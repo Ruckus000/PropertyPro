@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HELP_KEYS,
   useArticleFeedback,
+  useHelpArticle,
   useSubmitArticleFeedback,
 } from '../use-help';
 
@@ -127,5 +128,44 @@ describe('useSubmitArticleFeedback', () => {
         comment: 'Missing the setup step',
       }),
     ).rejects.toThrow('Unable to save feedback');
+  });
+});
+
+describe('useHelpArticle', () => {
+  it('does not fetch when category or slug is null', () => {
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useHelpArticle(null, null, 1), { wrapper });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fetches and returns article on success', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          source: { compiledSource: 'compiled', frontmatter: {}, scope: {} },
+          toc: [{ depth: 2, label: 'Heading', anchor: 'heading' }],
+          metadata: { slug: 's', category: 'c', title: 't' },
+          related: [],
+        },
+      }),
+    );
+
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useHelpArticle('c', 's', 42), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.metadata.slug).toBe('s');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/help/article?category=c&slug=s&communityId=42'),
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('surfaces error on 404', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'Not found' }, 404));
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useHelpArticle('c', 's', 42), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

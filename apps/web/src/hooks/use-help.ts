@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { MDXRemoteSerializeResult } from 'next-mdx-remote';
 import { requestJson } from '@/lib/api/request-json';
+import type { TocItem } from '@/components/help/mdx-components';
+import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -26,6 +29,8 @@ export const HELP_KEYS = {
   readArticles: (communityId: number) => ['help', 'read', communityId] as const,
   articleFeedback: (communityId: number, articleSlug: string) =>
     ['help', 'feedback', communityId, articleSlug] as const,
+  article: (category: string, slug: string, communityId: number) =>
+    ['help', 'article', category, slug, communityId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -250,4 +255,53 @@ export function useTrackArticleView({
       /* best-effort: ignore tracking failures */
     });
   }, [communityId, articleSlug, articleCategory]);
+}
+
+export interface HelpArticleResponse {
+  source: MDXRemoteSerializeResult;
+  toc: TocItem[];
+  metadata: HelpArticleMetadata;
+  related: HelpArticleMetadata[];
+}
+
+/**
+ * Fetches a single help article (serialized MDX + TOC + metadata + related)
+ * from /api/v1/help/article. Disabled when category or slug is null —
+ * useful for the modal's "no contextual match" state where no article is
+ * selected yet.
+ *
+ * Articles are effectively static at runtime, so staleTime is 5min and
+ * gcTime is 1hr — minimize refetches.
+ *
+ * Times out after CONTEXTUAL_TIMEOUT_MS (1500ms) — same as useContextualHelp.
+ * Caller surfaces the timeout as an error → AlertBanner with retry.
+ */
+export function useHelpArticle(
+  category: string | null,
+  slug: string | null,
+  communityId: number,
+) {
+  return useQuery({
+    queryKey:
+      category && slug
+        ? HELP_KEYS.article(category, slug, communityId)
+        : ['help', 'article', 'disabled'],
+    enabled: Boolean(category && slug && communityId > 0),
+    staleTime: 5 * 60_000,
+    gcTime: 60 * 60_000,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
+        category: category!,
+        slug: slug!,
+        communityId: String(communityId),
+      });
+      return requestJson<HelpArticleResponse>(
+        `/api/v1/help/article?${params}`,
+        {
+          credentials: 'include',
+          signal: withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS),
+        },
+      );
+    },
+  });
 }
