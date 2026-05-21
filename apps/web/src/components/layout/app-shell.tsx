@@ -27,6 +27,7 @@ import { AppTopBar } from './app-top-bar';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
+import { HelpDeepLinkHandler } from '@/components/help/help-deep-link-handler';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
@@ -278,6 +279,7 @@ export function AppShell(props: AppShellProps) {
       <HelpWidgetProvider>
         <ShellInner {...props} />
         <HelpWidget communityId={props.community?.id ?? 0} />
+        <HelpDeepLinkHandler />
       </HelpWidgetProvider>
     </SidebarProvider>
   );
