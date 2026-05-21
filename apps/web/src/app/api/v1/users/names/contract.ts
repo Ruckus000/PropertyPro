@@ -4,7 +4,7 @@
  * Bulk display-name resolver. Used by board/forum and elections UX to
  * render names for a batch of `userId`s without an N+1 fetch.
  *
- * Plan A1 drain (post-pilot drain #1). The non-paginated response is a
+ * Plan A1 drain (post-pilot drain #2). The non-paginated response is a
  * `Record<userId, displayName>` map, declared via `z.record(...)` rather
  * than `z.array(...)` — the runner wraps it as `{ data: { uuid: name } }`
  * (single-wrap, not double-wrap).
@@ -21,8 +21,11 @@ import { defineRoute, z } from '@propertypro/api-contract';
 /**
  * Query shape. `ids` arrives as a comma-separated list of UUIDs in a
  * single query string param (e.g. `?ids=a,b,c`); Zod's `transform()` +
- * `pipe()` split / trim / filter / validate it into a deduped UUID array
- * of 1-50 entries. The hard cap matches the prior implementation.
+ * `pipe()` split / trim / drop-empty / validate-as-UUID, then constrain
+ * the resulting array to 1-50 entries. The schema does NOT deduplicate
+ * — duplicates count against the `.max(50)` cap, and the
+ * `resolveUserDisplayNames` service deduplicates internally before
+ * hitting the DB. The hard cap matches the prior implementation.
  */
 const userNamesQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),
