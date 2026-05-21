@@ -84,6 +84,11 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
   const hasSearchResults =
     searchResults && (searchResults.articles.length > 0 || searchResults.faqs.length > 0);
 
+  // When the new modal is enabled, the drawer is replaced by HelpDocsModal
+  if (process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true') {
+    return null; // New modal takes over
+  }
+
   return (
     <>
       {/* Backdrop */}

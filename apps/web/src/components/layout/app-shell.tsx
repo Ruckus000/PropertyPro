@@ -38,6 +38,19 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 // Feature flag: set to true to use the new command palette
 const USE_COMMAND_PALETTE_V2 = true;
 
+interface HelpDocsModalProps {
+  communityId: number;
+  flagEnabled: boolean;
+}
+
+const HelpDocsModal = dynamic<HelpDocsModalProps>(
+  () => import('@/components/help/help-docs-modal').then((m) => m.HelpDocsModal),
+  { ssr: false },
+);
+
+const HELP_DOCS_MODAL_ENABLED =
+  process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
+
 interface LazyCommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -274,11 +287,18 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
 }
 
 export function AppShell(props: AppShellProps) {
+  const communityId = props.community?.id ?? 0;
+  const canShowHelpModal =
+    HELP_DOCS_MODAL_ENABLED && props.role != null && communityId > 0;
+
   return (
     <SidebarProvider>
       <HelpWidgetProvider>
         <ShellInner {...props} />
-        <HelpWidget communityId={props.community?.id ?? 0} />
+        <HelpWidget communityId={communityId} />
+        {canShowHelpModal && (
+          <HelpDocsModal communityId={communityId} flagEnabled />
+        )}
         <HelpDeepLinkHandler />
       </HelpWidgetProvider>
     </SidebarProvider>
