@@ -7,7 +7,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
-interface SelectedArticle {
+export interface SelectedArticle {
   category: string;
   slug: string;
 }
