@@ -1,51 +1,47 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
-import { requireCommunityMembership } from '@/lib/api/community-membership';
+/**
+ * GET /api/v1/users/names
+ *
+ * Bulk display-name resolver for board/forum and elections UX. Accepts a
+ * comma-separated list of `userId`s in the `ids` query param plus the
+ * actor's active `communityId`, and returns a `{ <uuid>: <displayName> }`
+ * map for every requested id (falling back to a synthesized "User <prefix>"
+ * for ids the community can't resolve).
+ *
+ * Plan A1 drain (post-pilot drain #2). Input validation (query) and
+ * output validation + canonical envelope wrapping are delegated to
+ * `runRoute()` from `@propertypro/api-contract`. The wire response is:
+ *
+ *     { data: { "<uuid>": "Display Name", ... } }
+ *
+ * Cleanup vs. the previous implementation:
+ *   - Dropped the manual `Object.fromEntries(searchParams)` + Zod safeParse
+ *     dance — the contract's `query` schema runs in the runner.
+ *   - Replaced `parseCommunityIdFromQuery(req)` + mismatch check with a
+ *     single `resolveEffectiveCommunityId(req, query.communityId)` call,
+ *     matching the document-categories pilot's auth chain.
+ *
+ * Behavior change: when the `x-community-id` header and the query
+ * `communityId` disagree, the response is now 404 ("Community not found",
+ * canonical for forged-header / tenant-mismatch via
+ * `resolveEffectiveCommunityId`) rather than 400. The pre-migration code
+ * also still returned 400 for malformed query (now also 400, via
+ * `ContractValidationError`); the security semantics are identical.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
+import { userNamesContract } from './contract';
 
-const userNamesQuerySchema = z.object({
-  communityId: z.coerce.number().int().positive(),
-  ids: z
-    .string()
-    .trim()
-    .min(1)
-    .transform((value) =>
-      value
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    )
-    .pipe(z.array(z.string().uuid()).min(1).max(50)),
-});
+export const GET = withErrorHandler(
+  runRoute(userNamesContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    await requireCommunityMembership(communityId, actorUserId);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-
-  const searchParams = Object.fromEntries(new URL(req.url).searchParams.entries());
-  const parsed = userNamesQuerySchema.safeParse(searchParams);
-  if (!parsed.success) {
-    throw new ValidationError('Invalid user names query', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromQuery(req);
-  if (communityId !== parsed.data.communityId) {
-    throw new ValidationError('Invalid user names query', {
-      fields: [{ field: 'communityId', message: 'communityId does not match the active request context' }],
-    });
-  }
-
-  await requireCommunityMembership(communityId, actorUserId);
-
-  const displayNames = await resolveUserDisplayNames(communityId, parsed.data.ids);
-
-  return NextResponse.json({
-    data: Object.fromEntries(displayNames),
-  });
-});
+    const displayNames = await resolveUserDisplayNames(communityId, query.ids);
+    return Object.fromEntries(displayNames);
+  }),
+);
