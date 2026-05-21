@@ -149,6 +149,8 @@ describe('scaffoldResource()', () => {
     // Use a different resource name + an explicit singular to avoid widget collision.
     const result = scaffoldResource({ plural: 'categories', singular: 'category', target: tmpRoot });
     expect(result.filesWritten.length).toBeGreaterThan(0);
+    // Migration index is picked from the journal — should be the next slot.
+    expect(result.migrationIndex).toBe(4);
 
     const schema = readFileSync(join(tmpRoot, 'packages/db/src/schema/categories.ts'), 'utf8');
     expect(schema).toContain("'categories'");
@@ -162,5 +164,74 @@ describe('scaffoldResource()', () => {
     expect(contract).toContain('categoriesListContract');
     expect(contract).toContain('categoryItemSchema');
     expect(contract).toContain("path: '/api/v1/categories'");
+
+    // Migration filename is renumbered AND the fixture token in the body is
+    // substituted to the new plural name.
+    const migration = readFileSync(
+      join(tmpRoot, 'packages/db/migrations/0004_create_categories.sql'),
+      'utf8',
+    );
+    expect(migration).toContain('"categories"');
+    expect(migration).not.toContain('widgets');
+    expect(migration).not.toContain('widget'); // no orphan singular either
+  });
+
+  it('substitutes correctly for names that contain fixture tokens as substrings (regression)', () => {
+    // Bug: a chained .replaceAll(plural).replaceAll(singular) sequence would
+    // turn `widgets` → `awidgets` and then re-scan the result to corrupt it
+    // into `aawidgets`. The single-pass regex form must visit each position
+    // exactly once.
+    const result = scaffoldResource({ plural: 'awidgets', target: tmpRoot });
+    expect(result.filesWritten.length).toBeGreaterThan(0);
+
+    const schema = readFileSync(join(tmpRoot, 'packages/db/src/schema/awidgets.ts'), 'utf8');
+    // Critical: NEVER `aawidgets` (double-substitution bug).
+    expect(schema).not.toContain('aawidgets');
+    expect(schema).not.toContain('aawidget');
+    expect(schema).toContain('export const awidgets = pgTable');
+    expect(schema).toContain('pgTable(\'awidgets\'');
+    expect(schema).toContain('type Awidget =');
+
+    const route = readFileSync(
+      join(tmpRoot, 'apps/web/src/app/api/v1/awidgets/route.ts'),
+      'utf8',
+    );
+    expect(route).not.toContain('aawidgets');
+    expect(route).toContain('awidgetsListContract');
+    expect(route).toContain('paginateAwidgets');
+  });
+
+  it('throws a clear error when the migration journal is malformed JSON', () => {
+    writeFile(
+      join(tmpRoot, 'packages/db/migrations/meta/_journal.json'),
+      '{ not valid json',
+    );
+    expect(() => scaffoldResource({ plural: 'widgets', target: tmpRoot })).toThrow(
+      /not valid JSON/,
+    );
+  });
+
+  it('does not double-append a journal entry on re-run after manual file cleanup', () => {
+    scaffoldResource({ plural: 'widgets', target: tmpRoot });
+
+    // Simulate "developer deleted the scaffolded files to retry" — keep the
+    // journal + barrel changes, drop the artifact files. The next run must
+    // pass `ensureNoCollisions` (files are gone) but MUST NOT add a second
+    // journal entry with the same tag.
+    rmSync(join(tmpRoot, 'packages/db/migrations/0004_create_widgets.sql'));
+    rmSync(join(tmpRoot, 'packages/db/src/schema/widgets.ts'));
+    rmSync(join(tmpRoot, 'apps/web/src/app/api/v1/widgets'), { recursive: true });
+    rmSync(join(tmpRoot, 'apps/web/src/lib/services/widgets-service.ts'));
+    rmSync(join(tmpRoot, 'apps/web/src/hooks/useWidgets.ts'));
+    rmSync(join(tmpRoot, 'apps/web/src/app/(authenticated)/widgets'), { recursive: true });
+    rmSync(join(tmpRoot, 'apps/web/__tests__/api/widgets'), { recursive: true });
+    rmSync(join(tmpRoot, 'apps/web/__tests__/integration/widgets.integration.test.ts'));
+
+    scaffoldResource({ plural: 'widgets', target: tmpRoot });
+
+    const raw = readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8');
+    const journal = JSON.parse(raw) as typeof STARTING_JOURNAL;
+    const widgetsEntries = journal.entries.filter((e) => e.tag === '0004_create_widgets');
+    expect(widgetsEntries).toHaveLength(1);
   });
 });

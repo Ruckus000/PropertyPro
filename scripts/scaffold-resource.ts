@@ -172,8 +172,15 @@ function buildResourceNames(opts: CliOptions): ResourceNames {
 // ---------------------------------------------------------------------------
 // Token substitution
 //
-// Order matters: replace LONGER variants first so substring overlap
-// (Widget ⊂ Widgets, widget ⊂ widgets) doesn't corrupt output.
+// Single-pass regex replacement so a substituted value is never re-scanned.
+// A chained `.replaceAll` sequence would corrupt names whose target string
+// contains a later fixture token as a substring — e.g. `awidgets` would
+// trigger `widget → awidget` AFTER `widgets → awidgets` and produce
+// `aawidgets`. The single-pass form visits each position exactly once.
+//
+// Alternation order matters within the regex literal (longest variants
+// first) so the engine prefers `Widgets`/`widgets` over `Widget`/`widget`
+// at the same offset.
 // ---------------------------------------------------------------------------
 
 const FIXTURE_NAMES: ResourceNames = {
@@ -183,12 +190,15 @@ const FIXTURE_NAMES: ResourceNames = {
   singularPascal: 'Widget',
 };
 
+const FIXTURE_TOKEN_REGEX = /Widgets|widgets|Widget|widget/g;
+
 function substituteNames(input: string, target: ResourceNames): string {
-  return input
-    .replaceAll(FIXTURE_NAMES.pluralPascal, target.pluralPascal)
-    .replaceAll(FIXTURE_NAMES.pluralLower, target.pluralLower)
-    .replaceAll(FIXTURE_NAMES.singularPascal, target.singularPascal)
-    .replaceAll(FIXTURE_NAMES.singularLower, target.singularLower);
+  return input.replace(FIXTURE_TOKEN_REGEX, (match) => {
+    if (match === FIXTURE_NAMES.pluralPascal) return target.pluralPascal;
+    if (match === FIXTURE_NAMES.pluralLower) return target.pluralLower;
+    if (match === FIXTURE_NAMES.singularPascal) return target.singularPascal;
+    return target.singularLower; // 'widget'
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +221,14 @@ interface Journal {
 
 function readJournal(journalPath: string): Journal {
   const raw = readFileSync(journalPath, 'utf8');
-  return JSON.parse(raw) as Journal;
+  try {
+    return JSON.parse(raw) as Journal;
+  } catch {
+    throw new Error(
+      `Migration journal at ${journalPath} is not valid JSON. ` +
+        `Check for merge conflict markers or a partial write.`,
+    );
+  }
 }
 
 function nextMigrationIndex(journal: Journal): number {
@@ -319,6 +336,10 @@ function appendJournalEntry(
   const journalPath = resolve(repoRoot, 'packages/db/migrations/meta/_journal.json');
   const journal = readJournal(journalPath);
   const tag = `${padIndex(migrationIdx)}_create_${names.pluralLower.replaceAll('-', '_')}`;
+  // Idempotent: skip if the journal already has an entry for this tag.
+  // Protects against a duplicate entry if scaffolded files were manually
+  // deleted but the journal/barrel changes were left in place.
+  if (journal.entries.some((e) => e.tag === tag)) return;
   journal.entries.push({
     idx: migrationIdx,
     version: '7',
