@@ -12,12 +12,16 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { getFeaturedForRole } from '@/lib/services/help-article-service';
+import {
+  getFeaturedForRole,
+  filterArticlesByFeatures,
+} from '@/lib/services/help-article-service';
 
 const querySchema = z.object({
   communityId: z.coerce.number().int().positive(),
@@ -37,7 +41,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, userId);
   const effectiveRole = membership.presetKey ?? membership.role;
 
-  const articles = getFeaturedForRole(effectiveRole);
+  const features = getFeaturesForCommunity(membership.communityType);
+  const articles = filterArticlesByFeatures(
+    getFeaturedForRole(effectiveRole),
+    features,
+  );
 
   return NextResponse.json({
     data: articles.map((a) => ({

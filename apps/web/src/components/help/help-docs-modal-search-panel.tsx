@@ -8,6 +8,7 @@
  * Clicking a result calls onPickArticle(category, slug), which the modal
  * uses to switch its content via openArticle() — no navigation.
  */
+import Link from 'next/link';
 import { useState } from 'react';
 import { BookOpen, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -52,6 +53,20 @@ export function HelpDocsModalSearchPanel({
           aria-label="Search help articles"
         />
       </div>
+
+      {!isSearching && featured.length === 0 && (
+        <div className="rounded-[var(--radius-md)] border border-edge bg-surface-card p-6 text-center">
+          <p className="text-sm text-content-secondary">
+            Help articles for your role haven't been written yet.
+          </p>
+          <Link
+            href={`/help/contact?communityId=${communityId}`}
+            className="mt-2 inline-block text-sm font-medium text-[var(--interactive-primary)] hover:underline"
+          >
+            Contact support →
+          </Link>
+        </div>
+      )}
 
       {isSearching && isFetching && (
         <div className="space-y-2" aria-label="Searching">

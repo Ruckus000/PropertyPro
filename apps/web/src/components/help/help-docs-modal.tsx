@@ -27,7 +27,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { cn } from '@/lib/utils';
@@ -45,7 +45,7 @@ export function HelpDocsModal({
   const pathname = usePathname();
 
   const { data: contextualArticles, isFetching: isFetchingContextual } =
-    useContextualHelp(pathname, communityId);
+    useContextualHelp(pathname, communityId, flagEnabled);
 
   const targetArticle = useMemo<{ category: string; slug: string } | null>(() => {
     if (selectedArticle) return selectedArticle;
@@ -60,6 +60,7 @@ export function HelpDocsModal({
     targetArticle?.category ?? null,
     targetArticle?.slug ?? null,
     communityId,
+    flagEnabled,
   );
 
   const isMobile = useIsMobile();
@@ -91,6 +92,9 @@ export function HelpDocsModal({
           <SheetTitle className="text-xl font-semibold text-content">
             {articleTitle}
           </SheetTitle>
+          <SheetDescription className="sr-only">
+            Help article viewer
+          </SheetDescription>
           <div className="mt-4">{content}</div>
         </SheetContent>
       </Sheet>

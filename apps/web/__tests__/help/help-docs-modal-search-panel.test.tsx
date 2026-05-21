@@ -47,12 +47,13 @@ describe('<HelpDocsModalSearchPanel/>', () => {
     expect(onPick).toHaveBeenCalledWith('getting-started', 'welcome');
   });
 
-  it('renders nothing in the featured slot when the hook returns an empty list', () => {
+  it('renders the empty state (not the Featured heading) when the hook returns an empty list', () => {
     useHelpSearchMock.mockReturnValue({ data: null });
     useFeaturedArticlesMock.mockReturnValue({ data: [] });
     render(
       withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={() => {}} />),
     );
     expect(screen.queryByRole('heading', { name: /Featured for you/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/haven't been written yet/i)).toBeInTheDocument();
   });
 });

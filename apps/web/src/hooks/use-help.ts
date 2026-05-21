@@ -161,7 +161,7 @@ export function useReadArticles(communityId: number) {
   });
 }
 
-export function useContextualHelp(path: string, communityId: number) {
+export function useContextualHelp(path: string, communityId: number, enabled = true) {
   return useQuery<HelpArticleResult[]>({
     queryKey: HELP_KEYS.contextual(path, communityId),
     queryFn: async ({ signal }) => {
@@ -174,7 +174,7 @@ export function useContextualHelp(path: string, communityId: number) {
         { signal: withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS) },
       );
     },
-    enabled: path.length > 0 && communityId > 0,
+    enabled: enabled && path.length > 0 && communityId > 0,
     staleTime: 300_000,
     // A timeout abort still surfaces as `error` to the consumer; the widget
     // renders its "browse the full help center" fallback in the no-data case.
@@ -304,13 +304,14 @@ export function useHelpArticle(
   category: string | null,
   slug: string | null,
   communityId: number,
+  enabled = true,
 ) {
   return useQuery({
     queryKey:
       category && slug
         ? HELP_KEYS.article(category, slug, communityId)
         : ['help', 'article', 'disabled'],
-    enabled: Boolean(category && slug && communityId > 0),
+    enabled: enabled && Boolean(category && slug && communityId > 0),
     staleTime: 5 * 60_000,
     gcTime: 60 * 60_000,
     retry: false,
