@@ -24,6 +24,7 @@ import { HelpDocsModalSearchPanel } from '@/components/help/help-docs-modal-sear
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -109,6 +110,9 @@ export function HelpDocsModal({
             <DialogTitle className="truncate text-xl font-semibold text-content">
               {articleTitle}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Help article viewer
+            </DialogDescription>
           </div>
         </header>
         <div className="px-6 py-6">{content}</div>
