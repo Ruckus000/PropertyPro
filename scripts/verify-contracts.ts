@@ -139,7 +139,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/communities/[id]/cancel-preview/route.ts',
   'apps/web/src/app/api/v1/communities/[id]/cancel/route.ts',
   'apps/web/src/app/api/v1/communities/delete/route.ts',
-  'apps/web/src/app/api/v1/community/contact/route.ts',
   'apps/web/src/app/api/v1/compliance/route.ts',
   'apps/web/src/app/api/v1/contracts/route.ts',
   'apps/web/src/app/api/v1/delinquency/[unitId]/waive/route.ts',
