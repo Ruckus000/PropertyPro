@@ -71,7 +71,7 @@ HelpWidgetProvider (existing client context, extended w/ selectedArticle state)
 - Reads `useHelpWidget()` for `isOpen`, `close`, and the new `selectedArticle` value.
 - Reads `usePathname()` + `useContextualHelp(pathname, communityId)` to pick the default article when no `selectedArticle` is set.
 - Uses `<Dialog/>` from `apps/web/src/components/ui/dialog.tsx` (Radix) on `>=768px`; `<Sheet side="bottom"/>` from `apps/web/src/components/ui/sheet.tsx` on `<768px`, gated by `useMediaQuery`.
-- Width: custom `max-w-[960px]` — above the design system's lg modal token (720px). Called out for design-system PR review; will land alongside this work as a one-off override or as a new `xl` modal token, depending on review.
+- Width: `xl` modal token (960px). The design rules at `.claude/rules/design.md` list modal widths `sm(400) md(560) lg(720) xl(960)` — `xl` is already in the system. No deviation, no review needed.
 - Layout: 2-column grid on desktop — `[280px_minmax(0,1fr)]`. Left rail = sticky TOC (or category list in browse mode). Right pane = article body.
 - Header: modal title (= article title), role badges, "min read" + "Updated" metadata. Parity with the article route page.
 - Footer: "Browse all help articles →" link to `/help?communityId=...`.
@@ -242,7 +242,7 @@ interface HelpWidgetContextValue {
 4. While `useHelpArticle` is loading: skeleton TOC (5 lines) + skeleton paragraphs (4 blocks).
 5. On success: `<MDXRemote {...source} components={helpMdxComponents}/>` renders the body. `<TableOfContents/>` renders the left rail. `<ArticleViewTracker/>` fires the POST to `/api/v1/help/view`.
 6. On 0 contextual matches AND no `selectedArticle`: render the search-and-browse panel directly. No article fetch.
-7. On error or 1500ms timeout: `<AlertBanner variant="danger">` with retry button.
+7. On error or 1500ms timeout: `<AlertBanner variant="danger">` with retry button. Timeout enforced via the existing `withTimeoutSignal` helper in `apps/web/src/hooks/use-help.ts` (same `CONTEXTUAL_TIMEOUT_MS = 1500` constant used by `useContextualHelp`).
 
 ## UX states
 
@@ -260,7 +260,8 @@ interface HelpWidgetContextValue {
 | Keyboard: open | `?` toggle (existing shortcut from `HelpWidgetProvider`) |
 | Keyboard: close | `Esc` (Radix Dialog default) |
 | Keyboard: tab cycle | Confined inside modal (Radix focus trap) |
-| Deep link | `?help=<category>/<slug>` query param on any route opens modal to that article on mount |
+| Deep link (open) | `?help=<category>/<slug>` query param on any route opens modal to that article on mount. Validated against the same `^[a-z0-9-]+$` regex as the API endpoint. |
+| Deep link (close) | Closing the modal strips `?help=` from the URL via `router.replace(pathname + remaining-params)`. Refresh after close should NOT reopen the modal. Chosen for "less surprising" over "shareable modal state" — the URL is for navigation, not modal state. |
 
 ## Accessibility
 
@@ -275,7 +276,7 @@ interface HelpWidgetContextValue {
 ## Performance
 
 - `<HelpDocsModal/>` is `next/dynamic` — zero cost until first help-open.
-- `<MDXRemote/>` client runtime ~10KB gzipped — only loaded with the modal.
+- `<MDXRemote/>` client runtime + `helpMdxComponents` add **non-trivial** client bundle weight when first loaded. The existing `/help/[cat]/[slug]` route uses `compileMDX` from `next-mdx-remote/rsc` which evaluates MDX server-side and ships only the rendered tree — cheaper. Switching that route to `serialize` + `<MDXRemote/>` is a deliberate trade: a few KB of client weight in exchange for the ability to render the same article inside the modal without a second code path. Measure before/after with `next build` analyzer and include the number in the PR description; if it exceeds 50KB gzipped delta, revisit (likely solution: keep `compileMDX` on the route and use `serialize` only for the modal endpoint, but accept the small code duplication).
 - API endpoint wraps `serialize` + `extractTableOfContents` in `unstable_cache` keyed on `(category, slug, contentHash)` — sub-ms cache hits after warmup. `contentHash` already lives on `HelpArticleMetadata` (sha256 prefix of raw content). Deploy with new content = new hash = new cache entry. No manual invalidation.
 - React Query: `staleTime: 5min`, `gcTime: 1hr`. Articles are static; we don't need fresh fetches.
 - TOC scroll-spy via `IntersectionObserver`, only active when modal is open.
@@ -327,7 +328,7 @@ interface HelpWidgetContextValue {
 3. Extract `<HelpArticleBody/>`; refactor `/help/[category]/[slug]/page.tsx` to use it (no visible UX change to route).
 4. Build `<HelpDocsModal/>` + search-and-browse panel + tests.
 5. Extend `HelpWidgetProvider` with `selectedArticle` + `openArticle`.
-6. Mount `<HelpDocsModal/>` in `app-shell.tsx` behind `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED`. Top-bar button toggles either old widget or new modal based on flag.
+6. Mount `<HelpDocsModal/>` in `app-shell.tsx` behind `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED`. The mount uses `props.role` (top-level on `AppShellProps`, NOT `props.community?.role`) and **short-circuits when `role == null`** — the modal does not render on routes like `/select-community` where no community role is resolved. Top-bar button toggles either old widget or new modal based on flag.
 7. Add `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED=false` to `.env.example`. Set `true` in the Vercel preview environment variables UI (no `.env.preview` file used — Vercel env config is the source).
 8. Verify in Vercel preview: 5 routes × 2 roles spot-check.
 
@@ -376,9 +377,15 @@ interface HelpWidgetContextValue {
 
 ## Open questions for plan owner
 
-1. **Modal width 960px:** one-off override or new `xl` modal token? (Recommend: one-off with comment; revisit if a second xl modal lands.)
-2. **`<HelpTooltip/>` "Read full guide" links:** open modal via `openArticle` action instead of navigating? Defer to a follow-up PR after Phase B soak.
-3. **Search panel UX:** reuse the existing widget's search list as a sub-component, or write fresh? Recommend reuse — minimize rework + Phase C deletes the wrapper, not the search list itself.
+1. **`<HelpTooltip/>` "Read full guide" links:** open modal via `openArticle` action instead of navigating? Defer to a follow-up PR after Phase B soak.
+2. **Search panel UX:** Compose the existing card layout from `<HelpSearchResults/>`, or write fresh? Recommend extracting a tiny `<HelpArticleCard/>` from `<HelpWidget/>` (current source of the design) and using it from both `<HelpDocsModalSearchPanel/>` and `<HelpSearchResults/>`. The shared card is one new ~40-line file; Phase C deletes the drawer wrapper but the card lives on.
+
+**Resolved during 2026-05-20 senior-review pass:**
+- Modal width 960px → `xl` token (already in design system); no review needed.
+- Deep-link URL semantics → strip `?help=` on close (ephemeral, less surprising).
+- Featured-articles list must come from a NEW `GET /api/v1/help/featured` endpoint, not direct client import of `getFeaturedForRole` (the service is server-only — uses `node:fs`).
+- `<HelpDocsModal/>` short-circuits when `role == null` (don't fall back to `'owner'` on `/select-community`).
+- `useHelpArticle` uses `withTimeoutSignal` for 1500ms parity with `useContextualHelp`.
 
 ## References
 

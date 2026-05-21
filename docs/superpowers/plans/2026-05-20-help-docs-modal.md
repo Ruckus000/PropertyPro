@@ -23,19 +23,25 @@
 - `apps/web/src/components/help/help-docs-modal.tsx` — outer modal chrome (Dialog/Sheet)
 - `apps/web/src/components/help/help-article-body.tsx` — shared article-render component (used by route + modal)
 - `apps/web/src/components/help/help-docs-modal-search-panel.tsx` — empty-state search/browse panel
-- `apps/web/src/components/help/help-docs-modal-toc.tsx` — left-rail TOC + "More for this page" links
-- `apps/web/src/app/api/v1/help/article/route.ts` — new endpoint
+- `apps/web/src/components/help/help-deep-link-handler.tsx` — `?help=` open + strip-on-close
+- `apps/web/src/app/api/v1/help/article/route.ts` — single article endpoint
+- `apps/web/src/app/api/v1/help/featured/route.ts` — featured-for-role endpoint (wraps server-only getFeaturedForRole)
 - `apps/web/__tests__/help/article-route.test.ts` — endpoint tests
+- `apps/web/__tests__/help/featured-route.test.ts` — featured endpoint tests
+- `apps/web/__tests__/help/help-widget-provider.test.tsx` — provider extension tests
+- `apps/web/__tests__/help/help-deep-link-handler.test.tsx` — handler tests
 - `apps/web/__tests__/help/help-docs-modal.test.tsx` — modal component tests
 - `apps/web/__tests__/help/help-article-body.test.tsx` — body component tests
+- `apps/web/__tests__/help/help-docs-modal-search-panel.test.tsx` — search panel tests
+- `apps/web/__tests__/integration/help-docs-modal.integration.test.tsx` — end-to-end integration tests
 
 **Modified files:**
 - `apps/web/src/components/help/help-widget-provider.tsx` — extend context with `selectedArticle` + `openArticle`
-- `apps/web/src/hooks/use-help.ts` — add `useHelpArticle` hook + `HELP_KEYS.article`
+- `apps/web/src/components/help/help-widget.tsx` — short-circuit to `null` when flag is on
+- `apps/web/src/hooks/use-help.ts` — add `useHelpArticle` + `useFeaturedArticles` + `HELP_KEYS.{article,featured}`
+- `apps/web/src/hooks/__tests__/use-help.test.tsx` — add hook tests
 - `apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx` — consume extracted `<HelpArticleBody/>`
-- `apps/web/src/components/layout/app-shell.tsx` — mount new modal alongside existing widget
-- `apps/web/src/components/layout/app-top-bar.tsx` — button reads flag
-- `apps/web/src/hooks/__tests__/use-help.test.tsx` — add `useHelpArticle` tests
+- `apps/web/src/components/layout/app-shell.tsx` — mount new modal + handler; uses `props.role` (top-level) with `role != null` short-circuit
 - `.env.example` — add `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED=false`
 
 ---
@@ -683,7 +689,7 @@ In `apps/web/src/hooks/use-help.ts`:
      ['help', 'article', category, slug, communityId] as const,
    ```
 
-3. Add types and hook (place near `useContextualHelp`):
+3. Add types and hook (place near `useContextualHelp`). Note: uses the existing `withTimeoutSignal` helper for 1500ms timeout parity with `useContextualHelp`.
 
    ```ts
    export interface HelpArticleResponse {
@@ -701,6 +707,9 @@ In `apps/web/src/hooks/use-help.ts`:
     *
     * Articles are effectively static at runtime, so staleTime is 5min and
     * gcTime is 1hr — minimize refetches.
+    *
+    * Times out after CONTEXTUAL_TIMEOUT_MS (1500ms) — same as useContextualHelp.
+    * Caller surfaces the timeout as an error → AlertBanner with retry.
     */
    export function useHelpArticle(
      category: string | null,
@@ -723,7 +732,10 @@ In `apps/web/src/hooks/use-help.ts`:
          });
          return requestJson<HelpArticleResponse>(
            `/api/v1/help/article?${params}`,
-           { credentials: 'include', signal },
+           {
+             credentials: 'include',
+             signal: withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS),
+           },
          );
        },
      });
@@ -1246,13 +1258,262 @@ EOF
 
 ---
 
+## Task 5b: Add `GET /api/v1/help/featured` endpoint + `useFeaturedArticles` hook
+
+**Why this task exists:** `<HelpDocsModalSearchPanel/>` (Task 6) is a client component and needs the featured-for-role list. The existing `getFeaturedForRole()` in `help-article-service.ts` imports `node:fs` and CANNOT run in a client bundle (verified: `apps/web/src/lib/services/help-article-service.ts:1`). Wrap it in an endpoint + hook.
+
+**Files:**
+- Create: `apps/web/src/app/api/v1/help/featured/route.ts`
+- Create: `apps/web/__tests__/help/featured-route.test.ts`
+- Modify: `apps/web/src/hooks/use-help.ts` (add `useFeaturedArticles` hook)
+- Modify: `apps/web/src/hooks/__tests__/use-help.test.tsx` (add tests)
+
+- [ ] **Step 5b.1: Write the failing route test**
+
+Create `apps/web/__tests__/help/featured-route.test.ts`:
+
+```ts
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
+
+const {
+  getFeaturedForRoleMock,
+  requireAuthenticatedUserIdMock,
+  requireCommunityMembershipMock,
+  resolveEffectiveCommunityIdMock,
+} = vi.hoisted(() => ({
+  getFeaturedForRoleMock: vi.fn(),
+  requireAuthenticatedUserIdMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn(),
+  resolveEffectiveCommunityIdMock: vi.fn(),
+}));
+
+vi.mock('@/lib/services/help-article-service', () => ({
+  getFeaturedForRole: getFeaturedForRoleMock,
+}));
+
+vi.mock('@/lib/api/auth', () => ({
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
+}));
+
+vi.mock('@/lib/api/tenant-context', () => ({
+  resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
+}));
+
+vi.mock('@/lib/api/error-handler', () => ({
+  withErrorHandler: (handler: unknown) => handler,
+}));
+
+import { GET } from '../../src/app/api/v1/help/featured/route';
+
+describe('GET /api/v1/help/featured', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'owner',
+      presetKey: null,
+      communityType: 'condo_718',
+    });
+    resolveEffectiveCommunityIdMock.mockReturnValue(1);
+  });
+
+  it('returns the featured-for-role list', async () => {
+    getFeaturedForRoleMock.mockReturnValue([
+      { title: 'Welcome', category: 'getting-started', slug: 'welcome', description: 'Get started', roles: ['owner'], keywords: [], relatedArticles: [], featured: true },
+    ]);
+    const res = await GET(
+      new NextRequest(new URL('/api/v1/help/featured?communityId=1', 'http://localhost:3000')),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].slug).toBe('welcome');
+    expect(getFeaturedForRoleMock).toHaveBeenCalledWith('owner');
+  });
+
+  it('returns an empty array when no featured articles match the role', async () => {
+    getFeaturedForRoleMock.mockReturnValue([]);
+    const res = await GET(
+      new NextRequest(new URL('/api/v1/help/featured?communityId=1', 'http://localhost:3000')),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 5b.2: Run — expect failure**
+
+```bash
+pnpm exec vitest run apps/web/__tests__/help/featured-route.test.ts
+```
+
+Expected: FAIL — module not found.
+
+- [ ] **Step 5b.3: Create the route**
+
+Create `apps/web/src/app/api/v1/help/featured/route.ts`:
+
+```ts
+/**
+ * Help Featured Articles API
+ *
+ * GET /api/v1/help/featured?communityId=N
+ *
+ * Returns featured articles for the viewer's role. Used by the
+ * HelpDocsModalSearchPanel empty-state when no contextual article
+ * matches the current route.
+ *
+ * Wraps the server-only getFeaturedForRole() so it can be consumed
+ * by client components.
+ */
+import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { getFeaturedForRole } from '@/lib/services/help-article-service';
+
+const querySchema = z.object({
+  communityId: z.coerce.number().int().positive(),
+});
+
+export const GET = withErrorHandler(async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
+  const parsed = querySchema.safeParse({
+    communityId: searchParams.get('communityId') || undefined,
+  });
+  if (!parsed.success) {
+    throw new ValidationError('Invalid featured help parameters');
+  }
+
+  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+  const userId = await requireAuthenticatedUserId();
+  const membership = await requireCommunityMembership(communityId, userId);
+  const effectiveRole = membership.presetKey ?? membership.role;
+
+  const articles = getFeaturedForRole(effectiveRole);
+
+  return NextResponse.json({
+    data: articles.map((a) => ({
+      title: a.title,
+      description: a.description,
+      category: a.category,
+      slug: a.slug,
+    })),
+  });
+});
+```
+
+- [ ] **Step 5b.4: Add the hook**
+
+In `apps/web/src/hooks/use-help.ts`:
+
+1. Add to `HELP_KEYS`:
+
+   ```ts
+   featured: (communityId: number) => ['help', 'featured', communityId] as const,
+   ```
+
+2. Add the hook (near `useContextualHelp`):
+
+   ```ts
+   /**
+    * Returns the featured-for-role articles list from /api/v1/help/featured.
+    * Used by HelpDocsModalSearchPanel when no contextual article matches
+    * the current route.
+    *
+    * staleTime 5min — the featured list rarely changes.
+    */
+   export function useFeaturedArticles(communityId: number) {
+     return useQuery<HelpArticleResult[]>({
+       queryKey: HELP_KEYS.featured(communityId),
+       enabled: communityId > 0,
+       staleTime: 5 * 60_000,
+       queryFn: async ({ signal }) => {
+         const params = new URLSearchParams({ communityId: String(communityId) });
+         return requestJson<HelpArticleResult[]>(
+           `/api/v1/help/featured?${params}`,
+           { credentials: 'include', signal },
+         );
+       },
+     });
+   }
+   ```
+
+3. Add a hook test to `apps/web/src/hooks/__tests__/use-help.test.tsx`:
+
+   ```ts
+   import { useFeaturedArticles } from '../use-help';
+
+   describe('useFeaturedArticles', () => {
+     it('fetches and returns featured articles', async () => {
+       fetchMock.mockResolvedValueOnce(
+         jsonResponse({
+           data: [
+             { title: 'Welcome', category: 'getting-started', slug: 'welcome' },
+           ],
+         }),
+       );
+       const { wrapper } = createWrapper();
+       const { result } = renderHook(() => useFeaturedArticles(1), { wrapper });
+       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+       expect(result.current.data).toHaveLength(1);
+     });
+
+     it('does not fetch when communityId is 0', () => {
+       const { wrapper } = createWrapper();
+       const { result } = renderHook(() => useFeaturedArticles(0), { wrapper });
+       expect(result.current.fetchStatus).toBe('idle');
+       expect(fetchMock).not.toHaveBeenCalled();
+     });
+   });
+   ```
+
+- [ ] **Step 5b.5: Run all tests — expect pass**
+
+```bash
+pnpm exec vitest run apps/web/__tests__/help/featured-route.test.ts apps/web/src/hooks/__tests__/use-help.test.tsx
+```
+
+Expected: PASS.
+
+- [ ] **Step 5b.6: Commit**
+
+```bash
+git add apps/web/src/app/api/v1/help/featured/route.ts \
+        apps/web/__tests__/help/featured-route.test.ts \
+        apps/web/src/hooks/use-help.ts \
+        apps/web/src/hooks/__tests__/use-help.test.tsx
+git commit -m "$(cat <<'EOF'
+feat(help): add GET /api/v1/help/featured + useFeaturedArticles hook
+
+Wraps the server-only getFeaturedForRole() (uses node:fs) in an HTTP
+endpoint so client components (incoming HelpDocsModalSearchPanel) can
+consume the featured-for-role list without breaking the client bundle.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ## Task 6: Build `<HelpDocsModalSearchPanel/>` (empty-state browse panel)
 
 **Files:**
 - Create: `apps/web/src/components/help/help-docs-modal-search-panel.tsx`
 - Test: `apps/web/__tests__/help/help-docs-modal-search-panel.test.tsx` (NEW)
 
-This is the panel shown inside the modal when there's no contextual article for the current route. Reuses the existing `useHelpSearch` hook and shows featured-for-role articles. We do NOT modify the existing `<HelpSearchResults/>` component — we compose it (it stays, gets deleted later as part of Phase C only if no consumer remains).
+This is the panel shown inside the modal when there's no contextual article for the current route. Uses `useHelpSearch` for search and `useFeaturedArticles` (from Task 5b) for the featured list. NEVER imports `getFeaturedForRole` directly — that's a server-only function.
 
 - [ ] **Step 6.1: Write the failing test**
 
@@ -1265,15 +1526,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { HelpDocsModalSearchPanel } from '../../src/components/help/help-docs-modal-search-panel';
 
 const useHelpSearchMock = vi.fn();
-const getFeaturedForRoleMock = vi.fn();
+const useFeaturedArticlesMock = vi.fn();
 
 vi.mock('../../src/hooks/use-help', () => ({
   useHelpSearch: (...args: unknown[]) => useHelpSearchMock(...args),
+  useFeaturedArticles: (...args: unknown[]) => useFeaturedArticlesMock(...args),
   HELP_KEYS: {},
-}));
-
-vi.mock('../../src/lib/services/help-article-service', () => ({
-  getFeaturedForRole: (...args: unknown[]) => getFeaturedForRoleMock(...args),
 }));
 
 function withQuery(children: React.ReactNode) {
@@ -1282,24 +1540,15 @@ function withQuery(children: React.ReactNode) {
 }
 
 describe('<HelpDocsModalSearchPanel/>', () => {
-  it('renders the search input and featured articles for the role', () => {
+  it('renders the search input and featured articles', () => {
     useHelpSearchMock.mockReturnValue({ data: null });
-    getFeaturedForRoleMock.mockReturnValue([
-      {
-        title: 'Welcome',
-        description: 'Get started',
-        category: 'getting-started',
-        slug: 'welcome',
-        roles: ['owner'],
-        keywords: [],
-        relatedArticles: [],
-        featured: true,
-      },
-    ]);
+    useFeaturedArticlesMock.mockReturnValue({
+      data: [
+        { title: 'Welcome', description: 'Get started', category: 'getting-started', slug: 'welcome' },
+      ],
+    });
     render(
-      withQuery(
-        <HelpDocsModalSearchPanel communityId={1} role="owner" onPickArticle={() => {}} />,
-      ),
+      withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={() => {}} />),
     );
     expect(screen.getByPlaceholderText(/Search help articles/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Welcome/ })).toBeInTheDocument();
@@ -1307,26 +1556,26 @@ describe('<HelpDocsModalSearchPanel/>', () => {
 
   it('calls onPickArticle when a featured article is clicked', () => {
     useHelpSearchMock.mockReturnValue({ data: null });
-    getFeaturedForRoleMock.mockReturnValue([
-      {
-        title: 'Welcome',
-        description: 'Get started',
-        category: 'getting-started',
-        slug: 'welcome',
-        roles: ['owner'],
-        keywords: [],
-        relatedArticles: [],
-        featured: true,
-      },
-    ]);
+    useFeaturedArticlesMock.mockReturnValue({
+      data: [
+        { title: 'Welcome', description: 'Get started', category: 'getting-started', slug: 'welcome' },
+      ],
+    });
     const onPick = vi.fn();
     render(
-      withQuery(
-        <HelpDocsModalSearchPanel communityId={1} role="owner" onPickArticle={onPick} />,
-      ),
+      withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={onPick} />),
     );
     screen.getByRole('button', { name: /Welcome/ }).click();
     expect(onPick).toHaveBeenCalledWith('getting-started', 'welcome');
+  });
+
+  it('renders nothing in the featured slot when the hook returns an empty list', () => {
+    useHelpSearchMock.mockReturnValue({ data: null });
+    useFeaturedArticlesMock.mockReturnValue({ data: [] });
+    render(
+      withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={() => {}} />),
+    );
+    expect(screen.queryByRole('heading', { name: /Featured for you/i })).not.toBeInTheDocument();
   });
 });
 ```
@@ -1357,24 +1606,21 @@ Create `apps/web/src/components/help/help-docs-modal-search-panel.tsx`:
 import { useState } from 'react';
 import { BookOpen, Search } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useHelpSearch } from '@/hooks/use-help';
-import { getFeaturedForRole } from '@/lib/services/help-article-service';
+import { useHelpSearch, useFeaturedArticles } from '@/hooks/use-help';
 import { cn } from '@/lib/utils';
 
 interface HelpDocsModalSearchPanelProps {
   communityId: number;
-  role: string;
   onPickArticle: (category: string, slug: string) => void;
 }
 
 export function HelpDocsModalSearchPanel({
   communityId,
-  role,
   onPickArticle,
 }: HelpDocsModalSearchPanelProps) {
   const [query, setQuery] = useState('');
   const { data: searchResults, isFetching } = useHelpSearch(query, communityId);
-  const featured = getFeaturedForRole(role);
+  const { data: featured = [] } = useFeaturedArticles(communityId);
   const isSearching = query.length >= 2;
 
   return (
@@ -1567,7 +1813,7 @@ describe('<HelpDocsModal/>', () => {
     useContextualHelpMock.mockReturnValue({ data: [], isFetching: false });
     useHelpArticleMock.mockReturnValue({ data: null, isLoading: false });
     render(
-      withProviders(<HelpDocsModal communityId={1} role="owner" flagEnabled={false} />),
+      withProviders(<HelpDocsModal communityId={1} flagEnabled={false} />),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -1593,7 +1839,7 @@ describe('<HelpDocsModal/>', () => {
       withProviders(
         <>
           <Opener />
-          <HelpDocsModal communityId={1} role="owner" flagEnabled />
+          <HelpDocsModal communityId={1} flagEnabled />
         </>,
       ),
     );
@@ -1613,7 +1859,7 @@ describe('<HelpDocsModal/>', () => {
       withProviders(
         <>
           <Opener />
-          <HelpDocsModal communityId={1} role="owner" flagEnabled />
+          <HelpDocsModal communityId={1} flagEnabled />
         </>,
       ),
     );
@@ -1641,7 +1887,7 @@ describe('<HelpDocsModal/>', () => {
       withProviders(
         <>
           <Opener />
-          <HelpDocsModal communityId={1} role="owner" flagEnabled />
+          <HelpDocsModal communityId={1} flagEnabled />
         </>,
       ),
     );
@@ -1703,13 +1949,11 @@ import { cn } from '@/lib/utils';
 
 interface HelpDocsModalProps {
   communityId: number;
-  role: string;
   flagEnabled: boolean;
 }
 
 export function HelpDocsModal({
   communityId,
-  role,
   flagEnabled,
 }: HelpDocsModalProps) {
   const { isOpen, close, selectedArticle, openArticle } = useHelpWidget();
@@ -1751,7 +1995,6 @@ export function HelpDocsModal({
       onRetry={() => articleQuery.refetch()}
       articleData={articleQuery.data ?? null}
       communityId={communityId}
-      role={role}
       contextualArticles={contextualArticles ?? []}
       isFetchingContextual={isFetchingContextual}
       onPickArticle={openArticle}
@@ -1810,7 +2053,6 @@ interface ModalContentProps {
   onRetry: () => void;
   articleData: NonNullable<ReturnType<typeof useHelpArticle>['data']> | null;
   communityId: number;
-  role: string;
   contextualArticles: Array<{ category: string; slug: string; title: string }>;
   isFetchingContextual: boolean;
   onPickArticle: (category: string, slug: string) => void;
@@ -1824,7 +2066,6 @@ function ModalContent({
   onRetry,
   articleData,
   communityId,
-  role,
   contextualArticles,
   isFetchingContextual,
   onPickArticle,
@@ -1833,7 +2074,6 @@ function ModalContent({
     return (
       <HelpDocsModalSearchPanel
         communityId={communityId}
-        role={role}
         onPickArticle={onPickArticle}
       />
     );
@@ -1963,43 +2203,184 @@ EOF
 
 ---
 
-## Task 8: Wire `?help=cat/slug` deep-link handler
+## Task 8: Wire `?help=cat/slug` deep-link handler + strip-on-close
 
 **Files:**
-- Modify: `apps/web/src/components/layout/app-shell.tsx`
-- Test: covered by integration test in Task 11
+- Create: `apps/web/src/components/help/help-deep-link-handler.tsx`
+- Create: `apps/web/__tests__/help/help-deep-link-handler.test.tsx`
 
-- [ ] **Step 8.1: Add the URL-param handler to app-shell**
+Real file (NOT inlined in `app-shell.tsx`) so integration tests can import the actual implementation instead of reimplementing it. The handler ALSO subscribes to `selectedArticle` so that when the modal closes (provider clears it), the `?help=` query param is stripped from the URL via `router.replace`. Per the spec, this ensures refresh-after-close doesn't reopen the modal.
 
-We add the handler at the shell level (not the modal) so the modal stays focused on rendering. The shell reads `?help=category/slug` once on mount and on every search-params change.
+- [ ] **Step 8.1: Write the failing test**
 
-In `apps/web/src/components/layout/app-shell.tsx`, add a small client component:
+Create `apps/web/__tests__/help/help-deep-link-handler.test.tsx`:
+
+```tsx
+import { act, render } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { HelpDeepLinkHandler } from '../../src/components/help/help-deep-link-handler';
+import {
+  HelpWidgetProvider,
+  useHelpWidget,
+} from '../../src/components/help/help-widget-provider';
+
+const routerReplaceMock = vi.fn();
+const useSearchParamsMock = vi.fn();
+const usePathnameMock = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: routerReplaceMock }),
+  useSearchParams: () => useSearchParamsMock(),
+  usePathname: () => usePathnameMock(),
+}));
+
+function Probe() {
+  const { selectedArticle, close } = useHelpWidget();
+  return (
+    <div>
+      <span data-testid="selected">
+        {selectedArticle ? `${selectedArticle.category}/${selectedArticle.slug}` : 'null'}
+      </span>
+      <button data-testid="close-btn" onClick={close}>close</button>
+    </div>
+  );
+}
+
+describe('<HelpDeepLinkHandler/>', () => {
+  beforeEach(() => {
+    routerReplaceMock.mockClear();
+    usePathnameMock.mockReturnValue('/dashboard');
+  });
+
+  it('opens an article when ?help=cat/slug is present', () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('help=getting-started/welcome'));
+    const { getByTestId } = render(
+      <HelpWidgetProvider>
+        <HelpDeepLinkHandler />
+        <Probe />
+      </HelpWidgetProvider>,
+    );
+    expect(getByTestId('selected')).toHaveTextContent('getting-started/welcome');
+  });
+
+  it('ignores invalid help params', () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('help=../etc/passwd'));
+    const { getByTestId } = render(
+      <HelpWidgetProvider>
+        <HelpDeepLinkHandler />
+        <Probe />
+      </HelpWidgetProvider>,
+    );
+    expect(getByTestId('selected')).toHaveTextContent('null');
+  });
+
+  it('strips ?help= from the URL when the modal closes', () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('help=getting-started/welcome&communityId=1'));
+    const { getByTestId } = render(
+      <HelpWidgetProvider>
+        <HelpDeepLinkHandler />
+        <Probe />
+      </HelpWidgetProvider>,
+    );
+    act(() => {
+      getByTestId('close-btn').click();
+    });
+    expect(routerReplaceMock).toHaveBeenCalledWith('/dashboard?communityId=1', { scroll: false });
+  });
+
+  it('does not call router.replace when ?help= is not present', () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('communityId=1'));
+    const { getByTestId } = render(
+      <HelpWidgetProvider>
+        <HelpDeepLinkHandler />
+        <Probe />
+      </HelpWidgetProvider>,
+    );
+    act(() => {
+      getByTestId('close-btn').click();
+    });
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 8.2: Run — expect failure**
+
+```bash
+pnpm exec vitest run apps/web/__tests__/help/help-deep-link-handler.test.tsx
+```
+
+Expected: FAIL — module not found.
+
+- [ ] **Step 8.3: Create the component**
+
+Create `apps/web/src/components/help/help-deep-link-handler.tsx`:
 
 ```tsx
 'use client';
 
-import { useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+/**
+ * <HelpDeepLinkHandler/> — bridges URL state and modal state.
+ *
+ * Open: when the URL contains `?help=<category>/<slug>` (validated by the
+ * same regex as the API endpoint), opens the modal pointed at that article.
+ *
+ * Close: when the modal closes (selectedArticle clears AND isOpen=false),
+ * strips `?help=` from the URL via router.replace. This prevents
+ * refresh-after-close from reopening the modal. Other query params are
+ * preserved.
+ *
+ * Mounted inside HelpWidgetProvider so it can read selectedArticle from
+ * the same context the modal does.
+ */
+import { useEffect, useRef } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
 
-export function HelpDeepLinkHandler() {
-  const searchParams = useSearchParams();
-  const { openArticle } = useHelpWidget();
+const SLUG_REGEX = /^[a-z0-9-]+$/;
 
+export function HelpDeepLinkHandler() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { isOpen, selectedArticle, openArticle } = useHelpWidget();
+  const wasOpen = useRef(false);
+
+  // Open the modal when ?help=cat/slug appears.
   useEffect(() => {
     const helpParam = searchParams.get('help');
     if (!helpParam) return;
     const [category, slug] = helpParam.split('/');
-    if (category && slug && /^[a-z0-9-]+$/.test(category) && /^[a-z0-9-]+$/.test(slug)) {
+    if (category && slug && SLUG_REGEX.test(category) && SLUG_REGEX.test(slug)) {
       openArticle(category, slug);
     }
   }, [searchParams, openArticle]);
+
+  // Strip ?help= when the modal closes. Detect close as "was open, now isn't".
+  useEffect(() => {
+    const isOpenNow = isOpen || selectedArticle !== null;
+    if (wasOpen.current && !isOpenNow && searchParams.get('help')) {
+      const remaining = new URLSearchParams(searchParams.toString());
+      remaining.delete('help');
+      const qs = remaining.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+    wasOpen.current = isOpenNow;
+  }, [isOpen, selectedArticle, searchParams, router, pathname]);
 
   return null;
 }
 ```
 
-Add this component as a child inside `<HelpWidgetProvider>` (next to `<HelpWidget/>`):
+- [ ] **Step 8.4: Mount it in app-shell**
+
+In `apps/web/src/components/layout/app-shell.tsx`, import the component:
+
+```tsx
+import { HelpDeepLinkHandler } from '@/components/help/help-deep-link-handler';
+```
+
+Add it inside `<HelpWidgetProvider>` (next to `<HelpWidget/>`):
 
 ```tsx
 <HelpWidgetProvider>
@@ -2011,7 +2392,15 @@ Add this component as a child inside `<HelpWidgetProvider>` (next to `<HelpWidge
 
 (Don't mount `<HelpDocsModal/>` yet — that's Task 9.)
 
-- [ ] **Step 8.2: Typecheck**
+- [ ] **Step 8.5: Run the test — expect pass**
+
+```bash
+pnpm exec vitest run apps/web/__tests__/help/help-deep-link-handler.test.tsx
+```
+
+Expected: PASS (4 tests).
+
+- [ ] **Step 8.6: Typecheck**
 
 ```bash
 pnpm typecheck
@@ -2019,16 +2408,19 @@ pnpm typecheck
 
 Expected: PASS.
 
-- [ ] **Step 8.3: Commit**
+- [ ] **Step 8.7: Commit**
 
 ```bash
-git add apps/web/src/components/layout/app-shell.tsx
+git add apps/web/src/components/help/help-deep-link-handler.tsx \
+        apps/web/__tests__/help/help-deep-link-handler.test.tsx \
+        apps/web/src/components/layout/app-shell.tsx
 git commit -m "$(cat <<'EOF'
-feat(help): add HelpDeepLinkHandler for ?help=cat/slug query param
+feat(help): HelpDeepLinkHandler for ?help=cat/slug + strip-on-close
 
-Lets external links (emails, in-app notifications) open the help modal
-to a specific article on any route. Regex-validates both segments to
-the same shape as the API endpoint's Zod schema.
+Bridges URL state with modal state. Opens the modal on ?help=cat/slug
+(regex-validated to match the API endpoint's Zod schema). Strips the
+?help= param via router.replace when the modal closes so refresh-after-
+close does not reopen it. Other query params preserved.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
@@ -2060,26 +2452,22 @@ const HELP_DOCS_MODAL_ENABLED =
   process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
 ```
 
-Update the `AppShell` return to mount the new modal:
+Update the `AppShell` return to mount the new modal. Note: `props.role` is the top-level `AnyCommunityRole | null` prop on `AppShellProps` (verified at [app-shell.tsx:72–76](apps/web/src/components/layout/app-shell.tsx#L72)) — NOT `props.community?.role`. When `role` is null (user on `/select-community`), the modal short-circuits to `null`.
 
 ```tsx
 export function AppShell(props: AppShellProps) {
   const communityId = props.community?.id ?? 0;
-  const role =
-    props.community?.role ??
-    /* fallback for shells rendered without a resolved community */
-    'owner';
+  const canShowHelpModal =
+    HELP_DOCS_MODAL_ENABLED && props.role != null && communityId > 0;
 
   return (
     <SidebarProvider>
       <HelpWidgetProvider>
         <ShellInner {...props} />
         <HelpWidget communityId={communityId} />
-        <HelpDocsModal
-          communityId={communityId}
-          role={role}
-          flagEnabled={HELP_DOCS_MODAL_ENABLED}
-        />
+        {canShowHelpModal && (
+          <HelpDocsModal communityId={communityId} flagEnabled />
+        )}
         <HelpDeepLinkHandler />
       </HelpWidgetProvider>
     </SidebarProvider>
@@ -2087,7 +2475,7 @@ export function AppShell(props: AppShellProps) {
 }
 ```
 
-> **Note:** Verify `props.community?.role` exists on `AppShellProps`. If the role lives elsewhere (e.g. `props.membership?.role`), use the actual prop. Grep for the existing role-passing pattern with: `grep -n "role" apps/web/src/components/layout/app-shell.tsx` and use the same shape.
+Note: `<HelpDocsModal/>` no longer takes a `role` prop. The modal doesn't need it directly — role-based filtering happens server-side inside the new endpoints (`/api/v1/help/article`, `/api/v1/help/featured`) which derive the role from the authenticated session. This also avoids a stale-prop bug if the user's role changes while the app is mounted.
 
 - [ ] **Step 9.2: Top-bar button: skip mounting old widget when flag is on**
 
@@ -2206,24 +2594,31 @@ EOF
 /**
  * Integration tests for the HelpDocsModal end-to-end behavior.
  *
+ * Imports the REAL HelpDeepLinkHandler from src/components/help — not a
+ * local reimplementation — so any drift between the test scenario and
+ * the production handler surfaces immediately.
+ *
  * Scope:
  * - ? keyboard shortcut opens modal
+ * - ? keyboard shortcut is SUPPRESSED inside input fields
  * - Esc closes modal
  * - ?help=cat/slug query param opens modal to that article
- * - Mobile breakpoint renders Sheet, desktop renders Dialog
+ * - flagEnabled=false renders nothing
  *
- * Mocks the API layer (useHelpArticle, useContextualHelp) to avoid
- * needing a real backend; verifies the full provider + modal +
- * deep-link handler integration.
+ * Mocks the API layer (useHelpArticle, useContextualHelp, useFeaturedArticles)
+ * to avoid needing a real backend.
  */
+import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const useContextualHelpMock = vi.fn();
 const useHelpArticleMock = vi.fn();
+const useFeaturedArticlesMock = vi.fn();
 const useSearchParamsMock = vi.fn();
 const usePathnameMock = vi.fn();
+const routerReplaceMock = vi.fn();
 
 vi.mock('../../src/hooks/use-help', async () => {
   const actual = await vi.importActual<typeof import('../../src/hooks/use-help')>(
@@ -2233,12 +2628,14 @@ vi.mock('../../src/hooks/use-help', async () => {
     ...actual,
     useContextualHelp: (...args: unknown[]) => useContextualHelpMock(...args),
     useHelpArticle: (...args: unknown[]) => useHelpArticleMock(...args),
+    useFeaturedArticles: (...args: unknown[]) => useFeaturedArticlesMock(...args),
   };
 });
 
 vi.mock('next/navigation', () => ({
   usePathname: () => usePathnameMock(),
   useSearchParams: () => useSearchParamsMock(),
+  useRouter: () => ({ replace: routerReplaceMock }),
 }));
 
 vi.mock('../../src/components/help/help-article-body', () => ({
@@ -2253,26 +2650,9 @@ vi.mock('../../src/components/help/help-docs-modal-search-panel', () => ({
 
 import {
   HelpWidgetProvider,
-  useHelpWidget,
 } from '../../src/components/help/help-widget-provider';
 import { HelpDocsModal } from '../../src/components/help/help-docs-modal';
-
-function HelpDeepLinkHandler() {
-  // Local copy of the shell's deep-link handler, since the integration test
-  // does not mount the full AppShell.
-  const params = useSearchParamsMock();
-  const { openArticle } = useHelpWidget();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => {
-    const helpParam = params.get('help');
-    if (!helpParam) return;
-    const [category, slug] = helpParam.split('/');
-    if (category && slug) openArticle(category, slug);
-  }, [params]);
-  return null;
-}
-
-import React from 'react';
+import { HelpDeepLinkHandler } from '../../src/components/help/help-deep-link-handler';
 
 function harness(flagEnabled = true) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -2280,7 +2660,7 @@ function harness(flagEnabled = true) {
     <QueryClientProvider client={qc}>
       <HelpWidgetProvider>
         <HelpDeepLinkHandler />
-        <HelpDocsModal communityId={1} role="owner" flagEnabled={flagEnabled} />
+        <HelpDocsModal communityId={1} flagEnabled={flagEnabled} />
       </HelpWidgetProvider>
     </QueryClientProvider>,
   );
@@ -2299,18 +2679,19 @@ beforeEach(() => {
   useSearchParamsMock.mockReturnValue(new URLSearchParams());
   useContextualHelpMock.mockReturnValue({ data: [], isFetching: false });
   useHelpArticleMock.mockReturnValue({ data: null, isLoading: false, isError: false });
+  useFeaturedArticlesMock.mockReturnValue({ data: [] });
+
+  // Pointer-device check for the ? shortcut requires matchMedia mock — jsdom
+  // defaults to undefined, so we override.
+  window.matchMedia = vi.fn().mockReturnValue({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }) as never;
 });
 
 describe('HelpDocsModal integration', () => {
   it('opens via ? keyboard shortcut and closes via Esc', async () => {
-    // Pointer-device check requires matchMedia mock — jsdom defaults to false,
-    // so we override.
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: true,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }) as never;
-
     harness();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
@@ -2327,6 +2708,26 @@ describe('HelpDocsModal integration', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('suppresses the ? shortcut when focus is inside an input', async () => {
+    harness();
+
+    // Render an input outside the modal that captures focus.
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+
+    act(() => {
+      fireEvent.keyDown(input, { key: '?' });
+    });
+
+    // Give React a tick to settle — if the modal opens, the assertion below
+    // will catch it.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    document.body.removeChild(input);
+  });
+
   it('opens to a specific article when ?help=cat/slug is set', async () => {
     useSearchParamsMock.mockReturnValue(new URLSearchParams('help=getting-started/welcome'));
     useHelpArticleMock.mockReturnValue({
@@ -2341,9 +2742,29 @@ describe('HelpDocsModal integration', () => {
     expect(screen.getByTestId('article-body')).toHaveTextContent('Welcome');
   });
 
+  it('strips ?help= from the URL when the modal closes', async () => {
+    useSearchParamsMock.mockReturnValue(new URLSearchParams('help=getting-started/welcome'));
+    useHelpArticleMock.mockReturnValue({
+      data: articleData,
+      isLoading: false,
+      isError: false,
+    });
+
+    harness();
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
+
+    await waitFor(() =>
+      expect(routerReplaceMock).toHaveBeenCalledWith('/dashboard', { scroll: false }),
+    );
+  });
+
   it('renders null when flagEnabled=false', () => {
     harness(false);
-    // Open via the provider directly — we expect nothing to mount
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
@@ -2477,15 +2898,18 @@ After completing all tasks, run this checklist:
 - Architecture diagram → Tasks 1, 2, 7, 9
 - `<HelpDocsModal/>` → Task 7
 - `<HelpArticleBody/>` → Tasks 4, 5
-- `useHelpArticle` → Task 3
+- `useHelpArticle` (with 1500ms timeout) → Task 3
+- `useFeaturedArticles` → Task 5b
 - `GET /api/v1/help/article` → Task 2
+- `GET /api/v1/help/featured` → Task 5b
 - `HelpWidgetProvider` extension → Task 1
 - Article-fetching flow → Task 7 (composes), Task 3 (hook), Task 2 (endpoint)
-- UX states (loading, empty, error, success, mobile, reduced motion, keyboard, deep link) → Tasks 7 (most states), 8 (deep link), 10 (keyboard via integration), 11 (manual reduced-motion + network)
+- UX states (loading, empty, error, success, mobile, reduced motion, keyboard, deep link) → Tasks 7 (most states), 8 (deep link open + strip-on-close), 10 (keyboard via integration including negative case), 11 (manual reduced-motion + network)
 - Accessibility → Task 7 (component) + Task 11 (manual verification)
-- Performance (`next/dynamic`, `unstable_cache`, React Query staleTime) → Tasks 2, 3, 9
-- Security (404 not 403, Zod validation, no `dangerouslySetInnerHTML`) → Task 2
-- Rollout Phase A → Tasks 1–11
+- Performance (`next/dynamic`, `unstable_cache`, React Query staleTime, bundle-size measurement) → Tasks 2, 3, 9, 11
+- Security (404 not 403, Zod validation, no `dangerouslySetInnerHTML`, no client import of server-only modules) → Tasks 2, 5b
+- `role == null` short-circuit on `/select-community` → Task 9
+- Rollout Phase A → Tasks 1–11 (with Task 5b inserted)
 - Phase B/C — explicitly out of scope, called out at top of plan
 - Testing matrix → Tasks 1–10 plus manual checks in Task 11
 
@@ -2495,5 +2919,16 @@ After completing all tasks, run this checklist:
 - `openArticle(category: string, slug: string)` signature — Task 1 defines, Tasks 6, 7, 8 consume
 - `displayMode: 'route' | 'modal'` — Task 4 defines, Tasks 5, 7 consume
 - `flagEnabled` prop on `HelpDocsModal` — Task 7 defines, Task 9 passes
+- `HelpDocsModal` props are now `{communityId, flagEnabled}` only — no `role` (role-derivation happens server-side per request)
 
 **Placeholder scan:** No `TODO`, `TBD`, `implement later`, `Similar to Task N` in code blocks. Every task has complete code or commands.
+
+**Senior-review fixes applied (2026-05-20):**
+- ✅ `getFeaturedForRole` no longer imported in client component — replaced by `useFeaturedArticles` hook via new endpoint (Task 5b)
+- ✅ `props.role` (top-level) instead of `props.community?.role`; null short-circuit added (Task 9)
+- ✅ Modal width is `xl` design-system token (960px), not a custom override
+- ✅ `useHelpArticle` uses `withTimeoutSignal` for 1500ms timeout parity (Task 3)
+- ✅ Integration test imports the real `<HelpDeepLinkHandler/>` (Tasks 8, 10)
+- ✅ Negative-case `?` keyboard test added (Task 10)
+- ✅ `?help=` URL param strips on modal close (Task 8)
+- ✅ `import React` at top of file in integration test (Task 10)
