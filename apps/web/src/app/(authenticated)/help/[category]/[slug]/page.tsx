@@ -1,29 +1,22 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { compileMDX } from 'next-mdx-remote/rsc';
+import { serialize } from 'next-mdx-remote/serialize';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
-import { ArticleFeedback } from '@/components/help/article-feedback';
-import { ArticleViewTracker } from '@/components/help/article-view-tracker';
-import { TableOfContents, helpMdxComponents } from '@/components/help/mdx-components';
+import { HelpArticleBody } from '@/components/help/help-article-body';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 import { extractTableOfContents } from '@/lib/help/toc';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import {
   getAllArticles,
   getArticle,
   isArticleVisibleToRole,
+  filterArticlesByFeatures,
+  type HelpArticleMetadata,
 } from '@/lib/services/help-article-service';
 
 interface HelpArticlePageProps {
   params: Promise<{ category: string; slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
-}
-
-function formatUpdatedAt(value: string | undefined): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
 }
 
 export default async function HelpArticlePage({
@@ -39,36 +32,31 @@ export default async function HelpArticlePage({
     `/help/${category}/${slug}`,
   );
   const effectiveRole = context.membership.presetKey ?? context.membership.role;
+  const features = getFeaturesForCommunity(context.membership.communityType);
   const article = getArticle(category, slug);
 
-  if (!article || !isArticleVisibleToRole(article.metadata, effectiveRole)) {
+  if (
+    !article ||
+    !isArticleVisibleToRole(article.metadata, effectiveRole) ||
+    filterArticlesByFeatures([article.metadata], features).length === 0
+  ) {
     notFound();
   }
 
-  const { content } = await compileMDX({
-    source: article.rawContent,
-    components: helpMdxComponents,
-    options: { parseFrontmatter: true },
-  });
+  const source = await serialize(article.rawContent, { parseFrontmatter: true });
+  const toc = extractTableOfContents(article.rawContent);
 
-  const tocItems = extractTableOfContents(article.rawContent);
-  const formattedUpdatedAt = formatUpdatedAt(article.metadata.updatedAt);
-
-  const related = article.metadata.relatedArticles
+  const related: HelpArticleMetadata[] = article.metadata.relatedArticles
     .map((relatedSlug) => getAllArticles().find((candidate) => candidate.slug === relatedSlug))
     .filter(
-      (candidate): candidate is NonNullable<typeof candidate> =>
-        !!candidate && isArticleVisibleToRole(candidate, effectiveRole),
+      (c): c is HelpArticleMetadata =>
+        !!c &&
+        isArticleVisibleToRole(c, effectiveRole) &&
+        filterArticlesByFeatures([c], features).length > 0,
     );
 
   return (
     <div className="space-y-8">
-      <ArticleViewTracker
-        communityId={context.communityId}
-        articleSlug={article.metadata.slug}
-        articleCategory={article.metadata.category}
-      />
-
       <PageHeader
         title={article.metadata.title}
         description={article.metadata.description}
@@ -88,102 +76,14 @@ export default async function HelpArticlePage({
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-content-tertiary">
-        {typeof article.metadata.readTimeMinutes === 'number' && (
-          <span>{article.metadata.readTimeMinutes} min read</span>
-        )}
-        {formattedUpdatedAt && (
-          <>
-            <span aria-hidden="true">/</span>
-            <span>Updated {formattedUpdatedAt}</span>
-          </>
-        )}
-        {article.metadata.roles.length > 0 && (
-          <>
-            <span aria-hidden="true">/</span>
-            <div className="flex flex-wrap gap-2">
-              {article.metadata.roles.map((role) => (
-                <span
-                  key={role}
-                  className="rounded-full bg-surface-muted px-2 py-0.5 capitalize"
-                >
-                  {role.replace(/_/g, ' ')}
-                </span>
-              ))}
-            </div>
-          </>
-        )}
-        {(article.metadata.statutes ?? []).length > 0 && (
-          <>
-            <span aria-hidden="true">/</span>
-            <div className="flex flex-wrap gap-2">
-              {(article.metadata.statutes ?? []).map((statute) => (
-                <Link
-                  key={statute}
-                  href={`/help/statutes/${encodeURIComponent(statute)}?communityId=${context.communityId}`}
-                  className="rounded-full bg-purple-50 px-2 py-0.5 text-purple-900 transition-colors hover:bg-purple-100"
-                  aria-label={`See all articles tagged with ${statute}`}
-                >
-                  {statute}
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Mobile TOC — collapsible disclosure above the body on <lg viewports.
-          Desktop continues to render a sticky sidebar (hidden lg:block below). */}
-      {tocItems.length > 0 && (
-        <details className="rounded-2xl border border-edge bg-surface-card lg:hidden">
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-content [&::-webkit-details-marker]:hidden">
-            On this page
-          </summary>
-          <div className="border-t border-edge-subtle px-4 py-3">
-            <TableOfContents items={tocItems} />
-          </div>
-        </details>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
-        <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
-          {content}
-        </article>
-
-        {tocItems.length > 0 && (
-          <aside className="hidden lg:block">
-            <div className="sticky top-24">
-              <TableOfContents items={tocItems} />
-            </div>
-          </aside>
-        )}
-      </div>
-
-      <ArticleFeedback
+      <HelpArticleBody
+        source={source}
+        toc={toc}
+        metadata={article.metadata}
+        related={related}
         communityId={context.communityId}
-        articleSlug={article.metadata.slug}
-        articleCategory={article.metadata.category}
+        displayMode="route"
       />
-
-      {related.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-content">Related guides</h2>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {related.map((candidate) => (
-              <Link
-                key={candidate.slug}
-                href={`/help/${candidate.category}/${candidate.slug}?communityId=${context.communityId}`}
-                className="rounded-2xl border border-edge bg-surface-card p-5 shadow-sm transition-colors hover:border-edge-strong hover:bg-surface-hover"
-              >
-                <h3 className="text-base font-semibold text-content">{candidate.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-content-secondary">
-                  {candidate.description}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
