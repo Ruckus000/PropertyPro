@@ -289,6 +289,7 @@ export function useHelpArticle(
     enabled: Boolean(category && slug && communityId > 0),
     staleTime: 5 * 60_000,
     gcTime: 60 * 60_000,
+    retry: false,
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
         category: category!,
