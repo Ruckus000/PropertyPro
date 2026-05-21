@@ -22,7 +22,7 @@ import { buildCommunityDashboardUrl } from '@/lib/utils/community-url';
  */
 export function CommunitySwitcher() {
   const { data } = useUserCommunities();
-  const communities = data?.data ?? [];
+  const communities = data ?? [];
 
   if (communities.length < 2) return null;
 
