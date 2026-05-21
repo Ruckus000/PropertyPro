@@ -31,6 +31,7 @@ export const HELP_KEYS = {
     ['help', 'feedback', communityId, articleSlug] as const,
   article: (category: string, slug: string, communityId: number) =>
     ['help', 'article', category, slug, communityId] as const,
+  featured: (communityId: number) => ['help', 'featured', communityId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -178,6 +179,29 @@ export function useContextualHelp(path: string, communityId: number) {
     // A timeout abort still surfaces as `error` to the consumer; the widget
     // renders its "browse the full help center" fallback in the no-data case.
     retry: false,
+  });
+}
+
+/**
+ * Returns the featured-for-role articles list from /api/v1/help/featured.
+ * Used by HelpDocsModalSearchPanel when no contextual article matches
+ * the current route.
+ *
+ * staleTime 5min — the featured list rarely changes.
+ */
+export function useFeaturedArticles(communityId: number) {
+  return useQuery<HelpArticleResult[]>({
+    queryKey: HELP_KEYS.featured(communityId),
+    enabled: communityId > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({ communityId: String(communityId) });
+      return requestJson<HelpArticleResult[]>(
+        `/api/v1/help/featured?${params}`,
+        { credentials: 'include', signal },
+      );
+    },
   });
 }
 

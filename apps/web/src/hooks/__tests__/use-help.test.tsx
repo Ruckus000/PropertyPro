@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HELP_KEYS,
   useArticleFeedback,
+  useFeaturedArticles,
   useHelpArticle,
   useSubmitArticleFeedback,
 } from '../use-help';
@@ -167,5 +168,28 @@ describe('useHelpArticle', () => {
     const { wrapper } = createWrapper();
     const { result } = renderHook(() => useHelpArticle('c', 's', 42), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe('useFeaturedArticles', () => {
+  it('fetches and returns featured articles', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: [
+          { title: 'Welcome', category: 'getting-started', slug: 'welcome', description: '' },
+        ],
+      }),
+    );
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useFeaturedArticles(1), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(1);
+  });
+
+  it('does not fetch when communityId is 0', () => {
+    const { wrapper } = createWrapper();
+    const { result } = renderHook(() => useFeaturedArticles(0), { wrapper });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
