@@ -23,9 +23,14 @@ import { defineRoute, z } from '@propertypro/api-contract';
 /**
  * Per-item shape. Mirrors the projection in `./route.ts`: `id`, `name`,
  * `slug`, `role`, `displayTitle`, `communityType`. We do NOT expose the
- * full `UserCommunityRow` (which also carries `city`, `state`, `logoPath`,
- * `isUnitOwner`) because the only in-app consumer is the community-switcher
- * dropdown which renders name + link only.
+ * full `UserCommunityRow` — the source row also carries `city`, `state`,
+ * `logoPath`, `isUnitOwner`, `subscriptionStatus`, `subscriptionPlan`,
+ * `freeAccessExpiresAt`, `isDemo`, `trialEndsAt`, and `demoExpiresAt`.
+ * Those fields are intentionally dropped because the only in-app consumer
+ * is the community-switcher dropdown which renders name + link only.
+ * (Server-side consumers — `select-community/page.tsx`,
+ * `community-picker-grid.tsx`, `page-context.ts` — use
+ * `listCommunitiesForUser` directly and have access to the full row.)
  */
 export const userCommunityItemSchema = z.object({
   id: z.number().int().positive(),
