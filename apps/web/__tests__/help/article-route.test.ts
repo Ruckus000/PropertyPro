@@ -182,4 +182,31 @@ describe('GET /api/v1/help/article', () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it('excludes feature-gated related articles from the related field', async () => {
+    const gatedRelatedMeta = {
+      ...sampleArticle.metadata,
+      slug: 'gated-related-slug',
+      featureGates: ['evoting'],
+    };
+    // The requested article includes the gated slug in its relatedArticles list
+    getArticleMock.mockReturnValue({
+      ...sampleArticle,
+      metadata: { ...sampleArticle.metadata, relatedArticles: ['gated-related-slug'] },
+    });
+    // getAllArticles returns the gated related article so the route can find it by slug
+    getAllArticlesMock.mockReturnValue([gatedRelatedMeta]);
+    // filterArticlesByFeatures passes the requested article but blocks the gated related
+    filterArticlesByFeaturesMock.mockImplementation(
+      (articles: { slug: string }[]) =>
+        articles.filter((a) => a.slug !== 'gated-related-slug'),
+    );
+
+    const res = await GET(
+      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.related).toEqual([]);
+  });
 });

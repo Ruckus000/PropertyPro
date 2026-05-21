@@ -79,7 +79,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }
 
   const compiled = await getCompiledArticle(article);
-  const related = getRelatedArticles(article, effectiveRole);
+  const related = getRelatedArticles(article, effectiveRole, features);
 
   return NextResponse.json({
     data: {
@@ -110,14 +110,21 @@ async function getCompiledArticle(article: HelpArticleSource): Promise<CompiledA
 
 /**
  * Resolves frontmatter `relatedArticles` slugs to full metadata, filtered
- * by the viewer's role. Mirrors the existing logic at
- * /help/[category]/[slug]/page.tsx lines 57–62.
+ * by the viewer's role and community features. Mirrors the existing logic at
+ * /help/[category]/[slug]/page.tsx lines 57–62, with feature-gate parity so
+ * related links don't 404 when clicked.
  */
 function getRelatedArticles(
   article: HelpArticleSource,
   effectiveRole: string,
+  features: ReturnType<typeof getFeaturesForCommunity>,
 ): HelpArticleMetadata[] {
   return article.metadata.relatedArticles
     .map((slug) => getAllArticles().find((a) => a.slug === slug))
-    .filter((a): a is HelpArticleMetadata => !!a && isArticleVisibleToRole(a, effectiveRole));
+    .filter(
+      (a): a is HelpArticleMetadata =>
+        !!a &&
+        isArticleVisibleToRole(a, effectiveRole) &&
+        filterArticlesByFeatures([a], features).length > 0,
+    );
 }
