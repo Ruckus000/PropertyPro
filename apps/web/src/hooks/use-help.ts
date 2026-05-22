@@ -17,6 +17,17 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** Contextual help fetch timeout — bail to fallback copy rather than spin. */
 const CONTEXTUAL_TIMEOUT_MS = 1500;
 
+/**
+ * Single-article fetch timeout. Larger than CONTEXTUAL_TIMEOUT_MS because the
+ * article endpoint serializes MDX (heavier than the small contextual lookup)
+ * and can hit lambda cold-start on the first request after a deploy. 1500ms
+ * caused spurious "couldn't load this article" errors when the route was
+ * compiling for the first time in dev — same risk applies to production cold
+ * starts. 5000ms gives headroom; the article-fetch path also enables React
+ * Query's retry, so a slow first attempt still recovers gracefully.
+ */
+const ARTICLE_TIMEOUT_MS = 5000;
+
 // ---------------------------------------------------------------------------
 // Query Keys
 // ---------------------------------------------------------------------------
@@ -297,7 +308,10 @@ export interface HelpArticleResponse {
  * Articles are effectively static at runtime, so staleTime is 5min and
  * gcTime is 1hr — minimize refetches.
  *
- * Times out after CONTEXTUAL_TIMEOUT_MS (1500ms) — same as useContextualHelp.
+ * Times out after ARTICLE_TIMEOUT_MS (5000ms) — longer than the contextual
+ * lookup because article fetches serialize MDX server-side and may hit
+ * lambda cold-starts. The contextual list endpoint is cheaper, so it keeps
+ * the tighter 1500ms timeout.
  * Caller surfaces the timeout as an error → AlertBanner with retry.
  */
 export function useHelpArticle(
@@ -314,7 +328,11 @@ export function useHelpArticle(
     enabled: enabled && Boolean(category && slug && communityId > 0),
     staleTime: 5 * 60_000,
     gcTime: 60 * 60_000,
-    retry: false,
+    // Retry once after a short delay: the article endpoint can hit cold-start
+    // on first request after deploy (route compile / lambda warm-up). One
+    // retry hides that from the user without masking real backend errors.
+    retry: 1,
+    retryDelay: 500,
     queryFn: async ({ signal }) => {
       const params = new URLSearchParams({
         category: category!,
@@ -325,7 +343,7 @@ export function useHelpArticle(
         `/api/v1/help/article?${params}`,
         {
           credentials: 'include',
-          signal: withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS),
+          signal: withTimeoutSignal(signal, ARTICLE_TIMEOUT_MS),
         },
       );
     },
