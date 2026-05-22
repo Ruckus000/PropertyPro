@@ -28,7 +28,7 @@ export function PageHeaderHelpButton() {
       onClick={widget.toggle}
       aria-label="Open help for this page"
       title="Open help for this page (?)"
-      className="text-content-secondary hover:text-content"
+      className="text-content-secondary hover:text-interactive hover:bg-transparent"
     >
       <HelpCircle aria-hidden="true" />
       Help
