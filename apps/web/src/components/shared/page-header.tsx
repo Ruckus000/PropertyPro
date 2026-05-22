@@ -4,12 +4,21 @@
  * Renders the page-level h1 heading. Used at the top of content areas
  * below AppTopBar to establish page identity and provide actions.
  *
- * Note: the per-page Help button is rendered at the AppShell content-area
- * level (not here) so it appears on EVERY route, including ~30 pages that
- * roll their own h1 instead of using this component.
+ * The per-page Help button is auto-rendered in the actions row (after any
+ * page-specific actions) so it sits inline with the page's primary action
+ * buttons rather than colliding with them. The AppShell-level fallback
+ * Help button hides itself via CSS `group-has-[data-page-header]:hidden`
+ * when this component is present — so routes that DON'T use PageHeader
+ * still get a Help button from the shell.
+ *
+ * Pages can suppress the inline Help button via `hideHelpButton` (e.g.
+ * legitimate edge case: a future page that wants no help affordance at
+ * all). Doing so does NOT make the shell-level button reappear — the
+ * data-page-header signal is the source of truth.
  */
 
 import * as React from "react";
+import { PageHeaderHelpButton } from "./page-header-help-button";
 import { cn } from "@/lib/utils";
 
 interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -21,6 +30,8 @@ interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   actions?: React.ReactNode;
   /** Optional breadcrumb or context element */
   breadcrumb?: React.ReactNode;
+  /** Suppress the auto-rendered Help button. Rare; default false. */
+  hideHelpButton?: boolean;
 }
 
 export function PageHeader({
@@ -28,12 +39,17 @@ export function PageHeader({
   description,
   actions,
   breadcrumb,
+  hideHelpButton = false,
   className,
   children,
   ...props
 }: PageHeaderProps) {
+  const showHelp = !hideHelpButton;
+  const showActionsRow = Boolean(actions) || showHelp;
+
   return (
     <div
+      data-page-header="true"
       className={cn("flex flex-col gap-2 pb-6", className)}
       {...props}
     >
@@ -54,9 +70,10 @@ export function PageHeader({
           {children}
         </div>
 
-        {actions && (
+        {showActionsRow && (
           <div className="flex shrink-0 items-center gap-2">
             {actions}
+            {showHelp && <PageHeaderHelpButton />}
           </div>
         )}
       </div>

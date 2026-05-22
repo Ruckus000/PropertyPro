@@ -174,6 +174,15 @@ describe('GET /api/v1/help/article', () => {
     expect(res.status).toBe(404);
   });
 
+  it('returns 401 when the session is not authenticated', async () => {
+    const { UnauthorizedError } = await import('@/lib/api/errors/UnauthorizedError');
+    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
+    const res = await GET(
+      makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
+    );
+    expect(res.status).toBe(401);
+  });
+
   it('returns 404 (not 403) when article is role-gated', async () => {
     isArticleVisibleToRoleMock.mockReturnValue(false);
     const res = await GET(

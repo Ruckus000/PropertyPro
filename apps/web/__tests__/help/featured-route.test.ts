@@ -1,6 +1,16 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
+// Sentry mock — required because we use the real withErrorHandler below
+// (so UnauthorizedError translates to a 401 response). withErrorHandler
+// imports @sentry/nextjs; mock it to avoid a real network call.
+vi.mock('@sentry/nextjs', () => ({
+  withScope: vi.fn((cb: (scope: unknown) => void) =>
+    cb({ setTag: vi.fn(), setUser: vi.fn() }),
+  ),
+  captureException: vi.fn(),
+}));
+
 const {
   getFeaturedForRoleMock,
   filterArticlesByFeaturesMock,
@@ -38,9 +48,9 @@ vi.mock('@/lib/api/tenant-context', () => ({
   resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
 }));
 
-vi.mock('@/lib/api/error-handler', () => ({
-  withErrorHandler: (handler: unknown) => handler,
-}));
+// NOTE: withErrorHandler is NOT mocked — using the real implementation
+// lets thrown errors (UnauthorizedError, NotFoundError, etc.) translate
+// to the correct HTTP status codes.
 
 import { GET } from '../../src/app/api/v1/help/featured/route';
 
@@ -81,6 +91,15 @@ describe('GET /api/v1/help/featured', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data).toEqual([]);
+  });
+
+  it('returns 401 when the session is not authenticated', async () => {
+    const { UnauthorizedError } = await import('@/lib/api/errors/UnauthorizedError');
+    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
+    const res = await GET(
+      new NextRequest(new URL('/api/v1/help/featured?communityId=1', 'http://localhost:3000')),
+    );
+    expect(res.status).toBe(401);
   });
 
   it('excludes feature-gated articles from the featured list', async () => {

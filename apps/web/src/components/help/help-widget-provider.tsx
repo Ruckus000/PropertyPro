@@ -5,7 +5,7 @@
  * currently being viewed in the help docs modal. Follows the same pattern
  * as sidebar-context.tsx.
  */
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export interface SelectedArticle {
   category: string;
@@ -19,6 +19,16 @@ interface HelpWidgetContextValue {
   toggle: () => void;
   selectedArticle: SelectedArticle | null;
   openArticle: (category: string, slug: string) => void;
+  /**
+   * Set by callers that will close the modal as part of a navigation
+   * (e.g. a footer Link click). Consumed by HelpDeepLinkHandler to skip
+   * stripping `?help=` from the URL on the *next* close — otherwise
+   * router.replace races with the Link's navigation. Auto-clears after
+   * one close.
+   */
+  markCloseAsNavigation: () => void;
+  /** @internal — read by HelpDeepLinkHandler only. */
+  consumeNavigationCloseFlag: () => boolean;
 }
 
 const HelpWidgetContext = createContext<HelpWidgetContextValue | null>(null);
@@ -26,6 +36,7 @@ const HelpWidgetContext = createContext<HelpWidgetContextValue | null>(null);
 export function HelpWidgetProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<SelectedArticle | null>(null);
+  const navigationCloseRef = useRef(false);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => {
@@ -36,6 +47,14 @@ export function HelpWidgetProvider({ children }: { children: ReactNode }) {
   const openArticle = useCallback((category: string, slug: string) => {
     setSelectedArticle({ category, slug });
     setIsOpen(true);
+  }, []);
+  const markCloseAsNavigation = useCallback(() => {
+    navigationCloseRef.current = true;
+  }, []);
+  const consumeNavigationCloseFlag = useCallback(() => {
+    const flag = navigationCloseRef.current;
+    navigationCloseRef.current = false;
+    return flag;
   }, []);
 
   // ? keyboard shortcut (only on pointer devices, not in inputs)
@@ -57,7 +76,16 @@ export function HelpWidgetProvider({ children }: { children: ReactNode }) {
 
   return (
     <HelpWidgetContext.Provider
-      value={{ isOpen, open, close, toggle, selectedArticle, openArticle }}
+      value={{
+        isOpen,
+        open,
+        close,
+        toggle,
+        selectedArticle,
+        openArticle,
+        markCloseAsNavigation,
+        consumeNavigationCloseFlag,
+      }}
     >
       {children}
     </HelpWidgetContext.Provider>

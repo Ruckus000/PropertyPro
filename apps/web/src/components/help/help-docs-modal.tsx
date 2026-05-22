@@ -41,7 +41,8 @@ export function HelpDocsModal({
   communityId,
   flagEnabled,
 }: HelpDocsModalProps) {
-  const { isOpen, close, selectedArticle, openArticle } = useHelpWidget();
+  const { isOpen, close, selectedArticle, openArticle, markCloseAsNavigation } =
+    useHelpWidget();
   const pathname = usePathname();
 
   const { data: contextualArticles, isFetching: isFetchingContextual } =
@@ -123,7 +124,13 @@ export function HelpDocsModal({
         <footer className="flex items-center justify-end border-t border-edge px-6 py-3">
           <Link
             href={`/help?communityId=${communityId}`}
-            onClick={close}
+            onClick={() => {
+              // Mark this close as a navigation-related close so the deep-link
+              // handler skips its router.replace — Next's <Link> is about to
+              // navigate; firing a strip-replace simultaneously creates a race.
+              markCloseAsNavigation();
+              close();
+            }}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--interactive-primary)] hover:underline"
           >
             Browse all help articles

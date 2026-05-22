@@ -254,14 +254,15 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
           id="main-content"
           className="flex-1 overflow-y-auto"
         >
-          <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 lg:px-8">
-            {/* Per-page Help button — positioned at top-right of the content
-                area so it appears on EVERY route, regardless of whether the
-                page uses <PageHeader/> or rolls its own h1. Adjacent to the
-                page title without depending on the page's layout.
-                Offsets are one tick larger than the content padding so the
-                button breathes away from card-bordered headers (top + right). */}
-            <div className="absolute right-10 top-10 z-10 lg:right-12 lg:top-12">
+          <div className="group relative mx-auto w-full max-w-[1400px] px-6 py-8 lg:px-8">
+            {/* Per-page Help button — fallback for pages that DON'T use
+                <PageHeader/>. When PageHeader is present, it renders its
+                own inline Help button in the actions row and this absolute
+                one hides via Tailwind's `group-has-` so they don't compete
+                visually. Pages with custom h1 markup (meetings, finance,
+                payments, custom dashboards, etc.) get help discoverability
+                from this fallback. */}
+            <div className="absolute right-10 top-10 z-10 group-has-[[data-page-header]]:hidden lg:right-12 lg:top-12">
               <PageHeaderHelpButton />
             </div>
             {children}
@@ -306,10 +307,17 @@ export function AppShell(props: AppShellProps) {
       <HelpWidgetProvider>
         <ShellInner {...props} />
         <HelpWidget communityId={communityId} />
+        {/* HelpDeepLinkHandler is gated on the same flag as HelpDocsModal —
+            without it, a ?help=cat/slug deep link would call openArticle()
+            and trigger the legacy <HelpWidget/> drawer to open to its search
+            list (not the article), producing a confusing UX during the
+            Phase A → Phase B transition. */}
         {canShowHelpModal && (
-          <HelpDocsModal communityId={communityId} flagEnabled />
+          <>
+            <HelpDocsModal communityId={communityId} flagEnabled />
+            <HelpDeepLinkHandler />
+          </>
         )}
-        <HelpDeepLinkHandler />
       </HelpWidgetProvider>
     </SidebarProvider>
   );
