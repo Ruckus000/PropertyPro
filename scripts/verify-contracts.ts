@@ -233,7 +233,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/notifications/archive/route.ts',
   'apps/web/src/app/api/v1/notifications/read/route.ts',
   'apps/web/src/app/api/v1/notifications/route.ts',
-  'apps/web/src/app/api/v1/notifications/unread-count/route.ts',
   'apps/web/src/app/api/v1/onboarding/apartment/route.ts',
   'apps/web/src/app/api/v1/onboarding/checklist/route.ts',
   'apps/web/src/app/api/v1/onboarding/condo/route.ts',
