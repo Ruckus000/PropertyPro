@@ -13,6 +13,13 @@ import { useHelpSearch, useContextualHelp, type HelpArticleResult } from '@/hook
 /** Capture a content-gap signal after this many consecutive no-match routes. */
 const CONTEXTUAL_GAP_THRESHOLD = 3;
 
+/**
+ * Inlined at build time by Next.js. Read at module level so the
+ * gating check is a free constant, no per-render env lookup.
+ */
+const HELP_DOCS_MODAL_ENABLED =
+  process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
+
 interface HelpWidgetProps {
   communityId: number;
 }
@@ -35,7 +42,19 @@ function ArticleLink({ article }: { article: HelpArticleResult }) {
   );
 }
 
+/**
+ * Wrapper that gates the legacy drawer on the new-modal flag. Hooks
+ * cannot be conditional, so we early-return BEFORE the inner component
+ * mounts — that prevents `useHelpSearch` and `useContextualHelp` from
+ * firing API queries when the new modal is in charge (Codex review:
+ * "Hidden legacy widget still runs queries when the modal flag is on").
+ */
 export function HelpWidget({ communityId }: HelpWidgetProps) {
+  if (HELP_DOCS_MODAL_ENABLED) return null;
+  return <HelpWidgetInner communityId={communityId} />;
+}
+
+function HelpWidgetInner({ communityId }: HelpWidgetProps) {
   const { isOpen, close } = useHelpWidget();
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,7 +67,7 @@ export function HelpWidget({ communityId }: HelpWidgetProps) {
     data: contextualArticles,
     isFetching: contextualFetching,
     isError: contextualHasError,
-  } = useContextualHelp(pathname, communityId);
+  } = useContextualHelp(pathname, communityId, { applyTimeout: true });
 
   // Track consecutive routes with no contextual matches; surface a one-shot
   // Sentry signal when the threshold trips so the weekly content-gaps script

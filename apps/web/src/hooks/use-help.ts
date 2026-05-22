@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { MDXRemoteSerializeResult } from 'next-mdx-remote';
 import { requestJson } from '@/lib/api/request-json';
+import type { TocItem } from '@/components/help/mdx-components';
+import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -11,7 +14,13 @@ import { requestJson } from '@/lib/api/request-json';
 /** Help widget search debounce — matches UserSearchCombobox (DEBOUNCE_MS = 300). */
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Contextual help fetch timeout — bail to fallback copy rather than spin. */
+/**
+ * Contextual help fetch timeout — opt-in via useContextualHelp's
+ * applyTimeout option. Used by the legacy HelpWidget drawer to short-
+ * circuit a slow contextual list into a "browse the full help center"
+ * fallback. NOT used by the new HelpDocsModal (a timeout there falls
+ * through to the search panel even when an article IS available).
+ */
 const CONTEXTUAL_TIMEOUT_MS = 1500;
 
 // ---------------------------------------------------------------------------
@@ -26,6 +35,9 @@ export const HELP_KEYS = {
   readArticles: (communityId: number) => ['help', 'read', communityId] as const,
   articleFeedback: (communityId: number, articleSlug: string) =>
     ['help', 'feedback', communityId, articleSlug] as const,
+  article: (category: string, slug: string, communityId: number) =>
+    ['help', 'article', category, slug, communityId] as const,
+  featured: (communityId: number) => ['help', 'featured', communityId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -155,7 +167,32 @@ export function useReadArticles(communityId: number) {
   });
 }
 
-export function useContextualHelp(path: string, communityId: number) {
+export interface UseContextualHelpOptions {
+  enabled?: boolean;
+  /**
+   * Apply the CONTEXTUAL_TIMEOUT_MS abort. Legacy `<HelpWidget/>` drawer
+   * uses this so it can surface a "browse the full help center" fallback
+   * when the route is slow. The new `<HelpDocsModal/>` does NOT use this —
+   * a timeout abort there would fall through to the search panel even
+   * though a contextual article IS available, and that misses the goal
+   * (Codex review: "Contextual matching fails under realistic latency").
+   * Default false — opt in only where a fast-failure UX is intentional.
+   */
+  applyTimeout?: boolean;
+}
+
+export function useContextualHelp(
+  path: string,
+  communityId: number,
+  enabledOrOptions: boolean | UseContextualHelpOptions = true,
+) {
+  const options: UseContextualHelpOptions =
+    typeof enabledOrOptions === 'boolean'
+      ? { enabled: enabledOrOptions }
+      : enabledOrOptions;
+  const enabled = options.enabled ?? true;
+  const applyTimeout = options.applyTimeout ?? false;
+
   return useQuery<HelpArticleResult[]>({
     queryKey: HELP_KEYS.contextual(path, communityId),
     queryFn: async ({ signal }) => {
@@ -165,14 +202,39 @@ export function useContextualHelp(path: string, communityId: number) {
       });
       return requestJson<HelpArticleResult[]>(
         `/api/v1/help/contextual?${params}`,
-        { signal: withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS) },
+        {
+          signal: applyTimeout
+            ? withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS)
+            : signal,
+        },
       );
     },
-    enabled: path.length > 0 && communityId > 0,
+    enabled: enabled && path.length > 0 && communityId > 0,
     staleTime: 300_000,
-    // A timeout abort still surfaces as `error` to the consumer; the widget
-    // renders its "browse the full help center" fallback in the no-data case.
     retry: false,
+  });
+}
+
+/**
+ * Returns the featured-for-role articles list from /api/v1/help/featured.
+ * Used by HelpDocsModalSearchPanel when no contextual article matches
+ * the current route.
+ *
+ * staleTime 5min — the featured list rarely changes.
+ */
+export function useFeaturedArticles(communityId: number) {
+  return useQuery<HelpArticleResult[]>({
+    queryKey: HELP_KEYS.featured(communityId),
+    enabled: communityId > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({ communityId: String(communityId) });
+      return requestJson<HelpArticleResult[]>(
+        `/api/v1/help/featured?${params}`,
+        { credentials: 'include', signal },
+      );
+    },
   });
 }
 
@@ -250,4 +312,63 @@ export function useTrackArticleView({
       /* best-effort: ignore tracking failures */
     });
   }, [communityId, articleSlug, articleCategory]);
+}
+
+export interface HelpArticleResponse {
+  source: MDXRemoteSerializeResult;
+  toc: TocItem[];
+  metadata: HelpArticleMetadata;
+  related: HelpArticleMetadata[];
+}
+
+/**
+ * Fetches a single help article (serialized MDX + TOC + metadata + related)
+ * from /api/v1/help/article. Disabled when category or slug is null —
+ * useful for the modal's "no contextual match" state where no article is
+ * selected yet.
+ *
+ * Articles are effectively static at runtime, so staleTime is 5min and
+ * gcTime is 1hr — minimize refetches.
+ *
+ * No client-side timeout. Earlier iterations layered 1500ms and then
+ * 5000ms timeouts on this fetch to mask dev-mode cold-compile slowness,
+ * but Codex review showed the timeout fires under real cold-start and
+ * a manual fetch immediately after returns ~900ms — the user sees
+ * "couldn't load this article" for an article that's actually fine.
+ * Better to wait for the real response (bounded by the server's hard
+ * deadline) than to fail fast with a misleading error.
+ */
+export function useHelpArticle(
+  category: string | null,
+  slug: string | null,
+  communityId: number,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey:
+      category && slug
+        ? HELP_KEYS.article(category, slug, communityId)
+        : ['help', 'article', 'disabled'],
+    enabled: enabled && Boolean(category && slug && communityId > 0),
+    staleTime: 5 * 60_000,
+    gcTime: 60 * 60_000,
+    // Retry once on network/5xx — keeps cold-start resilient without
+    // masking permanent 4xx (article missing / role-gated). React Query
+    // doesn't surface status from a plain Error, so this still retries
+    // 404s once; Codex flagged that as a minor latency cost — acceptable
+    // until requestJson carries typed HTTP errors.
+    retry: 1,
+    retryDelay: 500,
+    queryFn: async ({ signal }) => {
+      const params = new URLSearchParams({
+        category: category!,
+        slug: slug!,
+        communityId: String(communityId),
+      });
+      return requestJson<HelpArticleResponse>(
+        `/api/v1/help/article?${params}`,
+        { credentials: 'include', signal },
+      );
+    },
+  });
 }
