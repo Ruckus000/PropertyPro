@@ -259,9 +259,9 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
                 area so it appears on EVERY route, regardless of whether the
                 page uses <PageHeader/> or rolls its own h1. Adjacent to the
                 page title without depending on the page's layout.
-                Right offset is one tick larger than the content padding so
-                the button breathes away from card-bordered headers. */}
-            <div className="absolute right-10 top-8 z-10 lg:right-12">
+                Offsets are one tick larger than the content padding so the
+                button breathes away from card-bordered headers (top + right). */}
+            <div className="absolute right-10 top-10 z-10 lg:right-12 lg:top-12">
               <PageHeaderHelpButton />
             </div>
             {children}
