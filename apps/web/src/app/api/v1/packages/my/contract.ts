@@ -10,13 +10,15 @@
  * `isResidentRole`) applied inside the route handler.
  *
  * Cleanup vs. the previous implementation: replaced the legacy
- * `parseCommunityIdFromQuery(req)` (which validated the query but did NOT
- * reconcile against the `x-community-id` header) with the canonical
- * `resolveEffectiveCommunityId(req, query.communityId)` reconciler. This
- * introduces an intentional behavior change: when the `x-community-id`
- * header and the query `communityId` disagree, the response is now 404
- * (NotFoundError from `resolveEffectiveCommunityId`) instead of silently
- * using the query value. Aligns with drains #2 / #3 semantics.
+ * `parseCommunityIdFromQuery(req)` helper with the canonical
+ * `resolveEffectiveCommunityId(req, query.communityId)` reconciler. Header
+ * / query mismatch already returned 404 pre-migration because
+ * `parseCommunityIdFromQuery` itself delegates to `resolveEffectiveCommunityId`
+ * after parsing the query — so this drain is NOT introducing a new
+ * 400 → 404 status change for that path. The only wire delta vs.
+ * pre-migration is the 400 body shape for missing/non-positive `communityId`
+ * (now the runner's `VALIDATION_ERROR` envelope with per-field detail vs.
+ * pre-migration's `BadRequestError` body).
  *
  * Response is `z.array(z.unknown())` deliberately. `listMyPackagesForCommunity`
  * returns `Promise<PackageLogRow[]>`, but the canonical UI source-of-truth for

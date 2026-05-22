@@ -231,7 +231,7 @@ describe('GET /api/v1/packages/my', () => {
     expect(listMyPackagesForCommunityMock).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when the x-community-id header disagrees with the query (regression: pre-migration silently used the query value)', async () => {
+  it('returns 404 when the x-community-id header disagrees with the query (preserves pre-migration behavior — parseCommunityIdFromQuery already delegated to resolveEffectiveCommunityId)', async () => {
     const req = new NextRequest(
       `http://localhost:3000/api/v1/packages/my?communityId=${COMMUNITY_ID}`,
       { headers: { 'x-community-id': '99' } },
@@ -240,6 +240,27 @@ describe('GET /api/v1/packages/my', () => {
 
     expect(res.status).toBe(404);
     expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(listMyPackagesForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the resident has no unit associations (requireActorUnitIds gate)', async () => {
+    const { ForbiddenError } = await import('@/lib/api/errors');
+    requireActorUnitIdsMock.mockRejectedValueOnce(
+      new ForbiddenError(
+        'No unit association found for this user in the selected community',
+      ),
+    );
+
+    const req = new NextRequest(
+      `http://localhost:3000/api/v1/packages/my?communityId=${COMMUNITY_ID}`,
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    // The route must NOT call the package list when the unit-association
+    // gate trips — without this guard, listPackagesForCommunity would skip
+    // the `inArray(unitId, allowedUnitIds)` filter on empty arrays and
+    // return ALL packages for the community (data-exposure regression).
     expect(listMyPackagesForCommunityMock).not.toHaveBeenCalled();
   });
 });

@@ -15,11 +15,14 @@
  *
  * Behavior changes:
  *   - 400 body shape for malformed/missing query now uses the runner's
- *     `VALIDATION_ERROR` envelope (was a hand-constructed `ValidationError`).
+ *     `VALIDATION_ERROR` envelope (was a hand-constructed `BadRequestError`).
  *     Status code unchanged (still 400).
- *   - Header/query `communityId` mismatch now returns 404 (was: silently
- *     used the query value). Aligns with drain #2 / drain #3 semantics —
- *     `resolveEffectiveCommunityId` throws `NotFoundError` on mismatch.
+ *   - Header/query `communityId` mismatch was ALREADY 404 pre-migration —
+ *     `parseCommunityIdFromQuery` itself delegated to
+ *     `resolveEffectiveCommunityId` after parsing, so this drain does NOT
+ *     introduce a 400 → 404 status change for that path. The 404 regression
+ *     test in `my-route.test.ts` is locking in pre-existing behavior, not
+ *     a migration delta.
  *
  * Multi-gate auth chain preserved verbatim, in order:
  *   `requireAuthenticatedUserId`
