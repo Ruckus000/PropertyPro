@@ -71,3 +71,13 @@ export function useHelpWidget(): HelpWidgetContextValue {
   }
   return ctx;
 }
+
+/**
+ * Same as useHelpWidget but returns `null` when no provider is mounted
+ * instead of throwing. Used by components that ship across multiple shells
+ * (e.g., PageHeader's help button — PageHeader works under both
+ * authenticated AppShell and any future public layout).
+ */
+export function useHelpWidgetOptional(): HelpWidgetContextValue | null {
+  return useContext(HelpWidgetContext);
+}

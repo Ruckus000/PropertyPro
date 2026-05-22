@@ -20,10 +20,17 @@ Make every authenticated screen have a discoverable help affordance that opens a
 ## Non-goals
 
 - Building a new content-management system. MDX in repo stays the source of truth (a prior `help_articles` DB table was explicitly dropped in [migration 0002](../../packages/db/migrations/0002_reconcile_help_articles_user_search.sql)).
-- Adding a second per-page help button beyond the existing top-bar one — that would create redundant affordances.
 - Replacing the `/help/<category>/<slug>` route. It remains for deep-linking, SEO, and external sharing.
 - Per-community help customization. Articles stay platform-global.
 - Rich-text WYSIWYG authoring. Devs author MDX in PRs.
+
+## Course correction (2026-05-21)
+
+An earlier revision of this spec called out "adding a per-page help button beyond the top-bar icon" as a non-goal — that decision overrode the user's explicit answer during brainstorming (Q3: "In PageHeader actions slot") and turned out to be wrong in production: the top-bar `CircleHelp` icon was visually lost among the search bar, community switcher, and notifications icons. Live preview confirmed the issue. Reinstated as a **goal**:
+
+- **Every `PageHeader` renders a labeled `Help` button** in its actions row by default. Implemented via `<PageHeaderHelpButton/>` (client component) appended to the actions slot inside `PageHeader`. Pages can opt out via the `hideHelpButton` prop (currently used by none — left in place for future need).
+- The button calls `useHelpWidget().toggle()` — same target as the top-bar icon — so a single modal opens and the contextual matching still works.
+- Top-bar `CircleHelp` icon stays as a redundant trigger for the `?` keyboard shortcut and for pages that don't use `PageHeader` (custom dashboards). Not redundant in the bad sense — secondary in the good sense.
 
 ## Architecture
 
