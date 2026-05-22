@@ -28,6 +28,7 @@ import { SidebarProvider, useSidebar } from './sidebar-context';
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
 import { HelpDeepLinkHandler } from '@/components/help/help-deep-link-handler';
+import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
@@ -253,7 +254,14 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
           id="main-content"
           className="flex-1 overflow-y-auto"
         >
-          <div className="mx-auto w-full max-w-[1400px] px-6 py-8 lg:px-8">
+          <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 lg:px-8">
+            {/* Per-page Help button — positioned at top-right of the content
+                area so it appears on EVERY route, regardless of whether the
+                page uses <PageHeader/> or rolls its own h1. Adjacent to the
+                page title without depending on the page's layout. */}
+            <div className="absolute right-6 top-8 z-10 lg:right-8">
+              <PageHeaderHelpButton />
+            </div>
             {children}
           </div>
         </main>
