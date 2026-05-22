@@ -14,19 +14,14 @@ import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
 /** Help widget search debounce — matches UserSearchCombobox (DEBOUNCE_MS = 300). */
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Contextual help fetch timeout — bail to fallback copy rather than spin. */
-const CONTEXTUAL_TIMEOUT_MS = 1500;
-
 /**
- * Single-article fetch timeout. Larger than CONTEXTUAL_TIMEOUT_MS because the
- * article endpoint serializes MDX (heavier than the small contextual lookup)
- * and can hit lambda cold-start on the first request after a deploy. 1500ms
- * caused spurious "couldn't load this article" errors when the route was
- * compiling for the first time in dev — same risk applies to production cold
- * starts. 5000ms gives headroom; the article-fetch path also enables React
- * Query's retry, so a slow first attempt still recovers gracefully.
+ * Contextual help fetch timeout — opt-in via useContextualHelp's
+ * applyTimeout option. Used by the legacy HelpWidget drawer to short-
+ * circuit a slow contextual list into a "browse the full help center"
+ * fallback. NOT used by the new HelpDocsModal (a timeout there falls
+ * through to the search panel even when an article IS available).
  */
-const ARTICLE_TIMEOUT_MS = 5000;
+const CONTEXTUAL_TIMEOUT_MS = 1500;
 
 // ---------------------------------------------------------------------------
 // Query Keys
@@ -172,7 +167,32 @@ export function useReadArticles(communityId: number) {
   });
 }
 
-export function useContextualHelp(path: string, communityId: number, enabled = true) {
+export interface UseContextualHelpOptions {
+  enabled?: boolean;
+  /**
+   * Apply the CONTEXTUAL_TIMEOUT_MS abort. Legacy `<HelpWidget/>` drawer
+   * uses this so it can surface a "browse the full help center" fallback
+   * when the route is slow. The new `<HelpDocsModal/>` does NOT use this —
+   * a timeout abort there would fall through to the search panel even
+   * though a contextual article IS available, and that misses the goal
+   * (Codex review: "Contextual matching fails under realistic latency").
+   * Default false — opt in only where a fast-failure UX is intentional.
+   */
+  applyTimeout?: boolean;
+}
+
+export function useContextualHelp(
+  path: string,
+  communityId: number,
+  enabledOrOptions: boolean | UseContextualHelpOptions = true,
+) {
+  const options: UseContextualHelpOptions =
+    typeof enabledOrOptions === 'boolean'
+      ? { enabled: enabledOrOptions }
+      : enabledOrOptions;
+  const enabled = options.enabled ?? true;
+  const applyTimeout = options.applyTimeout ?? false;
+
   return useQuery<HelpArticleResult[]>({
     queryKey: HELP_KEYS.contextual(path, communityId),
     queryFn: async ({ signal }) => {
@@ -182,13 +202,15 @@ export function useContextualHelp(path: string, communityId: number, enabled = t
       });
       return requestJson<HelpArticleResult[]>(
         `/api/v1/help/contextual?${params}`,
-        { signal: withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS) },
+        {
+          signal: applyTimeout
+            ? withTimeoutSignal(signal, CONTEXTUAL_TIMEOUT_MS)
+            : signal,
+        },
       );
     },
     enabled: enabled && path.length > 0 && communityId > 0,
     staleTime: 300_000,
-    // A timeout abort still surfaces as `error` to the consumer; the widget
-    // renders its "browse the full help center" fallback in the no-data case.
     retry: false,
   });
 }
@@ -308,11 +330,13 @@ export interface HelpArticleResponse {
  * Articles are effectively static at runtime, so staleTime is 5min and
  * gcTime is 1hr — minimize refetches.
  *
- * Times out after ARTICLE_TIMEOUT_MS (5000ms) — longer than the contextual
- * lookup because article fetches serialize MDX server-side and may hit
- * lambda cold-starts. The contextual list endpoint is cheaper, so it keeps
- * the tighter 1500ms timeout.
- * Caller surfaces the timeout as an error → AlertBanner with retry.
+ * No client-side timeout. Earlier iterations layered 1500ms and then
+ * 5000ms timeouts on this fetch to mask dev-mode cold-compile slowness,
+ * but Codex review showed the timeout fires under real cold-start and
+ * a manual fetch immediately after returns ~900ms — the user sees
+ * "couldn't load this article" for an article that's actually fine.
+ * Better to wait for the real response (bounded by the server's hard
+ * deadline) than to fail fast with a misleading error.
  */
 export function useHelpArticle(
   category: string | null,
@@ -328,9 +352,11 @@ export function useHelpArticle(
     enabled: enabled && Boolean(category && slug && communityId > 0),
     staleTime: 5 * 60_000,
     gcTime: 60 * 60_000,
-    // Retry once after a short delay: the article endpoint can hit cold-start
-    // on first request after deploy (route compile / lambda warm-up). One
-    // retry hides that from the user without masking real backend errors.
+    // Retry once on network/5xx — keeps cold-start resilient without
+    // masking permanent 4xx (article missing / role-gated). React Query
+    // doesn't surface status from a plain Error, so this still retries
+    // 404s once; Codex flagged that as a minor latency cost — acceptable
+    // until requestJson carries typed HTTP errors.
     retry: 1,
     retryDelay: 500,
     queryFn: async ({ signal }) => {
@@ -341,10 +367,7 @@ export function useHelpArticle(
       });
       return requestJson<HelpArticleResponse>(
         `/api/v1/help/article?${params}`,
-        {
-          credentials: 'include',
-          signal: withTimeoutSignal(signal, ARTICLE_TIMEOUT_MS),
-        },
+        { credentials: 'include', signal },
       );
     },
   });

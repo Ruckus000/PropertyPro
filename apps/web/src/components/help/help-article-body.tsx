@@ -114,12 +114,10 @@ export function HelpArticleBody({
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
-        <article
-          className={cn(
-            'rounded-2xl border border-edge bg-surface-card p-6 shadow-sm',
-            isModal && 'max-h-[calc(80vh-7rem)] overflow-y-auto',
-          )}
-        >
+        {/* Scrolling is handled by the outer DialogContent body wrapper in
+            modal mode (single scroll source). No max-h here — nested
+            scrollers fight each other for the user's wheel events. */}
+        <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
           <MDXRemote {...source} components={helpMdxComponents} />
         </article>
 

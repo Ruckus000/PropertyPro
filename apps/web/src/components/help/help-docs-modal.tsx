@@ -106,11 +106,18 @@ export function HelpDocsModal({
     <Dialog open={isOpen} onOpenChange={(o) => (o ? null : close())}>
       <DialogContent
         className={cn(
-          'max-w-[960px] w-[95vw] p-0',
+          // Cap the dialog at 90vh so it never overflows the viewport, then
+          // give it a flex column so the article body becomes the only
+          // scrollable region (header + footer stay pinned). Without the
+          // max-h here, a long article + related guides + feedback could
+          // grow taller than the viewport — and because Radix centers via
+          // translate-50/50, the dialog's top would drift above the
+          // viewport (Codex caught y=-169px on /dashboard).
+          'flex max-h-[90vh] w-[95vw] max-w-[960px] flex-col p-0',
           'data-[state=open]:animate-in data-[state=closed]:animate-out',
         )}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-edge px-6 py-4">
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-edge px-6 py-4">
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-xl font-semibold text-content">
               {articleTitle}
@@ -120,8 +127,8 @@ export function HelpDocsModal({
             </DialogDescription>
           </div>
         </header>
-        <div className="px-6 py-6">{content}</div>
-        <footer className="flex items-center justify-end border-t border-edge px-6 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{content}</div>
+        <footer className="flex shrink-0 items-center justify-end border-t border-edge px-6 py-3">
           <Link
             href={`/help?communityId=${communityId}`}
             onClick={() => {
