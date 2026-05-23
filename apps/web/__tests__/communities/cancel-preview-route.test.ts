@@ -68,7 +68,7 @@ describe('GET /api/v1/communities/[id]/cancel-preview', () => {
     });
     getBillingGroupOwnerMock.mockResolvedValue('user-1');
     listSiblingCommunityPlansMock.mockResolvedValue([
-      { planKey: 'condo_pro' },
+      { planKey: 'essentials' },
       { planKey: null },
     ]);
     const impact = {
@@ -94,8 +94,9 @@ describe('GET /api/v1/communities/[id]/cancel-preview', () => {
     expect(getBillingGroupOwnerMock).toHaveBeenCalledWith(7);
     expect(listSiblingCommunityPlansMock).toHaveBeenCalledWith(7, 42);
     // currentGroupSize = remaining.length (2) + 1 = 3
+    // basePricesUsd: 'essentials' → 199 (in PLAN_MONTHLY_PRICES_USD); null → 0 (short-circuit)
     expect(calculatePricingImpactMock).toHaveBeenCalledWith({
-      basePricesUsd: expect.any(Array),
+      basePricesUsd: [199, 0],
       currentGroupSize: 3,
       changeType: 'remove',
     });
