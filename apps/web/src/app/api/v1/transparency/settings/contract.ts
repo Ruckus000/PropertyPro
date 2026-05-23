@@ -28,12 +28,13 @@
  *           additionally blocked during the demo grace window
  *           (`assertNotDemoGrace`).
  *
- * `permission: { resource: 'settings', action: 'read' | 'write' }` is the
- * placeholder taxonomy used by earlier drains (`settings` is not yet in
- * `RBAC_RESOURCES`). The runner does NOT enforce it — the route still calls
- * `requirePermission(membership, 'settings', ...)` directly. Kept in step
- * with the in-route permission check rather than swapped to a non-placeholder
- * member.
+ * `permission: { resource: 'settings', action: 'read' | 'write' }` —
+ * `settings` IS in `RBAC_RESOURCES` (`packages/shared/src/rbac-matrix.ts:35`)
+ * so this is a real RBAC resource, not a placeholder (joining drains #10
+ * `packages`, #11 `polls`, #13 `finances` as the fourth drain with a
+ * non-placeholder permission entry). The runner does NOT enforce it today
+ * (Plan A1 metadata only) — the route still calls
+ * `requirePermission(membership, 'settings', ...)` directly to actually gate.
  *
  * Behavior change vs. pre-migration: NONE w.r.t. header/query reconciliation.
  * Pre-migration ALREADY routes both GET and PATCH through
