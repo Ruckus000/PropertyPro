@@ -201,6 +201,17 @@ describe('GET /api/v1/move-checklists/[id]', () => {
     expect(res.status).toBe(400);
     expect(getMoveChecklistMock).not.toHaveBeenCalled();
   });
+
+  it('returns 400 when communityId query is not a number', async () => {
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/move-checklists/7?communityId=abc'),
+      ctx(7),
+    );
+
+    expect(res.status).toBe(400);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(getMoveChecklistMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/v1/move-checklists/[id]', () => {
