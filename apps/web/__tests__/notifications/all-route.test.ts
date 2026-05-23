@@ -251,6 +251,33 @@ describe('GET /api/v1/notifications/all', () => {
     });
   });
 
+  it('forwards unreadOnly=false to the per-community service (exercises the other enum branch)', async () => {
+    findUserCommunitiesUnscopedMock.mockResolvedValueOnce([COMMUNITIES[0]!]);
+    listCrossCommunityNotificationsForUserMock.mockResolvedValueOnce({
+      list: [],
+      unread: 0,
+    });
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/notifications/all?unreadOnly=false&limit=10',
+    );
+    const res = await GET(req);
+    const json = (await res.json()) as EnvelopeJson;
+
+    expect(res.status).toBe(200);
+    expect(json.data).toEqual({ notifications: [], nextCursor: null, totalUnread: 0 });
+    // The `unreadOnly === 'true'` check inside the handler converts the 'false'
+    // enum value to a literal boolean false — distinct branch from the
+    // undefined-then-default path, even though both evaluate to false.
+    expect(listCrossCommunityNotificationsForUserMock).toHaveBeenCalledWith({
+      communityId: 10,
+      userId: USER_ID,
+      cursor: undefined,
+      limitPlusOne: 11,
+      unreadOnly: false,
+    });
+  });
+
   it('forwards a numeric cursor verbatim to the per-community service', async () => {
     findUserCommunitiesUnscopedMock.mockResolvedValueOnce([COMMUNITIES[0]!]);
     listCrossCommunityNotificationsForUserMock.mockResolvedValueOnce({
