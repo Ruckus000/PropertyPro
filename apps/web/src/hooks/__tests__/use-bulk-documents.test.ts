@@ -210,6 +210,25 @@ describe('useBulkCreateDocuments', () => {
       }),
     ).rejects.toThrow('Failed to create bulk documents');
   });
+
+  it('rejects with the fallback literal when a 200 body is missing the data field', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useBulkCreateDocuments(), { wrapper });
+
+    await expect(
+      result.current.mutateAsync({
+        communityIds: [1],
+        documents: [
+          { fileName: 'a.pdf', storagePath: 'p', description: null },
+        ],
+      }),
+    ).rejects.toThrow('Failed to create bulk documents');
+  });
 });
 
 describe('useBulkUploadDocuments (orchestrator)', () => {
