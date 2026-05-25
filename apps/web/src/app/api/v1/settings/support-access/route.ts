@@ -47,9 +47,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const recentAccess = accessLogResult.data ?? [];
 
   return NextResponse.json({
-    consentActive: consent !== null,
-    consent,
-    recentAccess,
+    data: {
+      consentActive: consent !== null,
+      consent,
+      recentAccess,
+    },
   });
 });
 
@@ -79,7 +81,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       .maybeSingle();
 
     if (existing) {
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ data: { ok: true } });
     }
 
     // Insert new consent grant
@@ -123,7 +125,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       .maybeSingle();
 
     if (!activeConsent) {
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ data: { ok: true } });
     }
 
     // Revoke consent
@@ -161,5 +163,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ data: { ok: true } });
 });

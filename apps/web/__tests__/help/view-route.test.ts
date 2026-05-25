@@ -83,7 +83,7 @@ describe('POST /api/v1/help/view', () => {
     const json = await response.json();
 
     expect(response.status).toBe(201);
-    expect(json.ok).toBe(true);
+    expect(json).toEqual({ data: { ok: true } });
     expect(recordArticleViewMock).toHaveBeenCalledTimes(1);
     expect(recordArticleViewMock).toHaveBeenCalledWith({
       communityId: 1,

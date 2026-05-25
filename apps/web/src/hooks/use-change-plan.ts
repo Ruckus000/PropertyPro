@@ -41,12 +41,13 @@ export function useChangePlan() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, billingInterval }),
       });
-      // Documented exception to the requestJson rule: this route returns a
-      // bespoke `{ ok: true, planId, billingInterval }` body, NOT the
-      // standard `{ data: T }` envelope. requestJson would throw
-      // "Missing response payload" on every success. We replicate the
-      // component's original raw-fetch error parsing so the user-facing
-      // copy is byte-for-byte preserved.
+      // As of B1 Slice 1, this route returns the canonical
+      // `{ data: { ok, planId, billingInterval } }` envelope. The hook
+      // unwraps `.data` manually rather than adopting `requestJson` so
+      // the bespoke error-message parsing (handling both `error: string`
+      // and `error: { message }` shapes from middleware/AppError responses)
+      // and exact user-facing literal stay preserved — migration to
+      // `requestJson` is B6 work.
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
           error?: string | { message?: string };
@@ -57,7 +58,11 @@ export function useChangePlan() {
             : body.error?.message ?? `Could not change plan (${res.status})`;
         throw new Error(message);
       }
-      return (await res.json()) as ChangePlanResult;
+      const json = (await res.json()) as { data?: ChangePlanResult };
+      if (!json.data) {
+        throw new Error('Missing response payload');
+      }
+      return json.data;
     },
   });
 }

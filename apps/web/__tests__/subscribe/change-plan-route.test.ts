@@ -129,7 +129,7 @@ describe('POST /api/v1/subscribe/change-plan', () => {
     const res = await POST(buildRequest({ planId: 'professional', billingInterval: 'month' }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ ok: true, planId: 'professional', billingInterval: 'month' });
+    expect(body).toEqual({ data: { ok: true, planId: 'professional', billingInterval: 'month' } });
     expect(resolveStripePriceMock).toHaveBeenCalledWith('professional', 'condo_718', 'month');
     expect(changeSubscriptionPlanMock).toHaveBeenCalledWith('sub_abc', 'price_new');
     expect(emitConversionEventMock).toHaveBeenCalledWith(

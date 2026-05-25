@@ -300,8 +300,9 @@ export function useTrackArticleView({
     if (lastTrackedKey.current === currentKey) return;
     lastTrackedKey.current = currentKey;
 
-    // /api/v1/help/view returns `{ ok: true }`, not the standard `{ data }`
-    // envelope, so this intentionally stays on raw fetch.
+    // Route now returns the canonical { data: { ok: true } } envelope (B1
+    // Slice 1). This stays on raw fetch because it is fire-and-forget — the
+    // body is never read. Migration to requestJson is B6 work.
     void fetch('/api/v1/help/view', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

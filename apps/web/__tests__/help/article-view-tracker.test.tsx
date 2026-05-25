@@ -9,7 +9,7 @@ afterEach(() => {
 
 describe('ArticleViewTracker', () => {
   it('logs one best-effort article view with keepalive under StrictMode', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { ok: true } })));
     vi.stubGlobal('fetch', fetchMock);
 
     render(
@@ -36,7 +36,7 @@ describe('ArticleViewTracker', () => {
   });
 
   it('tracks a new article when client-side navigation reuses the mounted tracker', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { ok: true } })));
     vi.stubGlobal('fetch', fetchMock);
 
     const { rerender } = render(

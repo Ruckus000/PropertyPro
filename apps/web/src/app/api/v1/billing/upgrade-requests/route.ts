@@ -67,7 +67,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
 
   if (recipientIds.length === 0) {
     // Nothing to do — but treat as success so the requester sees confirmation.
-    return NextResponse.json({ ok: true, notified: 0 });
+    return NextResponse.json({ data: { ok: true, notified: 0 } });
   }
 
   // Use the requester's display title (loaded with membership) so we don't
@@ -92,7 +92,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   }));
 
   const result = await insertNotifications(rows);
-  return NextResponse.json({ ok: true, notified: result.created });
+  return NextResponse.json({ data: { ok: true, notified: result.created } });
 });
 
 function humanizeFeatureKey(key: string): string {
