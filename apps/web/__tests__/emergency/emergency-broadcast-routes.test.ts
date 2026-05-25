@@ -179,7 +179,7 @@ describe('Emergency Broadcast Routes', () => {
       channels: ['sms', 'email'],
     };
 
-    it('creates draft broadcast with valid input (status 201)', async () => {
+    it('creates draft broadcast with valid input (status 200)', async () => {
       const createdBroadcast = { id: 5, ...validPayload, status: 'draft' };
       createBroadcastMock.mockResolvedValue(createdBroadcast);
 
@@ -195,7 +195,7 @@ describe('Emergency Broadcast Routes', () => {
       const res = await POST(req);
       const json = await res.json();
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(json.id).toBe(5);
       expect(createBroadcastMock).toHaveBeenCalledWith(
         expect.objectContaining({

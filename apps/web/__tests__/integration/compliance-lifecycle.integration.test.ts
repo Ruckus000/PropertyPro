@@ -139,7 +139,7 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
     expect(json.data.length).toBeGreaterThan(0);
 

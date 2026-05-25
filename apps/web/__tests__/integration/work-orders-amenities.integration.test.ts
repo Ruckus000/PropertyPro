@@ -139,7 +139,7 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
         specialties: ['hvac', 'general_maintenance'],
       }),
     );
-    expect(createVendorResponse.status).toBe(201);
+    expect(createVendorResponse.status).toBe(200);
     const createVendorJson = await parseJson<{ data: Record<string, unknown> }>(createVendorResponse);
     const vendorId = readNumberField(createVendorJson.data, 'id');
 
@@ -156,7 +156,7 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
         slaCompletionHours: 24,
       }),
     );
-    expect(createWorkOrderResponse.status).toBe(201);
+    expect(createWorkOrderResponse.status).toBe(200);
     const createWorkOrderJson = await parseJson<{ data: Record<string, unknown> }>(createWorkOrderResponse);
     const workOrderId = readNumberField(createWorkOrderJson.data, 'id');
 
@@ -206,7 +206,7 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
         isBookable: true,
       }),
     );
-    expect(createAmenityResponse.status).toBe(201);
+    expect(createAmenityResponse.status).toBe(200);
     const createAmenityJson = await parseJson<{ data: Record<string, unknown> }>(createAmenityResponse);
     const amenityId = readNumberField(createAmenityJson.data, 'id');
 
@@ -222,7 +222,7 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
       }),
       { params: Promise.resolve({ id: String(amenityId) }) },
     );
-    expect(reserveResponse.status).toBe(201);
+    expect(reserveResponse.status).toBe(200);
     const reserveJson = await parseJson<{ data: Record<string, unknown> }>(reserveResponse);
     const reservationId = readNumberField(reserveJson.data, 'id');
 

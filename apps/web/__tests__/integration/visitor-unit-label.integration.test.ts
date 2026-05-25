@@ -83,7 +83,7 @@ describeDb('visitor registration by unit label (db-backed integration)', () => {
         expectedArrival: '2026-06-21T18:00:00.000Z',
       }),
     );
-    expect(createRes.status).toBe(201);
+    expect(createRes.status).toBe(200);
     const createdJson = await parseJson<{ data: { hostUnitLabel: string; hostUnitId: number } }>(createRes);
     expect(createdJson.data.hostUnitLabel).toBe(unitLabel);
 

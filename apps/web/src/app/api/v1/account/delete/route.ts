@@ -34,7 +34,7 @@ export const POST = withErrorHandler(async (): Promise<NextResponse> => {
   const userId = await requireAuthenticatedUserId();
   await requireFreshReauth(userId);
   const request = await requestUserDeletion(userId);
-  return NextResponse.json({ data: request }, { status: 201 });
+  return NextResponse.json({ data: request });
 });
 
 // DELETE — cancel deletion

@@ -152,8 +152,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     {
       data: result.document,
       ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
-    },
-    { status: 201 },
+    }
   );
 });
 

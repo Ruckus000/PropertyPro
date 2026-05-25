@@ -69,5 +69,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
   );
 
-  return NextResponse.json({ data: { created: true } }, { status: 201 });
+  return NextResponse.json({ data: { created: true } });
 });

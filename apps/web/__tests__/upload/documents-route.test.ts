@@ -183,7 +183,7 @@ describe('p1-11 documents route', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
 
     expect(createScopedClientMock).toHaveBeenCalledWith(42);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(
@@ -463,7 +463,7 @@ describe('p1-11 documents route', () => {
     const res = await POST(req);
     const json = await res.json() as { warnings?: Array<{ code: string }> };
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     expect(json.warnings).toEqual([
       expect.objectContaining({ code: 'notification_dispatch_failed' }),
     ]);
@@ -729,7 +729,7 @@ describe('p1-11 documents route — additional coverage', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
     });
 
     it('GET without communityId returns 400', async () => {

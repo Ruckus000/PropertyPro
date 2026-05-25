@@ -91,6 +91,6 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
 
   return NextResponse.json(
     { data: { ...plan, status: computeAccessPlanStatus(plan) } },
-    { status: 201, headers: corsHeaders(origin) },
+    { headers: corsHeaders(origin) },
   );
 });

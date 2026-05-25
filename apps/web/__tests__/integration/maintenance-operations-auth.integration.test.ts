@@ -70,7 +70,7 @@ async function createRequest(
     }),
   );
 
-  expect(response.status).toBe(201);
+  expect(response.status).toBe(200);
   const payload = await parseJson<{ data: Record<string, unknown> }>(response);
   return readNumberField(payload.data, 'id');
 }

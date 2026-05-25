@@ -60,7 +60,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const result = await submitAccessRequest(parsed.data);
-  return NextResponse.json({ data: result }, { status: 201 });
+  return NextResponse.json({ data: result });
 });
 
 // ---------------------------------------------------------------------------

@@ -455,7 +455,7 @@ describe('p2-37 leases route', () => {
       const res = await POST(req);
       const json = (await res.json()) as { data: { id: number } };
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(json.data.id).toBe(99);
       expect(insert).toHaveBeenCalledWith(
         leasesTableMock,
@@ -608,7 +608,7 @@ describe('p2-37 leases route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(insert).toHaveBeenCalledWith(
         leasesTableMock,
         expect.objectContaining({ rentAmount: '1500.00' }),
@@ -652,7 +652,7 @@ describe('p2-37 leases route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
 
       // Previous lease should be marked as renewed
       expect(update).toHaveBeenCalled();

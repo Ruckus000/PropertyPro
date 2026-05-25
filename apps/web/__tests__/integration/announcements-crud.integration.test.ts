@@ -147,7 +147,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
       }),
     );
 
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const createJson = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const flowAnnouncementId = readNumberField(createJson.data, 'id');
 
@@ -185,7 +185,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     const json = await parseJson<{ data: Record<string, unknown> }>(response);
     expect(json.data['title']).toBe(`Test Announcement ${kit.runSuffix}`);
     expect(json.data['audience']).toBe('all');
@@ -254,7 +254,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
         isPinned: false,
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const createJson = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const sequentialAnnouncementId = readNumberField(createJson.data, 'id');
 
@@ -457,7 +457,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
         isPinned: false,
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const created = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const toDeleteId = readNumberField(created.data, 'id');
 
@@ -557,7 +557,7 @@ describeDb('P4-58: announcements CRUD (db-backed integration)', () => {
         isPinned: false,
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const { data } = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const id = readNumberField(data, 'id');
 

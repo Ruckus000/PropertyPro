@@ -375,7 +375,7 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
         location: 'Leasing Office',
       }),
     );
-    expect(siteManagerCreateResponse.status).toBe(201);
+    expect(siteManagerCreateResponse.status).toBe(200);
 
     setActor(testState, 'actorC');
     const pmAdminDetailResponse = await routeModules.meetingDetail.GET(

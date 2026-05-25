@@ -146,7 +146,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         ...(invitationToken && { token: invitationToken }),
         ...(invitationExpiresAt && { expiresAt: invitationExpiresAt.toISOString() }),
       },
-    },
-    { status: 201 },
+    }
   );
 });

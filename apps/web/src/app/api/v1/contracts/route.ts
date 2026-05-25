@@ -403,7 +403,7 @@ async function handleCreateContract(
     },
   });
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created });
 }
 
 async function handleCreateBid(
@@ -458,5 +458,5 @@ async function handleCreateBid(
     },
   });
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created });
 }

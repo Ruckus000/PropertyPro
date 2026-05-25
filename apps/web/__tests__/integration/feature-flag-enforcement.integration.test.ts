@@ -199,7 +199,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
       });
       const res = await leases.POST(req);
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
     });
 
     it('allows lease PATCH on apartment communities', async () => {

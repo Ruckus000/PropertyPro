@@ -64,7 +64,7 @@ describe('POST /api/v1/pm/communities (gated)', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.clientSecret).toBe('cs_test_secret');
     expect(body.data.pendingSignupId).toBe(7);

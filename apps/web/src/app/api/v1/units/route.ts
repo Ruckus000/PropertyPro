@@ -194,8 +194,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         createdAt: newUnit['createdAt'] as string,
         updatedAt: newUnit['updatedAt'] as string,
       },
-    },
-    { status: 201 },
+    }
   );
 });
 

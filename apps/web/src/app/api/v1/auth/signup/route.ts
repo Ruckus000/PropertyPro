@@ -34,5 +34,5 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const body: unknown = await req.json();
   const result = await submitSignup(body);
-  return NextResponse.json({ data: result }, { status: 202 });
+  return NextResponse.json({ data: result });
 });

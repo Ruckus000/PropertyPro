@@ -186,7 +186,7 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
         isActive: true,
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const createJson = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const assessmentId = readNumberField(createJson.data, 'id');
 

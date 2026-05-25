@@ -341,7 +341,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         description: `Cross-tenant violation ${kit.runSuffix}`,
       }),
     );
-    expect(violationCreate.status).toBe(201);
+    expect(violationCreate.status).toBe(200);
     const violationJson = await parseJson<{ data: Record<string, unknown> }>(violationCreate);
     const violationId = readNumberField(violationJson.data, 'id');
 
@@ -354,7 +354,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         projectType: 'landscaping',
       }),
     );
-    expect(arcCreate.status).toBe(201);
+    expect(arcCreate.status).toBe(200);
     const arcJson = await parseJson<{ data: Record<string, unknown> }>(arcCreate);
     const arcId = readNumberField(arcJson.data, 'id');
 
@@ -368,7 +368,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         options: ['Yes', 'No'],
       }),
     );
-    expect(pollCreate.status).toBe(201);
+    expect(pollCreate.status).toBe(200);
     const pollJson = await parseJson<{ data: Record<string, unknown> }>(pollCreate);
     const pollId = readNumberField(pollJson.data, 'id');
 
@@ -380,7 +380,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         company: 'Cross Tenant Services',
       }),
     );
-    expect(vendorCreate.status).toBe(201);
+    expect(vendorCreate.status).toBe(200);
     const vendorJson = await parseJson<{ data: Record<string, unknown> }>(vendorCreate);
     const vendorId = readNumberField(vendorJson.data, 'id');
 
@@ -393,7 +393,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         vendorId,
       }),
     );
-    expect(workOrderCreate.status).toBe(201);
+    expect(workOrderCreate.status).toBe(200);
     const workOrderJson = await parseJson<{ data: Record<string, unknown> }>(workOrderCreate);
     const workOrderId = readNumberField(workOrderJson.data, 'id');
 
@@ -403,7 +403,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         name: `WS72 Amenity ${kit.runSuffix}`,
       }),
     );
-    expect(amenityCreate.status).toBe(201);
+    expect(amenityCreate.status).toBe(200);
     const amenityJson = await parseJson<{ data: Record<string, unknown> }>(amenityCreate);
     const amenityId = readNumberField(amenityJson.data, 'id');
 
@@ -415,7 +415,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         carrier: 'FedEx',
       }),
     );
-    expect(packageCreate.status).toBe(201);
+    expect(packageCreate.status).toBe(200);
 
     setActor(kit, 'tenantA');
     const visitorCreate = await routeModules.visitors.POST(
@@ -427,7 +427,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         expectedArrival: '2026-08-02T12:00:00.000Z',
       }),
     );
-    expect(visitorCreate.status).toBe(201);
+    expect(visitorCreate.status).toBe(200);
 
     setActor(kit, 'actorA');
     const calendarConnect = await routeModules.googleConnect.POST(
@@ -583,7 +583,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': financeRequestId },
       ),
     );
-    expect(financeMutation.status).toBe(201);
+    expect(financeMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, financeRequestId);
 
     setActor(kit, 'tenantA');
@@ -601,7 +601,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': violationsRequestId },
       ),
     );
-    expect(violationsMutation.status).toBe(201);
+    expect(violationsMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, violationsRequestId);
 
     const arcRequestId = randomUUID();
@@ -619,7 +619,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': arcRequestId },
       ),
     );
-    expect(arcMutation.status).toBe(201);
+    expect(arcMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, arcRequestId);
 
     setActor(kit, 'residentA');
@@ -638,7 +638,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': pollsRequestId },
       ),
     );
-    expect(pollsMutation.status).toBe(201);
+    expect(pollsMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, pollsRequestId);
 
     setActor(kit, 'actorA');
@@ -655,7 +655,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': workOrdersRequestId },
       ),
     );
-    expect(workOrdersMutation.status).toBe(201);
+    expect(workOrdersMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, workOrdersRequestId);
 
     const amenitiesRequestId = randomUUID();
@@ -670,7 +670,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': amenitiesRequestId },
       ),
     );
-    expect(amenitiesMutation.status).toBe(201);
+    expect(amenitiesMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, amenitiesRequestId);
 
     const packagesRequestId = randomUUID();
@@ -687,7 +687,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': packagesRequestId },
       ),
     );
-    expect(packagesMutation.status).toBe(201);
+    expect(packagesMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, packagesRequestId);
 
     setActor(kit, 'tenantA');
@@ -706,7 +706,7 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
         { 'x-request-id': visitorsRequestId },
       ),
     );
-    expect(visitorsMutation.status).toBe(201);
+    expect(visitorsMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, visitorsRequestId);
 
     setActor(kit, 'actorA');

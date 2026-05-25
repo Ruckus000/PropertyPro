@@ -136,7 +136,7 @@ describeDb('violations reporting permission matrix', () => {
         description: `resident self-report ${state.runSuffix}`,
       }),
     );
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
   });
 
   it("resident cannot report for a unit they don't own (403)", async () => {
@@ -194,7 +194,7 @@ describeDb('violations reporting permission matrix', () => {
         description: `staff filed ${state.runSuffix}`,
       }),
     );
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const posted = await parseJson<{ data: Record<string, unknown> }>(res);
     const violationId = readNumberField(posted.data, 'id');
 
@@ -242,7 +242,7 @@ describeDb('violations reporting permission matrix', () => {
         description: `staff-for-resident ${state.runSuffix}`,
       }),
     );
-    expect(staffRes.status).toBe(201);
+    expect(staffRes.status).toBe(200);
     const staffId = readNumberField(
       (await parseJson<{ data: Record<string, unknown> }>(staffRes)).data,
       'id',
@@ -277,7 +277,7 @@ describeDb('violations reporting permission matrix', () => {
         description: `resident row ${state.runSuffix}`,
       }),
     );
-    expect(residentRes.status).toBe(201);
+    expect(residentRes.status).toBe(200);
     const residentId = readNumberField(
       (await parseJson<{ data: Record<string, unknown> }>(residentRes)).data,
       'id',
@@ -293,7 +293,7 @@ describeDb('violations reporting permission matrix', () => {
         description: `staff row ${state.runSuffix}`,
       }),
     );
-    expect(staffRes.status).toBe(201);
+    expect(staffRes.status).toBe(200);
     const staffId = readNumberField(
       (await parseJson<{ data: Record<string, unknown> }>(staffRes)).data,
       'id',

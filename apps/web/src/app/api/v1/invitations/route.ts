@@ -133,7 +133,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     newValues: { userId, expiresAt: expiresAt.toISOString() },
   });
 
-  return NextResponse.json({ data: { success: true } }, { status: 201 });
+  return NextResponse.json({ data: { success: true } });
 });
 
 // ---------------------------------------------------------------------------

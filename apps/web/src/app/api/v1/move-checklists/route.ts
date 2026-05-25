@@ -69,5 +69,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   }
 
   const checklist = await createMoveChecklist(parseResult.data, userId);
-  return NextResponse.json({ data: checklist }, { status: 201 });
+  return NextResponse.json({ data: checklist });
 });

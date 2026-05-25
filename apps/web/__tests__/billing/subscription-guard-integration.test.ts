@@ -193,7 +193,7 @@ describe('P0: subscription gate end-to-end (real guard — no mock)', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
   });
 
   it('POST returns 403 with SUBSCRIPTION_REQUIRED when subscriptionStatus is "expired"', async () => {

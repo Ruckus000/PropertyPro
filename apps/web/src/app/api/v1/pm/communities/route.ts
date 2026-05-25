@@ -110,7 +110,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   });
 
   return NextResponse.json(
-    { data: { clientSecret, pendingSignupId, billingGroupId } },
-    { status: 202 },
+    { data: { clientSecret, pendingSignupId, billingGroupId } }
   );
 });

@@ -131,5 +131,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     },
   });
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created });
 });

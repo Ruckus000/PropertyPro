@@ -331,7 +331,7 @@ describe('p3-52 contracts route', () => {
       const res = await POST(req);
       const json = (await res.json()) as { data: { id: number } };
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(json.data.id).toBe(99);
       expect(logAuditEventMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -422,7 +422,7 @@ describe('p3-52 contracts route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(logAuditEventMock).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'create',

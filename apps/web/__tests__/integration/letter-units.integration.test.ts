@@ -112,7 +112,7 @@ describeDb('letter-suffixed units across search and visitor flow', () => {
         expectedArrival: '2026-06-21T18:00:00.000Z',
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const createJson = await parseJson<{ data: { hostUnitLabel: string } }>(createResponse);
     expect(createJson.data.hostUnitLabel).toBe(unitA101);
 

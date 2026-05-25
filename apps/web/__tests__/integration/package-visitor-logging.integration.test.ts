@@ -146,7 +146,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         trackingNumber: `1Z-${kit.runSuffix}`,
       }),
     );
-    expect(createPackageResponse.status).toBe(201);
+    expect(createPackageResponse.status).toBe(200);
     const createPackageJson = await parseJson<{ data: Record<string, unknown> }>(createPackageResponse);
     const packageId = readNumberField(createPackageJson.data, 'id');
 
@@ -236,7 +236,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         expectedArrival: '2026-06-21T18:00:00.000Z',
       }),
     );
-    expect(createVisitorResponse.status).toBe(201);
+    expect(createVisitorResponse.status).toBe(200);
     const createVisitorJson = await parseJson<{ data: Record<string, unknown> }>(createVisitorResponse);
     const visitorId = readNumberField(createVisitorJson.data, 'id');
 
@@ -309,7 +309,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         carrier: 'USPS',
       }),
     );
-    expect(apartmentPackageCreate.status).toBe(201);
+    expect(apartmentPackageCreate.status).toBe(200);
 
     const apartmentVisitorCreate = await routeModules.visitors.POST(
       jsonRequest(apiUrl('/api/v1/visitors'), 'POST', {
@@ -320,7 +320,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
         expectedArrival: '2026-06-25T12:00:00.000Z',
       }),
     );
-    expect(apartmentVisitorCreate.status).toBe(201);
+    expect(apartmentVisitorCreate.status).toBe(200);
   });
 
   it('returns 400 with a clear error when unitNumber does not resolve to a unit', async () => {

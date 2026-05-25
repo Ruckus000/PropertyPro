@@ -75,8 +75,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   });
 
   return NextResponse.json(
-    { data: { requestId: created.id, status: created.status } },
-    { status: 201 },
+    { data: { requestId: created.id, status: created.status } }
   );
 });
 

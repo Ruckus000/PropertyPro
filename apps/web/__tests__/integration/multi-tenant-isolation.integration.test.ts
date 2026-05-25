@@ -824,7 +824,7 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
         location: 'Audit Hall A',
       }),
     );
-    expect(createMeetingAResponse.status).toBe(201);
+    expect(createMeetingAResponse.status).toBe(200);
 
     setActor(seeded.actorBId);
     const createMeetingBResponse = await appRoutes.meetings.POST(
@@ -836,7 +836,7 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
         location: 'Audit Hall B',
       }),
     );
-    expect(createMeetingBResponse.status).toBe(201);
+    expect(createMeetingBResponse.status).toBe(200);
 
     const auditRowsForA = await dbPkg
       .createScopedClient(seeded.communityAId)

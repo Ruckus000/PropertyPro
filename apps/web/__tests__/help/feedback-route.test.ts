@@ -101,7 +101,7 @@ describe('POST /api/v1/help/feedback', () => {
     const response = await POST(makeJsonRequest('/api/v1/help/feedback', validPost));
     const json = await response.json();
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     expect(json.data).toMatchObject({ id: 1, rating: 1 });
     expect(upsertArticleFeedbackMock).toHaveBeenCalledTimes(1);
     expect(upsertArticleFeedbackMock).toHaveBeenCalledWith({

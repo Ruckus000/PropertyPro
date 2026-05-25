@@ -93,5 +93,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     comment: comment ?? null,
   });
 
-  return NextResponse.json({ data: row }, { status: created ? 201 : 200 });
+  return NextResponse.json({ data: row });
 });

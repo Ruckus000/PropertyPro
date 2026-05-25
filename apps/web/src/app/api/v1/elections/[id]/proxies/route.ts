@@ -65,6 +65,6 @@ export const POST = withErrorHandler(
       req.headers.get('x-request-id'),
     );
 
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json({ data });
   },
 );

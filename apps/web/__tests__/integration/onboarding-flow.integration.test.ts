@@ -213,7 +213,7 @@ describeDb('onboarding flow (db-backed integration)', () => {
         action: 'complete',
       }),
     );
-    expect(completeResponse.status).toBe(201);
+    expect(completeResponse.status).toBe(200);
     const completeJson = await parseJson<{
       data: {
         status: string;

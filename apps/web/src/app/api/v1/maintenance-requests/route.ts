@@ -298,7 +298,7 @@ async function handleCreateRequest(
     },
   });
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created });
 }
 
 async function handleAddComment(
@@ -364,7 +364,7 @@ async function handleAddComment(
     },
   });
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created });
 }
 
 async function handleRequestUploadUrl(

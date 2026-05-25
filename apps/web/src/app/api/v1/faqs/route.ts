@@ -102,5 +102,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     newValues: { question, answer, sortOrder },
   });
 
-  return NextResponse.json({ data: row }, { status: 201 });
+  return NextResponse.json({ data: row });
 });
