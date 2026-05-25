@@ -1,34 +1,34 @@
 /**
- * Emergency Broadcast Templates API — list pre-built templates.
+ * GET /api/v1/emergency-broadcasts/templates?communityId=N
  *
- * GET /api/v1/emergency-broadcasts/templates — List all templates
+ * Returns the static list of pre-built emergency broadcast templates.
+ *
+ * Plan A1 drain #29 (Move 2 bundle): input validation (query) and output
+ * envelope wrapping delegated to `runRoute()` from `@propertypro/api-contract`.
+ * Auth chain preserved verbatim. Wire shape `{ data: EMERGENCY_TEMPLATES }`
+ * byte-identical to pre-migration.
+ *
+ * Behavior change: pre-migration 400s threw `ValidationError` with two
+ * different messages (`'communityId query parameter is required'` /
+ * `'communityId must be a positive integer'`); runner produces the canonical
+ * `VALIDATION_ERROR` envelope for both cases. Status code (400) unchanged.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { EMERGENCY_TEMPLATES } from '@/lib/constants/emergency-templates';
+import { emergencyBroadcastsTemplatesGetContract } from './contract';
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
-  const communityIdParam = searchParams.get('communityId');
+export const GET = withErrorHandler(
+  runRoute(emergencyBroadcastsTemplatesGetContract, async ({ query, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'emergency_broadcasts', 'read');
 
-  if (!communityIdParam) {
-    throw new ValidationError('communityId query parameter is required');
-  }
-
-  const parsedCommunityId = Number(communityIdParam);
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'emergency_broadcasts', 'read');
-
-  return NextResponse.json({ data: EMERGENCY_TEMPLATES });
-});
+    return EMERGENCY_TEMPLATES;
+  }),
+);

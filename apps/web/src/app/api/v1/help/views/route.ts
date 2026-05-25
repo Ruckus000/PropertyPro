@@ -1,46 +1,34 @@
 /**
- * Help Article Read-State API
+ * GET /api/v1/help/views?communityId=X
  *
- * GET /api/v1/help/views?communityId=N — distinct article slugs the current
- *                                        user has ever viewed in this community.
+ * Returns slugs of help articles the calling user has viewed in this
+ * community.
  *
- * Sourced from help_article_views (write-only, append-only — see
- * /api/v1/help/view). The "read" UI is purely advisory — there is no SLA on
- * freshness and views are best-effort.
+ * Plan A1 drain #26 (Move 2 bundle): input validation (query) and output
+ * envelope wrapping delegated to `runRoute()` from `@propertypro/api-contract`.
+ * Auth chain preserved verbatim. Wire shape is `{ data: { slugs } }`,
+ * byte-identical to pre-migration.
  *
- * Invariants:
- * - withErrorHandler wrapper for structured errors / request ID
- * - Tenant isolation via createScopedClient(communityId)
- * - Auth via requireAuthenticatedUserId + requireCommunityMembership
- * - Returns { data: { slugs: string[] } } per the standard envelope.
+ * Behavior change: pre-migration 400s threw `ValidationError('Invalid
+ * communityId')`; runner produces the canonical `VALIDATION_ERROR` envelope.
+ * Status code (400) and error code (`VALIDATION_ERROR`) unchanged — message
+ * shifts to the runner's standard text.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { listViewedArticleSlugs } from '@/lib/services/help-views-service';
+import { helpViewsGetContract } from './contract';
 
-const querySchema = z.object({
-  communityId: z.coerce.number().int().positive(),
-});
+export const GET = withErrorHandler(
+  runRoute(helpViewsGetContract, async ({ query, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const userId = await requireAuthenticatedUserId();
+    await requireCommunityMembership(communityId, userId);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const { searchParams } = new URL(req.url);
-  const parsed = querySchema.safeParse({
-    communityId: searchParams.get('communityId'),
-  });
-  if (!parsed.success) {
-    throw new ValidationError('Invalid communityId');
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
-  const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, userId);
-
-  const slugs = await listViewedArticleSlugs(communityId, userId);
-
-  return NextResponse.json({ data: { slugs } });
-});
+    const slugs = await listViewedArticleSlugs(communityId, userId);
+    return { slugs };
+  }),
+);
