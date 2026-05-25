@@ -4,27 +4,33 @@
  * Returns pending e-sign requests for the authenticated user.
  * Available to all roles with esign.read permission (owner, tenant, admin).
  *
- * Plan A3 Phase 2 (#242 follow-on): the email lookup that previously lived
- * inline in this route is now folded into `listMyPendingForActor` in the
- * esign-service. Drops the `createScopedClient` + `users` table imports
- * from the route, removing it from the third-boundary-guard allowlist.
+ * Plan A1 drain #20: input validation (query) and output envelope wrapping
+ * delegated to `runRoute()` from `@propertypro/api-contract`. Auth chain
+ * preserved verbatim — pre-migration used `parseCommunityIdFromQuery`,
+ * which already delegates to `resolveEffectiveCommunityId` (drain #10
+ * lesson). The wire shape is `{ data: T[] }`, unchanged.
+ *
+ * Plan A3 Phase 2 (#242 follow-on, retained): the email lookup that
+ * previously lived inline in this route is folded into
+ * `listMyPendingForActor` in esign-service.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
 import { listMyPendingForActor } from '@/lib/services/esign-service';
+import { esignMyPendingContract } from './contract';
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+export const GET = withErrorHandler(
+  runRoute(esignMyPendingContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  await requireEsignReadPermission(membership);
+    await requireEsignReadPermission(membership);
 
-  const data = await listMyPendingForActor(communityId, actorUserId);
-
-  return NextResponse.json({ data });
-});
+    return listMyPendingForActor(communityId, actorUserId);
+  }),
+);
