@@ -159,4 +159,13 @@ describe('GET /api/v1/assessments/[id]/line-items', () => {
     const res = await GET(req(), ctx());
     expect(res.status).toBe(403);
   });
+
+  it('returns 403 when finance feature is disabled for the community', async () => {
+    requireFinanceEnabledMock.mockRejectedValueOnce(
+      new ForbiddenError('Finance not enabled'),
+    );
+    const res = await GET(req(), ctx());
+    expect(res.status).toBe(403);
+    expect(listAssessmentLineItemsForCommunityMock).not.toHaveBeenCalled();
+  });
 });
