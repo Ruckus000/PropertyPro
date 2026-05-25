@@ -517,13 +517,13 @@ describe('Access Request Routes', () => {
       );
     });
 
-    it('throws ValidationError when reason exceeds 500 characters', async () => {
+    it('throws ContractValidationError when reason exceeds 500 characters', async () => {
       const req = makeJsonRequest('/api/v1/access-requests/7/deny', {
         reason: 'x'.repeat(501),
       });
       const context = makeRouteParams({ id: '7' });
 
-      await expect(denyPOST(req, context)).rejects.toThrow('Validation failed');
+      await expect(denyPOST(req, context)).rejects.toMatchObject({ source: 'body' });
     });
   });
 });
