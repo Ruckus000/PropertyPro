@@ -44,9 +44,9 @@ export interface CommunityStatementData {
   lineItems: CommunityLineItem[];
 }
 
-export interface StatementEnvelope {
+export interface StatementInner {
   mode: 'unit' | 'community';
-  data: UnitStatementData | CommunityStatementData;
+  statement: UnitStatementData | CommunityStatementData;
 }
 
 export type PaymentPortalMode = 'unit' | 'community';
@@ -56,11 +56,15 @@ export type PaymentPortalMode = 'unit' | 'community';
 // Documented exception to the requestJson rule: (a) the statement query
 // throws a bespoke literal 'Failed to load payment data' (and a second
 // literal 'Expected community statement, received unit statement' for the
-// discriminated-union mode mismatch case) and parses a non-standard
-// envelope that may include a `mode` discriminator alongside `data`;
-// (b) the fee-policy query SILENTLY returns 'association_absorbs' on non-OK
-// (does NOT throw) — `requestJson` would always throw. Raw fetch preserves
-// both behaviors byte-for-byte.
+// discriminated-union mode mismatch case) — `requestJson` would surface
+// the server error.message instead; (b) the fee-policy query SILENTLY
+// returns 'association_absorbs' on non-OK (does NOT throw) — `requestJson`
+// would always throw. Raw fetch preserves both behaviors byte-for-byte.
+//
+// As of B1 Slice 3, the statement route returns the canonical envelope
+// `{ data: { mode, statement } }`. The hook still tolerates the legacy
+// `{ data }` shape (without `mode`) for back-compat with cached fixtures
+// and any test mocks that haven't been migrated.
 
 export function usePaymentStatement(
   communityId: number,
@@ -75,16 +79,20 @@ export function usePaymentStatement(
       if (unitId) params.set('unitId', String(unitId));
       const res = await fetch(`/api/v1/payments/statement?${params}`);
       if (!res.ok) throw new Error('Failed to load payment data');
-      const json = (await res.json()) as StatementEnvelope | { data: UnitStatementData };
+      const json = (await res.json()) as {
+        data?: StatementInner | UnitStatementData | CommunityStatementData;
+      };
 
-      // Back-compat: older servers (or mocks) may return `{ data }` without `mode`.
-      if ('mode' in json && typeof json.mode === 'string') {
-        if (mode === 'community' && json.mode !== 'community') {
+      const inner = json.data;
+      if (inner && typeof inner === 'object' && 'mode' in inner && typeof inner.mode === 'string') {
+        if (mode === 'community' && inner.mode !== 'community') {
           throw new Error('Expected community statement, received unit statement');
         }
-        return json.data;
+        return inner.statement;
       }
-      return (json as { data: UnitStatementData }).data;
+      // Back-compat: legacy `{ data: <statement> }` shape (no `mode`
+      // wrapper). Preserved for fixtures predating Slice 3.
+      return inner as UnitStatementData | CommunityStatementData;
     },
     enabled: options?.enabled,
     staleTime: 30_000,

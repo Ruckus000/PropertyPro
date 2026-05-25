@@ -72,8 +72,13 @@ function mockBothFetches(
           json: () => Promise.resolve({}),
         });
       }
+      // As of B1 Slice 3, the canonical envelope is
+      // `{ data: { mode, statement } }`. The legacy `{ data }` (no mode
+      // wrapper) is still tolerated by `usePaymentStatement` for back-compat,
+      // so the `mode === undefined` branch keeps the old single-wrap shape
+      // to exercise that fallback.
       const body = mode
-        ? { mode, data: statementData }
+        ? { data: { mode, statement: statementData } }
         : { data: statementData };
       return Promise.resolve({
         ok: true,
@@ -473,7 +478,7 @@ describe('PaymentPortal', () => {
         }
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ mode: 'community', data: null }),
+          json: () => Promise.resolve({ data: { mode: 'community', statement: null } }),
         });
       });
 

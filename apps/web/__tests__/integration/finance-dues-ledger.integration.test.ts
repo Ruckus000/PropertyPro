@@ -377,11 +377,11 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/payments/statement?communityId=${communityA.id}`)),
     );
     expect(statementResponse.status).toBe(200);
-    const statementJson = await parseJson<{ mode: string; data: Record<string, unknown> }>(
-      statementResponse,
-    );
-    expect(statementJson.mode).toBe('unit');
-    expect(statementJson.data['unitId']).toBe(unitAId);
+    const statementJson = await parseJson<{
+      data: { mode: string; statement: Record<string, unknown> };
+    }>(statementResponse);
+    expect(statementJson.data.mode).toBe('unit');
+    expect(statementJson.data.statement['unitId']).toBe(unitAId);
 
     const ledgerForbidden = await routeModules.ledger.GET(
       new NextRequest(apiUrl(`/api/v1/ledger?communityId=${communityA.id}&unitId=${unitASecondaryId}`)),

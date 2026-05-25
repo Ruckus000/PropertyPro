@@ -35,9 +35,12 @@ export interface BulkAnnouncementResponse {
  */
 export function useBulkAnnouncements() {
   return useMutation<BulkAnnouncementResponse, Error, BulkAnnouncementInput>({
-    // Documented exception to the requestJson rule: POST
-    // /api/v1/pm/bulk/announcements returns a flat `{ results }` envelope
-    // (no `{ data }` wrapper), so requestJson's `.data` unwrap does not fit.
+    // As of B1 Slice 3, this route returns the canonical
+    // `{ data: { results } }` envelope. The hook unwraps `.data` manually
+    // rather than adopting `requestJson` so the bespoke fallback literal
+    // 'Failed to send bulk announcement' (used on both unparseable bodies
+    // and 200 success bodies missing the `results` field) stays preserved
+    // — migration to `requestJson` is B6 work.
     mutationFn: async (input) => {
       const res = await fetch('/api/v1/pm/bulk/announcements', {
         method: 'POST',
@@ -53,7 +56,7 @@ export function useBulkAnnouncements() {
 
       const json = (await res.json().catch(() => null)) as {
         error?: { message?: string };
-        results?: BulkAnnouncementResult[];
+        data?: { results?: BulkAnnouncementResult[] };
       } | null;
 
       if (!res.ok) {
@@ -62,15 +65,15 @@ export function useBulkAnnouncements() {
         );
       }
 
-      // A 200 whose body is unparseable or missing `results` is an API
+      // A 200 whose body is unparseable or missing `data.results` is an API
       // error, not an empty success — surface it (matches the original
       // inline mutation, which threw on a bad success body) instead of
       // showing a misleading "Sent to 0/0".
-      if (!json?.results) {
+      if (!json?.data?.results) {
         throw new Error('Failed to send bulk announcement');
       }
 
-      return { results: json.results };
+      return { results: json.data.results };
     },
   });
 }

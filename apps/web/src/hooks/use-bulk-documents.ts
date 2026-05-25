@@ -87,7 +87,14 @@ async function bulkCreateDocuments(input: BulkCreateDocumentsInput): Promise<Bul
     const json = (await res.json()) as { error?: { message?: string } };
     throw new Error(json.error?.message ?? 'Failed to create bulk documents');
   }
-  return (await res.json()) as BulkDocumentResponse;
+  // As of B1 Slice 3, this route returns the canonical
+  // `{ data: { results } }` envelope. Unwrap `.data` to keep the
+  // hook-level `BulkDocumentResponse` shape unchanged.
+  const json = (await res.json()) as { data?: BulkDocumentResponse };
+  if (!json.data) {
+    throw new Error('Failed to create bulk documents');
+  }
+  return json.data;
 }
 
 // ---------------------------------------------------------------------------

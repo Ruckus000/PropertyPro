@@ -1,9 +1,10 @@
 /**
- * Unit tests for useDemoSelfServiceUpgrade (B5 batch 4C drain).
+ * Unit tests for useDemoSelfServiceUpgrade (B5 batch 4C drain; canonicalized in B1 Slice 3).
  *
- * Covers the documented exception to the requestJson rule: the route
- * returns a flat `{ checkoutUrl }` / `{ error }` envelope (no `{ data }`
- * wrapper).
+ * Post-Slice-3: the route returns the canonical `{ data: { checkoutUrl } }`
+ * envelope. The error body is still the bespoke `{ error: string }` shape
+ * (NOT `{ error: { message } }`), and the bespoke `Request failed (<status>)`
+ * fallback literal is preserved verbatim.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -40,7 +41,7 @@ describe('useDemoSelfServiceUpgrade', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ checkoutUrl: 'https://stripe.test/checkout' }),
+      json: async () => ({ data: { checkoutUrl: 'https://stripe.test/checkout' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -66,13 +67,13 @@ describe('useDemoSelfServiceUpgrade', () => {
     );
   });
 
-  it('returns the flat { checkoutUrl } envelope on success', async () => {
+  it('unwraps { data: { checkoutUrl } } envelope on success', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ checkoutUrl: 'https://stripe.test/checkout' }),
+        json: async () => ({ data: { checkoutUrl: 'https://stripe.test/checkout' } }),
       }),
     );
 

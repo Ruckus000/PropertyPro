@@ -52,7 +52,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     }
 
     const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
-    return NextResponse.json({ mode: 'unit', data: statement });
+    return NextResponse.json({ data: { mode: 'unit', statement } });
   }
 
   // Staff / manager path — either pick a specific unit or get the community rollup.
@@ -61,9 +61,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   if (rawUnitId) {
     const unitId = parsePositiveInt(rawUnitId, 'unitId');
     const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
-    return NextResponse.json({ mode: 'unit', data: statement });
+    return NextResponse.json({ data: { mode: 'unit', statement } });
   }
 
   const communityStatement = await buildCommunityStatement(communityId, startDate, endDate);
-  return NextResponse.json({ mode: 'community', data: communityStatement });
+  return NextResponse.json({ data: { mode: 'community', statement: communityStatement } });
 });

@@ -121,5 +121,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     };
   });
 
-  return NextResponse.json({ results: mapped });
+  return NextResponse.json({ data: { results: mapped } });
 });
