@@ -9,7 +9,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
  * - `useBillingGroupPreview` — param-driven GET of the portfolio pricing
  *   preview (`GET /api/v1/billing-groups/{id}/preview`).
  * - `useAddCommunity` — user-triggered POST that creates the pending signup
- *   and Stripe Checkout session (`POST /api/v1/pm/communities`, 202).
+ *   and Stripe Checkout session (`POST /api/v1/pm/communities`, 200).
  *
  * **Why not `requestJson`:** both routes return the standard `{ data: T }`
  * envelope, so `requestJson<T>` would unwrap correctly. However, the modal

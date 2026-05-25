@@ -179,7 +179,7 @@ describe('Emergency Broadcast Routes', () => {
       channels: ['sms', 'email'],
     };
 
-    it('creates draft broadcast with valid input (status 201)', async () => {
+    it('creates draft broadcast with valid input (status 200)', async () => {
       const createdBroadcast = { id: 5, ...validPayload, status: 'draft' };
       createBroadcastMock.mockResolvedValue(createdBroadcast);
 
