@@ -240,24 +240,26 @@ describeDb('Payments statement — staff community mode', () => {
     expect(response.status).toBe(200);
 
     const body = await parseJson<{
-      mode: string;
       data: {
-        balanceCents: number;
-        lineItems: Array<{ unitId: number; unitNumber: string; status: string }>;
+        mode: string;
+        statement: {
+          balanceCents: number;
+          lineItems: Array<{ unitId: number; unitNumber: string; status: string }>;
+        };
       };
     }>(response);
 
-    expect(body.mode).toBe('community');
-    expect(typeof body.data.balanceCents).toBe('number');
-    expect(body.data.lineItems.length).toBeGreaterThan(0);
+    expect(body.data.mode).toBe('community');
+    expect(typeof body.data.statement.balanceCents).toBe('number');
+    expect(body.data.statement.lineItems.length).toBeGreaterThan(0);
     // Every line item should carry both unitId and a non-empty unitNumber.
-    for (const item of body.data.lineItems) {
+    for (const item of body.data.statement.lineItems) {
       expect(typeof item.unitId).toBe('number');
       expect(typeof item.unitNumber).toBe('string');
       expect(item.unitNumber.length).toBeGreaterThan(0);
     }
     // Across the seeded data there should be items for both units.
-    const unitIds = new Set(body.data.lineItems.map((i) => i.unitId));
+    const unitIds = new Set(body.data.statement.lineItems.map((i) => i.unitId));
     expect(unitIds.has(communityAUnitAId)).toBe(true);
     expect(unitIds.has(communityAUnitBId)).toBe(true);
   });
@@ -276,9 +278,9 @@ describeDb('Payments statement — staff community mode', () => {
       ),
     );
     expect(response.status).toBe(200);
-    const body = await parseJson<{ mode: string; data: { unitId: number } }>(response);
-    expect(body.mode).toBe('unit');
-    expect(body.data.unitId).toBe(communityAUnitAId);
+    const body = await parseJson<{ data: { mode: string; statement: { unitId: number } } }>(response);
+    expect(body.data.mode).toBe('unit');
+    expect(body.data.statement.unitId).toBe(communityAUnitAId);
   });
 
   it('returns unit-mode statement for a single-unit resident without unitId', async () => {
@@ -291,9 +293,9 @@ describeDb('Payments statement — staff community mode', () => {
       new NextRequest(apiUrl(`/api/v1/payments/statement?communityId=${communityA.id}`)),
     );
     expect(response.status).toBe(200);
-    const body = await parseJson<{ mode: string; data: { unitId: number } }>(response);
-    expect(body.mode).toBe('unit');
-    expect(body.data.unitId).toBe(communityAUnitAId);
+    const body = await parseJson<{ data: { mode: string; statement: { unitId: number } } }>(response);
+    expect(body.data.mode).toBe('unit');
+    expect(body.data.statement.unitId).toBe(communityAUnitAId);
   });
 
   it('returns 400 when a multi-unit resident omits unitId', async () => {

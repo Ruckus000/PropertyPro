@@ -40,7 +40,7 @@ afterEach(() => {
 /* ─────── usePaymentStatement ─────── */
 
 describe('usePaymentStatement', () => {
-  it("returns body.data when server returns { mode: 'unit', data }", async () => {
+  it("returns inner statement when server returns canonical { data: { mode: 'unit', statement } }", async () => {
     const unitData = {
       unitId: 303,
       balanceCents: 12345,
@@ -49,7 +49,7 @@ describe('usePaymentStatement', () => {
     };
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ mode: 'unit', data: unitData }),
+      json: () => Promise.resolve({ data: { mode: 'unit', statement: unitData } }),
     });
 
     const { result } = renderHook(
@@ -64,7 +64,7 @@ describe('usePaymentStatement', () => {
     );
   });
 
-  it("returns body.data when server returns { mode: 'community', data }", async () => {
+  it("returns inner statement when server returns canonical { data: { mode: 'community', statement } }", async () => {
     const communityData = {
       balanceCents: 999,
       ledgerEntries: [],
@@ -72,7 +72,7 @@ describe('usePaymentStatement', () => {
     };
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ mode: 'community', data: communityData }),
+      json: () => Promise.resolve({ data: { mode: 'community', statement: communityData } }),
     });
 
     const { result } = renderHook(
@@ -87,7 +87,7 @@ describe('usePaymentStatement', () => {
     );
   });
 
-  it('returns body.data when server returns back-compat envelope without `mode`', async () => {
+  it('returns body.data when server returns back-compat envelope without `mode` wrapper', async () => {
     const unitData = {
       unitId: 1,
       balanceCents: 0,
@@ -130,8 +130,10 @@ describe('usePaymentStatement', () => {
       ok: true,
       json: () =>
         Promise.resolve({
-          mode: 'unit',
-          data: { unitId: 1, balanceCents: 0, ledgerEntries: [], lineItems: [] },
+          data: {
+            mode: 'unit',
+            statement: { unitId: 1, balanceCents: 0, ledgerEntries: [], lineItems: [] },
+          },
         }),
     });
 

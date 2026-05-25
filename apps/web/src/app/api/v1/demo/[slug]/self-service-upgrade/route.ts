@@ -136,6 +136,6 @@ export const POST = withErrorHandler(
       userId: user.id,
     });
 
-    return NextResponse.json({ checkoutUrl: session.url });
+    return NextResponse.json({ data: { checkoutUrl: session.url } });
   },
 );

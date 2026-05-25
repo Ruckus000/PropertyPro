@@ -1,8 +1,10 @@
 /**
- * Unit tests for useBulkAnnouncements (B5 batch 4B drain).
+ * Unit tests for useBulkAnnouncements (B5 batch 4B drain; canonicalized in B1 Slice 3).
  *
- * Covers the documented exception to the requestJson rule: the route
- * returns a flat `{ results }` envelope (no `{ data }` wrapper).
+ * Post-Slice-3: the route returns the canonical `{ data: { results } }`
+ * envelope. The hook still keeps its bespoke fallback literal
+ * 'Failed to send bulk announcement' for non-OK responses, unparseable
+ * success bodies, and 200 success bodies missing `data.results`.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -39,7 +41,7 @@ describe('useBulkAnnouncements', () => {
   it('POSTs exact URL, method, headers, and body', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ results: [] }),
+      json: async () => ({ data: { results: [] } }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -62,7 +64,7 @@ describe('useBulkAnnouncements', () => {
     });
   });
 
-  it('returns the flat { results } envelope on success', async () => {
+  it('unwraps { data: { results } } envelope on success', async () => {
     const results = [
       { communityId: 1, communityName: 'Alpha', status: 'sent' as const },
       {
@@ -74,7 +76,7 @@ describe('useBulkAnnouncements', () => {
     ];
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ results }) }),
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { results } }) }),
     );
 
     const { result } = renderHook(() => useBulkAnnouncements(), { wrapper });
@@ -142,7 +144,7 @@ describe('useBulkAnnouncements', () => {
     );
   });
 
-  it('throws the literal when a 200 body is missing the results field', async () => {
+  it('throws the literal when a 200 body is missing the data.results field', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }),

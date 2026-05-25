@@ -142,7 +142,7 @@ describe('useBulkCreateDocuments', () => {
     };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => responseBody,
+      json: async () => ({ data: responseBody }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -210,6 +210,25 @@ describe('useBulkCreateDocuments', () => {
       }),
     ).rejects.toThrow('Failed to create bulk documents');
   });
+
+  it('rejects with the fallback literal when a 200 body is missing the data field', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useBulkCreateDocuments(), { wrapper });
+
+    await expect(
+      result.current.mutateAsync({
+        communityIds: [1],
+        documents: [
+          { fileName: 'a.pdf', storagePath: 'p', description: null },
+        ],
+      }),
+    ).rejects.toThrow('Failed to create bulk documents');
+  });
 });
 
 describe('useBulkUploadDocuments (orchestrator)', () => {
@@ -240,7 +259,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       .mockResolvedValueOnce({ ok: true }) // S3 PUT a
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: presigned2 }) }) // presign b
       .mockResolvedValueOnce({ ok: true }) // S3 PUT b
-      .mockResolvedValueOnce({ ok: true, json: async () => bulkResult }); // bulk-create
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: bulkResult }) }); // bulk-create
     vi.stubGlobal('fetch', fetchMock);
 
     const onProgress = vi.fn();
@@ -298,7 +317,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { path: 'p', uploadUrl: 'u' } }) })
       .mockResolvedValueOnce({ ok: true })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ results: [] }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { results: [] } }) });
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useBulkUploadDocuments(), { wrapper });
@@ -400,7 +419,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       .fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { path: 'p', uploadUrl: 'u' } }) })
       .mockResolvedValueOnce({ ok: true })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ results: [] }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { results: [] } }) });
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() => useBulkUploadDocuments(), { wrapper });

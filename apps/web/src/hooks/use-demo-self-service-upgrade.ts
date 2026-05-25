@@ -27,10 +27,12 @@ export function useDemoSelfServiceUpgrade() {
     Error,
     DemoSelfServiceUpgradeInput
   >({
-    // Documented exception to the requestJson rule: POST
-    // /api/v1/demo/[slug]/self-service-upgrade returns a flat
-    // `{ checkoutUrl }` / `{ error }` envelope (no `{ data }` wrapper),
-    // so requestJson's `.data` unwrap does not fit.
+    // As of B1 Slice 3, this route returns the canonical
+    // `{ data: { checkoutUrl } }` envelope. The hook unwraps `.data`
+    // manually rather than adopting `requestJson` so the bespoke error
+    // parsing (handles a top-level `error: string` shape, NOT the
+    // canonical `error: { message }`) and bespoke `Request failed (<status>)`
+    // fallback literal stay preserved — migration to `requestJson` is B6 work.
     mutationFn: async ({ slug, planId, customerEmail, customerName }) => {
       const res = await fetch(`/api/v1/demo/${slug}/self-service-upgrade`, {
         method: 'POST',
@@ -44,7 +46,7 @@ export function useDemoSelfServiceUpgrade() {
 
       const json = (await res.json().catch(() => null)) as {
         error?: string;
-        checkoutUrl?: string;
+        data?: { checkoutUrl?: string };
       } | null;
 
       if (!res.ok) {
@@ -59,7 +61,7 @@ export function useDemoSelfServiceUpgrade() {
         throw new Error(`Request failed (${res.status})`);
       }
 
-      return { checkoutUrl: json.checkoutUrl };
+      return { checkoutUrl: json.data?.checkoutUrl };
     },
   });
 }
