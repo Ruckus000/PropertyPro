@@ -17,11 +17,13 @@
  * Token-authenticated (no session required) — listed in middleware allowlist
  * via the /api/v1/demo/.../enter startsWith match.
  */
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { createDemoSession } from '@/lib/services/demo-session';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 import { getDemoInstanceForEntry } from '@/lib/services/demo-conversion';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { AppError, BadRequestError, NotFoundError } from '@/lib/api/errors';
 
 const RoleSchema = z.object({
   role: z.enum(['board', 'resident']),
@@ -53,16 +55,13 @@ async function parseRole(request: Request): Promise<{ role: 'board' | 'resident'
   return null;
 }
 
-export async function POST(request: Request, { params }: RouteParams) {
-  const { slug } = await params;
+export const POST = withErrorHandler(async (request: NextRequest, context: RouteParams) => {
+  const { slug } = await context.params;
 
   // 1. Parse and validate role from request body
   const parsed = await parseRole(request);
   if (!parsed) {
-    return NextResponse.json(
-      { error: 'Invalid request. Role must be "board" or "resident".' },
-      { status: 400 },
-    );
+    throw new BadRequestError('Invalid request. Role must be "board" or "resident".');
   }
   const { role } = parsed;
 
@@ -71,7 +70,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   // 3. Validate instance exists, is a demo community, and has not expired
   if (!instance || !instance.isDemo) {
-    return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+    throw new NotFoundError('Not found.');
   }
 
   if (instance.demoExpiresAt && new Date(instance.demoExpiresAt) < new Date()) {
@@ -85,7 +84,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   const communityId = instance.seededCommunityId;
   if (!communityId) {
-    return NextResponse.json({ error: 'Demo setup incomplete.' }, { status: 404 });
+    throw new NotFoundError('Demo setup incomplete.');
   }
 
   // 4. Determine target email based on role
@@ -93,14 +92,14 @@ export async function POST(request: Request, { params }: RouteParams) {
 
   if (!email) {
     console.error(`[demo/enter] Missing email for role "${role}" on slug "${slug}"`);
-    return NextResponse.json({ error: 'Demo user not configured.' }, { status: 500 });
+    throw new AppError('Demo user not configured.', 500, 'INTERNAL_ERROR');
   }
 
   // 5. Create an authenticated session for the demo user
   const sessionResult = await createDemoSession(email);
   if (!sessionResult.ok) {
     console.error(`[demo/enter] Session creation failed for slug "${slug}":`, sessionResult.error);
-    return NextResponse.json({ error: 'Failed to create demo session.' }, { status: 500 });
+    throw new AppError('Failed to create demo session.', 500, 'INTERNAL_ERROR');
   }
 
   // 6. Emit demo_entered conversion event (awaited best-effort)
@@ -134,4 +133,4 @@ export async function POST(request: Request, { params }: RouteParams) {
   }
 
   return response;
-}
+});

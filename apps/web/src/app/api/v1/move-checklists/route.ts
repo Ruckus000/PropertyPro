@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -45,7 +45,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const { communityId, ...filters } = parseResult.data;
   const membership = await requireCommunityMembership(communityId, userId);
   if (!isAdminRole(membership.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    throw new ForbiddenError('Forbidden');
   }
 
   const rows = await listMoveChecklists(communityId, filters);
@@ -65,7 +65,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
   if (!isAdminRole(membership.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    throw new ForbiddenError('Forbidden');
   }
 
   const checklist = await createMoveChecklist(parseResult.data, userId);
