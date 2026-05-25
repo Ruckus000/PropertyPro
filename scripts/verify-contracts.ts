@@ -144,11 +144,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/documents/search/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/cancel/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/certify/route.ts',
-<<<<<<< HEAD
-  'apps/web/src/app/api/v1/elections/[id]/eligibility/route.ts',
-=======
-  'apps/web/src/app/api/v1/elections/[id]/proxies/[proxyId]/approve/route.ts',
->>>>>>> a62143c3 (Drain /api/v1/elections/[id]/eligibility off the contract allowlist (A1 drain #44))
   'apps/web/src/app/api/v1/elections/[id]/proxies/[proxyId]/reject/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/proxies/[proxyId]/revoke/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/proxies/route.ts',
