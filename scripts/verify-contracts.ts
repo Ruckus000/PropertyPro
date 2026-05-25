@@ -143,7 +143,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/documents/route.ts',
   'apps/web/src/app/api/v1/documents/search/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/certify/route.ts',
-  'apps/web/src/app/api/v1/elections/[id]/eligibility/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/proxies/[proxyId]/reject/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/proxies/[proxyId]/revoke/route.ts',
   'apps/web/src/app/api/v1/elections/[id]/proxies/route.ts',
