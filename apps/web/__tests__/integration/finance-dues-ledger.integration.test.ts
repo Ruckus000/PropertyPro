@@ -234,8 +234,10 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/delinquency?communityId=${communityA.id}`)),
     );
     expect(delinquencyResponse.status).toBe(200);
-    const delinquencyJson = await parseJson<{ data: Array<Record<string, unknown>> }>(delinquencyResponse);
-    expect(delinquencyJson.data.some((row) => row['unitId'] === unitAId)).toBe(true);
+    const delinquencyJson = await parseJson<{
+      data: { data: Array<Record<string, unknown>>; meta: { lienThresholdDays: number } };
+    }>(delinquencyResponse);
+    expect(delinquencyJson.data.data.some((row) => row['unitId'] === unitAId)).toBe(true);
 
     const waiveResponse = await routeModules.delinquencyWaive.POST(
       jsonRequest(apiUrl(`/api/v1/delinquency/${unitAId}/waive`), 'POST', {

@@ -485,7 +485,8 @@ describe('useDelinquency', () => {
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: units }),
+      json: () =>
+        Promise.resolve({ data: { data: units, meta: { lienThresholdDays: 90 } } }),
     });
 
     const { result } = renderHook(() => useDelinquency(42), { wrapper });

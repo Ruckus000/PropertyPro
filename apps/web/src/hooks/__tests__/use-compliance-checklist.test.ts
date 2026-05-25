@@ -87,7 +87,7 @@ describe('useComplianceChecklist', () => {
 
   it('returns json.data on success', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { data: [], meta: { alreadyGenerated: true } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { data: [], meta: { alreadyGenerated: true } } }))
       .mockResolvedValueOnce(
         jsonResponse(200, { data: [{ id: 9, templateKey: 'bylaws' }] }),
       );

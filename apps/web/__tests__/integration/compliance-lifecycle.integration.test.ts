@@ -172,11 +172,13 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
 
     expect(response.status).toBe(200);
     const json = await parseJson<{
-      data: Array<Record<string, unknown>>;
-      meta: { alreadyGenerated: boolean };
+      data: {
+        data: Array<Record<string, unknown>>;
+        meta: { alreadyGenerated: boolean };
+      };
     }>(response);
-    expect(json.meta.alreadyGenerated).toBe(true);
-    expect(json.data.length).toBeGreaterThan(0);
+    expect(json.data.meta.alreadyGenerated).toBe(true);
+    expect(json.data.data.length).toBeGreaterThan(0);
   });
 
   // =========================================================================

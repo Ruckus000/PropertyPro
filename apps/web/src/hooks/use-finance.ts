@@ -218,10 +218,15 @@ export function useDelinquency(
 ) {
   return useQuery({
     queryKey: FINANCE_KEYS.delinquency(communityId),
-    queryFn: () =>
-      requestJson<DelinquentUnit[]>(
-        `/api/v1/delinquency?communityId=${communityId}`,
-      ),
+    queryFn: async () => {
+      // Route returns canonical double-wrap { data: { data, meta } }; requestJson
+      // unwraps the outer .data, leaving us the inner { data, meta } envelope.
+      const result = await requestJson<{
+        data: DelinquentUnit[];
+        meta: { lienThresholdDays: number };
+      }>(`/api/v1/delinquency?communityId=${communityId}`);
+      return result.data;
+    },
     staleTime: 60_000,
     enabled: communityId > 0 && options?.enabled !== false,
   });
