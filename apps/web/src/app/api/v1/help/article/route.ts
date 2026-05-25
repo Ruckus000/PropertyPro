@@ -1,7 +1,7 @@
 /**
  * GET /api/v1/help/article?category=X&slug=Y&communityId=N
  *
- * Returns the serialized MDX body + TOC + metadata + related articles
+ * Returns server-rendered article HTML + TOC + metadata + related articles
  * for the requested help article, filtered by the viewer's role and
  * community features.
  *
@@ -13,14 +13,15 @@
  * envelope wrapping are delegated to `runRoute()` from `@propertypro/api-contract`.
  * The wire response is the canonical non-paginated envelope:
  *
- *     { data: { source, toc, metadata, related } }
+ *     { data: { html, toc, metadata, related } }
  *
  * so consumers can use `requestJson<HelpArticleResponse>` and get the right
  * payload after the outer `{ data }` is unwrapped.
  */
 import { unstable_cache } from 'next/cache';
+import { createElement } from 'react';
+import { MDXRemote } from 'next-mdx-remote';
 import { serialize } from 'next-mdx-remote/serialize';
-import type { MDXRemoteSerializeResult } from 'next-mdx-remote';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -37,11 +38,12 @@ import {
   type HelpArticleSource,
 } from '@/lib/services/help-article-service';
 import { extractTableOfContents } from '@/lib/help/toc';
-import type { TocItem } from '@/components/help/mdx-components';
+import { helpMdxComponents, type TocItem } from '@/components/help/mdx-components';
+import { sanitizeHelpHtml } from '@/lib/help/sanitize-help-html';
 import { helpArticleContract } from './contract';
 
 interface CompiledArticle {
-  source: MDXRemoteSerializeResult;
+  html: string;
   toc: TocItem[];
 }
 
@@ -67,7 +69,7 @@ export const GET = withErrorHandler(
     const related = getRelatedArticles(article, effectiveRole, features);
 
     return {
-      source: compiled.source,
+      html: compiled.html,
       toc: compiled.toc,
       metadata: article.metadata,
       related,
@@ -76,17 +78,26 @@ export const GET = withErrorHandler(
 );
 
 /**
- * Wraps next-mdx-remote/serialize + extractTableOfContents in unstable_cache,
- * keyed on (category, slug, contentHash). Sub-ms hits after warmup; new
- * deploy = new contentHash = automatic cache invalidation.
+ * Wraps MDX compile/render + extractTableOfContents in unstable_cache, keyed
+ * on (category, slug, contentHash). Rendering MDX to sanitized HTML on the
+ * server keeps the modal compatible with production CSP: the browser no longer
+ * needs `new Function()` / `'unsafe-eval'` to open contextual help.
  */
 async function getCompiledArticle(article: HelpArticleSource): Promise<CompiledArticle> {
   const key = `${article.metadata.category}:${article.metadata.slug}:${article.metadata.contentHash}`;
   return unstable_cache(
-    async (): Promise<CompiledArticle> => ({
-      source: await serialize(article.rawContent, { parseFrontmatter: true }),
-      toc: extractTableOfContents(article.rawContent),
-    }),
+    async (): Promise<CompiledArticle> => {
+      const source = await serialize(article.rawContent, { parseFrontmatter: true });
+      const { renderToStaticMarkup } = await import('react-dom/server');
+      const html = renderToStaticMarkup(
+        createElement(MDXRemote, { ...source, components: helpMdxComponents }),
+      );
+
+      return {
+        html: sanitizeHelpHtml(html),
+        toc: extractTableOfContents(article.rawContent),
+      };
+    },
     ['help-article', key],
     { tags: ['help-article', key] },
   )();

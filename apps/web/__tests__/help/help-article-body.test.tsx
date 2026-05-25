@@ -4,12 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { HelpArticleBody } from '../../src/components/help/help-article-body';
 import type { HelpArticleMetadata } from '../../src/lib/services/help-article-service';
 
-vi.mock('next-mdx-remote', () => ({
-  MDXRemote: ({ compiledSource }: { compiledSource: string }) => (
-    <div data-testid="mdx">{compiledSource}</div>
-  ),
-}));
-
 vi.mock('../../src/components/help/article-view-tracker', () => ({
   ArticleViewTracker: () => <div data-testid="view-tracker" />,
 }));
@@ -44,11 +38,11 @@ function withQueryClient(children: React.ReactNode) {
 }
 
 describe('<HelpArticleBody/>', () => {
-  it('renders MDX body and TOC in modal mode', () => {
+  it('renders precompiled article HTML and TOC in modal mode', () => {
     render(
       withQueryClient(
         <HelpArticleBody
-          source={{ compiledSource: 'compiled-html', frontmatter: {}, scope: {} } as never}
+          html='<h2 id="heading">Heading</h2><p>Compiled HTML</p>'
           toc={[{ depth: 2, label: 'Heading', anchor: 'heading' }]}
           metadata={baseMetadata}
           related={[]}
@@ -57,7 +51,7 @@ describe('<HelpArticleBody/>', () => {
         />,
       ),
     );
-    expect(screen.getByTestId('mdx')).toHaveTextContent('compiled-html');
+    expect(screen.getByText('Compiled HTML')).toBeInTheDocument();
     // TOC renders in both mobile (details) and desktop (aside) — at least one match is sufficient
     expect(screen.getAllByText('Heading').length).toBeGreaterThan(0);
     expect(screen.getByTestId('view-tracker')).toBeInTheDocument();
@@ -68,7 +62,7 @@ describe('<HelpArticleBody/>', () => {
     render(
       withQueryClient(
         <HelpArticleBody
-          source={{ compiledSource: 'x', frontmatter: {}, scope: {} } as never}
+          html='<p>x</p>'
           toc={[]}
           metadata={baseMetadata}
           related={[]}
@@ -84,7 +78,7 @@ describe('<HelpArticleBody/>', () => {
     render(
       withQueryClient(
         <HelpArticleBody
-          source={{ compiledSource: 'x', frontmatter: {}, scope: {} } as never}
+          html='<p>x</p>'
           toc={[]}
           metadata={baseMetadata}
           related={[{ ...baseMetadata, slug: 'related-slug', title: 'Related Article' }]}
