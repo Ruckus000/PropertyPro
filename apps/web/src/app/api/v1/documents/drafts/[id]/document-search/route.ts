@@ -3,56 +3,42 @@
  * the calling user can see, filtered by a query string. Used by the editor's
  * "Insert document link" picker.
  *
- * Reuses the existing access-controlled query path
- * (getAccessibleDocuments) so the picker never surfaces documents the
- * user can't actually access.
+ * GET /api/v1/documents/drafts/[id]/document-search?communityId=N&q=...&limit=N
+ *
+ * Plan A1 bundle drain #36. Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *   → resolveEffectiveCommunityId(req, query.communityId)
+ *   → requireCommunityMembership
+ *   → requirePermission('documents', 'write')
+ *   → draft existence + authorship/admin check
+ *   → getAccessibleDocuments(...)  // RLS-aware corpus
+ *   → in-memory filter + slice
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` / missing
+ * or non-numeric `communityId` / `q` exceeding 200 chars / `limit` out of
+ * `[1,50]` shifts to the canonical `VALIDATION_ERROR` envelope. Status
+ * unchanged. Success wire shape `{ data: filtered[] }` byte-identical.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { getAccessibleDocuments } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { listAllDocumentCategoryNames } from '@/lib/services/document-category-service';
 import { getDocumentDraftAuthorship } from '@/lib/services/document-draft-service';
+import { documentsDraftsDocumentSearchGetContract } from './contract';
 
 export const runtime = 'nodejs';
 
-const querySchema = z.object({
-  communityId: z.coerce.number().int().positive(),
-  q: z.string().max(200).optional(),
-  limit: z.coerce.number().int().positive().max(50).optional(),
-});
-
-function parseDraftId(rawId: string): number {
-  const n = Number(rawId);
-  if (!Number.isInteger(n) || n <= 0) {
-    throw new ValidationError('draft id must be a positive integer');
-  }
-  return n;
-}
-
 export const GET = withErrorHandler(
-  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  runRoute(documentsDraftsDocumentSearchGetContract, async ({ params, query, req }) => {
     const userId = await requireAuthenticatedUserId();
-    const { id: rawId } = await params;
-    const draftId = parseDraftId(rawId);
+    const draftId = params.id;
 
-    const { searchParams } = new URL(req.url);
-    const parsed = querySchema.safeParse({
-      communityId: searchParams.get('communityId') ?? undefined,
-      q: searchParams.get('q') ?? undefined,
-      limit: searchParams.get('limit') ?? undefined,
-    });
-    if (!parsed.success) {
-      throw new ValidationError('Invalid query', { fields: formatZodErrors(parsed.error) });
-    }
-
-    const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
 
@@ -73,8 +59,8 @@ export const GET = withErrorHandler(
       permissions: membership.permissions,
     })) as Array<Record<string, unknown>>;
 
-    const q = (parsed.data.q ?? '').trim().toLowerCase();
-    const limit = parsed.data.limit ?? 20;
+    const q = (query.q ?? '').trim().toLowerCase();
+    const limit = query.limit ?? 20;
 
     // Resolve category names for display.
     const categoryById = await listAllDocumentCategoryNames(communityId);
@@ -91,6 +77,6 @@ export const GET = withErrorHandler(
         mimeType: String(r['mimeType'] ?? ''),
       }));
 
-    return NextResponse.json({ data: filtered });
-  },
+    return filtered;
+  }),
 );
