@@ -180,22 +180,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   if (isResidentRole(membership.role)) {
     const unitIds = await getActorUnitIds(scoped, actorUserId);
     if (unitIds.length === 0) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'FORBIDDEN',
-            message: 'You must be associated with a unit before reporting a violation' } },
-        { status: 403 },
-      );
+      throw new ForbiddenError('You must be associated with a unit before reporting a violation');
     }
     if (!unitIds.includes(parseResult.data.unitId)) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'FORBIDDEN',
-            message: 'Residents can only report violations for their own unit' } },
-        { status: 403 },
-      );
+      throw new ForbiddenError('Residents can only report violations for their own unit');
     }
   } else {
     // Staff path: validate target unit belongs to this scoped community.
