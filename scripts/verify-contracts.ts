@@ -230,7 +230,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/packages/[id]/pickup/route.ts',
   'apps/web/src/app/api/v1/packages/route.ts',
   'apps/web/src/app/api/v1/payments/create-intent/route.ts',
-  'apps/web/src/app/api/v1/payments/history/route.ts',
   'apps/web/src/app/api/v1/payments/statement/route.ts',
   'apps/web/src/app/api/v1/payments/update-intent/route.ts',
   'apps/web/src/app/api/v1/phone/verify/confirm/route.ts',
