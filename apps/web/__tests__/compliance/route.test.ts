@@ -201,13 +201,15 @@ describe('p1-09 compliance route', () => {
 
     const res = await POST(req);
     const json = (await res.json()) as {
-      data: Array<{ templateKey: string }>;
-      meta?: { emptyTemplate?: boolean };
+      data: {
+        data: Array<{ templateKey: string }>;
+        meta?: { emptyTemplate?: boolean };
+      };
     };
 
     expect(res.status).toBe(200);
-    expect(json.data).toEqual([]);
-    expect(json.meta?.emptyTemplate).toBe(true);
+    expect(json.data.data).toEqual([]);
+    expect(json.data.meta?.emptyTemplate).toBe(true);
     expect(scopedInsertMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
     expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -276,9 +278,9 @@ describe('p1-09 compliance route', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     const json = (await res.json()) as {
-      meta?: { alreadyGenerated?: boolean };
+      data: { meta?: { alreadyGenerated?: boolean } };
     };
-    expect(json.meta?.alreadyGenerated).toBe(true);
+    expect(json.data.meta?.alreadyGenerated).toBe(true);
     expect(scopedInsertMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
@@ -307,12 +309,14 @@ describe('p1-09 compliance route', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     const json = (await res.json()) as {
-      data: Array<{ templateKey: string }>;
-      meta?: { alreadyGenerated?: boolean };
+      data: {
+        data: Array<{ templateKey: string }>;
+        meta?: { alreadyGenerated?: boolean };
+      };
     };
 
-    expect(json.data[0]?.templateKey).toBe('718_budget');
-    expect(json.meta?.alreadyGenerated).toBe(true);
+    expect(json.data.data[0]?.templateKey).toBe('718_budget');
+    expect(json.data.meta?.alreadyGenerated).toBe(true);
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 

@@ -25,5 +25,5 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const lienThresholdDays = rawThreshold ? parsePositiveInt(rawThreshold, 'lienThresholdDays') : 90;
 
   const data = await listDelinquentUnits(communityId, lienThresholdDays);
-  return NextResponse.json({ data, meta: { lienThresholdDays } });
+  return NextResponse.json({ data: { data, meta: { lienThresholdDays } } });
 });

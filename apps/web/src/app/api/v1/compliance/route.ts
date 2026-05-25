@@ -123,7 +123,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const existing = await listComplianceChecklistItems(communityId);
   if (existing.length > 0) {
-    return NextResponse.json({ data: existing, meta: { alreadyGenerated: true } });
+    return NextResponse.json({ data: { data: existing, meta: { alreadyGenerated: true } } });
   }
 
   const template = getComplianceTemplate(membership.communityType);
@@ -131,7 +131,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     console.warn(
       `[compliance] Empty template for community type "${membership.communityType}" despite hasCompliance=true. Skipping checklist generation.`,
     );
-    return NextResponse.json({ data: [], meta: { emptyTemplate: true } });
+    return NextResponse.json({ data: { data: [], meta: { emptyTemplate: true } } });
   }
 
   const now = new Date();
@@ -157,7 +157,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     }
 
     const raced = await listComplianceChecklistItems(communityId);
-    return NextResponse.json({ data: raced, meta: { alreadyGenerated: true } });
+    return NextResponse.json({ data: { data: raced, meta: { alreadyGenerated: true } } });
   }
 
   const inserted = await listComplianceChecklistItems(communityId);
