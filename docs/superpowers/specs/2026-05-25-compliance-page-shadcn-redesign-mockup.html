@@ -1,0 +1,1713 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PropertyPro Compliance Workflow Mockup</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --background: #f6f8fb;
+        --foreground: #18181b;
+        --card: #ffffff;
+        --primary: #2563eb;
+        --primary-strong: #1d4ed8;
+        --primary-soft: #eff6ff;
+        --primary-border: #bfdbfe;
+        --primary-foreground: #ffffff;
+        --muted: #f4f4f5;
+        --muted-foreground: #71717a;
+        --accent: #eef2ff;
+        --border: #dde3ee;
+        --input: #cbd5e1;
+        --ring: #2563eb;
+        --success: #0f9f6e;
+        --success-bg: #ecfdf5;
+        --success-border: #a7f3d0;
+        --warning: #b7791f;
+        --warning-bg: #fffbeb;
+        --warning-border: #f5d48b;
+        --danger: #d92d20;
+        --danger-bg: #fff1f0;
+        --danger-border: #ffb4ad;
+        --info: #2563eb;
+        --info-bg: #eff6ff;
+        --info-border: #bfdbfe;
+        --neutral-bg: #f8fafc;
+        --neutral-border: #e2e8f0;
+        --radius: 10px;
+        --radius-sm: 6px;
+        --radius-full: 9999px;
+        --shadow-e1: 0 1px 2px rgb(15 23 42 / 0.05), 0 8px 24px rgb(15 23 42 / 0.04);
+        --shadow-e2: 0 16px 50px rgb(15 23 42 / 0.09), 0 1px 0 rgb(255 255 255 / 0.75) inset;
+        --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --font-mono: "Geist Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+        letter-spacing: -0.02em;
+        line-height: 1.12;
+      }
+
+      h2 {
+        font-size: 16px;
+        line-height: 1.2;
+      }
+
+      h3 {
+        font-size: 14px;
+        line-height: 1.25;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--border);
+        background: var(--card);
+        padding: 16px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 8px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius);
+        background: var(--primary);
+        color: var(--primary-foreground);
+      }
+
+      .brand-title {
+        display: block;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .brand-subtitle {
+        display: block;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .nav {
+        display: grid;
+        gap: 4px;
+        padding-top: 16px;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        border-radius: var(--radius-sm);
+        color: var(--muted-foreground);
+        padding: 0 10px;
+        text-decoration: none;
+      }
+
+      .nav-item.active {
+        background: var(--accent);
+        color: var(--foreground);
+        font-weight: 560;
+      }
+
+      .main {
+        min-width: 0;
+        padding: 32px;
+      }
+
+      .page {
+        max-width: 1240px;
+        margin: 0 auto;
+        display: grid;
+        gap: 16px;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .breadcrumbs {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .page-subtitle {
+        margin-top: 8px;
+        color: var(--muted-foreground);
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 36px;
+        border-radius: var(--radius);
+        border: 1px solid transparent;
+        padding: 0 12px;
+        background: transparent;
+        color: var(--foreground);
+        font-size: 13px;
+        font-weight: 540;
+        white-space: nowrap;
+        box-shadow: 0 1px 1px rgb(15 23 42 / 0.04);
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: var(--primary-foreground);
+        box-shadow: 0 8px 18px rgb(37 99 235 / 0.22), 0 1px 0 rgb(255 255 255 / 0.18) inset;
+      }
+
+      .btn-primary:hover {
+        background: var(--primary-strong);
+      }
+
+      .btn-secondary {
+        border-color: var(--border);
+        background: var(--card);
+      }
+
+      .btn-ghost {
+        color: var(--muted-foreground);
+      }
+
+      .btn-ghost:hover,
+      .btn-secondary:hover {
+        background: var(--accent);
+      }
+
+      .btn-danger {
+        border-color: var(--danger-border);
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+
+      .card {
+        min-width: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        box-shadow: var(--shadow-e1);
+      }
+
+      .readiness-banner {
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 340px;
+        gap: 22px;
+        padding: 18px;
+        border-color: #cfd8ff;
+        background:
+          linear-gradient(135deg, rgb(255 255 255 / 0.96), rgb(246 248 255 / 0.96)),
+          var(--card);
+        box-shadow: var(--shadow-e2);
+      }
+
+      .readiness-banner::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary), #0ea5e9 48%, #22c55e 100%);
+      }
+
+      .readiness-copy {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .readiness-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .readiness-copy h2 {
+        font-size: 22px;
+        letter-spacing: -0.025em;
+      }
+
+      .readiness-copy p {
+        max-width: 760px;
+        color: var(--muted-foreground);
+      }
+
+      .banner-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .metric-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 26px;
+        border: 1px solid rgb(226 232 240 / 0.9);
+        border-radius: var(--radius-full);
+        background: rgb(255 255 255 / 0.76);
+        padding: 0 10px;
+        color: var(--foreground);
+        box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset;
+      }
+
+      .readiness-actions {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .readiness-command {
+        position: relative;
+        display: grid;
+        align-content: space-between;
+        gap: 14px;
+        min-width: 0;
+        border: 1px solid rgb(199 210 254 / 0.85);
+        border-radius: var(--radius);
+        background: rgb(255 255 255 / 0.72);
+        padding: 14px;
+      }
+
+      .command-score {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .score-label {
+        display: grid;
+        gap: 2px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .score-value {
+        font-family: var(--font-mono);
+        font-size: 30px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .readiness-path {
+        display: grid;
+        gap: 8px;
+      }
+
+      .path-track {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .path-segment {
+        height: 7px;
+        border-radius: var(--radius-full);
+        background: #e2e8f0;
+      }
+
+      .path-segment.active {
+        background: var(--primary);
+      }
+
+      .path-segment.next {
+        background: #bfdbfe;
+      }
+
+      .path-labels {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+        line-height: 1.25;
+      }
+
+      .path-labels strong {
+        color: var(--foreground);
+        font-weight: 650;
+      }
+
+      .readiness-checks {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .check-card {
+        display: grid;
+        gap: 4px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        padding: 12px;
+      }
+
+      .check-card strong {
+        font-size: 13px;
+      }
+
+      .check-card span {
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .public-preview {
+        display: grid;
+        grid-template-columns: minmax(0, 0.75fr) minmax(360px, 1fr);
+        gap: 18px;
+        padding: 18px;
+        background: linear-gradient(180deg, #ffffff, #fbfcff);
+      }
+
+      .preview-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 6px;
+      }
+
+      .preview-title h2 {
+        font-size: 15px;
+      }
+
+      .preview-copy {
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+
+      .preview-browser {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #ffffff;
+        box-shadow: 0 10px 28px rgb(15 23 42 / 0.06);
+      }
+
+      .browser-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--border);
+        background: #f8fafc;
+        padding: 9px 11px;
+      }
+
+      .browser-dots {
+        display: flex;
+        gap: 5px;
+      }
+
+      .browser-dots span {
+        width: 7px;
+        height: 7px;
+        border-radius: var(--radius-full);
+        background: #cbd5e1;
+      }
+
+      .browser-url {
+        overflow: hidden;
+        color: var(--muted-foreground);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .public-page {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+      }
+
+      .public-page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .public-page-title {
+        display: grid;
+        gap: 2px;
+      }
+
+      .public-page-title strong {
+        font-size: 15px;
+      }
+
+      .public-page-title span {
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .public-docs {
+        display: grid;
+        gap: 6px;
+      }
+
+      .public-doc {
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: #ffffff;
+        padding: 8px 9px;
+      }
+
+      .public-doc.blocked {
+        border-color: var(--danger-border);
+        background: var(--danger-bg);
+      }
+
+      .doc-name {
+        overflow: hidden;
+        font-size: 12px;
+        font-weight: 610;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .doc-note {
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+
+      .preview-assurance {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 352px;
+        gap: 16px;
+        align-items: start;
+      }
+
+      .content,
+      .aside {
+        display: grid;
+        align-content: start;
+        gap: 16px;
+        min-width: 0;
+      }
+
+      .card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 18px 12px;
+      }
+
+      .card-description {
+        margin-top: 4px;
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+
+      .card-content {
+        padding: 0 18px 18px;
+      }
+
+      .work-queue {
+        display: grid;
+        gap: 10px;
+      }
+
+      .task-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: linear-gradient(180deg, #ffffff, #fbfcff);
+        padding: 14px;
+        box-shadow: 0 1px 0 rgb(255 255 255 / 0.95) inset;
+      }
+
+      .task-row.selected {
+        border-color: var(--primary-border);
+        background:
+          linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(248 250 255 / 0.96)),
+          var(--primary-soft);
+        box-shadow:
+          inset 3px 0 0 var(--primary),
+          0 10px 28px rgb(37 99 235 / 0.12);
+      }
+
+      .task-main {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .task-heading {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .task-title {
+        font-size: 15px;
+        font-weight: 680;
+      }
+
+      .task-guidance {
+        color: var(--foreground);
+        font-size: 13px;
+      }
+
+      .task-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 24px;
+        border: 1px solid var(--neutral-border);
+        border-radius: var(--radius-full);
+        background: #ffffff;
+        padding: 0 8px;
+        color: var(--muted-foreground);
+      }
+
+      .task-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .inspector {
+        position: sticky;
+        top: 24px;
+        overflow: hidden;
+        box-shadow: var(--shadow-e2);
+      }
+
+      .inspector-summary {
+        display: grid;
+        gap: 12px;
+        border-bottom: 1px solid var(--border);
+        padding: 0 18px 18px;
+      }
+
+      .inspector-title {
+        font-size: 18px;
+        font-weight: 680;
+        letter-spacing: -0.01em;
+      }
+
+      .inspector-meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .inspector-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding-top: 4px;
+      }
+
+      .detail-section {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .detail-block {
+        display: grid;
+        gap: 4px;
+      }
+
+      .detail-label {
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 680;
+      }
+
+      .detail-block p {
+        color: var(--foreground);
+        font-size: 13px;
+      }
+
+      .system-checks {
+        display: grid;
+        gap: 8px;
+        border-top: 1px solid var(--border);
+        padding-top: 12px;
+      }
+
+      .system-check {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .document-preview {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #f8fafc;
+      }
+
+      .document-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid var(--border);
+        padding: 9px 10px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+
+      .document-sheet {
+        display: grid;
+        gap: 7px;
+        margin: 12px auto;
+        width: min(78%, 210px);
+        min-height: 118px;
+        border: 1px solid #e2e8f0;
+        border-radius: var(--radius-sm);
+        background: #ffffff;
+        padding: 14px;
+        box-shadow: 0 8px 18px rgb(15 23 42 / 0.07);
+      }
+
+      .sheet-line {
+        height: 7px;
+        border-radius: var(--radius-full);
+        background: #e2e8f0;
+      }
+
+      .sheet-line.short {
+        width: 58%;
+      }
+
+      .sheet-line.medium {
+        width: 78%;
+      }
+
+      .console-grid {
+        display: grid;
+        gap: 8px;
+      }
+
+      .console-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: #ffffff;
+        padding: 9px 10px;
+        font-size: 13px;
+      }
+
+      .console-row small {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+
+      .table-tools {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 16px 12px;
+      }
+
+      .tabs {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        overflow-x: auto;
+      }
+
+      .tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 34px;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--muted-foreground);
+        padding: 0 10px;
+        white-space: nowrap;
+      }
+
+      .tab.active {
+        background: var(--foreground);
+        color: #ffffff;
+      }
+
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 220px;
+        height: 36px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--muted-foreground);
+        padding: 0 10px;
+      }
+
+      .search input {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--foreground);
+      }
+
+      .table-wrap {
+        max-width: 100%;
+        overflow: auto;
+      }
+
+      table {
+        width: 100%;
+        min-width: 760px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--border);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: middle;
+      }
+
+      th {
+        height: 40px;
+        color: var(--muted-foreground);
+        font-size: 12px;
+        font-weight: 620;
+      }
+
+      td {
+        height: 52px;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tbody tr:hover {
+        background: #fafafa;
+      }
+
+      .row-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+
+      .menu-button {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--card);
+        color: var(--muted-foreground);
+      }
+
+      .item-title {
+        font-weight: 610;
+      }
+
+      .lozenge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 22px;
+        border-radius: var(--radius-sm);
+        padding: 2px 7px;
+        font-size: 11px;
+        font-weight: 680;
+        white-space: nowrap;
+      }
+
+      .lozenge-danger {
+        border: 1px solid var(--danger-border);
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+
+      .lozenge-warning {
+        border: 1px solid var(--warning-border);
+        background: var(--warning-bg);
+        color: var(--warning);
+      }
+
+      .lozenge-success {
+        border: 1px solid var(--success-border);
+        background: var(--success-bg);
+        color: var(--success);
+      }
+
+      .lozenge-info {
+        border: 1px solid var(--info-border);
+        background: var(--info-bg);
+        color: var(--info);
+      }
+
+      .lozenge-neutral {
+        border: 1px solid var(--neutral-border);
+        background: var(--neutral-bg);
+        color: var(--muted-foreground);
+      }
+
+      .status-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 14px;
+        height: 14px;
+        border-radius: var(--radius-full);
+        background: var(--info);
+        color: #ffffff;
+        font-size: 9px;
+        line-height: 1;
+      }
+
+      .lozenge-danger .status-icon,
+      .public-doc.blocked > .status-icon {
+        background: var(--danger);
+      }
+
+      .lozenge-warning .status-icon {
+        background: var(--warning);
+      }
+
+      .lozenge-success .status-icon,
+      .public-doc > .status-icon {
+        background: var(--success);
+      }
+
+      .lozenge-neutral .status-icon {
+        background: #94a3b8;
+      }
+
+      .mono {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .muted {
+        color: var(--muted-foreground);
+      }
+
+      .appendix {
+        display: grid;
+        gap: 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #f4f4f5;
+        padding: 16px;
+      }
+
+      .appendix-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .appendix-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .dialog {
+        overflow: hidden;
+      }
+
+      .dialog-header {
+        padding: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .dialog-description {
+        margin-top: 4px;
+        color: var(--muted-foreground);
+        font-size: 13px;
+      }
+
+      .dialog-body {
+        display: grid;
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      label {
+        font-size: 12px;
+        font-weight: 610;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 92px;
+        border: 1px solid var(--input);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--foreground);
+        padding: 9px 10px;
+        resize: vertical;
+      }
+
+      .command-list {
+        display: grid;
+        gap: 4px;
+      }
+
+      .command-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 48px;
+        border-radius: var(--radius-sm);
+        padding: 6px 8px;
+      }
+
+      .command-item.active,
+      .command-item:hover {
+        background: var(--accent);
+      }
+
+      .dialog-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 14px;
+        border-top: 1px solid var(--border);
+      }
+
+      .disclaimer {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--card);
+        color: var(--muted-foreground);
+        padding: 12px 14px;
+        font-size: 12px;
+      }
+
+      .icon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+
+      .icon-sm {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+      }
+
+      .sr-icon {
+        display: inline-grid;
+        place-items: center;
+      }
+
+      @media (max-width: 1180px) {
+        .app {
+          grid-template-columns: 72px minmax(0, 1fr);
+        }
+
+        .brand-copy,
+        .nav-label {
+          display: none;
+        }
+
+        .nav-item {
+          justify-content: center;
+          padding: 0;
+        }
+
+        .layout,
+        .appendix-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .inspector {
+          position: static;
+        }
+      }
+
+      @media (max-width: 780px) {
+        .app {
+          display: block;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .main {
+          padding: 16px 12px;
+        }
+
+        .page-header,
+        .readiness-banner,
+        .public-preview,
+        .task-row,
+        .table-tools,
+        .appendix-header {
+          align-items: stretch;
+          grid-template-columns: 1fr;
+          flex-direction: column;
+        }
+
+        .actions,
+        .readiness-actions,
+        .task-actions {
+          justify-content: flex-start;
+        }
+
+        .readiness-checks {
+          grid-template-columns: 1fr;
+        }
+
+        .readiness-command,
+        .preview-browser {
+          min-width: 0;
+        }
+
+        .readiness-banner {
+          gap: 14px;
+          padding: 14px;
+        }
+
+        .readiness-copy {
+          gap: 10px;
+        }
+
+        .readiness-copy h2 {
+          font-size: 21px;
+        }
+
+        .readiness-command {
+          gap: 10px;
+          padding: 12px;
+        }
+
+        .score-value {
+          font-size: 28px;
+        }
+
+        .path-labels {
+          font-size: 10px;
+        }
+
+        .search {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg class="icon" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3l7 4v5c0 4.2-2.8 7.9-7 9-4.2-1.1-7-4.8-7-9V7l7-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              <path d="M9 12l2 2 4-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </div>
+          <div class="brand-copy">
+            <span class="brand-title">PropertyPro</span>
+            <span class="brand-subtitle">Sunset Condos</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Main">
+          <a class="nav-item" href="#">
+            <span class="sr-icon" aria-hidden="true">□</span>
+            <span class="nav-label">Dashboard</span>
+          </a>
+          <a class="nav-item active" href="#">
+            <span class="sr-icon" aria-hidden="true">✓</span>
+            <span class="nav-label">Compliance</span>
+          </a>
+          <a class="nav-item" href="#">
+            <span class="sr-icon" aria-hidden="true">□</span>
+            <span class="nav-label">Documents</span>
+          </a>
+          <a class="nav-item" href="#">
+            <span class="sr-icon" aria-hidden="true">□</span>
+            <span class="nav-label">Meetings</span>
+          </a>
+          <a class="nav-item" href="#">
+            <span class="sr-icon" aria-hidden="true">□</span>
+            <span class="nav-label">Residents</span>
+          </a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <div class="page">
+          <header class="page-header">
+            <div>
+              <div class="breadcrumbs">
+                <span>Sunset Condos</span>
+                <span>/</span>
+                <span>Compliance</span>
+              </div>
+              <h1>Compliance</h1>
+              <p class="page-subtitle">A calm evidence-resolution workspace for Florida public posting readiness.</p>
+            </div>
+            <div class="actions">
+              <button class="btn btn-secondary">Export report</button>
+            </div>
+          </header>
+
+          <section class="card readiness-banner" aria-labelledby="readiness-title">
+            <div class="readiness-copy">
+              <div class="readiness-title">
+                <span class="lozenge lozenge-warning"><span class="status-icon" aria-hidden="true">!</span>Review required</span>
+                <h2 id="readiness-title">Public page is blocked by 3 missing records</h2>
+              </div>
+              <p>Resolve meeting minutes and insurance first. Once evidence is uploaded or linked, PropertyPro can verify visibility and prepare the public posting report.</p>
+              <div class="banner-meta">
+                <span class="metric-pill"><strong>2</strong> overdue</span>
+                <span class="metric-pill"><strong>1</strong> due soon</span>
+                <span class="metric-pill"><strong>13</strong> complete</span>
+                <span class="metric-pill">Last reviewed <strong>today</strong></span>
+              </div>
+            </div>
+            <div class="readiness-command" aria-label="Public readiness command center">
+              <div class="command-score">
+                <div class="score-label">
+                  <span>Reporting score</span>
+                  <strong class="score-value">81%</strong>
+                </div>
+                <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Not ready</span>
+              </div>
+              <div class="readiness-path" aria-label="Readiness path">
+                <div class="path-track" aria-hidden="true">
+                  <span class="path-segment active"></span>
+                  <span class="path-segment next"></span>
+                  <span class="path-segment"></span>
+                  <span class="path-segment"></span>
+                </div>
+                <div class="path-labels">
+                  <strong>Evidence missing</strong>
+                  <span>Verification</span>
+                  <span>Public posting</span>
+                  <span>Report</span>
+                </div>
+              </div>
+              <div class="readiness-actions">
+                <button class="btn btn-primary">Resolve missing items</button>
+                <button class="btn btn-ghost">Review why</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="layout">
+            <div class="content">
+              <section class="card" aria-labelledby="queue-title">
+                <div class="card-header">
+                  <div>
+                    <h2 id="queue-title">Resolve missing evidence</h2>
+                    <p class="card-description">Start with overdue records. Upload or link files to clear public posting blockers.</p>
+                  </div>
+                </div>
+                <div class="card-content work-queue">
+                  <article class="task-row selected" aria-label="Recommended next task: Upload meeting minutes">
+                    <div class="task-main">
+                      <div class="task-heading">
+                        <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Overdue since May 20</span>
+                        <span class="task-title">Upload meeting minutes</span>
+                      </div>
+                      <p class="task-guidance">Use board and owner meeting minutes from the last 12 months.</p>
+                      <div class="task-meta">
+                        <span class="meta-chip">Source: Board secretary or CAM archive</span>
+                        <span class="meta-chip">Impact: public page blocked</span>
+                        <span class="meta-chip">No matching file found</span>
+                        <span class="meta-chip mono">718.111(12)(g)</span>
+                      </div>
+                    </div>
+                    <div class="task-actions">
+                      <button class="btn btn-primary">Upload minutes</button>
+                      <button class="menu-button" aria-label="More actions">•••</button>
+                    </div>
+                  </article>
+
+                  <article class="task-row">
+                    <div class="task-main">
+                      <div class="task-heading">
+                        <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Overdue since May 23</span>
+                        <span class="task-title">Upload insurance certificate</span>
+                      </div>
+                      <p class="task-guidance">Use the current certificate or policy declaration page.</p>
+                      <div class="task-meta">
+                        <span class="meta-chip">Source: carrier portal or broker</span>
+                        <span class="meta-chip">Impact: public page blocked</span>
+                        <span class="meta-chip">Needs upload</span>
+                        <span class="meta-chip mono">718.111(12)(g)</span>
+                      </div>
+                    </div>
+                    <div class="task-actions">
+                      <button class="btn btn-primary">Upload insurance</button>
+                      <button class="menu-button" aria-label="More actions">•••</button>
+                    </div>
+                  </article>
+
+                  <article class="task-row">
+                    <div class="task-main">
+                      <div class="task-heading">
+                        <span class="lozenge lozenge-warning"><span class="status-icon" aria-hidden="true">!</span>Due May 29</span>
+                        <span class="task-title">Link current rules and regulations</span>
+                      </div>
+                      <p class="task-guidance">A likely matching file already exists in the document library.</p>
+                      <div class="task-meta">
+                        <span class="meta-chip">Source: document library suggestion</span>
+                        <span class="meta-chip">Impact: due in 4 days</span>
+                        <span class="meta-chip">Suggested match available</span>
+                        <span class="meta-chip mono">718.111(12)(g)</span>
+                      </div>
+                    </div>
+                    <div class="task-actions">
+                      <button class="btn btn-primary">Link match</button>
+                      <button class="menu-button" aria-label="More actions">•••</button>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="card" aria-labelledby="reference-title">
+                <div class="card-header">
+                  <div>
+                    <h2 id="reference-title">Reference checklist</h2>
+                    <p class="card-description">Showing 16 requirements for Florida 718. Use this for review and reporting.</p>
+                  </div>
+                </div>
+                <div class="table-tools">
+                  <div class="tabs" role="tablist" aria-label="Compliance status">
+                    <button class="tab active" role="tab" aria-selected="true">All <span class="mono">16</span></button>
+                    <button class="tab" role="tab">Overdue <span class="mono">2</span></button>
+                    <button class="tab" role="tab">Due soon <span class="mono">1</span></button>
+                    <button class="tab" role="tab">Complete <span class="mono">13</span></button>
+                  </div>
+                  <div class="search">
+                    <input aria-label="Search checklist" placeholder="Search" />
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table aria-label="Compliance checklist">
+                    <thead>
+                      <tr>
+                        <th>Requirement</th>
+                        <th>Status</th>
+                        <th>Document</th>
+                        <th>Deadline</th>
+                        <th>Last activity</th>
+                        <th style="text-align: right;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><span class="item-title">Declaration of Condominium</span></td>
+                        <td><span class="lozenge lozenge-success"><span class="status-icon" aria-hidden="true">✓</span>Complete</span></td>
+                        <td class="muted">Declaration-2026.pdf</td>
+                        <td class="mono muted">Posted Mar 12</td>
+                        <td class="muted">Linked by Devon</td>
+                        <td>
+                          <div class="row-actions">
+                            <button class="btn btn-secondary">View</button>
+                            <button class="menu-button" aria-label="More actions">•••</button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td><span class="item-title">Annual budget</span></td>
+                        <td><span class="lozenge lozenge-success"><span class="status-icon" aria-hidden="true">✓</span>Complete</span></td>
+                        <td class="muted">Budget-FY2026.pdf</td>
+                        <td class="mono muted">Posted May 24</td>
+                        <td class="muted">Uploaded by Maria</td>
+                        <td>
+                          <div class="row-actions">
+                            <button class="btn btn-secondary">View</button>
+                            <button class="menu-button" aria-label="More actions">•••</button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td><span class="item-title">Meeting minutes, rolling 12 months</span></td>
+                        <td><span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Overdue</span></td>
+                        <td class="muted">Not linked</td>
+                        <td class="mono">5d overdue</td>
+                        <td class="muted">No activity</td>
+                        <td>
+                          <div class="row-actions">
+                            <button class="btn btn-primary">Upload</button>
+                            <button class="menu-button" aria-label="More actions">•••</button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td><span class="item-title">Insurance certificates</span></td>
+                        <td><span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Overdue</span></td>
+                        <td class="muted">Not linked</td>
+                        <td class="mono">2d overdue</td>
+                        <td class="muted">No activity</td>
+                        <td>
+                          <div class="row-actions">
+                            <button class="btn btn-primary">Upload</button>
+                            <button class="menu-button" aria-label="More actions">•••</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+
+            <aside class="aside">
+              <section class="card inspector" aria-labelledby="inspector-title">
+                <div class="card-header">
+                  <div>
+                    <h2 id="inspector-title">Verification console</h2>
+                    <p class="card-description">Selected requirement: Meeting minutes</p>
+                  </div>
+                  <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Overdue</span>
+                </div>
+                <div class="inspector-summary">
+                  <div class="inspector-title">Rolling 12-month minutes record</div>
+                  <div class="inspector-meta">
+                    <span>Meeting records</span>
+                    <span>|</span>
+                    <span class="mono">718.111(12)(g)</span>
+                  </div>
+                  <div class="inspector-actions">
+                    <button class="btn btn-primary">Upload minutes</button>
+                    <button class="btn btn-secondary">Link existing</button>
+                  </div>
+                </div>
+                <div class="detail-section">
+                  <div class="document-preview" aria-label="Document upload preview">
+                    <div class="document-preview-header">
+                      <span>Upload destination</span>
+                      <span class="mono">PDF/DOCX</span>
+                    </div>
+                    <div class="document-sheet" aria-hidden="true">
+                      <span class="sheet-line medium"></span>
+                      <span class="sheet-line"></span>
+                      <span class="sheet-line"></span>
+                      <span class="sheet-line short"></span>
+                      <span class="sheet-line medium"></span>
+                    </div>
+                  </div>
+                  <div class="detail-block">
+                    <div class="detail-label">Required evidence</div>
+                    <p>Board and owner meeting minutes from the last 12 months. Upload the newest packet first.</p>
+                  </div>
+                  <div class="detail-block">
+                    <div class="detail-label">Typical source</div>
+                    <p>Board secretary, CAM office, or the management company archive.</p>
+                  </div>
+                  <div class="console-grid" aria-label="Verification checks">
+                    <div class="detail-label">Validation checks</div>
+                    <div class="console-row">
+                      <span>Rolling 12-month window<small>Document date must satisfy the retention window.</small></span>
+                      <span class="lozenge lozenge-info"><span class="status-icon" aria-hidden="true">i</span>Checked</span>
+                    </div>
+                    <div class="console-row">
+                      <span>Public visibility<small>Residents can see the posted file after verification.</small></span>
+                      <span class="lozenge lozenge-neutral"><span class="status-icon" aria-hidden="true">i</span>Pending</span>
+                    </div>
+                    <div class="console-row">
+                      <span>Audit trail<small>Every upload, link, and N/A decision is logged.</small></span>
+                      <span class="lozenge lozenge-success"><span class="status-icon" aria-hidden="true">✓</span>Enabled</span>
+                    </div>
+                  </div>
+                  <div class="detail-block">
+                    <div class="detail-label">Legal basis</div>
+                    <p><span class="mono">718.111(12)(g)</span> posting readiness is computed from linked evidence and deadline rules.</p>
+                  </div>
+                </div>
+              </section>
+            </aside>
+          </div>
+
+          <section class="readiness-checks" aria-label="Readiness checklist">
+            <div class="check-card">
+              <strong>Missing evidence reviewed</strong>
+              <span>1 active blocker selected</span>
+            </div>
+            <div class="check-card">
+              <strong>Required files linked</strong>
+              <span>3 files remaining</span>
+            </div>
+            <div class="check-card">
+              <strong>Public visibility verified</strong>
+              <span>Waiting on files</span>
+            </div>
+            <div class="check-card">
+              <strong>Report exported</strong>
+              <span>Final handoff</span>
+            </div>
+          </section>
+
+          <section class="card public-preview" aria-labelledby="preview-title">
+            <div>
+              <div class="preview-title">
+                <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Not ready</span>
+                <h2 id="preview-title">Resident public page preview</h2>
+              </div>
+              <p class="preview-copy">Preview what residents will see after compliance evidence is resolved. Posted records are visible; internal notes and audit reasons stay private.</p>
+            </div>
+            <div class="preview-browser" aria-label="Resident public page preview">
+              <div class="browser-bar">
+                <div class="browser-dots" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <div class="browser-url">sunset-condos.propertypro.com/records</div>
+              </div>
+              <div class="public-page">
+                <div class="public-page-header">
+                  <div class="public-page-title">
+                    <strong>Sunset Condos Public Records</strong>
+                    <span>Florida 718 public posting portal</span>
+                  </div>
+                  <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Blocked</span>
+                </div>
+                <div class="public-docs">
+                  <div class="public-doc">
+                    <span class="status-icon" aria-hidden="true">✓</span>
+                    <div>
+                      <div class="doc-name">Declaration of Condominium</div>
+                      <div class="doc-note">Posted Mar 12</div>
+                    </div>
+                    <span class="lozenge lozenge-success"><span class="status-icon" aria-hidden="true">✓</span>Visible</span>
+                  </div>
+                  <div class="public-doc blocked">
+                    <span class="status-icon" aria-hidden="true">!</span>
+                    <div>
+                      <div class="doc-name">Meeting minutes, rolling 12 months</div>
+                      <div class="doc-note">Hidden until evidence is linked</div>
+                    </div>
+                    <span class="lozenge lozenge-danger"><span class="status-icon" aria-hidden="true">!</span>Missing</span>
+                  </div>
+                  <div class="public-doc">
+                    <span class="status-icon" aria-hidden="true">✓</span>
+                    <div>
+                      <div class="doc-name">Annual budget</div>
+                      <div class="doc-note">Posted May 24</div>
+                    </div>
+                    <span class="lozenge lozenge-success"><span class="status-icon" aria-hidden="true">✓</span>Visible</span>
+                  </div>
+                </div>
+                <div class="preview-assurance">
+                  <span class="status-icon" aria-hidden="true">i</span>
+                  <span>Private review notes and audit reasons are excluded from the resident page.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="appendix" aria-labelledby="appendix-title">
+            <div class="appendix-header">
+              <div>
+                <h2 id="appendix-title">Design appendix: interaction states</h2>
+                <p class="card-description">These are launched from queue actions and are not part of the active page layout.</p>
+              </div>
+              <span class="lozenge lozenge-neutral"><span class="status-icon" aria-hidden="true">i</span>Design artifact</span>
+            </div>
+            <div class="appendix-grid">
+              <article class="card dialog">
+                <div class="dialog-header">
+                  <h3>State A: Link existing document</h3>
+                  <p class="dialog-description">Command-style picker shows likely files and why they match.</p>
+                </div>
+                <div class="dialog-body">
+                  <div class="search" style="width: 100%;">
+                    <input aria-label="Search documents" value="rules" />
+                  </div>
+                  <div class="command-list">
+                    <div class="command-item active">
+                      <div>
+                        <strong>Rules and Regulations - Current.pdf</strong>
+                        <p class="muted">Suggested because category and title match this requirement.</p>
+                      </div>
+                      <span class="lozenge lozenge-success"><span class="status-icon" aria-hidden="true">✓</span>Best match</span>
+                    </div>
+                    <div class="command-item">
+                      <div>
+                        <strong>Board Rules - 2024 archive.pdf</strong>
+                        <p class="muted">Older file. Review before linking.</p>
+                      </div>
+                      <span class="lozenge lozenge-neutral"><span class="status-icon" aria-hidden="true">i</span>Archive</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="dialog-footer">
+                  <button class="btn btn-secondary">Cancel</button>
+                  <button class="btn btn-primary">Link selected</button>
+                </div>
+              </article>
+
+              <article class="card dialog">
+                <div class="dialog-header">
+                  <h3>State B: Mark not applicable</h3>
+                  <p class="dialog-description">N/A is an audit decision, not a casual row action.</p>
+                </div>
+                <div class="dialog-body">
+                  <div class="detail-block">
+                    <div class="detail-label">Before continuing</div>
+                    <p>This removes the item from the compliance score. Add a reason so future board members and auditors understand the decision.</p>
+                  </div>
+                  <div class="field">
+                    <label for="na-reason">Reason for marking not applicable</label>
+                    <textarea id="na-reason">Requirement does not apply because this association does not maintain bid records for the selected period.</textarea>
+                  </div>
+                </div>
+                <div class="dialog-footer">
+                  <button class="btn btn-secondary">Cancel</button>
+                  <button class="btn btn-danger">Mark N/A and log reason</button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <footer class="disclaimer">
+            <span aria-hidden="true">i</span>
+            <p>This checklist is based on our interpretation of Florida Statutes as of May 25, 2026. Laws change. Always verify requirements with legal counsel.</p>
+          </footer>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
