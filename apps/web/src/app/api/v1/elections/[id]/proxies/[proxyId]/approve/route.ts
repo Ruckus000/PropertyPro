@@ -1,40 +1,46 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Elections — approve a proxy designation
+ *
+ * POST /api/v1/elections/[id]/proxies/[proxyId]/approve
+ * Body: { communityId }
+ *
+ * Plan A1 drain #47. **First two-param route in the corpus.** Migrated to
+ * `runRoute(contract, handler)`; see `./contract.ts` for the schema and
+ * rationale. Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireElectionsEnabled (sync, NOT awaited)
+ *     → requirePermission('elections', 'write')
+ *     → requireElectionsAdminRole
+ *     → approveElectionProxyForCommunity(
+ *         communityId, electionId, proxyId, actorUserId, x-request-id,
+ *       )
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]`/`[proxyId]`
+ * and body validation failures shifts to the canonical `VALIDATION_ERROR`
+ * envelope. Status unchanged. Success wire shape `{ data: ... }`
+ * byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to
+ * `approveElectionProxyForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parsePositiveInt } from '@/lib/finance/common';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireElectionsAdminRole, requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { approveElectionProxyForCommunity } from '@/lib/services/elections-service';
 import { requirePermission } from '@/lib/db/access-control';
-
-const proxyMutationSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+import { electionsProxiesApproveContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (
-    req: NextRequest,
-    context?: { params: Promise<Record<string, string>> },
-  ) => {
-    const params = await context?.params;
-    const electionId = parsePositiveInt(params?.id ?? '', 'election id');
-    const proxyId = parsePositiveInt(params?.proxyId ?? '', 'proxy id');
+  runRoute(electionsProxiesApproveContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = proxyMutationSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid proxy approval payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -42,14 +48,12 @@ export const POST = withErrorHandler(
     requirePermission(membership, 'elections', 'write');
     requireElectionsAdminRole(membership);
 
-    const data = await approveElectionProxyForCommunity(
+    return approveElectionProxyForCommunity(
       communityId,
-      electionId,
-      proxyId,
+      params.id,
+      params.proxyId,
       actorUserId,
       req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
