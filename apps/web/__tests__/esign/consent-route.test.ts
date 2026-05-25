@@ -218,6 +218,18 @@ describe('DELETE /api/v1/esign/consent', () => {
     expect(revokeConsentMock).not.toHaveBeenCalled();
   });
 
+  it('returns 403 when user is not a member of the requested community; revokeConsent not called', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(
+      new ForbiddenError('Not a member of this community'),
+    );
+
+    const res = await DELETE(deleteReq());
+
+    expect(res.status).toBe(403);
+    expect(requireEsignWritePermissionMock).not.toHaveBeenCalled();
+    expect(revokeConsentMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 when esign write permission is denied; revokeConsent not called', async () => {
     requireEsignWritePermissionMock.mockRejectedValueOnce(
       new ForbiddenError('E-Sign write permission required'),
