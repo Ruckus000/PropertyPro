@@ -189,4 +189,17 @@ describe('GET /api/v1/elections/[id]/my-vote', () => {
     const json = (await res.json()) as ErrorJson;
     expect(json.error.code).toBe('VALIDATION_ERROR');
   });
+
+  it('returns 404 when x-community-id header disagrees with query communityId', async () => {
+    const res = await GET(
+      buildReq('http://localhost/api/v1/elections/7/my-vote?communityId=42', {
+        headers: { 'x-community-id': '99' },
+      }),
+      buildCtx('7'),
+    );
+
+    expect(res.status).toBe(404);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(getMyElectionVoteReceiptForCommunityMock).not.toHaveBeenCalled();
+  });
 });

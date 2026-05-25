@@ -144,4 +144,25 @@ describe('GET /api/v1/help/contextual', () => {
     const json = (await res.json()) as ErrorJson;
     expect(json.error.code).toBe('VALIDATION_ERROR');
   });
+
+  it('returns 400 VALIDATION_ERROR when communityId is missing', async () => {
+    const res = await GET(buildReq('http://localhost/api/v1/help/contextual?path=/compliance'));
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as ErrorJson;
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(getContextualArticlesMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when x-community-id header disagrees with query communityId', async () => {
+    const res = await GET(
+      buildReq('http://localhost/api/v1/help/contextual?path=/compliance&communityId=42', {
+        headers: { 'x-community-id': '99' },
+      }),
+    );
+
+    expect(res.status).toBe(404);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(getContextualArticlesMock).not.toHaveBeenCalled();
+  });
 });
