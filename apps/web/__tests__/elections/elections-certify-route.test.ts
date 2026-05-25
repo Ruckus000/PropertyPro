@@ -192,6 +192,15 @@ describe('POST /api/v1/elections/[id]/certify', () => {
     expect(certifyElectionForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 VALIDATION_ERROR when params.id is zero', async () => {
+    const res = await POST(jsonPost('0', { communityId: 42 }), routeCtx('0'));
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(certifyElectionForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 VALIDATION_ERROR when body is missing communityId', async () => {
     const res = await POST(jsonPost(7, {}), routeCtx('7'));
 
