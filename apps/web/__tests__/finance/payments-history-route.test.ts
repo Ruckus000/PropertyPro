@@ -193,6 +193,19 @@ describe('GET /api/v1/payments/history', () => {
     expect(listPaymentHistoryForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 403 when requireFinanceEnabled throws', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(STAFF_MEMBERSHIP);
+    requireFinanceEnabledMock.mockRejectedValueOnce(
+      new ForbiddenError('Finance feature not enabled for this plan'),
+    );
+
+    const res = await GET(buildReq('http://localhost/api/v1/payments/history?communityId=42'));
+
+    expect(res.status).toBe(403);
+    expect(listActorUnitIdsForFinanceMock).not.toHaveBeenCalled();
+    expect(listPaymentHistoryForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 with exact message when resident-owner has zero unit associations', async () => {
     requireCommunityMembershipMock.mockResolvedValue(OWNER_MEMBERSHIP);
     listActorUnitIdsForFinanceMock.mockResolvedValue([]);
