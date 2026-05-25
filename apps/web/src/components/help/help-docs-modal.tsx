@@ -223,7 +223,7 @@ function ModalContent({
   return (
     <div className="space-y-6">
       <HelpArticleBody
-        source={articleData.source}
+        html={articleData.html}
         toc={articleData.toc}
         metadata={articleData.metadata}
         related={articleData.related}

@@ -12,10 +12,8 @@
  * - modal: outer wrapper applies scroll boundary for the article column
  */
 import Link from 'next/link';
-import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote';
 import {
   TableOfContents,
-  helpMdxComponents,
   type TocItem,
 } from '@/components/help/mdx-components';
 import { ArticleFeedback } from '@/components/help/article-feedback';
@@ -31,7 +29,7 @@ function formatUpdatedAt(value: string | undefined): string | null {
 }
 
 export interface HelpArticleBodyProps {
-  source: MDXRemoteSerializeResult;
+  html: string;
   toc: TocItem[];
   metadata: HelpArticleMetadata;
   related: HelpArticleMetadata[];
@@ -40,7 +38,7 @@ export interface HelpArticleBodyProps {
 }
 
 export function HelpArticleBody({
-  source,
+  html,
   toc,
   metadata,
   related,
@@ -118,7 +116,7 @@ export function HelpArticleBody({
             modal mode (single scroll source). No max-h here — nested
             scrollers fight each other for the user's wheel events. */}
         <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
-          <MDXRemote {...source} components={helpMdxComponents} />
+          <div dangerouslySetInnerHTML={{ __html: html }} />
         </article>
 
         {toc.length > 0 && (

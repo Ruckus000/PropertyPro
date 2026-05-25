@@ -2,7 +2,7 @@
  * Unit tests for GET /api/v1/help/article.
  *
  * Scope:
- * - Happy path returns serialized MDX + toc + metadata + related
+ * - Happy path returns server-rendered help HTML + toc + metadata + related
  * - Invalid params → 400 (ContractValidationError thrown by runRoute; caught
  *   by withErrorHandler)
  * - Missing article → 404
@@ -10,7 +10,8 @@
  * - Feature-gated article → 404
  *
  * Mocks the service boundary (getArticle, isArticleVisibleToRole,
- * filterArticlesByFeatures) and the next-mdx-remote/serialize call.
+ * filterArticlesByFeatures), the next-mdx-remote/serialize call, and the
+ * static React render step.
  *
  * withErrorHandler is NOT mocked — we use the real implementation so that
  * NotFoundError (thrown in the handler) and ContractValidationError (thrown
@@ -43,6 +44,7 @@ const {
   requireCommunityMembershipMock,
   resolveEffectiveCommunityIdMock,
   getFeaturesForCommunityMock,
+  renderToStaticMarkupMock,
 } = vi.hoisted(() => ({
   getArticleMock: vi.fn(),
   isArticleVisibleToRoleMock: vi.fn(),
@@ -55,6 +57,10 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
   getFeaturesForCommunityMock: vi.fn(),
+  renderToStaticMarkupMock: vi.fn(
+    () =>
+      '<h2 id="heading" onclick="alert(1)">Heading</h2><script>alert(1)</script><p>Body text.</p>',
+  ),
 }));
 
 vi.mock('@/lib/services/help-article-service', () => ({
@@ -66,6 +72,10 @@ vi.mock('@/lib/services/help-article-service', () => ({
 
 vi.mock('next-mdx-remote/serialize', () => ({
   serialize: serializeMock,
+}));
+
+vi.mock('react-dom/server', () => ({
+  renderToStaticMarkup: renderToStaticMarkupMock,
 }));
 
 vi.mock('@/lib/help/toc', () => ({
@@ -145,16 +155,22 @@ describe('GET /api/v1/help/article', () => {
     getArticleMock.mockReturnValue(sampleArticle);
   });
 
-  it('returns serialized MDX + toc + metadata on happy path', async () => {
+  it('returns sanitized server-rendered HTML + toc + metadata on happy path', async () => {
     const res = await GET(
       makeRequest('/api/v1/help/article?category=compliance&slug=fixing-compliance-gaps&communityId=1'),
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.source).toEqual(serializedResult);
+    expect(body.data.html).toContain('<h2 id="heading">Heading</h2>');
+    expect(body.data.html).toContain('<p>Body text.</p>');
+    expect(body.data.html).not.toContain('onclick');
+    expect(body.data.html).not.toContain('<script');
     expect(body.data.toc).toEqual([{ depth: 2, label: 'Heading', anchor: 'heading' }]);
     expect(body.data.metadata.slug).toBe('fixing-compliance-gaps');
     expect(body.data.related).toEqual([]);
+    expect(serializeMock).toHaveBeenCalledWith(sampleArticle.rawContent, {
+      parseFrontmatter: true,
+    });
   });
 
   it('returns 400 on invalid params (empty category/slug)', async () => {

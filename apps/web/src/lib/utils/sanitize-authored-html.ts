@@ -128,13 +128,15 @@ function clampNumeric(value: string | null | undefined, max: number): string | n
   return String(n);
 }
 
-// Hooks register once at module load. Per-call add/remove would race under
-// concurrent server-side sanitizations (DOMPurify is a global singleton)
-// and removeHook(entry) drops every hook on that entry — including any
-// other module's hooks. The hooks short-circuit cleanly on tags/attrs they
-// don't care about, so registering globally is safe even if other server
-// code calls DOMPurify.sanitize without authored-mode expectations.
+let authoredSanitizerDepth = 0;
+
+// Hooks register once at module load because DOMPurify is a shared singleton.
+// They only mutate attributes while sanitizeAuthoredHtml is actively running,
+// which keeps this stricter authored-document policy from leaking into other
+// server-side sanitizers such as help article rendering.
 DOMPurify.addHook('uponSanitizeAttribute', (node, hookEvent) => {
+  if (authoredSanitizerDepth === 0) return;
+
   const tagName = node.nodeName.toLowerCase();
   const attrName = hookEvent.attrName.toLowerCase();
   const attrValue = String(hookEvent.attrValue ?? '');
@@ -208,6 +210,8 @@ DOMPurify.addHook('uponSanitizeAttribute', (node, hookEvent) => {
 
 // Force any <a target="_blank"> to also carry rel="noopener noreferrer"
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (authoredSanitizerDepth === 0) return;
+
   if (node.nodeName === 'A') {
     const el = node as Element;
     if (el.getAttribute('target') === '_blank') {
@@ -229,14 +233,29 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
  * hook runs, so we don't.
  */
 export function sanitizeAuthoredHtml(dirty: string): string {
-  return DOMPurify.sanitize(dirty, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR: ALLOWED_ATTRS,
-    ALLOW_DATA_ATTR: false,
-    FORBID_ATTR: ['style', 'on*'],
-    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'style', 'link', 'meta'],
-    KEEP_CONTENT: true,
-    RETURN_DOM: false,
-    RETURN_DOM_FRAGMENT: false,
-  }) as string;
+  authoredSanitizerDepth += 1;
+  try {
+    return DOMPurify.sanitize(dirty, {
+      ALLOWED_TAGS,
+      ALLOWED_ATTR: ALLOWED_ATTRS,
+      ALLOW_DATA_ATTR: false,
+      FORBID_ATTR: ['style', 'on*'],
+      FORBID_TAGS: [
+        'script',
+        'iframe',
+        'object',
+        'embed',
+        'form',
+        'input',
+        'style',
+        'link',
+        'meta',
+      ],
+      KEEP_CONTENT: true,
+      RETURN_DOM: false,
+      RETURN_DOM_FRAGMENT: false,
+    }) as string;
+  } finally {
+    authoredSanitizerDepth -= 1;
+  }
 }

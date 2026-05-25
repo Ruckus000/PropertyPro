@@ -5,7 +5,7 @@
  * without dragging Next.js / `withErrorHandler` / service code into the
  * client bundle. The handler in `./route.ts` is the only value-consumer.
  *
- * Response shape: `{ source, toc, metadata, related }` — a single compiled
+ * Response shape: `{ html, toc, metadata, related }` — a single server-rendered
  * article object. Non-paginated (single resource endpoint).
  *
  * 404 semantics: missing, role-gated, and feature-gated articles throw
@@ -13,14 +13,6 @@
  * the existence of restricted content.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
-
-/**
- * Opaque schema for MDXRemoteSerializeResult from `next-mdx-remote`.
- * The shape is owned by the external package; we pass it through without
- * strict per-field validation. Downstream consumers hold the TypeScript
- * import for the full type.
- */
-const mdxSerializeResultSchema = z.record(z.string(), z.unknown());
 
 /**
  * Schema for a single table-of-contents entry.
@@ -59,7 +51,7 @@ const helpArticleMetadataSchema = z.object({
  * Full article response payload schema.
  */
 export const helpArticleResponseSchema = z.object({
-  source: mdxSerializeResultSchema,
+  html: z.string(),
   toc: z.array(tocItemSchema),
   metadata: helpArticleMetadataSchema,
   related: z.array(helpArticleMetadataSchema),

@@ -144,7 +144,7 @@ describe('useHelpArticle', () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
         data: {
-          source: { compiledSource: 'compiled', frontmatter: {}, scope: {} },
+          html: '<h2>Heading</h2>',
           toc: [{ depth: 2, label: 'Heading', anchor: 'heading' }],
           metadata: { slug: 's', category: 'c', title: 't' },
           related: [],

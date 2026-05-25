@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { MDXRemoteSerializeResult } from 'next-mdx-remote';
 import { requestJson } from '@/lib/api/request-json';
 import type { TocItem } from '@/components/help/mdx-components';
 import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
@@ -315,14 +314,14 @@ export function useTrackArticleView({
 }
 
 export interface HelpArticleResponse {
-  source: MDXRemoteSerializeResult;
+  html: string;
   toc: TocItem[];
   metadata: HelpArticleMetadata;
   related: HelpArticleMetadata[];
 }
 
 /**
- * Fetches a single help article (serialized MDX + TOC + metadata + related)
+ * Fetches a single help article (server-rendered HTML + TOC + metadata + related)
  * from /api/v1/help/article. Disabled when category or slug is null —
  * useful for the modal's "no contextual match" state where no article is
  * selected yet.
