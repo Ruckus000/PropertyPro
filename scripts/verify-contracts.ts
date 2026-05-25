@@ -87,7 +87,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/health/route.ts',
   'apps/web/src/app/api/v1/access-requests/[id]/deny/route.ts',
   'apps/web/src/app/api/v1/access-requests/route.ts',
-  'apps/web/src/app/api/v1/access-requests/verify/route.ts',
   'apps/web/src/app/api/v1/account/delete/route.ts',
   'apps/web/src/app/api/v1/account/join-requests/route.ts',
   'apps/web/src/app/api/v1/accounting/callback/route.ts',

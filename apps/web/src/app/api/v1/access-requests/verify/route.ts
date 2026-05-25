@@ -6,30 +6,21 @@
  * Invariants:
  * - Public route (no session required) — registered in TOKEN_AUTH_ROUTES
  * - withErrorHandler for structured errors
+ * - Plan A1 drain #41 — migrated to runRoute(contract, handler). First
+ *   NO-AUTH POST in the contract corpus. See ./contract.ts for the body
+ *   schema, response modeling rationale, and omitted-permission convention.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
 import { verifyOtp } from '@/lib/services/access-request-service';
-
-const verifySchema = z.object({
-  requestId: z.number().int().positive(),
-  otp: z.string().length(6),
-  communityId: z.number().int().positive(),
-});
+import { accessRequestsVerifyContract } from './contract';
 
 // ---------------------------------------------------------------------------
 // POST — public: verify OTP for an access request
 // ---------------------------------------------------------------------------
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parsed = verifySchema.safeParse(body);
-  if (!parsed.success) {
-    throw new ValidationError('Validation failed');
-  }
-
-  const result = await verifyOtp(parsed.data);
-  return NextResponse.json({ data: result });
-});
+export const POST = withErrorHandler(
+  runRoute(accessRequestsVerifyContract, async ({ body }) => {
+    return verifyOtp(body);
+  }),
+);
