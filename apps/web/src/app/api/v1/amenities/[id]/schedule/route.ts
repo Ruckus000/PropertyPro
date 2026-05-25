@@ -1,30 +1,45 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * Amenities — amenity schedule
+ *
+ * GET /api/v1/amenities/[id]/schedule?communityId=N
+ *
+ * Plan A1 bundle drain #33. Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *   → resolveEffectiveCommunityId(req, query.communityId)
+ *   → requireCommunityMembership
+ *   → requireAmenitiesEnabled (sync)
+ *   → requirePlanFeature(communityId, 'hasAmenities') (async)
+ *   → requireAmenitiesReadPermission (sync)
+ *   → getAmenityScheduleForCommunity(communityId, amenityId)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` / missing
+ * or non-numeric `communityId` shifts to the canonical `VALIDATION_ERROR`
+ * envelope. Status unchanged. Success wire shape `{ data: schedule }`
+ * byte-identical.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireAmenitiesEnabled,
   requireAmenitiesReadPermission,
 } from '@/lib/work-orders/common';
 import { getAmenityScheduleForCommunity } from '@/lib/services/work-orders-service';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { amenitiesScheduleGetContract } from './contract';
 
 export const GET = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const amenityId = parsePositiveInt(params?.id ?? '', 'amenity id');
-
+  runRoute(amenitiesScheduleGetContract, async ({ params, query, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const communityId = parseCommunityIdFromQuery(req);
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAmenitiesEnabled(membership);
     await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesReadPermission(membership);
 
-    const data = await getAmenityScheduleForCommunity(communityId, amenityId);
-    return NextResponse.json({ data });
-  },
+    return getAmenityScheduleForCommunity(communityId, params.id);
+  }),
 );
