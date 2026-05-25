@@ -169,7 +169,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/emergency-broadcasts/[id]/send/route.ts',
   'apps/web/src/app/api/v1/emergency-broadcasts/route.ts',
   'apps/web/src/app/api/v1/emergency-broadcasts/templates/route.ts',
-  'apps/web/src/app/api/v1/esign/consent/route.ts',
   'apps/web/src/app/api/v1/esign/sign/[submissionExternalId]/[slug]/route.ts',
   'apps/web/src/app/api/v1/esign/submissions/[id]/cancel/route.ts',
   'apps/web/src/app/api/v1/esign/submissions/[id]/download/route.ts',
