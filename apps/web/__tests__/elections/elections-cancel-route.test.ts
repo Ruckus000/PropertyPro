@@ -4,7 +4,8 @@
  * Added alongside Plan A1 drain #45 (sibling precedent: drain #42
  * `POST /api/v1/elections/[id]/open`, PR #446). Covers the contracted
  * runRoute envelope: happy path, x-request-id null forwarding, 401 unauth,
- * 400 invalid params.id / missing-communityId / missing-canceledReason /
+ * 400 invalid params.id / zero-params.id / missing-communityId /
+ * invalid-communityId (negative) / missing-canceledReason /
  * empty-canceledReason / too-long-canceledReason, 403 demo-grace, 403
  * non-member, 403 elections-disabled, 403 permission, 403 admin-role.
  */
@@ -193,10 +194,34 @@ describe('POST /api/v1/elections/[id]/cancel', () => {
     expect(cancelElectionForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 VALIDATION_ERROR when params.id is zero', async () => {
+    const res = await POST(
+      jsonPost('0', { communityId: 42, canceledReason: 'Reason X' }),
+      routeCtx('0'),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(cancelElectionForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 VALIDATION_ERROR when body is missing communityId', async () => {
     const res = await POST(
       jsonPost(7, { canceledReason: 'Reason X' }),
       routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(cancelElectionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_ERROR when body communityId is negative', async () => {
+    const res = await POST(
+      jsonPost(15, { communityId: -1, canceledReason: 'Reason X' }),
+      routeCtx('15'),
     );
 
     expect(res.status).toBe(400);
