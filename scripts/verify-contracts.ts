@@ -260,7 +260,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/settings/support-access/route.ts',
   'apps/web/src/app/api/v1/stripe/connect/complete/route.ts',
   'apps/web/src/app/api/v1/stripe/connect/onboard/route.ts',
-  'apps/web/src/app/api/v1/stripe/connect/status/route.ts',
   'apps/web/src/app/api/v1/subscribe/change-plan/route.ts',
   'apps/web/src/app/api/v1/subscribe/route.ts',
   'apps/web/src/app/api/v1/transparency/route.ts',
