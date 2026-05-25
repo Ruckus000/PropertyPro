@@ -383,28 +383,35 @@ describe('Access Request Routes', () => {
       });
     });
 
-    it('throws ValidationError when OTP is not exactly 6 characters', async () => {
+    // Drain #41: post-runner, the validation 400 envelope is asserted in the
+    // dedicated `access-requests-verify-route.test.ts` (with the real
+    // `withErrorHandler` so the canonical `VALIDATION_ERROR` body is
+    // observable). The inline cases below keep using the identity-mocked
+    // `withErrorHandler` from this file's top-of-file mocks, so they assert
+    // on the underlying thrown ContractValidationError instead.
+
+    it('throws ContractValidationError when OTP is not exactly 6 characters', async () => {
       const req = makeJsonRequest('/api/v1/access-requests/verify', {
         ...validBody,
         otp: '12345', // too short
       });
-      await expect(verifyPOST(req)).rejects.toThrow('Validation failed');
+      await expect(verifyPOST(req)).rejects.toMatchObject({ source: 'body' });
     });
 
-    it('throws ValidationError when requestId is missing', async () => {
+    it('throws ContractValidationError when requestId is missing', async () => {
       const req = makeJsonRequest('/api/v1/access-requests/verify', {
         otp: '123456',
         communityId: 1,
       });
-      await expect(verifyPOST(req)).rejects.toThrow('Validation failed');
+      await expect(verifyPOST(req)).rejects.toMatchObject({ source: 'body' });
     });
 
-    it('throws ValidationError when communityId is missing', async () => {
+    it('throws ContractValidationError when communityId is missing', async () => {
       const req = makeJsonRequest('/api/v1/access-requests/verify', {
         requestId: 42,
         otp: '123456',
       });
-      await expect(verifyPOST(req)).rejects.toThrow('Validation failed');
+      await expect(verifyPOST(req)).rejects.toMatchObject({ source: 'body' });
     });
   });
 
