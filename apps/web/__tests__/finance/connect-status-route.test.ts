@@ -154,6 +154,20 @@ describe('GET /api/v1/stripe/connect/status', () => {
     expect(getConnectStatusMock).not.toHaveBeenCalled();
   });
 
+  it('returns 403 when the finance feature is not enabled for the plan', async () => {
+    const { ForbiddenError } = await import('@/lib/api/errors');
+    requireFinanceEnabledMock.mockRejectedValueOnce(
+      new ForbiddenError('Finance feature not enabled for this plan'),
+    );
+
+    const req = new NextRequest(`${baseUrl}?communityId=42`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(403);
+    expect(requireFinanceReadPermissionMock).not.toHaveBeenCalled();
+    expect(getConnectStatusMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 when the finance read permission gate denies', async () => {
     const { ForbiddenError } = await import('@/lib/api/errors');
     requireFinanceReadPermissionMock.mockImplementation(() => {
