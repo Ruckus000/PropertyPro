@@ -58,7 +58,7 @@ describe('signup route', () => {
     const res = await POST(req);
     const body = (await res.json()) as { data: { signupRequestId: string } };
 
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(200);
     expect(body.data.signupRequestId).toBe('req-1');
     expect(submitSignupMock).toHaveBeenCalledWith({
       email: 'jordan@example.com',

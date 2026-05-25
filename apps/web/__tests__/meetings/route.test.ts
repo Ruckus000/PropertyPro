@@ -222,7 +222,7 @@ describe('meetings route', () => {
     );
     const json = (await response.json()) as { data: { id: number; endsAt: string | null } };
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     expect(insertMock).toHaveBeenCalledWith(
       meetingsTableMock,
       expect.objectContaining({
@@ -385,7 +385,7 @@ describe('meetings route', () => {
         }),
       }),
     );
-    expect(postResponse.status).toBe(201);
+    expect(postResponse.status).toBe(200);
   });
 
   it('GET rejects unauthenticated requests', async () => {

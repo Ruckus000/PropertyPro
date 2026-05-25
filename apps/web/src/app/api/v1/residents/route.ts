@@ -240,8 +240,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         fullName,
         phone: phone ?? null,
       },
-    },
-    { status: 201 },
+    }
   );
 });
 

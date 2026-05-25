@@ -73,7 +73,7 @@ describe('violation evidence route', () => {
     const res = await POST(req);
     const json = await res.json() as { data: { id: number } };
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     expect(json.data.id).toBe(77);
     expect(createUploadedDocumentMock).toHaveBeenCalledWith(
       expect.objectContaining({

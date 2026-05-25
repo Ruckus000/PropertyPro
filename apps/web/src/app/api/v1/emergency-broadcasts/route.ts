@@ -126,5 +126,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     initiatedBy: userId,
   });
 
-  return NextResponse.json(result, { status: 201 });
+  return NextResponse.json(result);
 });

@@ -375,7 +375,7 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
 
   void tryAutoComplete(communityId, audit.userId, 'post_announcement');
 
-  return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created });
 }
 
 async function handleUpdate(body: Record<string, unknown>, audit: AuditLog): Promise<NextResponse> {

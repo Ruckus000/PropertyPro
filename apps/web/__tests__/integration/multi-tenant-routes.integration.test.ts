@@ -401,7 +401,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         userId: residentA.id,
       }),
     );
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
   });
 
   it('invitations POST: actorA creating invitation in communityB → 403', async () => {
@@ -627,7 +627,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         documentId: seeded.documentAId,
       }),
     );
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
   });
 
   it('meetings attach: cross-tenant docB to meetingA in communityA → 404', async () => {
@@ -999,7 +999,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         notes: `P2-43 new lease ${kit.runSuffix}`,
       }),
     );
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     const json = await parseJson<{ data: Record<string, unknown> }>(response);
     expect(json.data['communityId']).toBe(communityC.id);
   });
@@ -1072,7 +1072,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         notes: `P2-43 side-effect check ${kit.runSuffix}`,
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
 
     // Verify communityA has no leases (not apartment, but check DB directly)
     const scopedA = kit.dbModule.createScopedClient(communityA.id);

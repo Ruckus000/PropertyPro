@@ -201,7 +201,7 @@ describe('Access Request Routes', () => {
       const response = await submitPOST(req);
       const json = await response.json();
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(200);
       expect(json.data.requestId).toBe(42);
       expect(json.data.resent).toBe(false);
       expect(submitAccessRequestMock).toHaveBeenCalledWith(
@@ -222,7 +222,7 @@ describe('Access Request Routes', () => {
       const response = await submitPOST(req);
       const json = await response.json();
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(200);
       expect(json.data.resent).toBe(true);
     });
 
@@ -259,7 +259,7 @@ describe('Access Request Routes', () => {
 
       const req = makeJsonRequest('/api/v1/access-requests', minimalBody);
       const response = await submitPOST(req);
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(200);
     });
   });
 

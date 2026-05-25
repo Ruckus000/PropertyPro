@@ -141,7 +141,7 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
         severity: 'moderate',
       }),
     );
-    expect(reportResponse.status).toBe(201);
+    expect(reportResponse.status).toBe(200);
     const reportJson = await parseJson<{ data: Record<string, unknown> }>(reportResponse);
     const violationId = readNumberField(reportJson.data, 'id');
 
@@ -170,7 +170,7 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
       }),
       { params: Promise.resolve({ id: String(violationId) }) },
     );
-    expect(fineResponse.status).toBe(201);
+    expect(fineResponse.status).toBe(200);
     const fineJson = await parseJson<{ data: Record<string, unknown> }>(fineResponse);
     const lineItemId = readNumberField(fineJson.data, 'lineItemId');
     const fineId = readNumberField(fineJson.data.fine as Record<string, unknown>, 'id');
@@ -220,7 +220,7 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
         projectType: 'fencing',
       }),
     );
-    expect(submitResponse.status).toBe(201);
+    expect(submitResponse.status).toBe(200);
     const submitJson = await parseJson<{ data: Record<string, unknown> }>(submitResponse);
     const submissionId = readNumberField(submitJson.data, 'id');
 
@@ -267,7 +267,7 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
         projectType: 'landscaping',
       }),
     );
-    expect(submitForWithdrawResponse.status).toBe(201);
+    expect(submitForWithdrawResponse.status).toBe(200);
     const submitForWithdrawJson = await parseJson<{ data: Record<string, unknown> }>(submitForWithdrawResponse);
     const withdrawSubmissionId = readNumberField(submitForWithdrawJson.data, 'id');
 
@@ -298,7 +298,7 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
         description: 'Cross-tenant isolation seed',
       }),
     );
-    expect(reportResponse.status).toBe(201);
+    expect(reportResponse.status).toBe(200);
     const reportJson = await parseJson<{ data: Record<string, unknown> }>(reportResponse);
     const violationId = readNumberField(reportJson.data, 'id');
 

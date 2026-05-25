@@ -97,7 +97,7 @@ describe('p1-20 invitation auth flow', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
 
     expect(createScopedClientMock).toHaveBeenCalledWith(99);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(99, 'inviter-uuid');

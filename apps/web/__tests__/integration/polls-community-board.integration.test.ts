@@ -108,7 +108,7 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
         options: ['8am - 6pm', '9am - 7pm', '10am - 8pm'],
       }),
     );
-    expect(createPollResponse.status).toBe(201);
+    expect(createPollResponse.status).toBe(200);
     const createPollJson = await parseJson<{ data: Record<string, unknown> }>(createPollResponse);
     const pollId = readNumberField(createPollJson.data, 'id');
 
@@ -120,7 +120,7 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
       }),
       { params: Promise.resolve({ id: String(pollId) }) },
     );
-    expect(voteResponse.status).toBe(201);
+    expect(voteResponse.status).toBe(200);
 
     const duplicateVoteResponse = await routeModules.pollVote.POST(
       jsonRequest(apiUrl(`/api/v1/polls/${pollId}/vote`), 'POST', {
@@ -163,7 +163,7 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
         body: 'Can we add more shade trees near building A?',
       }),
     );
-    expect(createThreadResponse.status).toBe(201);
+    expect(createThreadResponse.status).toBe(200);
     const createThreadJson = await parseJson<{ data: Record<string, unknown> }>(createThreadResponse);
     const threadId = readNumberField(createThreadJson.data, 'id');
 
@@ -175,7 +175,7 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
       }),
       { params: Promise.resolve({ id: String(threadId) }) },
     );
-    expect(replyResponse.status).toBe(201);
+    expect(replyResponse.status).toBe(200);
     const replyJson = await parseJson<{ data: Record<string, unknown> }>(replyResponse);
     const replyId = readNumberField(replyJson.data, 'id');
 
@@ -187,7 +187,7 @@ describeDb('WS68 polls/community board (db-backed integration)', () => {
       }),
       { params: Promise.resolve({ id: String(threadId) }) },
     );
-    expect(ownReplyResponse.status).toBe(201);
+    expect(ownReplyResponse.status).toBe(200);
     const ownReplyJson = await parseJson<{ data: Record<string, unknown> }>(ownReplyResponse);
     const ownReplyId = readNumberField(ownReplyJson.data, 'id');
 

@@ -134,7 +134,7 @@ describe('p1-18 residents route', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
 
     expect(createScopedClientMock).toHaveBeenCalledWith(42);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'actor-1');

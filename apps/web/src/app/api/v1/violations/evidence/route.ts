@@ -53,5 +53,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     sendDocumentNotifications: false,
   });
 
-  return NextResponse.json({ data: result.document }, { status: 201 });
+  return NextResponse.json({ data: result.document });
 });

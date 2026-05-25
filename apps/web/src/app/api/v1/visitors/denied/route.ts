@@ -118,5 +118,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     notes: parsed.data.notes ?? null,
   }, requestId);
 
-  return NextResponse.json({ data }, { status: 201 });
+  return NextResponse.json({ data });
 });

@@ -257,8 +257,7 @@ async function handleCreate(
   });
 
   return NextResponse.json(
-    { data: serializeMeetingResponse(createdMeeting, communityType) },
-    { status: 201 },
+    { data: serializeMeetingResponse(createdMeeting, communityType) }
   );
 }
 
@@ -397,7 +396,7 @@ async function handleAttach(
     metadata: { subAction: 'attach' },
   });
 
-  return NextResponse.json({ data: attachment }, { status: 201 });
+  return NextResponse.json({ data: attachment });
 }
 
 async function handleDetach(

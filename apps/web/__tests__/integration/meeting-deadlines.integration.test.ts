@@ -160,7 +160,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     const json = await parseJson<{ data: Record<string, unknown> }>(response);
     expect(json.data['title']).toBe(`Board Meeting ${kit.runSuffix}`);
     expect(json.data['meetingType']).toBe('board');
@@ -210,7 +210,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         location: 'Main Hall',
       }),
     );
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
 
     const getResponse = await route.GET(
       new NextRequest(apiUrl(`/api/v1/meetings?communityId=${communityA.id}`)),
@@ -306,7 +306,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         location: 'Room 101',
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const created = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const meetingId = created.data['id'] as number;
 
@@ -349,7 +349,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         location: 'Room 201',
       }),
     );
-    expect(meetingResponse.status).toBe(201);
+    expect(meetingResponse.status).toBe(200);
     const meetingJson = await parseJson<{ data: Record<string, unknown> }>(meetingResponse);
     const meetingId = meetingJson.data['id'] as number;
 
@@ -374,7 +374,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         documentId,
       }),
     );
-    expect(attachResponse.status).toBe(201);
+    expect(attachResponse.status).toBe(200);
 
     // Detach
     const detachResponse = await route.POST(
@@ -421,7 +421,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         location: 'Nowhere',
       }),
     );
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
   });
 
   // =========================================================================
@@ -443,7 +443,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
         location: 'HOA Clubhouse',
       }),
     );
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
   });
 
   // =========================================================================

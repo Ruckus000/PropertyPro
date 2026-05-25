@@ -67,7 +67,7 @@ describe('POST /api/v1/pm/communities', () => {
   it('starts a Stripe checkout session with valid input', async () => {
     const res = await POST(makeRequest(validBody));
     const json = await res.json();
-    expect(res.status).toBe(202);
+    expect(res.status).toBe(200);
     expect(json.data).toEqual({
       clientSecret: 'cs_test_secret_123',
       pendingSignupId: 7,

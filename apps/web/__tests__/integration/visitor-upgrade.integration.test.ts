@@ -229,7 +229,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 90,
       }),
     );
-    expect(oneTimeResponse.status).toBe(201);
+    expect(oneTimeResponse.status).toBe(200);
     const oneTimeJson = await parseJson<{ data: Record<string, unknown> }>(oneTimeResponse);
     const oneTimeId = readNumberField(oneTimeJson.data, 'id');
     expect(oneTimeJson.data.guestType).toBe('one_time');
@@ -252,7 +252,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         vehiclePlate: `REC-${kit.runSuffix}`,
       }),
     );
-    expect(recurringResponse.status).toBe(201);
+    expect(recurringResponse.status).toBe(200);
     const recurringJson = await parseJson<{ data: Record<string, unknown> }>(recurringResponse);
     expect(recurringJson.data.guestType).toBe('recurring');
     expect(recurringJson.data.recurrenceRule).toBe('weekdays');
@@ -268,7 +268,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         validFrom: '2026-06-01T00:00:00.000Z',
       }),
     );
-    expect(permanentResponse.status).toBe(201);
+    expect(permanentResponse.status).toBe(200);
     const permanentJson = await parseJson<{ data: Record<string, unknown> }>(permanentResponse);
     expect(permanentJson.data.guestType).toBe('permanent');
     expect(permanentJson.data.validUntil).toBeNull();
@@ -288,7 +288,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         vehiclePlate: `VEN-${kit.runSuffix}`,
       }),
     );
-    expect(vendorResponse.status).toBe(201);
+    expect(vendorResponse.status).toBe(200);
     const vendorJson = await parseJson<{ data: Record<string, unknown> }>(vendorResponse);
     expect(vendorJson.data.guestType).toBe('vendor');
     expect(vendorJson.data.vehicleMake).toBe('Ford');
@@ -350,7 +350,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 60,
       }),
     );
-    expect(selfPassResponse.status).toBe(201);
+    expect(selfPassResponse.status).toBe(200);
     const selfPassJson = await parseJson<{ data: Record<string, unknown> }>(selfPassResponse);
     const selfPassId = readNumberField(selfPassJson.data, 'id');
 
@@ -413,7 +413,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 120,
       }),
     );
-    expect(residentPassResponse.status).toBe(201);
+    expect(residentPassResponse.status).toBe(200);
     const residentPassJson = await parseJson<{ data: Record<string, unknown> }>(residentPassResponse);
     const residentPassId = readNumberField(residentPassJson.data, 'id');
 
@@ -448,7 +448,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 60,
       }),
     );
-    expect(expiredPassResponse.status).toBe(201);
+    expect(expiredPassResponse.status).toBe(200);
     const expiredPassJson = await parseJson<{ data: Record<string, unknown> }>(expiredPassResponse);
     const expiredPassId = readNumberField(expiredPassJson.data, 'id');
 
@@ -478,7 +478,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         notes: 'Front desk note',
       }),
     );
-    expect(inactiveEntryResponse.status).toBe(201);
+    expect(inactiveEntryResponse.status).toBe(200);
     const inactiveEntryJson = await parseJson<{ data: Record<string, unknown> }>(inactiveEntryResponse);
     const inactiveEntryId = readNumberField(inactiveEntryJson.data, 'id');
 
@@ -490,7 +490,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         vehiclePlate: `ACT-${kit.runSuffix}`,
       }),
     );
-    expect(activeEntryResponse.status).toBe(201);
+    expect(activeEntryResponse.status).toBe(200);
     const activeEntryJson = await parseJson<{ data: Record<string, unknown> }>(activeEntryResponse);
     const activeEntryId = readNumberField(activeEntryJson.data, 'id');
 
@@ -582,7 +582,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 15,
       }),
     );
-    expect(createResponse.status).toBe(201);
+    expect(createResponse.status).toBe(200);
     const createJson = await parseJson<{ data: Record<string, unknown> }>(createResponse);
     const visitorId = readNumberField(createJson.data, 'id');
 
@@ -644,7 +644,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 60,
       }),
     );
-    expect(recurringResponse.status).toBe(201);
+    expect(recurringResponse.status).toBe(200);
     const recurringJson = await parseJson<{ data: Record<string, unknown> }>(recurringResponse);
     const recurringId = readNumberField(recurringJson.data, 'id');
 
@@ -658,7 +658,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         validFrom: '2026-09-01T00:00:00.000Z',
       }),
     );
-    expect(permanentResponse.status).toBe(201);
+    expect(permanentResponse.status).toBe(200);
     const permanentJson = await parseJson<{ data: Record<string, unknown> }>(permanentResponse);
     const permanentId = readNumberField(permanentJson.data, 'id');
 
@@ -699,7 +699,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 60,
       }),
     );
-    expect(overstayedCreateResponse.status).toBe(201);
+    expect(overstayedCreateResponse.status).toBe(200);
     const overstayedCreateJson = await parseJson<{ data: Record<string, unknown> }>(overstayedCreateResponse);
     const overstayedId = readNumberField(overstayedCreateJson.data, 'id');
 
@@ -752,7 +752,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 45,
       }),
     );
-    expect(activeResponse.status).toBe(201);
+    expect(activeResponse.status).toBe(200);
     const activeJson = await parseJson<{ data: Record<string, unknown> }>(activeResponse);
     const activeId = readNumberField(activeJson.data, 'id');
 
@@ -766,7 +766,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         expectedDurationMinutes: 30,
       }),
     );
-    expect(checkedOutResponse.status).toBe(201);
+    expect(checkedOutResponse.status).toBe(200);
     const checkedOutJson = await parseJson<{ data: Record<string, unknown> }>(checkedOutResponse);
     const checkedOutId = readNumberField(checkedOutJson.data, 'id');
 

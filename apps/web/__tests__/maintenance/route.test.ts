@@ -519,7 +519,7 @@ describe('maintenance requests route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
 
       const json = (await res.json()) as { data: { id: number } };
       expect(json.data.id).toBe(99);
@@ -647,7 +647,7 @@ describe('maintenance requests route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(insert).toHaveBeenCalledWith(
         maintenanceRequestsTableMock,
         expect.objectContaining({ unitLabel: 'Apt 312' }),
@@ -672,7 +672,7 @@ describe('maintenance requests route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
 
       // insert should have been called with priority: 'urgent'
       expect(insert).toHaveBeenCalledWith(
@@ -709,7 +709,7 @@ describe('maintenance requests route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
 
       expect(insert).toHaveBeenCalledWith(
         maintenanceCommentsTableMock,
@@ -741,7 +741,7 @@ describe('maintenance requests route', () => {
       });
 
       const res = await POST(req);
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
 
       expect(insert).toHaveBeenCalledWith(
         maintenanceCommentsTableMock,

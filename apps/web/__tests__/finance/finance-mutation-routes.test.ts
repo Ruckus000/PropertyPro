@@ -177,7 +177,7 @@ describe('WS66 finance mutation routes', () => {
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
     expect(createAssessmentForCommunityMock).toHaveBeenCalledWith(
       communityId,

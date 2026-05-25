@@ -300,7 +300,6 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
         status: 'completed',
         completedAt: now.toISOString(),
       },
-    },
-    { status: 201 },
+    }
   );
 });

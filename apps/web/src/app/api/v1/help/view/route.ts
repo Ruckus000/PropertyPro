@@ -43,5 +43,5 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     articleCategory,
   });
 
-  return NextResponse.json({ data: { ok: true } }, { status: 201 });
+  return NextResponse.json({ data: { ok: true } });
 });

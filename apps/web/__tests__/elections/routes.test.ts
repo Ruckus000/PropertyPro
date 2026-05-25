@@ -175,7 +175,7 @@ describe('elections routes', () => {
 
     const res = await postVote(req, { params: Promise.resolve({ id: '15' }) });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     expect(castElectionVoteForCommunityMock).toHaveBeenCalledWith(
       42,
       15,
@@ -329,7 +329,7 @@ describe('elections routes', () => {
       params: Promise.resolve({ id: '15' }),
     });
 
-    expect(snapshotRes.status).toBe(201);
+    expect(snapshotRes.status).toBe(200);
     expect(snapshotElectionEligibilityForCommunityMock).toHaveBeenCalledWith(42, 15, 'user-1', 'req-6');
   });
 

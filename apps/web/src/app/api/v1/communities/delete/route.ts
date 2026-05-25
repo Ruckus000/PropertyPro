@@ -26,7 +26,7 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
   requirePermission(membership, 'settings', 'write');
 
   const request = await requestCommunityDeletion(communityId, userId);
-  return NextResponse.json({ data: request }, { status: 201 });
+  return NextResponse.json({ data: request });
 });
 
 // DELETE — cancel community deletion

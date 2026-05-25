@@ -215,8 +215,7 @@ export const POST = withErrorHandler(
           documentId,
           warnings: result.warnings.length > 0 ? result.warnings : undefined,
         },
-      },
-      { status: 201 },
+      }
     );
   },
 );

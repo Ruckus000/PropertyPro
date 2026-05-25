@@ -159,7 +159,7 @@ describe('p1-09 compliance route', () => {
     });
 
     const res = await POST(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
 
     expect(createScopedClientMock).toHaveBeenCalledWith(42);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(
@@ -240,7 +240,7 @@ describe('p1-09 compliance route', () => {
     const res = await POST(req);
     const json = (await res.json()) as { data: Array<{ templateKey: string }> };
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     expect(json.data).toEqual([]);
     expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
     expect(consoleWarnSpy).toHaveBeenCalledWith(

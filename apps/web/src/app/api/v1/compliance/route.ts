@@ -181,7 +181,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     },
   });
 
-  return NextResponse.json({ data: inserted }, { status: 201 });
+  return NextResponse.json({ data: inserted });
 });
 
 // ---------------------------------------------------------------------------

@@ -195,7 +195,7 @@ describe('Emergency Broadcast Routes', () => {
       const res = await POST(req);
       const json = await res.json();
 
-      expect(res.status).toBe(201);
+      expect(res.status).toBe(200);
       expect(json.id).toBe(5);
       expect(createBroadcastMock).toHaveBeenCalledWith(
         expect.objectContaining({

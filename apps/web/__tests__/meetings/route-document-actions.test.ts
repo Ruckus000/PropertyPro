@@ -196,7 +196,7 @@ describe('meetings route — delete / attach / detach actions', () => {
         }),
       );
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(200);
       expect(insertMock).toHaveBeenCalledWith(meetingDocumentsTableMock, {
         meetingId: 10,
         documentId: 5,

@@ -147,7 +147,7 @@ async function runSunsetWriter(): Promise<void> {
           isPinned: false,
         }),
       );
-      expect(announcementResponse.status).toBe(201);
+      expect(announcementResponse.status).toBe(200);
 
       const residentResponse = await residents.POST(
         jsonRequest(apiUrl('/api/v1/residents'), 'POST', {
@@ -159,7 +159,7 @@ async function runSunsetWriter(): Promise<void> {
           presetKey: 'board_member',
         }),
       );
-      expect(residentResponse.status).toBe(201);
+      expect(residentResponse.status).toBe(200);
       const residentJson = await parseJson<{ data: Record<string, unknown> }>(residentResponse);
       const createdUserId = residentJson.data['userId'];
       if (typeof createdUserId === 'string') {

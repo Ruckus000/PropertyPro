@@ -226,7 +226,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     const json = await parseJson<{ data: Record<string, unknown> }>(response);
     expect(json.data['title']).toBe(`PDF Test Doc ${kit.runSuffix}`);
     expect(json.data['mimeType']).toBe('application/pdf');
@@ -255,7 +255,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
       }),
     );
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     const json = await parseJson<{ data: Record<string, unknown> }>(response);
     expect(json.data['mimeType']).toBe('image/png');
     expect(json.data['extractionStatus']).toBe('not_applicable');
