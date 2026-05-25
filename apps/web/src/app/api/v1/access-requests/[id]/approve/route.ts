@@ -3,55 +3,50 @@
  *
  * POST /api/v1/access-requests/[id]/approve — admin: approve a pending access request
  *
- * Invariants:
- * - Requires authentication and residents.write permission
- * - withErrorHandler for structured errors
+ * Plan A1 drain #39. Input validation (params + body) and output envelope
+ * wrapping delegated to `runRoute()` from `@propertypro/api-contract`. Auth
+ * chain preserved verbatim:
+ *   requireAuthenticatedUserId → resolveEffectiveCommunityId(req, null)
+ *   → assertNotDemoGrace → requireCommunityMembership
+ *   → requirePermission('residents', 'write') → approveAccessRequest.
+ *
+ * `resolveEffectiveCommunityId(req, null)` reads the `x-community-id`
+ * header only (no `?communityId=` query param on this route). The contract
+ * intentionally declares no `query` schema to match.
+ *
+ * Behavior change vs. pre-migration:
+ *   - Invalid `params.id` (non-numeric, zero, negative) and invalid body
+ *     (e.g., `unitId: 0`) now return the runner's canonical
+ *     `VALIDATION_ERROR` envelope instead of the bespoke
+ *     `ValidationError('Invalid request ID')` / `ValidationError('Validation
+ *     failed')`. Status code 400 unchanged. Hooks read `!res.ok` opaquely.
+ *   - The service call signature is preserved verbatim — uses
+ *     `membership.communityId` (not the local `communityId`) to match the
+ *     pre-migration argument shape.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { approveAccessRequest } from '@/lib/services/access-request-service';
-
-const approveSchema = z.object({
-  unitId: z.number().int().positive().optional(),
-});
-
-// ---------------------------------------------------------------------------
-// POST — admin: approve an access request
-// ---------------------------------------------------------------------------
+import { accessRequestsApproveContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { id } = await params;
+  runRoute(accessRequestsApproveContract, async ({ params, body, req }) => {
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'residents', 'write');
 
-    const body: unknown = await req.json();
-    const parsed = approveSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new ValidationError('Validation failed');
-    }
-
-    const requestId = Number(id);
-    if (isNaN(requestId)) {
-      throw new ValidationError('Invalid request ID');
-    }
-
-    const result = await approveAccessRequest({
-      requestId,
+    return approveAccessRequest({
+      requestId: params.id,
       communityId: membership.communityId,
       reviewerId: userId,
-      unitId: parsed.data.unitId,
+      unitId: body.unitId,
     });
-    return NextResponse.json({ data: result });
-  },
+  }),
 );
