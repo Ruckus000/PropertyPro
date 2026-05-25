@@ -8,13 +8,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
  * `SupportAccessSettings.tsx`, including the post-toggle manual refetch
  * (now a query invalidation).
  *
- * The GET /api/v1/settings/support-access response is non-standard — it
- * returns a flat `{ consentActive, consent, recentAccess }` object, NOT the
- * canonical `{ data: T }` envelope. `requestJson` would try to unwrap a
- * `.data` key that does not exist, so the read hook does its own fetch.
- *
- * The POST endpoint returns `{ ok: true }` (also no `{ data }` envelope),
- * so the mutation hook likewise does its own fetch.
+ * As of B1 Slice 1, both the GET and POST endpoints return the canonical
+ * `{ data: T }` envelope. The hooks unwrap `.data` manually rather than
+ * adopting `requestJson` because they preserve bespoke error-literal
+ * handling — migration to `requestJson` is B6 work.
  */
 
 export interface ConsentGrant {
@@ -51,11 +48,10 @@ export function useSupportAccess(communityId: number) {
       const res = await fetch(`/api/v1/settings/support-access?${params.toString()}`, {
         signal,
       });
-      // Documented exception to the requestJson rule: GET returns flat
-      // { consentActive, consent, recentAccess }, not { data }. Check
-      // res.ok BEFORE parsing and read the success body exactly once; a
-      // non-JSON/empty success body throws the load literal rather than a
-      // silent `{}` that would crash the component on data.recentAccess.
+      // GET returns canonical { data: SupportAccessData } (B1 Slice 1).
+      // Check res.ok BEFORE parsing and read the success body exactly once;
+      // a non-JSON/empty success body throws the load literal rather than
+      // a silent `{}` that would crash the component on data.recentAccess.
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(
@@ -64,7 +60,11 @@ export function useSupportAccess(communityId: number) {
         );
       }
       try {
-        return (await res.json()) as SupportAccessData;
+        const json = (await res.json()) as { data?: SupportAccessData };
+        if (!json.data) {
+          throw new Error('Failed to load support access settings');
+        }
+        return json.data;
       } catch {
         throw new Error('Failed to load support access settings');
       }

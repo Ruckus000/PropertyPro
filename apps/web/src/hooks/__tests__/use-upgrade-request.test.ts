@@ -28,7 +28,7 @@ beforeEach(() => {
 
 describe('useUpgradeRequest', () => {
   it('POSTs to the URL WITH communityId query param and returns { ok, notified }', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { ok: true, notified: 3 }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: { ok: true, notified: 3 } }));
     const { result } = renderHook(() => useUpgradeRequest(), {
       wrapper: createWrapper(),
     });
@@ -53,7 +53,7 @@ describe('useUpgradeRequest', () => {
   });
 
   it('POSTs to the URL WITHOUT a query param when communityId is null', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { ok: true, notified: 0 }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: { ok: true, notified: 0 } }));
     const { result } = renderHook(() => useUpgradeRequest(), {
       wrapper: createWrapper(),
     });
@@ -70,7 +70,7 @@ describe('useUpgradeRequest', () => {
   });
 
   it('omits the query param when communityId is 0 (falsy), matching original truthiness', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { ok: true, notified: 1 }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: { ok: true, notified: 1 } }));
     const { result } = renderHook(() => useUpgradeRequest(), {
       wrapper: createWrapper(),
     });

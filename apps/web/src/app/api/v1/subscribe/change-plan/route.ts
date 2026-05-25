@@ -127,5 +127,5 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
     },
   });
 
-  return NextResponse.json({ ok: true, planId, billingInterval });
+  return NextResponse.json({ data: { ok: true, planId, billingInterval } });
 });

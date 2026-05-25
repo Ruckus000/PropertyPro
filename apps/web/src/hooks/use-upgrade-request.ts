@@ -20,7 +20,10 @@ export interface UpgradeRequestResponse {
  */
 export function useUpgradeRequest() {
   return useMutation<UpgradeRequestResponse, Error, UpgradeRequestInput>({
-    // Documented exception to the requestJson rule: route returns flat { ok, notified }, no { data } envelope; exact error literal must be preserved.
+    // As of B1 Slice 1, route returns canonical { data: { ok, notified } }.
+    // Hook unwraps manually rather than adopting requestJson to preserve
+    // the exact "We couldn't send your request" user-facing error literal —
+    // migration to requestJson is B6 work.
     mutationFn: async ({ communityId, featureKey, requestedPlan }) => {
       const params = new URLSearchParams();
       // Match the component's original `communityId ? ... : ''` truthiness so
@@ -50,7 +53,11 @@ export function useUpgradeRequest() {
         );
       }
 
-      return (await res.json()) as UpgradeRequestResponse;
+      const json = (await res.json()) as { data?: UpgradeRequestResponse };
+      if (!json.data) {
+        throw new Error('Missing response payload');
+      }
+      return json.data;
     },
   });
 }

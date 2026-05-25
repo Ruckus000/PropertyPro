@@ -76,7 +76,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     );
   }
   const { name, value, ...options } = cookieParams;
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ data: { ok: true } });
   response.cookies.set(name, value, options);
   return response;
 });

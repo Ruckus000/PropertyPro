@@ -20,7 +20,7 @@ describe('useChangePlan', () => {
   it('POSTs the exact URL, method, and JSON body', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, planId: 'professional', billingInterval: 'year' }),
+      json: async () => ({ data: { ok: true, planId: 'professional', billingInterval: 'year' } }),
     });
 
     const { result } = renderHook(() => useChangePlan(), { wrapper });
@@ -38,10 +38,10 @@ describe('useChangePlan', () => {
     );
   });
 
-  it('unwraps the bespoke success body', async () => {
+  it('unwraps the canonical { data: { ok, planId, billingInterval } } envelope', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ ok: true, planId: 'essentials', billingInterval: 'month' }),
+      json: async () => ({ data: { ok: true, planId: 'essentials', billingInterval: 'month' } }),
     });
 
     const { result } = renderHook(() => useChangePlan(), { wrapper });

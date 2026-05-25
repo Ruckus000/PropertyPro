@@ -71,7 +71,7 @@ describe('useSupportAccess', () => {
   });
 
   it('GETs the exact URL with communityId param and forwards the AbortSignal', async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => SAMPLE });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: SAMPLE }) });
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useSupportAccess(42), { wrapper });
 
@@ -83,8 +83,8 @@ describe('useSupportAccess', () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('returns the flat { consentActive, consent, recentAccess } body unchanged', async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => SAMPLE });
+  it('unwraps the canonical { data: { consentActive, consent, recentAccess } } envelope', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: SAMPLE }) });
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useSupportAccess(42), { wrapper });
 
@@ -94,7 +94,7 @@ describe('useSupportAccess', () => {
 
   it('handles an empty recentAccess / null consent payload', async () => {
     const empty = { consentActive: false, consent: null, recentAccess: [] };
-    fetchMock.mockResolvedValue({ ok: true, json: async () => empty });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: empty }) });
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useSupportAccess(42), { wrapper });
 
@@ -149,7 +149,7 @@ describe('useSupportAccess', () => {
   });
 
   it('refetches with the new id when communityId changes', async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => SAMPLE });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: SAMPLE }) });
     const { wrapper } = makeWrapper();
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useSupportAccess(id),
@@ -175,7 +175,7 @@ describe('useSupportAccess', () => {
 
 describe('useToggleSupportAccess', () => {
   it('POSTs communityId + enabled and invalidates the support-access query', async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { ok: true } }) });
     const { qc, wrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
 
