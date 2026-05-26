@@ -70,9 +70,23 @@
   --zinc-900: #18181B;
   --zinc-950: #09090B;
 
+  --violet-50: #f5f3ff;
+  --violet-100: #ede9fe;
+  --violet-200: #ddd6fe;
+  --violet-300: #c4b5fd;
   --violet-500: #8B5CF6;
   --violet-600: #7C3AED;
   --violet-700: #6D28D9;
+  --violet-900: #4c1d95;
+  --violet-950: #2e1065;
+
+  --pink-50: #fdf2f8;
+  --pink-100: #fce7f3;
+  --pink-200: #fbcfe8;
+  --pink-300: #f9a8d4;
+  --pink-700: #be185d;
+  --pink-900: #831843;
+  --pink-950: #500724;
 
   --yellow-50: #FEFCE8;
   --yellow-100: #FEF9C3;
@@ -229,6 +243,16 @@
   --status-neutral-bg: var(--gray-100);
   --status-neutral-border: var(--gray-200);
   --status-neutral-subtle: var(--gray-50);
+
+  --status-owner: var(--violet-700);
+  --status-owner-bg: var(--violet-50);
+  --status-owner-border: var(--violet-200);
+  --status-owner-subtle: var(--violet-100);
+
+  --status-board: var(--pink-700);
+  --status-board-bg: var(--pink-50);
+  --status-board-border: var(--pink-200);
+  --status-board-subtle: var(--pink-100);
 
   /* Elevation */
   --elevation-e0: none;
