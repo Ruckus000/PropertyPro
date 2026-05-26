@@ -1,54 +1,51 @@
 /**
  * Emergency Broadcast cancel API — cancel within undo window (10 seconds).
  *
- * POST /api/v1/emergency-broadcasts/[id]/cancel — Cancel broadcast
+ * POST /api/v1/emergency-broadcasts/[id]/cancel
+ * Body: { communityId }
+ *
+ * Plan A1 drain #71. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schema, B1 normalizations, and rationale.
+ *
+ * Two B1 cleanups vs. pre-migration:
+ *   1. Inline 409 `{error: 'Undo window has expired...'}` → `ConflictError`.
+ *      Message preserved byte-identical; envelope shifts to canonical
+ *      `{error: {code: 'CONFLICT', ...}}`.
+ *   2. Top-level `{canceled: true}` success envelope wrapped to
+ *      `{data: {canceled: true}}` by the runner.
+ *
+ * Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requirePermission('emergency_broadcasts', 'write')
+ *     → cancelBroadcast(broadcastId, communityId, userId)  // id FIRST
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
-import { cancelBroadcast } from '@/lib/services/emergency-broadcast-service';
-import { z } from 'zod';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-
-const cancelSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+import { ConflictError } from '@/lib/api/errors';
+import { cancelBroadcast } from '@/lib/services/emergency-broadcast-service';
+import { emergencyBroadcastsCancelContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  runRoute(emergencyBroadcastsCancelContract, async ({ params, body, req }) => {
     const userId = await requireAuthenticatedUserId();
-    const { id } = await params;
-    const broadcastId = Number(id);
-
-    if (!Number.isInteger(broadcastId) || broadcastId <= 0) {
-      throw new ValidationError('Invalid broadcast ID');
-    }
-
-    const body = await req.json();
-    const parsed = cancelSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid request', { fields: formatZodErrors(parsed.error) });
-    }
-
-    const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'emergency_broadcasts', 'write');
 
-    const canceled = await cancelBroadcast(broadcastId, communityId, userId);
-
+    const canceled = await cancelBroadcast(params.id, communityId, userId);
     if (!canceled) {
-      return NextResponse.json(
-        { error: 'Undo window has expired. Broadcast cannot be canceled.' },
-        { status: 409 },
-      );
+      throw new ConflictError('Undo window has expired. Broadcast cannot be canceled.');
     }
 
-    return NextResponse.json({ canceled: true });
-  },
+    return { canceled: true as const };
+  }),
 );

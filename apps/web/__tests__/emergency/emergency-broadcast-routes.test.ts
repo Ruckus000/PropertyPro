@@ -300,7 +300,7 @@ describe('Emergency Broadcast Routes', () => {
       const json = await res.json();
 
       expect(res.status).toBe(200);
-      expect(json.canceled).toBe(true);
+      expect(json.data.canceled).toBe(true);
       expect(cancelBroadcastMock).toHaveBeenCalledWith(10, 100, 'user-1');
     });
 
@@ -322,7 +322,8 @@ describe('Emergency Broadcast Routes', () => {
       const json = await res.json();
 
       expect(res.status).toBe(409);
-      expect(json.error).toContain('Undo window has expired');
+      expect(json.error.code).toBe('CONFLICT');
+      expect(json.error.message).toContain('Undo window has expired');
     });
 
     it('returns 400 for invalid broadcast ID', async () => {
