@@ -5,8 +5,9 @@
  * Auth: community membership + compliance:read permission required.
  * Feature gate: hasCompliance must be true (condo/HOA only).
  *
- * Layout: pass ?layout=v2 to render the redesigned ComplianceCommandCenter;
- * otherwise renders the legacy ComplianceDashboard. Default flips in Slice D.
+ * Layout: pass ?layout=v1 to render the legacy ComplianceDashboard (escape
+ * hatch for one release window). Default and all other layout values render
+ * ComplianceCommandCenter. Legacy path removed in Slice E.
  */
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -47,18 +48,18 @@ export default async function CompliancePage({ params, searchParams }: PageProps
     redirect('/dashboard?reason=insufficient-permissions');
   }
 
-  if (layout === 'v2') {
-    const canWrite = checkPermission(
-      membership.role, membership.communityType, 'compliance', 'write', opts,
-    );
-    return (
-      <ComplianceCommandCenter
-        communityId={communityId}
-        role={membership.role}
-        canWrite={canWrite}
-      />
-    );
+  if (layout === 'v1') {
+    return <ComplianceDashboard communityId={communityId} />;
   }
 
-  return <ComplianceDashboard communityId={communityId} />;
+  const canWrite = checkPermission(
+    membership.role, membership.communityType, 'compliance', 'write', opts,
+  );
+  return (
+    <ComplianceCommandCenter
+      communityId={communityId}
+      role={membership.role}
+      canWrite={canWrite}
+    />
+  );
 }
