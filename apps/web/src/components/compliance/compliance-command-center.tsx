@@ -19,6 +19,10 @@ export interface ComplianceCommandCenterProps {
   canWrite: boolean;
 }
 
+// CAM-class roles. Includes both `pm_admin` (NewCommunityRole) and
+// `property_manager_admin` (legacy CommunityRole) to cover both sides
+// of the in-progress role migration. Either string can arrive on the
+// `role` prop depending on which auth path resolved the membership.
 const CAM_LIKE_ROLES = new Set<string>(['cam', 'pm_admin', 'property_manager_admin', 'site_manager']);
 const BOARD_LIKE_ROLES = new Set<string>(['board_president', 'board_member']);
 
@@ -110,6 +114,7 @@ export function ComplianceCommandCenter({
         </section>
       )}
 
+      {/* TODO(Slice B/C): replace with Skeleton during isLoading — currently flashes 100% / 0 counts on empty items */}
       <section aria-label="Compliance summary" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Readiness" value={`${summary.readiness.percentage}%`} meta={`${summary.readiness.satisfied} of ${summary.readiness.applicableTotal} items satisfied`} />
         <KpiCard label="Posting windows" value={summary.postingWindowsDueSoonCount} meta="Due inside 7 days" />
