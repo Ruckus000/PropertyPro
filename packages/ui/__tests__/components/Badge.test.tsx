@@ -154,6 +154,22 @@ describe("StatusBadge", () => {
   });
 });
 
+describe("Badge — compliance variants", () => {
+  it("renders owner variant with violet text class", () => {
+    const { container } = render(<Badge variant="owner">Owner portal</Badge>);
+    const span = container.querySelector("span");
+    expect(span?.className).toMatch(/text-\[var\(--status-owner\)\]/);
+    expect(span?.textContent).toBe("Owner portal");
+  });
+
+  it("renders board variant with pink text class", () => {
+    const { container } = render(<Badge variant="board">Board</Badge>);
+    const span = container.querySelector("span");
+    expect(span?.className).toMatch(/text-\[var\(--status-board\)\]/);
+    expect(span?.textContent).toBe("Board");
+  });
+});
+
 describe("PriorityBadge", () => {
   it("maps high/medium/low labels", () => {
     render(
