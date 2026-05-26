@@ -1,67 +1,62 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Assessments — generate line items for the resolved community.
+ *
+ * POST /api/v1/assessments/[id]/generate
+ * Body: { communityId, dueDate? }
+ *
+ * Plan A1 drain #67. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. **First drain exercising
+ * `requireActiveSubscriptionForMutation`** (async subscription gate). Auth
+ * chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace                       (ASYNC)
+ *     → requireCommunityMembership               (ASYNC)
+ *     → requireFinanceEnabled                    (ASYNC)
+ *     → requireFinanceWritePermission            (sync)
+ *     → requireFinanceAdminWrite                 (sync)
+ *     → requireActiveSubscriptionForMutation     (ASYNC)
+ *     → generateAssessmentLineItemsForCommunity(communityId, assessmentId, actorUserId, dueDate ?? null, x-request-id)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to the service call.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { BadRequestError, ValidationError } from '@/lib/api/errors';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import {
-  parsePositiveInt,
   requireFinanceAdminWrite,
   requireFinanceEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
-import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { assessmentsGenerateContract } from './contract';
 
-const generateSchema = z.object({
-  communityId: z.number().int().positive(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-});
+export const POST = withErrorHandler(
+  runRoute(assessmentsGenerateContract, async ({ params, body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-async function parseAssessmentId(
-  context?: { params: Promise<Record<string, string>> },
-): Promise<number> {
-  const rawId = (await context?.params)?.['id'] ?? '';
-  if (!rawId) {
-    throw new BadRequestError('Assessment ID is required');
-  }
-  return parsePositiveInt(rawId, 'Assessment ID');
-}
+    await requireFinanceEnabled(membership);
+    requireFinanceWritePermission(membership);
+    requireFinanceAdminWrite(membership);
+    await requireActiveSubscriptionForMutation(communityId);
 
-export const POST = withErrorHandler(async (
-  req: NextRequest,
-  context?: { params: Promise<Record<string, string>> },
-) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const assessmentId = await parseAssessmentId(context);
-
-  const body: unknown = await req.json();
-  const parseResult = generateSchema.safeParse(body);
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid line-item generation payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  await requireFinanceEnabled(membership);
-  requireFinanceWritePermission(membership);
-  requireFinanceAdminWrite(membership);
-  await requireActiveSubscriptionForMutation(communityId);
-
-  const requestId = req.headers.get('x-request-id');
-  const result = await generateAssessmentLineItemsForCommunity(
-    communityId,
-    assessmentId,
-    actorUserId,
-    parseResult.data.dueDate ?? null,
-    requestId,
-  );
-
-  return NextResponse.json({ data: result });
-});
+    return generateAssessmentLineItemsForCommunity(
+      communityId,
+      params.id,
+      actorUserId,
+      body.dueDate ?? null,
+      req.headers.get('x-request-id'),
+    );
+  }),
+);
