@@ -1,38 +1,47 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * ARC — record a decision on a submission (admin/reviewer-facing).
+ *
+ * POST /api/v1/arc/[id]/decide
+ * Body: { communityId, decision: 'approved' | 'denied', reviewNotes? }
+ *
+ * Plan A1 drain #51. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Auth chain preserved
+ * verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireArcEnabled (ASYNC — awaited)
+ *     → requirePermission('arc_submissions', 'read')
+ *     → requirePermission('arc_submissions', 'write')
+ *     → requireArcReviewPermission (sync, NOT awaited)
+ *     → decideArcSubmissionForCommunity(communityId, id, actorUserId,
+ *         { decision, reviewNotes }, x-request-id)
+ *
+ * The `?? null` coercion on `reviewNotes` is preserved verbatim — the
+ * service expects `null` (not `undefined`) for this field.
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `decideArcSubmissionForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireArcEnabled, requireArcReviewPermission } from '@/lib/violations/common';
-import { decideArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { decideArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { requirePermission } from '@/lib/db/access-control';
-
-const decideSchema = z.object({
-  communityId: z.number().int().positive(),
-  decision: z.enum(['approved', 'denied']),
-  reviewNotes: z.string().max(4000).nullable().optional(),
-});
+import { arcDecideContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const id = parsePositiveInt(params?.id ?? '', 'ARC submission id');
+  runRoute(arcDecideContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parseResult = decideSchema.safeParse(body);
-
-    if (!parseResult.success) {
-      throw new ValidationError('Invalid ARC decision payload', {
-        fields: formatZodErrors(parseResult.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -41,17 +50,15 @@ export const POST = withErrorHandler(
     requirePermission(membership, 'arc_submissions', 'write');
     requireArcReviewPermission(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await decideArcSubmissionForCommunity(
+    return decideArcSubmissionForCommunity(
       communityId,
-      id,
+      params.id,
       actorUserId,
       {
-        decision: parseResult.data.decision,
-        reviewNotes: parseResult.data.reviewNotes ?? null },
-      requestId,
+        decision: body.decision,
+        reviewNotes: body.reviewNotes ?? null,
+      },
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
