@@ -211,7 +211,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/polls/route.ts',
   'apps/web/src/app/api/v1/public/communities/search/route.ts',
   'apps/web/src/app/api/v1/reauth/verify/route.ts',
-  'apps/web/src/app/api/v1/reservations/[id]/cancel/route.ts',
   'apps/web/src/app/api/v1/reservations/[id]/route.ts',
   'apps/web/src/app/api/v1/reservations/route.ts',
   'apps/web/src/app/api/v1/residents/invite/route.ts',
