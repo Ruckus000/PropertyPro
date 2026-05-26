@@ -7,7 +7,7 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 import { Badge, PriorityBadge, StatusBadge } from "../../src/components/Badge";
 
-const variants = ["success", "brand", "warning", "danger", "info", "neutral"] as const;
+const variants = ["success", "brand", "warning", "danger", "info", "neutral", "owner", "board"] as const;
 const sizes = ["sm", "md", "lg"] as const;
 
 describe("Badge", () => {
