@@ -13,7 +13,7 @@
  *
  * In PR #1a, the read methods are stubbed (return empty arrays / null).
  * Real implementations land in subsequent PRs:
- *   - PR #1b: listSiteBlocks (drives the page render)
+ *   - PR #1a: listSiteBlocks (this PR — drives the page render)
  *   - PR #3: listAnnouncements
  *   - PR #4: listDocuments, listMeetings, getContactInfo
  */
@@ -74,6 +74,7 @@ export function getPublicCommunityScopedReader(communityId: number): PublicScope
           and(
             eq(siteBlocks.communityId, communityId),
             eq(siteBlocks.isDraft, false),
+            eq(siteBlocks.templateVariant, 'public'),
             isNull(siteBlocks.deletedAt),
           ),
         )

@@ -10,6 +10,7 @@ vi.mock('@propertypro/db', () => ({
     blockType: 'siteBlocks.blockType',
     content: 'siteBlocks.content',
     isDraft: 'siteBlocks.isDraft',
+    templateVariant: 'siteBlocks.templateVariant',
     deletedAt: 'siteBlocks.deletedAt',
   },
 }));
@@ -87,5 +88,39 @@ describe('getPublicCommunityScopedReader', () => {
     expect(() => getPublicCommunityScopedReader(0)).toThrow();
     expect(() => getPublicCommunityScopedReader(-1)).toThrow();
     expect(() => getPublicCommunityScopedReader(1.5)).toThrow();
+  });
+
+  it('listSiteBlocks calls select on siteBlocks with the correct WHERE shape', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listSiteBlocks();
+
+    // The query should select FROM siteBlocks
+    expect(mockSelectChain.from).toHaveBeenCalled();
+
+    // The WHERE clause should include all four predicates
+    expect(mockSelectChain.where).toHaveBeenCalledTimes(1);
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // Mock 'and' wraps its args in { __and: clauses[] }
+    expect(whereCall).toHaveProperty('__and');
+    expect(whereCall.__and).toHaveLength(4);
+  });
+
+  it('listSiteBlocks orders by blockOrder ascending', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listSiteBlocks();
+
+    expect(mockSelectChain.orderBy).toHaveBeenCalledTimes(1);
+  });
+
+  it('listSiteBlocks binds the communityId into the WHERE predicate', async () => {
+    const reader = getPublicCommunityScopedReader(99);
+    await reader.listSiteBlocks();
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // The first AND clause should be eq(communityId, 99). The mock factory
+    // for eq returns { __eq: { col, val } }.
+    const communityIdClause = whereCall.__and[0];
+    expect(communityIdClause).toHaveProperty('__eq');
+    expect(communityIdClause.__eq.val).toBe(99);
   });
 });
