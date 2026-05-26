@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@propertypro/ui';
 import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
 import { useComplianceMutations } from '@/hooks/useComplianceMutations';
-import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';
+import { buildComplianceSummary, sortByPriority } from '@/lib/utils/compliance-calculator';
+import { ComplianceDetailPanel } from './compliance-detail-panel';
 import { ComplianceOnboarding } from './compliance-onboarding';
 import { ComplianceActivityFeed } from './compliance-activity-feed';
 import { ComplianceQueue } from './compliance-queue';
@@ -52,6 +53,36 @@ export function ComplianceCommandCenter({
   const mutations = useComplianceMutations(communityId);
 
   const summary = useMemo(() => buildComplianceSummary(items, new Date()), [items]);
+
+  // Ref tracks which selectedId we already scrolled to, so we only trigger
+  // the scrollIntoView behavior when the selection actually changes (not on
+  // every re-render). Initialized to null so the very first selection does
+  // NOT scroll (the row may not yet be in the DOM on initial mount).
+  const selectedRowRef = useRef<number | null>(null);
+  const selectedItem = selectedId != null ? items.find((i) => i.id === selectedId) ?? null : null;
+
+  // Initial selection: pick the first item by priority. Fallback: if the
+  // selected item disappears entirely (e.g., removed from data), pick the
+  // new top item.
+  useEffect(() => {
+    if (items.length > 0 && selectedId === null) {
+      const first = sortByPriority(items)[0];
+      if (first) setSelectedId(first.id);
+    }
+    if (selectedId !== null && !items.some((i) => i.id === selectedId)) {
+      setSelectedId(sortByPriority(items)[0]?.id ?? null);
+    }
+  }, [items, selectedId]);
+
+  // Scroll the selected row into view after layout settles when selection changes.
+  useEffect(() => {
+    if (selectedId == null || selectedRowRef.current === selectedId) return;
+    selectedRowRef.current = selectedId;
+    requestAnimationFrame(() => {
+      const row = document.querySelector(`[data-row-id="${selectedId}"]`);
+      if (row && 'scrollIntoView' in row) (row as HTMLElement).scrollIntoView({ block: 'nearest' });
+    });
+  }, [selectedId, items]);
 
   if (error) {
     return (
@@ -140,21 +171,37 @@ export function ComplianceCommandCenter({
       )}
 
       {!isLoading && items.length > 0 && (
-        <ComplianceQueue
-          items={items as ChecklistItemData[]}
-          canWrite={canWrite}
-          role={role}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onUpload={(item) => setUploadItem(item)}
-          onLink={(item) => setLinkItem(item)}
-          onView={(item) => {
-            if (item.documentId) {
-              window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
-            }
-          }}
-          onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
-        />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <ComplianceQueue
+            items={items as ChecklistItemData[]}
+            canWrite={canWrite}
+            role={role}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onUpload={(item) => setUploadItem(item)}
+            onLink={(item) => setLinkItem(item)}
+            onView={(item) => {
+              if (item.documentId) {
+                window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+              }
+            }}
+            onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+          />
+          <ComplianceDetailPanel
+            item={selectedItem}
+            communityId={communityId}
+            canWrite={canWrite}
+            role={role}
+            onUpload={(item) => setUploadItem(item)}
+            onLink={(item) => setLinkItem(item)}
+            onView={(item) => {
+              if (item.documentId) {
+                window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+              }
+            }}
+            onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+          />
+        </div>
       )}
 
       {uploadItem && (
