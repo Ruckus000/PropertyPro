@@ -5,9 +5,13 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@propertypro/ui';
 import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
+import { useComplianceMutations } from '@/hooks/useComplianceMutations';
 import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';
 import { ComplianceOnboarding } from './compliance-onboarding';
 import { ComplianceActivityFeed } from './compliance-activity-feed';
+import { ComplianceQueue } from './compliance-queue';
+import { UploadDocumentModal } from './upload-document-modal';
+import { LinkDocumentModal } from './link-document-modal';
 import type { CommunityRole, NewCommunityRole } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
 
@@ -41,7 +45,11 @@ export function ComplianceCommandCenter({
   canWrite,
 }: ComplianceCommandCenterProps) {
   const [view, setView] = useState<ViewMode>(() => defaultViewForRole(role));
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);
+  const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
   const { data: items = [], isLoading, error } = useComplianceChecklist(communityId);
+  const mutations = useComplianceMutations(communityId);
 
   const summary = useMemo(() => buildComplianceSummary(items, new Date()), [items]);
 
@@ -122,13 +130,54 @@ export function ComplianceCommandCenter({
         <KpiCard label="Needs board action" value={summary.needsBoardActionCount} meta="Approvals and reviews pending" />
       </section>
 
-      <ComplianceOnboarding items={items as ChecklistItemData[]} onUpload={() => { /* hooked in Slice B */ }} />
+      <ComplianceOnboarding items={items as ChecklistItemData[]} onUpload={(item) => setUploadItem(item as ChecklistItemData)} />
 
-      {/* Queue + Detail panel land in Slice B and Slice C. */}
+      {/* Queue + loading state */}
       {isLoading && (
         <div className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card p-8 text-center text-content-secondary">
           Loading&hellip;
         </div>
+      )}
+
+      {!isLoading && items.length > 0 && (
+        <ComplianceQueue
+          items={items as ChecklistItemData[]}
+          canWrite={canWrite}
+          role={role}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          onUpload={(item) => setUploadItem(item)}
+          onLink={(item) => setLinkItem(item)}
+          onView={(item) => {
+            if (item.documentId) {
+              window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+            }
+          }}
+          onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+        />
+      )}
+
+      {uploadItem && (
+        <UploadDocumentModal
+          communityId={communityId}
+          defaultTitle={uploadItem.title}
+          categoryName={uploadItem.category}
+          onUploaded={(documentId) => {
+            mutations.linkDocument.mutate({ itemId: uploadItem.id, documentId });
+            setUploadItem(null);
+          }}
+          onClose={() => setUploadItem(null)}
+        />
+      )}
+      {linkItem && (
+        <LinkDocumentModal
+          communityId={communityId}
+          onSelect={(documentId) => {
+            mutations.linkDocument.mutate({ itemId: linkItem.id, documentId });
+            setLinkItem(null);
+          }}
+          onClose={() => setLinkItem(null)}
+        />
       )}
 
       <section id="compliance-activity-feed">
