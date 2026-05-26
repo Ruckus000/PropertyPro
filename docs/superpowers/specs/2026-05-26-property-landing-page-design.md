@@ -296,11 +296,109 @@ No per-block draft state. No partial publishes. The simplicity is intentional.
 
 ### 2.8 Image Handling
 
-- Supabase Storage (already in stack). New bucket: `community-site-assets`. RLS enforces `community_id` in the path prefix.
-- Cropping UI: `react-image-crop` (~30KB, MIT, zero deps) in the editor.
-- Server-side transformation: `sharp` (already a transitive dep of Next.js image optimization). New API route `POST /api/v1/site/images` accepts the original + crop coordinates, stores three sizes (`original`, `1600w`, `800w`) and returns a Supabase Storage URL plus alt-text-required form.
-- Validation at upload: max 5MB, accept `image/jpeg | image/png | image/webp`. Reject SVG (XSS vector), GIF (perceptual problem on hero blocks), HEIC (not universally supported by `sharp`).
-- Alt text is a required field at the API boundary. The schema for `image` and `hero` blocks marks `altText` as required. Empty alt is allowed only when the block schema explicitly declares the image as decorative (e.g., a hero-overlay-graphic field).
+**Storage layer.** Supabase Storage (already in stack). New bucket: `community-site-assets`. Path layout: `{community_id}/{kind}/{uuid}-{filename}` where `kind ∈ {logo, hero, content}`.
+
+**Two-step upload pattern (aligned to existing codebase pattern at [apps/web/src/app/api/v1/upload/route.ts:46](apps/web/src/app/api/v1/upload/route.ts:46)):**
+
+1. **Presign:** `POST /api/v1/site/uploads/presign` — body: `{ kind, filename, mimeType, fileSize }`. Validates MIME allowlist, file size, storage quota (Section 8.3), and authorization (PM has `hasSiteEditor`). Returns presigned upload URL + final storage path. Reuses `createPresignedUploadUrl()` from `@propertypro/db` — same primitive as the existing document upload route.
+2. **Client uploads directly** to Supabase Storage via the presigned URL. No bytes pass through the Next.js app server.
+3. **Transform & finalize:** `POST /api/v1/site/images/finalize` — body: `{ storagePath, kind, cropBox: { x, y, w, h }, altText }`. Server downloads the original from Storage, runs `sharp` transformations (crop + resize to two variants: `1600w` and `800w`), writes the variants back to Storage at `{storagePath}.1600w.webp` and `{storagePath}.800w.webp`, then returns the canonical paths for the block content jsonb. Audit log entry: `site_image_uploaded`. Alt text required on this endpoint (the presign endpoint stores nothing in the DB; the finalize endpoint is the audited boundary).
+
+Cropping UI uses `react-image-crop` (~30KB, MIT, zero deps) in the editor — added via `pnpm add react-image-crop` in PR #2. Cropping happens client-side for the preview; the authoritative crop runs server-side in step 3.
+
+**Validation at upload:** max 5MB for logos, 10MB for hero/content images, accept `image/jpeg | image/png | image/webp`. Reject SVG (XSS vector), GIF (perceptual problem on hero blocks), HEIC (not universally supported by `sharp`). Validation runs at the presign endpoint AND server-side in finalize (defense-in-depth: a malicious actor cannot bypass MIME validation by uploading anything else through the presigned URL — finalize re-checks the actual file bytes via `sharp`'s decode).
+
+**Alt text** is required at the finalize endpoint. The schema for `image` and `hero` blocks marks `altText` as required. Empty alt is allowed only when the block schema explicitly declares the image as decorative (e.g., a hero-overlay-graphic field).
+
+**Rate limiting.** Both endpoints inherit the existing rate limiter at [apps/web/src/lib/middleware/rate-limiter.ts](apps/web/src/lib/middleware/rate-limiter.ts). Presign endpoint: 20 requests / 5 minutes / community. Finalize endpoint: 20 requests / 5 minutes / community. Matches the existing `auth` route category limits.
+
+**Storage RLS policies (added in PR #2's migration):**
+
+```sql
+-- Allow service role to manage all objects (server-side transformations)
+CREATE POLICY "site_assets_service_role_all" ON storage.objects
+  FOR ALL TO service_role
+  USING (bucket_id = 'community-site-assets')
+  WITH CHECK (bucket_id = 'community-site-assets');
+
+-- Allow authenticated PM to insert objects scoped to their community path
+CREATE POLICY "site_assets_pm_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'community-site-assets'
+    AND (storage.foldername(name))[1] IN (
+      SELECT community_id::text FROM community_memberships
+       WHERE user_id = auth.uid()
+         AND role_id IN ('property_manager_admin','cam')
+         AND deleted_at IS NULL
+    )
+  );
+
+-- Allow anonymous public read (the public site is unauthenticated)
+CREATE POLICY "site_assets_public_read" ON storage.objects
+  FOR SELECT TO anon, authenticated
+  USING (bucket_id = 'community-site-assets');
+
+-- Allow PM to delete their community's assets
+CREATE POLICY "site_assets_pm_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'community-site-assets'
+    AND (storage.foldername(name))[1] IN (
+      SELECT community_id::text FROM community_memberships
+       WHERE user_id = auth.uid()
+         AND role_id IN ('property_manager_admin','cam')
+         AND deleted_at IS NULL
+    )
+  );
+```
+
+The bucket is created with `public = true` at the bucket level (so the `SELECT` policy actually matters; cf. existing buckets in the project). The `service_role` policy lets the finalize endpoint write transformed variants back without inheriting PM auth.
+
+### 2.9 SEO, OpenGraph & Page Metadata
+
+Public community sites need proper page metadata so resident-shared links render correctly on Facebook / iMessage / SMS / search engine results. Currently `_site/page.tsx` and `(public)/[subdomain]/page.tsx` have ZERO `generateMetadata()` — verified by grep. Sharing a community URL on social produces an unbranded preview.
+
+**PR #1b adds `generateMetadata()` to the `_site/page.tsx`** producing:
+
+```ts
+export async function generateMetadata(): Promise<Metadata> {
+  const community = await resolvePublicCommunityFromHeaders();
+  if (!community) return { title: 'PropertyPro' };
+  return {
+    title: `${community.name} — Community Portal`,
+    description: community.tagline ?? `Official site of ${community.name}, a Florida ${community.communityType === 'condo_718' ? 'condominium association' : community.communityType === 'hoa_720' ? 'homeowners association' : 'apartment community'} in ${community.city ?? 'Florida'}.`,
+    openGraph: {
+      title: community.name,
+      description: community.tagline ?? undefined,
+      url: `https://${community.slug}.getpropertypro.com`,
+      siteName: community.name,
+      images: community.heroImagePath ? [{ url: buildPublicAssetUrl(community.heroImagePath), width: 1600, height: 900, alt: `${community.name}` }] : [],
+      locale: 'en_US',
+      type: 'website',
+    },
+    twitter: { card: 'summary_large_image', title: community.name, description: community.tagline ?? undefined },
+    robots: { index: true, follow: true },
+  };
+}
+```
+
+The same helper is wired into the existing `(public)/[subdomain]/transparency/page.tsx` and `(public)/[subdomain]/notices/page.tsx` in PR #4 (one-line addition per file).
+
+**A shared helper `buildCommunityMetadata(community, pageTitle?)` is added to `apps/web/src/lib/seo/community-metadata.ts` in PR #1b** so every public page uses the same metadata shape.
+
+### 2.10 robots.txt and sitemap.xml
+
+A public community site that fails to surface its statutory transparency content to search engines weakens the compliance promise. Today the repo has NO `robots.txt` or `sitemap.xml` route (verified by `find apps/web/src -name robots\* -o -name sitemap\*` — empty).
+
+**PR #4 adds two Next.js Metadata Route handlers:**
+
+- `apps/web/src/app/robots.ts` — Next 15 metadata-route export returning per-host robots policy. Subdomain hosts (community sites) allow indexing of `/`, `/transparency`, `/notices`, `/request-access`, and explicitly disallow `/auth/*`, `/dashboard/*`, `/pm/*`, `/api/*`. The marketing root host (`getpropertypro.com`) gets its own policy.
+- `apps/web/src/app/sitemap.ts` — Next 15 metadata-route export. For subdomain hosts, returns the community's public URLs: home, transparency, notices, plus per-document URLs for the most recent N statutory documents (sourced via `getPublicCommunityScopedReader`). For the marketing root host, returns the marketing pages.
+
+Both routes respect the existing middleware tenant resolution (the host header drives the community lookup). Cached with `revalidate: 3600` (1 hour) to bound DB load from crawlers.
+
+Spec-explicit requirement: documents marked `public_access = false` are NEVER included in the sitemap. Verified at the DB query level.
 
 ---
 
@@ -393,7 +491,7 @@ Route: `apps/web/src/app/(authenticated)/pm/onboarding/website/?communityId=X` (
 3. **Communities table action** — for PMs with multiple communities, `/pm/dashboard/communities` gets a new "Site" column showing one of three pills: `Customized` / `Default` / `Draft saved`. The pill is a link to the wizard for that community.
 4. **Settings menu** — `/pm/settings/website/?communityId=X` is always accessible; from there a "Re-run onboarding" link launches the wizard against the same community.
 
-**Role gating:** only `property_manager_admin` and `cam` roles can run the wizard. Board members and board presidents see the editor in read-only mode in v1 (Phase 2 may grant board roles edit access). Enforced via `requireRole(membership, ['property_manager_admin', 'cam'])` at the route handler.
+**Role gating:** only `property_manager_admin` and `cam` roles can run the wizard. Board members and board presidents see the editor in read-only mode in v1 (Phase 2 may grant board roles edit access). Enforced via a small new helper `requireRole(membership, roles)` added in PR #5 at `apps/web/src/lib/api/role-guard.ts` — this helper does NOT exist today (verified by grep; existing role checks are scattered ad-hoc, e.g., [apps/web/src/lib/services/onboarding-checklist-service.ts:69](apps/web/src/lib/services/onboarding-checklist-service.ts:69) does `if (role === 'pm_admin' || role === 'property_manager_admin')`). The helper consolidates the pattern and is reused by PR #6's admin endpoints and PR #11's custom-CSS gate. Note: `pm_admin` and `property_manager_admin` are aliases (confirmed in [packages/shared/src/default-faqs.ts:15-17](packages/shared/src/default-faqs.ts:15)); the helper accepts either string.
 
 **The wizard, step by step:**
 
@@ -610,22 +708,68 @@ Image uploads consume Supabase Storage. Without a quota, a Pro+ community using 
 
 **Observability hook:** PR #2 adds a daily metric in `apps/admin/api/admin/metrics/` exposing top-N communities by `assetsBytesUsed`, for cost-monitoring.
 
+### 8.4 CSRF & Rate Limiting
+
+**CSRF.** All editor mutation routes under `/api/v1/site/*` and `/api/v1/pm/site/*` inherit the codebase's existing CSRF posture: Supabase Auth session cookies are `SameSite=Lax` (verified at [apps/web/src/lib/api/reauth-guard.ts:49](apps/web/src/lib/api/reauth-guard.ts:49)). This is the same protection the rest of the authenticated app relies on; no per-route CSRF token logic is introduced. The spec does not add a new CSRF mechanism — it inherits.
+
+**Rate limiting.** Three new routes are added to the existing rate limiter's `auth` route category (where the per-IP / per-user limits already apply):
+
+| Route                                            | Limit                                  |
+|--------------------------------------------------|----------------------------------------|
+| `POST /api/v1/site/uploads/presign`              | 20 req / 5 min / community             |
+| `POST /api/v1/site/images/finalize`              | 20 req / 5 min / community             |
+| `POST /api/v1/site/publish`                      | 10 req / 5 min / community             |
+| `POST /admin/site-templates/communities/[id]/reset-to-starter` | 5 req / 1 hour / admin user |
+
+Rate limits are added to [apps/web/src/lib/middleware/rate-limiter.ts](apps/web/src/lib/middleware/rate-limiter.ts)'s route classifier in PR #2 (images) and PR #8 (publish) and PR #6 (reset-to-starter).
+
+### 8.5 Performance Budget & N+1 Analysis
+
+**Current baseline.** The existing `_site/page.tsx` performs:
+1. One read for `community` (via `getCommunityPublicInfo`)
+2. One read for `branding` (via `getBrandingForCommunity`)
+3. One read for the JSX template (via `getPublishedTemplate`)
+4. No SoR queries (the hardcoded page doesn't display documents/meetings/announcements)
+
+**Target architecture.** The new `_site/page.tsx` performs:
+1. One read for `community` (unchanged)
+2. One read for `branding` + layout/preset resolution (consolidated)
+3. One read for the ordered block list from `site_blocks` (new, replaces step 3 above)
+4. **Per SoR block**: one read for the underlying data (typically 4 SoR blocks → 4 additional reads)
+
+**Net delta: +1 to +4 reads per public page render**, depending on how many SoR blocks the community has enabled. At 50ms p95 per scoped read, this adds 50-200ms to public-site server render time.
+
+**Performance budget for v1:**
+
+- Server render p95 < 500ms (was: ~200ms for the hardcoded page).
+- Initial page payload size < 100 KB gzipped (excluding hero image).
+- Lighthouse Performance score ≥ 85 on a mid-tier mobile device with the default starter pack content.
+
+**N+1 mitigation strategy.** Each SoR block's read is intentionally separate (preserves the renderer registry boundary). Two mitigations:
+
+1. **Limit is enforced at the schema level.** Documents SoR block has `limit: z.number().int().min(1).max(20).default(5)` — caps each read at 20 rows. Same for meetings (`max(20).default(10)`) and announcements (`max(20).default(5)`).
+2. **Per-block parallel execution.** The layout component issues block reads via `Promise.all(blocks.map(...))` rather than awaiting sequentially. The 4 SoR queries execute concurrently, so wall-clock is bounded by the slowest, not their sum.
+
+**No caching layer in v1.** Public pages are not cached at the CDN or app layer. Deferred to Phase 2 if traffic genuinely warrants it (would need cache invalidation on publish, hero image rotation, etc.). For 1000 communities × 100 page-views/day, the uncached load is ~400k DB reads/day — well within Supabase's free-tier quota and not a meaningful cost driver.
+
+**PR #1b establishes the baseline.** A new check is added to `scripts/perf-check.ts` that loads a seeded demo community's public site and asserts p95 < 500ms. CI fails if the budget is busted.
+
 ---
 
 ## Section 9: PR Sequencing (Approach C — Vertical-Slice-First)
 
-Estimated total: ~47 engineering days for v1 + v1.5 (Pro+ polish blocks). One engineer ≈ 9 weeks; two in parallel ≈ 4.5 weeks. Adjusted upward from the original ~42d to reflect the split of PR #1 into 1a/1b, the storage-quota work, the reset-to-starter UX, and the public-scoped-reader helper.
+Estimated total: ~51 engineering days for v1 + v1.5 (Pro+ polish blocks). One engineer ≈ 10 weeks; two in parallel ≈ 5 weeks. Revised upward from the post-hostile-review ~47d to reflect the 8 additional amendments from the verification checklist: presigned-URL upload pattern, SEO metadata helper, robots.ts + sitemap.ts routes, existing-test inventory and updates, `requireRole` helper, storage RLS policies (added explicitly), CSRF + rate-limiting notes (no new code, just discipline), performance budget + N+1 mitigation (explicit limit enforcement + parallel reads).
 
 **Migration journal coordination:** before each PR with a migration (#1a, #1b — partial-unique-index split, #9), the PR author runs `git fetch && git diff origin/main -- packages/db/migrations/meta/_journal.json` to lock in the next sequential migration number. This spec does NOT name absolute numbers (e.g., "0037") because the journal state on main may have moved since spec authorship.
 
 | #   | Title                                              | Effort | Scope |
 |-----|----------------------------------------------------|--------|-------|
 | 1a  | Foundation — block registry + platform tables      | ~4d    | Block schema registry (Zod schemas for all 7 v1 block types), layout registry, `getPublicCommunityScopedReader` helper, the partial-unique-index migration on `site_blocks` (Section 2.7), new platform tables (`site_theme_presets`, `site_starter_packs`, `site_layout_metadata`), extended `block_type` CHECK constraint, seed rows for layouts + 6 presets + 3 starter packs, new `has*` feature flags in `CommunityFeatures` + `PLAN_FEATURES`, CI-guard allowlist update. **No PM-facing UI yet.** Pre-existing `_site/page.tsx` keeps rendering hardcoded content (unchanged). |
-| 1b  | Hero vertical slice — Tidewater + Hero block       | ~4d    | Tidewater layout component, Hero block schema + renderer + editor form, `_site/page.tsx` switched to layout-registry rendering (Tidewater only; gated behind a per-community feature flag column added in PR #1a). PM editor surface for the Hero block at `/pm/settings/website/?communityId=X` (Welcome tab only). Documentation: `blocks/hero.md`, `layouts/README.md`, `templates/tidewater.md`. |
-| 2   | Text & Image content blocks + storage              | ~3d    | Two block types in parallel. Storage bucket `community-site-assets` + RLS, `POST /api/v1/site/images` route with `sharp` resize pipeline + `react-image-crop` integration in editor, **per-plan storage quota enforcement (Section 8.3)**, asset cleanup hook in `internal/account-lifecycle`. Documentation: `blocks/text.md`, `blocks/image.md`. |
+| 1b  | Hero vertical slice — Tidewater + Hero block + SEO | ~5d    | Tidewater layout component, Hero block schema + renderer + editor form, `_site/page.tsx` switched to layout-registry rendering (Tidewater only; gated behind a per-community feature flag column added in PR #1a). PM editor surface for the Hero block at `/pm/settings/website/?communityId=X` (Welcome tab only). **NEW: `generateMetadata()` + `buildCommunityMetadata` helper at `apps/web/src/lib/seo/community-metadata.ts` (Section 2.9). Performance budget check added to `scripts/perf-check.ts` (Section 8.5).** Documentation: `blocks/hero.md`, `layouts/README.md`, `templates/tidewater.md`. Existing tests touched: see Section 9.0. |
+| 2   | Text & Image content blocks + storage + uploads    | ~4d    | Two block types in parallel. Storage bucket `community-site-assets` + RLS policies (Section 2.8), **two-step presigned-URL upload pattern: `POST /api/v1/site/uploads/presign` + `POST /api/v1/site/images/finalize`** with `sharp` server-side transform + `react-image-crop` in editor, per-plan storage quota enforcement (Section 8.3), rate limits registered (Section 8.4), asset cleanup hook in `internal/account-lifecycle`. Documentation: `blocks/text.md`, `blocks/image.md`. |
 | 3   | Announcements SoR block                            | ~3d    | First SoR block — establishes the pattern (config-only block, server-side fetch at render via `getPublicCommunityScopedReader`). Folds in the orphaned `PublicNotices` component logic. Documentation: `blocks/announcements.md`. |
-| 4   | Documents + Meetings + Contact SoR blocks          | ~5d    | Three SoR blocks in a parallel-3 batch (matches the A1 drain cadence). Documentation for each. |
-| 5   | Onboarding wizard + auto-applied starter packs     | ~6d    | 5-step wizard at `/pm/onboarding/website/?communityId=X`. **Modification to `pm/communities/new` to auto-apply starter pack on community creation (Section 4.0).** All four entry points (post-creation modal, dashboard banner, communities table action, settings link). Help center MDX articles. Snapshot-on-mid-wizard-reset (30-day retention). |
+| 4   | Documents + Meetings + Contact SoR blocks + robots/sitemap | ~6d    | Three SoR blocks in a parallel-3 batch (matches the A1 drain cadence). **NEW: `apps/web/src/app/robots.ts` and `apps/web/src/app/sitemap.ts` Next 15 metadata routes (Section 2.10), per-host policies, statutory documents indexed (only `public_access=true`).** Documentation for each block. |
+| 5   | Onboarding wizard + auto-applied starter packs + requireRole | ~6d    | 5-step wizard at `/pm/onboarding/website/?communityId=X`. **Modification to `pm/communities/new` to auto-apply starter pack on community creation (Section 4.0).** All four entry points (post-creation modal, dashboard banner, communities table action, settings link). **NEW: `apps/web/src/lib/api/role-guard.ts` with `requireRole(membership, roles[])` helper consolidating the ad-hoc role checks across the codebase.** Help center MDX articles. Snapshot-on-mid-wizard-reset (30-day retention). |
 | 6   | Theme preset CRUD admin panel + reset-to-starter   | ~4d    | `/admin/site-templates/theme-presets/` (full CRUD). Reset-to-starter destructive action with confirm-by-slug + snapshot + audit log + 30-day restore window. `POST /communities/[id]/restore-from-snapshot` endpoint. |
 | 7   | Layouts admin panel + Boulevard & Sable layouts    | ~6d    | Admin metadata-editing panel for layouts at `/admin/site-templates/`, plus the two remaining layouts shipped as code. Documentation: `templates/boulevard.md`, `templates/sable.md`. |
 | 8   | Reorder + publish workflow                         | ~4d    | Per-block ↑/↓ controls with keyboard support, "Publish website" button (executes the transaction from Section 2.7), optimistic-concurrency `If-Match`-style header, preview-route middleware extension to honor `?preview=true` on `/`. Extends the `internal/account-lifecycle` cron with `cleanupSoftDeletedSiteBlocks()`. |
@@ -642,6 +786,31 @@ Estimated total: ~47 engineering days for v1 + v1.5 (Pro+ polish blocks). One en
 | Ph2-3 | Visual regression (Chromatic/PW)   | Once layout count grows past 3; ~3d. |
 | Ph2-4 | A/B testing of layouts/presets     | Probably never; add only if requested. |
 | Ph2-5 | Visual diff of preset versions     | Quality-of-life polish; ~2d. |
+
+### 9.0 Existing tests affected per PR
+
+The current public-site test surface is non-empty. Each PR that touches a render path or removes a route must explicitly update or delete the tests listed below.
+
+| PR    | Tests touched                                                                              | Action |
+|-------|--------------------------------------------------------------------------------------------|--------|
+| #1b   | `apps/web/__tests__/public/public-website.test.tsx`                                        | Update assertions to match the new layout-registry render path (Tidewater shell + hero block) |
+| #1b   | `apps/web/__tests__/public-site/community-resolution.test.ts`                              | Verify middleware test still passes; extend to assert `_site` receives `x-community-id` for the new render path |
+| #1b   | `apps/web/__tests__/theme/theme-injection-mobile.test.tsx`                                 | Update theme-injection assertions to cover the new layout-component path (no functional change to mobile yet) |
+| #2    | NEW tests — image upload presign + finalize, quota enforcement (boundary 5MB exact, over-quota 413) | Add |
+| #3    | NEW test for `announcements` SoR block; verify orphan `PublicNotices` component logic is folded in cleanly | Add |
+| #4    | NEW tests for `documents`, `meetings`, `contact` SoR blocks; NEW tests for robots.ts + sitemap.ts | Add |
+| #5    | NEW integration tests for onboarding wizard (happy path + mid-wizard exit + role-gating); NEW tests for `requireRole` helper | Add |
+| #8    | NEW tests for publish workflow (atomic publish + concurrent publish + optimistic-concurrency 409); NEW test for `cleanupSoftDeletedSiteBlocks` cron | Add |
+| #9    | `apps/web/__tests__/mobile/mobile-home.test.ts`                                            | Rewrite — current test asserts JSX template render; PR #9 changes mobile to render from block model |
+| #9    | `apps/web/__tests__/mobile/mobile-home-content.test.tsx`                                   | Rewrite assertions to match block-model render |
+| #9    | `apps/web/__tests__/mobile/phone-frame.test.tsx`                                           | Verify still passes (UI chrome only; should be untouched by PR #9's mobile migration) |
+| #9    | `apps/web/__tests__/mobile/mobile-settings-content.test.tsx`                               | Verify still passes (settings page; should be untouched) |
+| #9    | `apps/admin/__tests__/compile-template.test.ts`                                            | Delete (JSX template flow being retired) |
+| #9    | `apps/admin/__tests__/templates/public-site-template-queries.test.ts`                      | Delete (JSX template flow) |
+| #9    | `apps/admin/__tests__/templates/public-site-template-service.test.ts`                      | Delete (JSX template flow) |
+| #9    | `apps/admin/__tests__/templates/compile-template-detailed.test.ts`                         | Delete (JSX template flow) |
+
+**Discovery method:** `find apps/web/__tests__ -path '*public*' -o -path '*mobile*' -o -path '*theme*'` and `grep -rln 'jsx_template\|site_blocks\|getPublishedTemplate' apps/web/__tests__ apps/admin/__tests__`. Run this same discovery in each PR before opening to catch any tests added since spec authorship.
 
 ### 9.1 Per-PR Discipline (carrying forward A1-drain conventions)
 
