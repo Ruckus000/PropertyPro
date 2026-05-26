@@ -82,7 +82,7 @@ export function ComplianceCommandCenter({
       const row = document.querySelector(`[data-row-id="${selectedId}"]`);
       if (row && 'scrollIntoView' in row) (row as HTMLElement).scrollIntoView({ block: 'nearest' });
     });
-  }, [selectedId, items]);
+  }, [selectedId]);
 
   if (error) {
     return (

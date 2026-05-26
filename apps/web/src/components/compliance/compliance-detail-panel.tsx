@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Badge } from '@propertypro/ui';
-import { useComplianceActivityFeed } from '@/hooks/use-compliance-activity';
+import { useComplianceActivityFeed, type AuditEntry } from '@/hooks/use-compliance-activity';
 import type { ChecklistItemData } from './compliance-checklist-item';
 import { getTemplateDefaultVisibility } from './compliance-visibility';
 import { BOARD_ACTION_TEMPLATE_KEYS } from '@/lib/utils/compliance-calculator';
@@ -84,7 +84,7 @@ export function ComplianceDetailPanel({
   const cta = resolveComplianceCta(selectedItem, canWrite, role);
   const vis = getTemplateDefaultVisibility(selectedItem.templateKey);
   const activityHidden = (activity.error as { status?: number } | null)?.status === 403;
-  const recentEvents = (activity.data as { data?: unknown[] } | undefined)?.data?.slice(0, 3) ?? [];
+  const recentEvents: AuditEntry[] = activity.data?.data?.slice(0, 3) ?? [];
 
   function dispatchCta() {
     if (!cta) return;
@@ -150,17 +150,14 @@ export function ComplianceDetailPanel({
             <p className="mt-2 text-sm text-content-secondary">No recent activity.</p>
           ) : (
             <ul className="mt-2 flex flex-col gap-2 text-sm">
-              {recentEvents.map((e) => {
-                const entry = e as { id: number; action: string; createdAt: string };
-                return (
-                  <li key={entry.id} className="text-content-secondary">
-                    <span className="font-medium text-content">
-                      {new Date(entry.createdAt).toLocaleString()}
-                    </span>{' '}
-                    — {entry.action.replace(/_/g, ' ')}
-                  </li>
-                );
-              })}
+              {recentEvents.map((e) => (
+                <li key={e.id} className="text-content-secondary">
+                  <span className="font-medium text-content">
+                    {new Date(e.createdAt).toLocaleString()}
+                  </span>{' '}
+                  — {e.action.replace(/_/g, ' ')}
+                </li>
+              ))}
             </ul>
           )}
           <button
