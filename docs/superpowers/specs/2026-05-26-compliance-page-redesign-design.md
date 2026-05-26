@@ -52,23 +52,23 @@ PageHeader:  H1 + subtitle              [CAM/Board toggle] [Upload] [Export PDF]
 ─────────────────────────────────────────────────────
 Banner (statutory framing + attention-count chip)
 ─────────────────────────────────────────────────────
-KPI grid  (4 columns ≥900px; 2×2 <900px)
+KPI grid  (4 columns ≥900px; 2×2 <900px; gap: 16px = space-4)
    ├ Readiness %
    ├ Posting windows ≤7d
    ├ Overdue
    └ Needs board action
 ─────────────────────────────────────────────────────
-Body (grid: 1fr 380px; stacks below 1100px)
+Body (grid: 1fr 380px; gap: 24px = space-6; stacks below 1100px)
    ├ Queue card (left, primary)
    │    ├ Heading + sort control
    │    ├ Filter chip row
    │    └ Table (≥768px) OR card list (<768px)
    │       Columns: Record · Statute · Visibility · Deadline · Status · Action
-   └ Side panel (right, sticky at top:28px)
+   └ Side panel (right, sticky at top: 24px = space-6)
         ├ Selected record header (title + pills)
         ├ 3 status checks (Document, Owner access, Audit trail)
         ├ Primary CTA  (see §"Side panel CTA matrix")
-        └ Recent activity (last 3 events from compliance_audit_log)
+        └ Recent activity (last 3 community events + "View full activity" link)
 ─────────────────────────────────────────────────────
 Collapsible: All compliance activity (existing feed, behind a disclosure)
 ```
@@ -81,7 +81,7 @@ Collapsible: All compliance activity (existing feed, behind a disclosure)
 |---|---|---|
 | `PageHeader` | `apps/web/src/components/shared/page-header.tsx` | Page header with breadcrumb prop |
 | `Breadcrumbs` | (shared) | Inside `PageHeader.breadcrumb` slot |
-| `Badge`, `Button`, `Card` | `packages/ui/src/components/` | Surfaces, actions, tags. Add new `Badge` variants for owner/board/public if missing — no new pill component. |
+| `Badge`, `Button`, `Card` | `packages/ui/src/components/` | Surfaces, actions, tags. See "Badge variants" below — three new variants needed. No new pill component. |
 | `Stack` / `HStack` / `VStack` | `packages/ui/src/primitives/Stack.tsx` | Layout primitives |
 | `ComplianceActivityFeed` | `apps/web/src/components/compliance/compliance-activity-feed.tsx` | Reused inside the collapsible bottom section |
 | `ComplianceOnboarding` | same dir | Shown verbatim in "Empty (no items generated yet)" state in place of the queue |
@@ -100,6 +100,18 @@ Collapsible: All compliance activity (existing feed, behind a disclosure)
 | `ComplianceDetailPanel` | same dir | Sticky side panel. Selected record header, 3 status checks, primary CTA (resolved via the matrix below), recent activity. |
 
 Everything else from the mockup — the banner, the KPI cards, the view toggle — is inlined inside `ComplianceCommandCenter` until extraction earns its keep.
+
+### Badge variants
+
+The Badge component at `packages/ui/src/components/Badge.tsx` exposes `solidVariantClasses` / `outlinedVariantClasses` / `dotColorClasses` keyed on a `BadgeVariant` union. Existing variants in use elsewhere: `success`, `warning`, `danger`, `info`, `neutral`. The redesign needs three more:
+
+| New variant | Foreground | Background (soft) | Used for |
+|---|---|---|---|
+| `owner` | `#6d28d9` (violet-700) | `#ede9fe` (violet-100) | Visibility = `owner_only` or `owner_portal` |
+| `board` | `#be185d` (pink-700) | `#fce7f3` (pink-100) | Visibility = `board` |
+| `public` | `#0369a1` (sky-700) | `#e0f2fe` (sky-100) | Visibility = `public_page` |
+
+All three pass WCAG AA on white and on their own soft background (≥ 4.5:1). Add corresponding entries to `solidVariantClasses`, `outlinedVariantClasses`, and `dotColorClasses` in one PR (folded into Slice B since the queue first renders them).
 
 ### Removed / demoted
 
@@ -170,6 +182,17 @@ export function sortByPriority(items: ChecklistItemData[], now?: Date): Checklis
 
 `id` is the final tiebreaker everywhere for cross-render stability.
 
+**Edge cases the helper tests must cover:**
+
+- Empty input array → `readiness = { satisfied: 0, applicableTotal: 0, percentage: 100 }`, all counts 0. (Percentage defaults to 100 so a community with zero items doesn't render as 0% on first paint while items are seeding.)
+- All items `not_applicable` → `applicableTotal: 0`, `percentage: 100`, `overdueCount: 0`, `needsBoardActionCount: 0`.
+- Item with `deadline: null` (rolling-window class) → never counted by `postingWindowsDueSoonCount`; still sorted into its rolling bucket per `sortByPriority`.
+- Item with `deadline` exactly `now + 7 days` (boundary) → **counted** as due-soon. Use inclusive `<=` not strict `<`.
+- Item with `deadline` exactly `now` → status is already `overdue` from the calculator (`isAfter(now, deadline)` is false at exact equality, so `deadline === now` is *not* overdue per existing logic — verify and document the call: spec follows existing calculator behavior; "exactly now" is unsatisfied-due-today, not overdue).
+- `documentPostedAt` exactly at the rolling-window start boundary → status is `satisfied` (per existing calculator: `isBefore(documentPostedAt, windowStart)` is false at equality).
+- `templateKey` not in `BOARD_ACTION_TEMPLATE_KEYS` → never counted by `needsBoardActionCount`, regardless of status.
+- All KPI counts handle a 1-second clock drift across `now` calls within the same render (helpers accept a single `now: Date` arg so callers can pass one fixed timestamp).
+
 ### Visibility taxonomy — derived from template
 
 The queue's Visibility column needs a value per item that the schema does not store. We add a `defaultVisibility` field to the compliance template definitions in `packages/shared/src/compliance/templates.ts`:
@@ -209,7 +232,25 @@ The CAM/Board toggle in the page header is **hidden** when the user is neither a
 | Banner chip copy | "N items need attention" | "N records need board action" |
 | Queue sort | `sortByPriority` (default) | Same sort, default filter changes which items show |
 
-Role is read from the existing membership context the page already resolves server-side and passes into the client component (see `apps/web/src/components/billing/feature-gate.tsx` for an existing pattern of role-driven client UI).
+Role is **passed as props** from the server-side page (`apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx`) into `ComplianceCommandCenter`. The page already resolves `membership` via `requirePageCommunityMembership` and already calls `checkPermission(membership.role, …, 'compliance', 'read')`; add a parallel `checkPermission(…, 'compliance', 'write')` call and forward both:
+
+```tsx
+// In page.tsx, after the existing read check:
+const canWrite = checkPermission(
+  membership.role, membership.communityType, 'compliance', 'write',
+  { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions },
+);
+
+return (
+  <ComplianceCommandCenter
+    communityId={communityId}
+    role={membership.role}
+    canWrite={canWrite}
+  />
+);
+```
+
+The client component does not call `checkPermission` itself (that helper requires server context to be reliable). Conditional UI in the client — toggle visibility, CTA hiding — branches on the `role` and `canWrite` props. No client context provider, no new shared store. (`apps/web/src/components/billing/feature-gate.tsx` is a **server** component and is not a usable pattern here; the prop-down approach above is what existing client components like the dashboard already do implicitly.)
 
 **Persistence:** view preference is stored in `localStorage` keyed on `compliance.audienceView.<communityId>`. Note this is per-browser, not per-user — shared workstations share preferences. We accept that; cookies bound to user-id would solve it cleanly but are out of scope.
 
@@ -262,13 +303,34 @@ Baked into the design per the v2 audit. Implementation must preserve:
 
 - Route file: `apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx` — unchanged shell; the page renders `<ComplianceCommandCenter communityId={...} />` instead of `<ComplianceDashboard>`.
 - Breadcrumb is added to the route file via the existing `PageHeader` `breadcrumb` slot in the new client component (`ComplianceCommandCenter` owns chrome). Since the CI guard doesn't enforce on this route (see §"Problem"), no `breadcrumbs:exempt` comment is needed; we simply render the breadcrumb because the design calls for it.
-- `ComplianceDashboard` is removed in the cleanup slice. Only known import is the route file (`page.tsx:13`) and the dashboard's own test file — both updated.
+- `ComplianceDashboard` is removed in the cleanup slice. Importers and test files affected (verified by `grep` at spec time):
+  - `apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx:13` (import + render — replaced by `ComplianceCommandCenter`).
+  - `apps/web/__tests__/compliance/compliance-dashboard.test.tsx` — delete with the component.
+  - `apps/web/__tests__/compliance/compliance-filters.test.ts` — delete with `ComplianceFilterPills` (Slice E).
+  - `apps/web/__tests__/compliance/compliance-calculator.test.ts` — **extend** with cases for `needsAttention`, `buildComplianceSummary`, `sortByPriority`, and the board-action whitelist.
+  - `apps/web/__tests__/compliance/statutory-718-regression.test.ts` — verify still green after adding `defaultVisibility` to template items; add one new assertion that every §718 template item has a `defaultVisibility` field set.
+  - `apps/web/__tests__/compliance/route.test.ts` — unchanged (route preserved verbatim).
+  - `apps/web/__tests__/compliance/pdf-export.test.ts` — unchanged (export contract preserved; see "PDF export" below).
+  - `apps/web/src/components/compliance/__tests__/compliance-item-actions.test.tsx` and `apps/web/src/components/compliance/__tests__/compliance-activity-feed.test.tsx` — unchanged (components reused as-is).
+  - New: `apps/web/src/components/compliance/__tests__/compliance-command-center.test.tsx`, `compliance-queue.test.tsx`, `compliance-detail-panel.test.tsx` covering the new components and the CTA matrix.
 - `mobile/FeatureCard.tsx` imports `useComplianceChecklist` from `useComplianceChecklist.ts` — unaffected (same hook).
 - Modals (`UploadDocumentModal`, `LinkDocumentModal`) continue to be portal-rendered from the same module, mounted by `ComplianceCommandCenter`.
 
+### PDF export
+
+`Export readiness PDF` button continues to call `generateChecklistPdf(toPdfItems(filtered))` from `apps/web/src/lib/utils/pdf-export.ts`. The function signature, the `toPdfItems` mapper, and the rendered PDF contract are all unchanged. The `filtered` input is whatever the current queue is displaying (respects the active filter chip), matching today's behavior. `compliance/pdf-export.test.ts` does not need updates.
+
+## Recent activity (side panel)
+
+The existing client hook is `useComplianceActivityFeed(communityId)` at `apps/web/src/hooks/use-compliance-activity.ts`. It calls `/api/v1/audit-trail?communityId=…&limit=8` and is **community-scoped — no `itemId` filter today**.
+
+For v1 the side panel reuses this hook as-is and renders **the most recent 3 community events**, followed by a `View full activity →` link that scrolls/expands the bottom collapsible (`ComplianceActivityFeed`). This is technically less precise than "events for this exact item" but avoids new endpoint work and gives the user a one-click path to the per-community history. The 3-event slice comes from `data.slice(0, 3)` on the already-cached payload — no extra request.
+
+Item-scoped activity (the truly correct behavior) is deferred to a follow-up. When it ships, it adds `?resourceType=compliance_checklist_item&resourceId=…&limit=3` to `/api/v1/audit-trail` and a thin wrapper hook (`useComplianceItemActivity(itemId)`). Out of scope here.
+
 ## Telemetry
 
-Out of scope. Existing audit-log entries (`compliance_audit_log`) cover the side panel's "Recent activity" feed. Side panel pulls the last 3 events for the selected `itemId` via a new query param on the existing `use-compliance-activity` hook — verify in implementation that the hook supports an `itemId` filter; if not, add the filter to the hook + route as part of Slice C.
+Out of scope beyond preserving the existing `compliance_audit_log` writes from PATCH handlers and the side-panel reuse described above. No new emission.
 
 ## Open questions
 
@@ -280,13 +342,15 @@ None. All branch points were decided in the brainstorm and the senior-dev review
 
 The implementation must match the v2 mockup in these specifics:
 
+All spacing values must use design.md tokens: space-1 (4 px), space-2 (8 px), space-3 (12 px), space-4 (16 px), space-5 (20 px), space-6 (24 px), space-8 (32 px). The mockup uses some intermediate values for tuning; the implementation snaps to the nearest token.
+
 - 1.5 rem (24 px) page H1, weight 600
 - 2.25 rem KPI numerals, weight 700, -0.02em tracking
-- 4-column KPI grid with `gap: 18px`; collapses to 2×2 below 900 px
-- Body grid `1fr 380px` with `gap: 24px`; stacks below 1100 px and side panel un-stickies
+- 4-column KPI grid with `gap: 16px` (space-4); collapses to 2×2 below 900 px
+- Body grid `1fr 380px` with `gap: 24px` (space-6); stacks below 1100 px and side panel un-stickies
 - Filter chips: pill shape, 36 px desktop / 44 px mobile, blue-soft + blue-strong when pressed
-- Queue table: column padding `16px 24px`, row hover background `--surface-muted`, selected row gets a 3 px left border in `--interactive-primary` and background `#eef4ff`
-- Side panel: 24 px padding, sticky `top: 28px`, primary CTA `min-height: 44px`
+- Queue table: column padding `16px 24px` (space-4 / space-6), row hover background `--surface-muted`, selected row gets a 3 px left border in `--interactive-primary` and background `#eef4ff`
+- Side panel: 24 px (space-6) padding, sticky `top: 24px` (space-6), primary CTA `min-height: 44px`
 - Banner: amber-soft background, 4 px left border in `--status-warning`, 22 px warning glyph in a real `<span aria-hidden>`
 
 ## Appendix B — Implementation order
@@ -299,6 +363,6 @@ Five PRs, each independently shippable. No dual-render parity hack.
    - Add `ComplianceCommandCenter` with `breadcrumb` + page header + view toggle + banner + KPI grid only. No queue, no detail panel.
    - Gate by `?layout=v2` query param in the route file. When `?layout=v2` is absent, render `ComplianceDashboard` (existing). When present, render `ComplianceCommandCenter`. Lets us A/B test in dev.
 2. **Slice B — Queue with filters and sort.** Add `ComplianceQueue` inside the new container. Filter chip group, sort control, table (or card list <768 px). Row primary action wired to existing `UploadDocumentModal` / `LinkDocumentModal`. Empty (filter→0) state.
-3. **Slice C — Side detail panel.** Add `ComplianceDetailPanel` bound to selected row. Implements the §"Side panel CTA matrix". Extends `use-compliance-activity` with optional `itemId` filter if needed.
+3. **Slice C — Side detail panel.** Add `ComplianceDetailPanel` bound to selected row. Implements the §"Side panel CTA matrix". Reuses `useComplianceActivityFeed` (community-scoped) and slices to the last 3 events; adds a "View full activity" link to the bottom collapsible. Item-scoped activity is deferred (see §"Recent activity").
 4. **Slice D — Default-on swap.** Flip the default branch in the route file: `ComplianceCommandCenter` becomes default; `?layout=v1` opt-back-in for one release window.
 5. **Slice E — Cleanup.** Remove `?layout=v1` branch, delete `ComplianceDashboard`, `ComplianceScoreRing`, `DeadlineRibbon`, `CategoryGroup` (if no other importers — verify). Remove `ComplianceFilterPills` if confirmed unused after Slice B. Move `ComplianceActivityFeed` into the bottom collapsible. Role-driven default-view localStorage persistence lands in this slice too (small enough to ride along).
