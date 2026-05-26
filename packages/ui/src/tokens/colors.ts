@@ -84,6 +84,18 @@ export const semanticColors = {
       border: "var(--status-neutral-border)",
       subtle: "var(--status-neutral-subtle)",
     },
+    owner: {
+      foreground: "var(--status-owner)",
+      background: "var(--status-owner-bg)",
+      border: "var(--status-owner-border)",
+      subtle: "var(--status-owner-subtle)",
+    },
+    board: {
+      foreground: "var(--status-board)",
+      background: "var(--status-board-bg)",
+      border: "var(--status-board-border)",
+      subtle: "var(--status-board-subtle)",
+    },
   },
 } as const;
 
