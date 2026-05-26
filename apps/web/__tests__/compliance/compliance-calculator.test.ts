@@ -1,9 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOARD_ACTION_TEMPLATE_KEYS,
+  needsAttention,
+  buildComplianceSummary,
+  sortByPriority,
   calculateComplianceStatus,
   calculatePostingDeadline,
   calculateRollingWindowStart,
 } from '../../src/lib/utils/compliance-calculator';
+import type { ChecklistItemData } from '../../src/components/compliance/compliance-checklist-item';
+
+function makeItem(overrides: Partial<ChecklistItemData> = {}): ChecklistItemData {
+  return {
+    id: 1,
+    templateKey: '718_declaration',
+    title: 'Declaration',
+    category: 'governing_documents',
+    status: 'unsatisfied',
+    documentId: null,
+    documentPostedAt: null,
+    deadline: null,
+    rollingWindow: null,
+    isConditional: false,
+    isApplicable: true,
+    ...overrides,
+  };
+}
 
 describe('p1-09 compliance calculator', () => {
   it('marks checklist item satisfied when linked document exists', () => {
@@ -89,5 +111,57 @@ describe('p1-09 compliance calculator', () => {
     expect(rollingStart.toISOString()).toBe('2025-12-01T00:00:00.000Z');
     expect(recentStatus).toBe('satisfied');
     expect(staleStatus).toBe('overdue');
+  });
+});
+
+describe('BOARD_ACTION_TEMPLATE_KEYS', () => {
+  it('contains 718_minutes_rolling_12m and 718_affidavits', () => {
+    expect(BOARD_ACTION_TEMPLATE_KEYS.has('718_minutes_rolling_12m')).toBe(true);
+    expect(BOARD_ACTION_TEMPLATE_KEYS.has('718_affidavits')).toBe(true);
+  });
+
+  it('contains 720_minutes_rolling_12m and 720_bids', () => {
+    expect(BOARD_ACTION_TEMPLATE_KEYS.has('720_minutes_rolling_12m')).toBe(true);
+    expect(BOARD_ACTION_TEMPLATE_KEYS.has('720_bids')).toBe(true);
+  });
+});
+
+describe('needsAttention', () => {
+  const now = new Date('2026-05-26T00:00:00.000Z');
+
+  it('returns true for overdue items', () => {
+    expect(needsAttention(makeItem({ status: 'overdue' }), now)).toBe(true);
+  });
+
+  it('returns true for unsatisfied items with deadline within 7 days (inclusive boundary)', () => {
+    const boundary = new Date('2026-06-02T00:00:00.000Z'); // exactly +7d
+    expect(needsAttention(makeItem({ status: 'unsatisfied', deadline: boundary.toISOString() }), now)).toBe(true);
+  });
+
+  it('returns false for unsatisfied items with deadline 8 days out', () => {
+    const farther = new Date('2026-06-03T00:00:00.000Z');
+    expect(needsAttention(makeItem({ status: 'unsatisfied', deadline: farther.toISOString() }), now)).toBe(false);
+  });
+
+  it('returns true for board-action whitelist items that are unsatisfied', () => {
+    expect(
+      needsAttention(makeItem({ templateKey: '718_minutes_rolling_12m', status: 'unsatisfied' }), now),
+    ).toBe(true);
+  });
+
+  it('returns false for board-action whitelist items that are satisfied', () => {
+    expect(
+      needsAttention(makeItem({ templateKey: '718_minutes_rolling_12m', status: 'satisfied' }), now),
+    ).toBe(false);
+  });
+
+  it('returns false for not_applicable regardless of templateKey', () => {
+    expect(
+      needsAttention(makeItem({ templateKey: '718_minutes_rolling_12m', status: 'not_applicable' }), now),
+    ).toBe(false);
+  });
+
+  it('returns false for unsatisfied items with no deadline that are NOT board-action', () => {
+    expect(needsAttention(makeItem({ status: 'unsatisfied', deadline: null }), now)).toBe(false);
   });
 });
