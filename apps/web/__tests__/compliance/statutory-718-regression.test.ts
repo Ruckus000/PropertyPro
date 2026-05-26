@@ -625,6 +625,24 @@ describe('legislative amendment regression detection', () => {
 });
 
 // =============================================================================
+// defaultVisibility Coverage
+// =============================================================================
+
+describe('compliance template defaultVisibility coverage', () => {
+  it('every §718 template item has defaultVisibility', () => {
+    for (const item of CONDO_718_CHECKLIST_TEMPLATE) {
+      expect(item.defaultVisibility, `${item.templateKey} missing defaultVisibility`).toBeDefined();
+    }
+  });
+
+  it('every §720 template item has defaultVisibility', () => {
+    for (const item of HOA_720_CHECKLIST_TEMPLATE) {
+      expect(item.defaultVisibility, `${item.templateKey} missing defaultVisibility`).toBeDefined();
+    }
+  });
+});
+
+// =============================================================================
 // Category Grouping
 // =============================================================================
 
