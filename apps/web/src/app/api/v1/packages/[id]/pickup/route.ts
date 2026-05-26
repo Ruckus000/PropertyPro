@@ -1,41 +1,48 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Packages — pickup (staff-operator action).
+ *
+ * PATCH /api/v1/packages/[id]/pickup
+ * Body: { communityId, pickedUpByName }
+ *
+ * Plan A1 drain #69. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. HTTP method is PATCH
+ * (not POST) — package pickup is a state mutation on an existing
+ * package record. Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requirePackageLoggingEnabled  (ASYNC — awaited)
+ *     → requirePackagesWritePermission (sync)
+ *     → requireStaffOperator           (sync)
+ *     → pickupPackageForCommunity(communityId, packageId, actorUserId, { pickedUpByName }, x-request-id)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `pickupPackageForCommunity`.
+ * Service arg shape is object `{ pickedUpByName }` as the 4th positional
+ * argument (NOT a positional string).
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requirePackageLoggingEnabled,
   requirePackagesWritePermission,
   requireStaffOperator,
 } from '@/lib/logistics/common';
 import { pickupPackageForCommunity } from '@/lib/services/package-visitor-service';
-
-const pickupSchema = z.object({
-  communityId: z.number().int().positive(),
-  pickedUpByName: z.string().trim().min(1).max(240),
-});
+import { packagesPickupContract } from './contract';
 
 export const PATCH = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const packageId = parsePositiveInt(params?.id ?? '', 'package id');
-
+  runRoute(packagesPickupContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = pickupSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid package pickup payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -43,17 +50,12 @@ export const PATCH = withErrorHandler(
     requirePackagesWritePermission(membership);
     requireStaffOperator(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await pickupPackageForCommunity(
+    return pickupPackageForCommunity(
       communityId,
-      packageId,
+      params.id,
       actorUserId,
-      {
-        pickedUpByName: parsed.data.pickedUpByName,
-      },
-      requestId,
+      { pickedUpByName: body.pickedUpByName },
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
