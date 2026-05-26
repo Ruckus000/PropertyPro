@@ -1,23 +1,28 @@
 /**
- * Compliance Dashboard page.
+ * Compliance page.
  *
  * Route: /communities/[id]/compliance
  * Auth: community membership + compliance:read permission required.
- *       Owner can read in condo/HOA; tenant cannot.
  * Feature gate: hasCompliance must be true (condo/HOA only).
+ *
+ * Layout: pass ?layout=v2 to render the redesigned ComplianceCommandCenter;
+ * otherwise renders the legacy ComplianceDashboard. Default flips in Slice D.
  */
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermission, getFeaturesForCommunity } from '@propertypro/shared';
 import ComplianceDashboard from '@/components/compliance/compliance-dashboard';
+import ComplianceCommandCenter from '@/components/compliance/compliance-command-center';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ layout?: string }>;
 }
 
-export default async function CompliancePage({ params }: PageProps) {
+export default async function CompliancePage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { layout } = await searchParams;
   const communityId = Number(id);
   if (!Number.isFinite(communityId) || communityId <= 0) {
     redirect('/dashboard?reason=invalid-selection');
@@ -32,15 +37,27 @@ export default async function CompliancePage({ params }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
-  // Feature gate: compliance is condo/HOA only
   const features = getFeaturesForCommunity(membership.communityType);
   if (!features.hasCompliance) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
-  // RBAC check: owner can read in condo/HOA, tenant cannot
-  if (!checkPermission(membership.role, membership.communityType, 'compliance', 'read', { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions })) {
+  const opts = { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions };
+  if (!checkPermission(membership.role, membership.communityType, 'compliance', 'read', opts)) {
     redirect('/dashboard?reason=insufficient-permissions');
+  }
+
+  if (layout === 'v2') {
+    const canWrite = checkPermission(
+      membership.role, membership.communityType, 'compliance', 'write', opts,
+    );
+    return (
+      <ComplianceCommandCenter
+        communityId={communityId}
+        role={membership.role}
+        canWrite={canWrite}
+      />
+    );
   }
 
   return <ComplianceDashboard communityId={communityId} />;
