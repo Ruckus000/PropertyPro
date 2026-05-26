@@ -258,6 +258,10 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'maintenance_comments',
   // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
   'user_search_index',
+  // PR #1a: site_blocks platform tables — ENABLE RLS covered by 0005_site_blocks_rls_hardening
+  'site_theme_presets',
+  'site_starter_packs',
+  'site_layout_metadata',
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {
