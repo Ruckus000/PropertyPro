@@ -21,14 +21,23 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
 
 export const blockTypeSchema = z.enum(BLOCK_TYPES);
 
-/** Supabase Storage path for site assets. */
+/**
+ * Supabase Storage path for site assets.
+ *
+ * Path shape: {community_id}/{kind}/{safe-filename}
+ * Refused: traversal segments ('..'), absolute paths, schemes, leading slashes.
+ */
 export const imagePathSchema = z
   .string()
   .min(1)
   .max(512)
   .regex(/^\d+\/(logo|hero|content)\/[a-zA-Z0-9._/-]+$/, {
     message: 'Must be a path under {community_id}/{kind}/...',
-  });
+  })
+  .refine(
+    (v) => !v.split('/').includes('..'),
+    'Path traversal segments (..) are not allowed.',
+  );
 
 /** Alt text — required for non-decorative images. */
 export const altTextSchema = z.string().min(1).max(200);
