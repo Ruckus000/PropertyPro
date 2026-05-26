@@ -2,7 +2,8 @@
 
 import React, { useMemo, useState } from 'react';
 import { Badge } from '@propertypro/ui';
-import { sortByPriority, needsAttention, BOARD_ACTION_TEMPLATE_KEYS } from '@/lib/utils/compliance-calculator';
+import { sortByPriority, needsAttention, BOARD_ACTION_TEMPLATE_KEYS, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
+import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import type { ChecklistItemData } from './compliance-checklist-item';
 import { getTemplateDefaultVisibility, type DefaultVisibility } from './compliance-visibility';
 import type { ComplianceStatus } from '@/lib/utils/compliance-calculator';
@@ -59,23 +60,6 @@ function deadlineCell(item: ChecklistItemData): string {
   return new Date(item.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function resolveCta(
-  item: ChecklistItemData,
-  canWrite: boolean,
-  role?: string,
-): { label: string; handler: 'upload' | 'link' | 'view' | 'mark_applicable' } | null {
-  if (!canWrite) return item.documentId ? { label: 'View document', handler: 'view' } : null;
-  if (item.status === 'not_applicable') return { label: 'Mark applicable', handler: 'mark_applicable' };
-  if (item.status === 'satisfied') return { label: 'View document', handler: 'view' };
-  if (item.documentId) {
-    const rolling = !!item.rollingWindow;
-    return { label: rolling ? 'Upload current document' : 'Re-link or replace', handler: rolling ? 'upload' : 'link' };
-  }
-  if (role === 'board_president' || role === 'board_member') {
-    return { label: 'Link existing document', handler: 'link' };
-  }
-  return { label: 'Upload document', handler: 'upload' };
-}
 
 function matchesFilter(item: ChecklistItemData, filter: FilterKey): boolean {
   if (filter === 'all') return true;
@@ -84,7 +68,7 @@ function matchesFilter(item: ChecklistItemData, filter: FilterKey): boolean {
   if (filter === 'satisfied') return item.status === 'satisfied';
   if (filter === 'due_soon') {
     return !!item.deadline && item.status === 'unsatisfied' &&
-      (new Date(item.deadline).getTime() - Date.now()) <= 7 * 86400000;
+      (new Date(item.deadline).getTime() - Date.now()) <= SEVEN_DAYS_MS;
   }
   return true;
 }
@@ -180,12 +164,12 @@ export function ComplianceQueue({
     overdue: items.filter((i) => i.status === 'overdue').length,
     due_soon: items.filter(
       (i) => i.status === 'unsatisfied' && !!i.deadline &&
-        (new Date(i.deadline).getTime() - Date.now()) <= 7 * 86400000,
+        (new Date(i.deadline).getTime() - Date.now()) <= SEVEN_DAYS_MS,
     ).length,
     satisfied: items.filter((i) => i.status === 'satisfied').length,
   }), [items]);
 
-  function dispatch(cta: NonNullable<ReturnType<typeof resolveCta>>, item: ChecklistItemData) {
+  function dispatch(cta: NonNullable<ReturnType<typeof resolveComplianceCta>>, item: ChecklistItemData) {
     onSelect(item.id);
     if (cta.handler === 'upload') onUpload(item);
     else if (cta.handler === 'link') onLink(item);
@@ -264,7 +248,7 @@ export function ComplianceQueue({
           </thead>
           <tbody>
             {filtered.map((item) => {
-              const cta = resolveCta(item, canWrite, role);
+              const cta = resolveComplianceCta(item, canWrite, role);
               const vis = getTemplateDefaultVisibility(item.templateKey);
               return (
                 <tr

@@ -115,7 +115,7 @@ export const BOARD_ACTION_TEMPLATE_KEYS = new Set<string>([
   '720_bids',
 ]);
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * True when the item should appear in the "Action needed" filter / attention banner.
