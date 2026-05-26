@@ -1,37 +1,56 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * ARC — withdraw a submission (resident-facing).
+ *
+ * POST /api/v1/arc/[id]/withdraw
+ * Body: { communityId }
+ *
+ * Plan A1 drain #61. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Auth chain preserved
+ * verbatim — this is a RESIDENT-submitter endpoint (`requireArcSubmitterRole`
+ * gate) and intentionally has NO ARC-admin gate:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireArcEnabled (ASYNC, awaited)
+ *     → requirePermission('arc_submissions', 'write')
+ *     → requireArcSubmitterRole (sync)
+ *     → createScopedClient(communityId) (sync)
+ *     → getActorUnitIds(scoped, actorUserId) (async, awaited)
+ *     → withdrawArcSubmissionForCommunity(communityId, id, actorUserId,
+ *         unitIds, x-request-id)
+ *
+ * SCOPED DB CALL: the in-handler `createScopedClient(communityId)` +
+ * `getActorUnitIds(scoped, actorUserId)` step is preserved verbatim. The
+ * resolved `unitIds: number[]` flows into the service as the 4th positional
+ * argument.
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `withdrawArcSubmissionForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { getActorUnitIds, requireArcEnabled, requireArcSubmitterRole } from '@/lib/violations/common';
-import { parsePositiveInt } from '@/lib/finance/common';
-import { withdrawArcSubmissionForCommunity } from '@/lib/services/violations-service';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import {
+  getActorUnitIds,
+  requireArcEnabled,
+  requireArcSubmitterRole,
+} from '@/lib/violations/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { withdrawArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { requirePermission } from '@/lib/db/access-control';
-
-const withdrawSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+import { arcWithdrawContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const id = parsePositiveInt(params?.id ?? '', 'ARC submission id');
+  runRoute(arcWithdrawContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parseResult = withdrawSchema.safeParse(body);
-
-    if (!parseResult.success) {
-      throw new ValidationError('Invalid ARC withdraw payload', {
-        fields: formatZodErrors(parseResult.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireArcEnabled(membership);
@@ -41,15 +60,12 @@ export const POST = withErrorHandler(
     const scoped = createScopedClient(communityId);
     const unitIds = await getActorUnitIds(scoped, actorUserId);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await withdrawArcSubmissionForCommunity(
+    return withdrawArcSubmissionForCommunity(
       communityId,
-      id,
+      params.id,
       actorUserId,
       unitIds,
-      requestId,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
