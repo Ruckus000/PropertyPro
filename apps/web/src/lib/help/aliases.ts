@@ -46,7 +46,7 @@ const ALIAS_GROUPS: readonly (readonly string[])[] = [
   ['tenant', 'tenants', 'renter', 'renters', 'lessee', 'lessees'],
   ['owner', 'owners', 'unit owner', 'unit owners', 'homeowner', 'homeowners'],
   // Workflow verbs that map to specific admin surfaces (join requests, ARC, maintenance triage)
-  ['approve', 'approval', 'approvals', 'accept', 'reject', 'deny', 'denial'],
+  ['approve', 'approved', 'approval', 'approvals', 'accept', 'accepted', 'reject', 'rejected', 'rejects', 'rejection', 'rejections', 'deny', 'denied', 'denies', 'denial', 'denials'],
   // Broadcast / outbound notifications
   ['broadcast', 'broadcasts', 'emergency notification', 'emergency notifications'],
   // Money inflow — kept separate from the assessments/fees group so "invoice"

@@ -62,6 +62,21 @@ describe('expandQuery', () => {
       expect(result.aliases).toContain('deny');
     });
 
+    it('expands past-tense inflections of approval verbs ("rejected", "denied", "accepted", "approved")', () => {
+      const rejected = expandQuery('rejected');
+      expect(rejected.aliases).toContain('approve');
+      expect(rejected.aliases).toContain('denied');
+      expect(rejected.aliases).toContain('accepted');
+
+      const denied = expandQuery('denied');
+      expect(denied.aliases).toContain('approve');
+      expect(denied.aliases).toContain('rejected');
+
+      const approved = expandQuery('approved');
+      expect(approved.aliases).toContain('reject');
+      expect(approved.aliases).toContain('accepted');
+    });
+
     it('expands "broadcast" to emergency notification phrasing', () => {
       const result = expandQuery('broadcast');
       expect(result.aliases).toContain('emergency notification');
