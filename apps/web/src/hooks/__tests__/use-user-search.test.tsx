@@ -40,10 +40,12 @@ describe('useUserSearch', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('builds the user search request and parses the flat results payload', async () => {
+  it('builds the user search request and parses the wrapped results payload', async () => {
     mockFetch.mockReturnValue(
       jsonResponse({
-        results: [{ id: 'u1', title: 'Cameron CAM', subtitle: 'CAM' }],
+        data: {
+          results: [{ id: 'u1', title: 'Cameron CAM', subtitle: 'CAM' }],
+        },
       }),
     );
     const controller = new AbortController();

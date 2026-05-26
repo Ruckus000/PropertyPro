@@ -5,7 +5,8 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requirePermissionMock,
-  searchDocumentsByTrigramMock,
+  requireViolationsEnabledMock,
+  searchDocumentsMock,
   searchMeetingsByTrigramMock,
   searchMaintenanceByTrigramMock,
   searchViolationsByTrigramMock,
@@ -14,7 +15,8 @@ const {
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
-  searchDocumentsByTrigramMock: vi.fn(),
+  requireViolationsEnabledMock: vi.fn(),
+  searchDocumentsMock: vi.fn(),
   searchMeetingsByTrigramMock: vi.fn(),
   searchMaintenanceByTrigramMock: vi.fn(),
   searchViolationsByTrigramMock: vi.fn(),
@@ -34,7 +36,7 @@ vi.mock('@/lib/db/access-control', () => ({
 }));
 
 vi.mock('@propertypro/db', () => ({
-  searchDocumentsByTrigram: searchDocumentsByTrigramMock,
+  searchDocuments: searchDocumentsMock,
   searchMeetingsByTrigram: searchMeetingsByTrigramMock,
   searchMaintenanceByTrigram: searchMaintenanceByTrigramMock,
   searchViolationsByTrigram: searchViolationsByTrigramMock,
@@ -45,10 +47,8 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
   formatAnnouncementAudienceLabel: (audience: string) => audience,
 }));
 
-// The violations search route calls requirePlanFeature via requireViolationsEnabled.
-// Stub it so the test can reach requirePermissionMock (the thing under assertion).
-vi.mock('@/lib/middleware/plan-guard', () => ({
-  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/lib/violations/common', () => ({
+  requireViolationsEnabled: requireViolationsEnabledMock,
 }));
 
 import { GET as getAnnouncementSearch } from '../../src/app/api/v1/search/announcements/route';
@@ -79,7 +79,8 @@ describe('entity search permission guards', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue(membership);
-    searchDocumentsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
+    requireViolationsEnabledMock.mockResolvedValue(undefined);
+    searchDocumentsMock.mockResolvedValue({ data: [], nextCursor: null });
     searchMeetingsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
     searchMaintenanceByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
     searchViolationsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });

@@ -10,7 +10,7 @@ export interface ResidentSearchResult {
 }
 
 interface ResidentSearchResponse {
-  results?: ResidentSearchResult[];
+  data?: { results?: ResidentSearchResult[] };
 }
 
 export const RESIDENT_SEARCH_FETCH_LIMIT = 10;
@@ -37,13 +37,11 @@ async function searchResidents(
     limit: String(RESIDENT_SEARCH_FETCH_LIMIT),
   });
 
-  // Search routes still return a flat `{ results }` payload, so this hook keeps
-  // the response adapter local until the route-envelope migration reaches them.
   const res = await fetch(`/api/v1/search/residents?${params.toString()}`, { signal });
   if (!res.ok) throw new Error('Search failed');
 
   const json = (await res.json()) as ResidentSearchResponse;
-  return json.results ?? [];
+  return json.data?.results ?? [];
 }
 
 export function useResidentSearch(communityId: number) {
