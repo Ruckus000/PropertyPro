@@ -46,7 +46,11 @@
  *
  * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
  * validation failures (`ValidationError('Invalid resolve payload')`) shifts to
- * the canonical `VALIDATION_ERROR` envelope. Status code unchanged at 400.
+ * the canonical `VALIDATION_ERROR` envelope. This includes `communityId`
+ * validation, which pre-migration surfaced via `parseCommunityIdFromBody` as
+ * `BadRequestError('communityId must be a positive integer')` and now flows
+ * through the same `VALIDATION_ERROR` envelope as the rest of the body.
+ * Status code unchanged at 400.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
