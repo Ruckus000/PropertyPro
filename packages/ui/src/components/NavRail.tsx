@@ -92,6 +92,8 @@ const badgeDotClasses: Record<StatusVariant, string> = {
   danger: "bg-[var(--status-danger)] dark:bg-red-300",
   info: "bg-[var(--status-info)] dark:bg-sky-300",
   neutral: "bg-[var(--status-neutral)] dark:bg-gray-400",
+  owner: "bg-[var(--status-owner)] dark:bg-violet-300",
+  board: "bg-[var(--status-board)] dark:bg-pink-300",
 };
 
 function ChevronRightIcon({ size = 18 }: { size?: number }) {

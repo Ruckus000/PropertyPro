@@ -100,6 +100,10 @@ const statusBorderClasses: Record<StatusVariant, string> = {
   info: "border-l-[3px] border-l-[var(--status-info)] dark:border-l-sky-400",
   neutral:
     "border-l-[3px] border-l-[var(--status-neutral)] dark:border-l-gray-400",
+  owner:
+    "border-l-[3px] border-l-[var(--status-owner)] dark:border-l-violet-400",
+  board:
+    "border-l-[3px] border-l-[var(--status-board)] dark:border-l-pink-400",
 };
 
 interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {

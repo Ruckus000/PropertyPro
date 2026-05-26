@@ -92,6 +92,10 @@ const solidVariantClasses: Record<BadgeVariant, string> = {
   info: "bg-[var(--status-info-bg)] text-[var(--status-info)] dark:bg-sky-950 dark:text-sky-200",
   neutral:
     "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)] dark:bg-gray-800 dark:text-gray-300",
+  owner:
+    "bg-[var(--status-owner-bg)] text-[var(--status-owner)] dark:bg-violet-950 dark:text-violet-200",
+  board:
+    "bg-[var(--status-board-bg)] text-[var(--status-board)] dark:bg-pink-950 dark:text-pink-200",
 };
 
 const outlinedVariantClasses: Record<BadgeVariant, string> = {
@@ -107,6 +111,10 @@ const outlinedVariantClasses: Record<BadgeVariant, string> = {
     "bg-transparent border border-[var(--status-info-border)] text-[var(--status-info)] dark:border-sky-500 dark:text-sky-200",
   neutral:
     "bg-transparent border border-[var(--status-neutral-border)] text-[var(--status-neutral)] dark:border-gray-600 dark:text-gray-300",
+  owner:
+    "bg-transparent border border-[var(--status-owner-border)] text-[var(--status-owner)] dark:border-violet-500 dark:text-violet-200",
+  board:
+    "bg-transparent border border-[var(--status-board-border)] text-[var(--status-board)] dark:border-pink-500 dark:text-pink-200",
 };
 
 const dotColorClasses: Record<BadgeVariant, string> = {
@@ -116,6 +124,8 @@ const dotColorClasses: Record<BadgeVariant, string> = {
   danger: "bg-[var(--status-danger)] dark:bg-red-300",
   info: "bg-[var(--status-info)] dark:bg-sky-300",
   neutral: "bg-[var(--status-neutral)] dark:bg-gray-400",
+  owner: "bg-[var(--status-owner)] dark:bg-violet-300",
+  board: "bg-[var(--status-board)] dark:bg-pink-300",
 };
 
 const StatusIcons = {
