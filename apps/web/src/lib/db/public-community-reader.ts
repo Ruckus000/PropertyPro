@@ -18,8 +18,7 @@
  *   - PR #4: listDocuments, listMeetings, getContactInfo
  */
 import { siteBlocks } from '@propertypro/db';
-// AUTHZ: Public-site reader — unauthenticated context, no TenantContext available.
-// Every method below applies an explicit community_id predicate.
+// AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, eq, isNull } from '@propertypro/db/filters';
 
