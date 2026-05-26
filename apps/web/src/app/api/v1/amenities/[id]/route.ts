@@ -1,54 +1,52 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Amenities — update an amenity.
+ *
+ * PATCH /api/v1/amenities/[id]
+ * Body: { communityId, name?, description?, location?, capacity?, isBookable?, bookingRules? }
+ *
+ * Plan A1 drain #75. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Mirrors drain #70
+ * (reservations/[id]/cancel) — async `requirePlanFeature` gate — but PATCH
+ * with a nested `bookingRules` body field and the canonical "OBJECT 4th
+ * positional" arg shape passed to the service.
+ *
+ * Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireAmenitiesEnabled (sync, NOT awaited)
+ *     → requirePlanFeature(communityId, 'hasAmenities') (async — awaited)
+ *     → requireAmenitiesWritePermission (sync)
+ *     → requireAmenityAdminWrite (sync)
+ *     → updateAmenityForCommunity(
+ *         communityId, amenityId, actorUserId, { ...fields }, x-request-id)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `updateAmenityForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   requireAmenityAdminWrite,
   requireAmenitiesEnabled,
   requireAmenitiesWritePermission,
 } from '@/lib/work-orders/common';
 import { updateAmenityForCommunity } from '@/lib/services/work-orders-service';
-import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-
-const bookingRulesSchema = z.object({
-  minDurationMinutes: z.number().int().positive().optional(),
-  maxDurationMinutes: z.number().int().positive().optional(),
-  advanceBookingDays: z.number().int().positive().optional(),
-  blackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
-});
-
-const updateAmenitySchema = z.object({
-  communityId: z.number().int().positive(),
-  name: z.string().trim().min(1).max(240).optional(),
-  description: z.string().trim().max(5000).nullable().optional(),
-  location: z.string().trim().max(240).nullable().optional(),
-  capacity: z.number().int().positive().nullable().optional(),
-  isBookable: z.boolean().optional(),
-  bookingRules: bookingRulesSchema.optional(),
-});
+import { amenitiesUpdateContract } from './contract';
 
 export const PATCH = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const amenityId = parsePositiveInt(params?.id ?? '', 'amenity id');
-
+  runRoute(amenitiesUpdateContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = updateAmenitySchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid amenity update payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -57,22 +55,19 @@ export const PATCH = withErrorHandler(
     requireAmenitiesWritePermission(membership);
     requireAmenityAdminWrite(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await updateAmenityForCommunity(
+    return updateAmenityForCommunity(
       communityId,
-      amenityId,
+      params.id,
       actorUserId,
       {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        location: parsed.data.location,
-        capacity: parsed.data.capacity,
-        isBookable: parsed.data.isBookable,
-        bookingRules: parsed.data.bookingRules,
+        name: body.name,
+        description: body.description,
+        location: body.location,
+        capacity: body.capacity,
+        isBookable: body.isBookable,
+        bookingRules: body.bookingRules,
       },
-      requestId,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
