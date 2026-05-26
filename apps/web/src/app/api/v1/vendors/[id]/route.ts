@@ -1,47 +1,49 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Vendors — update a vendor (admin-facing).
+ *
+ * PATCH /api/v1/vendors/[id]
+ * Body: { communityId, name?, company?, phone?, email?, specialties?, isActive? }
+ *
+ * Plan A1 drain #74. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Mirrors drain #63
+ * (`work-orders/[id]/complete`) auth chain with a richer body.
+ *
+ * Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireWorkOrdersEnabled (sync, NOT awaited)
+ *     → requirePlanFeature(communityId, 'hasWorkOrders') (async — awaited)
+ *     → requireWorkOrdersWritePermission (sync)
+ *     → requireWorkOrderAdminWrite (sync)
+ *     → updateVendorForCommunity(communityId, vendorId, actorUserId, fields, x-request-id)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `updateVendorForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireWorkOrderAdminWrite,
   requireWorkOrdersEnabled,
   requireWorkOrdersWritePermission,
 } from '@/lib/work-orders/common';
 import { updateVendorForCommunity } from '@/lib/services/work-orders-service';
-
-const updateVendorSchema = z.object({
-  communityId: z.number().int().positive(),
-  name: z.string().trim().min(1).max(240).optional(),
-  company: z.string().trim().max(240).nullable().optional(),
-  phone: z.string().trim().max(64).nullable().optional(),
-  email: z.string().trim().email().max(320).nullable().optional(),
-  specialties: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
-  isActive: z.boolean().optional(),
-});
+import { vendorsUpdateContract } from './contract';
 
 export const PATCH = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const vendorId = parsePositiveInt(params?.id ?? '', 'vendor id');
-
+  runRoute(vendorsUpdateContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = updateVendorSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid vendor update payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -50,22 +52,19 @@ export const PATCH = withErrorHandler(
     requireWorkOrdersWritePermission(membership);
     requireWorkOrderAdminWrite(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await updateVendorForCommunity(
+    return updateVendorForCommunity(
       communityId,
-      vendorId,
+      params.id,
       actorUserId,
       {
-        name: parsed.data.name,
-        company: parsed.data.company,
-        phone: parsed.data.phone,
-        email: parsed.data.email,
-        specialties: parsed.data.specialties,
-        isActive: parsed.data.isActive,
+        name: body.name,
+        company: body.company,
+        phone: body.phone,
+        email: body.email,
+        specialties: body.specialties,
+        isActive: body.isActive,
       },
-      requestId,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
