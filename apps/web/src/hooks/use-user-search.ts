@@ -9,7 +9,7 @@ export interface UserSearchResult {
 }
 
 interface UserSearchResponse {
-  results?: UserSearchResult[];
+  data?: { results?: UserSearchResult[] };
 }
 
 export const USER_SEARCH_FETCH_LIMIT = 10;
@@ -36,13 +36,11 @@ async function searchUsers(
     limit: String(USER_SEARCH_FETCH_LIMIT),
   });
 
-  // Search routes still return a flat `{ results }` payload, so this hook keeps
-  // the response adapter local until the route-envelope migration reaches them.
   const res = await fetch(`/api/v1/search/users?${params.toString()}`, { signal });
   if (!res.ok) throw new Error('Search failed');
 
   const json = (await res.json()) as UserSearchResponse;
-  return json.results ?? [];
+  return json.data?.results ?? [];
 }
 
 export function useUserSearch(communityId: number) {

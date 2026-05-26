@@ -61,7 +61,9 @@ describe('UserSearchCombobox', () => {
   it('calls /api/v1/search/users for a qualifying query', async () => {
     mockFetch.mockReturnValue(
       jsonResponse({
-        results: [{ id: 'u1', title: 'Cameron CAM', subtitle: 'CAM', role: 'manager' }],
+        data: {
+          results: [{ id: 'u1', title: 'Cameron CAM', subtitle: 'CAM', role: 'manager' }],
+        },
       }),
     );
     const onChange = vi.fn();

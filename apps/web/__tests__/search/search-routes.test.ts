@@ -148,8 +148,10 @@ describe('command palette search routes', () => {
 
     const res = await getDocuments(req);
     const json = (await res.json()) as {
-      results: Array<{ subtitle: string; relevance: number }>;
-      totalCount: number;
+      data: {
+        results: Array<{ subtitle: string; relevance: number }>;
+        totalCount: number;
+      };
     };
 
     expect(res.status).toBe(200);
@@ -167,9 +169,9 @@ describe('command palette search routes', () => {
         communityType: 'apartment',
       }),
     );
-    expect(json.results[0]?.subtitle).toBe('Rules');
-    expect(json.results[0]?.relevance).toBe(0.91);
-    expect(json.totalCount).toBe(1);
+    expect(json.data.results[0]?.subtitle).toBe('Rules');
+    expect(json.data.results[0]?.relevance).toBe(0.91);
+    expect(json.data.totalCount).toBe(1);
   });
 
   it('announcements search blocks managers without announcement read access', async () => {

@@ -5,7 +5,7 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requirePermissionMock,
-  searchDocumentsByTrigramMock,
+  searchDocumentsMock,
   searchMeetingsByTrigramMock,
   searchMaintenanceByTrigramMock,
   searchViolationsByTrigramMock,
@@ -14,7 +14,7 @@ const {
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
-  searchDocumentsByTrigramMock: vi.fn(),
+  searchDocumentsMock: vi.fn(),
   searchMeetingsByTrigramMock: vi.fn(),
   searchMaintenanceByTrigramMock: vi.fn(),
   searchViolationsByTrigramMock: vi.fn(),
@@ -34,7 +34,7 @@ vi.mock('@/lib/db/access-control', () => ({
 }));
 
 vi.mock('@propertypro/db', () => ({
-  searchDocumentsByTrigram: searchDocumentsByTrigramMock,
+  searchDocuments: searchDocumentsMock,
   searchMeetingsByTrigram: searchMeetingsByTrigramMock,
   searchMaintenanceByTrigram: searchMaintenanceByTrigramMock,
   searchViolationsByTrigram: searchViolationsByTrigramMock,
@@ -79,7 +79,7 @@ describe('entity search permission guards', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireCommunityMembershipMock.mockResolvedValue(membership);
-    searchDocumentsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
+    searchDocumentsMock.mockResolvedValue({ data: [], nextCursor: null });
     searchMeetingsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
     searchMaintenanceByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
     searchViolationsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });

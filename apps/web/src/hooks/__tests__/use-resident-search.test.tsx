@@ -40,12 +40,14 @@ describe('useResidentSearch', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('builds the resident search request and parses the flat results payload', async () => {
+  it('builds the resident search request and parses the wrapped results payload', async () => {
     mockFetch.mockReturnValue(
       jsonResponse({
-        results: [
-          { id: 'u1', title: 'Jane Smith', subtitle: 'Unit 101', unitNumber: '101' },
-        ],
+        data: {
+          results: [
+            { id: 'u1', title: 'Jane Smith', subtitle: 'Unit 101', unitNumber: '101' },
+          ],
+        },
       }),
     );
     const controller = new AbortController();
