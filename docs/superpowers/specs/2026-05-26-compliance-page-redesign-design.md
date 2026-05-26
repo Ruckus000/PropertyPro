@@ -60,10 +60,18 @@ KPI grid  (4 columns ≥900px; 2×2 <900px; gap: 16px = space-4)
 ─────────────────────────────────────────────────────
 Body (grid: 1fr 380px; gap: 24px = space-6; stacks below 1100px)
    ├ Queue card (left, primary)
-   │    ├ Heading + sort control
+   │    ├ Heading + filter-state summary ("Showing X of Y" + "× Clear filters" when filter active)
    │    ├ Filter chip row
    │    └ Table (≥768px) OR card list (<768px)
-   │       Columns: Record · Statute · Visibility · Deadline · Status · Action
+   │       Columns: Record · Status · Visibility · Deadline · Statute · Action
+   │       - Record/Statute: left-aligned text
+   │       - Status/Visibility: left-aligned pills
+   │       - Deadline: right-aligned date; "—" for non-rolling items with null deadline,
+   │         "Rolling 12 mo" for items with rollingWindow.months set
+   │       - Action: right-aligned button
+   │       - Column headers are sortable (Atlassian DynamicTable pattern):
+   │         clickable with up/down chevron glyph on the active column,
+   │         aria-sort="ascending|descending|none". Default sort: Status (sortByPriority).
    └ Side panel (right, sticky at top: 24px = space-6)
         ├ Selected record header (title + pills)
         ├ 3 status checks (Document, Owner access, Audit trail)
@@ -81,13 +89,13 @@ Collapsible: All compliance activity (existing feed, behind a disclosure)
 |---|---|---|
 | `PageHeader` | `apps/web/src/components/shared/page-header.tsx` | Page header with breadcrumb prop |
 | `Breadcrumbs` | (shared) | Inside `PageHeader.breadcrumb` slot |
-| `Badge`, `Button`, `Card` | `packages/ui/src/components/` | Surfaces, actions, tags. See "Badge variants" below — three new variants needed. No new pill component. |
+| `Badge`, `Button`, `Card` | `packages/ui/src/components/` | Surfaces, actions, tags. We use **raw** `<Badge variant="...">label</Badge>` for status and visibility pills — not the compound `StatusBadge`/`STATUS_CONFIG` helper (its domain keys don't include compliance statuses; see "Status → variant mapping" below). |
+| `Tooltip` | `apps/web/src/components/ui/tooltip.tsx` | KPI label tooltips (see "Queue interactions and affordances") |
 | `Stack` / `HStack` / `VStack` | `packages/ui/src/primitives/Stack.tsx` | Layout primitives |
 | `ComplianceActivityFeed` | `apps/web/src/components/compliance/compliance-activity-feed.tsx` | Reused inside the collapsible bottom section |
-| `ComplianceOnboarding` | same dir | Shown verbatim in "Empty (no items generated yet)" state in place of the queue |
+| `ComplianceOnboarding` | same dir | Already self-hides via `isFreshChecklist(items)`. We always render it inside `ComplianceCommandCenter` (same as today's dashboard); it shows the priority-upload CTA when applicable items are all unlinked, and renders null otherwise. No new conditional logic in the container. |
 | `UploadDocumentModal`, `LinkDocumentModal` | same dir | Triggered from row actions and side panel CTA |
 | `ComplianceItemActions` | same dir | Mark N/A, Mark applicable, Unlink — surfaced in the side panel only (queue rows have a single primary action button to keep the table dense) |
-| `getStatusConfig` | `docs/design-system/constants/status.ts` | Pill icon + label + color resolution |
 | `useComplianceChecklist` from **`apps/web/src/hooks/useComplianceChecklist.ts`** | (GET-only variant) | The new container uses this hook. The newer `use-compliance-checklist.ts` (POST-then-GET) is left for onboarding only. Per-first-time users, the onboarding flow generates the checklist before this page is reachable. |
 | `useComplianceMutations` | `apps/web/src/hooks/useComplianceMutations.ts` | Existing; cache key already matches the chosen GET hook. |
 
@@ -101,17 +109,27 @@ Collapsible: All compliance activity (existing feed, behind a disclosure)
 
 Everything else from the mockup — the banner, the KPI cards, the view toggle — is inlined inside `ComplianceCommandCenter` until extraction earns its keep.
 
-### Badge variants
+### Badge variants — token-system change
 
-The Badge component at `packages/ui/src/components/Badge.tsx` exposes `solidVariantClasses` / `outlinedVariantClasses` / `dotColorClasses` keyed on a `BadgeVariant` union. Existing variants in use elsewhere: `success`, `warning`, `danger`, `info`, `neutral`. The redesign needs three more:
+The Badge component at `packages/ui/src/components/Badge.tsx` types `BadgeVariant = StatusVariant`, and `StatusVariant = keyof typeof semanticColors.status` from `packages/ui/src/tokens/colors.ts`. The closed union today is `success | brand | warning | danger | info | neutral`. **`brand` is the PropertyPro blue.** `info` is sky-blue and works as-is for "Public page" visibility.
 
-| New variant | Foreground | Background (soft) | Used for |
-|---|---|---|---|
-| `owner` | `#6d28d9` (violet-700) | `#ede9fe` (violet-100) | Visibility = `owner_only` or `owner_portal` |
-| `board` | `#be185d` (pink-700) | `#fce7f3` (pink-100) | Visibility = `board` |
-| `public` | `#0369a1` (sky-700) | `#e0f2fe` (sky-100) | Visibility = `public_page` |
+The redesign needs **two** new variants (not three — `public` reuses `info`):
 
-All three pass WCAG AA on white and on their own soft background (≥ 4.5:1). Add corresponding entries to `solidVariantClasses`, `outlinedVariantClasses`, and `dotColorClasses` in one PR (folded into Slice B since the queue first renders them).
+| New variant | Foreground | Background (soft) | Light token | Dark token | Used for |
+|---|---|---|---|---|---|
+| `owner` | violet-700 `#6d28d9` | violet-100 `#ede9fe` | `--status-owner` / `--status-owner-bg` / `--status-owner-border` | `dark:bg-violet-950 dark:text-violet-200` | Visibility = `owner_only` or `owner_portal` |
+| `board` | pink-700 `#be185d` | pink-100 `#fce7f3` | `--status-board` / `--status-board-bg` / `--status-board-border` | `dark:bg-pink-950 dark:text-pink-200` | Visibility = `board` |
+
+Adding these requires touching the **design tokens module**, not just the Badge file:
+
+1. Extend `semanticColors.status` in `packages/ui/src/tokens/colors.ts` with `owner` and `board` entries.
+2. Add corresponding CSS custom properties in the global stylesheet (light + dark mode).
+3. Add the new variants to `solidVariantClasses`, `outlinedVariantClasses`, `dotColorClasses` in `Badge.tsx` (each with light + dark Tailwind classes).
+4. Re-export through `packages/ui/src/tokens/index.ts` if anything else needs the raw token name.
+
+This is **Slice A0** in the implementation order — it ships before the data layer because every later slice's pill rendering depends on it. It's a small standalone PR (one tokens file, one CSS file, one Badge file, one Badge test addition).
+
+Both new variants pass WCAG AA on white and on their soft background (≥ 4.5:1).
 
 ### Removed / demoted
 
@@ -141,6 +159,19 @@ type ComplianceStatus = 'satisfied' | 'unsatisfied' | 'overdue' | 'not_applicabl
 ```
 
 No `needs_publish` or `needs_board_approval` UI-only statuses. The screenshot's "Needs publish" pill maps to `unsatisfied` for items in the board-action whitelist (see "Needs board action KPI" below); otherwise it's just "Action needed" copy on the existing `unsatisfied` state. If a publish workflow is later added, it gets its own spec + schema migration.
+
+### Status → Badge variant mapping
+
+The Status column in the queue and the status pills in the side panel render via raw `<Badge variant="..."><label></Badge>`. No `STATUS_CONFIG` entries are added (the existing config uses different domain keys; see Components → Reuse). The mapping is a small helper inside `ComplianceCommandCenter` (or co-located with the queue):
+
+| `ComplianceStatus` | `BadgeVariant` | Pill label | Notes |
+|---|---|---|---|
+| `satisfied` | `success` | "Satisfied" | Existing variant; no token work. |
+| `unsatisfied` | `warning` | "Action needed" | For items in `BOARD_ACTION_TEMPLATE_KEYS` whose status is `unsatisfied`, override label to "Needs board action" — variant stays `warning`. |
+| `overdue` | `danger` | "Overdue" | Existing variant. |
+| `not_applicable` | `neutral` | "Not applicable" | Existing variant. |
+
+Visibility column uses `<Badge variant="...">` with `owner` / `board` / `info` (sky) variants from §"Badge variants" + the §"Visibility taxonomy" table.
 
 ### Derived helpers — extend `compliance-calculator.ts`
 
@@ -206,7 +237,7 @@ interface ComplianceTemplateItem {
 }
 ```
 
-Mapping for the §718 template (apply analogous logic to §720):
+**§718 (condo) mapping:**
 
 | `templateKey` | `defaultVisibility` | Why |
 |---|---|---|
@@ -216,9 +247,22 @@ Mapping for the §718 template (apply analogous logic to §720):
 | `718_video_recordings` | `owner_portal` | Owner access, same window as minutes. |
 | `718_insurance` | `owner_only` | Sensitive — owners only, not public. |
 | `718_contracts` | `owner_only` | Same. |
-| Any other template added later | `owner_portal` (default) | Conservative default. |
 
-The Visibility column reads this field directly. No documents-table join. No new DB column. The pill labels and colors come from existing `Badge` variants (owner / public / board) — add a variant if it's missing today.
+**§720 (HOA) mapping** (full enumeration of `HOA_720_CHECKLIST_TEMPLATE`):
+
+| `templateKey` | `defaultVisibility` | Why |
+|---|---|---|
+| `720_governing_docs`, `720_articles`, `720_bylaws_rules` | `owner_portal` | Governing documents available to members. |
+| `720_budget`, `720_financial_report` | `owner_portal` | Financial records members access. |
+| `720_minutes_rolling_12m` | `board` | Board approves before posting. |
+| `720_meeting_notices` | `owner_portal` | Meeting notices visible to members. |
+| `720_insurance` | `owner_only` | Sensitive. |
+| `720_contracts` | `owner_only` | Sensitive. |
+| `720_bids` | `board` | Bids reviewed by board after bidding closes (per §720.303(4)). |
+
+**Default for any future template item:** `owner_portal` (conservative; broader than `owner_only`, narrower than `public_page`). Add an explicit row above when adding a template item — don't rely on the default for shipped items.
+
+The Visibility column reads this field directly. No documents-table join. No new DB column. The pill renders as `<Badge variant="owner">Owner portal</Badge>` or analogous — see §"Badge variants" for the variant additions.
 
 ---
 
@@ -254,6 +298,8 @@ The client component does not call `checkPermission` itself (that helper require
 
 **Persistence:** view preference is stored in `localStorage` keyed on `compliance.audienceView.<communityId>`. Note this is per-browser, not per-user — shared workstations share preferences. We accept that; cookies bound to user-id would solve it cleanly but are out of scope.
 
+**Stale-preference edge case:** if a user's role changes (e.g., promoted from CAM to Board), their existing localStorage value remains. They'll continue seeing CAM-view default until they manually toggle. Acceptable for v1; if it becomes a complaint, key the localStorage value on `<communityId>.<role>` so a role change effectively resets the preference.
+
 ---
 
 ## Side panel CTA matrix
@@ -273,6 +319,18 @@ The CTA button text and handler depend on the selected item's `status`, the pres
 
 `ComplianceItemActions` (Mark N/A, Unlink, etc.) renders below the primary CTA as a smaller secondary group, unchanged from today.
 
+**Implementation note:** the matrix is **one switch statement** resolving to `{ label, handler, hidden }`, not 8 React components. Pseudocode:
+
+```ts
+function resolveCta(item, canWrite, role) {
+  if (!canWrite) return item.documentId ? { label: 'View document', handler: viewDoc } : { hidden: true };
+  if (item.status === 'not_applicable') return { label: 'Mark applicable', handler: markApplicable };
+  if (item.status === 'satisfied') return { label: 'View document', handler: viewDoc };
+  if (item.documentId) return { label: rolling ? 'Upload current document' : 'Re-link or replace', handler: openUpload | openLink };
+  return role === 'board' ? { label: 'Link existing document', handler: openLink } : { label: 'Upload document', handler: openUpload };
+}
+```
+
 ---
 
 ## States
@@ -280,11 +338,35 @@ The CTA button text and handler depend on the selected item's `status`, the pres
 | State | Treatment |
 |---|---|
 | **Loading** | KPI grid renders 4 `Skeleton` cards (label + tall numeral + meta line). Queue card renders 6 skeleton rows. Side panel: skeleton block. Banner is hidden until data arrives. |
-| **Empty (no items generated yet)** | Banner hidden. KPIs hidden. Queue card replaced by existing `ComplianceOnboarding` component CTA, which calls `POST /api/v1/compliance` via the existing onboarding hook to seed the checklist. |
-| **Empty (filter returns zero)** | Queue table replaced by `EmptyState` ("No records match these filters") with a "Clear filters" action. |
+| **Empty (no items generated yet)** | `ComplianceOnboarding` is always rendered above the queue; it self-hides via `isFreshChecklist(items)` (returns true when applicable items exist but all are unlinked). When it shows, it offers the priority-upload CTA. Banner and KPIs render normally because items DO exist (just unlinked). When `items.length === 0` entirely, queue area shows a simple "Generating your checklist…" message — the onboarding flow seeds items via `POST /api/v1/compliance` before the page is typically reachable. |
+| **Empty (filter returns zero)** | Queue table replaced by `EmptyState` ("No records match these filters") with an inline "Clear filters" button. |
 | **Error** | `AlertBanner` (danger) above the KPI grid: "We couldn't load compliance records. Please try again." Retry button (`refetch`). KPIs and queue render their skeleton state behind the banner. |
-| **Side panel: nothing selected** | Default selection on first render is `sortByPriority(items)[0]` if any items exist; otherwise side panel renders an `EmptyState` ("Select a record to see details."). This avoids an awkward empty panel on initial load. |
-| **Mobile fallback (<768 px)** | Queue table reflows to a card list: each card stacks Record (title + sub) → Statute + Visibility (inline pills) → Deadline → Status → primary action button. Side panel reflows below the queue (no sticky). KPI grid is 2×2. Below 768 px the page is functional but not the design target. |
+| **Side panel: nothing selected** | See §"Selection model" below — first-render default is `sortByPriority(items)[0]` set via a `useEffect` keyed on "items just hydrated AND selection is null". Selected row scrolls into view on initial mount and after any mutation that re-orders the queue. |
+| **Side panel: selected row hidden by filter** | If the user has a selected row and they activate a filter that excludes it, the side panel renders an inline `AlertBanner` (info): "Selected record is hidden by the current filter. [Clear filter]". Selection state is preserved; clicking the action restores the previous filter. |
+| **Side panel: activity hook 403** | `useComplianceActivityFeed` throws `ActivityFetchError(403)` for users without audit-read permission. The Recent Activity section (only) hides quietly; status checks + CTA still render. Mirrors the existing `ComplianceActivityFeed` 403 behavior. |
+| **Mobile fallback (<768 px)** | Queue table reflows to a card list: each card stacks Record (title + sub) → Status + Visibility (inline pills) → Deadline → Statute → primary action button. Side panel reflows below the queue (no sticky). KPI grid is 2×2. Below 768 px the page is functional but not the design target. |
+
+## Selection model
+
+Selection is a single `useState<number | null>(null)` inside `ComplianceCommandCenter` (the item `id`, not the whole object). Lifecycle:
+
+1. **Initial render:** selection is `null` (data still loading). Side panel renders skeleton.
+2. **First data arrival:** a `useEffect` keyed on `[items.length > 0, selectedId === null]` sets selection to `sortByPriority(items, now)[0].id`. The selected row scrolls into view via `scrollIntoView({ block: 'nearest', behavior: 'smooth' })`.
+3. **User clicks a row's primary action button:** the click handler calls `setSelectedId(item.id)` first, then triggers the action (open modal / view doc / etc.). The row immediately gets `aria-current="true"`; the side panel re-renders with the new item.
+4. **After a mutation (`useComplianceMutations.*`):** the optimistic update reorders the cached items, which may move the selected row. The container has a `useEffect` keyed on `items` that, when the selected row is still present but has moved, calls `scrollIntoView({ block: 'nearest' })` on it so the user doesn't lose visual context.
+5. **Selected item disappears (item N/A'd → moves to bottom, or filter hides it):** selection state is preserved. Side panel renders the "Selected record is hidden" banner (see States table). If the user explicitly removes the item by filter, no auto-clear; the user controls when to drop the selection.
+6. **Selected item deleted from the underlying list (race / unusual case):** if `items.find(i => i.id === selectedId)` returns undefined, a `useEffect` resets selection to `sortByPriority(items)[0]?.id ?? null`.
+
+The selection state intentionally does **not** persist in localStorage — it's per-session, per-tab.
+
+## Queue interactions and affordances
+
+In addition to the IA tree above, the queue card has these affordances (all Atlassian-DynamicTable-style):
+
+- **Sortable column headers.** Click a column header to sort by that column; click again to reverse direction. The active header shows a chevron glyph and carries `aria-sort="ascending" | "descending"`; inactive headers have `aria-sort="none"` and the chevron is hidden until hover. Default sort: by Status (which invokes `sortByPriority`). Sortable columns: Status (default), Deadline, Statute. Record column is not sortable (titles are sometimes very similar across statutes). Visibility and Action are not sortable.
+- **Filter-state summary line.** Just below the queue card heading, render `"Showing X of Y records"` when no filter is active and `"Showing X of Y records · × Clear filters"` when ≥1 filter is non-default. The "Clear filters" link is a button (`type="button"`) and resets all chip states.
+- **Inline Clear filters chip in the filter row.** When ≥1 filter is non-default, a final pill `× Clear filters` appears at the end of the chip row (in addition to the summary-line link). This makes the affordance reachable both visually next to filters and in the result-count area.
+- **KPI label tooltips.** Each KPI label has a `<Tooltip>` (component at `apps/web/src/components/ui/tooltip.tsx`) explaining what the metric counts. Suggested copy: "Readiness — % of applicable items with a posted document.", "Posting windows — Items whose 30-day posting deadline falls within 7 days.", "Overdue — Items whose deadline has passed or whose rolling-window posted document is too old.", "Needs board action — Items the board must approve or sign before posting.".
 
 ## Accessibility requirements
 
@@ -301,8 +383,27 @@ Baked into the design per the v2 audit. Implementation must preserve:
 
 ## Routes and integration
 
-- Route file: `apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx` — unchanged shell; the page renders `<ComplianceCommandCenter communityId={...} />` instead of `<ComplianceDashboard>`.
-- Breadcrumb is added to the route file via the existing `PageHeader` `breadcrumb` slot in the new client component (`ComplianceCommandCenter` owns chrome). Since the CI guard doesn't enforce on this route (see §"Problem"), no `breadcrumbs:exempt` comment is needed; we simply render the breadcrumb because the design calls for it.
+- Route file: `apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx`. Extend its `PageProps` to accept `searchParams` (App Router pattern, see `apps/web/src/app/(authenticated)/communities/[id]/operations/page.tsx:27` for an existing precedent):
+
+```tsx
+interface PageProps {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ layout?: string }>;
+}
+
+export default async function CompliancePage({ params, searchParams }: PageProps) {
+  const { id } = await params;
+  const { layout } = await searchParams;
+  // ... existing auth + feature-gate ...
+  return layout === 'v2'
+    ? <ComplianceCommandCenter communityId={communityId} role={membership.role} canWrite={canWrite} />
+    : <ComplianceDashboard communityId={communityId} />;
+}
+```
+
+- `loading.tsx` at `apps/web/src/app/(authenticated)/communities/[id]/compliance/loading.tsx` is **unchanged**. It only renders during the server-side auth + membership resolution; the new client component owns its own data-loading skeleton.
+- Breadcrumb is rendered by `ComplianceCommandCenter` via `<PageHeader breadcrumb={...}>`. Since the CI guard doesn't enforce on this route (see §"Problem"), no `breadcrumbs:exempt` comment is needed; we simply render the breadcrumb because the design calls for it.
+- **PageHeader auto-renders a Help button** ([page-header.tsx:73-77](apps/web/src/components/shared/page-header.tsx:73-77)) after any `actions` JSX. Our actions slot has [view toggle] + [Upload record] + [Export readiness PDF]. With the auto-Help that's 4 chips/buttons; on narrow viewports they wrap below the title. **Decision:** pass `hideHelpButton={true}` to `PageHeader` for this page — the page already has substantial chrome and the global help affordance from the AppShell is reachable elsewhere. (If product disagrees later, removing the prop puts the help button back.)
 - `ComplianceDashboard` is removed in the cleanup slice. Importers and test files affected (verified by `grep` at spec time):
   - `apps/web/src/app/(authenticated)/communities/[id]/compliance/page.tsx:13` (import + render — replaced by `ComplianceCommandCenter`).
   - `apps/web/__tests__/compliance/compliance-dashboard.test.tsx` — delete with the component.
@@ -324,7 +425,15 @@ Baked into the design per the v2 audit. Implementation must preserve:
 
 The existing client hook is `useComplianceActivityFeed(communityId)` at `apps/web/src/hooks/use-compliance-activity.ts`. It calls `/api/v1/audit-trail?communityId=…&limit=8` and is **community-scoped — no `itemId` filter today**.
 
-For v1 the side panel reuses this hook as-is and renders **the most recent 3 community events**, followed by a `View full activity →` link that scrolls/expands the bottom collapsible (`ComplianceActivityFeed`). This is technically less precise than "events for this exact item" but avoids new endpoint work and gives the user a one-click path to the per-community history. The 3-event slice comes from `data.slice(0, 3)` on the already-cached payload — no extra request.
+For v1 the side panel reuses this hook as-is and renders **the most recent 3 community events**, followed by a `View full activity →` link that scrolls and expands the bottom collapsible (`ComplianceActivityFeed`). This is technically less precise than "events for this exact item" but avoids new endpoint work and gives the user a one-click path to the per-community history. The 3-event slice comes from `data.slice(0, 3)` on the already-cached payload — no extra request.
+
+**Link target spec.** The bottom-of-page section that wraps `ComplianceActivityFeed` carries `id="compliance-activity-feed"`. The `View full activity →` link's `onClick`:
+
+1. Sets the collapsible's `aria-expanded="true"` (if not already open).
+2. Calls `document.getElementById('compliance-activity-feed')?.scrollIntoView({ behavior: 'smooth', block: 'start' })`.
+3. After scroll completes, moves focus to the section's wrapper for SR users.
+
+If the activity hook returns a 403, the Recent Activity section (and the link) are hidden — see §"States: Side panel: activity hook 403".
 
 Item-scoped activity (the truly correct behavior) is deferred to a follow-up. When it ships, it adds `?resourceType=compliance_checklist_item&resourceId=…&limit=3` to `/api/v1/audit-trail` and a thin wrapper hook (`useComplianceItemActivity(itemId)`). Out of scope here.
 
@@ -355,14 +464,20 @@ All spacing values must use design.md tokens: space-1 (4 px), space-2 (8 px), sp
 
 ## Appendix B — Implementation order
 
-Five PRs, each independently shippable. No dual-render parity hack.
+Six PRs (Slice A0 added after Pass-3 review), each independently shippable. No dual-render parity hack.
 
+0. **Slice A0 — Design-system tokens for new Badge variants.**
+   - Extend `semanticColors.status` in `packages/ui/src/tokens/colors.ts` with `owner` and `board` entries.
+   - Add CSS custom properties (`--status-owner`, `--status-owner-bg`, `--status-owner-border`, and the `board` triplet) in light + dark mode.
+   - Add light + dark Tailwind class entries to `solidVariantClasses`, `outlinedVariantClasses`, `dotColorClasses` in `packages/ui/src/components/Badge.tsx`.
+   - Add a Badge unit-test case for each new variant. No other UI changes.
+   - Ships first because every later slice's pill rendering depends on it.
 1. **Slice A — Data layer + container behind a flag.**
-   - Add `defaultVisibility` to template items (`packages/shared`).
-   - Extend `compliance-calculator.ts` with `needsAttention`, `buildComplianceSummary`, `sortByPriority`, `BOARD_ACTION_TEMPLATE_KEYS`. Unit tests for each.
-   - Add `ComplianceCommandCenter` with `breadcrumb` + page header + view toggle + banner + KPI grid only. No queue, no detail panel.
-   - Gate by `?layout=v2` query param in the route file. When `?layout=v2` is absent, render `ComplianceDashboard` (existing). When present, render `ComplianceCommandCenter`. Lets us A/B test in dev.
-2. **Slice B — Queue with filters and sort.** Add `ComplianceQueue` inside the new container. Filter chip group, sort control, table (or card list <768 px). Row primary action wired to existing `UploadDocumentModal` / `LinkDocumentModal`. Empty (filter→0) state.
-3. **Slice C — Side detail panel.** Add `ComplianceDetailPanel` bound to selected row. Implements the §"Side panel CTA matrix". Reuses `useComplianceActivityFeed` (community-scoped) and slices to the last 3 events; adds a "View full activity" link to the bottom collapsible. Item-scoped activity is deferred (see §"Recent activity").
-4. **Slice D — Default-on swap.** Flip the default branch in the route file: `ComplianceCommandCenter` becomes default; `?layout=v1` opt-back-in for one release window.
-5. **Slice E — Cleanup.** Remove `?layout=v1` branch, delete `ComplianceDashboard`, `ComplianceScoreRing`, `DeadlineRibbon`, `CategoryGroup` (if no other importers — verify). Remove `ComplianceFilterPills` if confirmed unused after Slice B. Move `ComplianceActivityFeed` into the bottom collapsible. Role-driven default-view localStorage persistence lands in this slice too (small enough to ride along).
+   - Add `defaultVisibility` to `ComplianceTemplateItem` type + every entry in `CONDO_718_CHECKLIST_TEMPLATE` and `HOA_720_CHECKLIST_TEMPLATE` (`packages/shared/src/compliance/templates.ts`).
+   - Extend `compliance-calculator.ts` with `needsAttention`, `buildComplianceSummary`, `sortByPriority`, `BOARD_ACTION_TEMPLATE_KEYS`. Unit tests for each (including the edge cases listed earlier).
+   - Add `ComplianceCommandCenter` with `breadcrumb` + page header (`hideHelpButton`) + view toggle + banner + KPI grid (with tooltips) only. No queue, no detail panel.
+   - Extend `page.tsx` `PageProps` with `searchParams`, branch on `?layout=v2`. Without the flag, render existing `ComplianceDashboard`.
+2. **Slice B — Queue with filters and sort.** Add `ComplianceQueue` inside the new container. Sortable column headers (default by Status via `sortByPriority`), filter chip group, "Showing X of Y" summary, inline "× Clear filters" affordance. Table at ≥768 px, card list below. Row primary action wired to existing modals via the CTA-matrix switch. Empty (filter→0) state.
+3. **Slice C — Side detail panel.** Add `ComplianceDetailPanel` bound to selected row. Implements §"Side panel CTA matrix" (single switch). Selection-model lifecycle (initial selection, scroll-into-view on mount + after mutation, hidden-by-filter banner). Reuses `useComplianceActivityFeed`, slices to last 3, adds "View full activity →" link with anchor + smooth scroll + auto-expand of the bottom collapsible. 403 hides Recent Activity section only.
+4. **Slice D — Default-on swap.** Flip the default branch in the route file: `ComplianceCommandCenter` becomes default when `?layout` is absent; `?layout=v1` opt-back-in for one release window.
+5. **Slice E — Cleanup.** Remove `?layout=v1` branch, delete `ComplianceDashboard`, `ComplianceScoreRing`, `DeadlineRibbon`, `CategoryGroup` (if no other importers — verify). Remove `ComplianceFilterPills` if confirmed unused after Slice B. Role-driven default-view localStorage persistence lands in this slice too (small enough to ride along).
