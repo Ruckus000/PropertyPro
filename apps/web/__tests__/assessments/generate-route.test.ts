@@ -80,9 +80,9 @@ const ADMIN_MEMBERSHIP = {
 };
 
 const GENERATE_RESULT = {
-  assessmentId: 7,
-  lineItemsCreated: 12,
-  generatedAt: new Date('2026-01-01T00:00:00Z'),
+  insertedCount: 12,
+  skippedCount: 0,
+  dueDate: '2026-02-15',
 };
 
 function jsonPost(
@@ -125,9 +125,10 @@ describe('POST /api/v1/assessments/[id]/generate', () => {
     );
 
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { data: { assessmentId: number; lineItemsCreated: number } };
-    expect(json.data.assessmentId).toBe(7);
-    expect(json.data.lineItemsCreated).toBe(12);
+    const json = (await res.json()) as { data: { insertedCount: number; skippedCount: number; dueDate: string } };
+    expect(json.data.insertedCount).toBe(12);
+    expect(json.data.skippedCount).toBe(0);
+    expect(json.data.dueDate).toBe('2026-02-15');
     expect(resolveEffectiveCommunityIdMock).toHaveBeenCalledWith(expect.anything(), 42);
     expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-admin-1');
