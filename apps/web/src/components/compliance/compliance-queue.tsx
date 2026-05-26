@@ -203,16 +203,13 @@ export function ComplianceQueue({
             {filter !== 'all' && (
               <>
                 {' · '}
-                {/* eslint-disable-next-line jsx-a11y/anchor-is-valid */}
-                <a
-                  role="link"
-                  tabIndex={0}
+                <button
+                  type="button"
                   onClick={() => setFilter('all')}
-                  onKeyDown={(e) => e.key === 'Enter' && setFilter('all')}
-                  className="cursor-pointer text-[var(--interactive-primary)] hover:underline"
+                  className="text-[var(--interactive-primary)] hover:underline"
                 >
                   × Clear filters
-                </a>
+                </button>
               </>
             )}
           </p>

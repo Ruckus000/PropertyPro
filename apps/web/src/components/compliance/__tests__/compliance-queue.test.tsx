@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ComplianceQueue } from '../compliance-queue';
 
 const ITEMS = [
@@ -50,7 +50,13 @@ describe('ComplianceQueue', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /Satisfied/i }));
     expect(screen.getByText(/Showing 1 of 2/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Clear filters/i })).toBeInTheDocument();
+    // Both the chip-row chip and the summary-line button are intentional per spec.
+    // Use within() to target the chip-row affordance via its filter-group container.
+    const filterGroup = screen.getByRole('group', { name: /filter records/i });
+    expect(within(filterGroup).getByRole('button', { name: /Clear filters/i })).toBeInTheDocument();
+    // Summary-line affordance is also a <button> (keyboard-accessible for both Enter and Space).
+    const allClearButtons = screen.getAllByRole('button', { name: /Clear filters/i });
+    expect(allClearButtons.length).toBeGreaterThanOrEqual(2);
   });
 
   it('calls onSelect with the item id when row primary action is clicked', () => {
