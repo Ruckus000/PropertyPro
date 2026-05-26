@@ -5,9 +5,13 @@
 --     publish flow (Section 2.7 of the spec) can soft-delete published rows
 --     and promote drafts in a single transaction without constraint violation.
 --
--- (b) Extend the block_type CHECK constraint to include the 7 v1 block types.
---     The existing constraint only allows the old "jsx_template" + a few
---     other legacy types. (Note: jsx_template is retired in PR #9 — this
+-- (b) Re-establish the block_type CHECK constraint that was lost during
+--     the Drizzle schema reset. The current baseline (0000_nappy_guardian.sql:1041)
+--     declares `block_type text NOT NULL` with no CHECK; the original constraint
+--     (added in archive 0033, extended in archive 0097 with 'jsx_template') is
+--     missing on this branch. The DROP IF EXISTS below is defensive — on this
+--     branch there is no constraint to drop. The new CHECK enforces all 8
+--     v1 block types. (Note: 'jsx_template' is retired in PR #9 — this
 --     migration does NOT drop it yet, only adds the new ones.)
 --
 -- (c) Create three new platform-level tables (site_theme_presets,
@@ -91,7 +95,8 @@ CREATE TABLE site_layout_metadata (
     CHECK (tier IN ('essentials', 'professional', 'pm')),
   is_archived          boolean NOT NULL DEFAULT false,
   is_featured          boolean NOT NULL DEFAULT true,
-  default_preset_slug  text REFERENCES site_theme_presets(slug),
+  default_preset_slug  text REFERENCES site_theme_presets(slug)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
   version              text NOT NULL,
   created_at           timestamptz NOT NULL DEFAULT now(),
   updated_at           timestamptz NOT NULL DEFAULT now()
