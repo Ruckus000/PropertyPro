@@ -21,7 +21,7 @@ vi.mock('@propertypro/db/filters', () => ({
   isNull: vi.fn((col: unknown) => ({ __isNull: col })),
 }));
 
-import { upsertPublishedHero } from '@/lib/services/site-blocks-service';
+import { upsertPublishedHero, upsertPublishedBlock } from '@/lib/services/site-blocks-service';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
 
 const createScopedClientMock = vi.mocked(createScopedClient);
@@ -111,5 +111,83 @@ describe('upsertPublishedHero', () => {
     });
     await upsertPublishedHero({ communityId: 42, actorUserId: 'user-1', content: HERO });
     expect(callOrder).toEqual(['softDelete', 'insert', 'audit']);
+  });
+});
+
+describe('upsertPublishedBlock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('soft-deletes existing published block at matching blockType + blockOrder, then inserts new', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'text',
+      blockOrder: 3,
+      content: { heading: 'About', body: 'Lorem ipsum.' },
+    });
+    expect(scopedClient.softDelete).toHaveBeenCalled();
+    expect(scopedClient.insert).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      blockType: 'text',
+      blockOrder: 3,
+      isDraft: false,
+      content: { heading: 'About', body: 'Lorem ipsum.' },
+    }));
+  });
+
+  it('audit-logs with action=update, resourceType=site_block, resourceId={blockType}', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'image',
+      blockOrder: 4,
+      content: { imagePath: '42/content/x.webp', altText: 'pool' },
+    });
+    expect(logAuditEventMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'update',
+      resourceType: 'site_block',
+      resourceId: 'image',
+      communityId: 42,
+      userId: 'user-1',
+    }));
+  });
+
+  it('audit log fires AFTER mutations complete', async () => {
+    const callOrder: string[] = [];
+    const scopedClient = {
+      softDelete: vi.fn().mockImplementation(async () => { callOrder.push('softDelete'); return []; }),
+      insert: vi.fn().mockImplementation(async () => { callOrder.push('insert'); return [{ id: 999 }]; }),
+    };
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    logAuditEventMock.mockImplementationOnce(async () => { callOrder.push('audit'); });
+    await upsertPublishedBlock({
+      communityId: 42, actorUserId: 'user-1', blockType: 'text', blockOrder: 2, content: { body: 'x' },
+    });
+    expect(callOrder).toEqual(['softDelete', 'insert', 'audit']);
+  });
+});
+
+describe('upsertPublishedHero (back-compat caller)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('delegates to upsertPublishedBlock with blockType=hero blockOrder=1', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedHero({ communityId: 42, actorUserId: 'user-1', content: { headline: 'H' } as typeof HERO });
+    expect(scopedClient.insert).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      blockType: 'hero',
+      blockOrder: 1,
+      isDraft: false,
+      content: { headline: 'H' },
+    }));
   });
 });
