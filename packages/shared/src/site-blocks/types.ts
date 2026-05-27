@@ -48,8 +48,8 @@ export const ctaTargetSchema = z
   .min(1)
   .max(512)
   .refine(
-    (v) => v.startsWith('/') || v.startsWith('https://'),
-    'CTA target must be an internal path (starting with /) or an https URL',
+    (v) => (v.startsWith('/') && !v.startsWith('//')) || v.startsWith('https://'),
+    'CTA target must be an internal path (starting with /, not //) or an https URL',
   );
 
 /** SoR block configuration limits used across documents/meetings/announcements. */

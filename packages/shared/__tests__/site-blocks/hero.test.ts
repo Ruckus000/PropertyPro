@@ -44,6 +44,21 @@ describe('heroBlockSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects ctaTarget with protocol-relative URL', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '//evil.com' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects ctaTarget that is just two slashes', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '//' });
+    expect(result.success).toBe(false);
+  });
+
+  it('still accepts a normal internal path with a single leading slash', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '/path/to/page' });
+    expect(result.success).toBe(true);
+  });
+
   it('accepts ctaTarget as internal path', () => {
     const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '/auth/login' });
     expect(result.success).toBe(true);
