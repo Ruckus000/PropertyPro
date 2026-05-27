@@ -1,48 +1,55 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Accounting Disconnect API
+ *
+ * DELETE /api/v1/accounting/disconnect — revoke an active QuickBooks/Xero
+ * connection for a community.
+ *
+ * Plan A1 drain #84. Second `DELETE` handler in the contract corpus
+ * (after drain #22 `esign/consent`); first DELETE with a body schema.
+ * See `./contract.ts` for the schema and permission rationale.
+ *
+ * Authorization invariants (preserved verbatim):
+ *   requireAuthenticatedUserId
+ *   → resolveEffectiveCommunityId(req, body.communityId)
+ *   → assertNotDemoGrace(communityId)
+ *   → requireCommunityMembership(communityId, actorUserId)
+ *   → requireAccountingEnabled(membership)            (SYNC)
+ *   → requireAccountingWritePermission(membership)    (SYNC)
+ *   → disconnectAccounting(communityId, actorUserId, body.provider, requestId)
+ *
+ * The pre-migration handler called `parseCommunityIdFromBody(req, body.communityId)`,
+ * which already delegates to `resolveEffectiveCommunityId` under the hood
+ * (drain #10 lesson). The only wire delta is the 400 envelope for invalid
+ * body, which becomes the canonical `VALIDATION_ERROR` shape; status
+ * unchanged at 400.
+ *
+ * `requestId = req.headers.get('x-request-id')` is forwarded verbatim,
+ * including the `null` value when absent.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { disconnectAccounting } from '@/lib/services/accounting-connectors-service';
+import { accountingDisconnectContract } from './contract';
 
-const disconnectSchema = z.object({
-  communityId: z.number().int().positive(),
-  provider: z.enum(['quickbooks', 'xero']),
-});
+export const DELETE = withErrorHandler(
+  runRoute(accountingDisconnectContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-export const DELETE = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = disconnectSchema.safeParse(body);
+    requireAccountingEnabled(membership);
+    requireAccountingWritePermission(membership);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid accounting disconnect payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireAccountingEnabled(membership);
-  requireAccountingWritePermission(membership);
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await disconnectAccounting(
-    communityId,
-    actorUserId,
-    parsed.data.provider,
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    const requestId = req.headers.get('x-request-id');
+    return disconnectAccounting(communityId, actorUserId, body.provider, requestId);
+  }),
+);
