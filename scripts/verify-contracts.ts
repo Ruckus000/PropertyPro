@@ -90,7 +90,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/account/join-requests/route.ts',
   'apps/web/src/app/api/v1/accounting/callback/route.ts',
   'apps/web/src/app/api/v1/accounting/export/route.ts',
-  'apps/web/src/app/api/v1/accounting/mapping/route.ts',
   'apps/web/src/app/api/v1/admin/access-plans/[id]/extend/route.ts',
   'apps/web/src/app/api/v1/admin/access-plans/[id]/route.ts',
   'apps/web/src/app/api/v1/admin/access-plans/community/[id]/route.ts',
