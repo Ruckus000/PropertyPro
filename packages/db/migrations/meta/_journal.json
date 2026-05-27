@@ -29,6 +29,20 @@
       "when": 1778694790784,
       "tag": "0003_maintenance_unit_label",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779814172957,
+      "tag": "0004_site_blocks_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779836874265,
+      "tag": "0005_site_blocks_rls_hardening",
+      "breakpoints": true
     }
   ]
 }

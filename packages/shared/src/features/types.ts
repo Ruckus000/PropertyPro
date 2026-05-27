@@ -59,4 +59,14 @@ export interface CommunityFeatures {
   readonly hasEsign: boolean;
   /** Emergency SMS + email broadcast system (Phase 1B) */
   readonly hasEmergencyNotifications: boolean;
+  /** Site editor — block authoring UI at /pm/settings/website/ (Essentials+). */
+  readonly hasSiteEditor: boolean;
+  /** Polish block types: FAQ, gallery, amenities pages (Pro+). */
+  readonly hasSitePolishBlocks: boolean;
+  /** Custom CSS overrides on layout theme tokens (Pro+, allowlist-only). */
+  readonly hasSiteCustomCss: boolean;
+  /** Custom domain mapping (Pro+, Phase 2). */
+  readonly hasSiteCustomDomain: boolean;
+  /** Portfolio templates + bulk apply across communities (PM/Enterprise, Phase 2). */
+  readonly hasSitePortfolioTemplates: boolean;
 }

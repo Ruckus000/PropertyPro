@@ -5,16 +5,18 @@
  * Block types: hero, announcements, documents, meetings, contact, text, image, jsx_template
  * (enforced via CHECK constraint in migration 0033, extended in 0097).
  */
+import { sql } from 'drizzle-orm';
 import {
   bigint,
   bigserial,
   boolean,
+  check,
   integer,
   jsonb,
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 
@@ -36,11 +38,17 @@ export const siteBlocks = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    unique('site_blocks_community_order_draft_variant_unique').on(
-      table.communityId,
-      table.blockOrder,
-      table.isDraft,
-      table.templateVariant,
+    uniqueIndex('site_blocks_community_order_draft_variant_partial')
+      .on(
+        table.communityId,
+        table.blockOrder,
+        table.isDraft,
+        table.templateVariant,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
+    check(
+      'site_blocks_block_type_check',
+      sql`${table.blockType} IN ('jsx_template','hero','text','image','documents','meetings','announcements','contact')`,
     ),
   ],
 );

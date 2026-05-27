@@ -211,6 +211,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/deny/route.ts'),
   // Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped
   resolve(repoRoot, 'apps/web/src/lib/services/revenue-snapshot-data-service.ts'),
+  // PR #1a: Public-site community reader — unauthenticated /_site context, no TenantContext
+  // available. Applies explicit community_id + deletedAt predicates on every read.
+  resolve(repoRoot, 'apps/web/src/lib/db/public-community-reader.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
@@ -255,6 +258,10 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'maintenance_comments',
   // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
   'user_search_index',
+  // PR #1a: site_blocks platform tables — ENABLE RLS covered by 0005_site_blocks_rls_hardening
+  'site_theme_presets',
+  'site_starter_packs',
+  'site_layout_metadata',
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {

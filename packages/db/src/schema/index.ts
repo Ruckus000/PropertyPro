@@ -61,6 +61,9 @@ export * from './onboarding-wizard-state';
 export * from './onboarding-checklist-items';
 export * from './rls-config';
 export * from './site-blocks';
+export { siteThemePresets, type ThemePresetTokens } from './site-theme-presets';
+export { siteStarterPacks, type StarterPackBlock } from './site-starter-packs';
+export { siteLayoutMetadata } from './site-layout-metadata';
 export * from './esign';
 export * from './emergency-broadcasts';
 export * from './emergency-broadcast-recipients';
@@ -128,6 +131,9 @@ import type { demoInstances } from './demo-instances';
 import type { onboardingWizardState } from './onboarding-wizard-state';
 import type { platformAdminUsers } from './platform-admin-users';
 import type { siteBlocks } from './site-blocks';
+import type { siteThemePresets } from './site-theme-presets';
+import type { siteStarterPacks } from './site-starter-packs';
+import type { siteLayoutMetadata } from './site-layout-metadata';
 
 // Communities
 export type Community = typeof communities.$inferSelect;
@@ -340,6 +346,18 @@ export type NewPlatformAdminUser = typeof platformAdminUsers.$inferInsert;
 // Site Blocks
 export type SiteBlock = typeof siteBlocks.$inferSelect;
 export type NewSiteBlock = typeof siteBlocks.$inferInsert;
+
+// Site Theme Presets
+export type SiteThemePreset = typeof siteThemePresets.$inferSelect;
+export type NewSiteThemePreset = typeof siteThemePresets.$inferInsert;
+
+// Site Starter Packs
+export type SiteStarterPack = typeof siteStarterPacks.$inferSelect;
+export type NewSiteStarterPack = typeof siteStarterPacks.$inferInsert;
+
+// Site Layout Metadata
+export type SiteLayoutMetadata = typeof siteLayoutMetadata.$inferSelect;
+export type NewSiteLayoutMetadata = typeof siteLayoutMetadata.$inferInsert;
 
 // E-Signature Templates
 import type { esignTemplates } from './esign';
