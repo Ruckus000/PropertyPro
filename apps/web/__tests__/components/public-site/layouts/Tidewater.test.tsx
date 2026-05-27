@@ -68,6 +68,21 @@ describe('<Tidewater>', () => {
     expect(screen.getByTestId('hero-mock')).toHaveTextContent('After skipped block');
   });
 
+  it('renders blocks in ascending blockOrder regardless of array input order', () => {
+    const { getAllByTestId } = render(
+      <Tidewater
+        community={community}
+        theme={theme}
+        blocks={[
+          { id: 1, blockType: 'hero', blockOrder: 2, content: { headline: 'Second' } },
+          { id: 2, blockType: 'hero', blockOrder: 1, content: { headline: 'First' } },
+        ]}
+      />,
+    );
+    const heroes = getAllByTestId('hero-mock');
+    expect(heroes.map((el) => el.textContent)).toEqual(['First', 'Second']);
+  });
+
   it('does not render the empty-state hero when a hero block is supplied', () => {
     render(
       <Tidewater

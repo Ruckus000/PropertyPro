@@ -1,6 +1,7 @@
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
-import { blockRendererRegistry } from '@/components/public-site/blocks/registry';
+import { blockRendererRegistry, hasRenderer } from '@/components/public-site/blocks/registry';
+import type { BlockType } from '@propertypro/shared';
 import type { LayoutProps, SiteBlock } from './types';
 
 /**
@@ -65,16 +66,20 @@ export function Tidewater({ community, theme, blocks }: LayoutProps) {
       <main id="main-content" className="flex-1">
         {!hasHeroBlock(ordered) && <EmptyStateHero communityName={community.name} />}
         {ordered.map((block) => {
-          const Renderer =
-            blockRendererRegistry[block.blockType as keyof typeof blockRendererRegistry];
-          if (!Renderer) {
-            // Unknown block type — skip silently (logged at the page level).
+          const blockType = block.blockType as BlockType;
+          if (!hasRenderer(blockType)) {
+            // Unknown block type — skip silently. A console/Sentry warning will be
+            // added at the page level in a later PR (#1b Task 7 does not include it;
+            // PR #2+ may surface this through the Sentry plumbing per spec §8.2).
             return null;
           }
+          // hasRenderer guard above ensures this entry exists.
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const Renderer = blockRendererRegistry[blockType]!;
           return (
             <Renderer
               key={block.id}
-              block={block}
+              block={{ ...block, blockType }}
               community={community}
               theme={theme}
               layout="tidewater"
