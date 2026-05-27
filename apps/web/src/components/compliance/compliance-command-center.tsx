@@ -10,8 +10,9 @@ import { buildComplianceSummary, sortByPriority } from '@/lib/utils/compliance-c
 import { ComplianceDetailPanel } from './compliance-detail-panel';
 import { ComplianceOnboarding } from './compliance-onboarding';
 import { ComplianceActivityFeed } from './compliance-activity-feed';
-import { ComplianceQueue, matchesFilter } from './compliance-queue';
-import type { FilterKey } from './compliance-queue';
+import { ComplianceQueue } from './compliance-queue';
+import { matchesFilter } from './compliance-pill-mapping';
+import type { FilterKey } from './compliance-pill-mapping';
 import { UploadDocumentModal } from './upload-document-modal';
 import { LinkDocumentModal } from './link-document-modal';
 import type { CommunityRole, NewCommunityRole } from '@propertypro/shared';
@@ -49,14 +50,12 @@ export function ComplianceCommandCenter({
   const storageKey = `compliance.audienceView.${communityId}`;
 
   const [view, setView] = useState<ViewMode>(() => {
-    if (typeof window === 'undefined') return defaultViewForRole(role);
     const stored = window.localStorage.getItem(storageKey);
     if (stored === 'cam' || stored === 'board') return stored;
     return defaultViewForRole(role);
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     window.localStorage.setItem(storageKey, view);
   }, [storageKey, view]);
 
@@ -74,8 +73,14 @@ export function ComplianceCommandCenter({
   // every re-render). Initialized to null so the very first selection does
   // NOT scroll (the row may not yet be in the DOM on initial mount).
   const selectedRowRef = useRef<number | null>(null);
-  const selectedItem = selectedId != null ? items.find((i) => i.id === selectedId) ?? null : null;
-  const isSelectedHidden = selectedItem !== null && !matchesFilter(selectedItem, filter);
+  const selectedItem = useMemo(
+    () => (selectedId != null ? items.find((i) => i.id === selectedId) ?? null : null),
+    [items, selectedId],
+  );
+  const isSelectedHidden = useMemo(
+    () => selectedItem !== null && !matchesFilter(selectedItem, filter),
+    [selectedItem, filter],
+  );
 
   // Initial selection: pick the first item by priority. Fallback: if the
   // selected item disappears entirely (e.g., removed from data), pick the

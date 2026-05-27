@@ -1,5 +1,5 @@
 import type { ChecklistItemData } from './compliance-checklist-item';
-import { BOARD_ACTION_TEMPLATE_KEYS } from '@/lib/utils/compliance-calculator';
+import { BOARD_ACTION_TEMPLATE_KEYS, needsAttention, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
 import type { ComplianceStatus } from '@/lib/utils/compliance-calculator';
 import type { DefaultVisibility } from '@propertypro/shared';
 
@@ -33,4 +33,18 @@ export function statusVariant(status: ComplianceStatus): StatusBadgeVariant {
   if (status === 'overdue') return 'danger';
   if (status === 'not_applicable') return 'neutral';
   return 'warning';
+}
+
+export type FilterKey = 'all' | 'action_needed' | 'overdue' | 'due_soon' | 'satisfied';
+
+export function matchesFilter(item: ChecklistItemData, filter: FilterKey): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'action_needed') return needsAttention(item);
+  if (filter === 'overdue') return item.status === 'overdue';
+  if (filter === 'satisfied') return item.status === 'satisfied';
+  if (filter === 'due_soon') {
+    return !!item.deadline && item.status === 'unsatisfied' &&
+      (new Date(item.deadline).getTime() - Date.now()) <= SEVEN_DAYS_MS;
+  }
+  return true;
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -196,13 +196,16 @@ describe('ComplianceCommandCenter', () => {
 });
 
 describe('ComplianceCommandCenter — view persistence', () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
   it('reads view preference from localStorage on mount', () => {
     window.localStorage.setItem('compliance.audienceView.1', 'board');
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
     );
     expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
-    window.localStorage.removeItem('compliance.audienceView.1');
   });
 
   it('writes view preference to localStorage on toggle', () => {
@@ -211,6 +214,5 @@ describe('ComplianceCommandCenter — view persistence', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Board view' }));
     expect(window.localStorage.getItem('compliance.audienceView.1')).toBe('board');
-    window.localStorage.removeItem('compliance.audienceView.1');
   });
 });

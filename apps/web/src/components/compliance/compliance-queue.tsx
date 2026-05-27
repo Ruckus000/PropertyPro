@@ -6,9 +6,9 @@ import { sortByPriority, needsAttention, SEVEN_DAYS_MS } from '@/lib/utils/compl
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import type { ChecklistItemData } from './compliance-checklist-item';
 import { getTemplateDefaultVisibility } from './compliance-visibility';
-import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant } from './compliance-pill-mapping';
-
-export type FilterKey = 'all' | 'action_needed' | 'overdue' | 'due_soon' | 'satisfied';
+import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant, matchesFilter } from './compliance-pill-mapping';
+import type { FilterKey } from './compliance-pill-mapping';
+export type { FilterKey } from './compliance-pill-mapping';
 type SortKey = 'status' | 'deadline' | 'statute';
 type SortDir = 'asc' | 'desc';
 
@@ -31,19 +31,6 @@ function deadlineCell(item: ChecklistItemData): string {
   if (item.rollingWindow && !item.deadline) return `Rolling ${item.rollingWindow.months} mo`;
   if (!item.deadline) return '—';
   return new Date(item.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-
-export function matchesFilter(item: ChecklistItemData, filter: FilterKey): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'action_needed') return needsAttention(item);
-  if (filter === 'overdue') return item.status === 'overdue';
-  if (filter === 'satisfied') return item.status === 'satisfied';
-  if (filter === 'due_soon') {
-    return !!item.deadline && item.status === 'unsatisfied' &&
-      (new Date(item.deadline).getTime() - Date.now()) <= SEVEN_DAYS_MS;
-  }
-  return true;
 }
 
 function SortableHeader({
