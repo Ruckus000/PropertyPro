@@ -27,7 +27,8 @@ export interface ResolvedTheme {
   bodyFont: string;
 }
 
-export type LayoutId = 'tidewater' | 'boulevard' | 'sable';
+export const LAYOUT_IDS = ['tidewater', 'boulevard', 'sable'] as const;
+export type LayoutId = (typeof LAYOUT_IDS)[number];
 
 export interface BlockRendererProps<TContent = unknown> {
   block: {

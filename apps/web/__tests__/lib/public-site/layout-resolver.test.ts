@@ -24,4 +24,8 @@ describe('resolveLayoutId', () => {
   it('ignores an unknown branding.layoutId and uses the community_type default', () => {
     expect(resolveLayoutId({ layoutId: 'futuristic' as never }, 'apartment')).toBe('sable');
   });
+
+  it('treats empty-string layoutId as missing', () => {
+    expect(resolveLayoutId({ layoutId: '' }, 'condo_718')).toBe('tidewater');
+  });
 });
