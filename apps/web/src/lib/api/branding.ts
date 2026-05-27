@@ -82,6 +82,8 @@ export interface BrandingPatch {
   logoPath?: string;
   /** Custom footer text for outbound emails */
   customEmailFooter?: string;
+  /** Running total of site-asset bytes consumed by this community (managed by quota helpers) */
+  assetsBytesUsed?: number;
 }
 
 /**
