@@ -16,18 +16,18 @@
 import type { BlockType } from '@propertypro/shared';
 import type { BlockRenderer } from './types';
 import { HeroBlock } from './HeroBlock';
+import { TextBlock } from './TextBlock';
+import { ImageBlock } from './ImageBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
   hero: HeroBlock,
-  // text, image: PR #2
+  text: TextBlock,
+  image: ImageBlock,
   // announcements: PR #3
   // documents, meetings, contact: PR #4
 };
 
-/**
- * Returns true if a renderer is registered for the given block type.
- */
 export function hasRenderer(blockType: BlockType): boolean {
   return blockType in blockRendererRegistry;
 }
