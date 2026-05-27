@@ -214,6 +214,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // PR #1a: Public-site community reader — unauthenticated /_site context, no TenantContext
   // available. Applies explicit community_id + deletedAt predicates on every read.
   resolve(repoRoot, 'apps/web/src/lib/db/public-community-reader.ts'),
+  // PR #2: Site asset quota lookup — communities is the root tenant table (no communityId column);
+  // plan resolution requires unscoped read. Routes calling these helpers MUST have already
+  // verified caller's pm_admin membership in the target community.
+  resolve(repoRoot, 'apps/web/src/lib/site-assets/quota.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
