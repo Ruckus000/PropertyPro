@@ -218,6 +218,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // plan resolution requires unscoped read. Routes calling these helpers MUST have already
   // verified caller's pm_admin membership in the target community.
   resolve(repoRoot, 'apps/web/src/lib/site-assets/quota.ts'),
+  // PR #5: Starter pack apply — reads platform-level site_starter_packs catalog (no community_id);
+  // inserts into site_blocks via scoped client after community creation.
+  resolve(repoRoot, 'apps/web/src/lib/services/starter-pack-service.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
