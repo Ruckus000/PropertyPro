@@ -105,4 +105,20 @@ describe('PublicSitePage (layout-registry path)', () => {
     const meta = await generateMetadata();
     expect(meta.title).toBe('PropertyPro');
   });
+
+  it('falls back to the legacy hardcoded markup when the resolved layout is not registered', async () => {
+    // hoa_720 resolves to 'boulevard', which is NOT registered in PR #1b.
+    getCommunityPublicInfoMock.mockResolvedValueOnce({
+      id: 99,
+      slug: 'palm-shores-hoa',
+      name: 'Palm Shores HOA',
+      communityType: 'hoa_720',
+      sitePublishedAt: null,
+    });
+    const ui = await PublicSitePage();
+    const { container } = render(ui as React.ReactElement);
+    // The hardcoded fallback contains "Community Resources" — the layout
+    // path does not.
+    expect(container.innerHTML).toContain('Community Resources');
+  });
 });

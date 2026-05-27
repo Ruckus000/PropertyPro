@@ -4,6 +4,7 @@
  * All callers must have already verified the user holds property_manager_admin
  * in the target community before calling these functions.
  */
+import { cache } from 'react';
 import { communities } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
@@ -27,10 +28,13 @@ export interface CommunityPublicInfo {
 /**
  * Fetch community public info by ID for the public site renderer.
  * Returns null if the community does not exist or is soft-deleted.
+ *
+ * Wrapped in React.cache so that generateMetadata and PublicSitePage share
+ * a single DB read per request instead of issuing two identical SELECTs.
  */
-export async function getCommunityPublicInfo(
+export const getCommunityPublicInfo = cache(async (
   communityId: number,
-): Promise<CommunityPublicInfo | null> {
+): Promise<CommunityPublicInfo | null> => {
   const db = createUnscopedClient();
   const rows = await db
     .select({
@@ -45,7 +49,7 @@ export async function getCommunityPublicInfo(
     .limit(1);
 
   return rows[0] ?? null;
-}
+});
 
 /**
  * Read the current branding for a community.

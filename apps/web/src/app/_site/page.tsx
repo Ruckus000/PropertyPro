@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
-import type { Metadata } from 'next';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import type { Metadata } from 'next';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getBrandingForCommunity,
@@ -101,11 +101,7 @@ export default async function PublicSitePage() {
   }
 
   // Layout-registry render path (PR #1b)
-  // CommunityBranding doesn't declare layoutId (it's stored in the JSONB but not yet
-  // typed in @propertypro/shared). Cast to BrandingLayoutInput to extract only what
-  // resolveLayoutId needs. The field will be present at runtime if the PM has set it.
-  const brandingAsLayoutInput = branding as { layoutId?: string | null } | null;
-  const layoutId = resolveLayoutId(brandingAsLayoutInput, community.communityType as CommunityType);
+  const layoutId = resolveLayoutId(branding, community.communityType as CommunityType);
   const Layout = getLayout(layoutId);
 
   if (Layout) {
@@ -125,6 +121,8 @@ export default async function PublicSitePage() {
               name: community.name,
               logoUrl: theme.logoUrl,
               communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+              // city / state / timezone not yet in getCommunityPublicInfo; all FL
+              // communities are America/New_York. A later PR extends the SELECT.
               city: null,
               state: null,
               timezone: 'America/New_York',
