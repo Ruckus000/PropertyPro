@@ -1,13 +1,58 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * Amenities — reserve an amenity.
+ *
+ * POST /api/v1/amenities/[id]/reserve
+ * Body: { communityId, unitId?, startTime, endTime, notes? }
+ *
+ * Plan A1 drain #78. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Mirrors drain #70
+ * (reservations/[id]/cancel) plumbing for the amenities plan-gate stack,
+ * AND drain #61 (arc/[id]/withdraw) for the in-handler scoped DB call.
+ *
+ * Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireAmenitiesEnabled (sync, NOT awaited)
+ *     → requirePlanFeature(communityId, 'hasAmenities') (async — awaited)
+ *     → requireAmenitiesWritePermission (sync)
+ *     → requireReservationPermission (sync — no-op compat guard)
+ *     → if (isResidentRole) {
+ *         scoped = createScopedClient(communityId)   ← SCOPED DB CALL
+ *         actorUnitIds = await getActorUnitIds(scoped, actorUserId)
+ *         if (resolvedUnitId === null)
+ *           resolvedUnitId = await requireActorUnitId(scoped, actorUserId)
+ *         if (!actorUnitIds.includes(resolvedUnitId))
+ *           throw new ForbiddenError(
+ *             'Residents can only reserve amenities for their own unit')
+ *       }
+ *     → createReservationForCommunity(
+ *         communityId, actorUserId,
+ *         { amenityId, unitId, startTime, endTime, notes },
+ *         x-request-id)
+ *
+ * B1 Slice 5 inline-error migration: the pre-migration resident
+ * unit-mismatch branch returned an inline
+ * `NextResponse.json({ error: { code: 'FORBIDDEN', message: ... } }, { status: 403 })`.
+ * Replaced by `throw new ForbiddenError(...)` with the message preserved
+ * byte-identical. `withErrorHandler` still emits the canonical
+ * `{ error: { code: 'FORBIDDEN', message } }` envelope at status 403, so the
+ * wire shape is unchanged.
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `createReservationForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient } from '@propertypro/db';
-import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { ForbiddenError } from '@/lib/api/errors';
 import {
   getActorUnitIds,
   isResidentRole,
@@ -16,34 +61,15 @@ import {
   requireAmenitiesWritePermission,
   requireReservationPermission,
 } from '@/lib/work-orders/common';
-import { createReservationForCommunity } from '@/lib/services/work-orders-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-
-const reserveAmenitySchema = z.object({
-  communityId: z.number().int().positive(),
-  unitId: z.number().int().positive().nullable().optional(),
-  startTime: z.string().datetime({ offset: true }),
-  endTime: z.string().datetime({ offset: true }),
-  notes: z.string().trim().max(5000).nullable().optional(),
-});
+import { createReservationForCommunity } from '@/lib/services/work-orders-service';
+import { amenitiesReserveContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const amenityId = parsePositiveInt(params?.id ?? '', 'amenity id');
-
+  runRoute(amenitiesReserveContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = reserveAmenitySchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid reservation payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -52,41 +78,32 @@ export const POST = withErrorHandler(
     requireAmenitiesWritePermission(membership);
     requireReservationPermission(membership);
 
-    const scoped = createScopedClient(communityId);
-    let resolvedUnitId: number | null = parsed.data.unitId ?? null;
+    let resolvedUnitId: number | null = body.unitId ?? null;
 
     if (isResidentRole(membership.role)) {
+      const scoped = createScopedClient(communityId);
       const actorUnitIds = await getActorUnitIds(scoped, actorUserId);
       if (resolvedUnitId === null) {
         resolvedUnitId = await requireActorUnitId(scoped, actorUserId);
       }
       if (!actorUnitIds.includes(resolvedUnitId)) {
-        return NextResponse.json(
-          {
-            error: {
-              code: 'FORBIDDEN',
-              message: 'Residents can only reserve amenities for their own unit',
-            },
-          },
-          { status: 403 },
+        throw new ForbiddenError(
+          'Residents can only reserve amenities for their own unit',
         );
       }
     }
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await createReservationForCommunity(
+    return createReservationForCommunity(
       communityId,
       actorUserId,
       {
-        amenityId,
+        amenityId: params.id,
         unitId: resolvedUnitId,
-        startTime: parsed.data.startTime,
-        endTime: parsed.data.endTime,
-        notes: parsed.data.notes ?? null,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        notes: body.notes ?? null,
       },
-      requestId,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
