@@ -10,7 +10,8 @@ import { buildComplianceSummary, sortByPriority } from '@/lib/utils/compliance-c
 import { ComplianceDetailPanel } from './compliance-detail-panel';
 import { ComplianceOnboarding } from './compliance-onboarding';
 import { ComplianceActivityFeed } from './compliance-activity-feed';
-import { ComplianceQueue } from './compliance-queue';
+import { ComplianceQueue, matchesFilter } from './compliance-queue';
+import type { FilterKey } from './compliance-queue';
 import { UploadDocumentModal } from './upload-document-modal';
 import { LinkDocumentModal } from './link-document-modal';
 import type { CommunityRole, NewCommunityRole } from '@propertypro/shared';
@@ -46,6 +47,7 @@ export function ComplianceCommandCenter({
   canWrite,
 }: ComplianceCommandCenterProps) {
   const [view, setView] = useState<ViewMode>(() => defaultViewForRole(role));
+  const [filter, setFilter] = useState<FilterKey>('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);
   const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
@@ -60,6 +62,7 @@ export function ComplianceCommandCenter({
   // NOT scroll (the row may not yet be in the DOM on initial mount).
   const selectedRowRef = useRef<number | null>(null);
   const selectedItem = selectedId != null ? items.find((i) => i.id === selectedId) ?? null : null;
+  const isSelectedHidden = selectedItem !== null && !matchesFilter(selectedItem, filter);
 
   // Initial selection: pick the first item by priority. Fallback: if the
   // selected item disappears entirely (e.g., removed from data), pick the
@@ -186,6 +189,8 @@ export function ComplianceCommandCenter({
               }
             }}
             onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+            filter={filter}
+            onFilterChange={setFilter}
           />
           <ComplianceDetailPanel
             item={selectedItem}
@@ -200,6 +205,8 @@ export function ComplianceCommandCenter({
               }
             }}
             onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+            isSelectedHidden={isSelectedHidden}
+            onClearFilter={() => setFilter('all')}
           />
         </div>
       )}

@@ -17,6 +17,8 @@ export interface ComplianceDetailPanelProps {
   onLink: (item: ChecklistItemData) => void;
   onView: (item: ChecklistItemData) => void;
   onMarkApplicable: (item: ChecklistItemData) => void;
+  isSelectedHidden?: boolean;
+  onClearFilter?: () => void;
 }
 
 export function ComplianceDetailPanel({
@@ -28,6 +30,8 @@ export function ComplianceDetailPanel({
   onLink,
   onView,
   onMarkApplicable,
+  isSelectedHidden,
+  onClearFilter,
 }: ComplianceDetailPanelProps) {
   const activity = useComplianceActivityFeed(communityId);
 
@@ -74,6 +78,18 @@ export function ComplianceDetailPanel({
         Selected record
       </div>
       <h3 className="mt-1 text-lg font-semibold leading-tight">{selectedItem.title}</h3>
+
+      {isSelectedHidden && (
+        <div role="alert" className="mt-3 rounded-[var(--radius-sm)] border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-3 text-sm text-[var(--status-info)]">
+          Selected record is hidden by the current filter.
+          {onClearFilter && (
+            <button type="button" onClick={onClearFilter} className="ml-2 underline hover:no-underline">
+              Clear filter
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mt-2 flex flex-wrap gap-2">
         <Badge variant={statusVariant(selectedItem.status)}>{statusLabel(selectedItem)}</Badge>
         <Badge variant={VISIBILITY_VARIANT[vis]}>{VISIBILITY_LABEL[vis]}</Badge>

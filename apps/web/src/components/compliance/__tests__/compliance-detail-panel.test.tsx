@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ComplianceDetailPanel } from '../compliance-detail-panel';
 
@@ -146,5 +146,45 @@ describe('ComplianceDetailPanel', () => {
       />,
     );
     expect(screen.queryByText(/Recent activity/i)).not.toBeInTheDocument();
+  });
+
+  it('renders hidden-by-filter notice with Clear filter button when isSelectedHidden=true', () => {
+    withQuery(
+      <ComplianceDetailPanel
+        item={ITEM}
+        communityId={1}
+        canWrite
+        role="cam"
+        onUpload={vi.fn()}
+        onLink={vi.fn()}
+        onView={vi.fn()}
+        onMarkApplicable={vi.fn()}
+        isSelectedHidden={true}
+        onClearFilter={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText(/Selected record is hidden by the current filter/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Clear filter/i })).toBeInTheDocument();
+  });
+
+  it('calls onClearFilter when the Clear filter button is clicked', () => {
+    const onClearFilter = vi.fn();
+    withQuery(
+      <ComplianceDetailPanel
+        item={ITEM}
+        communityId={1}
+        canWrite
+        role="cam"
+        onUpload={vi.fn()}
+        onLink={vi.fn()}
+        onView={vi.fn()}
+        onMarkApplicable={vi.fn()}
+        isSelectedHidden={true}
+        onClearFilter={onClearFilter}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Clear filter/i }));
+    expect(onClearFilter).toHaveBeenCalledOnce();
   });
 });

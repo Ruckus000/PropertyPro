@@ -1,16 +1,38 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ComplianceQueue } from '../compliance-queue';
+import type { FilterKey } from '../compliance-queue';
+import React, { useState } from 'react';
 
 const ITEMS = [
   { id: 1, templateKey: '718_declaration', title: 'Declaration', category: 'governing_documents', status: 'satisfied' as const, documentId: 1, documentPostedAt: '2026-05-01T00:00:00.000Z', deadline: null, rollingWindow: null, isApplicable: true },
   { id: 2, templateKey: '718_insurance', title: 'Insurance', category: 'insurance', status: 'overdue' as const, documentId: null, documentPostedAt: null, deadline: '2026-05-01T00:00:00.000Z', rollingWindow: null, isApplicable: true },
 ];
 
+/**
+ * Wraps ComplianceQueue with local filter state so tests can simulate the
+ * lifted-state contract without needing the full ComplianceCommandCenter.
+ */
+function QueueWithState({
+  initialFilter = 'all' as FilterKey,
+  onFilterChange,
+  ...props
+}: Omit<React.ComponentProps<typeof ComplianceQueue>, 'filter' | 'onFilterChange'> & {
+  initialFilter?: FilterKey;
+  onFilterChange?: (f: FilterKey) => void;
+}) {
+  const [filter, setFilter] = useState<FilterKey>(initialFilter);
+  function handleFilterChange(f: FilterKey) {
+    setFilter(f);
+    onFilterChange?.(f);
+  }
+  return <ComplianceQueue {...props} filter={filter} onFilterChange={handleFilterChange} />;
+}
+
 describe('ComplianceQueue', () => {
   it('renders one row per item with a Status pill', () => {
     render(
-      <ComplianceQueue
+      <QueueWithState
         items={ITEMS}
         canWrite
         onUpload={vi.fn()}
@@ -29,7 +51,7 @@ describe('ComplianceQueue', () => {
 
   it('shows filter chips with counts', () => {
     render(
-      <ComplianceQueue items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
+      <QueueWithState items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
     );
     expect(screen.getByRole('button', { name: /Action needed/i })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: /All/i })).toHaveAttribute('aria-pressed', 'true');
@@ -37,7 +59,7 @@ describe('ComplianceQueue', () => {
 
   it('hides items that do not match the active filter', () => {
     render(
-      <ComplianceQueue items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
+      <QueueWithState items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Satisfied/i }));
     expect(screen.getByText('Declaration')).toBeInTheDocument();
@@ -46,7 +68,7 @@ describe('ComplianceQueue', () => {
 
   it('shows "Showing X of Y" and Clear filters affordance when filter is active', () => {
     render(
-      <ComplianceQueue items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
+      <QueueWithState items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Satisfied/i }));
     expect(screen.getByText(/Showing 1 of 2/)).toBeInTheDocument();
@@ -63,7 +85,7 @@ describe('ComplianceQueue', () => {
     const onSelect = vi.fn();
     const onView = vi.fn();
     render(
-      <ComplianceQueue items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={onView} onMarkApplicable={vi.fn()} selectedId={null} onSelect={onSelect} />,
+      <QueueWithState items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={onView} onMarkApplicable={vi.fn()} selectedId={null} onSelect={onSelect} />,
     );
     const viewBtns = screen.getAllByRole('button', { name: /View document/i });
     fireEvent.click(viewBtns[0] as HTMLElement);
@@ -75,7 +97,7 @@ describe('ComplianceQueue', () => {
 describe('ComplianceQueue — sortable headers', () => {
   it('marks Status column as the default sort with aria-sort="descending"', () => {
     render(
-      <ComplianceQueue items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
+      <QueueWithState items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
     );
     const statusHeader = screen.getByRole('columnheader', { name: /status/i });
     expect(statusHeader).toHaveAttribute('aria-sort', 'descending');
@@ -83,7 +105,7 @@ describe('ComplianceQueue — sortable headers', () => {
 
   it('changes aria-sort when Deadline header is clicked', () => {
     render(
-      <ComplianceQueue items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
+      <QueueWithState items={ITEMS} canWrite onUpload={vi.fn()} onLink={vi.fn()} onView={vi.fn()} onMarkApplicable={vi.fn()} selectedId={null} onSelect={vi.fn()} />,
     );
     const deadline = screen.getByRole('columnheader', { name: /deadline/i });
     // querySelector may return null; SortableHeader always renders a <button> so this is safe
