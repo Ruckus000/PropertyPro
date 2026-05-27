@@ -25,3 +25,31 @@ export async function resizeLogo(input: Buffer): Promise<Buffer> {
     .webp({ quality: LOGO_QUALITY })
     .toBuffer();
 }
+
+const SITE_IMAGE_QUALITY = 82;
+
+export interface SiteImageVariants {
+  at1600w: Buffer;
+  at800w: Buffer;
+}
+
+/**
+ * Resize a site asset image to two WebP variants (1600w + 800w). Aspect
+ * ratio preserved; never upscales beyond input width. EXIF stripped.
+ *
+ * Used by the finalize endpoint (PR #2) to produce CDN-friendly variants
+ * from raw uploads.
+ */
+export async function resizeSiteImage(input: Buffer): Promise<SiteImageVariants> {
+  const meta = await sharp(input).metadata();
+  const sourceWidth = meta.width ?? 0;
+  const target1600 = Math.min(sourceWidth, 1600);
+  const target800 = Math.min(sourceWidth, 800);
+
+  const [at1600w, at800w] = await Promise.all([
+    sharp(input).resize({ width: target1600, withoutEnlargement: true }).webp({ quality: SITE_IMAGE_QUALITY }).toBuffer(),
+    sharp(input).resize({ width: target800, withoutEnlargement: true }).webp({ quality: SITE_IMAGE_QUALITY }).toBuffer(),
+  ]);
+
+  return { at1600w, at800w };
+}
