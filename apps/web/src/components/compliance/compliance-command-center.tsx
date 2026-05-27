@@ -46,7 +46,20 @@ export function ComplianceCommandCenter({
   role,
   canWrite,
 }: ComplianceCommandCenterProps) {
-  const [view, setView] = useState<ViewMode>(() => defaultViewForRole(role));
+  const storageKey = `compliance.audienceView.${communityId}`;
+
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return defaultViewForRole(role);
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored === 'cam' || stored === 'board') return stored;
+    return defaultViewForRole(role);
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(storageKey, view);
+  }, [storageKey, view]);
+
   const [filter, setFilter] = useState<FilterKey>('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);

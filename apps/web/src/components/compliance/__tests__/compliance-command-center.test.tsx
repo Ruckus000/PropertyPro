@@ -194,3 +194,23 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.getByText(/Selected record is hidden by the current filter/i)).toBeInTheDocument();
   });
 });
+
+describe('ComplianceCommandCenter — view persistence', () => {
+  it('reads view preference from localStorage on mount', () => {
+    window.localStorage.setItem('compliance.audienceView.1', 'board');
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
+    window.localStorage.removeItem('compliance.audienceView.1');
+  });
+
+  it('writes view preference to localStorage on toggle', () => {
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Board view' }));
+    expect(window.localStorage.getItem('compliance.audienceView.1')).toBe('board');
+    window.localStorage.removeItem('compliance.audienceView.1');
+  });
+});
