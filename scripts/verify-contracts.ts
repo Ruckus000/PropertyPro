@@ -98,7 +98,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/admin/deletion-requests/[id]/intervene/route.ts',
   'apps/web/src/app/api/v1/admin/deletion-requests/[id]/recover/route.ts',
   'apps/web/src/app/api/v1/admin/deletion-requests/route.ts',
-  'apps/web/src/app/api/v1/admin/demo/[slug]/convert/route.ts',
   'apps/web/src/app/api/v1/admin/join-requests/route.ts',
   'apps/web/src/app/api/v1/amenities/route.ts',
   'apps/web/src/app/api/v1/announcements/route.ts',
