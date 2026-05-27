@@ -7,7 +7,7 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 import { Badge, PriorityBadge, StatusBadge } from "../../src/components/Badge";
 
-const variants = ["success", "brand", "warning", "danger", "info", "neutral"] as const;
+const variants = ["success", "brand", "warning", "danger", "info", "neutral", "owner", "board"] as const;
 const sizes = ["sm", "md", "lg"] as const;
 
 describe("Badge", () => {
@@ -151,6 +151,22 @@ describe("StatusBadge", () => {
 
   it("has correct displayName", () => {
     expect(StatusBadge.displayName).toBe("StatusBadge");
+  });
+});
+
+describe("Badge — compliance variants", () => {
+  it("renders owner variant with violet text class", () => {
+    const { container } = render(<Badge variant="owner">Owner portal</Badge>);
+    const span = container.querySelector("span");
+    expect(span?.className).toMatch(/text-\[var\(--status-owner\)\]/);
+    expect(span?.textContent).toBe("Owner portal");
+  });
+
+  it("renders board variant with pink text class", () => {
+    const { container } = render(<Badge variant="board">Board</Badge>);
+    const span = container.querySelector("span");
+    expect(span?.className).toMatch(/text-\[var\(--status-board\)\]/);
+    expect(span?.textContent).toBe("Board");
   });
 });
 
