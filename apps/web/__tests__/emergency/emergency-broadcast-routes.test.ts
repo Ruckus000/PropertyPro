@@ -240,7 +240,7 @@ describe('Emergency Broadcast Routes', () => {
 
   describe('POST /api/v1/emergency-broadcasts/[id]/send', () => {
     it('executes broadcast and returns result', async () => {
-      const sendResult = { broadcastId: 10, recipientCount: 42, status: 'sending' };
+      const sendResult = { smsQueued: 3, emailSent: 39 };
       executeBroadcastMock.mockResolvedValue(sendResult);
 
       const req = new NextRequest(
@@ -258,7 +258,8 @@ describe('Emergency Broadcast Routes', () => {
       const json = await res.json();
 
       expect(res.status).toBe(200);
-      expect(json.data.recipientCount).toBe(42);
+      expect(json.data.smsQueued).toBe(3);
+      expect(json.data.emailSent).toBe(39);
       expect(executeBroadcastMock).toHaveBeenCalledWith(10, 100, 'user-1');
     });
 

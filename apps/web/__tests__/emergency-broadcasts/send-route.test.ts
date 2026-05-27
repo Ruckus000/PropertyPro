@@ -97,22 +97,20 @@ describe('POST /api/v1/emergency-broadcasts/[id]/send', () => {
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
     requirePermissionMock.mockReturnValue(undefined);
     executeBroadcastMock.mockResolvedValue({
-      broadcastId: 99,
-      recipientCount: 42,
-      status: 'sending',
+      smsQueued: 3,
+      emailSent: 7,
     });
   });
 
-  it('executes a broadcast and returns {data: {broadcastId, recipientCount, status}}', async () => {
+  it('executes a broadcast and returns {data: {smsQueued, emailSent}}', async () => {
     const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
 
     expect(res.status).toBe(200);
     const json = (await res.json()) as {
-      data: { broadcastId: number; recipientCount: number; status: string };
+      data: { smsQueued: number; emailSent: number };
     };
-    expect(json.data.broadcastId).toBe(99);
-    expect(json.data.recipientCount).toBe(42);
-    expect(json.data.status).toBe('sending');
+    expect(json.data.smsQueued).toBe(3);
+    expect(json.data.emailSent).toBe(7);
     expect(resolveEffectiveCommunityIdMock).toHaveBeenCalledWith(
       expect.anything(),
       42,
