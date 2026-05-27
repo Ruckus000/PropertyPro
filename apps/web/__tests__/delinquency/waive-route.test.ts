@@ -87,7 +87,7 @@ const ADMIN_MEMBERSHIP = {
 
 const WAIVE_RESULT = {
   waivedCount: 3,
-  waivedAmountUsd: 75,
+  waivedAmountCents: 7500,
 };
 
 function jsonPost(
@@ -130,9 +130,9 @@ describe('POST /api/v1/delinquency/[unitId]/waive', () => {
     );
 
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { data: { waivedCount: number; waivedAmountUsd: number } };
+    const json = (await res.json()) as { data: { waivedCount: number; waivedAmountCents: number } };
     expect(json.data.waivedCount).toBe(3);
-    expect(json.data.waivedAmountUsd).toBe(75);
+    expect(json.data.waivedAmountCents).toBe(7500);
     expect(resolveEffectiveCommunityIdMock).toHaveBeenCalledWith(expect.anything(), 42);
     expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-admin-1');
