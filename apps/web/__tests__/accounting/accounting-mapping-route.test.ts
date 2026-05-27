@@ -11,7 +11,7 @@
  * Cases:
  *   GET — happy path, 401 unauth, 400 missing communityId, 400 missing
  *         provider, 400 invalid provider enum, 403 non-member,
- *         403 accounting-disabled.
+ *         403 accounting-disabled, 403 accounting-read denied.
  *   PUT — happy path, 401 unauth, 400 missing communityId, 400 missing
  *         provider, 400 missing mapping, 403 demo-grace,
  *         403 non-member, 403 accounting-write denied,
@@ -211,6 +211,17 @@ describe('GET /api/v1/accounting/mapping', () => {
 
     expect(res.status).toBe(403);
     expect(requireAccountingReadPermissionMock).not.toHaveBeenCalled();
+    expect(getAccountingMappingMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when accounting-read permission is denied', async () => {
+    requireAccountingReadPermissionMock.mockImplementation(() => {
+      throw new ForbiddenError('Missing accounting:read permission');
+    });
+
+    const res = await GET(jsonGet('?communityId=42&provider=quickbooks'));
+
+    expect(res.status).toBe(403);
     expect(getAccountingMappingMock).not.toHaveBeenCalled();
   });
 });
