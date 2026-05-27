@@ -122,6 +122,15 @@ describe('PATCH /api/v1/pm/site/hero', () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
+  it('403s when caller is not a member of the community', async () => {
+    requireMembershipMock.mockRejectedValueOnce(
+      new AppError('Not a member', 403, 'FORBIDDEN'),
+    );
+    const res = await PATCH(makeRequest(VALID_BODY));
+    expect(res.status).toBe(403);
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
   it('403s when plan does not include hasSiteEditor', async () => {
     requirePlanFeatureMock.mockRejectedValueOnce(
       new AppError('This feature requires a higher plan.', 403, 'PLAN_UPGRADE_REQUIRED'),
