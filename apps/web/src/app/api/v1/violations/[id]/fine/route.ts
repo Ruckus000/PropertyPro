@@ -1,59 +1,60 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Violations — impose a fine on a violation (admin-facing).
+ *
+ * POST /api/v1/violations/[id]/fine
+ * Body: { communityId, amountCents, dueDate?, graceDays?, notes? }
+ *
+ * Plan A1 drain #77. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireViolationsEnabled (ASYNC — awaited)
+ *     → requirePermission('violations', 'write')
+ *     → requireViolationAdminWrite (sync, isAdmin gate)
+ *     → imposeViolationFineForCommunity(communityId, violationId, actorUserId,
+ *         { amountCents, dueDate, graceDays, notes ?? null }, x-request-id)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[id]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to `imposeViolationFineForCommunity`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { parsePositiveInt } from '@/lib/finance/common';
 import { requireViolationAdminWrite, requireViolationsEnabled } from '@/lib/violations/common';
 import { imposeViolationFineForCommunity } from '@/lib/services/violations-service';
 import { requirePermission } from '@/lib/db/access-control';
-
-const imposeFineSchema = z.object({
-  communityId: z.number().int().positive(),
-  amountCents: z.number().int().positive(),
-  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  graceDays: z.number().int().min(1).max(120).optional(),
-  notes: z.string().max(1000).nullable().optional(),
-});
+import { violationsFineContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const id = parsePositiveInt(params?.id ?? '', 'violation id');
+  runRoute(violationsFineContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parseResult = imposeFineSchema.safeParse(body);
-
-    if (!parseResult.success) {
-      throw new ValidationError('Invalid fine payload', {
-        fields: formatZodErrors(parseResult.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
+
     await requireViolationsEnabled(membership);
     requirePermission(membership, 'violations', 'write');
     requireViolationAdminWrite(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await imposeViolationFineForCommunity(
+    return imposeViolationFineForCommunity(
       communityId,
-      id,
+      params.id,
       actorUserId,
       {
-        amountCents: parseResult.data.amountCents,
-        dueDate: parseResult.data.dueDate,
-        graceDays: parseResult.data.graceDays,
-        notes: parseResult.data.notes ?? null },
-      requestId,
+        amountCents: body.amountCents,
+        dueDate: body.dueDate,
+        graceDays: body.graceDays,
+        notes: body.notes ?? null,
+      },
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
