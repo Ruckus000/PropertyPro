@@ -12,7 +12,8 @@ import type { LayoutProps, SiteBlock } from './types';
  * names differ from ResolvedTheme:
  *   ResolvedTheme.headingFont → CommunityTheme.fontHeading
  *   ResolvedTheme.bodyFont    → CommunityTheme.fontBody
- *   (logoUrl and communityName come from the community object)
+ *   community.logoUrl         → CommunityTheme.logoUrl
+ *   community.name            → CommunityTheme.communityName
  */
 function toHeaderTheme(
   community: LayoutProps['community'],
@@ -24,7 +25,7 @@ function toHeaderTheme(
     accentColor: theme.accentColor,
     fontHeading: theme.headingFont,
     fontBody: theme.bodyFont,
-    logoUrl: null,
+    logoUrl: community.logoUrl,
     communityName: community.name,
     communityType: community.communityType,
   };

@@ -13,6 +13,7 @@ export interface PublicCommunity {
   id: number;
   slug: string;
   name: string;
+  logoUrl: string | null;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   city: string | null;
   state: string | null;

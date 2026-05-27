@@ -7,6 +7,7 @@ const communityFixture = {
   id: 1,
   slug: 'sunset-condos',
   name: 'Sunset Condos',
+  logoUrl: null,
   communityType: 'condo_718' as const,
   city: 'Miami',
   state: 'FL',
