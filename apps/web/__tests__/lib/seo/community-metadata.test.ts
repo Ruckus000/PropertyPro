@@ -32,9 +32,19 @@ describe('buildCommunityMetadata', () => {
     expect(apt.description).toContain('apartment community');
   });
 
-  it('builds the canonical site url from the slug', () => {
+  it('falls back to default description when tagline is the empty string', () => {
+    const meta = buildCommunityMetadata({ ...baseCommunity, tagline: '' });
+    expect(meta.description).toContain('condominium association');
+  });
+
+  it('falls back to default description when tagline is whitespace-only', () => {
+    const meta = buildCommunityMetadata({ ...baseCommunity, tagline: '   ' });
+    expect(meta.description).toContain('condominium association');
+  });
+
+  it('builds the canonical site url from the slug via buildCommunityUrl', () => {
     const meta = buildCommunityMetadata(baseCommunity);
-    expect(meta.openGraph?.url).toBe('https://sunset-condos.getpropertypro.com');
+    expect(meta.openGraph?.url).toBe('https://sunset-condos.getpropertypro.com/');
   });
 
   it('sets robots index:true follow:true (the public site is meant to be crawled)', () => {

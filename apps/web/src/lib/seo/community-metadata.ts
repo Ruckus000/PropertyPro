@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 
 export interface CommunityMetadataInput {
   id: number;
@@ -25,7 +26,7 @@ function defaultDescription(c: CommunityMetadataInput): string {
 
 export function buildCommunityMetadata(community: CommunityMetadataInput): Metadata {
   const description = community.tagline?.trim() || defaultDescription(community);
-  const url = `https://${community.slug}.getpropertypro.com`;
+  const url = buildCommunityUrl(community.slug, '/');
   const images = community.heroImageUrl
     ? [{ url: community.heroImageUrl, width: 1600, height: 900, alt: community.name }]
     : [];
