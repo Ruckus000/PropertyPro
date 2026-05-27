@@ -13,13 +13,27 @@ vi.mock('@propertypro/db', () => ({
     templateVariant: 'siteBlocks.templateVariant',
     deletedAt: 'siteBlocks.deletedAt',
   },
+  announcements: {
+    id: 'announcements.id',
+    communityId: 'announcements.communityId',
+    title: 'announcements.title',
+    body: 'announcements.body',
+    audience: 'announcements.audience',
+    isPinned: 'announcements.isPinned',
+    archivedAt: 'announcements.archivedAt',
+    deletedAt: 'announcements.deletedAt',
+    publishedAt: 'announcements.publishedAt',
+  },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
   and: (...args: unknown[]) => ({ __and: args }),
   asc: (col: unknown) => ({ __asc: col }),
+  desc: (col: unknown) => ({ __desc: col }),
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+  gte: (col: unknown, val: unknown) => ({ __gte: { col, val } }),
   isNull: (col: unknown) => ({ __isNull: col }),
+  lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
 }));
 
 // Mock the unscoped client BEFORE importing the helper
@@ -74,7 +88,7 @@ describe('getPublicCommunityScopedReader', () => {
     expect(typeof reader.listMeetings).toBe('function');
   });
 
-  it('exposes stubbed listAnnouncements method (real impl in PR #3)', async () => {
+  it('exposes listAnnouncements method', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.listAnnouncements).toBe('function');
   });
@@ -122,5 +136,59 @@ describe('getPublicCommunityScopedReader', () => {
     const communityIdClause = whereCall.__and[0];
     expect(communityIdClause).toHaveProperty('__eq');
     expect(communityIdClause.__eq.val).toBe(99);
+  });
+
+  it('listAnnouncements returns mapped rows with the expected shape', async () => {
+    const fakeRow = {
+      id: 1,
+      title: 'Pool closure',
+      body: '<p>Pool closed.</p>',
+      isPinned: false,
+      publishedAt: new Date('2026-05-01T10:00:00Z'),
+    };
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([fakeRow]).then(resolve),
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listAnnouncements({ limit: 5 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: 1,
+      title: 'Pool closure',
+      body: '<p>Pool closed.</p>',
+      isPinned: false,
+    });
+    expect(results[0].publishedAt).toBeInstanceOf(Date);
+  });
+
+  it('listAnnouncements includes a timeWindowDays gte predicate when supplied', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listAnnouncements({ limit: 5, timeWindowDays: 30 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // With timeWindowDays, and() should receive 6 conditions
+    expect(whereCall.__and).toHaveLength(6);
+    // The 6th condition should be a gte (time window cutoff)
+    const gteClause = whereCall.__and[5];
+    expect(gteClause).toHaveProperty('__gte');
+  });
+
+  it('listAnnouncements omits the time filter when timeWindowDays is null/undefined', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listAnnouncements({ limit: 5 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // Without timeWindowDays, and() should receive exactly 5 conditions
+    expect(whereCall.__and).toHaveLength(5);
   });
 });
