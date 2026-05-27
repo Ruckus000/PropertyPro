@@ -1,59 +1,60 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Delinquency — waive late fees for a unit.
+ *
+ * POST /api/v1/delinquency/[unitId]/waive
+ * Body: { communityId }
+ *
+ * Plan A1 drain #80. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. **First drain with `[unitId]`
+ * path param** (vs `[id]`). Auth chain preserved verbatim (mirrors drain #67):
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace                       (ASYNC)
+ *     → requireCommunityMembership               (ASYNC)
+ *     → requireFinanceEnabled                    (ASYNC)
+ *     → requireFinanceWritePermission            (sync)
+ *     → requireFinanceAdminWrite                 (sync)
+ *     → requireActiveSubscriptionForMutation     (ASYNC)
+ *     → waiveLateFeesForUnit(communityId, unitId, actorUserId, x-request-id)
+ *
+ * Behavior change vs. pre-migration: 400 body for invalid `[unitId]` and body
+ * validation failures shifts to the canonical `VALIDATION_ERROR` envelope.
+ * Status unchanged. Success wire shape `{ data: ... }` byte-identical.
+ *
+ * `x-request-id` header forwarded verbatim to the service call.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { BadRequestError, ValidationError } from '@/lib/api/errors';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import {
-  parsePositiveInt,
   requireFinanceAdminWrite,
   requireFinanceEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { waiveLateFeesForUnit } from '@/lib/services/finance-service';
+import { delinquencyWaiveContract } from './contract';
 
-const waiveSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+export const POST = withErrorHandler(
+  runRoute(delinquencyWaiveContract, async ({ params, body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-async function parseUnitId(
-  context?: { params: Promise<Record<string, string>> },
-): Promise<number> {
-  const rawUnitId = (await context?.params)?.['unitId'] ?? '';
-  if (!rawUnitId) {
-    throw new BadRequestError('unitId route parameter is required');
-  }
-  return parsePositiveInt(rawUnitId, 'unitId');
-}
+    await requireFinanceEnabled(membership);
+    requireFinanceWritePermission(membership);
+    requireFinanceAdminWrite(membership);
+    await requireActiveSubscriptionForMutation(communityId);
 
-export const POST = withErrorHandler(async (
-  req: NextRequest,
-  context?: { params: Promise<Record<string, string>> },
-) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const unitId = await parseUnitId(context);
-
-  const body: unknown = await req.json();
-  const parseResult = waiveSchema.safeParse(body);
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid waive-late-fees payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  await requireFinanceEnabled(membership);
-  requireFinanceWritePermission(membership);
-  requireFinanceAdminWrite(membership);
-  await requireActiveSubscriptionForMutation(communityId);
-
-  const requestId = req.headers.get('x-request-id');
-  const result = await waiveLateFeesForUnit(communityId, unitId, actorUserId, requestId);
-  return NextResponse.json({ data: result });
-});
+    return waiveLateFeesForUnit(
+      communityId,
+      params.unitId,
+      actorUserId,
+      req.headers.get('x-request-id'),
+    );
+  }),
+);
