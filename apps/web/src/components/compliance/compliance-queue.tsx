@@ -2,11 +2,11 @@
 
 import React, { useMemo, useState } from 'react';
 import { Badge } from '@propertypro/ui';
-import { sortByPriority, needsAttention, BOARD_ACTION_TEMPLATE_KEYS, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
+import { sortByPriority, needsAttention, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import type { ChecklistItemData } from './compliance-checklist-item';
-import { getTemplateDefaultVisibility, type DefaultVisibility } from './compliance-visibility';
-import type { ComplianceStatus } from '@/lib/utils/compliance-calculator';
+import { getTemplateDefaultVisibility } from './compliance-visibility';
+import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant } from './compliance-pill-mapping';
 
 type FilterKey = 'all' | 'action_needed' | 'overdue' | 'due_soon' | 'satisfied';
 type SortKey = 'status' | 'deadline' | 'statute';
@@ -22,35 +22,6 @@ export interface ComplianceQueueProps {
   onLink: (item: ChecklistItemData) => void;
   onView: (item: ChecklistItemData) => void;
   onMarkApplicable: (item: ChecklistItemData) => void;
-}
-
-const VISIBILITY_LABEL: Record<DefaultVisibility, string> = {
-  public_page: 'Public',
-  owner_portal: 'Owner portal',
-  owner_only: 'Owner-only',
-  board: 'Board',
-};
-
-const VISIBILITY_VARIANT: Record<DefaultVisibility, 'info' | 'owner' | 'board'> = {
-  public_page: 'info',
-  owner_portal: 'owner',
-  owner_only: 'owner',
-  board: 'board',
-};
-
-function statusLabel(item: ChecklistItemData): string {
-  if (item.status === 'satisfied') return 'Satisfied';
-  if (item.status === 'overdue') return 'Overdue';
-  if (item.status === 'not_applicable') return 'Not applicable';
-  if (BOARD_ACTION_TEMPLATE_KEYS.has(item.templateKey)) return 'Needs board action';
-  return 'Action needed';
-}
-
-function statusVariant(status: ComplianceStatus): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'satisfied') return 'success';
-  if (status === 'overdue') return 'danger';
-  if (status === 'not_applicable') return 'neutral';
-  return 'warning';
 }
 
 function deadlineCell(item: ChecklistItemData): string {
