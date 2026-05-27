@@ -31,6 +31,7 @@ import type { AccessPlan } from '@propertypro/db';
 // AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -801,6 +802,12 @@ export async function purgeCommunityData(requestId: number) {
     );
 
   if (!request) return null; // Already purged or not found — idempotent
+
+  // PR #2: purge community-site-assets storage if this is a community deletion.
+  // Failure aborts the status update so the request remains retryable.
+  if (request.communityId !== null) {
+    await purgeCommunitySiteAssets(request.communityId);
+  }
 
   const [updated] = await db
     .update(accountDeletionRequests)
