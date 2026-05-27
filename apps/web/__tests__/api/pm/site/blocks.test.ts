@@ -234,6 +234,38 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     }));
   });
 
+  it('PATCHes a documents block (validates via documentsBlockSchema)', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'documents',
+      blockOrder: 5,
+      content: { limit: 5, includeCategories: ['budget', 'minutes'] },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'documents',
+      blockOrder: 5,
+      content: { limit: 5, includeCategories: ['budget', 'minutes'] },
+    }));
+  });
+
+  it('PATCHes a meetings block (validates via meetingsBlockSchema)', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'meetings',
+      blockOrder: 6,
+      content: { limit: 10, timeWindowDays: 30 },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'meetings',
+      blockOrder: 6,
+      content: { limit: 10, timeWindowDays: 30 },
+    }));
+  });
+
   it('400s on invalid text content (missing required body field)', async () => {
     const body = { ...VALID_TEXT_BODY, content: {} }; // body field is required
     const res = await PATCH(makePatchRequest(body));
