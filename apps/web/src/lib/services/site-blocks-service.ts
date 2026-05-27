@@ -12,9 +12,12 @@
  * NOTE: ScopedClient does not expose a raw Drizzle transaction handle.
  * The two operations (soft-delete + insert) are sequential. A failure on
  * the insert will leave the old row soft-deleted; the route-level error
- * handler surfaces a 500 so the caller can retry. Full transactionality
- * is a PR #8 concern that will require adding this service to the
- * WEB_UNSAFE_IMPORT_ALLOWLIST with a documented auth contract.
+ * handler surfaces a 500 so the caller can retry. A retry is safe: the
+ * soft-delete step filters on isNull(deletedAt), so it is a no-op when
+ * the old row is already soft-deleted, and the insert proceeds normally.
+ * Full transactionality is a PR #8 concern that will require adding this
+ * service to the WEB_UNSAFE_IMPORT_ALLOWLIST with a documented auth
+ * contract.
  */
 import {
   createScopedClient,

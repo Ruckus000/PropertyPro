@@ -1,10 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Flat mock — avoids loading the real @propertypro/db which requires DATABASE_URL.
+// NOTE: vi.importActual cannot be used here because the real @propertypro/db
+// requires DATABASE_URL at module load (packages/db/src/drizzle.ts throws if
+// missing). This is the established pattern across the test suite — see
+// branding-route.test.ts, audit-middleware.test.ts, etc.
+//
+// Guard against future silent-undefined imports: every export consumed by the
+// service is explicitly stubbed. When PR #8 adds a sibling table import,
+// this factory MUST be extended accordingly — the factory is intentionally
+// exhaustive, not minimal.
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(),
   logAuditEvent: vi.fn(),
-  siteBlocks: Symbol('siteBlocks'),
+  siteBlocks: Symbol('siteBlocks'), // table ref: identity doesn't matter; expect.anything() checks pass
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
