@@ -20,6 +20,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { heroBlockSchema } from '@propertypro/shared';
 import { upsertPublishedHero } from '@/lib/services/site-blocks-service';
+import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 
 const patchBodySchema = z
   .object({
@@ -61,4 +62,26 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   });
 
   return NextResponse.json({ data: { ok: true } });
+});
+
+export const GET = withErrorHandler(async (req: NextRequest) => {
+  const userId = await requireAuthenticatedUserId();
+
+  const { searchParams } = new URL(req.url);
+  const rawCommunityId = Number(searchParams.get('communityId'));
+  if (!Number.isInteger(rawCommunityId) || rawCommunityId <= 0) {
+    throw new ValidationError('communityId must be a positive integer');
+  }
+
+  const effectiveCommunityId = resolveEffectiveCommunityId(req, rawCommunityId);
+  const membership = await requireCommunityMembership(effectiveCommunityId, userId);
+  if (membership.role !== 'pm_admin') {
+    throw new ForbiddenError('Only property managers can edit the community site');
+  }
+  await requirePlanFeature(effectiveCommunityId, 'hasSiteEditor');
+
+  const reader = getPublicCommunityScopedReader(effectiveCommunityId);
+  const blocks = await reader.listSiteBlocks();
+  const heroBlock = blocks.find((b) => b.blockType === 'hero');
+  return NextResponse.json({ data: { hero: heroBlock?.content ?? null } });
 });
