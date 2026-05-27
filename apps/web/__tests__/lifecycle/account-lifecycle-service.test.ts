@@ -28,6 +28,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   createUnscopedClientMock,
   createAdminClientMock,
+  purgeCommunitySiteAssetsMock,
   logAuditEventMock,
   eqMock,
   andMock,
@@ -42,6 +43,7 @@ const {
   return {
     createUnscopedClientMock: vi.fn(),
     createAdminClientMock: vi.fn(),
+    purgeCommunitySiteAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     logAuditEventMock: vi.fn().mockResolvedValue(undefined),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
@@ -118,6 +120,10 @@ vi.mock('@propertypro/db/filters', () => ({
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
+}));
+
+vi.mock('@/lib/site-assets/cleanup', () => ({
+  purgeCommunitySiteAssets: purgeCommunitySiteAssetsMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -810,6 +816,7 @@ describe('recoverCommunity', () => {
 describe('purgeCommunityData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 0 });
   });
 
   it('sets status to purged', async () => {
@@ -831,5 +838,48 @@ describe('purgeCommunityData', () => {
 
     const result = await purgeCommunityData(1);
     expect(result).toBeNull();
+  });
+
+  it('calls purgeCommunitySiteAssets when communityId is set', async () => {
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[updatedRequest]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await purgeCommunityData(1);
+
+    expect(purgeCommunitySiteAssetsMock).toHaveBeenCalledOnce();
+    expect(purgeCommunitySiteAssetsMock).toHaveBeenCalledWith(100);
+  });
+
+  it('does NOT call purgeCommunitySiteAssets when communityId is null (user deletion)', async () => {
+    const request = { id: 2, communityId: null, status: 'soft_deleted' };
+    const updatedRequest = { id: 2, status: 'purged', purgedAt: new Date() };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[updatedRequest]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await purgeCommunityData(2);
+
+    expect(purgeCommunitySiteAssetsMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts status update when purgeCommunitySiteAssets throws', async () => {
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    purgeCommunitySiteAssetsMock.mockRejectedValueOnce(new Error('storage offline'));
+
+    await expect(purgeCommunityData(1)).rejects.toThrow('storage offline');
+    // Verify no DB update was attempted
+    expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
   });
 });
