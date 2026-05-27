@@ -258,7 +258,7 @@ describe('Emergency Broadcast Routes', () => {
       const json = await res.json();
 
       expect(res.status).toBe(200);
-      expect(json.recipientCount).toBe(42);
+      expect(json.data.recipientCount).toBe(42);
       expect(executeBroadcastMock).toHaveBeenCalledWith(10, 100, 'user-1');
     });
 
