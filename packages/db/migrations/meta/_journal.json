@@ -43,6 +43,13 @@
       "when": 1779836874265,
       "tag": "0005_site_blocks_rls_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779905382570,
+      "tag": "0006_site_assets_storage",
+      "breakpoints": true
     }
   ]
 }
