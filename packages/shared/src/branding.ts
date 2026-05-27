@@ -25,6 +25,13 @@ export interface CommunityBranding {
    * site_layout_metadata. Null/missing falls back to community_type default.
    */
   layoutId?: string | null;
+  /**
+   * Cumulative bytes consumed by community-site-assets uploads (PR #2).
+   * Incremented at finalize, decremented on hard-delete by the
+   * account-lifecycle cron. Used to enforce per-plan quotas
+   * (siteAssetsQuotaBytes on PlanFeatureConfig).
+   */
+  assetsBytesUsed?: number;
 }
 
 /** Default branding colors used when no community branding is configured. */
