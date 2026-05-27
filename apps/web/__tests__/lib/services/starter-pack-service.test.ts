@@ -23,6 +23,7 @@ vi.mock('@propertypro/db/filters', () => ({
 
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { createScopedClient } from '@propertypro/db';
+// AUTHZ: test file — mocks createUnscopedClient from @propertypro/db/unsafe; no real DB access occurs.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
 const createScopedClientMock = vi.mocked(createScopedClient);
