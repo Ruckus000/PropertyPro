@@ -560,7 +560,11 @@ describe('E-Sign Routes', () => {
       });
       const context = makeRouteParams({ id: 'abc' });
 
-      await expect(remindPOST(req, context)).rejects.toThrow('Invalid ID');
+      // Post drain #82: runner Zod-validates params.id. This test file mocks
+      // withErrorHandler as a passthrough (line 85-87), so the runner's
+      // ContractValidationError bubbles out instead of being caught and
+      // converted to a 400 response. Pre-migration threw BadRequestError('Invalid ID').
+      await expect(remindPOST(req, context)).rejects.toThrow('Invalid path parameters');
     });
 
     it('rejects missing signerId in body', async () => {
