@@ -5,9 +5,11 @@
  * platform-admin auth. Reads from apps/web/ via createUnscopedClient()
  * with a documented authorization contract.
  */
+import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
+  check,
   integer,
   jsonb,
   pgTable,
@@ -15,19 +17,28 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 
-export const siteThemePresets = pgTable('site_theme_presets', {
-  id: bigserial('id', { mode: 'number' }).primaryKey(),
-  slug: text('slug').notNull().unique(),
-  displayName: text('display_name').notNull(),
-  description: text('description'),
-  tokens: jsonb('tokens').notNull(),
-  tier: text('tier').notNull().default('essentials').$type<'essentials' | 'professional' | 'pm'>(),
-  isArchived: boolean('is_archived').notNull().default(false),
-  isFeatured: boolean('is_featured').notNull().default(false),
-  version: integer('version').notNull().default(1),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const siteThemePresets = pgTable(
+  'site_theme_presets',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    slug: text('slug').notNull().unique(),
+    displayName: text('display_name').notNull(),
+    description: text('description'),
+    tokens: jsonb('tokens').notNull(),
+    tier: text('tier').notNull().default('essentials').$type<'essentials' | 'professional' | 'pm'>(),
+    isArchived: boolean('is_archived').notNull().default(false),
+    isFeatured: boolean('is_featured').notNull().default(false),
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'site_theme_presets_tier_check',
+      sql`${table.tier} IN ('essentials','professional','pm')`,
+    ),
+  ],
+);
 
 export type SiteThemePreset = typeof siteThemePresets.$inferSelect;
 export type NewSiteThemePreset = typeof siteThemePresets.$inferInsert;
