@@ -1,11 +1,43 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Accounting Mapping API
+ *
+ * GET /api/v1/accounting/mapping — read the current category→external-account
+ *   mapping for a community's QuickBooks/Xero connection, plus the
+ *   discoverable account list from the upstream adapter.
+ * PUT /api/v1/accounting/mapping — replace the mapping for the community's
+ *   connection.
+ *
+ * Plan A1 drain #88. Behavior-preserving migration to `runRoute`. Auth
+ * chains preserved verbatim:
+ *
+ *   GET:
+ *     requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, query.communityId)
+ *     → requireCommunityMembership(communityId, actorUserId)
+ *     → requireAccountingEnabled(membership)            (SYNC)
+ *     → requireAccountingReadPermission(membership)     (SYNC)
+ *     → getAccountingMapping(communityId, query.provider)
+ *
+ *   PUT:
+ *     requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace(communityId)
+ *     → requireCommunityMembership(communityId, actorUserId)
+ *     → requireAccountingEnabled(membership)            (SYNC)
+ *     → requireAccountingWritePermission(membership)    (SYNC)
+ *     → updateAccountingMapping(communityId, actorUserId, body.provider,
+ *                               body.mapping, x-request-id ?? null)
+ *
+ * `parseCommunityIdFromQuery(req)` / `parseCommunityIdFromBody(req, ...)`
+ * already delegated to `resolveEffectiveCommunityId(...)` under the hood
+ * (drain #10 lesson); the explicit call here preserves header-vs-payload
+ * precedence semantics. Success wire shape `{ data: ... }` byte-identical.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireAccountingEnabled,
   requireAccountingReadPermission,
@@ -16,66 +48,40 @@ import {
   getAccountingMapping,
   updateAccountingMapping,
 } from '@/lib/services/accounting-connectors-service';
+import {
+  accountingMappingGetContract,
+  accountingMappingPutContract,
+} from './contract';
 
-const providerQuerySchema = z.object({
-  provider: z.enum(['quickbooks', 'xero']),
-});
+export const GET = withErrorHandler(
+  runRoute(accountingMappingGetContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-const updateMappingSchema = z.object({
-  communityId: z.number().int().positive(),
-  provider: z.enum(['quickbooks', 'xero']),
-  mapping: z.record(z.string(), z.string()),
-});
+    requireAccountingEnabled(membership);
+    requireAccountingReadPermission(membership);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    return getAccountingMapping(communityId, query.provider);
+  }),
+);
 
-  requireAccountingEnabled(membership);
-  requireAccountingReadPermission(membership);
+export const PUT = withErrorHandler(
+  runRoute(accountingMappingPutContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  const { searchParams } = new URL(req.url);
-  const parsed = providerQuerySchema.safeParse({
-    provider: searchParams.get('provider'),
-  });
+    requireAccountingEnabled(membership);
+    requireAccountingWritePermission(membership);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid mapping query parameters', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const data = await getAccountingMapping(communityId, parsed.data.provider);
-  return NextResponse.json({ data });
-});
-
-export const PUT = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = updateMappingSchema.safeParse(body);
-
-  if (!parsed.success) {
-    throw new ValidationError('Invalid accounting mapping payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireAccountingEnabled(membership);
-  requireAccountingWritePermission(membership);
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await updateAccountingMapping(
-    communityId,
-    actorUserId,
-    parsed.data.provider,
-    parsed.data.mapping,
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    return updateAccountingMapping(
+      communityId,
+      actorUserId,
+      body.provider,
+      body.mapping,
+      req.headers.get('x-request-id'),
+    );
+  }),
+);
