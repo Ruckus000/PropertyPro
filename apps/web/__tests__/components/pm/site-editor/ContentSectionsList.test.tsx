@@ -15,6 +15,11 @@ vi.mock('@/components/pm/site-editor/ImageBlockForm', () => ({
     <div data-testid="image-form" data-block-order={props.blockOrder}>image form</div>
   ),
 }));
+vi.mock('@/components/pm/site-editor/AnnouncementsBlockForm', () => ({
+  AnnouncementsBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="announcements-form" data-block-order={props.blockOrder}>announcements form</div>
+  ),
+}));
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -42,12 +47,13 @@ describe('<ContentSectionsList>', () => {
     expect(screen.getByText(/loading content sections/i)).toBeInTheDocument();
   });
 
-  it('shows empty state and Add buttons when there are no text/image blocks', async () => {
+  it('shows empty state and Add buttons when there are no content blocks', async () => {
     mockBlocks([]);
     render(wrap(<ContentSectionsList communityId={42} />));
     expect(await screen.findByText(/no content sections yet/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add text section/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add image section/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add announcements section/i })).toBeInTheDocument();
   });
 
   it('renders a TextBlockForm for an existing text block', async () => {
@@ -91,6 +97,26 @@ describe('<ContentSectionsList>', () => {
     expect(screen.getByTestId('text-form')).toBeInTheDocument();
     // blockOrder should be HERO_BLOCK_ORDER + 1 = 2 since no existing content blocks
     expect(screen.getByTestId('text-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  it('renders an AnnouncementsBlockForm for an existing announcements block', async () => {
+    mockBlocks([
+      { id: 12, blockType: 'announcements', blockOrder: 4, content: { limit: 5, timeWindowDays: 30 } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    const form = await screen.findByTestId('announcements-form');
+    expect(form).toBeInTheDocument();
+    expect(form).toHaveAttribute('data-block-order', '4');
+  });
+
+  it('clicking "+ Add announcements section" reveals a new AnnouncementsBlockForm', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByText(/no content sections yet/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /add announcements section/i }));
+    expect(screen.getByTestId('announcements-form')).toBeInTheDocument();
+    expect(screen.getByTestId('announcements-form')).toHaveAttribute('data-block-order', '2');
   });
 
   it('shows error alert when the fetch fails', async () => {

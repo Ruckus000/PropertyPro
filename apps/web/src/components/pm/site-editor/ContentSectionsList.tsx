@@ -3,11 +3,14 @@ import { useState } from 'react';
 import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { TextBlockForm } from './TextBlockForm';
 import { ImageBlockForm } from './ImageBlockForm';
+import { AnnouncementsBlockForm } from './AnnouncementsBlockForm';
 import {
   textBlockSchema,
   imageBlockSchema,
+  announcementsBlockSchema,
   type TextBlockContent,
   type ImageBlockContent,
+  type AnnouncementsBlockContent,
 } from '@propertypro/shared';
 
 interface Props {
@@ -32,9 +35,14 @@ function parseImageBlock(content: unknown): ImageBlockContent | null {
   return parse.success ? parse.data : null;
 }
 
+function parseAnnouncementsBlock(content: unknown): AnnouncementsBlockContent | null {
+  const parse = announcementsBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
 export function ContentSectionsList({ communityId }: Props) {
   const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
-  const [adding, setAdding] = useState<'text' | 'image' | null>(null);
+  const [adding, setAdding] = useState<'text' | 'image' | 'announcements' | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-content-secondary">Loading content sections…</p>;
@@ -48,7 +56,7 @@ export function ContentSectionsList({ communityId }: Props) {
   }
 
   const contentBlocks = (blocks ?? []).filter(
-    (b) => b.blockType === 'text' || b.blockType === 'image',
+    (b) => b.blockType === 'text' || b.blockType === 'image' || b.blockType === 'announcements',
   );
 
   return (
@@ -80,6 +88,13 @@ export function ContentSectionsList({ communityId }: Props) {
               initial={parseImageBlock(b.content)}
             />
           )}
+          {b.blockType === 'announcements' && (
+            <AnnouncementsBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseAnnouncementsBlock(b.content)}
+            />
+          )}
         </div>
       ))}
       {adding === 'text' && (
@@ -108,6 +123,19 @@ export function ContentSectionsList({ communityId }: Props) {
           />
         </div>
       )}
+      {adding === 'announcements' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New announcements section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <AnnouncementsBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
       <div className="flex gap-2 pt-2">
         <button
           type="button"
@@ -122,6 +150,13 @@ export function ContentSectionsList({ communityId }: Props) {
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
         >
           + Add image section
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('announcements')}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+        >
+          + Add announcements section
         </button>
       </div>
     </section>
