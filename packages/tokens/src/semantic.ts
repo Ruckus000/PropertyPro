@@ -131,5 +131,17 @@ export const tokenDefinitions = {
       border:     prim('gray', 200),
       subtle:     prim('gray', 50),
     },
+    owner: {
+      foreground: prim('violet', 700),
+      background: prim('violet', 50),
+      border:     prim('violet', 200),
+      subtle:     prim('violet', 100),
+    },
+    board: {
+      foreground: prim('pink', 700),
+      background: prim('pink', 50),
+      border:     prim('pink', 200),
+      subtle:     prim('pink', 100),
+    },
   },
 } as const;
