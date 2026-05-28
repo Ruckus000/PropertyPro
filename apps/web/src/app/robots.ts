@@ -1,9 +1,13 @@
 /**
  * PR #4: Next 15 robots.ts metadata route. Per-host policy.
  *
- * Subdomain hosts (community sites) allow indexing the public-facing
- * pages and disallow authenticated areas. The marketing root host
- * gets its own policy.
+ * Three branches:
+ *   1. Community subdomain (real tenant, not reserved): allow indexing the
+ *      public-facing pages, disallow authenticated areas.
+ *   2. Reserved subdomain (e.g. `pm.`, the PM dashboard host): disallow ALL
+ *      indexing. The dashboard requires auth so content is protected, but
+ *      indexing URL structure leaks information unnecessarily.
+ *   3. Marketing root: allow most, disallow api/dashboard/pm.
  *
  * Cached via revalidate: 3600 (1 hour).
  */
@@ -18,7 +22,7 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const host = hdrs.get('host');
   const context = resolveCommunityContext({ host });
 
-  // Community subdomain: allow public pages, disallow authenticated paths.
+  // Branch 1: Community subdomain — allow public pages, disallow authenticated paths.
   if (context.source === 'host_subdomain' && context.tenantSlug && !context.isReservedSubdomain) {
     return {
       rules: [
@@ -32,7 +36,17 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     };
   }
 
-  // Marketing root (or reserved subdomain): allow everything except API.
+  // Branch 2: Reserved subdomain (pm.*, app.*, admin.*, etc.) — block all crawling.
+  // These hosts serve authenticated apps; there is nothing public worth indexing
+  // and URL structure should not leak to search engines.
+  if (context.source === 'host_subdomain' && context.isReservedSubdomain) {
+    return {
+      rules: [{ userAgent: '*', disallow: '/' }],
+      // No sitemap reference for reserved hosts.
+    };
+  }
+
+  // Branch 3: Marketing root — allow most, disallow api/dashboard/pm.
   return {
     rules: [
       {

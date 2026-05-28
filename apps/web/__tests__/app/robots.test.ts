@@ -53,7 +53,12 @@ describe('robots.ts', () => {
     ]);
   });
 
-  it('returns marketing-root policy on a reserved subdomain (e.g., pm.)', async () => {
+  it('disallows ALL crawling on a reserved subdomain (e.g. pm.)', async () => {
+    // Reserved subdomains serve authenticated apps (PM dashboard). The
+    // dashboard requires auth so content is protected, but indexing URL
+    // structure leaks dashboard route shape to search engines and adversaries.
+    // Before the fix this fell through to the marketing-root branch and
+    // emitted `allow: '/'` — see PR #500 /review HIGH finding.
     headersMock.mockResolvedValueOnce(new Headers({ host: 'pm.getpropertypro.com' }));
     resolveCommunityContextMock.mockReturnValueOnce({
       source: 'host_subdomain',
@@ -62,6 +67,8 @@ describe('robots.ts', () => {
       communityId: null,
     });
     const result = await robots();
-    expect(result.rules?.[0]?.allow).toBe('/'); // Marketing-style, not community
+    expect(result.rules).toEqual([{ userAgent: '*', disallow: '/' }]);
+    // Reserved subdomains intentionally do NOT advertise a sitemap.
+    expect(result.sitemap).toBeUndefined();
   });
 });

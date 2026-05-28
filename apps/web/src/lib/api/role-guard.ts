@@ -41,7 +41,7 @@ export function hasRole(membership: Membership, allowed: readonly string[]): boo
 export function requireRole(
   membership: Membership,
   allowed: readonly string[],
-  errorMessage = 'Caller is not authorized for this action',
+  errorMessage = "You don't have permission to perform this action.",
 ): void {
   if (!hasRole(membership, allowed)) {
     throw new ForbiddenError(errorMessage);

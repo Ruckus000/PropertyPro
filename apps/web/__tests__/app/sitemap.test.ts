@@ -25,10 +25,26 @@ describe('sitemap.ts', () => {
       communityId: null,
     });
     const result = await sitemap();
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(4);
     expect(result[0]?.url).toBe('https://sunset-condos.getpropertypro.com/');
     expect(result[1]?.url).toBe('https://sunset-condos.getpropertypro.com/transparency');
     expect(result[2]?.url).toBe('https://sunset-condos.getpropertypro.com/notices');
+    expect(result[3]?.url).toBe('https://sunset-condos.getpropertypro.com/request-access');
+  });
+
+  it('returns an empty sitemap on a reserved subdomain (e.g. pm.)', async () => {
+    // Mirrors the robots.ts disallow-all branch. Reserved subdomains serve
+    // authenticated apps; advertising a sitemap would leak dashboard URL
+    // structure.
+    headersMock.mockResolvedValueOnce(new Headers({ host: 'pm.getpropertypro.com' }));
+    resolveCommunityContextMock.mockReturnValueOnce({
+      source: 'host_subdomain',
+      tenantSlug: 'pm',
+      isReservedSubdomain: true,
+      communityId: null,
+    });
+    const result = await sitemap();
+    expect(result).toEqual([]);
   });
 
   it('lists marketing URLs on the root host', async () => {
