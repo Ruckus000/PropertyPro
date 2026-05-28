@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import type { Metadata } from 'next';
 import type { CommunityType } from '@propertypro/shared';
+import { createPresignedDownloadUrl } from '@propertypro/db';
 import {
   getBrandingForCommunity,
   getCommunityPublicInfo,
@@ -61,8 +62,26 @@ export default async function PublicSitePage() {
     );
   }
 
-  // Resolve theme from branding settings
-  const branding = await getBrandingForCommunity(community.id);
+  // Resolve theme from branding settings.
+  //
+  // getBrandingForCommunity returns the raw CommunityBranding shape, which
+  // carries `logoPath` (a Supabase Storage object key), NOT a public URL.
+  // resolveTheme reads `branding.logoUrl` — so passing the raw branding object
+  // produces `theme.logoUrl === null` even when a logo is configured, and the
+  // public-site header silently renders text-only. Mirror the auth-page
+  // pattern (lib/auth/resolve-auth-page-branding.ts:64-78): presign the
+  // download URL first, then hand resolveTheme a branding object with the
+  // populated logoUrl field.
+  const rawBranding = await getBrandingForCommunity(community.id);
+  let logoUrl: string | null = null;
+  if (rawBranding?.logoPath) {
+    try {
+      logoUrl = await createPresignedDownloadUrl('documents', rawBranding.logoPath);
+    } catch {
+      // Non-fatal — render the page without a logo rather than crash.
+    }
+  }
+  const branding = rawBranding ? { ...rawBranding, logoUrl } : null;
   const theme = resolveTheme(
     branding,
     community.name,

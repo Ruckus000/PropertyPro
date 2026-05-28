@@ -1,7 +1,7 @@
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { blockRendererRegistry, hasRenderer } from '@/components/public-site/blocks/registry';
-import type { BlockType } from '@propertypro/shared';
+import { type BlockType, heroBlockSchema } from '@propertypro/shared';
 import type { LayoutProps, SiteBlock } from './types';
 
 /**
@@ -32,7 +32,14 @@ function toHeaderTheme(
 }
 
 function hasHeroBlock(blocks: SiteBlock[]): boolean {
-  return blocks.some((b) => b.blockType === 'hero');
+  // Mirror HeroBlock's own validation. If a hero row exists but its content
+  // fails the schema, HeroBlock returns null — so a presence-only check here
+  // would suppress the empty-state hero AND render nothing, leaving the
+  // page without an <h1> (violates the heading-hierarchy invariant
+  // documented in layouts/README.md and docs/design-system/templates/tidewater.md).
+  return blocks.some(
+    (b) => b.blockType === 'hero' && heroBlockSchema.safeParse(b.content).success,
+  );
 }
 
 function EmptyStateHero({ communityName }: { communityName: string }) {

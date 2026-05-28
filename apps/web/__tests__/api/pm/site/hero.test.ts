@@ -157,6 +157,34 @@ describe('PATCH /api/v1/pm/site/hero', () => {
     const res = await PATCH(makeRequest(VALID_BODY));
     expect(res.status).toBe(403);
   });
+
+  it('400s when heroImagePath references a different community', async () => {
+    const res = await PATCH(
+      makeRequest({
+        ...VALID_BODY,
+        heroImagePath: '999/hero/sneaky.webp',
+        heroImageAlt: 'cross-tenant',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
+  it('200s when heroImagePath matches the editing community', async () => {
+    const res = await PATCH(
+      makeRequest({
+        ...VALID_BODY,
+        heroImagePath: '42/hero/ours.webp',
+        heroImageAlt: 'in-tenant',
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({ heroImagePath: '42/hero/ours.webp' }),
+      }),
+    );
+  });
 });
 
 describe('GET /api/v1/pm/site/hero', () => {
