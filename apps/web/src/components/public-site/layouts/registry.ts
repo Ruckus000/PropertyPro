@@ -12,10 +12,13 @@
  */
 import type { LayoutId, LayoutComponent } from './types';
 import { Tidewater } from './Tidewater';
+import { Boulevard } from './Boulevard';
+import { Sable } from './Sable';
 
 export const layoutRegistry: Partial<Record<LayoutId, LayoutComponent>> = {
   tidewater: Tidewater,
-  // boulevard, sable: PR #7
+  boulevard: Boulevard,
+  sable: Sable,
 };
 
 /**

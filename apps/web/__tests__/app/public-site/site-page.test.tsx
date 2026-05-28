@@ -61,7 +61,7 @@ vi.mock('@/lib/utils/html-sanitizer', () => ({
   sanitizeHtml: (html: string) => html,
 }));
 
-import PublicSitePage, { generateMetadata } from '@/app/_site/page';
+import PublicSitePage, { generateMetadata } from '@/app/public-site/page';
 
 describe('PublicSitePage (layout-registry path)', () => {
   beforeEach(() => {
@@ -106,8 +106,7 @@ describe('PublicSitePage (layout-registry path)', () => {
     expect(meta.title).toBe('PropertyPro');
   });
 
-  it('falls back to the legacy hardcoded markup when the resolved layout is not registered', async () => {
-    // hoa_720 resolves to 'boulevard', which is NOT registered in PR #1b.
+  it('renders the Boulevard layout for HOA communities', async () => {
     getCommunityPublicInfoMock.mockResolvedValueOnce({
       id: 99,
       slug: 'palm-shores-hoa',
@@ -117,8 +116,7 @@ describe('PublicSitePage (layout-registry path)', () => {
     });
     const ui = await PublicSitePage();
     const { container } = render(ui as React.ReactElement);
-    // The hardcoded fallback contains "Community Resources" — the layout
-    // path does not.
-    expect(container.innerHTML).toContain('Community Resources');
+    expect(container.querySelector('h1')?.textContent).toBe('Palm Shores HOA');
+    expect(container.innerHTML).not.toContain('Community Resources');
   });
 });

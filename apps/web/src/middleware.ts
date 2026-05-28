@@ -673,9 +673,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      // Unauthenticated — rewrite to /_site so the public-site page renders
+      // Unauthenticated — rewrite to the internal public-site renderer.
       const siteUrl = request.nextUrl.clone();
-      siteUrl.pathname = '/_site';
+      siteUrl.pathname = '/public-site';
       const publicSiteResponse = NextResponse.rewrite(siteUrl, {
         request: { headers: forwardedHeaders },
       });

@@ -5,8 +5,8 @@ Layouts own the page chrome of public community sites. Three ship in v1:
 | Slug      | File             | Status               | Brand fit                                                                                  |
 |-----------|------------------|----------------------|--------------------------------------------------------------------------------------------|
 | tidewater | `Tidewater.tsx`  | **Shipped (PR #1b)** | Coastal editorial — golden-hour palette, Fraunces italic display, hairline rules.          |
-| boulevard | `Boulevard.tsx`  | Planned (PR #7)      | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
-| sable     | `Sable.tsx`      | Planned (PR #7)      | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
+| boulevard | `Boulevard.tsx`  | **Shipped (PR #7)**  | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
+| sable     | `Sable.tsx`      | **Shipped (PR #7)**  | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Layouts own the page chrome of public community sites. Three ship in v1:
 2. Register the layout in `./registry.ts`.
 3. Add a metadata row via migration: `INSERT INTO site_layout_metadata (slug, display_name, ...) VALUES (...)`.
 4. Document the layout's design intent at `docs/design-system/templates/<slug>.md`.
-5. Add a layout integration test under `apps/web/__tests__/public-site/layouts/<slug>.test.tsx`.
+5. Add a layout integration test under `apps/web/__tests__/components/public-site/layouts/<LayoutName>.test.tsx`.
 
 ## Constraints
 
@@ -33,9 +33,7 @@ Layouts own the page chrome of public community sites. Three ship in v1:
 
 ## Default fallback
 
-If a community's resolved `LayoutId` has no registered layout component (`layoutRegistry[id]` returns `undefined`), `_site/page.tsx` falls back to the hardcoded markup that shipped pre-PR-#1b. This makes the rollout safe: even after Tidewater ships, removing it from the registry would NOT crash the site — it would visually regress to the pre-1b baseline.
-
-The fallback is currently the live render path for `hoa_720` and `apartment` community types (which resolve to `boulevard` and `sable`, neither registered until PR #7). It is removed in PR #7 once all three layouts ship.
+All seeded v1 layout IDs are registered. If a future `LayoutId` is added without a component, `public-site/page.tsx` still falls back to the hardcoded pre-registry markup instead of crashing.
 
 ## What layouts are not
 

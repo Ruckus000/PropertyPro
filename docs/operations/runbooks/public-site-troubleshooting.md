@@ -67,7 +67,7 @@ slug changed, the cache may serve stale data.
 
 #### 4. Confirm `x-community-id` header reaches the page
 
-The public site root (`/`) rewrites to `/_site` with forwarded headers.
+The public site root (`/`) rewrites to `/public-site` with forwarded headers.
 If the rewrite drops headers, the scoped client won't have a community ID.
 
 Check server logs for the `X-Request-ID` and confirm `x-community-id` is
