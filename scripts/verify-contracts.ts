@@ -85,7 +85,6 @@ const RUN_ROUTE_REGEX = /\brunRoute\s*\(/;
 
 const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/health/route.ts',
-  'apps/web/src/app/api/v1/access-requests/route.ts',
   'apps/web/src/app/api/v1/account/delete/route.ts',
   'apps/web/src/app/api/v1/account/join-requests/route.ts',
   'apps/web/src/app/api/v1/accounting/export/route.ts',
