@@ -14,6 +14,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
+import { ContentSectionsList } from '@/components/pm/site-editor/ContentSectionsList';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -82,6 +83,10 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
         </h2>
         <HeroBlockForm communityId={communityId} initial={initial} />
       </section>
+
+      <div className="mt-8">
+        <ContentSectionsList communityId={communityId} />
+      </div>
     </div>
   );
 }
