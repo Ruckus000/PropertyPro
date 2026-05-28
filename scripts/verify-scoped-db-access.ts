@@ -82,6 +82,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/work-orders-service.ts'),
   // Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
   resolve(repoRoot, 'apps/web/src/lib/services/elections-service.ts'),
+  // PR #8a: site-blocks atomic publish + transactional upserts.
+  // publishCommunitySite runs a single transaction (SELECT FOR UPDATE on
+  // communities → soft-delete published → promote drafts → audit log) per
+  // spec §2.7. upsertPublishedBlock also wraps its soft-delete + insert in
+  // a transaction. Both require createUnscopedClient().transaction().
+  // Caller authorization is verified upstream at the route layer (pm_admin
+  // membership + hasSiteEditor plan feature).
+  resolve(repoRoot, 'apps/web/src/lib/services/site-blocks-service.ts'),
   // Community-scoped user display-name resolution for board/forum and elections UX
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing

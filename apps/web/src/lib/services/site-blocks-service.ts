@@ -4,23 +4,74 @@
  * Mutation entry points for community site blocks. Authenticated writes
  * only — tenant-scoped via createScopedClient. Audit-logged.
  *
- * PR #1b shipped `upsertPublishedHero`. PR #2 factors the publish primitive
- * into `upsertPublishedBlock(...)` so text and image blocks can use the
- * same machinery. `upsertPublishedHero` is now a thin caller — PR #1b's
- * external contract is preserved.
+ * PR #1b shipped `upsertPublishedHero`. PR #2 factored the publish primitive
+ * into `upsertPublishedBlock(...)` so text and image blocks could use the
+ * same machinery (sequential soft-delete + insert + external audit log).
  *
- * NOTE: ScopedClient does not expose a raw Drizzle transaction handle.
- * The two operations (soft-delete + insert) are sequential. A failure on
- * the insert will leave the old row soft-deleted; the route-level error
- * handler surfaces a 500 so the caller can retry. A retry is safe: the
- * soft-delete step filters on isNull(deletedAt), so it is a no-op when
- * the old row is already soft-deleted, and the insert proceeds normally.
- * Full transactionality is a PR #8 concern that will require adding this
- * service to the WEB_UNSAFE_IMPORT_ALLOWLIST.
+ * PR #8a moves both `upsertPublishedBlock` and a new `publishCommunitySite`
+ * onto `db.transaction()` so the soft-delete + insert + audit-log triple
+ * is atomic. The atomic-publish path (spec §2.7) acquires a row-level
+ * lock on the community row (`SELECT ... FOR UPDATE`) and checks an
+ * optimistic-concurrency token (`expectedPublishedAt`) before promoting
+ * drafts to published.
+ *
+ * AUTHZ: This file is allowlisted in scripts/verify-scoped-db-access.ts
+ * for `createUnscopedClient` import. Callers MUST verify pm_admin / cam
+ * membership and the `hasSiteEditor` plan feature at the route layer.
  */
-import { createScopedClient, logAuditEvent, siteBlocks } from '@propertypro/db';
-import { and, eq, isNull } from '@propertypro/db/filters';
+import {
+  complianceAuditLog,
+  createScopedClient,
+  siteBlocks,
+  type AuditAction,
+} from '@propertypro/db';
+import { and, desc, eq, isNull, sql } from '@propertypro/db/filters';
+// AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies pm_admin + hasSiteEditor.
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import type { HeroBlockContent } from '@propertypro/shared';
+import { ConflictError } from '@/lib/api/errors';
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Narrowed transaction shape for inline audit-log writes. Mirrors the
+ * elections-service pattern (apps/web/src/lib/services/elections-service.ts).
+ * Inlining the audit insert into the same tx keeps the publish atomic — a
+ * crash between mutations and the audit row would otherwise leave a
+ * mutation without provenance.
+ */
+type AuditInsertExecutor = {
+  insert(table: typeof complianceAuditLog): {
+    values(payload: Record<string, unknown>): Promise<unknown>;
+  };
+};
+
+async function insertAuditEventInTransaction(
+  tx: AuditInsertExecutor,
+  params: {
+    userId: string | null;
+    action: AuditAction;
+    resourceType: string;
+    resourceId: string;
+    communityId: number;
+    metadata?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await tx.insert(complianceAuditLog).values({
+    userId: params.userId,
+    communityId: params.communityId,
+    action: params.action,
+    resourceType: params.resourceType,
+    resourceId: params.resourceId,
+    metadata: params.metadata ?? null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Per-block upsert (PR #2 surface, now transactional)
+// ---------------------------------------------------------------------------
 
 export interface UpsertPublishedBlockInput {
   communityId: number;
@@ -37,50 +88,239 @@ export async function upsertPublishedBlock({
   blockOrder,
   content,
 }: UpsertPublishedBlockInput): Promise<void> {
-  const scoped = createScopedClient(communityId);
+  const db = createUnscopedClient();
 
-  // Step 1: Soft-delete any existing published row at this blockOrder.
-  //
-  // The predicate intentionally does NOT include blockType. The partial
-  // unique index `site_blocks_community_order_draft_variant_partial` is
-  // keyed on (community_id, block_order, is_draft, template_variant)
-  // WHERE deleted_at IS NULL — block_type is NOT part of the uniqueness
-  // constraint. Filtering soft-delete on block_type would leave a row of
-  // a different type at the same order, and the subsequent insert would
-  // collide on the partial unique index → opaque 500. Match the index's
-  // shape so "replace whatever lives at this slot" works regardless of
-  // the previous block's type.
-  await scoped.softDelete(
-    siteBlocks,
-    and(
-      eq(siteBlocks.blockOrder, blockOrder),
-      eq(siteBlocks.isDraft, false),
-      isNull(siteBlocks.deletedAt),
-    ),
-  );
+  await db.transaction(async (tx) => {
+    // Scoped client bound to the transaction — preserves tenant isolation
+    // while keeping the soft-delete + insert + audit-log triple atomic.
+    const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
 
-  // Step 2: Insert the new published row.
-  await scoped.insert(siteBlocks, {
-    communityId,
-    blockType,
-    blockOrder,
-    isDraft: false,
-    publishedAt: new Date(),
-    content: content as Record<string, unknown>,
-  });
+    // Step 1: Soft-delete any existing published row at this blockOrder.
+    //
+    // The predicate intentionally does NOT include blockType. The partial
+    // unique index `site_blocks_community_order_draft_variant_partial` is
+    // keyed on (community_id, block_order, is_draft, template_variant)
+    // WHERE deleted_at IS NULL — block_type is NOT part of the uniqueness
+    // constraint. Filtering soft-delete on block_type would leave a row of
+    // a different type at the same order, and the subsequent insert would
+    // collide on the partial unique index → opaque 500. Match the index's
+    // shape so "replace whatever lives at this slot" works regardless of
+    // the previous block's type.
+    await scoped.softDelete(
+      siteBlocks,
+      and(
+        eq(siteBlocks.blockOrder, blockOrder),
+        eq(siteBlocks.isDraft, false),
+        isNull(siteBlocks.deletedAt),
+      ),
+    );
 
-  // Audit log fires AFTER mutations. logAuditEvent uses a privileged
-  // postgres connection (see packages/db/src/utils/audit-logger.ts) so it
-  // must run outside the scoped-client context.
-  await logAuditEvent({
-    userId: actorUserId,
-    communityId,
-    action: 'update',
-    resourceType: 'site_block',
-    resourceId: blockType,
-    metadata: { blockType, blockOrder },
+    // Step 2: Insert the new published row.
+    await scoped.insert(siteBlocks, {
+      communityId,
+      blockType,
+      blockOrder,
+      isDraft: false,
+      publishedAt: new Date(),
+      content: content as Record<string, unknown>,
+    });
+
+    // Step 3: Audit row inside the same tx — atomic with the mutation.
+    await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'site_block',
+      resourceId: blockType,
+      metadata: { blockType, blockOrder },
+    });
   });
 }
+
+// ---------------------------------------------------------------------------
+// Atomic community-wide publish (PR #8a — spec §2.7)
+// ---------------------------------------------------------------------------
+
+export interface PublishCommunitySiteInput {
+  communityId: number;
+  actorUserId: string;
+  /**
+   * Optimistic-concurrency token. The caller passes the `publishedAt` it
+   * loaded with the editor state. If a concurrent publish has advanced
+   * the server-side value since then, the publish fails with `ConflictError`
+   * (HTTP 409) and the editor reloads. Pass `null` to skip the check
+   * (use only for tests or first-ever publishes).
+   */
+  expectedPublishedAt: Date | null;
+}
+
+export type PublishCommunitySiteResult =
+  | {
+      published: true;
+      publishedAt: Date;
+      promotedCount: number;
+      retiredCount: number;
+    }
+  | {
+      published: false;
+      reason: 'nothing-to-publish';
+    };
+
+/**
+ * Atomic community-wide publish per spec §2.7.
+ *
+ * Transaction:
+ *   1. `SELECT ... FOR UPDATE` on the community row — serializes concurrent
+ *      publish attempts for the same community.
+ *   2. Read the current max `published_at` across published, non-deleted
+ *      site_blocks. If `expectedPublishedAt` is supplied and doesn't match,
+ *      throw `ConflictError` so the editor reloads.
+ *   3. Soft-delete every currently-published, non-deleted site_blocks row
+ *      for the community.
+ *   4. Promote every draft row (is_draft=true, deleted_at IS NULL) to
+ *      published (is_draft=false, published_at=now()).
+ *   5. Audit row (action='update', resourceType='community_site') inside
+ *      the same tx so the mutation has provenance.
+ *
+ * If no drafts exist at step 4, the function rolls back implicitly and
+ * returns `{ published: false, reason: 'nothing-to-publish' }`. Callers
+ * surface this as a 200 with a "no changes" message rather than a 409.
+ *
+ * Order matters: the soft-delete (step 3) moves prior rows out of the
+ * partial unique index BEFORE the draft-promotion (step 4) inserts the
+ * new keys. Without step 3 first, two rows would briefly share
+ * `(community_id, block_order, is_draft=false, template_variant)` and
+ * violate the constraint mid-transaction.
+ */
+export async function publishCommunitySite({
+  communityId,
+  actorUserId,
+  expectedPublishedAt,
+}: PublishCommunitySiteInput): Promise<PublishCommunitySiteResult> {
+  const db = createUnscopedClient();
+
+  return db.transaction(async (tx) => {
+    // Step 1: row-level lock on the community row. Concurrent publish
+    // attempts for the same community queue here. communities is the root
+    // tenant table; no scoping required.
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
+    const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
+
+    // Step 2: optimistic-concurrency check. The `expectedPublishedAt`
+    // token captures the editor's snapshot of state; a mismatch means
+    // someone else published in between.
+    if (expectedPublishedAt !== null) {
+      // Newest published row by publishedAt. Sufficient as a concurrency
+      // token — every publishCommunitySite call promotes drafts with a
+      // single fresh publishedAt, so all rows from one publish share the
+      // same timestamp. The first publishedAt the caller saw advances on
+      // every successful publish.
+      const newest = await tx
+        .select({ publishedAt: siteBlocks.publishedAt })
+        .from(siteBlocks)
+        .where(
+          and(
+            eq(siteBlocks.communityId, communityId),
+            eq(siteBlocks.isDraft, false),
+            isNull(siteBlocks.deletedAt),
+          ),
+        )
+        .orderBy(desc(siteBlocks.publishedAt))
+        .limit(1);
+      const currentMax = newest[0]?.publishedAt ?? null;
+      // Compare by epoch ms — Date instances and the postgres timestamp
+      // round-trip can produce equal-but-non-identical references.
+      const currentMs = currentMax instanceof Date ? currentMax.getTime() : null;
+      const expectedMs = expectedPublishedAt.getTime();
+      if (currentMs !== expectedMs) {
+        throw new ConflictError(
+          'Another editor published changes while you were working. Reload the page and try again.',
+        );
+      }
+    }
+
+    // Step 3: soft-delete every currently-published row for the community.
+    // Returns the count of rows affected so we can surface it in the audit
+    // row and the result object.
+    const retiredResult = await tx
+      .update(siteBlocks)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.isDraft, false),
+          isNull(siteBlocks.deletedAt),
+        ),
+      )
+      .returning({ id: siteBlocks.id });
+    const retiredCount = retiredResult.length;
+
+    // Step 4: promote drafts. Capture the new publishedAt up front so the
+    // returned timestamp matches what landed in the rows.
+    const publishedAt = new Date();
+    const promotedResult = await tx
+      .update(siteBlocks)
+      .set({ isDraft: false, publishedAt })
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.isDraft, true),
+          isNull(siteBlocks.deletedAt),
+        ),
+      )
+      .returning({ id: siteBlocks.id });
+    const promotedCount = promotedResult.length;
+
+    // If nothing was promoted, this publish is a no-op. Rollback by
+    // throwing — Drizzle's transaction wrapper undoes the soft-delete
+    // step so the prior published rows remain visible.
+    if (promotedCount === 0) {
+      throw new NothingToPublishRollback();
+    }
+
+    // Step 5: audit row inside the same tx so the publish has atomic
+    // provenance.
+    await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'community_site',
+      resourceId: String(communityId),
+      metadata: { retiredCount, promotedCount, publishedAt: publishedAt.toISOString() },
+    });
+
+    // Mark Drizzle that we want to keep the work — the explicit return
+    // here means the implicit COMMIT runs.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return { published: true as const, publishedAt, promotedCount, retiredCount };
+  })
+    .catch((err: unknown) => {
+      if (err instanceof NothingToPublishRollback) {
+        return { published: false as const, reason: 'nothing-to-publish' as const };
+      }
+      throw err;
+    });
+}
+
+/**
+ * Sentinel thrown inside the publishCommunitySite transaction when there
+ * are no drafts to promote. Drizzle rolls back, and the outer `.catch`
+ * converts the sentinel to a `{ published: false }` result. We use a
+ * sentinel rather than a flag because the rollback is part of the
+ * semantics — the soft-delete step shouldn't land if no drafts exist.
+ */
+class NothingToPublishRollback extends Error {
+  constructor() {
+    super('publishCommunitySite: no drafts to promote — rolling back');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PR #1b back-compat
+// ---------------------------------------------------------------------------
 
 export interface UpsertPublishedHeroInput {
   communityId: number;
@@ -105,3 +345,4 @@ export async function upsertPublishedHero({
     content,
   });
 }
+
