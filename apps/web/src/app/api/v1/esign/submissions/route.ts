@@ -4,7 +4,8 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
-import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireEsignReadPermission,
   requireEsignWritePermission,
@@ -32,9 +33,9 @@ const listStatusSchema = z.enum([
 ]);
 
 export const GET = withErrorHandler(
-  runRoute(esignSubmissionsListContract, async ({ req }) => {
+  runRoute(esignSubmissionsListContract, async ({ query, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const communityId = parseCommunityIdFromQuery(req);
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignReadPermission(membership);

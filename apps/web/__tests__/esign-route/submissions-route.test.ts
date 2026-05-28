@@ -13,8 +13,10 @@ const {
   requireCommunityMembershipMock,
   requireEsignReadPermissionMock,
   requireEsignWritePermissionMock,
-  parseCommunityIdFromQueryMock,
+  resolveEffectiveCommunityIdMock,
   parseCommunityIdFromBodyMock,
+  assertNotDemoGraceMock,
+  requirePlanFeatureMock,
 } = vi.hoisted(() => ({
   listSubmissionsMock: vi.fn(),
   createSubmissionMock: vi.fn(),
@@ -22,8 +24,10 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   requireEsignReadPermissionMock: vi.fn(),
   requireEsignWritePermissionMock: vi.fn(),
-  parseCommunityIdFromQueryMock: vi.fn(),
+  resolveEffectiveCommunityIdMock: vi.fn(),
   parseCommunityIdFromBodyMock: vi.fn(),
+  assertNotDemoGraceMock: vi.fn(),
+  requirePlanFeatureMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -34,8 +38,11 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+vi.mock('@/lib/api/tenant-context', () => ({
+  resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
+}));
+
 vi.mock('@/lib/finance/request', () => ({
-  parseCommunityIdFromQuery: parseCommunityIdFromQueryMock,
   parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
@@ -50,11 +57,11 @@ vi.mock('@/lib/services/esign-service', () => ({
 }));
 
 vi.mock('@/lib/middleware/plan-guard', () => ({
-  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
+  requirePlanFeature: requirePlanFeatureMock,
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
-  assertNotDemoGrace: vi.fn().mockResolvedValue(undefined),
+  assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
 
@@ -82,11 +89,13 @@ const membership = {
 beforeEach(() => {
   vi.clearAllMocks();
   requireAuthenticatedUserIdMock.mockResolvedValue('user-staff');
-  parseCommunityIdFromQueryMock.mockReturnValue(COMMUNITY_ID);
+  resolveEffectiveCommunityIdMock.mockReturnValue(COMMUNITY_ID);
   parseCommunityIdFromBodyMock.mockReturnValue(COMMUNITY_ID);
   requireCommunityMembershipMock.mockResolvedValue(membership);
   requireEsignReadPermissionMock.mockResolvedValue(undefined);
   requireEsignWritePermissionMock.mockResolvedValue(undefined);
+  assertNotDemoGraceMock.mockResolvedValue(undefined);
+  requirePlanFeatureMock.mockResolvedValue(undefined);
 });
 
 describe('GET /api/v1/esign/submissions', () => {
@@ -148,9 +157,14 @@ const CREATE_BODY = {
   sendEmail: true,
 };
 
+const CREATE_RESULT = {
+  submission: { id: 12, status: 'pending' },
+  signers: [{ id: 1, email: 'signer@example.com' }],
+};
+
 describe('POST /api/v1/esign/submissions', () => {
   beforeEach(() => {
-    createSubmissionMock.mockResolvedValue({ id: 12, status: 'pending' });
+    createSubmissionMock.mockResolvedValue(CREATE_RESULT);
   });
 
   it('creates submission and returns { data }', async () => {
@@ -163,7 +177,10 @@ describe('POST /api/v1/esign/submissions', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json).toEqual({ data: { id: 12, status: 'pending' } });
+    expect(json).toEqual({ data: CREATE_RESULT });
+    expect(assertNotDemoGraceMock).toHaveBeenCalledWith(COMMUNITY_ID);
+    expect(requireEsignWritePermissionMock).toHaveBeenCalledWith(membership);
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(COMMUNITY_ID, 'hasEsign');
     expect(createSubmissionMock).toHaveBeenCalledWith(
       COMMUNITY_ID,
       'user-staff',
@@ -172,7 +189,7 @@ describe('POST /api/v1/esign/submissions', () => {
     );
   });
 
-  it('rejects invalid body via contract validation', async () => {
+  it('rejects invalid body via contract validation without calling gates', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/esign/submissions', {
       method: 'POST',
       body: JSON.stringify({ communityId: COMMUNITY_ID }),
@@ -181,6 +198,9 @@ describe('POST /api/v1/esign/submissions', () => {
     const response = await POST(req);
     expect(response.status).toBe(400);
     expect(createSubmissionMock).not.toHaveBeenCalled();
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requirePlanFeatureMock).not.toHaveBeenCalled();
   });
 });
+
 
