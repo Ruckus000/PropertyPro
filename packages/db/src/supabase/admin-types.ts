@@ -173,6 +173,22 @@ type AccessPlanInsert = Omit<
   notes?: string | null;
 };
 
+// ─── Site templates ───
+
+export type SiteThemePresetRow = {
+  id: number;
+  slug: string;
+  display_name: string;
+  description: string | null;
+  tokens: unknown;
+  tier: 'essentials' | 'professional' | 'pm';
+  is_archived: boolean;
+  is_featured: boolean;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AdminDatabase = {
   public: {
     Tables: {
@@ -200,6 +216,7 @@ export type AdminDatabase = {
       account_deletion_requests: AdminTable<AccountDeletionRequestRow>;
       users: AdminTable<AdminUserRow>;
       communities: AdminTable<AdminCommunityRow>;
+      site_theme_presets: AdminTable<SiteThemePresetRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
