@@ -2,47 +2,32 @@
  * Emergency Broadcast detail API — get broadcast with delivery report.
  *
  * GET /api/v1/emergency-broadcasts/[id] — Get broadcast + delivery report
+ *
+ * Plan A1 drain #115 — migrated to `runRoute(contract, handler)`;
+ * see `./contract.ts` for schemas and auth-chain rationale.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { getBroadcastWithReport } from '@/lib/services/emergency-broadcast-service';
+import { emergencyBroadcastDetailContract } from './contract';
 
 export const GET = withErrorHandler(
-  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  runRoute(emergencyBroadcastDetailContract, async ({ params, query, req }) => {
     const userId = await requireAuthenticatedUserId();
-    const { id } = await params;
-    const broadcastId = Number(id);
-
-    if (!Number.isInteger(broadcastId) || broadcastId <= 0) {
-      throw new ValidationError('Invalid broadcast ID');
-    }
-
-    const { searchParams } = new URL(req.url);
-    const communityIdParam = searchParams.get('communityId');
-    if (!communityIdParam) {
-      throw new ValidationError('communityId query parameter is required');
-    }
-
-    const parsedCommunityId = Number(communityIdParam);
-    if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-      throw new ValidationError('communityId must be a positive integer');
-    }
-
-    const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'emergency_broadcasts', 'read');
 
-    const report = await getBroadcastWithReport(broadcastId, communityId);
+    const report = await getBroadcastWithReport(params.id, communityId);
     if (!report) {
       throw new NotFoundError('Broadcast not found');
     }
 
-    return NextResponse.json({ data: report });
-  },
+    return report;
+  }),
 );
