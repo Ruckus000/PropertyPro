@@ -2,13 +2,13 @@
 
 import React, { useMemo, useState } from 'react';
 import { Badge } from '@propertypro/ui';
-import { sortByPriority, needsAttention, BOARD_ACTION_TEMPLATE_KEYS, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
+import { sortByPriority, needsAttention, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import type { ChecklistItemData } from './compliance-checklist-item';
-import { getTemplateDefaultVisibility, type DefaultVisibility } from './compliance-visibility';
-import type { ComplianceStatus } from '@/lib/utils/compliance-calculator';
-
-type FilterKey = 'all' | 'action_needed' | 'overdue' | 'due_soon' | 'satisfied';
+import { getTemplateDefaultVisibility } from './compliance-visibility';
+import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant, matchesFilter } from './compliance-pill-mapping';
+import type { FilterKey } from './compliance-pill-mapping';
+export type { FilterKey } from './compliance-pill-mapping';
 type SortKey = 'status' | 'deadline' | 'statute';
 type SortDir = 'asc' | 'desc';
 
@@ -22,35 +22,8 @@ export interface ComplianceQueueProps {
   onLink: (item: ChecklistItemData) => void;
   onView: (item: ChecklistItemData) => void;
   onMarkApplicable: (item: ChecklistItemData) => void;
-}
-
-const VISIBILITY_LABEL: Record<DefaultVisibility, string> = {
-  public_page: 'Public',
-  owner_portal: 'Owner portal',
-  owner_only: 'Owner-only',
-  board: 'Board',
-};
-
-const VISIBILITY_VARIANT: Record<DefaultVisibility, 'info' | 'owner' | 'board'> = {
-  public_page: 'info',
-  owner_portal: 'owner',
-  owner_only: 'owner',
-  board: 'board',
-};
-
-function statusLabel(item: ChecklistItemData): string {
-  if (item.status === 'satisfied') return 'Satisfied';
-  if (item.status === 'overdue') return 'Overdue';
-  if (item.status === 'not_applicable') return 'Not applicable';
-  if (BOARD_ACTION_TEMPLATE_KEYS.has(item.templateKey)) return 'Needs board action';
-  return 'Action needed';
-}
-
-function statusVariant(status: ComplianceStatus): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'satisfied') return 'success';
-  if (status === 'overdue') return 'danger';
-  if (status === 'not_applicable') return 'neutral';
-  return 'warning';
+  filter: FilterKey;
+  onFilterChange: (filter: FilterKey) => void;
 }
 
 function deadlineCell(item: ChecklistItemData): string {
@@ -58,19 +31,6 @@ function deadlineCell(item: ChecklistItemData): string {
   if (item.rollingWindow && !item.deadline) return `Rolling ${item.rollingWindow.months} mo`;
   if (!item.deadline) return '—';
   return new Date(item.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-
-function matchesFilter(item: ChecklistItemData, filter: FilterKey): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'action_needed') return needsAttention(item);
-  if (filter === 'overdue') return item.status === 'overdue';
-  if (filter === 'satisfied') return item.status === 'satisfied';
-  if (filter === 'due_soon') {
-    return !!item.deadline && item.status === 'unsatisfied' &&
-      (new Date(item.deadline).getTime() - Date.now()) <= SEVEN_DAYS_MS;
-  }
-  return true;
 }
 
 function SortableHeader({
@@ -124,8 +84,8 @@ function FilterChip({
 export function ComplianceQueue({
   items, canWrite, role, selectedId, onSelect,
   onUpload, onLink, onView, onMarkApplicable,
+  filter, onFilterChange,
 }: ComplianceQueueProps) {
-  const [filter, setFilter] = useState<FilterKey>('all');
   const [sortKey, setSortKey] = useState<SortKey>('status');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -189,7 +149,7 @@ export function ComplianceQueue({
                 {' · '}
                 <button
                   type="button"
-                  onClick={() => setFilter('all')}
+                  onClick={() => onFilterChange('all')}
                   className="text-[var(--interactive-primary)] hover:underline"
                 >
                   × Clear filters
@@ -201,23 +161,23 @@ export function ComplianceQueue({
       </header>
 
       <div role="group" aria-label="Filter records" className="flex flex-wrap gap-2 px-6 pb-3">
-        <FilterChip active={filter === 'action_needed'} onClick={() => setFilter('action_needed')}>
+        <FilterChip active={filter === 'action_needed'} onClick={() => onFilterChange('action_needed')}>
           {`Action needed ${counts.action_needed}`}
         </FilterChip>
-        <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
+        <FilterChip active={filter === 'all'} onClick={() => onFilterChange('all')}>
           {`All ${counts.all}`}
         </FilterChip>
-        <FilterChip active={filter === 'overdue'} onClick={() => setFilter('overdue')}>
+        <FilterChip active={filter === 'overdue'} onClick={() => onFilterChange('overdue')}>
           {`Overdue ${counts.overdue}`}
         </FilterChip>
-        <FilterChip active={filter === 'due_soon'} onClick={() => setFilter('due_soon')}>
+        <FilterChip active={filter === 'due_soon'} onClick={() => onFilterChange('due_soon')}>
           {`Due ≤ 7 days ${counts.due_soon}`}
         </FilterChip>
-        <FilterChip active={filter === 'satisfied'} onClick={() => setFilter('satisfied')}>
+        <FilterChip active={filter === 'satisfied'} onClick={() => onFilterChange('satisfied')}>
           {`Satisfied ${counts.satisfied}`}
         </FilterChip>
         {filter !== 'all' && (
-          <FilterChip active={false} onClick={() => setFilter('all')}>
+          <FilterChip active={false} onClick={() => onFilterChange('all')}>
             × Clear filters
           </FilterChip>
         )}
@@ -228,7 +188,7 @@ export function ComplianceQueue({
           No records match these filters.
           <button
             type="button"
-            onClick={() => setFilter('all')}
+            onClick={() => onFilterChange('all')}
             className="ml-2 text-[var(--interactive-primary)] hover:underline"
           >
             Clear filters

@@ -11,6 +11,8 @@ import { ComplianceDetailPanel } from './compliance-detail-panel';
 import { ComplianceOnboarding } from './compliance-onboarding';
 import { ComplianceActivityFeed } from './compliance-activity-feed';
 import { ComplianceQueue } from './compliance-queue';
+import { matchesFilter } from './compliance-pill-mapping';
+import type { FilterKey } from './compliance-pill-mapping';
 import { UploadDocumentModal } from './upload-document-modal';
 import { LinkDocumentModal } from './link-document-modal';
 import type { CommunityRole, NewCommunityRole } from '@propertypro/shared';
@@ -45,7 +47,19 @@ export function ComplianceCommandCenter({
   role,
   canWrite,
 }: ComplianceCommandCenterProps) {
-  const [view, setView] = useState<ViewMode>(() => defaultViewForRole(role));
+  const storageKey = `compliance.audienceView.${communityId}`;
+
+  const [view, setView] = useState<ViewMode>(() => {
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored === 'cam' || stored === 'board') return stored;
+    return defaultViewForRole(role);
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, view);
+  }, [storageKey, view]);
+
+  const [filter, setFilter] = useState<FilterKey>('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);
   const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
@@ -59,7 +73,14 @@ export function ComplianceCommandCenter({
   // every re-render). Initialized to null so the very first selection does
   // NOT scroll (the row may not yet be in the DOM on initial mount).
   const selectedRowRef = useRef<number | null>(null);
-  const selectedItem = selectedId != null ? items.find((i) => i.id === selectedId) ?? null : null;
+  const selectedItem = useMemo(
+    () => (selectedId != null ? items.find((i) => i.id === selectedId) ?? null : null),
+    [items, selectedId],
+  );
+  const isSelectedHidden = useMemo(
+    () => selectedItem !== null && !matchesFilter(selectedItem, filter),
+    [selectedItem, filter],
+  );
 
   // Initial selection: pick the first item by priority. Fallback: if the
   // selected item disappears entirely (e.g., removed from data), pick the
@@ -186,6 +207,8 @@ export function ComplianceCommandCenter({
               }
             }}
             onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+            filter={filter}
+            onFilterChange={setFilter}
           />
           <ComplianceDetailPanel
             item={selectedItem}
@@ -200,6 +223,8 @@ export function ComplianceCommandCenter({
               }
             }}
             onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+            isSelectedHidden={isSelectedHidden}
+            onClearFilter={() => setFilter('all')}
           />
         </div>
       )}

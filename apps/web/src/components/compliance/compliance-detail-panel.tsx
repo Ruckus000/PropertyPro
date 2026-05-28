@@ -5,14 +5,8 @@ import { Badge } from '@propertypro/ui';
 import { useComplianceActivityFeed, type AuditEntry } from '@/hooks/use-compliance-activity';
 import type { ChecklistItemData } from './compliance-checklist-item';
 import { getTemplateDefaultVisibility } from './compliance-visibility';
-import { BOARD_ACTION_TEMPLATE_KEYS } from '@/lib/utils/compliance-calculator';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
-import type { ComplianceStatus } from '@/lib/utils/compliance-calculator';
-import type { DefaultVisibility } from './compliance-visibility';
-
-// DONE_WITH_CONCERNS: VISIBILITY_LABEL and VISIBILITY_VARIANT are duplicated
-// from compliance-queue.tsx. Extraction to a shared compliance-pill-mapping.ts
-// module is deferred to Slice D/E clean-up to keep this slice focused.
+import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant } from './compliance-pill-mapping';
 
 export interface ComplianceDetailPanelProps {
   item: ChecklistItemData | null;
@@ -23,36 +17,9 @@ export interface ComplianceDetailPanelProps {
   onLink: (item: ChecklistItemData) => void;
   onView: (item: ChecklistItemData) => void;
   onMarkApplicable: (item: ChecklistItemData) => void;
+  isSelectedHidden?: boolean;
+  onClearFilter?: () => void;
 }
-
-function statusLabel(item: ChecklistItemData): string {
-  if (item.status === 'satisfied') return 'Satisfied';
-  if (item.status === 'overdue') return 'Overdue';
-  if (item.status === 'not_applicable') return 'Not applicable';
-  if (BOARD_ACTION_TEMPLATE_KEYS.has(item.templateKey)) return 'Needs board action';
-  return 'Action needed';
-}
-
-function statusVariant(status: ComplianceStatus): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'satisfied') return 'success';
-  if (status === 'overdue') return 'danger';
-  if (status === 'not_applicable') return 'neutral';
-  return 'warning';
-}
-
-const VISIBILITY_LABEL: Record<DefaultVisibility, string> = {
-  public_page: 'Public',
-  owner_portal: 'Owner portal',
-  owner_only: 'Owner-only',
-  board: 'Board',
-};
-
-const VISIBILITY_VARIANT: Record<DefaultVisibility, 'info' | 'owner' | 'board'> = {
-  public_page: 'info',
-  owner_portal: 'owner',
-  owner_only: 'owner',
-  board: 'board',
-};
 
 export function ComplianceDetailPanel({
   item,
@@ -63,6 +30,8 @@ export function ComplianceDetailPanel({
   onLink,
   onView,
   onMarkApplicable,
+  isSelectedHidden,
+  onClearFilter,
 }: ComplianceDetailPanelProps) {
   const activity = useComplianceActivityFeed(communityId);
 
@@ -109,6 +78,18 @@ export function ComplianceDetailPanel({
         Selected record
       </div>
       <h3 className="mt-1 text-lg font-semibold leading-tight">{selectedItem.title}</h3>
+
+      {isSelectedHidden && (
+        <div role="alert" className="mt-3 rounded-[var(--radius-sm)] border border-[var(--status-info-border)] bg-[var(--status-info-bg)] p-3 text-sm text-[var(--status-info)]">
+          Selected record is hidden by the current filter.
+          {onClearFilter && (
+            <button type="button" onClick={onClearFilter} className="ml-2 underline hover:no-underline">
+              Clear filter
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mt-2 flex flex-wrap gap-2">
         <Badge variant={statusVariant(selectedItem.status)}>{statusLabel(selectedItem)}</Badge>
         <Badge variant={VISIBILITY_VARIANT[vis]}>{VISIBILITY_LABEL[vis]}</Badge>

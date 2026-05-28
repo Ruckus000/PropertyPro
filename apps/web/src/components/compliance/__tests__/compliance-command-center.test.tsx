@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ComplianceCommandCenter } from '../compliance-command-center';
@@ -179,5 +179,40 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.getByText('Selected record')).toBeInTheDocument();
     // First selected item is the overdue "Insurance" record.
     expect(screen.getAllByText('Insurance').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows the hidden-by-filter notice when the active filter excludes the selected item', () => {
+    // Default fixture: "Insurance" (overdue, id=2) is auto-selected as the top-priority item.
+    // Clicking the "Satisfied" filter chip excludes it (it is 'overdue', not 'satisfied').
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    // Activate the "Satisfied" filter — hides the auto-selected "Insurance" item.
+    fireEvent.click(screen.getByRole('button', { name: /Satisfied/i }));
+    // The detail panel should show the hidden-by-filter notice.
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText(/Selected record is hidden by the current filter/i)).toBeInTheDocument();
+  });
+});
+
+describe('ComplianceCommandCenter — view persistence', () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('reads view preference from localStorage on mount', () => {
+    window.localStorage.setItem('compliance.audienceView.1', 'board');
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('writes view preference to localStorage on toggle', () => {
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Board view' }));
+    expect(window.localStorage.getItem('compliance.audienceView.1')).toBe('board');
   });
 });
