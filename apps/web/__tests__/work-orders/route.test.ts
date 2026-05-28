@@ -28,6 +28,9 @@ const {
   isResidentRoleMock,
   getActorUnitIdsMock,
   parseCommunityIdFromQueryMock,
+  parseCommunityIdFromBodyMock,
+  createWorkOrderForCommunityMock,
+  requireWorkOrdersWritePermissionMock,
 } = vi.hoisted(() => ({
   paginateMock: vi.fn(),
   scopedClient: { __scoped: true },
@@ -49,6 +52,9 @@ const {
   isResidentRoleMock: vi.fn(),
   getActorUnitIdsMock: vi.fn(),
   parseCommunityIdFromQueryMock: vi.fn(),
+  parseCommunityIdFromBodyMock: vi.fn(),
+  createWorkOrderForCommunityMock: vi.fn(),
+  requireWorkOrdersWritePermissionMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -77,7 +83,7 @@ vi.mock('@/lib/api/community-membership', () => ({
 
 vi.mock('@/lib/finance/request', () => ({
   parseCommunityIdFromQuery: parseCommunityIdFromQueryMock,
-  parseCommunityIdFromBody: vi.fn(),
+  parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
 vi.mock('@/lib/finance/common', () => ({
@@ -89,17 +95,17 @@ vi.mock('@/lib/work-orders/common', () => ({
   getActorUnitIds: getActorUnitIdsMock,
   requireWorkOrdersEnabled: requireWorkOrdersEnabledMock,
   requireWorkOrdersReadPermission: requireWorkOrdersReadPermissionMock,
-  requireWorkOrdersWritePermission: vi.fn(),
+  requireWorkOrdersWritePermission: requireWorkOrdersWritePermissionMock,
 }));
 
 vi.mock('@/lib/services/work-orders-service', () => ({
-  createWorkOrderForCommunity: vi.fn(),
   mapWorkOrderRow: mapWorkOrderRowMock,
   deriveSlaState: deriveSlaStateMock,
   // After A3 drain #59, the route imports `paginateWorkOrdersForCommunity`
   // from the service. Delegate to underlying paginateMock with same where
   // + short-circuit + mapWorkOrderRow projection so all 8 GET assertions
   // continue to work.
+  createWorkOrderForCommunity: createWorkOrderForCommunityMock,
   paginateWorkOrdersForCommunity: async (params: {
     communityId: number;
     cursor?: string;
@@ -175,7 +181,7 @@ vi.mock('@/lib/api/zod/error-formatter', () => ({
   formatZodErrors: vi.fn(() => []),
 }));
 
-import { GET } from '../../src/app/api/v1/work-orders/route';
+import { GET, POST } from '../../src/app/api/v1/work-orders/route';
 
 function makeRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost:3000'));
@@ -411,5 +417,42 @@ describe('GET /api/v1/work-orders — paginate() integration', () => {
       GET(makeRequest(`/api/v1/work-orders?communityId=${COMMUNITY_ID}&status=garbage`)),
     ).rejects.toThrow('Invalid work order status filter');
     expect(paginateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/work-orders', () => {
+  beforeEach(() => {
+    parseCommunityIdFromBodyMock.mockImplementation(
+      (_req: unknown, communityId: number) => communityId,
+    );
+    createWorkOrderForCommunityMock.mockResolvedValue({
+      id: 99,
+      title: 'Fix leak',
+      status: 'created',
+    });
+    requireWorkOrdersWritePermissionMock.mockReturnValue(undefined);
+  });
+
+  it('creates a work order and wraps the response', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/v1/work-orders', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: COMMUNITY_ID,
+          title: 'Fix leak',
+        }),
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data).toEqual({ id: 99, title: 'Fix leak', status: 'created' });
+    expect(createWorkOrderForCommunityMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      'user-staff',
+      expect.objectContaining({ title: 'Fix leak' }),
+      null,
+    );
   });
 });
