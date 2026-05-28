@@ -274,6 +274,22 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     }));
   });
 
+  it('PATCHes a contact block (validates via contactBlockSchema)', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'contact',
+      blockOrder: 7,
+      content: { showBoard: true, showManagement: false },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'contact',
+      blockOrder: 7,
+      content: { showBoard: true, showManagement: false },
+    }));
+  });
+
   it('400s on invalid text content (missing required body field)', async () => {
     const body = { ...VALID_TEXT_BODY, content: {} }; // body field is required
     const res = await PATCH(makePatchRequest(body));
@@ -285,6 +301,18 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     const body = {
       ...VALID_IMAGE_BODY,
       content: { imagePath: '42/content/photo.webp' }, // no altText, no decorative
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(400);
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s on invalid contact content (unknown fields are rejected)', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'contact',
+      blockOrder: 7,
+      content: { showBoard: true, showManagement: true, exposeBoardEmails: true },
     };
     const res = await PATCH(makePatchRequest(body));
     expect(res.status).toBe(400);

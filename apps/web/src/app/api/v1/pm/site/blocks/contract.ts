@@ -31,7 +31,7 @@ export const blocksUpsertContract = defineRoute({
   request: {
     body: z.object({
       communityId: z.number().int().positive(),
-      blockType: z.enum(['text', 'image', 'announcements', 'documents', 'meetings']), // hero has its own dedicated endpoint at /api/v1/pm/site/hero
+      blockType: z.enum(['text', 'image', 'announcements', 'documents', 'meetings', 'contact']), // hero has its own dedicated endpoint at /api/v1/pm/site/hero
       blockOrder: z.number().int().min(2).max(99), // 1 is reserved for the hero block
       content: z.unknown(),
     }),

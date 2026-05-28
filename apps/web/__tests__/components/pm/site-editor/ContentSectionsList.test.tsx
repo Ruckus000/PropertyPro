@@ -30,6 +30,11 @@ vi.mock('@/components/pm/site-editor/MeetingsBlockForm', () => ({
     <div data-testid="meetings-form" data-block-order={props.blockOrder}>meetings form</div>
   ),
 }));
+vi.mock('@/components/pm/site-editor/ContactBlockForm', () => ({
+  ContactBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="contact-form" data-block-order={props.blockOrder}>contact form</div>
+  ),
+}));
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -57,7 +62,7 @@ describe('<ContentSectionsList>', () => {
     expect(screen.getByText(/loading content sections/i)).toBeInTheDocument();
   });
 
-  it('shows empty state and all 5 Add buttons when there are no content blocks', async () => {
+  it('shows empty state and all 6 Add buttons when there are no content blocks', async () => {
     mockBlocks([]);
     render(wrap(<ContentSectionsList communityId={42} />));
     expect(await screen.findByText(/no content sections yet/i)).toBeInTheDocument();
@@ -66,6 +71,7 @@ describe('<ContentSectionsList>', () => {
     expect(screen.getByRole('button', { name: /add announcements section/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add documents section/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add meetings section/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add contact section/i })).toBeInTheDocument();
   });
 
   it('renders a TextBlockForm for an existing text block', async () => {
@@ -162,6 +168,16 @@ describe('<ContentSectionsList>', () => {
     expect(form).toHaveAttribute('data-block-order', '6');
   });
 
+  it('renders a ContactBlockForm for an existing contact block', async () => {
+    mockBlocks([
+      { id: 15, blockType: 'contact', blockOrder: 7, content: { showBoard: true, showManagement: true } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    const form = await screen.findByTestId('contact-form');
+    expect(form).toBeInTheDocument();
+    expect(form).toHaveAttribute('data-block-order', '7');
+  });
+
   it('clicking "+ Add documents section" reveals a new DocumentsBlockForm', async () => {
     mockBlocks([]);
     render(wrap(<ContentSectionsList communityId={42} />));
@@ -180,5 +196,15 @@ describe('<ContentSectionsList>', () => {
     fireEvent.click(screen.getByRole('button', { name: /add meetings section/i }));
     expect(screen.getByTestId('meetings-form')).toBeInTheDocument();
     expect(screen.getByTestId('meetings-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  it('clicking "+ Add contact section" reveals a new ContactBlockForm', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByText(/no content sections yet/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /add contact section/i }));
+    expect(screen.getByTestId('contact-form')).toBeInTheDocument();
+    expect(screen.getByTestId('contact-form')).toHaveAttribute('data-block-order', '2');
   });
 });

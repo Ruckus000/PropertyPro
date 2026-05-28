@@ -21,6 +21,7 @@ import { ImageBlock } from './ImageBlock';
 import { AnnouncementsBlock } from './AnnouncementsBlock';
 import { DocumentsBlock } from './DocumentsBlock';
 import { MeetingsBlock } from './MeetingsBlock';
+import { ContactBlock } from './ContactBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
@@ -30,7 +31,7 @@ export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>
   announcements: AnnouncementsBlock,
   documents: DocumentsBlock,
   meetings: MeetingsBlock,
-  // contact: PR #4 (next sub-task)
+  contact: ContactBlock,
 };
 
 export function hasRenderer(blockType: BlockType): boolean {

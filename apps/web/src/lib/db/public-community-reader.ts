@@ -24,7 +24,7 @@
  * column directly. A future migration may add a slug column; until then the
  * name field acts as the slug.
  */
-import { announcements, documentCategories, documents, meetings, siteBlocks } from '@propertypro/db';
+import { announcements, communities, documentCategories, documents, meetings, siteBlocks, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
@@ -71,6 +71,18 @@ export interface PublicMeeting {
   location: string;
 }
 
+export interface PublicContactInfo {
+  management: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  board: Array<{
+    name: string;
+    title: string;
+  }>;
+}
+
 export interface PublicScopedReader {
   readonly communityId: number;
 
@@ -91,8 +103,8 @@ export interface PublicScopedReader {
   /** PR #4 — upcoming meetings within window. */
   listMeetings(opts: { limit: number; timeWindowDays: number }): Promise<PublicMeeting[]>;
 
-  /** PR #4 — community + board + management contact. Stubbed: returns null. */
-  getContactInfo(opts: { showBoard: boolean; showManagement: boolean }): Promise<unknown | null>;
+  /** PR #4 follow-up — community management contact + public board roster. */
+  getContactInfo(opts: { showBoard: boolean; showManagement: boolean }): Promise<PublicContactInfo>;
 }
 
 export function getPublicCommunityScopedReader(communityId: number): PublicScopedReader {
@@ -216,9 +228,57 @@ export function getPublicCommunityScopedReader(communityId: number): PublicScope
       return rows;
     },
 
-    async getContactInfo(_opts) {
-      // PR #4 implementation
-      return null;
+    async getContactInfo(opts) {
+      const [communityRows, boardRows] = await Promise.all([
+        opts.showManagement
+          ? db
+            .select({
+              contactName: communities.contactName,
+              contactEmail: communities.contactEmail,
+              contactPhone: communities.contactPhone,
+            })
+            .from(communities)
+            .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
+            .limit(1)
+          : Promise.resolve([]),
+        opts.showBoard
+          ? db
+            .select({
+              fullName: users.fullName,
+              displayTitle: userRoles.displayTitle,
+              presetKey: userRoles.presetKey,
+            })
+            .from(userRoles)
+            .innerJoin(users, eq(users.id, userRoles.userId))
+            .where(
+              and(
+                eq(userRoles.communityId, communityId),
+                eq(userRoles.role, 'manager'),
+                inArray(userRoles.presetKey, ['board_president', 'board_member']),
+                isNull(users.deletedAt),
+              ),
+            )
+            .orderBy(asc(userRoles.displayTitle), asc(users.fullName))
+          : Promise.resolve([]),
+      ]);
+
+      const community = communityRows[0];
+      const management = community
+        && (community.contactName || community.contactEmail || community.contactPhone)
+        ? {
+          name: community.contactName ?? null,
+          email: community.contactEmail ?? null,
+          phone: community.contactPhone ?? null,
+        }
+        : null;
+
+      return {
+        management,
+        board: boardRows.map((row) => ({
+          name: row.fullName,
+          title: row.displayTitle ?? (row.presetKey === 'board_president' ? 'Board President' : 'Board Member'),
+        })),
+      };
     },
   };
 }

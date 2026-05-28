@@ -6,17 +6,20 @@ import { ImageBlockForm } from './ImageBlockForm';
 import { AnnouncementsBlockForm } from './AnnouncementsBlockForm';
 import { DocumentsBlockForm } from './DocumentsBlockForm';
 import { MeetingsBlockForm } from './MeetingsBlockForm';
+import { ContactBlockForm } from './ContactBlockForm';
 import {
   textBlockSchema,
   imageBlockSchema,
   announcementsBlockSchema,
   documentsBlockSchema,
   meetingsBlockSchema,
+  contactBlockSchema,
   type TextBlockContent,
   type ImageBlockContent,
   type AnnouncementsBlockContent,
   type DocumentsBlockContent,
   type MeetingsBlockContent,
+  type ContactBlockContent,
 } from '@propertypro/shared';
 
 interface Props {
@@ -56,9 +59,14 @@ function parseMeetingsBlock(content: unknown): MeetingsBlockContent | null {
   return parse.success ? parse.data : null;
 }
 
+function parseContactBlock(content: unknown): ContactBlockContent | null {
+  const parse = contactBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
 export function ContentSectionsList({ communityId }: Props) {
   const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
-  const [adding, setAdding] = useState<'text' | 'image' | 'announcements' | 'documents' | 'meetings' | null>(null);
+  const [adding, setAdding] = useState<'text' | 'image' | 'announcements' | 'documents' | 'meetings' | 'contact' | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-content-secondary">Loading content sections…</p>;
@@ -77,7 +85,8 @@ export function ContentSectionsList({ communityId }: Props) {
       b.blockType === 'image' ||
       b.blockType === 'announcements' ||
       b.blockType === 'documents' ||
-      b.blockType === 'meetings',
+      b.blockType === 'meetings' ||
+      b.blockType === 'contact',
   );
 
   return (
@@ -128,6 +137,13 @@ export function ContentSectionsList({ communityId }: Props) {
               communityId={communityId}
               blockOrder={b.blockOrder}
               initial={parseMeetingsBlock(b.content)}
+            />
+          )}
+          {b.blockType === 'contact' && (
+            <ContactBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseContactBlock(b.content)}
             />
           )}
         </div>
@@ -197,6 +213,19 @@ export function ContentSectionsList({ communityId }: Props) {
           />
         </div>
       )}
+      {adding === 'contact' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New contact section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <ContactBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 pt-2">
         <button
           type="button"
@@ -232,6 +261,13 @@ export function ContentSectionsList({ communityId }: Props) {
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
         >
           + Add meetings section
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('contact')}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+        >
+          + Add contact section
         </button>
       </div>
     </section>
