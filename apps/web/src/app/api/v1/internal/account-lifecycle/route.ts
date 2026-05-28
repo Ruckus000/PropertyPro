@@ -34,6 +34,7 @@ import {
   purgeCommunityData,
   purgeUserPII,
 } from '@/lib/services/account-lifecycle-service';
+import { cleanupSoftDeletedSiteBlocks } from '@/lib/services/site-blocks-service';
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.ACCOUNT_LIFECYCLE_CRON_SECRET);
@@ -43,6 +44,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     softDeleted: { users: 0, communities: 0 },
     purged: { users: 0, communities: 0 },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
+    siteBlocksCleaned: 0,
     errors: [] as string[],
   };
 
@@ -176,6 +178,20 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       );
       summary.notifications.sentExpired++;
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // 4. Site-blocks soft-delete cleanup (PR #8d — spec §2.7)
+  //
+  // Hard-delete site_blocks rows whose deleted_at is older than 30 days.
+  // The publish transaction soft-deletes the previously-published row set
+  // for accidental-publish recovery; this sweep completes the lifecycle.
+  // -------------------------------------------------------------------------
+  try {
+    const result = await cleanupSoftDeletedSiteBlocks(now);
+    summary.siteBlocksCleaned = result.deleted;
+  } catch (err) {
+    summary.errors.push(`cleanup site_blocks: ${String(err)}`);
   }
 
   return NextResponse.json({ ok: true, summary });
