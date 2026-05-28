@@ -26,6 +26,10 @@ export interface SiteBlockSummary {
   blockType: string;
   blockOrder: number;
   content: unknown;
+  /** PR #8e — true when this row is an unpublished draft. */
+  isDraft: boolean;
+  /** PR #8e — last publish timestamp (ISO string) or null for drafts. */
+  publishedAt: string | null;
 }
 
 const blocksKey = (communityId: number) =>

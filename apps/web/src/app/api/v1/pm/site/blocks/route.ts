@@ -41,7 +41,18 @@ export const GET = withErrorHandler(
   runRoute(blocksListContract, async ({ query, req }) => {
     const { communityId } = await ensurePmAccess(req, query.communityId);
     const reader = getPublicCommunityScopedReader(communityId);
-    const blocks = await reader.listSiteBlocks();
+    // PR #8e — the editor view merges draft + published (draft wins per
+    // block_order) so PMs see and edit pending changes; the public site
+    // continues to use the default published-only read.
+    const rows = await reader.listSiteBlocks({ includeDrafts: true });
+    const blocks = rows.map((r) => ({
+      id: r.id,
+      blockType: r.blockType,
+      blockOrder: r.blockOrder,
+      content: r.content,
+      isDraft: r.isDraft,
+      publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
+    }));
     return { blocks };
   }),
 );
@@ -59,12 +70,16 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('Invalid block content', { fields: formatZodErrors(parse.error) });
     }
 
+    // PR #8e — PM edits write to the draft row at this slot. The public
+    // site continues to serve the last-published row until the PM clicks
+    // Publish, which atomically promotes drafts via publishCommunitySite.
     await upsertPublishedBlock({
       communityId,
       actorUserId: userId,
       blockType: body.blockType,
       blockOrder: body.blockOrder,
       content: parse.data,
+      isDraft: true,
     });
 
     return { ok: true as const };

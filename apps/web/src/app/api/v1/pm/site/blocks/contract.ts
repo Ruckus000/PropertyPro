@@ -11,6 +11,8 @@ const siteBlockSchema = z.object({
   blockType: z.string(),
   blockOrder: z.number(),
   content: z.unknown(),
+  isDraft: z.boolean(),
+  publishedAt: z.string().nullable(),
 });
 
 export const blocksListContract = defineRoute({

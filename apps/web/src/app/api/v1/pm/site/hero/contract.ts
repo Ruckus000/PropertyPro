@@ -9,6 +9,10 @@ import { defineRoute, z } from '@propertypro/api-contract';
 
 const heroResponseSchema = z.object({
   hero: z.unknown().nullable(),
+  /** PR #8e — true when the returned hero is a draft (not yet published). */
+  isDraft: z.boolean(),
+  /** PR #8e — last publish time of the hero block, ISO string or null. */
+  publishedAt: z.string().nullable(),
 });
 
 export const heroBlockGetContract = defineRoute({

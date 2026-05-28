@@ -58,9 +58,11 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
-  // Load current hero from the published block set (PR #1b writes published only)
+  // PR #8e — load hero from the merged draft+published view so the form
+  // seeds with whatever the PM is currently iterating on, not the last
+  // published version.
   const reader = getPublicCommunityScopedReader(communityId);
-  const blocks = await reader.listSiteBlocks();
+  const blocks = await reader.listSiteBlocks({ includeDrafts: true });
   const heroRaw = blocks.find((b) => b.blockType === 'hero')?.content;
   let initial: HeroBlockContent | null = null;
   if (heroRaw != null) {

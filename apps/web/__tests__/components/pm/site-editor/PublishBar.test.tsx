@@ -91,7 +91,58 @@ describe('<PublishBar>', () => {
     expect(publishCall).toBeDefined();
     expect(JSON.parse((publishCall![1] as RequestInit).body as string)).toMatchObject({
       communityId: 42,
-      expectedPublishedAt: null, // transitional — see PublishBar deriveExpectedPublishedAt
+      // The default blocks fixture has isDraft=false but no publishedAt
+      // field, so the token derives to null.
+      expectedPublishedAt: null,
+    });
+  });
+
+  it('threads the latest published-block publishedAt as the optimistic-concurrency token', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url) => {
+      if (typeof url === 'string' && url.includes('/blocks')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              blocks: [
+                // older published
+                { id: 1, blockType: 'text', blockOrder: 2, content: {}, isDraft: false, publishedAt: '2026-05-10T10:00:00Z' },
+                // latest published — should be the token
+                { id: 2, blockType: 'image', blockOrder: 3, content: {}, isDraft: false, publishedAt: '2026-05-15T11:30:00Z' },
+                // draft — ignored even with a later (non-null) publishedAt
+                { id: 3, blockType: 'announcements', blockOrder: 4, content: {}, isDraft: true, publishedAt: null },
+              ],
+            },
+          }),
+        } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/hero')) {
+        return { ok: true, status: 200, json: async () => ({ data: { hero: null } }) } as Response;
+      }
+      if (typeof url === 'string' && url.endsWith('/publish')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { published: true, publishedAt: '2026-05-16T09:00:00Z', promotedCount: 1, retiredCount: 0 } }),
+        } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    });
+    render(wrap(<PublishBar communityId={42} />));
+    await screen.findByTestId('pending-changes-badge');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /publish website/i })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /publish website/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+    const publishCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('/publish'),
+    );
+    expect(JSON.parse((publishCall![1] as RequestInit).body as string)).toMatchObject({
+      expectedPublishedAt: '2026-05-15T11:30:00Z',
     });
   });
 
