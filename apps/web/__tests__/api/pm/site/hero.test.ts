@@ -92,6 +92,7 @@ describe('PATCH /api/v1/pm/site/hero', () => {
         ctaText: 'Login',
         ctaTarget: '/auth/login',
       },
+      isDraft: true,
     });
   });
 
@@ -200,28 +201,50 @@ describe('GET /api/v1/pm/site/hero', () => {
     return new NextRequest(`http://localhost/api/v1/pm/site/hero?communityId=${communityId}`);
   }
 
-  it('returns the current published hero content', async () => {
+  it('returns the current hero content (with isDraft + publishedAt metadata)', async () => {
+    const publishedAt = new Date('2026-05-15T10:00:00Z');
     listSiteBlocksMock.mockResolvedValueOnce([
-      { id: 1, blockType: 'hero', blockOrder: 1, content: { headline: 'H' } },
+      { id: 1, blockType: 'hero', blockOrder: 1, content: { headline: 'H' }, isDraft: false, publishedAt },
     ]);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ data: { hero: { headline: 'H' } } });
+    expect(await res.json()).toEqual({
+      data: { hero: { headline: 'H' }, isDraft: false, publishedAt: publishedAt.toISOString() },
+    });
+  });
+
+  it('returns the draft hero when one exists (PR #8e merged view)', async () => {
+    listSiteBlocksMock.mockResolvedValueOnce([
+      { id: 9, blockType: 'hero', blockOrder: 1, content: { headline: 'Draft H' }, isDraft: true, publishedAt: null },
+    ]);
+    const res = await GET(makeGetRequest());
+    expect(await res.json()).toEqual({
+      data: { hero: { headline: 'Draft H' }, isDraft: true, publishedAt: null },
+    });
+  });
+
+  it('passes includeDrafts: true to the reader', async () => {
+    listSiteBlocksMock.mockResolvedValueOnce([]);
+    await GET(makeGetRequest());
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true });
   });
 
   it('returns hero:null when no hero block exists', async () => {
     listSiteBlocksMock.mockResolvedValueOnce([]);
     const res = await GET(makeGetRequest());
-    expect(await res.json()).toEqual({ data: { hero: null } });
+    expect(await res.json()).toEqual({ data: { hero: null, isDraft: false, publishedAt: null } });
   });
 
   it('skips non-hero blocks when finding the hero', async () => {
+    const publishedAt = new Date('2026-05-15T10:00:00Z');
     listSiteBlocksMock.mockResolvedValueOnce([
-      { id: 2, blockType: 'announcements', blockOrder: 1, content: {} },
-      { id: 3, blockType: 'hero', blockOrder: 2, content: { headline: 'H2' } },
+      { id: 2, blockType: 'announcements', blockOrder: 1, content: {}, isDraft: false, publishedAt },
+      { id: 3, blockType: 'hero', blockOrder: 2, content: { headline: 'H2' }, isDraft: false, publishedAt },
     ]);
     const res = await GET(makeGetRequest());
-    expect(await res.json()).toEqual({ data: { hero: { headline: 'H2' } } });
+    expect(await res.json()).toEqual({
+      data: { hero: { headline: 'H2' }, isDraft: false, publishedAt: publishedAt.toISOString() },
+    });
   });
 
   it('400s when communityId query param is missing', async () => {

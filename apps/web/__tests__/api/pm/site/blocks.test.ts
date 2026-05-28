@@ -87,15 +87,32 @@ describe('GET /api/v1/pm/site/blocks', () => {
   });
 
   it('200s and returns the ordered block list', async () => {
-    const blocks = [
-      { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' } },
-      { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' } },
-      { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 } },
+    const publishedAt = new Date('2026-05-15T10:00:00Z');
+    // PR #8e — reader now returns isDraft + publishedAt on every row.
+    const rawBlocks = [
+      { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt },
+      { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
+      { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt },
     ];
-    listSiteBlocksMock.mockResolvedValueOnce(blocks);
+    listSiteBlocksMock.mockResolvedValueOnce(rawBlocks);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ data: { blocks } });
+    // Route serializes publishedAt to ISO string (null preserved).
+    expect(await res.json()).toEqual({
+      data: {
+        blocks: [
+          { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt: publishedAt.toISOString() },
+          { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
+          { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
+        ],
+      },
+    });
+  });
+
+  it('passes includeDrafts: true to the reader so the editor sees the merged view', async () => {
+    listSiteBlocksMock.mockResolvedValueOnce([]);
+    await GET(makeGetRequest());
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true });
   });
 
   it('200s and returns empty blocks array when no blocks exist', async () => {
@@ -198,6 +215,7 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
       blockType: 'text',
       blockOrder: 2,
       content: { body: 'Hello world' },
+      isDraft: true,
     });
   });
 
@@ -211,6 +229,7 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
       blockType: 'image',
       blockOrder: 3,
       content: { imagePath: '42/content/photo.webp', altText: 'A scenic view' },
+      isDraft: true,
     });
   });
 
