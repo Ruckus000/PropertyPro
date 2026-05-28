@@ -70,4 +70,28 @@ describe('<HeroBlockForm>', () => {
     render(wrap(<HeroBlockForm communityId={42} initial={{ headline: 'Pre' }} />));
     expect(screen.getByLabelText(/headline/i)).toHaveValue('Pre');
   });
+
+  it('preserves heroImagePath and heroImageAlt from initial when saving', async () => {
+    render(
+      wrap(
+        <HeroBlockForm
+          communityId={42}
+          initial={{
+            headline: 'Pre',
+            heroImagePath: 'communities/42/site/hero-final.jpg',
+            heroImageAlt: 'Sunset over the courtyard',
+          }}
+        />,
+      ),
+    );
+    await userEvent.clear(screen.getByLabelText(/headline/i));
+    await userEvent.type(screen.getByLabelText(/headline/i), 'Updated headline');
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const init = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    const body = JSON.parse(init.body);
+    expect(body.headline).toBe('Updated headline');
+    expect(body.heroImagePath).toBe('communities/42/site/hero-final.jpg');
+    expect(body.heroImageAlt).toBe('Sunset over the courtyard');
+  });
 });

@@ -26,6 +26,8 @@ export function HeroBlockForm({ communityId, initial }: Props) {
       ...(subtitle.trim() ? { subtitle: subtitle.trim() } : {}),
       ...(ctaText.trim() ? { ctaText: ctaText.trim() } : {}),
       ...(ctaTarget.trim() ? { ctaTarget: ctaTarget.trim() } : {}),
+      ...(initial?.heroImagePath ? { heroImagePath: initial.heroImagePath } : {}),
+      ...(initial?.heroImageAlt ? { heroImageAlt: initial.heroImageAlt } : {}),
     } as HeroBlockContent;
     try {
       await mutation.mutateAsync(payload);
