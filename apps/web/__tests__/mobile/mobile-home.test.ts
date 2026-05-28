@@ -11,7 +11,6 @@ const {
   requireCommunityMembershipMock,
   loadDashboardDataMock,
   redirectMock,
-  getPublishedTemplateMock,
   getBrandingForCommunityMock,
   getCommunityPublicInfoMock,
 } = vi.hoisted(() => ({
@@ -19,7 +18,6 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   loadDashboardDataMock: vi.fn(),
   redirectMock: vi.fn(),
-  getPublishedTemplateMock: vi.fn(),
   getBrandingForCommunityMock: vi.fn(),
   getCommunityPublicInfoMock: vi.fn(),
 }));
@@ -45,9 +43,6 @@ vi.mock('@/components/mobile/MobileHomeContent', () => ({
 }));
 vi.mock('@propertypro/shared', () => ({
   getFeaturesForCommunity: () => ({ hasCompliance: true, hasMeetings: true }),
-}));
-vi.mock('@/lib/api/site-template', () => ({
-  getPublishedTemplate: getPublishedTemplateMock,
 }));
 vi.mock('@/lib/api/branding', () => ({
   getBrandingForCommunity: getBrandingForCommunityMock,
@@ -91,7 +86,6 @@ describe('MobileHomePage', () => {
       meetings: [],
       openMaintenanceCount: 0,
     });
-    getPublishedTemplateMock.mockResolvedValue(null);
     getBrandingForCommunityMock.mockResolvedValue(null);
     getCommunityPublicInfoMock.mockResolvedValue({
       id: 1, name: 'Test Community', slug: 'test', communityType: 'condo_718', sitePublishedAt: null,
@@ -120,23 +114,12 @@ describe('MobileHomePage', () => {
   });
 
   describe('preview mode', () => {
-    it('skips auth and shows placeholder when no template published', async () => {
-      getPublishedTemplateMock.mockResolvedValue(null);
+    it('skips auth and shows the branded dashboard mockup', async () => {
       await MobileHomePage({ searchParams: SEARCH_PARAMS_PREVIEW });
 
       expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
       expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
       expect(redirectMock).not.toHaveBeenCalled();
-    });
-
-    it('skips auth and renders template when published', async () => {
-      getPublishedTemplateMock.mockResolvedValue('<div>Hello</div>');
-      await MobileHomePage({ searchParams: SEARCH_PARAMS_PREVIEW });
-
-      expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
-      expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
-      expect(redirectMock).not.toHaveBeenCalled();
-      expect(getPublishedTemplateMock).toHaveBeenCalledWith(1, 'mobile');
     });
 
     it('returns community-not-found for invalid communityId in preview', async () => {

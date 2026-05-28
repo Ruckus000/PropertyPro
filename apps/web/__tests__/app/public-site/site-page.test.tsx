@@ -4,12 +4,10 @@ import { render } from '@testing-library/react';
 const {
   getCommunityPublicInfoMock,
   getBrandingForCommunityMock,
-  getPublishedTemplateMock,
   listSiteBlocksMock,
 } = vi.hoisted(() => ({
   getCommunityPublicInfoMock: vi.fn(),
   getBrandingForCommunityMock: vi.fn(),
-  getPublishedTemplateMock: vi.fn(),
   listSiteBlocksMock: vi.fn(),
 }));
 
@@ -23,10 +21,6 @@ vi.mock('next/headers', () => ({
 vi.mock('@/lib/api/branding', () => ({
   getCommunityPublicInfo: getCommunityPublicInfoMock,
   getBrandingForCommunity: getBrandingForCommunityMock,
-}));
-
-vi.mock('@/lib/api/site-template', () => ({
-  getPublishedTemplate: getPublishedTemplateMock,
 }));
 
 // Mock the public reader so we don't touch a real DB
@@ -74,7 +68,6 @@ describe('PublicSitePage (layout-registry path)', () => {
       sitePublishedAt: null,
     });
     getBrandingForCommunityMock.mockResolvedValue({});
-    getPublishedTemplateMock.mockResolvedValue(null);
     listSiteBlocksMock.mockResolvedValue([]);
   });
 
@@ -86,13 +79,6 @@ describe('PublicSitePage (layout-registry path)', () => {
     expect(h1?.textContent).toBe('Sunset Condos');
     // CTA present
     expect(container.querySelector('a[href="/auth/login"]')).not.toBeNull();
-  });
-
-  it('falls back to the legacy JSX template when compiledHtml is present', async () => {
-    getPublishedTemplateMock.mockResolvedValueOnce('<p>legacy template content</p>');
-    const ui = await PublicSitePage();
-    const { container } = render(ui as React.ReactElement);
-    expect(container.innerHTML).toContain('legacy template content');
   });
 
   it('builds metadata via buildCommunityMetadata using the helper', async () => {

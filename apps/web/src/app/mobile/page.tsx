@@ -10,13 +10,10 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
-import { getPublishedTemplate } from '@/lib/api/site-template';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
-import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { getFeaturesForCommunity } from '@propertypro/shared';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
 import { TenantDashboardMockup } from '@/components/mobile/TenantDashboardMockup';
-import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -47,42 +44,10 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     return <div className="p-4 text-content-secondary">Community not found.</div>;
   }
 
-  // If a custom mobile template has been published, render it with branding
-  const mobileHtml = await getPublishedTemplate(communityId, 'mobile');
-  if (mobileHtml) {
-    const [branding, community] = await Promise.all([
-      getBrandingForCommunity(communityId),
-      getCommunityPublicInfo(communityId),
-    ]);
-    const theme = resolveTheme(
-      branding,
-      community?.name ?? 'Community',
-      (community?.communityType ?? 'condo_718') as CommunityType,
-    );
-    const cssVars = toCssVars(theme);
-    const fontLinks = toFontLinks(theme);
-    const templateVars: Record<string, string> = {
-      ...cssVars,
-      '--pp-primary': theme.primaryColor,
-      '--pp-secondary': theme.secondaryColor,
-      '--pp-accent': theme.accentColor,
-    };
-
-    return (
-      <>
-        {fontLinks.map((href) => (
-          // eslint-disable-next-line @next/next/no-page-custom-font
-          <link key={href} rel="stylesheet" href={href} />
-        ))}
-        {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
-        <script src="/assets/tailwind.min.js" async />
-        <div style={templateVars} className="font-body">
-          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(mobileHtml) }} />
-        </div>
-      </>
-    );
-  }
-
+  // PR #9d — JSX mobile-template render branch retired. Mobile sessions
+  // now always render the real dashboard for authed users and the
+  // branded mockup for preview, matching the public site's exclusively-
+  // block-model render contract.
   // No published template — preview shows branded mockup, auth'd shows real dashboard
   if (isPreview) {
     const [branding, community] = await Promise.all([
