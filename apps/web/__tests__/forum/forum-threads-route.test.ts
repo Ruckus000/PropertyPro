@@ -78,8 +78,12 @@ const THREAD_RECORD = {
   updatedAt: new Date('2026-01-01T00:00:00Z'),
 };
 
-function makeGetRequest(query = '') {
-  return new NextRequest(`http://localhost:3000/api/v1/forum/threads?communityId=42${query}`);
+function makeGetRequest(query = '', communityId: string | null = '42') {
+  const communityParam = communityId === null ? '' : `communityId=${communityId}`;
+  const separator = communityParam && query ? '&' : '';
+  return new NextRequest(
+    `http://localhost:3000/api/v1/forum/threads?${communityParam}${separator}${query}`,
+  );
 }
 
 function makePostRequest(payload: unknown, headers?: Record<string, string>) {
@@ -114,7 +118,7 @@ describe('GET /api/v1/forum/threads', () => {
       pagination: { nextCursor: 'next-cursor', hasMore: true, pageSize: 1 },
     });
 
-    const response = await GET(makeGetRequest('&cursor=abc&pageSize=1'));
+    const response = await GET(makeGetRequest('cursor=abc&pageSize=1'));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -138,6 +142,19 @@ describe('GET /api/v1/forum/threads', () => {
     const response = await GET(makeGetRequest());
 
     expect(response.status).toBe(401);
+    expect(parseCommunityIdFromQueryMock).not.toHaveBeenCalled();
+    expect(paginateForumThreadsForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 before communityId parsing when unauthenticated and communityId is missing/invalid', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
+
+    const missingCommunityIdResponse = await GET(makeGetRequest('', null));
+    const invalidCommunityIdResponse = await GET(makeGetRequest('', 'invalid'));
+
+    expect(missingCommunityIdResponse.status).toBe(401);
+    expect(invalidCommunityIdResponse.status).toBe(401);
+    expect(parseCommunityIdFromQueryMock).not.toHaveBeenCalled();
     expect(paginateForumThreadsForCommunityMock).not.toHaveBeenCalled();
   });
 
@@ -174,7 +191,7 @@ describe('GET /api/v1/forum/threads', () => {
   });
 
   it('returns 400 for invalid cursor/pageSize query params', async () => {
-    const response = await GET(makeGetRequest('&pageSize=abc'));
+    const response = await GET(makeGetRequest('pageSize=abc'));
     const json = await response.json();
 
     expect(response.status).toBe(400);
