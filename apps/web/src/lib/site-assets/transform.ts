@@ -24,19 +24,23 @@ export async function transformSiteImage(
     if (crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0) {
       throw new Error(`Crop box must have non-negative origin and positive dimensions: ${JSON.stringify(crop)}`);
     }
+    // Round client-supplied floats once and use the integers for BOTH the
+    // bounds check and the sharp extract. Checking the raw floats can
+    // reject valid crops where (x + width) is e.g. 1600.0000003 on a
+    // 1600px image; rounding first keeps the check consistent with what
+    // sharp actually receives.
+    const left = Math.round(crop.x);
+    const top = Math.round(crop.y);
+    const width = Math.round(crop.width);
+    const height = Math.round(crop.height);
     const meta = await sharp(input).metadata();
     if (
-      (meta.width ?? 0) < crop.x + crop.width ||
-      (meta.height ?? 0) < crop.y + crop.height
+      (meta.width ?? 0) < left + width ||
+      (meta.height ?? 0) < top + height
     ) {
       throw new Error(`Crop box ${JSON.stringify(crop)} exceeds source dimensions ${meta.width}x${meta.height}`);
     }
-    bytes = await sharp(input).extract({
-      left: Math.round(crop.x),
-      top: Math.round(crop.y),
-      width: Math.round(crop.width),
-      height: Math.round(crop.height),
-    }).toBuffer();
+    bytes = await sharp(input).extract({ left, top, width, height }).toBuffer();
   }
   return resizeSiteImage(bytes);
 }
