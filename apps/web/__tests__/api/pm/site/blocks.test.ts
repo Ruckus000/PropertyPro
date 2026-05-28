@@ -125,6 +125,14 @@ describe('GET /api/v1/pm/site/blocks', () => {
     expect(listSiteBlocksMock).not.toHaveBeenCalled();
   });
 
+  it('allows CAM managers to list site blocks', async () => {
+    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    listSiteBlocksMock.mockResolvedValueOnce([]);
+    const res = await GET(makeGetRequest());
+    expect(res.status).toBe(200);
+    expect(listSiteBlocksMock).toHaveBeenCalled();
+  });
+
   it('403s when caller is not a member of the community', async () => {
     requireMembershipMock.mockRejectedValueOnce(
       new AppError('Not a member', 403, 'FORBIDDEN'),
@@ -315,6 +323,13 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     const res = await PATCH(makePatchRequest(VALID_TEXT_BODY));
     expect(res.status).toBe(403);
     expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('allows CAM managers to upsert site blocks', async () => {
+    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    const res = await PATCH(makePatchRequest(VALID_TEXT_BODY));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({ blockType: 'text' }));
   });
 
   it('403s when caller is not a member of the community', async () => {

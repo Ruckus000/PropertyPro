@@ -2,7 +2,7 @@
  * PR #1b: PM website editor — Welcome tab only.
  *
  * Route: /pm/settings/website?communityId=X
- * Auth: pm_admin role required.
+ * Auth: pm_admin or cam role required.
  *
  * PR #1b ships the Hero block editor. PR #5 adds the full onboarding flow,
  * PR #8 ships the full 5-tab editor + draft/preview/publish workflow.
@@ -11,6 +11,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { hasRole } from '@/lib/api/role-guard';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
@@ -50,7 +51,7 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   }
 
   const membership = await requireCommunityMembership(communityId, userId!);
-  if (membership.role !== 'pm_admin') {
+  if (!hasRole(membership, ['pm_admin', 'cam'])) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
