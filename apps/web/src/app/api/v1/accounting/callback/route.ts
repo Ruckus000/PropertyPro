@@ -1,63 +1,66 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Accounting OAuth Callback API
+ *
+ * GET /api/v1/accounting/callback — completes a QuickBooks/Xero OAuth
+ * connect flow for a community after the user authorizes at the provider.
+ *
+ * Plan A1 drain #91. See `./contract.ts` for the full contract docblock
+ * (auth chain, sequencing nuance, response shape rationale).
+ *
+ * Authorization chain (preserved verbatim):
+ *   requireAuthenticatedUserId
+ *   → resolveEffectiveCommunityId(req, query.communityId)
+ *   → requireCommunityMembership(communityId, actorUserId)
+ *   → requireAccountingEnabled(membership)            (SYNC)
+ *   → requireAccountingWritePermission(membership)    (SYNC)
+ *   → validateAccountingOAuthState(state, communityId, actorUserId, provider) (SYNC, throws)
+ *   → completeAccountingConnect(communityId, actorUserId, provider, code, x-request-id)
+ *
+ * `parseCommunityIdFromQuery(req)` (pre-migration) already delegated to
+ * `resolveEffectiveCommunityId` (drain #10 lesson), so the swap is wire-
+ * preserving for tenant resolution. `state` and `code` `min(1)` Zod
+ * refinements pre-empt the null-state branch inside
+ * `validateAccountingOAuthState` and the inline empty-code BadRequest
+ * branch — both become unreachable post-migration. Wire shape is
+ * byte-identical at `{ data: <service-result> }`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { BadRequestError, ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
-import { completeAccountingConnect, validateAccountingOAuthState } from '@/lib/services/accounting-connectors-service';
+import {
+  completeAccountingConnect,
+  validateAccountingOAuthState,
+} from '@/lib/services/accounting-connectors-service';
+import { accountingCallbackContract } from './contract';
 
-const callbackSchema = z.object({
-  provider: z.enum(['quickbooks', 'xero']),
-});
+export const GET = withErrorHandler(
+  runRoute(accountingCallbackContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    requireAccountingEnabled(membership);
+    requireAccountingWritePermission(membership);
 
-  requireAccountingEnabled(membership);
-  requireAccountingWritePermission(membership);
+    validateAccountingOAuthState(
+      query.state,
+      communityId,
+      actorUserId,
+      query.provider,
+    );
 
-  const { searchParams } = new URL(req.url);
-
-  // Validate provider first (needed by state check), then HMAC state before
-  // touching the authorization code — matches the Google callback ordering.
-  const parsed = callbackSchema.safeParse({
-    provider: searchParams.get('provider'),
-  });
-
-  if (!parsed.success) {
-    throw new ValidationError('Invalid accounting callback query', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  validateAccountingOAuthState(
-    searchParams.get('state'),
-    communityId,
-    actorUserId,
-    parsed.data.provider,
-  );
-
-  const code = searchParams.get('code');
-  if (!code || code.trim().length === 0) {
-    throw new BadRequestError('code query parameter is required');
-  }
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await completeAccountingConnect(
-    communityId,
-    actorUserId,
-    parsed.data.provider,
-    code,
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    return completeAccountingConnect(
+      communityId,
+      actorUserId,
+      query.provider,
+      query.code,
+      req.headers.get('x-request-id'),
+    );
+  }),
+);
