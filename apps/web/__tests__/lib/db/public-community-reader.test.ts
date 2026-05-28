@@ -50,6 +50,25 @@ vi.mock('@propertypro/db', () => ({
     location: 'meetings.location',
     deletedAt: 'meetings.deletedAt',
   },
+  communities: {
+    id: 'communities.id',
+    contactName: 'communities.contactName',
+    contactEmail: 'communities.contactEmail',
+    contactPhone: 'communities.contactPhone',
+    deletedAt: 'communities.deletedAt',
+  },
+  users: {
+    id: 'users.id',
+    fullName: 'users.fullName',
+    deletedAt: 'users.deletedAt',
+  },
+  userRoles: {
+    userId: 'userRoles.userId',
+    communityId: 'userRoles.communityId',
+    role: 'userRoles.role',
+    displayTitle: 'userRoles.displayTitle',
+    presetKey: 'userRoles.presetKey',
+  },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -67,6 +86,7 @@ vi.mock('@propertypro/db/filters', () => ({
 const mockSelectChain = {
   from: vi.fn().mockReturnThis(),
   leftJoin: vi.fn().mockReturnThis(),
+  innerJoin: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
   orderBy: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
@@ -77,6 +97,15 @@ const mockSelectChain = {
 const mockDb = {
   select: vi.fn(() => mockSelectChain),
 };
+
+let queuedQueryResults: unknown[][] = [];
+
+function queueQueryResults(...results: unknown[][]) {
+  queuedQueryResults = [...results];
+  mockSelectChain.then.mockImplementation((resolve) =>
+    Promise.resolve(queuedQueryResults.shift() ?? []).then(resolve),
+  );
+}
 
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => mockDb,
@@ -89,8 +118,10 @@ describe('getPublicCommunityScopedReader', () => {
     vi.clearAllMocks();
     // Re-set up the chain after clearAllMocks
     mockDb.select.mockReturnValue(mockSelectChain);
+    queuedQueryResults = [];
     mockSelectChain.from.mockReturnValue(mockSelectChain);
     mockSelectChain.leftJoin.mockReturnValue(mockSelectChain);
+    mockSelectChain.innerJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.where.mockReturnValue(mockSelectChain);
     mockSelectChain.orderBy.mockReturnValue(mockSelectChain);
     mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
@@ -122,7 +153,7 @@ describe('getPublicCommunityScopedReader', () => {
     expect(typeof reader.listAnnouncements).toBe('function');
   });
 
-  it('exposes getContactInfo method (stub: returns null)', async () => {
+  it('exposes getContactInfo method', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.getContactInfo).toBe('function');
   });
@@ -346,5 +377,57 @@ describe('getPublicCommunityScopedReader', () => {
       (c: unknown) => (c as { __lte?: unknown }).__lte !== undefined,
     );
     expect(lteClause).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // getContactInfo
+  // ---------------------------------------------------------------------------
+
+  it('getContactInfo returns management contact and board names/titles only', async () => {
+    queueQueryResults(
+      [{ contactName: 'Harbor Management', contactEmail: 'desk@example.com', contactPhone: '555-0100' }],
+      [
+        { fullName: 'Ava Nguyen', displayTitle: 'Board President', presetKey: 'board_president' },
+        { fullName: 'Miles Carter', displayTitle: null, presetKey: 'board_member' },
+      ],
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.getContactInfo({ showBoard: true, showManagement: true });
+
+    expect(result).toEqual({
+      management: {
+        name: 'Harbor Management',
+        email: 'desk@example.com',
+        phone: '555-0100',
+      },
+      board: [
+        { name: 'Ava Nguyen', title: 'Board President' },
+        { name: 'Miles Carter', title: 'Board Member' },
+      ],
+    });
+    expect(result.board[0]).not.toHaveProperty('email');
+    expect(result.board[0]).not.toHaveProperty('phone');
+    expect(mockSelectChain.innerJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it('getContactInfo returns null management when community contact fields are empty', async () => {
+    queueQueryResults(
+      [{ contactName: null, contactEmail: null, contactPhone: null }],
+      [],
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.getContactInfo({ showBoard: true, showManagement: true });
+
+    expect(result).toEqual({ management: null, board: [] });
+  });
+
+  it('getContactInfo skips disabled sections without issuing their queries', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.getContactInfo({ showBoard: false, showManagement: false });
+
+    expect(result).toEqual({ management: null, board: [] });
+    expect(mockDb.select).not.toHaveBeenCalled();
   });
 });

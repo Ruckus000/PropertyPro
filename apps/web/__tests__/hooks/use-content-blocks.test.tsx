@@ -114,6 +114,29 @@ describe('useUpsertContentBlock', () => {
     expect(body.content).toEqual({ storagePath: '/path/to/img.webp', altText: 'Pool view' });
   });
 
+  it('PATCHes /api/v1/pm/site/blocks with contact block and communityId in body', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { ok: true } }),
+    });
+    const { result } = renderHook(() => useUpsertContentBlock(7), {
+      wrapper: makeWrapper(),
+    });
+    await result.current.mutateAsync({
+      blockType: 'contact',
+      blockOrder: 6,
+      content: { showBoard: true, showManagement: false },
+    });
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(call[1].body as string);
+    expect(body).toEqual({
+      communityId: 7,
+      blockType: 'contact',
+      blockOrder: 6,
+      content: { showBoard: true, showManagement: false },
+    });
+  });
+
   it('surfaces server error on PATCH failure', async () => {
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: false,
