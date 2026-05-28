@@ -1,13 +1,18 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * `POST /api/v1/visitors/[id]/revoke` — visitor pass revocation.
+ *
+ * Migrated to the canonical `runRoute(visitorsRevokeContract, ...)` envelope
+ * as part of Plan A1 drain #93. See `./contract.ts` for the request/response
+ * schema, the verbatim-preserved auth chain, and the three-way authorization
+ * branch (admin / resident / other).
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { ValidationError, ForbiddenError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireVisitorLoggingEnabled,
   requireVisitorsWritePermission,
@@ -18,27 +23,12 @@ import {
   isResidentVisitorRevokeEnabled,
   revokeVisitorForCommunity,
 } from '@/lib/services/package-visitor-service';
-
-const revokeSchema = z.object({
-  communityId: z.number().int().positive(),
-  reason: z.string().optional(),
-});
+import { visitorsRevokeContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const visitorId = parsePositiveInt(params?.id ?? '', 'visitor id');
+  runRoute(visitorsRevokeContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = revokeSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid revoke payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -46,7 +36,7 @@ export const POST = withErrorHandler(
     requireVisitorsWritePermission(membership);
 
     if (membership.isAdmin) {
-      if (!parsed.data.reason) {
+      if (!body.reason) {
         throw new ValidationError('Reason is required for staff revocations');
       }
     } else if (isResidentRole(membership.role)) {
@@ -56,7 +46,7 @@ export const POST = withErrorHandler(
         );
       }
 
-      const hostUserId = await getVisitorHostUserId(communityId, visitorId);
+      const hostUserId = await getVisitorHostUserId(communityId, params.id);
       if (hostUserId === null || hostUserId !== actorUserId) {
         throw new ForbiddenError('You can only revoke passes you registered');
       }
@@ -64,15 +54,12 @@ export const POST = withErrorHandler(
       throw new ForbiddenError('Only staff or the registering resident can revoke a pass');
     }
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await revokeVisitorForCommunity(
+    return revokeVisitorForCommunity(
       communityId,
-      visitorId,
+      params.id,
       actorUserId,
-      parsed.data.reason ?? null,
-      requestId,
+      body.reason ?? null,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
