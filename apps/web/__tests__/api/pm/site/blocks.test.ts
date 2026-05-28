@@ -218,6 +218,22 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     );
   });
 
+  it('PATCHes an announcements block (validates via announcementsBlockSchema)', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'announcements',
+      blockOrder: 4,
+      content: { limit: 5, timeWindowDays: 30 },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'announcements',
+      blockOrder: 4,
+      content: { limit: 5, timeWindowDays: 30 },
+    }));
+  });
+
   it('400s on invalid text content (missing required body field)', async () => {
     const body = { ...VALID_TEXT_BODY, content: {} }; // body field is required
     const res = await PATCH(makePatchRequest(body));

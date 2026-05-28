@@ -17,10 +17,18 @@
  *   - PR #3: listAnnouncements
  *   - PR #4: listDocuments, listMeetings, getContactInfo
  */
-import { siteBlocks } from '@propertypro/db';
+import { announcements, siteBlocks } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, asc, eq, isNull } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, isNull, lte } from '@propertypro/db/filters';
+
+export interface PublicAnnouncement {
+  id: number;
+  title: string;
+  body: string; // HTML — caller must sanitize before rendering
+  isPinned: boolean;
+  publishedAt: Date;
+}
 
 export interface PublicSiteBlock {
   id: number;
@@ -35,8 +43,8 @@ export interface PublicScopedReader {
   /** Returns the community's published, non-deleted site blocks in order. */
   listSiteBlocks(): Promise<PublicSiteBlock[]>;
 
-  /** PR #3 — published, non-expired announcements. Stubbed: returns []. */
-  listAnnouncements(opts: { limit: number; timeWindowDays: number }): Promise<unknown[]>;
+  /** PR #3 — published, non-expired announcements. */
+  listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
 
   /** PR #4 — public-access documents. Stubbed: returns []. */
   listDocuments(opts: { limit: number; includeCategories?: string[] }): Promise<unknown[]>;
@@ -87,9 +95,32 @@ export function getPublicCommunityScopedReader(communityId: number): PublicScope
       }));
     },
 
-    async listAnnouncements(_opts) {
-      // PR #3 implementation
-      return [];
+    async listAnnouncements(opts) {
+      const conditions = [
+        eq(announcements.communityId, communityId),
+        eq(announcements.audience, 'all'),
+        isNull(announcements.archivedAt),
+        isNull(announcements.deletedAt),
+        lte(announcements.publishedAt, new Date()),
+      ];
+      if (opts.timeWindowDays != null) {
+        const cutoff = new Date(Date.now() - opts.timeWindowDays * 24 * 60 * 60 * 1000);
+        conditions.push(gte(announcements.publishedAt, cutoff));
+      }
+      const rows = await db
+        .select({
+          id: announcements.id,
+          title: announcements.title,
+          body: announcements.body,
+          isPinned: announcements.isPinned,
+          publishedAt: announcements.publishedAt,
+        })
+        .from(announcements)
+        .where(and(...conditions))
+        .orderBy(desc(announcements.isPinned), desc(announcements.publishedAt))
+        .limit(opts.limit);
+
+      return rows;
     },
 
     async listDocuments(_opts) {

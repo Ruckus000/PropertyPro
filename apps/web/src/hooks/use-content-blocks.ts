@@ -56,7 +56,7 @@ export function useContentBlocks(communityId: number) {
 }
 
 export interface UpsertContentBlockInput {
-  blockType: 'text' | 'image';
+  blockType: 'text' | 'image' | 'announcements';
   blockOrder: number;
   content: unknown;
 }

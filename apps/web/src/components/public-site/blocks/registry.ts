@@ -18,13 +18,14 @@ import type { BlockRenderer } from './types';
 import { HeroBlock } from './HeroBlock';
 import { TextBlock } from './TextBlock';
 import { ImageBlock } from './ImageBlock';
+import { AnnouncementsBlock } from './AnnouncementsBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
   hero: HeroBlock,
   text: TextBlock,
   image: ImageBlock,
-  // announcements: PR #3
+  announcements: AnnouncementsBlock,
   // documents, meetings, contact: PR #4
 };
 
