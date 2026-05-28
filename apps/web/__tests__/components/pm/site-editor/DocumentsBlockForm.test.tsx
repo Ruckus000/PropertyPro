@@ -93,4 +93,15 @@ describe('<DocumentsBlockForm>', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Invalid limit.');
     });
   });
+
+  it('renders the public-exposure warning explaining the category-as-access trade-off', () => {
+    // PR-C: until documents.public_access lands, category selection IS the
+    // access boundary. PMs must see this trade-off in the editor so they
+    // don't accidentally publish internal-only documents by picking a public
+    // category. Surfaced from /review on PR #500.
+    render(wrap(<DocumentsBlockForm communityId={42} blockOrder={5} initial={null} />));
+    const warning = screen.getByRole('note');
+    expect(warning).toHaveTextContent(/Public exposure warning/i);
+    expect(warning).toHaveTextContent(/title, description, category, and upload date/i);
+  });
 });

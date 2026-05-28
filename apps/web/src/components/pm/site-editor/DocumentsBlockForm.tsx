@@ -83,6 +83,17 @@ export function DocumentsBlockForm({ communityId, blockOrder, initial, onSaved }
       <fieldset>
         <legend className="text-sm font-medium text-content">Include categories</legend>
         <p className="mt-0.5 text-xs text-content-secondary">Only documents in the selected categories will be shown.</p>
+        <div
+          role="note"
+          className="mt-2 rounded-sm border border-warning bg-warning/10 px-3 py-2 text-xs text-content"
+        >
+          <strong className="font-semibold">Public exposure warning.</strong>{' '}
+          Every document currently in a selected category will be listed on
+          your public site — title, description, category, and upload date are
+          all visible to anyone with the link. Only select categories where
+          every document is safe for public viewing. (A per-document
+          public/private control is coming in a future release.)
+        </div>
         <div className="mt-2 space-y-1">
           {DOCUMENT_CATEGORIES.map(({ value, label }) => (
             <label key={value} className="flex items-center gap-2 cursor-pointer text-sm text-content">

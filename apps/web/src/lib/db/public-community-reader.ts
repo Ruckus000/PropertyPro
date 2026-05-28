@@ -24,6 +24,7 @@
  * column directly. A future migration may add a slug column; until then the
  * name field acts as the slug.
  */
+import { cache } from 'react';
 import { announcements, communities, documentCategories, documents, meetings, siteBlocks, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -107,7 +108,17 @@ export interface PublicScopedReader {
   getContactInfo(opts: { showBoard: boolean; showManagement: boolean }): Promise<PublicContactInfo>;
 }
 
-export function getPublicCommunityScopedReader(communityId: number): PublicScopedReader {
+/**
+ * Wrapped in React.cache so multiple block renderers on a single public-site
+ * request share a single reader instance + per-method DB results within the
+ * same request (matches the established pattern on getCommunityPublicInfo,
+ * apps/web/src/lib/api/branding.ts:35). Without this, a page rendering
+ * Documents + Meetings + Announcements blocks would create three readers and
+ * re-issue every query per block.
+ */
+export const getPublicCommunityScopedReader = cache(_getPublicCommunityScopedReader);
+
+function _getPublicCommunityScopedReader(communityId: number): PublicScopedReader {
   if (!Number.isInteger(communityId) || communityId <= 0) {
     throw new Error(
       `getPublicCommunityScopedReader: communityId must be a positive integer; got ${communityId}`,

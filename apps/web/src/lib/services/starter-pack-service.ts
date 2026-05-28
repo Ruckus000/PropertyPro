@@ -72,6 +72,15 @@ export async function applyStarterPackToCommunity(
 
   // Inserts are independent (blockOrder is set explicitly per block);
   // run them concurrently to avoid N sequential roundtrips.
+  //
+  // KNOWN LIMITATION: Promise.all rejects on the first failure but the other
+  // inserts may still complete. So a partial failure can leave the community
+  // with an unknown subset of starter blocks landed. The caller
+  // (createCommunityForPm) catches and logs — it does NOT roll back the
+  // community. The idempotency guard above means a manual re-apply or a
+  // future "reset to starter" tool (PR #6) will short-circuit cleanly rather
+  // than double-insert. Atomic batch insertion is part of the PR #8 publish
+  // workflow redesign.
   await Promise.all(
     blocks.map((block) =>
       scoped.insert(siteBlocks, {

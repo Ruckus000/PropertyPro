@@ -253,6 +253,91 @@ describe('getPublicCommunityScopedReader', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // SoR security-boundary predicates (PR-C from /review on PR #499).
+  //
+  // Length-based assertions can pass even when one of the security-load-bearing
+  // filters is silently dropped (e.g. audience='all' removed → board-only or
+  // owner-only announcements leak to the unauthenticated public site). Assert
+  // on specific predicate identity for each filter, so a regression breaks the
+  // test with a clear signal rather than a misleading "expected 5, got 4".
+  // ---------------------------------------------------------------------------
+
+  it('listAnnouncements WHERE includes the audience=all filter (load-bearing SoR boundary)', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listAnnouncements({ limit: 5 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const audienceClause = whereCall.__and.find(
+      (c: unknown) =>
+        (c as { __eq?: { col: string } }).__eq?.col === 'announcements.audience',
+    );
+    expect(audienceClause).toBeDefined();
+    expect((audienceClause as { __eq: { val: string } }).__eq.val).toBe('all');
+  });
+
+  it('listAnnouncements WHERE includes archivedAt + deletedAt isNull guards', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listAnnouncements({ limit: 5 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const isNullCols = whereCall.__and
+      .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
+      .map((c: unknown) => (c as { __isNull: string }).__isNull);
+    expect(isNullCols).toContain('announcements.archivedAt');
+    expect(isNullCols).toContain('announcements.deletedAt');
+  });
+
+  it('listAnnouncements WHERE includes publishedAt<=now (no scheduled-future leaks)', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listAnnouncements({ limit: 5 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const lteClause = whereCall.__and.find(
+      (c: unknown) =>
+        (c as { __lte?: { col: string } }).__lte?.col === 'announcements.publishedAt',
+    );
+    expect(lteClause).toBeDefined();
+    expect((lteClause as { __lte: { val: Date } }).__lte.val).toBeInstanceOf(Date);
+  });
+
+  it('listDocuments WHERE includes the deletedAt isNull guard', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const isNullCols = whereCall.__and
+      .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
+      .map((c: unknown) => (c as { __isNull: string }).__isNull);
+    expect(isNullCols).toContain('documents.deletedAt');
+  });
+
+  it('listMeetings WHERE includes the deletedAt isNull guard', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listMeetings({ limit: 5, timeWindowDays: 14 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const isNullCols = whereCall.__and
+      .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
+      .map((c: unknown) => (c as { __isNull: string }).__isNull);
+    expect(isNullCols).toContain('meetings.deletedAt');
+  });
+
+  // ---------------------------------------------------------------------------
   // listDocuments
   // ---------------------------------------------------------------------------
 
