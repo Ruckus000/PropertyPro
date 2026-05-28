@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
-import { ImageBlockForm } from '@/components/pm/site-editor/ImageBlockForm';
+import { ImageBlockForm, scaleCropToNatural } from '@/components/pm/site-editor/ImageBlockForm';
 
 vi.mock('react-image-crop', () => ({
   __esModule: true,
@@ -114,5 +114,45 @@ describe('<ImageBlockForm>', () => {
     // Wait for error to appear
     await screen.findByRole('alert');
     expect(screen.getByRole('alert')).toHaveTextContent('Upload service unavailable.');
+  });
+});
+
+describe('scaleCropToNatural (ultrareview bug_028 regression)', () => {
+  // ReactCrop returns CSS-pixel coords of the rendered <img>. The preview is
+  // styled max-w-full and shrinks to ~600px in the editor column, so for a
+  // typical 2400×1350 source the rendered img reports clientWidth=600 /
+  // clientHeight=337. Without scaling, sharp.extract would treat the
+  // display-pixel crop coords as source-pixel coords and crop a tiny region
+  // from the upper-left of the source — silent UX corruption. The scaler
+  // multiplies by naturalWidth/clientWidth so the coords sent to the server
+  // match the user's intended region on the source.
+
+  it('scales display-pixel crop coords up to source-pixel coords', () => {
+    const result = scaleCropToNatural(
+      { x: 50, y: 80, width: 500, height: 281, unit: 'px' },
+      { naturalWidth: 2400, naturalHeight: 1350, clientWidth: 600, clientHeight: 337 },
+    );
+    expect(result).not.toBeNull();
+    // ratioX = 2400/600 = 4, ratioY ≈ 1350/337 ≈ 4.0059
+    expect(result!.x).toBe(200);
+    expect(result!.width).toBe(2000);
+    expect(result!.y).toBeCloseTo(320, -1);   // ratioY ≈ 4.006
+    expect(result!.height).toBeCloseTo(1125, -1);
+  });
+
+  it('is the identity when displayed and natural sizes match (no shrink)', () => {
+    const result = scaleCropToNatural(
+      { x: 10, y: 20, width: 100, height: 56, unit: 'px' },
+      { naturalWidth: 600, naturalHeight: 337, clientWidth: 600, clientHeight: 337 },
+    );
+    expect(result).toEqual({ x: 10, y: 20, width: 100, height: 56 });
+  });
+
+  it('returns null when the preview img has zero client dimensions (not yet laid out)', () => {
+    const result = scaleCropToNatural(
+      { x: 10, y: 20, width: 100, height: 56, unit: 'px' },
+      { naturalWidth: 1600, naturalHeight: 900, clientWidth: 0, clientHeight: 0 },
+    );
+    expect(result).toBeNull();
   });
 });

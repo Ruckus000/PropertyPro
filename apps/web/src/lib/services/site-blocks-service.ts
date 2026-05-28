@@ -39,11 +39,20 @@ export async function upsertPublishedBlock({
 }: UpsertPublishedBlockInput): Promise<void> {
   const scoped = createScopedClient(communityId);
 
-  // Step 1: Soft-delete any existing published row at this (blockType, blockOrder).
+  // Step 1: Soft-delete any existing published row at this blockOrder.
+  //
+  // The predicate intentionally does NOT include blockType. The partial
+  // unique index `site_blocks_community_order_draft_variant_partial` is
+  // keyed on (community_id, block_order, is_draft, template_variant)
+  // WHERE deleted_at IS NULL — block_type is NOT part of the uniqueness
+  // constraint. Filtering soft-delete on block_type would leave a row of
+  // a different type at the same order, and the subsequent insert would
+  // collide on the partial unique index → opaque 500. Match the index's
+  // shape so "replace whatever lives at this slot" works regardless of
+  // the previous block's type.
   await scoped.softDelete(
     siteBlocks,
     and(
-      eq(siteBlocks.blockType, blockType),
       eq(siteBlocks.blockOrder, blockOrder),
       eq(siteBlocks.isDraft, false),
       isNull(siteBlocks.deletedAt),

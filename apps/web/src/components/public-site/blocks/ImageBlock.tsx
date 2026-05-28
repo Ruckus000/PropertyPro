@@ -14,10 +14,14 @@ export function ImageBlock(props: BlockRendererProps) {
   const content: ImageBlockContent = parsed.data;
 
   // The finalize endpoint writes sibling variants at
-  // {storagePath}.1600w.webp and {storagePath}.800w.webp.
+  // {storagePath}.1600w.webp and {storagePath}.800w.webp AND deletes the raw
+  // upload at content.imagePath. So fallbackSrc must NOT point at
+  // content.imagePath (it would 404 — caught by save-image, social-media
+  // crawlers, screen readers in "list images" mode, and as the srcset
+  // fallback). Use the 1600w variant as the fallback src.
   const src1600 = buildPublicAssetUrl(`${content.imagePath}.1600w.webp`);
   const src800 = buildPublicAssetUrl(`${content.imagePath}.800w.webp`);
-  const fallbackSrc = buildPublicAssetUrl(content.imagePath);
+  const fallbackSrc = src1600;
 
   const alt = content.decorative === true ? '' : (content.altText ?? '');
 

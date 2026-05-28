@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import ReactCrop, { type Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import type { ImageBlockContent } from '@propertypro/shared';
@@ -13,6 +13,36 @@ interface Props {
   onSaved?: () => void;
 }
 
+/**
+ * Scale a react-image-crop Crop (in display-pixel coordinates of the rendered
+ * preview <img>) into the source image's natural-pixel coordinate space.
+ *
+ * react-image-crop v11's default unit is 'px' — those pixels are CSS pixels
+ * of the rendered preview element, not the source file's natural pixels. The
+ * preview <img className="max-w-full"> shrinks to fit the editor column
+ * (~600px), so for any real-world source larger than ~600px wide, sending
+ * the raw crop coords to sharp.extract crops a tiny region from the source's
+ * top-left rather than the user's intended center selection — silent
+ * UX-level corruption. Scale by naturalWidth/clientWidth (and the height
+ * counterpart) before posting.
+ *
+ * Exported for testing.
+ */
+export function scaleCropToNatural(
+  crop: Crop,
+  img: { naturalWidth: number; naturalHeight: number; clientWidth: number; clientHeight: number },
+): { x: number; y: number; width: number; height: number } | null {
+  if (img.clientWidth <= 0 || img.clientHeight <= 0) return null;
+  const ratioX = img.naturalWidth / img.clientWidth;
+  const ratioY = img.naturalHeight / img.clientHeight;
+  return {
+    x: crop.x * ratioX,
+    y: crop.y * ratioY,
+    width: crop.width * ratioX,
+    height: crop.height * ratioY,
+  };
+}
+
 export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -23,6 +53,7 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
   const [serverError, setServerError] = useState<string | null>(null);
   const upload = useImageUpload({ communityId });
   const save = useUpsertContentBlock(communityId);
+  const previewImgRef = useRef<HTMLImageElement | null>(null);
 
   // Create the preview URL once per file selection and revoke it on
   // change or unmount — keeps the <img src> stable across unrelated
@@ -47,13 +78,19 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
     try {
       let imagePath = initial?.imagePath ?? '';
       if (file) {
+        // Scale display-pixel crop coords into source-pixel coords. If the
+        // preview img hasn't fully loaded (no natural dims yet) we send no
+        // cropBox — finalize will treat the upload as no-crop and just
+        // produce variants of the full source.
+        const img = previewImgRef.current;
+        const scaled = crop && crop.width > 0 && img && img.naturalWidth > 0
+          ? scaleCropToNatural(crop, img)
+          : null;
         const result = await upload.mutateAsync({
           file,
           kind: 'content',
           altText: decorative ? '' : altText.trim(),
-          cropBox: crop && crop.width > 0
-            ? { x: crop.x, y: crop.y, width: crop.width, height: crop.height }
-            : undefined,
+          cropBox: scaled ?? undefined,
         });
         imagePath = result.storagePath;
       }
@@ -85,7 +122,7 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
         <div className="border border-default rounded-md p-2">
           <ReactCrop crop={crop} onChange={(c) => setCrop(c)} aspect={16/9}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={fileUrl} alt="" className="max-w-full" />
+            <img ref={previewImgRef} src={fileUrl} alt="" className="max-w-full" />
           </ReactCrop>
           <p className="text-xs text-content-secondary mt-1">Drag to crop. Recommended 16:9.</p>
         </div>

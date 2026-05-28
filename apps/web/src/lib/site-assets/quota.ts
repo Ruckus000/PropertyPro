@@ -14,7 +14,7 @@
  * community membership + role + plan-feature gate (hasSiteEditor) before
  * invoking — this file does no auth checks itself.
  */
-import { eq } from '@propertypro/db/filters';
+import { eq, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 // PR #2 quota lookup. communities is the root tenant table (no communityId
 // column); plan resolution requires unscoped read. Routes calling these
@@ -23,7 +23,7 @@ import { communities } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_FEATURES } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';
-import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
+import { getBrandingForCommunity } from '@/lib/api/branding';
 import { resolvePlanIdWithTelemetry } from '@/lib/telemetry/plan-resolution';
 
 export class QuotaExceededError extends AppError {
@@ -66,13 +66,43 @@ export async function assertWithinQuota(communityId: number, addBytes: number): 
   }
 }
 
+/**
+ * Atomically add `bytes` to `branding.assetsBytesUsed`. Negative `bytes`
+ * decrements; the result is clamped to a non-negative floor.
+ *
+ * Previously this was a JS-side read-modify-write (`getCommunitySiteAssetsUsage`
+ * → `updateBrandingForCommunity`), which leaked increments under concurrent
+ * finalize calls (two requests reading the same baseline, last write wins,
+ * the earlier increment lost). The quota gate would then under-count actual
+ * stored bytes and let uploads slip past the plan ceiling.
+ *
+ * Use a single SQL statement so Postgres serializes the update at the row
+ * level. `jsonb_set` + `(branding->>'assetsBytesUsed')::bigint` reads and
+ * writes the JSONB field in one expression; `COALESCE(..., 0)` handles the
+ * never-set case; `GREATEST(0, ...)` enforces the non-negative floor.
+ */
+async function applyAssetsUsageDelta(communityId: number, deltaBytes: number): Promise<void> {
+  const db = createUnscopedClient();
+  await db.execute(sql`
+    UPDATE communities
+       SET branding = jsonb_set(
+         COALESCE(branding, '{}'::jsonb),
+         '{assetsBytesUsed}',
+         to_jsonb(
+           GREATEST(
+             0,
+             COALESCE((branding ->> 'assetsBytesUsed')::bigint, 0) + ${deltaBytes}
+           )
+         )
+       )
+     WHERE id = ${communityId}
+  `);
+}
+
 export async function incrementAssetsUsage(communityId: number, bytes: number): Promise<void> {
-  const current = await getCommunitySiteAssetsUsage(communityId);
-  await updateBrandingForCommunity(communityId, { assetsBytesUsed: current + bytes });
+  await applyAssetsUsageDelta(communityId, bytes);
 }
 
 export async function decrementAssetsUsage(communityId: number, bytes: number): Promise<void> {
-  const current = await getCommunitySiteAssetsUsage(communityId);
-  const next = Math.max(0, current - bytes);
-  await updateBrandingForCommunity(communityId, { assetsBytesUsed: next });
+  await applyAssetsUsageDelta(communityId, -bytes);
 }
