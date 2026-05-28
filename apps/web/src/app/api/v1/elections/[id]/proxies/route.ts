@@ -35,7 +35,7 @@ export const POST = withErrorHandler(
     requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'write');
 
-    const data = await createElectionProxyForCommunity(
+    return createElectionProxyForCommunity(
       communityId,
       electionId,
       actorUserId,

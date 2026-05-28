@@ -187,6 +187,38 @@ describe('/api/v1/elections/[id]/proxies route', () => {
     expect(createElectionProxyForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 when POST election id is non-numeric', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/abc/proxies', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        proxyHolderUserId: '2f5fceec-f6b2-47ec-a266-e1a94f2a53f7',
+      }),
+    });
+    const res = await POST(req, routeCtx('abc'));
+
+    expect(res.status).toBe(400);
+    expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
+    expect(createElectionProxyForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when POST election id is zero', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/0/proxies', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        proxyHolderUserId: '2f5fceec-f6b2-47ec-a266-e1a94f2a53f7',
+      }),
+    });
+    const res = await POST(req, routeCtx('0'));
+
+    expect(res.status).toBe(400);
+    expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
+    expect(createElectionProxyForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 when elections are disabled', async () => {
     requireElectionsEnabledMock.mockImplementationOnce(() => {
       throw new ForbiddenError('Elections disabled');
