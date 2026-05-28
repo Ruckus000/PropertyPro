@@ -4,97 +4,39 @@
  * Returns a paginated list of in-app notifications for the current user
  * within a community. Excludes archived and soft-deleted rows.
  *
- * Migrated to the canonical `paginate()` helper from `@propertypro/db`
- * (Plan B3; see ADR-003 / Plan A2). Replaces the previous bespoke
- * cursor-based path that used `listNotifications()` with raw numeric
- * cursors and a custom response shape.
+ * Plan A1 drain #103 — migrated to `runRoute()` from `@propertypro/api-contract`.
+ * See `./contract.ts` for schemas and `unread_only` parsing rationale.
  *
- * Response envelope is double-wrapped per the paginated-route contract:
- *
- *     { data: { data: NotificationItem[], pagination: { nextCursor, hasMore, pageSize } } }
- *
- * Behavioral changes from the previous implementation:
- * - Cursor format: was a raw numeric id stringified, now opaque base64url
- *   issued by `paginate()`. Old numeric cursors will fail to decode and
- *   will silently fall back to "first page" per `paginate()`'s permissive
- *   contract. Acceptable because cursors are scoped to a single user
- *   session and aren't typically persisted long-term.
- * - Inner shape: was `{ notifications, nextCursor }`, now `{ data, pagination }`.
- * - Sort order: was `(createdAt DESC, id DESC)`, now `id DESC`. For the
- *   bigserial monotonic id this is equivalent.
- * - Limit cap: was 50 (hard 400 on >50), now 100 (silent clamp at paginate
- *   MAX_PAGE_SIZE). Default still 20 if not specified.
+ * Cursor-based pagination via `paginateNotificationsForUser()` (Plan B3).
+ * Response envelope: `{ data: { data: NotificationItem[], pagination } } }`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
-import { type NotificationCategory } from '@propertypro/db';
+import { runRoute } from '@propertypro/api-contract';
+import type { NotificationCategory } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { paginateNotificationsForUser } from '@/lib/services/notification-service';
+import { notificationsListContract } from './contract';
 
-const VALID_CATEGORIES = [
-  'announcement',
-  'document',
-  'meeting',
-  'maintenance',
-  'violation',
-  'election',
-  'system',
-] as const;
+export const GET = withErrorHandler(
+  runRoute(notificationsListContract, async ({ query, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    await requireCommunityMembership(communityId, userId);
 
-const querySchema = z.object({
-  communityId: z.coerce.number().int().positive(),
-  cursor: z.string().min(1).max(256).optional(),
-  // Default 20 preserves the route's prior pageSize default. Without this,
-  // omitting `limit` would fall through to paginate()'s DEFAULT_PAGE_SIZE (50).
-  limit: z.coerce.number().int().positive().default(20),
-  category: z.enum(VALID_CATEGORIES).optional(),
-  // `z.coerce.boolean()` is unsafe for query strings: `Boolean("false") === true`.
-  // Treat the param as a flag — only the literal string "true" enables it; any
-  // other value (including "false", "0", missing) means "filter off".
-  unread_only: z.preprocess((val) => val === 'true', z.boolean()).optional(),
-});
+    const unreadOnlyParam = new URL(req.url).searchParams.get('unread_only');
+    const unreadOnly = unreadOnlyParam === 'true';
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const { searchParams } = new URL(req.url);
-  // Use `||` not `??` so empty-string query params (`?cursor=`, `?limit=`,
-  // `?category=`, `?unread_only=`) collapse to undefined rather than passing
-  // `""` to Zod, which would 400 on `min(1)` / `positive()` / `enum`
-  // constraints. The `unread_only` preprocessing also benefits — empty string
-  // becomes undefined → optional → no filter.
-  const parsed = querySchema.safeParse({
-    communityId: searchParams.get('communityId'),
-    cursor: searchParams.get('cursor') || undefined,
-    limit: searchParams.get('limit') || undefined,
-    category: searchParams.get('category') || undefined,
-    unread_only: searchParams.get('unread_only') || undefined,
-  });
+    const result = await paginateNotificationsForUser({
+      communityId,
+      userId,
+      cursor: query.cursor,
+      pageSize: query.limit,
+      category: query.category as NotificationCategory | undefined,
+      unreadOnly,
+    });
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
-
-  const { cursor, limit, category, unread_only } = parsed.data;
-  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
-  const userId = await requireAuthenticatedUserId();
-  await requireCommunityMembership(communityId, userId);
-
-  const result = await paginateNotificationsForUser({
-    communityId,
-    userId,
-    cursor,
-    pageSize: limit,
-    category: category as NotificationCategory | undefined,
-    unreadOnly: unread_only,
-  });
-
-  return NextResponse.json({
-    data: {
-      data: result.data,
-      pagination: result.pagination,
-    },
-  });
-});
+    return { data: result.data, pagination: result.pagination };
+  }),
+);
