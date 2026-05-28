@@ -125,6 +125,15 @@ describe('applyStarterPackToCommunity', () => {
     expect(scopedClient.insert).not.toHaveBeenCalled();
   });
 
+  it('no-ops when communityType is not mapped in STARTER_PACK_SLUG_BY_TYPE', async () => {
+    // Bypass the TypeScript guard to simulate a future widening of CommunityType
+    // without a matching pack entry.
+    const result = await applyStarterPackToCommunity(99, 'unknown_type' as never);
+    expect(result).toEqual({ applied: false, blockCount: 0, packSlug: null });
+    expect(createScopedClientMock).not.toHaveBeenCalled();
+    expect(createUnscopedClientMock).not.toHaveBeenCalled();
+  });
+
   it('returns applied:false when the pack row does not exist in the catalog', async () => {
     const scopedClient = buildScopedClient([]);
     createScopedClientMock.mockReturnValue(scopedClient as never);

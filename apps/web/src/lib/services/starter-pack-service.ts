@@ -41,6 +41,12 @@ export async function applyStarterPackToCommunity(
   communityType: CommunityType,
 ): Promise<ApplyStarterPackResult> {
   const packSlug = STARTER_PACK_SLUG_BY_TYPE[communityType];
+  // Defensive: if STARTER_PACK_SLUG_BY_TYPE ever drifts from CommunityType
+  // (e.g. a new variant added without a pack mapping), no-op instead of
+  // executing a query with an undefined slug.
+  if (!packSlug) {
+    return { applied: false, blockCount: 0, packSlug: null };
+  }
 
   const scoped = createScopedClient(communityId);
   // queryWhere auto-injects community_id and deleted_at IS NULL; add isDraft=false to find published blocks.
@@ -64,16 +70,20 @@ export async function applyStarterPackToCommunity(
   const blocks = pack.blocks as StarterPackBlock[];
   const now = new Date();
 
-  for (const block of blocks) {
-    await scoped.insert(siteBlocks, {
-      communityId,
-      blockType: block.blockType,
-      blockOrder: block.blockOrder,
-      isDraft: false,
-      publishedAt: now,
-      content: block.content,
-    });
-  }
+  // Inserts are independent (blockOrder is set explicitly per block);
+  // run them concurrently to avoid N sequential roundtrips.
+  await Promise.all(
+    blocks.map((block) =>
+      scoped.insert(siteBlocks, {
+        communityId,
+        blockType: block.blockType,
+        blockOrder: block.blockOrder,
+        isDraft: false,
+        publishedAt: now,
+        content: block.content,
+      }),
+    ),
+  );
 
   return { applied: true, blockCount: blocks.length, packSlug };
 }
