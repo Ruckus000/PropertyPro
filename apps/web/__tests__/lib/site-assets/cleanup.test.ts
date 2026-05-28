@@ -62,4 +62,22 @@ describe('purgeCommunitySiteAssets', () => {
     removeMock.mockResolvedValueOnce({ error: { message: 'remove failed' } });
     await expect(purgeCommunitySiteAssets(42)).rejects.toThrow(/remove failed/);
   });
+
+  it('paginates beyond a single 1000-item page per kind', async () => {
+    // First .list() for 'logo' returns a full PAGE_SIZE page → must trigger
+    // a second .list() call. Second page returns < PAGE_SIZE so the loop
+    // exits. Tests both halves of the pagination contract: the loop
+    // continues when items.length === PAGE_SIZE, and stops when shorter.
+    const fullPage = Array.from({ length: 1000 }, (_, i) => ({ name: `f${i}.webp` }));
+    const tailPage = [{ name: 'tail.webp' }];
+    listMock
+      .mockResolvedValueOnce({ data: fullPage, error: null }) // logo page 1
+      .mockResolvedValueOnce({ data: tailPage, error: null }) // logo page 2 (short → break)
+      .mockResolvedValueOnce({ data: [], error: null })       // hero empty
+      .mockResolvedValueOnce({ data: [], error: null });      // content empty
+    const result = await purgeCommunitySiteAssets(42);
+    expect(result.deletedCount).toBe(1001);
+    expect(removeMock).toHaveBeenCalledTimes(2);  // one remove per non-empty page
+    expect(listMock).toHaveBeenCalledTimes(4);    // logo×2 + hero + content
+  });
 });

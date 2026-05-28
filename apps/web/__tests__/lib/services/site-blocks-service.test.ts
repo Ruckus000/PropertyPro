@@ -171,6 +171,32 @@ describe('upsertPublishedBlock', () => {
     });
     expect(callOrder).toEqual(['softDelete', 'insert', 'audit']);
   });
+
+  it('soft-delete predicate does NOT include blockType (matches partial unique index shape)', async () => {
+    // Regression guard for ultrareview bug_011: the partial unique index
+    // `site_blocks_community_order_draft_variant_partial` is keyed on
+    // (community_id, block_order, is_draft, template_variant) WHERE
+    // deleted_at IS NULL — block_type is intentionally not part of the
+    // uniqueness key. Filtering soft-delete on block_type would leave a
+    // different-type row at the same order, and the subsequent insert
+    // would collide on the partial unique index. The predicate must be
+    // type-agnostic.
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'image',
+      blockOrder: 5,
+      content: { imagePath: '42/content/x.webp', altText: 'a' },
+    });
+    // softDelete is called with (table, predicate). The predicate is a
+    // drizzle-and(...) shape; we serialize and grep to confirm absence.
+    const [, predicate] = scopedClient.softDelete.mock.calls[0];
+    const serialized = JSON.stringify(predicate);
+    expect(serialized).not.toContain('block_type');
+    expect(serialized).not.toContain('blockType');
+  });
 });
 
 describe('upsertPublishedHero (back-compat caller)', () => {

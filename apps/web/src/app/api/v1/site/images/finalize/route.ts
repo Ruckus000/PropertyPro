@@ -61,7 +61,11 @@ export const POST = withErrorHandler(
     const variant1600Path = `${body.storagePath}.1600w.webp`;
     const variant800Path = `${body.storagePath}.800w.webp`;
 
-    const uploadResults = await Promise.all([
+    // Track which variant paths landed in storage so we can compensate if
+    // either upload fails (otherwise a 1600w success + 800w failure would
+    // strand the 1600w forever — finalize throws, no quota increment, no
+    // DB row, and the orphan isn't reachable for cleanup).
+    const [result1600, result800] = await Promise.all([
       admin.storage.from(SITE_ASSETS_BUCKET).upload(variant1600Path, variants.at1600w, {
         contentType: 'image/webp',
         upsert: true,
@@ -71,10 +75,23 @@ export const POST = withErrorHandler(
         upsert: true,
       }),
     ]);
-    for (const result of uploadResults) {
-      if (result.error) {
-        throw new AppError(`Variant upload failed: ${result.error.message}`, 500, 'UPLOAD_FAILED');
+    if (result1600.error || result800.error) {
+      // Compensate: remove whichever variant succeeded.
+      const succeeded: string[] = [];
+      if (!result1600.error) succeeded.push(variant1600Path);
+      if (!result800.error) succeeded.push(variant800Path);
+      if (succeeded.length > 0) {
+        const { error: compErr } = await admin.storage
+          .from(SITE_ASSETS_BUCKET)
+          .remove(succeeded);
+        if (compErr) {
+          console.warn(
+            `[site/images/finalize] compensating delete failed for ${succeeded.join(', ')}: ${compErr.message}`,
+          );
+        }
       }
+      const firstErr = result1600.error?.message ?? result800.error?.message ?? 'unknown';
+      throw new AppError(`Variant upload failed: ${firstErr}`, 500, 'UPLOAD_FAILED');
     }
 
     // Best-effort delete of the raw upload. The variants are the system of

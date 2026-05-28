@@ -1,19 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getBrandingMock, updateBrandingMock, planFeaturesMock, resolvePlanIdMock, dbMock, selectMock, fromMock, whereMock, limitMock } = vi.hoisted(() => {
+const { getBrandingMock, updateBrandingMock, executeMock, planFeaturesMock, resolvePlanIdMock, dbMock, selectMock, fromMock, whereMock, limitMock } = vi.hoisted(() => {
   const limitMock = vi.fn();
   const whereMock = vi.fn(() => ({ limit: limitMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
+  const executeMock = vi.fn().mockResolvedValue(undefined);
   return {
     getBrandingMock: vi.fn(),
     updateBrandingMock: vi.fn(),
+    executeMock,
     planFeaturesMock: {
       essentials: { siteAssetsQuotaBytes: 100 * 1024 * 1024 },
       professional: { siteAssetsQuotaBytes: 500 * 1024 * 1024 },
     },
     resolvePlanIdMock: vi.fn(),
-    dbMock: { select: selectMock },
+    dbMock: { select: selectMock, execute: executeMock },
     selectMock,
     fromMock,
     whereMock,
@@ -32,6 +34,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+  // Identity-ish stub for the sql tagged template used by the atomic
+  // quota-delta UPDATE in incrementAssetsUsage/decrementAssetsUsage.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: { strings: [...strings], values } }),
 }));
 
 // NOTE: vi.importActual cannot be used here because the real @propertypro/db
@@ -128,23 +133,43 @@ describe('increment / decrement', () => {
   // vi.resetAllMocks() (not clearAllMocks) is required here: the assertWithinQuota
   // fail-open tests queue getBrandingMock.mockResolvedValueOnce but never consume it
   // (getSiteAssetsQuotaBytes returns null early). resetAllMocks drains those queues.
-  beforeEach(() => vi.resetAllMocks());
-
-  it('incrementAssetsUsage adds to existing counter', async () => {
-    getBrandingMock.mockResolvedValueOnce({ assetsBytesUsed: 1000 });
-    await incrementAssetsUsage(42, 500);
-    expect(updateBrandingMock).toHaveBeenCalledWith(42, expect.objectContaining({ assetsBytesUsed: 1500 }));
+  beforeEach(() => {
+    vi.resetAllMocks();
+    executeMock.mockResolvedValue(undefined);
   });
 
-  it('incrementAssetsUsage starts from 0 when no counter set', async () => {
-    getBrandingMock.mockResolvedValueOnce({});
+  // Increment/decrement now route through a single atomic SQL UPDATE
+  // (jsonb_set + GREATEST(0, ...)). The previous JS-side read-modify-write
+  // (getBranding → updateBranding) leaked increments under concurrent
+  // finalize calls. Tests now assert on the dbMock.execute() call rather
+  // than on the (no-longer-used) updateBrandingForCommunity helper.
+
+  it('incrementAssetsUsage issues an atomic UPDATE with positive delta', async () => {
     await incrementAssetsUsage(42, 500);
-    expect(updateBrandingMock).toHaveBeenCalledWith(42, expect.objectContaining({ assetsBytesUsed: 500 }));
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    const sqlCall = executeMock.mock.calls[0][0];
+    expect(sqlCall).toMatchObject({
+      __sql: {
+        // sql template strings should include the jsonb_set UPDATE + the
+        // GREATEST(0, ...) clamp. Values include the bytes delta + community id.
+        values: expect.arrayContaining([500, 42]),
+      },
+    });
   });
 
-  it('decrementAssetsUsage clamps at zero (never negative)', async () => {
-    getBrandingMock.mockResolvedValueOnce({ assetsBytesUsed: 100 });
+  it('decrementAssetsUsage passes a negative delta into the same UPDATE', async () => {
     await decrementAssetsUsage(42, 500);
-    expect(updateBrandingMock).toHaveBeenCalledWith(42, expect.objectContaining({ assetsBytesUsed: 0 }));
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    const sqlCall = executeMock.mock.calls[0][0];
+    // -500 is the delta; GREATEST(0, ...) clamps in SQL (not exercised by the mock).
+    expect(sqlCall.__sql.values).toEqual(expect.arrayContaining([-500, 42]));
+  });
+
+  it('uses GREATEST(0, ...) so decrements cannot drive the counter negative', async () => {
+    await decrementAssetsUsage(42, 1_000_000);
+    const sqlCall = executeMock.mock.calls[0][0];
+    const sqlText = sqlCall.__sql.strings.join('');
+    expect(sqlText).toContain('GREATEST');
+    expect(sqlText).toContain('jsonb_set');
   });
 });

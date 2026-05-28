@@ -183,6 +183,23 @@ describe('POST /api/v1/site/images/finalize', () => {
     expect(storageRemoveMock).toHaveBeenCalledWith([VALID_BODY.storagePath]);
   });
 
+  it('compensates by removing the succeeded variant when its sibling upload fails', async () => {
+    // 1600w succeeds, 800w fails → finalize should throw 500 AND remove the
+    // orphaned 1600w. Without compensation the 1600w would be stranded in
+    // storage with no DB row, no quota counter bump, and no path to cleanup.
+    storageUploadMock
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: new Error('storage upload failed') });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(500);
+    // The raw-upload .remove() is NOT called on failure (we never reach that
+    // line), but the compensating .remove() of the succeeded variant IS:
+    const removeCalls = storageRemoveMock.mock.calls.map((c) => c[0]);
+    expect(removeCalls).toContainEqual([`${VALID_BODY.storagePath}.1600w.webp`]);
+    // Quota counter must NOT have been bumped on the failure path:
+    expect(incrementAssetsUsageMock).not.toHaveBeenCalled();
+  });
+
   it('still 200s when raw-upload removal fails (best-effort cleanup)', async () => {
     storageRemoveMock.mockResolvedValueOnce({ data: null, error: new Error('remove failed') });
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

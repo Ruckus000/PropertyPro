@@ -46,13 +46,22 @@ export interface ParsedSiteAssetPath {
 export function parseSiteAssetPath(path: string): ParsedSiteAssetPath | null {
   if (!path) return null;
   const parts = path.split('/');
-  if (parts.length < 3) return null;
-  const [communityIdStr, kind, ...rest] = parts as [string, string, ...string[]];
+  // Mirror buildSiteAssetPath's writer contract: exactly 3 segments,
+  // single-segment filename with no path-traversal markers. The previous
+  // permissive shape (`rest.join('/')`) accepted `42/hero/../../etc/passwd`
+  // and `42/hero/uuid-foo/sub/dir/extra.webp`, breaking the parser/writer
+  // symmetry asserted in this file's header doc. Supabase Storage uses
+  // literal keys so this was never directly exploitable as cross-tenant
+  // traversal, but rejecting these here keeps audit-log resourceId clean,
+  // prevents storage namespace pollution, and matches the schema's intent.
+  if (parts.length !== 3) return null;
+  const [communityIdStr, kind, filename] = parts as [string, string, string];
   const communityId = Number(communityIdStr);
   if (!Number.isInteger(communityId) || communityId <= 0) return null;
   if (!(VALID_KINDS as readonly string[]).includes(kind)) return null;
-  if (rest.length === 0 || rest[0] === '') return null;
-  return { communityId, kind: kind as AssetKind, filename: rest.join('/') };
+  if (!filename || filename === '.' || filename === '..') return null;
+  if (filename.includes('/') || filename.includes('\\')) return null;
+  return { communityId, kind: kind as AssetKind, filename };
 }
 
 export function buildPublicAssetUrl(path: string): string {
