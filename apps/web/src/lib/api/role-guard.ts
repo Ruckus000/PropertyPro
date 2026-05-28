@@ -15,13 +15,9 @@ const ROLE_ALIASES: Record<string, readonly string[]> = {
   property_manager_admin: ['pm_admin', 'property_manager_admin'],
 };
 
-export type Membership = { role: string; communityId: number };
+export type Membership = { role: string; communityId: number; presetKey?: string | null };
 
-export function requireRole(
-  membership: Membership,
-  allowed: readonly string[],
-  errorMessage = 'Caller is not authorized for this action',
-): void {
+function expandRoles(allowed: readonly string[]): Set<string> {
   const expanded = new Set<string>();
   for (const role of allowed) {
     expanded.add(role);
@@ -29,7 +25,25 @@ export function requireRole(
       expanded.add(alias);
     }
   }
-  if (!expanded.has(membership.role)) {
+  return expanded;
+}
+
+export function hasRole(membership: Membership, allowed: readonly string[]): boolean {
+  const expanded = expandRoles(allowed);
+  if (expanded.has(membership.role)) {
+    return true;
+  }
+  return membership.role === 'manager'
+    && typeof membership.presetKey === 'string'
+    && expanded.has(membership.presetKey);
+}
+
+export function requireRole(
+  membership: Membership,
+  allowed: readonly string[],
+  errorMessage = 'Caller is not authorized for this action',
+): void {
+  if (!hasRole(membership, allowed)) {
     throw new ForbiddenError(errorMessage);
   }
 }

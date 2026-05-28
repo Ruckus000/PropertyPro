@@ -4,7 +4,7 @@
  * GET   /api/v1/pm/site/blocks?communityId=X   — list community's blocks
  * PATCH /api/v1/pm/site/blocks                 — upsert a content block at (blockType, blockOrder)
  *
- * Authorization: caller must hold pm_admin in the community AND the
+ * Authorization: caller must hold pm_admin or cam in the community AND the
  * community's plan must include hasSiteEditor.
  *
  * Validation: PATCH body's `content` is validated against the per-type
@@ -15,9 +15,10 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requireRole } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
@@ -31,9 +32,7 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
   const membership = await requireCommunityMembership(effective, userId);
-  if (membership.role !== 'pm_admin') {
-    throw new ForbiddenError('Only property managers can manage site blocks');
-  }
+  requireRole(membership, ['pm_admin', 'cam'], 'Only property managers can manage site blocks');
   await requirePlanFeature(effective, 'hasSiteEditor');
   return { userId, communityId: effective };
 }
