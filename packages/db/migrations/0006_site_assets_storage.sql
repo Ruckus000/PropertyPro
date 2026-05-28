@@ -1,14 +1,22 @@
 -- Migration 0006: site assets storage bucket + RLS policies
 --
 -- Creates the community-site-assets storage bucket (public = true so anonymous
--- reads work) and four RLS policies governing object access. PM users in
--- pm_admin / cam / property_manager_admin roles get insert + delete on objects
--- under their community's path prefix; service_role gets full access for the
--- finalize endpoint to read raw uploads + write WebP variants without
--- inheriting end-user auth.
+-- reads work) and four RLS policies governing object access. PM users
+-- (role='pm_admin', or role='manager' with the 'cam' preset) get insert +
+-- delete on objects under their community's path prefix; service_role gets
+-- full access for the finalize endpoint to read raw uploads + write WebP
+-- variants without inheriting end-user auth.
 --
 -- Bucket path convention: {community_id}/{kind}/{uuid}-{filename}
 -- where kind ∈ {logo, hero, content}.
+--
+-- NOTE: This migration's PM policies were originally written against a
+-- non-existent `community_memberships` table with non-existent columns/enum
+-- values, so the entire DO block aborted on any real Supabase environment
+-- (CI passed only because the to_regclass guard skipped the body on
+-- bare-Postgres). The corrected subqueries below match the current
+-- `public.user_roles` schema (see packages/db/src/schema/user-roles.ts and
+-- migration 0093 which collapsed the role enum to user_role_v2).
 
 BEGIN;
 
@@ -47,6 +55,8 @@ BEGIN
   $POL$;
 
   -- Authenticated PM can INSERT objects in their own community's path prefix.
+  -- Matches the runtime gate in /api/v1/pm/site/hero (requireRole [pm_admin, cam]):
+  --   role='pm_admin', OR role='manager' with preset_key='cam'.
   EXECUTE $POL$DROP POLICY IF EXISTS "site_assets_pm_insert" ON storage.objects$POL$;
   EXECUTE $POL$
     CREATE POLICY "site_assets_pm_insert" ON storage.objects
@@ -54,10 +64,9 @@ BEGIN
       WITH CHECK (
         bucket_id = 'community-site-assets'
         AND (storage.foldername(name))[1] IN (
-          SELECT community_id::text FROM community_memberships
+          SELECT community_id::text FROM public.user_roles
            WHERE user_id = auth.uid()
-             AND role_id IN ('property_manager_admin','cam','pm_admin')
-             AND deleted_at IS NULL
+             AND (role = 'pm_admin' OR (role = 'manager' AND preset_key = 'cam'))
         )
       )
   $POL$;
@@ -78,10 +87,9 @@ BEGIN
       USING (
         bucket_id = 'community-site-assets'
         AND (storage.foldername(name))[1] IN (
-          SELECT community_id::text FROM community_memberships
+          SELECT community_id::text FROM public.user_roles
            WHERE user_id = auth.uid()
-             AND role_id IN ('property_manager_admin','cam','pm_admin')
-             AND deleted_at IS NULL
+             AND (role = 'pm_admin' OR (role = 'manager' AND preset_key = 'cam'))
         )
       )
   $POL$;
