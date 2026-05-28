@@ -26,11 +26,14 @@ export interface ComplianceCommandCenterProps {
   canWrite: boolean;
 }
 
-// CAM-class roles. Includes both `pm_admin` (NewCommunityRole) and
-// `property_manager_admin` (legacy CommunityRole) to cover both sides
-// of the in-progress role migration. Either string can arrive on the
-// `role` prop depending on which auth path resolved the membership.
-const CAM_LIKE_ROLES = new Set<string>(['cam', 'pm_admin', 'property_manager_admin', 'site_manager']);
+// CAM-class roles. Includes legacy CommunityRole strings (`cam`,
+// `property_manager_admin`, `site_manager`) and the new NewCommunityRole
+// migration strings (`manager`, `pm_admin`) so the toggle renders on
+// whichever side of the in-progress role migration the user lands on.
+// Live preview verified `membership.role === 'manager'` for CAM users
+// under the new manager-permissions system; without that entry the
+// toggle silently hides for every CAM in production.
+const CAM_LIKE_ROLES = new Set<string>(['cam', 'manager', 'pm_admin', 'property_manager_admin', 'site_manager']);
 const BOARD_LIKE_ROLES = new Set<string>(['board_president', 'board_member']);
 
 function defaultViewForRole(role: string): ViewMode {

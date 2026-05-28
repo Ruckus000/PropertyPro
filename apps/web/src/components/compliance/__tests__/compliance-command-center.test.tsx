@@ -109,6 +109,14 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.queryByRole('button', { name: 'CAM view' })).not.toBeInTheDocument();
   });
 
+  it('shows the view toggle for the new manager role', () => {
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="manager" canWrite={true} />,
+    );
+    expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('hides the attention banner when no items need attention', () => {
     mockChecklistReturn = {
       data: [
