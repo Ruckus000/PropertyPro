@@ -11,12 +11,25 @@ import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import type { BlockRendererProps } from './types';
 
 function formatDate(value: Date, timezone: string): string {
-  return value.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: timezone || 'America/New_York',
-  });
+  const tz = timezone || 'America/New_York';
+  try {
+    return value.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: tz,
+    });
+  } catch {
+    // Invalid/unsupported timezone (e.g., legacy bad data in
+    // communities.timezone). Fall back to the default zone rather than
+    // crashing the whole block.
+    return value.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'America/New_York',
+    });
+  }
 }
 
 export async function AnnouncementsBlock(props: BlockRendererProps) {
@@ -57,7 +70,7 @@ export async function AnnouncementsBlock(props: BlockRendererProps) {
                 </div>
                 <div
                   className="mt-3 text-sm text-content prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.body) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(item.body ?? '') }}
                 />
               </li>
             ))}

@@ -78,4 +78,22 @@ describe('<AnnouncementsBlock>', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('announcements block content'), expect.anything());
     warnSpy.mockRestore();
   });
+
+  it('does not crash when an announcement body is null', async () => {
+    listAnnouncementsMock.mockResolvedValueOnce([
+      { id: 1, title: 'Title only', body: null as unknown as string, isPinned: false, publishedAt: new Date('2026-05-01T12:00:00Z') },
+    ]);
+    const ui = await AnnouncementsBlock(makeProps({ limit: 5, timeWindowDays: 30 }));
+    expect(() => render(ui as React.ReactElement)).not.toThrow();
+    expect(screen.getByText('Title only')).toBeInTheDocument();
+  });
+
+  it('falls back gracefully when community.timezone is invalid', async () => {
+    listAnnouncementsMock.mockResolvedValueOnce([
+      { id: 1, title: 'Hi', body: '<p>x</p>', isPinned: false, publishedAt: new Date('2026-05-01T12:00:00Z') },
+    ]);
+    const props = { ...makeProps({ limit: 5, timeWindowDays: 30 }), community: { ...community, timezone: 'Not/A_Real_Zone' } };
+    const ui = await AnnouncementsBlock(props);
+    expect(() => render(ui as React.ReactElement)).not.toThrow();
+  });
 });
