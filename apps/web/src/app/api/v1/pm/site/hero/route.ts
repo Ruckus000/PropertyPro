@@ -56,6 +56,27 @@ export const PATCH = withErrorHandler(
       });
     }
 
+    // Defense-in-depth: imagePathSchema only enforces the shape
+    // `{numeric}/{kind}/...` — it does not bind the leading numeric segment
+    // to the editing community. A pm_admin for community 42 could otherwise
+    // PATCH a heroImagePath of `999/hero/x.webp` and the row would persist
+    // a cross-tenant reference. The storage bucket is anon-readable by
+    // design (no access boundary crossed), but the schema's own contract
+    // says the leading segment IS the community id, so enforce it here.
+    if (
+      heroParse.data.heroImagePath &&
+      !heroParse.data.heroImagePath.startsWith(`${communityId}/`)
+    ) {
+      throw new ValidationError('heroImagePath must reference this community', {
+        fields: [
+          {
+            field: 'heroImagePath',
+            message: `Path must start with "${communityId}/" (got "${heroParse.data.heroImagePath.slice(0, 32)}…")`,
+          },
+        ],
+      });
+    }
+
     await upsertPublishedHero({
       communityId,
       actorUserId: userId,

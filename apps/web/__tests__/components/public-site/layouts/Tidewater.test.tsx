@@ -100,4 +100,22 @@ describe('<Tidewater>', () => {
     ).not.toBeInTheDocument();
     expect(screen.getByTestId('hero-mock')).toBeInTheDocument();
   });
+
+  it('falls back to the empty-state <h1> when a hero block fails schema validation', () => {
+    // Hero row present but content fails heroBlockSchema (empty headline).
+    // HeroBlock returns null on safeParse failure; if Tidewater suppressed
+    // the empty-state hero based on blockType alone, the page would have
+    // zero <h1>s (violates the heading-hierarchy invariant). hasHeroBlock
+    // now gates on safeParse success so the empty-state hero takes over.
+    render(
+      <Tidewater
+        community={community}
+        theme={theme}
+        blocks={[
+          { id: 10, blockType: 'hero', blockOrder: 1, content: { headline: '' } },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sunset Condos');
+  });
 });
