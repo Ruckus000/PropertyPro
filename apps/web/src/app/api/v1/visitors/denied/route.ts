@@ -1,31 +1,26 @@
 /**
  * Denied Visitors API.
  *
- * GET   /api/v1/visitors/denied  — paginated denied-visitor list (Plan B3 rollout)
+ * GET   /api/v1/visitors/denied  — paginated denied-visitor list (Plan B3)
  * POST  /api/v1/visitors/denied  — create a new denied-visitor entry
  *
+ * Plan A1 drain #94. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and auth-chain rationale.
+ *
  * GET pagination (Plan B3, A3 service wrapper):
- * - Cursor-based via the canonical `paginate()` helper, called from
- *   `paginateDeniedVisitors` in package-visitor-service.
- * - The optional `active` filter pushes into the SQL `where` predicate.
- * - Order by `id` desc — for monotonic bigserial PKs this is equivalent to
- *   the previous `desc(createdAt)` sort. Same-instant inserts may break ties
- *   differently; rare edge case.
- * - Response envelope is double-wrapped per the paginated-route contract:
+ * - Cursor-based via `paginateDeniedVisitors` in package-visitor-service.
+ * - Optional `active` filter is tri-state-parsed from `req.url` (not Zod).
+ * - Handler returns the INNER paginated shape; runner builds
  *   `{ data: { data: DeniedVisitorRow[], pagination } }`.
  *
  * Staff-only: `requireStaffOperator(membership)` blocks residents at the
- * authorization layer. There is no resident-allowedUnitIds scoping (denied
- * visitors are a community-wide list maintained by staff).
+ * authorization layer.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   requireStaffOperator,
@@ -37,86 +32,58 @@ import {
   createDeniedVisitor,
   paginateDeniedVisitors,
 } from '@/lib/services/package-visitor-service';
+import {
+  visitorsDeniedCreateContract,
+  visitorsDeniedListContract,
+} from './contract';
 
-const createDeniedSchema = z.object({
-  communityId: z.number().int().positive(),
-  fullName: z.string().min(1).max(240),
-  reason: z.string().min(1).max(500),
-  vehiclePlate: z.string().max(20).nullable().optional(),
-  notes: z.string().max(2000).nullable().optional(),
-});
+export const GET = withErrorHandler(
+  runRoute(visitorsDeniedListContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-const listQuerySchema = z.object({
-  cursor: z.string().min(1).max(256).optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
-});
+    await requireVisitorLoggingEnabled(membership);
+    requireVisitorsReadPermission(membership);
+    requireStaffOperator(membership);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    const { searchParams } = new URL(req.url);
+    const rawActive = searchParams.get('active');
+    const onlyActive =
+      rawActive === 'true' ? true : rawActive === 'false' ? false : undefined;
 
-  await requireVisitorLoggingEnabled(membership);
-  requireVisitorsReadPermission(membership);
-  requireStaffOperator(membership);
-
-  const { searchParams } = new URL(req.url);
-  const rawActive = searchParams.get('active');
-  const onlyActive =
-    rawActive === 'true' ? true : rawActive === 'false' ? false : undefined;
-
-  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
-  // are treated as missing rather than passed to Zod, which would 400 on the
-  // `min(1)` / `positive()` constraints.
-  const parsedQuery = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
-
-  const result = await paginateDeniedVisitors({
-    communityId,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-    onlyActive,
-  });
-
-  return NextResponse.json({
-    data: {
-      data: result.data,
-      pagination: result.pagination,
-    },
-  });
-});
-
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = createDeniedSchema.safeParse(body);
-
-  if (!parsed.success) {
-    throw new ValidationError('Invalid denied visitor payload', {
-      fields: formatZodErrors(parsed.error),
+    const result = await paginateDeniedVisitors({
+      communityId,
+      cursor: query.cursor,
+      pageSize: query.pageSize,
+      onlyActive,
     });
-  }
 
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    return { data: result.data, pagination: result.pagination };
+  }),
+);
 
-  await requireVisitorLoggingEnabled(membership);
-  requireVisitorsWritePermission(membership);
-  requireStaffOperator(membership);
+export const POST = withErrorHandler(
+  runRoute(visitorsDeniedCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  const requestId = req.headers.get('x-request-id');
-  const data = await createDeniedVisitor(communityId, actorUserId, {
-    fullName: parsed.data.fullName,
-    reason: parsed.data.reason,
-    vehiclePlate: parsed.data.vehiclePlate ?? null,
-    notes: parsed.data.notes ?? null,
-  }, requestId);
+    await requireVisitorLoggingEnabled(membership);
+    requireVisitorsWritePermission(membership);
+    requireStaffOperator(membership);
 
-  return NextResponse.json({ data });
-});
+    return createDeniedVisitor(
+      communityId,
+      actorUserId,
+      {
+        fullName: body.fullName,
+        reason: body.reason,
+        vehiclePlate: body.vehiclePlate ?? null,
+        notes: body.notes ?? null,
+      },
+      req.headers.get('x-request-id'),
+    );
+  }),
+);
