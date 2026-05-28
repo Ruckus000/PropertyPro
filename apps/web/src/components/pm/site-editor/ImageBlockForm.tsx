@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import ReactCrop, { type Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import type { ImageBlockContent } from '@propertypro/shared';
@@ -15,6 +15,7 @@ interface Props {
 
 export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [crop, setCrop] = useState<Crop | undefined>();
   const [altText, setAltText] = useState(initial?.altText ?? '');
   const [caption, setCaption] = useState(initial?.caption ?? '');
@@ -22,14 +23,19 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
   const [serverError, setServerError] = useState<string | null>(null);
   const upload = useImageUpload({ communityId });
   const save = useUpsertContentBlock(communityId);
-  const previewUrlRef = useRef<string | null>(null);
 
-  // Build the preview URL once per file selection
-  const fileUrl = file ? ((): string => {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
-    previewUrlRef.current = URL.createObjectURL(file);
-    return previewUrlRef.current;
-  })() : null;
+  // Create the preview URL once per file selection and revoke it on
+  // change or unmount — keeps the <img src> stable across unrelated
+  // re-renders (alt/caption typing) and avoids leaking object URLs.
+  useEffect(() => {
+    if (!file) {
+      setFileUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setFileUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const needsAlt = !decorative && altText.trim().length === 0;
   const needsFile = !file && !initial;

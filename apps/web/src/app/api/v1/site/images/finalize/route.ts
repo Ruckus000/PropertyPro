@@ -77,6 +77,20 @@ export const POST = withErrorHandler(
       }
     }
 
+    // Best-effort delete of the raw upload. The variants are the system of
+    // record from here on; the original (up to 10MB) is no longer needed and
+    // would otherwise accumulate as orphans and drift from quota tracking
+    // (which counts variants only). Failures here are non-fatal — the
+    // finalize succeeded.
+    const { error: removeErr } = await admin.storage
+      .from(SITE_ASSETS_BUCKET)
+      .remove([body.storagePath]);
+    if (removeErr) {
+      console.warn(
+        `[site/images/finalize] failed to remove raw upload ${body.storagePath}: ${removeErr.message}`,
+      );
+    }
+
     // Quota increment (combined size of both variants)
     const totalBytes = variants.at1600w.byteLength + variants.at800w.byteLength;
     await incrementAssetsUsage(communityId, totalBytes);

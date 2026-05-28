@@ -12,15 +12,18 @@ const {
   logAuditEventMock,
   storageDownloadMock,
   storageUploadMock,
+  storageRemoveMock,
   createAdminClientMock,
 } = vi.hoisted(() => {
   const storageDownloadMock = vi.fn();
   const storageUploadMock = vi.fn();
+  const storageRemoveMock = vi.fn();
   const createAdminClientMock = vi.fn(() => ({
     storage: {
       from: vi.fn(() => ({
         download: storageDownloadMock,
         upload: storageUploadMock,
+        remove: storageRemoveMock,
       })),
     },
   }));
@@ -34,6 +37,7 @@ const {
     logAuditEventMock: vi.fn(),
     storageDownloadMock,
     storageUploadMock,
+    storageRemoveMock,
     createAdminClientMock,
   };
 });
@@ -82,6 +86,7 @@ describe('POST /api/v1/site/images/finalize', () => {
       at800w: Buffer.from(new Uint8Array(400)),
     });
     storageUploadMock.mockResolvedValue({ error: null });
+    storageRemoveMock.mockResolvedValue({ data: null, error: null });
     incrementAssetsUsageMock.mockResolvedValue(undefined);
     logAuditEventMock.mockResolvedValue(undefined);
   });
@@ -171,5 +176,19 @@ describe('POST /api/v1/site/images/finalize', () => {
     requireAuthMock.mockRejectedValueOnce(new AppError('unauthorized', 401, 'UNAUTHORIZED'));
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(401);
+  });
+
+  it('removes the raw upload after both variants succeed', async () => {
+    await POST(makeRequest(VALID_BODY));
+    expect(storageRemoveMock).toHaveBeenCalledWith([VALID_BODY.storagePath]);
+  });
+
+  it('still 200s when raw-upload removal fails (best-effort cleanup)', async () => {
+    storageRemoveMock.mockResolvedValueOnce({ data: null, error: new Error('remove failed') });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(200);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

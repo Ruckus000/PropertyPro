@@ -70,6 +70,28 @@ describe('<ImageBlockForm>', () => {
     expect(screen.getByLabelText(/caption/i)).toHaveValue('Nice view');
   });
 
+  it('creates the preview object URL once per file (not on every keystroke)', async () => {
+    const createSpy = global.URL.createObjectURL as unknown as ReturnType<typeof vi.fn>;
+    render(wrap(<ImageBlockForm communityId={42} blockOrder={1} initial={null} />));
+    const fileInput = screen.getByLabelText('Image');
+    const file = new File(['img'], 'test.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(fileInput, file);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    // Type into alt text — should NOT recreate the object URL.
+    await userEvent.type(screen.getByLabelText('Alt text *'), 'a description');
+    expect(createSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('revokes the preview object URL on unmount', async () => {
+    const revokeSpy = global.URL.revokeObjectURL as unknown as ReturnType<typeof vi.fn>;
+    const { unmount } = render(wrap(<ImageBlockForm communityId={42} blockOrder={1} initial={null} />));
+    const fileInput = screen.getByLabelText('Image');
+    const file = new File(['img'], 'test.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(fileInput, file);
+    unmount();
+    expect(revokeSpy).toHaveBeenCalledWith('blob:mock');
+  });
+
   it('displays server error in role=alert', async () => {
     // Provide initial so file gate is satisfied; save call will fail
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

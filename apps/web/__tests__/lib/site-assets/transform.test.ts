@@ -40,4 +40,13 @@ describe('transformSiteImage', () => {
     await expect(transformSiteImage(input, { x: 0, y: 0, width: 0, height: 100 })).rejects.toThrow();
     await expect(transformSiteImage(input, { x: 0, y: 0, width: 100, height: -5 })).rejects.toThrow();
   });
+
+  it('accepts a crop whose unrounded right edge is just past the image edge but rounds to it', async () => {
+    const input = await makeJpegFixture(1600, 900);
+    // Unrounded x+width = 1600.4; the raw-float check would reject this,
+    // but Math.round produces left=0, width=1600 — fits the 1600px source.
+    await expect(
+      transformSiteImage(input, { x: 0.4, y: 0, width: 1599.6, height: 900 }),
+    ).resolves.toBeDefined();
+  });
 });
