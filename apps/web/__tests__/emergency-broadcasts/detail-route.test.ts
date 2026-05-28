@@ -5,18 +5,17 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  resolveEffectiveCommunityIdMock,
   requirePermissionMock,
   getBroadcastWithReportMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
-  resolveEffectiveCommunityIdMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   getBroadcastWithReportMock: vi.fn(),
 }));
@@ -27,10 +26,6 @@ vi.mock('@/lib/api/auth', () => ({
 
 vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
-}));
-
-vi.mock('@/lib/api/tenant-context', () => ({
-  resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
 }));
 
 vi.mock('@/lib/db/access-control', () => ({
@@ -82,7 +77,6 @@ describe('GET /api/v1/emergency-broadcasts/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-admin-1');
-    resolveEffectiveCommunityIdMock.mockReturnValue(42);
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
     requirePermissionMock.mockReturnValue(undefined);
     getBroadcastWithReportMock.mockResolvedValue(REPORT);
@@ -97,6 +91,13 @@ describe('GET /api/v1/emergency-broadcasts/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ data: REPORT });
+    expect(requireAuthenticatedUserIdMock).toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-admin-1');
+    expect(requirePermissionMock).toHaveBeenCalledWith(
+      ADMIN_MEMBERSHIP,
+      'emergency_broadcasts',
+      'read',
+    );
     expect(getBroadcastWithReportMock).toHaveBeenCalledWith(5, 42);
   });
 
@@ -112,6 +113,17 @@ describe('GET /api/v1/emergency-broadcasts/[id]', () => {
     expect(json.error.message).toBe('Broadcast not found');
   });
 
+  it('returns 404 when x-community-id header mismatches query communityId', async () => {
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/emergency-broadcasts/5?communityId=42',
+      { headers: { 'x-community-id': '99' } },
+    );
+
+    const res = await GET(req, routeCtx('5'));
+    expect(res.status).toBe(404);
+    expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+  });
+
   it('returns 401 for unauthenticated requests', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
     const req = new NextRequest(
@@ -123,12 +135,56 @@ describe('GET /api/v1/emergency-broadcasts/[id]', () => {
     expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for invalid params.id before service call', async () => {
+  it('returns 403 when user is not a community member', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError('Not a member'));
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/emergency-broadcasts/5?communityId=42',
+    );
+    const res = await GET(req, routeCtx('5'));
+
+    expect(res.status).toBe(403);
+    expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when emergency_broadcasts read permission is denied', async () => {
+    requirePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError('Permission denied');
+    });
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/emergency-broadcasts/5?communityId=42',
+    );
+    const res = await GET(req, routeCtx('5'));
+
+    expect(res.status).toBe(403);
+    expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when communityId query is missing', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/emergency-broadcasts/5');
+    const res = await GET(req, routeCtx('5'));
+
+    expect(res.status).toBe(400);
+    expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for non-numeric params.id', async () => {
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/emergency-broadcasts/abc?communityId=42',
+    );
+    const res = await GET(req, routeCtx('abc'));
+
+    expect(res.status).toBe(400);
+    expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for zero params.id', async () => {
     const req = new NextRequest(
       'http://localhost:3000/api/v1/emergency-broadcasts/0?communityId=42',
     );
-
     const res = await GET(req, routeCtx('0'));
+
     expect(res.status).toBe(400);
     expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
   });

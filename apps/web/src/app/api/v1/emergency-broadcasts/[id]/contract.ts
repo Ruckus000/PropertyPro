@@ -3,13 +3,14 @@
  *
  * Plan A1 drain #115. Detail + delivery report. Sibling collection drained in #114.
  *
- * Auth surface (preserved verbatim):
- *   params.id (Zod)
- *     → requireAuthenticatedUserId
+ * Auth surface (handler order after runRoute validates params/query):
+ *   requireAuthenticatedUserId
  *     → resolveEffectiveCommunityId(req, query.communityId)
  *     → requireCommunityMembership
  *     → requirePermission('emergency_broadcasts', 'read')
  *     → getBroadcastWithReport
+ *
+ * Invalid params/query return 400 before auth (standard runRoute delta vs legacy).
  *
  * `emergency_broadcasts` IS in `RBAC_RESOURCES`.
  *
