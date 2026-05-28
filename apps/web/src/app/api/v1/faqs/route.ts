@@ -1,21 +1,20 @@
 /**
  * FAQs API
  *
- * GET   /api/v1/faqs?communityId=N  — list all active FAQs for a community
+ * GET   /api/v1/faqs?communityId=N  — paginated visible FAQs for a community
  * POST  /api/v1/faqs                — create a new FAQ (admin only)
  *
+ * Plan A1 drain #104 — both methods migrated to `runRoute(contract, handler)`;
+ * see `./contract.ts` for schemas and auth-chain rationale.
+ *
  * Invariants:
- * - withErrorHandler wrapper (structured errors, request ID)
- * - Tenant isolation via the faq-service (createScopedClient inside)
- * - Auth via requireAuthenticatedUserId + requireCommunityMembership
+ * - Tenant isolation via faq-service (createScopedClient inside)
  * - Lazy-seeds default FAQs on first GET via ensureFaqsExist
- * - Audit log on mutations (route concern, not service concern)
+ * - Audit log on POST mutations (route concern, not service concern)
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -26,81 +25,50 @@ import {
   listVisibleFaqsPage,
 } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { faqsCreateContract, faqsListContract } from './contract';
 
-const communityIdSchema = z.coerce.number().int().positive();
-const listQuerySchema = z.object({
-  cursor: z.string().min(1).max(512).optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
-});
+export const GET = withErrorHandler(
+  runRoute(faqsListContract, async ({ query, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
 
-const postSchema = z.object({
-  communityId: z.number().int().positive(),
-  question: z.string().min(1).max(500),
-  answer: z.string().min(1).max(5000),
-});
+    await ensureFaqsExist(communityId);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const { searchParams } = new URL(req.url);
-  const parsed = communityIdSchema.safeParse(searchParams.get('communityId'));
-  if (!parsed.success) {
-    throw new ValidationError('Invalid or missing communityId');
-  }
+    const result = await listVisibleFaqsPage(communityId, membership.role, {
+      cursor: query.cursor,
+      pageSize: query.pageSize,
+    });
 
-  const communityId = resolveEffectiveCommunityId(req, parsed.data);
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, userId);
+    return { data: result.data, pagination: result.pagination };
+  }),
+);
 
-  const query = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!query.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
+export const POST = withErrorHandler(
+  runRoute(faqsCreateContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const userId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, userId);
 
-  // Lazy-seed default FAQs if none exist
-  await ensureFaqsExist(communityId);
+    if (!membership.isAdmin) {
+      throw new ForbiddenError('Only admins can create FAQs');
+    }
 
-  const result = await listVisibleFaqsPage(communityId, membership.role, {
-    cursor: query.data.cursor,
-    pageSize: query.data.pageSize,
-  });
+    const { row, sortOrder } = await createFaq(communityId, {
+      question: body.question,
+      answer: body.answer,
+    });
 
-  return NextResponse.json({
-    data: {
-      data: result.data,
-      pagination: result.pagination,
-    },
-  });
-});
+    await logAuditEvent({
+      userId,
+      action: 'faq.created',
+      resourceType: 'faq',
+      resourceId: String((row as Record<string, unknown>)?.['id'] ?? 'unknown'),
+      communityId,
+      newValues: { question: body.question, answer: body.answer, sortOrder },
+    });
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const result = postSchema.safeParse(body);
-  if (!result.success) {
-    throw new ValidationError('Invalid FAQ payload');
-  }
-
-  const { question, answer } = result.data;
-  const communityId = resolveEffectiveCommunityId(req, result.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const userId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, userId);
-
-  if (!membership.isAdmin) {
-    throw new ForbiddenError('Only admins can create FAQs');
-  }
-
-  const { row, sortOrder } = await createFaq(communityId, { question, answer });
-
-  await logAuditEvent({
-    userId,
-    action: 'faq.created',
-    resourceType: 'faq',
-    resourceId: String((row as Record<string, unknown>)?.['id'] ?? 'unknown'),
-    communityId,
-    newValues: { question, answer, sortOrder },
-  });
-
-  return NextResponse.json({ data: row });
-});
+    return row;
+  }),
+);
