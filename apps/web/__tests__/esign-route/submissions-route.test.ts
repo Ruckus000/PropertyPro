@@ -8,16 +8,26 @@ import { NextRequest } from 'next/server';
 
 const {
   listSubmissionsMock,
+  createSubmissionMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   requireEsignReadPermissionMock,
-  parseCommunityIdFromQueryMock,
+  requireEsignWritePermissionMock,
+  resolveEffectiveCommunityIdMock,
+  parseCommunityIdFromBodyMock,
+  assertNotDemoGraceMock,
+  requirePlanFeatureMock,
 } = vi.hoisted(() => ({
   listSubmissionsMock: vi.fn(),
+  createSubmissionMock: vi.fn(),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requireEsignReadPermissionMock: vi.fn(),
-  parseCommunityIdFromQueryMock: vi.fn(),
+  requireEsignWritePermissionMock: vi.fn(),
+  resolveEffectiveCommunityIdMock: vi.fn(),
+  parseCommunityIdFromBodyMock: vi.fn(),
+  assertNotDemoGraceMock: vi.fn(),
+  requirePlanFeatureMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -28,53 +38,38 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+vi.mock('@/lib/api/tenant-context', () => ({
+  resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
+}));
+
 vi.mock('@/lib/finance/request', () => ({
-  parseCommunityIdFromQuery: parseCommunityIdFromQueryMock,
-  parseCommunityIdFromBody: vi.fn(),
+  parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
 vi.mock('@/lib/esign/esign-route-helpers', () => ({
   requireEsignReadPermission: requireEsignReadPermissionMock,
-  requireEsignWritePermission: vi.fn(),
+  requireEsignWritePermission: requireEsignWritePermissionMock,
 }));
 
 vi.mock('@/lib/services/esign-service', () => ({
-  createSubmission: vi.fn(),
+  createSubmission: createSubmissionMock,
   listSubmissions: listSubmissionsMock,
 }));
 
 vi.mock('@/lib/middleware/plan-guard', () => ({
-  requirePlanFeature: vi.fn().mockResolvedValue(undefined),
+  requirePlanFeature: requirePlanFeatureMock,
 }));
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
-  assertNotDemoGrace: vi.fn().mockResolvedValue(undefined),
+  assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
-vi.mock('@/lib/api/error-handler', () => ({
-  withErrorHandler: (handler: unknown) => handler,
-}));
-
-vi.mock('@/lib/api/errors', () => ({
-  ValidationError: class ValidationError extends Error {
-    details?: Record<string, unknown>;
-    constructor(msg: string, details?: Record<string, unknown>) {
-      super(msg);
-      this.name = 'ValidationError';
-      this.details = details;
-    }
-  },
-}));
-
-vi.mock('@/lib/api/zod/error-formatter', () => ({
-  formatZodErrors: vi.fn(() => []),
-}));
 
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: vi.fn(() => ({})),
 }));
 
-import { GET } from '../../src/app/api/v1/esign/submissions/route';
+import { GET, POST } from '../../src/app/api/v1/esign/submissions/route';
 
 function makeRequest(url: string) {
   return new NextRequest(new URL(url, 'http://localhost:3000'));
@@ -94,9 +89,13 @@ const membership = {
 beforeEach(() => {
   vi.clearAllMocks();
   requireAuthenticatedUserIdMock.mockResolvedValue('user-staff');
-  parseCommunityIdFromQueryMock.mockReturnValue(COMMUNITY_ID);
+  resolveEffectiveCommunityIdMock.mockReturnValue(COMMUNITY_ID);
+  parseCommunityIdFromBodyMock.mockReturnValue(COMMUNITY_ID);
   requireCommunityMembershipMock.mockResolvedValue(membership);
   requireEsignReadPermissionMock.mockResolvedValue(undefined);
+  requireEsignWritePermissionMock.mockResolvedValue(undefined);
+  assertNotDemoGraceMock.mockResolvedValue(undefined);
+  requirePlanFeatureMock.mockResolvedValue(undefined);
 });
 
 describe('GET /api/v1/esign/submissions', () => {
@@ -123,27 +122,85 @@ describe('GET /api/v1/esign/submissions', () => {
   });
 
   it('rejects an invalid status with ValidationError (400, not 500) — #232 contract', async () => {
-    await expect(
-      GET(makeRequest(`/api/v1/esign/submissions?communityId=${COMMUNITY_ID}&status=garbage`)),
-    ).rejects.toThrow('Invalid status filter');
+    const response = await GET(
+      makeRequest(`/api/v1/esign/submissions?communityId=${COMMUNITY_ID}&status=garbage`),
+    );
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.error.message).toBe('Invalid status filter');
     expect(listSubmissionsMock).not.toHaveBeenCalled();
   });
 
   it('lists all accepted status values in the ValidationError details — #232 contract', async () => {
-    let caught: Error & { details?: { fields?: Array<{ field: string; message: string }> } } | null = null;
-    try {
-      await GET(
-        makeRequest(`/api/v1/esign/submissions?communityId=${COMMUNITY_ID}&status=garbage`),
-      );
-    } catch (err) {
-      caught = err as typeof caught;
-    }
-    expect(caught).toBeInstanceOf(Error);
-    expect(caught?.details?.fields?.[0]?.field).toBe('status');
-    const fieldMessage = caught?.details?.fields?.[0]?.message ?? '';
-    // Spot-check well-known statuses are listed; exact string would over-pin.
+    const response = await GET(
+      makeRequest(`/api/v1/esign/submissions?communityId=${COMMUNITY_ID}&status=garbage`),
+    );
+    const json = await response.json();
+    const fieldMessage = json.error?.details?.fields?.[0]?.message ?? '';
+    expect(json.error?.details?.fields?.[0]?.field).toBe('status');
     for (const s of ['pending', 'processing', 'completed', 'declined', 'expired']) {
       expect(fieldMessage).toMatch(new RegExp(s));
     }
   });
 });
+
+const CREATE_BODY = {
+  communityId: COMMUNITY_ID,
+  templateId: 3,
+  signers: [{
+    email: 'signer@example.com',
+    name: 'Signer',
+    role: 'owner',
+    sortOrder: 0,
+  }],
+  signingOrder: 'parallel' as const,
+  sendEmail: true,
+};
+
+const CREATE_RESULT = {
+  submission: { id: 12, status: 'pending' },
+  signers: [{ id: 1, email: 'signer@example.com' }],
+};
+
+describe('POST /api/v1/esign/submissions', () => {
+  beforeEach(() => {
+    createSubmissionMock.mockResolvedValue(CREATE_RESULT);
+  });
+
+  it('creates submission and returns { data }', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/esign/submissions', {
+      method: 'POST',
+      body: JSON.stringify(CREATE_BODY),
+      headers: { 'content-type': 'application/json', 'x-request-id': 'req-1' },
+    });
+    const response = await POST(req);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toEqual({ data: CREATE_RESULT });
+    expect(assertNotDemoGraceMock).toHaveBeenCalledWith(COMMUNITY_ID);
+    expect(requireEsignWritePermissionMock).toHaveBeenCalledWith(membership);
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(COMMUNITY_ID, 'hasEsign');
+    expect(createSubmissionMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      'user-staff',
+      expect.objectContaining({ templateId: 3, signingOrder: 'parallel' }),
+      'req-1',
+    );
+  });
+
+  it('rejects invalid body via contract validation without calling gates', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/esign/submissions', {
+      method: 'POST',
+      body: JSON.stringify({ communityId: COMMUNITY_ID }),
+      headers: { 'content-type': 'application/json' },
+    });
+    const response = await POST(req);
+    expect(response.status).toBe(400);
+    expect(createSubmissionMock).not.toHaveBeenCalled();
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(requirePlanFeatureMock).not.toHaveBeenCalled();
+  });
+});
+
+
