@@ -1,6 +1,7 @@
 import { defineRoute, z } from '@propertypro/api-contract';
 
 export const listAmenitiesQuerySchema = z.object({
+  communityId: z.coerce.number().int().positive(),
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
@@ -25,7 +26,9 @@ export const createAmenitySchema = z.object({
 export const amenitiesListContract = defineRoute({
   method: 'GET',
   path: '/api/v1/amenities',
-  request: {},
+  request: {
+    query: listAmenitiesQuerySchema,
+  },
   response: z.unknown(),
   paginated: true,
   permission: { resource: 'amenities', action: 'read' },
@@ -34,7 +37,9 @@ export const amenitiesListContract = defineRoute({
 export const amenitiesCreateContract = defineRoute({
   method: 'POST',
   path: '/api/v1/amenities',
-  request: {},
+  request: {
+    body: createAmenitySchema,
+  },
   response: z.unknown(),
   permission: { resource: 'amenities', action: 'write' },
 });

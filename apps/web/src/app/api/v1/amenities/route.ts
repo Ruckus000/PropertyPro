@@ -1,9 +1,8 @@
-import { runRoute } from '@propertypro/api-contract';
+import { isContractValidationError, runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
   requireAmenityAdminWrite,
@@ -17,11 +16,33 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   amenitiesCreateContract,
   amenitiesListContract,
-  createAmenitySchema,
-  listAmenitiesQuerySchema,
 } from './contract';
+type RouteLikeHandler = Parameters<typeof withErrorHandler>[0];
+
+function withAmenityValidationMessages(handler: RouteLikeHandler): RouteLikeHandler {
+  return async (req, context) => {
+    try {
+      return await handler(req, context);
+    } catch (error) {
+      if (isContractValidationError(error)) {
+        if (error.source === 'query') {
+          throw new ValidationError('Invalid amenities query', {
+            fields: error.fields,
+          });
+        }
+        if (error.source === 'body') {
+          throw new ValidationError('Invalid amenity payload', {
+            fields: error.fields,
+          });
+        }
+      }
+      throw error;
+    }
+  };
+}
+
 export const GET = withErrorHandler(
-  runRoute(amenitiesListContract, async ({ req }) => {
+  withAmenityValidationMessages(runRoute(amenitiesListContract, async ({ req, query }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -30,38 +51,17 @@ export const GET = withErrorHandler(
     await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesReadPermission(membership);
 
-    const { searchParams } = new URL(req.url);
-    const parsedQuery = listAmenitiesQuerySchema.safeParse({
-      cursor: searchParams.get('cursor') || undefined,
-      pageSize: searchParams.get('pageSize') || undefined,
-    });
-
-    if (!parsedQuery.success) {
-      throw new ValidationError('Invalid amenities query', {
-        fields: formatZodErrors(parsedQuery.error),
-      });
-    }
-
     return paginateAmenitiesForCommunity(communityId, {
-      cursor: parsedQuery.data.cursor,
-      pageSize: parsedQuery.data.pageSize,
+      cursor: query.cursor,
+      pageSize: query.pageSize,
     });
-  }),
+  })),
 );
 
 export const POST = withErrorHandler(
-  runRoute(amenitiesCreateContract, async ({ req }) => {
+  withAmenityValidationMessages(runRoute(amenitiesCreateContract, async ({ req, body }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = createAmenitySchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid amenity payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = parseCommunityIdFromBody(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -74,14 +74,14 @@ export const POST = withErrorHandler(
       communityId,
       actorUserId,
       {
-        name: parsed.data.name,
-        description: parsed.data.description ?? null,
-        location: parsed.data.location ?? null,
-        capacity: parsed.data.capacity ?? null,
-        isBookable: parsed.data.isBookable,
-        bookingRules: parsed.data.bookingRules,
+        name: body.name,
+        description: body.description ?? null,
+        location: body.location ?? null,
+        capacity: body.capacity ?? null,
+        isBookable: body.isBookable,
+        bookingRules: body.bookingRules,
       },
       req.headers.get('x-request-id'),
     );
-  }),
+  })),
 );
