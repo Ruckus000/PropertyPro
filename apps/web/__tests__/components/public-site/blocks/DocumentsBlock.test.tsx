@@ -113,4 +113,13 @@ describe('<DocumentsBlock>', () => {
     expect(screen.getByText(/No documents available/i)).toBeInTheDocument();
     expect(listDocumentsMock).toHaveBeenCalledWith({ limit: 5, includeCategories: undefined });
   });
+
+  it('falls back gracefully when community.timezone is invalid', async () => {
+    listDocumentsMock.mockResolvedValueOnce([
+      { id: 9, title: 'Doc', description: null, filePath: '42/x.pdf', fileName: 'x.pdf', categoryName: 'rules', createdAt: new Date('2026-01-15T10:00:00Z') },
+    ]);
+    const props = { ...makeProps({ limit: 5, includeCategories: ['rules'] }), community: { ...community, timezone: 'Not/A_Real_Zone' } };
+    const ui = await DocumentsBlock(props);
+    expect(() => render(ui as React.ReactElement)).not.toThrow();
+  });
 });

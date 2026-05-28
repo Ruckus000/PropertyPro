@@ -97,6 +97,15 @@ describe('<MeetingsBlock>', () => {
     warnSpy.mockRestore();
   });
 
+  it('falls back gracefully when community.timezone is invalid', async () => {
+    listMeetingsMock.mockResolvedValueOnce([
+      { id: 9, title: 'X', meetingType: 'board', startsAt: new Date('2026-06-01T15:00:00Z'), endsAt: null, location: 'Y' },
+    ]);
+    const props = { ...makeProps({ limit: 10, timeWindowDays: 30 }), community: { ...community, timezone: 'Not/A_Real_Zone' } };
+    const ui = await MeetingsBlock(props);
+    expect(() => render(ui as React.ReactElement)).not.toThrow();
+  });
+
   it('renders the "When" label for meeting start time', async () => {
     listMeetingsMock.mockResolvedValueOnce([
       {

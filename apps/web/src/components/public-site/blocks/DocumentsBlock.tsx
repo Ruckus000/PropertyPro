@@ -20,12 +20,13 @@ import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader
 import type { BlockRendererProps } from './types';
 
 function formatDate(value: Date, timezone: string): string {
-  return value.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: timezone || 'America/New_York',
-  });
+  const tz = timezone || 'America/New_York';
+  try {
+    return value.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: tz });
+  } catch {
+    // Invalid timezone (legacy DB data); fall back to default.
+    return value.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
+  }
 }
 
 export async function DocumentsBlock(props: BlockRendererProps) {

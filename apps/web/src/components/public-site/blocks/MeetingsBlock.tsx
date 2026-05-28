@@ -14,16 +14,22 @@ import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader
 import type { BlockRendererProps } from './types';
 
 function formatDateTime(value: Date, timezone: string): string {
-  return value.toLocaleString('en-US', {
+  const tz = timezone || 'America/New_York';
+  const opts: Intl.DateTimeFormatOptions = {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    timeZone: timezone || 'America/New_York',
     timeZoneName: 'short',
-  });
+  };
+  try {
+    return value.toLocaleString('en-US', { ...opts, timeZone: tz });
+  } catch {
+    // Invalid timezone (legacy DB data); fall back to default.
+    return value.toLocaleString('en-US', { ...opts, timeZone: 'America/New_York' });
+  }
 }
 
 /** Capitalises the first letter and replaces underscores with spaces. */
