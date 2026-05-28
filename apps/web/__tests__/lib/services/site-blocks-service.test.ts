@@ -19,6 +19,8 @@ vi.mock('@propertypro/db/filters', () => ({
   desc: vi.fn((col: unknown) => ({ __desc: col })),
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: { col, val } })),
   isNull: vi.fn((col: unknown) => ({ __isNull: col })),
+  isNotNull: vi.fn((col: unknown) => ({ __isNotNull: col })),
+  lt: vi.fn((col: unknown, val: unknown) => ({ __lt: { col, val } })),
   sql: Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: { strings: [...strings], values } }),
     {},
@@ -27,7 +29,7 @@ vi.mock('@propertypro/db/filters', () => ({
 
 // Hoisted so the test file can configure transaction behavior and inspect
 // the tx call surface.
-const { createUnscopedClientMock, txExecuteMock, txSelectMock, txUpdateMock, txInsertMock, txAuditValuesMock } = vi.hoisted(() => {
+const { createUnscopedClientMock, txExecuteMock, txSelectMock, txUpdateMock, txInsertMock, txAuditValuesMock, dbDeleteMock, setDeleteReturning, getDeleteWhereArg } = vi.hoisted(() => {
   const txExecuteMock = vi.fn().mockResolvedValue(undefined);
   const txAuditValuesMock = vi.fn().mockResolvedValue(undefined);
   const txInsertMock = vi.fn(() => ({ values: txAuditValuesMock }));
@@ -68,8 +70,23 @@ const { createUnscopedClientMock, txExecuteMock, txSelectMock, txUpdateMock, txI
     update: txUpdateMock,
     insert: txInsertMock,
   };
+  // .delete() chain on the top-level unscoped client (cleanupSoftDeletedSiteBlocks).
+  // Tests set `dbDeleteReturning` to control the rows returned by .returning().
+  let dbDeleteReturning: unknown[] = [];
+  let dbDeleteWhereArg: unknown = undefined;
+  const dbDeleteMock = vi.fn(() => {
+    const chain: Record<string, unknown> = {};
+    chain.where = vi.fn((w: unknown) => {
+      dbDeleteWhereArg = w;
+      return chain;
+    });
+    chain.returning = vi.fn(() => Promise.resolve(dbDeleteReturning));
+    return chain;
+  });
+
   const createUnscopedClientMock = vi.fn(() => ({
     transaction: async (cb: (t: typeof tx) => unknown) => cb(tx),
+    delete: dbDeleteMock,
   }));
 
   return {
@@ -79,9 +96,12 @@ const { createUnscopedClientMock, txExecuteMock, txSelectMock, txUpdateMock, txI
     txUpdateMock,
     txInsertMock,
     txAuditValuesMock,
+    dbDeleteMock,
     // Test-only setters for the chain mocks.
     setSelectRows: (rows: unknown[]) => { txSelectRows = rows; },
     setUpdateReturning: (rows: unknown[]) => { txUpdateReturning = rows; },
+    setDeleteReturning: (rows: unknown[]) => { dbDeleteReturning = rows; },
+    getDeleteWhereArg: () => dbDeleteWhereArg,
   };
 });
 
@@ -89,7 +109,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
-import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite } from '@/lib/services/site-blocks-service';
+import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks } from '@/lib/services/site-blocks-service';
 import { createScopedClient } from '@propertypro/db';
 import { ConflictError } from '@/lib/api/errors';
 
@@ -422,5 +442,59 @@ describe('publishCommunitySite', () => {
         metadata: expect.objectContaining({ promotedCount: 3, retiredCount: 0 }),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cleanupSoftDeletedSiteBlocks (PR #8d)
+// ---------------------------------------------------------------------------
+
+describe('cleanupSoftDeletedSiteBlocks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setDeleteReturning([]);
+  });
+
+  it('returns the count of rows deleted', async () => {
+    setDeleteReturning([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    const result = await cleanupSoftDeletedSiteBlocks(new Date('2026-06-01T00:00:00Z'));
+    expect(result).toEqual({ deleted: 3 });
+  });
+
+  it('returns 0 when no rows are past the retention window', async () => {
+    setDeleteReturning([]);
+    const result = await cleanupSoftDeletedSiteBlocks(new Date('2026-06-01T00:00:00Z'));
+    expect(result).toEqual({ deleted: 0 });
+  });
+
+  it('issues a single DELETE on siteBlocks', async () => {
+    await cleanupSoftDeletedSiteBlocks(new Date('2026-06-01T00:00:00Z'));
+    expect(dbDeleteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('predicate filters by deletedAt IS NOT NULL AND deletedAt < (now - 30 days)', async () => {
+    const now = new Date('2026-06-01T00:00:00Z');
+    await cleanupSoftDeletedSiteBlocks(now);
+    const where = getDeleteWhereArg() as { __and: Array<{ __isNotNull?: unknown; __lt?: { val: Date } }> };
+    expect(where).toHaveProperty('__and');
+    expect(where.__and).toHaveLength(2);
+    // First clause: isNotNull(deletedAt)
+    expect(where.__and[0]).toHaveProperty('__isNotNull');
+    // Second clause: lt(deletedAt, cutoff)
+    const ltClause = where.__and[1];
+    expect(ltClause).toHaveProperty('__lt');
+    const cutoff = ltClause.__lt!.val;
+    expect(cutoff).toBeInstanceOf(Date);
+    // 30 days = 2592000000 ms
+    expect(now.getTime() - cutoff.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
+  });
+
+  it('respects a custom retentionDays argument', async () => {
+    const now = new Date('2026-06-01T00:00:00Z');
+    await cleanupSoftDeletedSiteBlocks(now, 7);
+    const where = getDeleteWhereArg() as { __and: Array<{ __lt?: { val: Date } }> };
+    const ltClause = where.__and[1];
+    const cutoff = ltClause.__lt!.val;
+    expect(now.getTime() - cutoff.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });

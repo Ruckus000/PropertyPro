@@ -25,7 +25,7 @@ import {
   siteBlocks,
   type AuditAction,
 } from '@propertypro/db';
-import { and, desc, eq, isNull, sql } from '@propertypro/db/filters';
+import { and, desc, eq, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies pm_admin + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import type { HeroBlockContent } from '@propertypro/shared';
@@ -326,6 +326,44 @@ export interface UpsertPublishedHeroInput {
   communityId: number;
   actorUserId: string;
   content: HeroBlockContent;
+}
+
+// ---------------------------------------------------------------------------
+// Soft-delete cleanup (PR #8d — spec §2.7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Hard-deletes `site_blocks` rows whose `deleted_at` is older than
+ * `retentionDays`. Cross-tenant by design — runs from the daily
+ * account-lifecycle cron. Returns the number of rows deleted.
+ *
+ * The publish transaction (publishCommunitySite) soft-deletes the
+ * previously-published row set so the old content survives long enough for
+ * accidental-publish recovery. Spec §2.7 sets the retention window at 30
+ * days; this cleanup completes the lifecycle.
+ *
+ * AUTHZ: caller (the cron route) verifies the cron secret. This function
+ * uses createUnscopedClient (already allowlisted for this file) because the
+ * sweep is intentionally cross-community.
+ */
+export async function cleanupSoftDeletedSiteBlocks(
+  now: Date,
+  retentionDays: number = 30,
+): Promise<{ deleted: number }> {
+  const db = createUnscopedClient();
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+
+  const deleted = await db
+    .delete(siteBlocks)
+    .where(
+      and(
+        isNotNull(siteBlocks.deletedAt),
+        lt(siteBlocks.deletedAt, cutoff),
+      ),
+    )
+    .returning({ id: siteBlocks.id });
+
+  return { deleted: deleted.length };
 }
 
 /**
