@@ -19,17 +19,15 @@
  * has its own service path (`listMyPackagesForCommunity`) that filters out
  * `picked_up` entries, and the resident-facing UI relies on the flat shape.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
+import type { NextRequest } from 'next/server';
 import { createScopedClient } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError, ForbiddenError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   isResidentRole,
   requireActorUnitIds,
@@ -41,136 +39,83 @@ import {
 import {
   createPackageForCommunity,
   paginatePackageLog,
-  type PackageLogStatus,
 } from '@/lib/services/package-visitor-service';
 import { resolveUnitIdByLabel } from '@/lib/services/units-lookup';
+import { packagesCreateContract, packagesListContract } from './contract';
 
-const createPackageSchema = z.object({
-  communityId: z.number().int().positive(),
-  unitNumber: z.string().trim().min(1).max(100),
-  recipientName: z.string().trim().min(1).max(240),
-  carrier: z.string().trim().min(1).max(120),
-  trackingNumber: z.string().trim().max(240).nullable().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
-});
+export const GET = withErrorHandler(
+  runRoute(packagesListContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromQuery(req as NextRequest);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-const packageStatusSchema = z.enum(['received', 'notified', 'picked_up']);
+    await requirePackageLoggingEnabled(membership);
+    requirePackagesReadPermission(membership);
 
-const listQuerySchema = z.object({
-  cursor: z.string().min(1).max(256).optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
-});
+    const status = query.status;
+    const unitId = query.unitId;
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    const scoped = createScopedClient(communityId);
 
-  await requirePackageLoggingEnabled(membership);
-  requirePackagesReadPermission(membership);
+    let allowedUnitIds: number[] | undefined;
+    if (isResidentRole(membership.role)) {
+      allowedUnitIds = await requireActorUnitIds(scoped, actorUserId);
 
-  const { searchParams } = new URL(req.url);
-  const rawStatus = searchParams.get('status');
-  const rawUnitId = searchParams.get('unitId');
-
-  const statusParsed = rawStatus ? packageStatusSchema.safeParse(rawStatus) : null;
-  if (rawStatus && !statusParsed?.success) {
-    throw new ValidationError('Invalid package status filter', {
-      fields: [{
-        field: 'status',
-        message: 'status must be one of received, notified, picked_up',
-      }],
-    });
-  }
-
-  const unitId = rawUnitId ? parsePositiveInt(rawUnitId, 'unitId') : undefined;
-  const status = statusParsed?.success
-    ? (statusParsed.data as PackageLogStatus)
-    : undefined;
-
-  const scoped = createScopedClient(communityId);
-
-  let allowedUnitIds: number[] | undefined;
-  if (isResidentRole(membership.role)) {
-    allowedUnitIds = await requireActorUnitIds(scoped, actorUserId);
-
-    if (unitId !== undefined && !allowedUnitIds.includes(unitId)) {
-      throw new ForbiddenError('You can only view packages for your own unit');
+      if (unitId !== undefined && !allowedUnitIds.includes(unitId)) {
+        throw new ForbiddenError('You can only view packages for your own unit');
+      }
     }
-  }
 
-  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
-  // are treated as missing rather than passed to Zod, which would 400 on the
-  // `min(1)` / `positive()` constraints.
-  const parsedQuery = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
+    const result = await paginatePackageLog({
+      communityId,
+      cursor: query.cursor,
+      pageSize: query.pageSize,
+      status,
+      unitId,
+      allowedUnitIds,
+    });
 
-  const result = await paginatePackageLog({
-    communityId,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-    status,
-    unitId,
-    allowedUnitIds,
-  });
-
-  return NextResponse.json({
-    data: {
+    return {
       data: result.data,
       pagination: result.pagination,
-    },
-  });
-});
+    };
+  }),
+);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = createPackageSchema.safeParse(body);
+export const POST = withErrorHandler(
+  runRoute(packagesCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromBody(req as NextRequest, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid package payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
+    await requirePackageLoggingEnabled(membership);
+    requirePackagesWritePermission(membership);
+    requireStaffOperator(membership);
 
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    const resolution = await resolveUnitIdByLabel(communityId, body.unitNumber);
+    if (resolution.kind === 'ambiguous') {
+      throw new ValidationError(
+        `Multiple units share "${body.unitNumber}". Contact your administrator to resolve duplicates.`,
+      );
+    }
+    if (resolution.kind !== 'resolved') {
+      throw new ValidationError(
+        `No unit found with number "${body.unitNumber}". Please check the unit number and try again.`,
+      );
+    }
 
-  await requirePackageLoggingEnabled(membership);
-  requirePackagesWritePermission(membership);
-  requireStaffOperator(membership);
-
-  const resolution = await resolveUnitIdByLabel(communityId, parsed.data.unitNumber);
-  if (resolution.kind === 'ambiguous') {
-    throw new ValidationError(
-      `Multiple units share "${parsed.data.unitNumber}". Contact your administrator to resolve duplicates.`,
+    return await createPackageForCommunity(
+      communityId,
+      actorUserId,
+      {
+        unitId: resolution.unitId,
+        recipientName: body.recipientName,
+        carrier: body.carrier,
+        trackingNumber: body.trackingNumber ?? null,
+        notes: body.notes ?? null,
+      },
+      req.headers.get('x-request-id'),
     );
-  }
-  if (resolution.kind !== 'resolved') {
-    throw new ValidationError(
-      `No unit found with number "${parsed.data.unitNumber}". Please check the unit number and try again.`,
-    );
-  }
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await createPackageForCommunity(
-    communityId,
-    actorUserId,
-    {
-      unitId: resolution.unitId,
-      recipientName: parsed.data.recipientName,
-      carrier: parsed.data.carrier,
-      trackingNumber: parsed.data.trackingNumber ?? null,
-      notes: parsed.data.notes ?? null,
-    },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+  }),
+);
