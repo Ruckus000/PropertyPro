@@ -133,7 +133,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/export/route.ts',
   'apps/web/src/app/api/v1/finance/export/csv/route.ts',
   'apps/web/src/app/api/v1/finance/export/statement/route.ts',
-  'apps/web/src/app/api/v1/forum/threads/[id]/route.ts',
   'apps/web/src/app/api/v1/import-residents/route.ts',
   'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts',
   'apps/web/src/app/api/v1/internal/assessment-overdue/route.ts',
