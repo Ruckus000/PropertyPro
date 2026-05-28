@@ -72,7 +72,6 @@ const ADMIN_MEMBERSHIP = {
 const COMPLETE_RESULT = {
   provider: 'quickbooks' as const,
   tenantId: 'qbo-tenant',
-  connectedAt: new Date('2026-01-01T00:00:00Z'),
 };
 
 const HAPPY_QUERY =
@@ -109,7 +108,6 @@ describe('GET /api/v1/accounting/callback', () => {
       data: {
         provider: 'quickbooks',
         tenantId: 'qbo-tenant',
-        connectedAt: '2026-01-01T00:00:00.000Z',
       },
     });
 
