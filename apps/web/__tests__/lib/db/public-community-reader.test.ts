@@ -249,23 +249,24 @@ describe('getPublicCommunityScopedReader', () => {
 
   it('listSiteBlocks({ includeDrafts: true }) returns draft rows when no published twin exists', async () => {
     queueQueryResults([
-      { id: 7, blockType: 'docs', blockOrder: 2, content: { v: 'draft-only' }, isDraft: true },
+      { id: 7, blockType: 'docs', blockOrder: 2, content: { v: 'draft-only' }, isDraft: true, publishedAt: null },
     ]);
     const reader = getPublicCommunityScopedReader(42);
     const results = await reader.listSiteBlocks({ includeDrafts: true });
     expect(results).toEqual([
-      { id: 7, blockType: 'docs', blockOrder: 2, content: { v: 'draft-only' } },
+      { id: 7, blockType: 'docs', blockOrder: 2, content: { v: 'draft-only' }, isDraft: true, publishedAt: null },
     ]);
   });
 
   it('listSiteBlocks default returns rows unchanged when no draft option supplied', async () => {
+    const publishedAt = new Date('2026-05-01T00:00:00Z');
     queueQueryResults([
-      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' }, isDraft: false },
+      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' }, isDraft: false, publishedAt },
     ]);
     const reader = getPublicCommunityScopedReader(42);
     const results = await reader.listSiteBlocks();
     expect(results).toEqual([
-      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' } },
+      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' }, isDraft: false, publishedAt },
     ]);
   });
 

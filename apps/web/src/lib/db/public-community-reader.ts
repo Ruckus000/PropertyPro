@@ -43,6 +43,13 @@ export interface PublicSiteBlock {
   blockType: string;
   blockOrder: number;
   content: unknown;
+  /**
+   * PR #8e — exposed so the PM editor can count drafts and so the public-site
+   * preview can sanity-check what it renders. The public-site Layout
+   * component ignores these fields.
+   */
+  isDraft: boolean;
+  publishedAt: Date | null;
 }
 
 export interface PublicDocument {
@@ -170,6 +177,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           blockOrder: siteBlocks.blockOrder,
           content: siteBlocks.content,
           isDraft: siteBlocks.isDraft,
+          publishedAt: siteBlocks.publishedAt,
         })
         .from(siteBlocks)
         .where(and(...conditions))
@@ -193,6 +201,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             blockType: r.blockType,
             blockOrder: r.blockOrder,
             content: r.content,
+            isDraft: r.isDraft,
+            publishedAt: r.publishedAt,
           }));
       }
 
@@ -201,6 +211,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         blockType: r.blockType,
         blockOrder: r.blockOrder,
         content: r.content,
+        isDraft: r.isDraft,
+        publishedAt: r.publishedAt,
       }));
     },
 

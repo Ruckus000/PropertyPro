@@ -446,6 +446,97 @@ describe('publishCommunitySite', () => {
 });
 
 // ---------------------------------------------------------------------------
+// upsertPublishedBlock — draft semantics (PR #8e)
+// ---------------------------------------------------------------------------
+
+describe('upsertPublishedBlock with isDraft=true (PR #8e)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('inserts a row with is_draft=true and publishedAt=null', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'text',
+      blockOrder: 3,
+      content: { body: 'draft text' },
+      isDraft: true,
+    });
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        isDraft: true,
+        publishedAt: null,
+      }),
+    );
+  });
+
+  it('soft-deletes the existing DRAFT at the same blockOrder (not the published row)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'text',
+      blockOrder: 3,
+      content: { body: 'replacement draft' },
+      isDraft: true,
+    });
+    expect(scopedClient.softDelete).toHaveBeenCalledTimes(1);
+    const whereArg = scopedClient.softDelete.mock.calls[0][1] as { __and: Array<{ __eq?: { col: unknown; val: unknown } }> };
+    // The predicate must filter is_draft = true (replace existing draft only).
+    // The mock siteBlocks is a Symbol so we identify the clause by val type.
+    const isDraftClause = whereArg.__and.find(
+      (c) => c?.__eq && typeof c.__eq.val === 'boolean',
+    );
+    expect(isDraftClause).toBeDefined();
+    expect(isDraftClause!.__eq!.val).toBe(true);
+  });
+
+  it('default (isDraft omitted) still writes published — back-compat', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'text',
+      blockOrder: 3,
+      content: { body: 'still-published' },
+    });
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        isDraft: false,
+      }),
+    );
+    // publishedAt should be a Date (not null) on the published path.
+    const insertCall = scopedClient.insert.mock.calls[0][1] as { publishedAt: unknown };
+    expect(insertCall.publishedAt).toBeInstanceOf(Date);
+  });
+
+  it('audit metadata records the isDraft flag', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    await upsertPublishedBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockType: 'text',
+      blockOrder: 3,
+      content: {},
+      isDraft: true,
+    });
+    expect(txAuditValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ isDraft: true }),
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // cleanupSoftDeletedSiteBlocks (PR #8d)
 // ---------------------------------------------------------------------------
 

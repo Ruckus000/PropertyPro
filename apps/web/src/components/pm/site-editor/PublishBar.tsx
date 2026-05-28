@@ -22,7 +22,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useContentBlocks } from '@/hooks/use-content-blocks';
+import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { useHeroBlock } from '@/hooks/use-hero-block';
 import { usePublishSite, PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
 
@@ -31,21 +31,24 @@ interface Props {
 }
 
 /**
- * Last-modified token sourced from the editor's loaded state. We use the
- * latest publishedAt across blocks; before 8e ships, every block carries
- * the same publishedAt as its create-time. After 8e, this becomes the
- * snapshot the optimistic-concurrency check binds against.
+ * Optimistic-concurrency token: the latest `publishedAt` across the loaded
+ * blocks. The publish endpoint compares this against the row-level lock it
+ * acquires on the community; a mid-flight publish by another PM bumps every
+ * published row's `publishedAt`, the tokens no longer match, and the API
+ * returns 409. Returns null when no published rows exist yet (first publish).
  *
- * Today neither use-content-blocks nor use-hero-block exposes per-row
- * publishedAt, so we send null and let the server skip the concurrency
- * check. That's the documented behavior of expectedPublishedAt=null in
- * publishCommunitySite — used here as a transitional shim.
- *
- * 8e is the right time to thread publishedAt through both hooks; tracked
- * in the slice's TODO.
+ * Only published rows contribute — draft rows carry `publishedAt = null`.
  */
-function deriveExpectedPublishedAt(): string | null {
-  return null;
+function deriveExpectedPublishedAt(blocks: SiteBlockSummary[] | undefined): string | null {
+  if (!blocks) return null;
+  let latest: string | null = null;
+  for (const b of blocks) {
+    if (b.isDraft) continue;
+    if (b.publishedAt && (!latest || b.publishedAt > latest)) {
+      latest = b.publishedAt;
+    }
+  }
+  return latest;
 }
 
 function classifyOutcome(result: PublishSiteResult): string {
@@ -66,12 +69,9 @@ export function PublishBar({ communityId }: Props) {
   const publish = usePublishSite(communityId);
   const [outcome, setOutcome] = useState<string | null>(null);
 
-  // Pending count — until 8e ships, every block is published, so this
-  // is always 0. We still calculate it so the badge UI works the day 8e
-  // lands without another component change.
   const pendingCount = useMemo(() => {
     if (!blocksQ.data) return 0;
-    return blocksQ.data.filter((b) => (b as { isDraft?: boolean }).isDraft === true).length;
+    return blocksQ.data.filter((b) => b.isDraft).length;
   }, [blocksQ.data]);
 
   const isLoading = blocksQ.isLoading || publish.isPending;
@@ -80,7 +80,7 @@ export function PublishBar({ communityId }: Props) {
     setOutcome(null);
     try {
       const result = await publish.mutateAsync({
-        expectedPublishedAt: deriveExpectedPublishedAt(),
+        expectedPublishedAt: deriveExpectedPublishedAt(blocksQ.data),
       });
       setOutcome(classifyOutcome(result));
     } catch (err) {

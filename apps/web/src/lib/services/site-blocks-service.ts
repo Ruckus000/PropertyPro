@@ -79,6 +79,14 @@ export interface UpsertPublishedBlockInput {
   blockType: string;
   blockOrder: number;
   content: unknown;
+  /**
+   * PR #8e — when true, writes a draft row (`is_draft=true, published_at=null`)
+   * instead of writing straight to published. The publish workflow
+   * (`publishCommunitySite`) promotes drafts to published atomically.
+   * Defaults to false to preserve PR #1b/#2 callers; the PM editor's
+   * PATCH routes now pass true.
+   */
+  isDraft?: boolean;
 }
 
 export async function upsertPublishedBlock({
@@ -87,6 +95,7 @@ export async function upsertPublishedBlock({
   blockType,
   blockOrder,
   content,
+  isDraft = false,
 }: UpsertPublishedBlockInput): Promise<void> {
   const db = createUnscopedClient();
 
@@ -95,33 +104,39 @@ export async function upsertPublishedBlock({
     // while keeping the soft-delete + insert + audit-log triple atomic.
     const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
 
-    // Step 1: Soft-delete any existing published row at this blockOrder.
-    //
-    // The predicate intentionally does NOT include blockType. The partial
-    // unique index `site_blocks_community_order_draft_variant_partial` is
-    // keyed on (community_id, block_order, is_draft, template_variant)
+    // Step 1: Soft-delete any existing row of the SAME draft-state at this
+    // blockOrder. The predicate intentionally does NOT include blockType.
+    // The partial unique index
+    // `site_blocks_community_order_draft_variant_partial` is keyed on
+    // (community_id, block_order, is_draft, template_variant)
     // WHERE deleted_at IS NULL — block_type is NOT part of the uniqueness
     // constraint. Filtering soft-delete on block_type would leave a row of
     // a different type at the same order, and the subsequent insert would
-    // collide on the partial unique index → opaque 500. Match the index's
-    // shape so "replace whatever lives at this slot" works regardless of
-    // the previous block's type.
+    // collide on the partial unique index → opaque 500.
+    //
+    // We match on `is_draft = isDraft` (not always false): writing a draft
+    // replaces an existing draft at the same slot but leaves any published
+    // row in place (so the public site keeps serving the last-published
+    // version until publish runs). Symmetrically, writing published
+    // replaces the published row only.
     await scoped.softDelete(
       siteBlocks,
       and(
         eq(siteBlocks.blockOrder, blockOrder),
-        eq(siteBlocks.isDraft, false),
+        eq(siteBlocks.isDraft, isDraft),
         isNull(siteBlocks.deletedAt),
       ),
     );
 
-    // Step 2: Insert the new published row.
+    // Step 2: Insert the new row. Drafts carry no publishedAt (NULL); the
+    // promote-drafts step in publishCommunitySite sets publishedAt = now()
+    // when they become published.
     await scoped.insert(siteBlocks, {
       communityId,
       blockType,
       blockOrder,
-      isDraft: false,
-      publishedAt: new Date(),
+      isDraft,
+      publishedAt: isDraft ? null : new Date(),
       content: content as Record<string, unknown>,
     });
 
@@ -132,7 +147,7 @@ export async function upsertPublishedBlock({
       action: 'update',
       resourceType: 'site_block',
       resourceId: blockType,
-      metadata: { blockType, blockOrder },
+      metadata: { blockType, blockOrder, isDraft },
     });
   });
 }
@@ -323,6 +338,8 @@ class NothingToPublishRollback extends Error {
 // ---------------------------------------------------------------------------
 
 export interface UpsertPublishedHeroInput {
+  /** PR #8e — pass through to upsertPublishedBlock. Defaults to false. */
+  isDraft?: boolean;
   communityId: number;
   actorUserId: string;
   content: HeroBlockContent;
@@ -374,6 +391,7 @@ export async function upsertPublishedHero({
   communityId,
   actorUserId,
   content,
+  isDraft = false,
 }: UpsertPublishedHeroInput): Promise<void> {
   return upsertPublishedBlock({
     communityId,
@@ -381,6 +399,7 @@ export async function upsertPublishedHero({
     blockType: 'hero',
     blockOrder: 1,
     content,
+    isDraft,
   });
 }
 

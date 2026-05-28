@@ -38,9 +38,16 @@ export const GET = withErrorHandler(
   runRoute(heroBlockGetContract, async ({ query, req }) => {
     const { communityId } = await ensurePmAccess(req, query.communityId);
     const reader = getPublicCommunityScopedReader(communityId);
-    const blocks = await reader.listSiteBlocks();
+    // PR #8e — the editor view merges draft + published (draft wins). If a
+    // hero draft exists, return it so the editor form seeds with the draft
+    // content the PM is iterating on.
+    const blocks = await reader.listSiteBlocks({ includeDrafts: true });
     const heroBlock = blocks.find((b) => b.blockType === 'hero');
-    return { hero: heroBlock?.content ?? null };
+    return {
+      hero: heroBlock?.content ?? null,
+      isDraft: heroBlock?.isDraft ?? false,
+      publishedAt: heroBlock?.publishedAt ? heroBlock.publishedAt.toISOString() : null,
+    };
   }),
 );
 
@@ -77,10 +84,14 @@ export const PATCH = withErrorHandler(
       });
     }
 
+    // PR #8e — hero edits write to the draft row at block_order=1. The
+    // public site continues to serve the last-published hero until the PM
+    // clicks Publish.
     await upsertPublishedHero({
       communityId,
       actorUserId: userId,
       content: heroParse.data,
+      isDraft: true,
     });
 
     return { ok: true as const };
