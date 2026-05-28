@@ -16,6 +16,7 @@ import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
 import { ContentSectionsList } from '@/components/pm/site-editor/ContentSectionsList';
+import { PublishBar } from '@/components/pm/site-editor/PublishBar';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -74,7 +75,8 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
           <code className="rounded bg-surface-muted px-1 py-0.5 text-xs">
             [your-community].getpropertypro.com
           </code>
-          . Saving immediately publishes the change in PR #1b — draft/preview/publish lands in PR #8.
+          . Use <strong className="font-medium">Publish Website</strong> at the bottom to make
+          your changes live.
         </p>
       </div>
 
@@ -88,6 +90,8 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
       <div className="mt-8">
         <ContentSectionsList communityId={communityId} />
       </div>
+
+      <PublishBar communityId={communityId} />
     </div>
   );
 }
