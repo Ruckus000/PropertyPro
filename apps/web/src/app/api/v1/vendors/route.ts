@@ -1,11 +1,47 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Vendors API — list + create.
+ *
+ * GET  /api/v1/vendors — paginated vendor directory (Plan A1 drain #96)
+ * POST /api/v1/vendors — create vendor (admin-facing)
+ *
+ * Plan A1 drain #96. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and rationale. Mirrors drain #74
+ * (`vendors/[id]` PATCH) work-orders auth chain.
+ *
+ * GET auth chain (preserved verbatim):
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, query.communityId)
+ *     → requireCommunityMembership
+ *     → requireWorkOrdersEnabled (sync — NOT awaited)
+ *     → requirePlanFeature(communityId, 'hasWorkOrders') (async — awaited)
+ *     → requireWorkOrdersReadPermission (sync)
+ *     → paginateVendorsForCommunity
+ *
+ * POST auth chain (preserved verbatim):
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace
+ *     → requireCommunityMembership
+ *     → requireWorkOrdersEnabled (sync)
+ *     → requirePlanFeature(communityId, 'hasWorkOrders') (async)
+ *     → requireWorkOrdersWritePermission (sync)
+ *     → requireWorkOrderAdminWrite (sync)
+ *     → createVendorForCommunity(..., x-request-id)
+ *
+ * `parseCommunityIdFromQuery` / `parseCommunityIdFromBody` replaced with Zod
+ * contract validation + explicit `resolveEffectiveCommunityId` — same
+ * header/query reconciliation as pre-migration (both helpers delegated).
+ *
+ * Behavior change vs. pre-migration: 400 body for validation failures uses
+ * the canonical `VALIDATION_ERROR` envelope. GET query failures keep message
+ * `Invalid query parameters` with `fields` (runner default). Status codes
+ * unchanged. Success wire shapes byte-identical.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
@@ -14,89 +50,55 @@ import {
   requireWorkOrdersReadPermission,
   requireWorkOrdersWritePermission,
 } from '@/lib/work-orders/common';
-import { createVendorForCommunity, paginateVendorsForCommunity } from '@/lib/services/work-orders-service';
+import {
+  createVendorForCommunity,
+  paginateVendorsForCommunity,
+} from '@/lib/services/work-orders-service';
+import { vendorsCreateContract, vendorsListGetContract } from './contract';
 
-const createVendorSchema = z.object({
-  communityId: z.number().int().positive(),
-  name: z.string().trim().min(1).max(240),
-  company: z.string().trim().max(240).nullable().optional(),
-  phone: z.string().trim().max(64).nullable().optional(),
-  email: z.string().trim().email().max(320).nullable().optional(),
-  specialties: z.array(z.string().trim().min(1).max(120)).max(50).optional(),
-  isActive: z.boolean().optional(),
-});
+export const GET = withErrorHandler(
+  runRoute(vendorsListGetContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-const listVendorsQuerySchema = z.object({
-  cursor: z.string().min(1).max(512).optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
-});
+    requireWorkOrdersEnabled(membership);
+    await requirePlanFeature(communityId, 'hasWorkOrders');
+    requireWorkOrdersReadPermission(membership);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireWorkOrdersEnabled(membership);
-  await requirePlanFeature(communityId, 'hasWorkOrders');
-  requireWorkOrdersReadPermission(membership);
-
-  const { searchParams } = new URL(req.url);
-  const parsedQuery = listVendorsQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters', {
-      fields: formatZodErrors(parsedQuery.error),
+    const result = await paginateVendorsForCommunity(communityId, {
+      cursor: query.cursor,
+      pageSize: query.pageSize,
     });
-  }
 
-  const result = await paginateVendorsForCommunity(communityId, {
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-  });
-  return NextResponse.json({
-    data: {
-      data: result.data,
-      pagination: result.pagination,
-    },
-  });
-});
+    return { data: result.data, pagination: result.pagination };
+  }),
+);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = createVendorSchema.safeParse(body);
+export const POST = withErrorHandler(
+  runRoute(vendorsCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid vendor payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
+    requireWorkOrdersEnabled(membership);
+    await requirePlanFeature(communityId, 'hasWorkOrders');
+    requireWorkOrdersWritePermission(membership);
+    requireWorkOrderAdminWrite(membership);
 
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireWorkOrdersEnabled(membership);
-  await requirePlanFeature(communityId, 'hasWorkOrders');
-  requireWorkOrdersWritePermission(membership);
-  requireWorkOrderAdminWrite(membership);
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await createVendorForCommunity(
-    communityId,
-    actorUserId,
-    {
-      name: parsed.data.name,
-      company: parsed.data.company ?? null,
-      phone: parsed.data.phone ?? null,
-      email: parsed.data.email ?? null,
-      specialties: parsed.data.specialties,
-      isActive: parsed.data.isActive,
-    },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    return createVendorForCommunity(
+      communityId,
+      actorUserId,
+      {
+        name: body.name,
+        company: body.company ?? null,
+        phone: body.phone ?? null,
+        email: body.email ?? null,
+        specialties: body.specialties,
+        isActive: body.isActive,
+      },
+      req.headers.get('x-request-id'),
+    );
+  }),
+);
