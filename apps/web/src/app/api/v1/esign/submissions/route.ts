@@ -1,10 +1,9 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
   requireEsignReadPermission,
@@ -17,27 +16,10 @@ import {
   listSubmissions,
 } from '@/lib/services/esign-service';
 import type { EsignSubmissionStatus } from '@propertypro/shared';
-
-const createSubmissionSchema = z.object({
-  communityId: z.number().int().positive(),
-  templateId: z.number().int().positive(),
-  signers: z.array(
-    z.object({
-      email: z.string().email(),
-      name: z.string().trim().min(1).max(200),
-      role: z.string().trim().min(1),
-      sortOrder: z.number().int().min(0),
-      userId: z.string().uuid().optional(),
-      prefilledFields: z.record(z.string(), z.unknown()).optional(),
-    }),
-  ).min(1).max(50),
-  signingOrder: z.enum(['parallel', 'sequential']),
-  sendEmail: z.boolean(),
-  expiresAt: z.string().datetime().optional(),
-  messageSubject: z.string().trim().max(200).optional(),
-  messageBody: z.string().trim().max(4000).optional(),
-  linkedDocumentId: z.number().int().positive().optional(),
-});
+import {
+  esignSubmissionsCreateContract,
+  esignSubmissionsListContract,
+} from './contract';
 
 const listStatusSchema = z.enum([
   'pending',
@@ -49,72 +31,60 @@ const listStatusSchema = z.enum([
   'cancelled',
 ]);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+export const GET = withErrorHandler(
+  runRoute(esignSubmissionsListContract, async ({ req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromQuery(req);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  await requireEsignReadPermission(membership);
+    await requireEsignReadPermission(membership);
 
-  const { searchParams } = new URL(req.url);
-  const rawStatus = searchParams.get('status');
+    const { searchParams } = new URL(req.url);
+    const rawStatus = searchParams.get('status');
 
-  // Validate enum query params via safeParse + throw new ValidationError so
-  // that invalid client input produces a 400 with a structured error envelope
-  // instead of falling through `withErrorHandler`'s generic 500 + Sentry path.
-  let status: EsignSubmissionStatus | undefined;
-  if (rawStatus) {
-    const parsed = listStatusSchema.safeParse(rawStatus);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid status filter', {
-        fields: [{
-          field: 'status',
-          message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
-        }],
-      });
+    let status: EsignSubmissionStatus | undefined;
+    if (rawStatus) {
+      const parsed = listStatusSchema.safeParse(rawStatus);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid status filter', {
+          fields: [{
+            field: 'status',
+            message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
+          }],
+        });
+      }
+      status = parsed.data as EsignSubmissionStatus;
     }
-    status = parsed.data as EsignSubmissionStatus;
-  }
 
-  const data = await listSubmissions(communityId, { status });
+    return listSubmissions(communityId, { status });
+  }),
+);
 
-  return NextResponse.json({ data });
-});
+export const POST = withErrorHandler(
+  runRoute(esignSubmissionsCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromBody(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parseResult = createSubmissionSchema.safeParse(body);
+    await requireEsignWritePermission(membership);
+    await requirePlanFeature(communityId, 'hasEsign');
 
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid submission payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  await requireEsignWritePermission(membership);
-  await requirePlanFeature(communityId, 'hasEsign');
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await createSubmission(
-    communityId,
-    actorUserId,
-    {
-      templateId: parseResult.data.templateId,
-      signers: parseResult.data.signers,
-      signingOrder: parseResult.data.signingOrder,
-      sendEmail: parseResult.data.sendEmail,
-      expiresAt: parseResult.data.expiresAt,
-      messageSubject: parseResult.data.messageSubject,
-      messageBody: parseResult.data.messageBody,
-      linkedDocumentId: parseResult.data.linkedDocumentId,
-    },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    const requestId = req.headers.get('x-request-id');
+    return createSubmission(
+      communityId,
+      actorUserId,
+      {
+        templateId: body.templateId,
+        signers: body.signers,
+        signingOrder: body.signingOrder,
+        sendEmail: body.sendEmail,
+        expiresAt: body.expiresAt,
+        messageSubject: body.messageSubject,
+        messageBody: body.messageBody,
+        linkedDocumentId: body.linkedDocumentId,
+      },
+      requestId,
+    );
+  }),
+);
