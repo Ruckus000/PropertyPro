@@ -2,7 +2,7 @@
  * Documents table — file records stored in Supabase Storage.
  * Includes full-text search columns (search_text, search_vector).
  */
-import { bigint, bigserial, customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { documentCategories } from './document-categories';
 import { documentSourceTypeEnum, extractionStatusEnum } from './enums';
@@ -52,6 +52,13 @@ export const documents = pgTable(
     extractionError: text('extraction_error'),
     /** Timestamp when text extraction completed */
     extractedAt: timestamp('extracted_at', { withTimezone: true }),
+    /**
+     * Marks a document as visible on the unauthenticated public site.
+     * Default false (secure by default; PMs opt in per document).
+     * Filtered on by public-community-reader.listDocuments and surfaced in
+     * apps/web/src/app/sitemap.ts.
+     */
+    publicAccess: boolean('public_access').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

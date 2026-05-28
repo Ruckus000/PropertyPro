@@ -63,6 +63,12 @@ export interface PublicDocument {
   createdAt: Date;
 }
 
+/** Minimal projection used by sitemap.xml — id + dates only, no PII. */
+export interface PublicSitemapDocument {
+  id: number;
+  updatedAt: Date;
+}
+
 export interface PublicMeeting {
   id: number;
   title: string;
@@ -94,12 +100,21 @@ export interface PublicScopedReader {
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
 
   /**
-   * PR #4 — documents filtered by category name.
+   * Documents filtered by `public_access = true` AND category name.
    *
-   * Returns [] when includeCategories is empty/missing — categories are the
-   * only public-access control (no public_access column on documents yet).
+   * Returns [] when includeCategories is empty/missing — categories narrow
+   * the listing further but are no longer the sole access control (migration
+   * 0007 added the publicAccess boolean as the authoritative gate).
    */
   listDocuments(opts: { limit: number; includeCategories?: string[] }): Promise<PublicDocument[]>;
+
+  /**
+   * Every public-access document for the community, oldest-stable-id-first
+   * (so paginated sitemaps stay consistent across requests). Powers
+   * apps/web/src/app/sitemap.ts. Differs from listDocuments by ignoring the
+   * category filter — sitemap surfaces every public document.
+   */
+  listPublicDocumentsForSitemap(opts: { limit: number }): Promise<PublicSitemapDocument[]>;
 
   /** PR #4 — upcoming meetings within window. */
   listMeetings(opts: { limit: number; timeWindowDays: number }): Promise<PublicMeeting[]>;
@@ -186,9 +201,11 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
     },
 
     async listDocuments(opts) {
-      // PR #4 — categories are the only public-access control on documents
-      // (no public_access column on the documents table yet). Return empty
-      // when no categories are specified so unpublicised docs stay hidden.
+      // Migration 0007 added documents.publicAccess as the authoritative
+      // access boundary. Category selection still narrows the listing per
+      // PM config, but it's an additional filter rather than the sole gate.
+      // Returns [] when no categories are specified (preserves the existing
+      // contract — a DocumentsBlock with no category selection is a no-op).
       if (!opts.includeCategories || opts.includeCategories.length === 0) return [];
       const rows = await db
         .select({
@@ -206,10 +223,35 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           and(
             eq(documents.communityId, communityId),
             isNull(documents.deletedAt),
+            eq(documents.publicAccess, true),
             inArray(documentCategories.name, opts.includeCategories),
           ),
         )
         .orderBy(desc(documents.createdAt))
+        .limit(opts.limit);
+      return rows;
+    },
+
+    async listPublicDocumentsForSitemap(opts) {
+      // Sitemap surface — every public, non-deleted document for the
+      // community, regardless of category. Sorted by id asc so crawlers see
+      // a stable order across requests (createdAt could shift if a document
+      // is reuploaded). Minimal projection — sitemap only needs id + a
+      // lastmod date.
+      const rows = await db
+        .select({
+          id: documents.id,
+          updatedAt: documents.updatedAt,
+        })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.communityId, communityId),
+            isNull(documents.deletedAt),
+            eq(documents.publicAccess, true),
+          ),
+        )
+        .orderBy(asc(documents.id))
         .limit(opts.limit);
       return rows;
     },
