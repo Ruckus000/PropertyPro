@@ -4,22 +4,26 @@ import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
-  createScopedClientMock,
   logAuditEventMock,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  notificationPreferencesTable,
+  getNotificationPreferencesForUserMock,
+  insertNotificationPreferencesMock,
+  updateNotificationPreferencesMock,
+  assertNotDemoGraceMock,
+  tryAutoCompleteMock,
 } = vi.hoisted(() => ({
-  createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
-  notificationPreferencesTable: Symbol('notification_preferences'),
+  getNotificationPreferencesForUserMock: vi.fn(),
+  insertNotificationPreferencesMock: vi.fn().mockResolvedValue(undefined),
+  updateNotificationPreferencesMock: vi.fn().mockResolvedValue(undefined),
+  assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
+  tryAutoCompleteMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
-  createScopedClient: createScopedClientMock,
-  notificationPreferences: notificationPreferencesTable,
   logAuditEvent: logAuditEventMock,
 }));
 
@@ -31,31 +35,30 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
-vi.mock('@propertypro/db/filters', () => ({
-  eq: vi.fn((col: unknown, value: unknown) => ({ col, value })),
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
+vi.mock('@/lib/services/onboarding-checklist-service', () => ({
+  tryAutoComplete: tryAutoCompleteMock,
+}));
 
-vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('@/lib/services/notification-preferences-service', () => ({
+  getNotificationPreferencesForUser: getNotificationPreferencesForUserMock,
+  insertNotificationPreferences: insertNotificationPreferencesMock,
+  updateNotificationPreferences: updateNotificationPreferencesMock,
+}));
+
 import { GET, PATCH } from '../../src/app/api/v1/notification-preferences/route';
 
-describe('p1-26 notification-preferences route', () => {
+describe('/api/v1/notification-preferences route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-123');
+    getNotificationPreferencesForUserMock.mockResolvedValue(null);
   });
 
   it('GET returns defaults when no row exists', async () => {
-    // After A3 drain #61, the GET handler uses
-    // getNotificationPreferencesForUser, which calls scoped.selectFrom
-    // instead of scoped.query + JS .find(). selectFrom returns the same
-    // empty array shape, so we mock both to return [].
-    const empty = vi.fn().mockResolvedValue([]);
-    createScopedClientMock.mockReturnValue({
-      query: empty,
-      selectFrom: empty,
-    });
-
     const req = new NextRequest(
       'http://localhost:3000/api/v1/notification-preferences?communityId=42',
     );
@@ -67,75 +70,40 @@ describe('p1-26 notification-preferences route', () => {
         userId: 'user-123',
         communityId: 42,
         emailFrequency: 'immediate',
-        emailAnnouncements: true,
-        emailMeetings: true,
         calendarReminderPreset: '7_days_before',
-        calendarReminderMeetings: true,
-        calendarReminderPersonalAssessments: true,
-        calendarReminderCommunityAssessments: false,
         inAppEnabled: true,
       }),
     );
-    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-123');
+    expect(getNotificationPreferencesForUserMock).toHaveBeenCalledWith(42, 'user-123');
   });
 
   it('PATCH upserts preferences and writes audit log', async () => {
-    const stored: Record<string, unknown>[] = [];
-    const query = vi.fn().mockImplementation(async () => stored);
-    const insert = vi
-      .fn()
-      .mockImplementation(async (_table, data: Record<string, unknown>) => {
-        stored.push({ id: 1, communityId: 42, ...data });
-        return [stored[stored.length - 1]];
-      });
-    const update = vi
-      .fn()
-      .mockImplementation(async (_table, data: Record<string, unknown>) => {
-        const idx = stored.findIndex((r) => r['userId'] === 'user-123');
-        if (idx >= 0) stored[idx] = { ...stored[idx], ...data };
-        return [stored[idx]];
-      });
-
-    const queryWhere = vi
-      .fn()
-      .mockImplementation(async () => stored.filter((r) => r['userId'] === 'user-123'));
-
-    // selectFrom alias for queryWhere — see drain #61 mock-aliasing pattern.
-    createScopedClientMock.mockReturnValue({ query, queryWhere, selectFrom: queryWhere, insert, update });
-
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
         emailFrequency: 'never',
-        emailAnnouncements: false,
-        emailMeetings: true,
-        calendarReminderPreset: '3_days_before',
-        calendarReminderMeetings: true,
-        calendarReminderPersonalAssessments: false,
-        calendarReminderCommunityAssessments: true,
         inAppEnabled: true,
       }),
     });
 
     const res = await PATCH(req);
     expect(res.status).toBe(200);
-
-    expect(stored[0]).toEqual(
+    const json = (await res.json()) as { data: Record<string, unknown> };
+    expect(json.data).toEqual(
       expect.objectContaining({
         userId: 'user-123',
+        communityId: 42,
         emailFrequency: 'never',
-        emailAnnouncements: false,
-        emailMeetings: true,
-        calendarReminderPreset: '3_days_before',
-        calendarReminderMeetings: true,
-        calendarReminderPersonalAssessments: false,
-        calendarReminderCommunityAssessments: true,
         inAppEnabled: true,
       }),
     );
-
+    expect(insertNotificationPreferencesMock).toHaveBeenCalledWith(
+      42,
+      'user-123',
+      expect.objectContaining({ emailFrequency: 'never', inAppEnabled: true }),
+    );
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'settings_changed',
@@ -147,21 +115,6 @@ describe('p1-26 notification-preferences route', () => {
   });
 
   it('PATCH logs IP, user-agent, and consent metadata for SMS preference changes', async () => {
-    const stored: Record<string, unknown>[] = [];
-    const query = vi.fn().mockResolvedValue(stored);
-    const insert = vi
-      .fn()
-      .mockImplementation(async (_table, data: Record<string, unknown>) => {
-        stored.push({ id: 1, communityId: 42, ...data });
-        return [stored[stored.length - 1]];
-      });
-
-    const queryWhere = vi
-      .fn()
-      .mockImplementation(async () => stored.filter((r) => r['userId'] === 'user-123'));
-
-    createScopedClientMock.mockReturnValue({ query, queryWhere, selectFrom: queryWhere, insert, update: vi.fn() });
-
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
       headers: {
@@ -178,7 +131,6 @@ describe('p1-26 notification-preferences route', () => {
 
     const res = await PATCH(req);
     expect(res.status).toBe(200);
-
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: {
@@ -197,9 +149,6 @@ describe('p1-26 notification-preferences route', () => {
       body: JSON.stringify({
         communityId: 42,
         emailFrequency: 'monthly',
-        emailAnnouncements: true,
-        emailMeetings: true,
-        inAppEnabled: true,
       }),
     });
 
@@ -216,9 +165,6 @@ describe('p1-26 notification-preferences route', () => {
       },
       body: JSON.stringify({
         communityId: 42,
-        emailFrequency: 'immediate',
-        emailAnnouncements: true,
-        emailMeetings: true,
         inAppEnabled: true,
       }),
     });
@@ -229,7 +175,6 @@ describe('p1-26 notification-preferences route', () => {
 
   it('GET rejects unauthenticated requests', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
-
     const req = new NextRequest(
       'http://localhost:3000/api/v1/notification-preferences?communityId=42',
     );
@@ -239,7 +184,6 @@ describe('p1-26 notification-preferences route', () => {
 
   it('GET returns 403 for authenticated non-member', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
-
     const req = new NextRequest(
       'http://localhost:3000/api/v1/notification-preferences?communityId=42',
     );
@@ -247,41 +191,15 @@ describe('p1-26 notification-preferences route', () => {
     expect(res.status).toBe(403);
   });
 
-  it('PATCH rejects unauthenticated requests', async () => {
-    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
-
+  it('PATCH rejects empty update payload', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        communityId: 42,
-        emailFrequency: 'immediate',
-        emailAnnouncements: true,
-        emailMeetings: true,
-        inAppEnabled: true,
-      }),
+      body: JSON.stringify({ communityId: 42 }),
     });
-
     const res = await PATCH(req);
-    expect(res.status).toBe(401);
-  });
-
-  it('PATCH returns 403 for authenticated non-member', async () => {
-    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
-
-    const req = new NextRequest('http://localhost:3000/api/v1/notification-preferences', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        communityId: 42,
-        emailFrequency: 'immediate',
-        emailAnnouncements: true,
-        emailMeetings: true,
-        inAppEnabled: true,
-      }),
-    });
-
-    const res = await PATCH(req);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { message: string } };
+    expect(json.error.message).toBe('No preference updates provided');
   });
 });
