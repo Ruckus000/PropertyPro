@@ -7,7 +7,6 @@ import {
   BarChart3,
   LayoutGrid,
   MonitorPlay,
-  FileCode2,
   Settings,
   LogOut,
   ChevronsLeft,
@@ -27,7 +26,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/clients', label: 'Clients', icon: LayoutGrid },
   { href: '/deletion-requests', label: 'Deletion Requests', icon: Trash2, badge: true },
   { href: '/demo', label: 'Demos', icon: MonitorPlay },
-  { href: '/templates', label: 'Templates', icon: FileCode2 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
