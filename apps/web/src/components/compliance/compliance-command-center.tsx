@@ -154,7 +154,6 @@ export function ComplianceCommandCenter({
         title="Compliance"
         description="Records and statutory requirements"
         actions={actions}
-        hideHelpButton
       />
 
       {summary.attentionCount > 0 && (
