@@ -292,9 +292,11 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
   },
   {
     id: 'branding',
-    label: 'Branding',
+    label: 'Website',
     icon: Paintbrush,
-    href: () => '/pm/settings/branding',
+    // PR #9c — branding settings moved into the site editor's Branding tab.
+    // /pm/settings/branding is a permanent redirect to this destination.
+    href: () => '/pm/settings/website',
     matchPrefixes: ['/pm/settings'],
   },
   {
@@ -504,7 +506,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   residents: { title: 'Residents', subtitle: 'Manage community members' },
   units: { title: 'Units', subtitle: 'Manage community units' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
-  branding: { title: 'Branding', subtitle: 'White-label settings' },
+  branding: { title: 'Website', subtitle: 'Public site editor + branding' },
   leases: { title: 'Leases', subtitle: 'Manage unit leases' },
   packages: { title: 'Packages', subtitle: 'Track package deliveries' },
   visitors: { title: 'Visitors', subtitle: 'Manage visitor access' },

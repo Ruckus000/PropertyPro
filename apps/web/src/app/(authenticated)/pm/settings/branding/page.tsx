@@ -1,21 +1,21 @@
+// breadcrumbs:exempt — redirect-only page
 /**
- * P3-47: PM white-label branding settings page.
+ * PR #9c — permanent redirect from the legacy branding-only page to the
+ * site editor's Branding tab.
  *
- * Route: /pm/settings/branding?communityId=X
- * Auth: property_manager_admin required (redirects to community list on failure).
+ * The standalone /pm/settings/branding route was the multi-community
+ * BrandingForm + BrandingTable page from Phase 2. Per spec §4.2 (the
+ * 5-tab site editor), branding controls now live inside
+ * /pm/settings/website?communityId=X#branding. The #branding anchor
+ * scrolls to the Branding tab once the 5-tab layout lands in a later
+ * slice — until then the redirect just lands the user on the site
+ * editor for that community, which is the closest current equivalent.
  *
- * Shows a multi-community BrandingTable overview above the single-community
- * BrandingForm for the selected community.
+ * communityId is preserved across the redirect when present so PMs
+ * coming from cached deep-links don't drop into "Select a Community."
  */
-import { redirect } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { getBrandingForCommunity } from '@/lib/api/branding';
-// AUTHZ: Phase 2C: Branding settings — communities is root tenant table
-import { findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
-import { BrandingForm } from '@/components/pm/BrandingForm';
-import { BrandingTable } from '@/components/pm/BrandingTable';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -24,80 +24,9 @@ interface PageProps {
 export default async function BrandingSettingsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const rawId = Number(params['communityId']);
-
-  if (!Number.isInteger(rawId) || rawId <= 0) {
-    return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-content">Select a Community</h1>
-        <p className="mt-2 text-sm text-content-secondary">
-          Choose a community from the Communities list to manage its branding.
-        </p>
-        <a
-          href="/pm/dashboard/communities"
-          className="mt-6 inline-block rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
-        >
-          Go to Communities
-        </a>
-      </main>
-    );
-  }
-
-  const communityId = rawId;
-  let userId: string;
-
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
-
-  const membership = await requireCommunityMembership(communityId, userId!);
-  if (membership.role !== 'pm_admin') {
-    redirect('/pm/dashboard/communities?reason=invalid-selection');
-  }
-
-  // Fetch branding for the current community + all managed communities
-  const [branding, managedCommunities] = await Promise.all([
-    getBrandingForCommunity(communityId),
-    findManagedCommunitiesPortfolioUnscoped(userId!),
-  ]);
-
-  // Load branding for each managed community
-  const communitiesWithBranding = await Promise.all(
-    managedCommunities.map(async (c) => ({
-      communityId: c.communityId,
-      communityName: c.communityName,
-      branding: await getBrandingForCommunity(c.communityId),
-    })),
-  );
-
-  return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-content">Branding Settings</h1>
-        <p className="mt-1 text-sm text-content-secondary">
-          Manage branding across all your communities or customize a specific community below.
-        </p>
-      </div>
-
-      {/* Multi-community branding overview */}
-      {communitiesWithBranding.length > 1 && (
-        <div className="mb-10">
-          <h2 className="mb-3 text-lg font-medium text-content">All Communities</h2>
-          <BrandingTable
-            currentCommunityId={communityId}
-            communities={communitiesWithBranding}
-          />
-        </div>
-      )}
-
-      {/* Single-community branding form */}
-      <div>
-        <h2 className="mb-3 text-lg font-medium text-content">
-          Edit Branding
-        </h2>
-        <BrandingForm communityId={communityId} initialBranding={branding ?? {}} />
-      </div>
-    </div>
-  );
+  const target =
+    Number.isInteger(rawId) && rawId > 0
+      ? `/pm/settings/website?communityId=${rawId}#branding`
+      : `/pm/settings/website#branding`;
+  permanentRedirect(target);
 }
