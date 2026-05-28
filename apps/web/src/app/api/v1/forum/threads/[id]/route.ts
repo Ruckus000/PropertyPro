@@ -37,6 +37,8 @@ export const GET = withErrorHandler(
 
 export const PATCH = withErrorHandler(
   runRoute(forumThreadUpdateContract, async ({ params, body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+
     if (
       body.title === undefined
       && body.body === undefined
@@ -45,8 +47,6 @@ export const PATCH = withErrorHandler(
     ) {
       throw new ValidationError('At least one field must be provided for update');
     }
-
-    const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromBody(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);

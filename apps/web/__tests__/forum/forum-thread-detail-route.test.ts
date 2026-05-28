@@ -160,6 +160,19 @@ describe('PATCH /api/v1/forum/threads/[id]', () => {
     );
   });
 
+  it('returns 401 for unauthenticated PATCH before empty-field check', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+    const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7', {
+      method: 'PATCH',
+      body: JSON.stringify({ communityId: 42 }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await PATCH(req, routeCtx('7'));
+    expect(res.status).toBe(401);
+    expect(updateForumThreadForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('rejects empty PATCH body fields', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7', {
       method: 'PATCH',
