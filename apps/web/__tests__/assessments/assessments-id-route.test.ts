@@ -472,6 +472,15 @@ describe('DELETE /api/v1/assessments/[id]', () => {
     expect(deleteAssessmentForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 VALIDATION_ERROR when params.id is zero', async () => {
+    const res = await DELETE(jsonDelete('0', '?communityId=42'), routeCtx('0'));
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(deleteAssessmentForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 400 VALIDATION_ERROR when communityId query is missing', async () => {
     const res = await DELETE(jsonDelete(7, ''), routeCtx('7'));
 
