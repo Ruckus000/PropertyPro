@@ -200,6 +200,75 @@ describe('getPublicCommunityScopedReader', () => {
     expect(communityIdClause.__eq.val).toBe(99);
   });
 
+  // ---------------------------------------------------------------------------
+  // PR #8c — preview workflow: listSiteBlocks({ includeDrafts: true })
+  // ---------------------------------------------------------------------------
+
+  it('listSiteBlocks default WHERE includes the is_draft=false predicate', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listSiteBlocks();
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // 4 predicates: communityId, templateVariant, deletedAt isNull, isDraft=false
+    expect(whereCall.__and).toHaveLength(4);
+    // The is_draft=false predicate is appended last
+    const isDraftClause = whereCall.__and[3];
+    expect(isDraftClause).toHaveProperty('__eq');
+    expect(isDraftClause.__eq.col).toBe('siteBlocks.isDraft');
+    expect(isDraftClause.__eq.val).toBe(false);
+  });
+
+  it('listSiteBlocks({ includeDrafts: true }) drops the is_draft predicate', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listSiteBlocks({ includeDrafts: true });
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // Only 3 predicates: communityId, templateVariant, deletedAt isNull
+    expect(whereCall.__and).toHaveLength(3);
+    // None of the remaining predicates target isDraft
+    const targetsIsDraft = whereCall.__and.some(
+      (c: { __eq?: { col: unknown } }) => c?.__eq?.col === 'siteBlocks.isDraft',
+    );
+    expect(targetsIsDraft).toBe(false);
+  });
+
+  it('listSiteBlocks({ includeDrafts: true }) prefers draft rows over published at the same block_order', async () => {
+    queueQueryResults([
+      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'published' }, isDraft: false },
+      { id: 2, blockType: 'hero', blockOrder: 0, content: { v: 'draft' }, isDraft: true },
+      { id: 3, blockType: 'docs', blockOrder: 1, content: { v: 'published-1' }, isDraft: false },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks({ includeDrafts: true });
+    // Expect block_order 0 returned ONCE (draft wins), block_order 1 returned as published
+    expect(results).toHaveLength(2);
+    const order0 = results.find((r) => r.blockOrder === 0);
+    expect(order0?.id).toBe(2);
+    expect(order0?.content).toEqual({ v: 'draft' });
+    const order1 = results.find((r) => r.blockOrder === 1);
+    expect(order1?.id).toBe(3);
+  });
+
+  it('listSiteBlocks({ includeDrafts: true }) returns draft rows when no published twin exists', async () => {
+    queueQueryResults([
+      { id: 7, blockType: 'docs', blockOrder: 2, content: { v: 'draft-only' }, isDraft: true },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks({ includeDrafts: true });
+    expect(results).toEqual([
+      { id: 7, blockType: 'docs', blockOrder: 2, content: { v: 'draft-only' } },
+    ]);
+  });
+
+  it('listSiteBlocks default returns rows unchanged when no draft option supplied', async () => {
+    queueQueryResults([
+      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' }, isDraft: false },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks();
+    expect(results).toEqual([
+      { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' } },
+    ]);
+  });
+
   it('listAnnouncements returns mapped rows with the expected shape', async () => {
     const fakeRow = {
       id: 1,

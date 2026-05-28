@@ -93,8 +93,16 @@ export interface PublicContactInfo {
 export interface PublicScopedReader {
   readonly communityId: number;
 
-  /** Returns the community's published, non-deleted site blocks in order. */
-  listSiteBlocks(): Promise<PublicSiteBlock[]>;
+  /**
+   * Returns the community's non-deleted site blocks in order.
+   *
+   * Default: published only (is_draft=false). With `includeDrafts: true`
+   * (preview mode, PR #8c) drafts are included and a draft row at a given
+   * block_order shadows the published row at the same slot. The partial
+   * unique index permits one draft + one published per slot to coexist;
+   * the dedupe runs in JS after fetch.
+   */
+  listSiteBlocks(opts?: { includeDrafts?: boolean }): Promise<PublicSiteBlock[]>;
 
   /** PR #3 — published, non-expired announcements. */
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
@@ -145,24 +153,48 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
   return {
     communityId,
 
-    async listSiteBlocks() {
+    async listSiteBlocks(opts) {
+      const includeDrafts = opts?.includeDrafts === true;
+      const conditions = [
+        eq(siteBlocks.communityId, communityId),
+        eq(siteBlocks.templateVariant, 'public'),
+        isNull(siteBlocks.deletedAt),
+      ];
+      if (!includeDrafts) {
+        conditions.push(eq(siteBlocks.isDraft, false));
+      }
       const rows = await db
         .select({
           id: siteBlocks.id,
           blockType: siteBlocks.blockType,
           blockOrder: siteBlocks.blockOrder,
           content: siteBlocks.content,
+          isDraft: siteBlocks.isDraft,
         })
         .from(siteBlocks)
-        .where(
-          and(
-            eq(siteBlocks.communityId, communityId),
-            eq(siteBlocks.isDraft, false),
-            eq(siteBlocks.templateVariant, 'public'),
-            isNull(siteBlocks.deletedAt),
-          ),
-        )
+        .where(and(...conditions))
         .orderBy(asc(siteBlocks.blockOrder));
+
+      // Draft-wins dedupe per block_order. The partial unique index allows
+      // one draft + one published row to coexist at the same slot; in preview
+      // mode the draft replaces the published row.
+      if (includeDrafts) {
+        const byOrder = new Map<number, typeof rows[number]>();
+        for (const row of rows) {
+          const existing = byOrder.get(row.blockOrder);
+          if (!existing || (row.isDraft && !existing.isDraft)) {
+            byOrder.set(row.blockOrder, row);
+          }
+        }
+        return [...byOrder.values()]
+          .sort((a, b) => a.blockOrder - b.blockOrder)
+          .map((r) => ({
+            id: r.id,
+            blockType: r.blockType,
+            blockOrder: r.blockOrder,
+            content: r.content,
+          }));
+      }
 
       return rows.map((r) => ({
         id: r.id,

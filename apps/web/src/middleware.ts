@@ -674,6 +674,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       }
 
       // Unauthenticated — rewrite to the internal public-site renderer.
+      // Forward x-preview=true so the renderer can switch to draft reads
+      // (PR #8c). Mirrors the /mobile preview pattern at line 477.
+      if (isPreviewRequest) {
+        forwardedHeaders.set('x-preview', 'true');
+      }
       const siteUrl = request.nextUrl.clone();
       siteUrl.pathname = '/public-site';
       const publicSiteResponse = NextResponse.rewrite(siteUrl, {

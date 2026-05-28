@@ -30,6 +30,17 @@ async function resolveCommunityId(): Promise<number | null> {
   return communityId;
 }
 
+/**
+ * Preview mode is set by the middleware when the request carries
+ * `?preview=true` on the public-site rewrite (PR #8c). In preview mode the
+ * page reads draft site blocks instead of published ones and renders a
+ * banner indicating the visitor is seeing unpublished content.
+ */
+async function resolvePreviewMode(): Promise<boolean> {
+  const requestHeaders = await headers();
+  return requestHeaders.get('x-preview') === 'true';
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const communityId = await resolveCommunityId();
   if (!communityId) return { title: 'PropertyPro' };
@@ -45,6 +56,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function PublicSitePage() {
   const communityId = await resolveCommunityId();
+  const isPreview = await resolvePreviewMode();
   if (!communityId) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -125,7 +137,7 @@ export default async function PublicSitePage() {
 
   if (Layout) {
     const reader = getPublicCommunityScopedReader(community.id);
-    const blocks = await reader.listSiteBlocks();
+    const blocks = await reader.listSiteBlocks({ includeDrafts: isPreview });
     return (
       <>
         {fontLinks.map((href) => (
@@ -133,6 +145,16 @@ export default async function PublicSitePage() {
           <link key={href} rel="stylesheet" href={href} />
         ))}
         <div style={cssVars}>
+          {isPreview && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="preview-banner"
+              className="sticky top-0 z-50 border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
+            >
+              Preview mode — showing unpublished drafts. Visitors see the last published version.
+            </div>
+          )}
           <Layout
             community={{
               id: community.id,
