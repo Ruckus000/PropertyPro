@@ -94,14 +94,13 @@ describe('<DocumentsBlockForm>', () => {
     });
   });
 
-  it('renders the public-exposure warning explaining the category-as-access trade-off', () => {
-    // PR-C: until documents.public_access lands, category selection IS the
-    // access boundary. PMs must see this trade-off in the editor so they
-    // don't accidentally publish internal-only documents by picking a public
-    // category. Surfaced from /review on PR #500.
+  it('renders the per-document public-toggle hint (migration 0007 supersedes the category-as-access warning)', () => {
+    // The earlier PR-C role=note warned that category selection WAS the
+    // access boundary. Migration 0007 made documents.public_access the
+    // authoritative gate — the warning now tells PMs where to set it.
     render(wrap(<DocumentsBlockForm communityId={42} blockOrder={5} initial={null} />));
-    const warning = screen.getByRole('note');
-    expect(warning).toHaveTextContent(/Public exposure warning/i);
-    expect(warning).toHaveTextContent(/title, description, category, and upload date/i);
+    const note = screen.getByRole('note');
+    expect(note).toHaveTextContent(/Only documents marked.*Public.*will appear here/i);
+    expect(note).toHaveTextContent(/Documents page/i);
   });
 });

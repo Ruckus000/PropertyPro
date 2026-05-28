@@ -85,14 +85,12 @@ export function DocumentsBlockForm({ communityId, blockOrder, initial, onSaved }
         <p className="mt-0.5 text-xs text-content-secondary">Only documents in the selected categories will be shown.</p>
         <div
           role="note"
-          className="mt-2 rounded-sm border border-warning bg-warning/10 px-3 py-2 text-xs text-content"
+          className="mt-2 rounded-sm border border-default bg-surface-muted px-3 py-2 text-xs text-content-secondary"
         >
-          <strong className="font-semibold">Public exposure warning.</strong>{' '}
-          Every document currently in a selected category will be listed on
-          your public site — title, description, category, and upload date are
-          all visible to anyone with the link. Only select categories where
-          every document is safe for public viewing. (A per-document
-          public/private control is coming in a future release.)
+          Only documents marked <strong className="font-semibold text-content">Public</strong>{' '}
+          on the Documents page will appear here — the category selection
+          below narrows that list further. To make a document public, open it
+          on the Documents page and toggle <em>Public</em>.
         </div>
         <div className="mt-2 space-y-1">
           {DOCUMENT_CATEGORIES.map(({ value, label }) => (

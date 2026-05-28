@@ -32,7 +32,9 @@ vi.mock('@propertypro/db', () => ({
     description: 'documents.description',
     filePath: 'documents.filePath',
     fileName: 'documents.fileName',
+    publicAccess: 'documents.publicAccess',
     createdAt: 'documents.createdAt',
+    updatedAt: 'documents.updatedAt',
     deletedAt: 'documents.deletedAt',
   },
   documentCategories: {
@@ -321,6 +323,85 @@ describe('getPublicCommunityScopedReader', () => {
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
     expect(isNullCols).toContain('documents.deletedAt');
+  });
+
+  it('listDocuments WHERE includes publicAccess=true (migration 0007 access gate)', async () => {
+    // Migration 0007 introduced documents.public_access as the authoritative
+    // public-site access boundary. Existing category-filter assertions could
+    // pass even if a regression silently dropped this gate, so we explicitly
+    // assert the publicAccess=true equality clause is present.
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const publicAccessClause = whereCall.__and.find(
+      (c: unknown) =>
+        (c as { __eq?: { col: string } }).__eq?.col === 'documents.publicAccess',
+    );
+    expect(publicAccessClause).toBeDefined();
+    expect((publicAccessClause as { __eq: { val: boolean } }).__eq.val).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // listPublicDocumentsForSitemap (migration 0007 follow-up)
+  // ---------------------------------------------------------------------------
+
+  it('listPublicDocumentsForSitemap returns mapped { id, updatedAt } rows', async () => {
+    const fakeRow = {
+      id: 10,
+      updatedAt: new Date('2026-01-15T10:00:00Z'),
+    };
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([fakeRow]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.listPublicDocumentsForSitemap({ limit: 100 });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 10 });
+    expect(result[0].updatedAt).toBeInstanceOf(Date);
+  });
+
+  it('listPublicDocumentsForSitemap WHERE binds communityId + deletedAt isNull + publicAccess=true', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(7);
+    await reader.listPublicDocumentsForSitemap({ limit: 100 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    // communityId eq
+    const cidClause = whereCall.__and.find(
+      (c: unknown) => (c as { __eq?: { col: string } }).__eq?.col === 'documents.communityId',
+    );
+    expect((cidClause as { __eq: { val: number } }).__eq.val).toBe(7);
+    // deletedAt isNull
+    const isNullCols = whereCall.__and
+      .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
+      .map((c: unknown) => (c as { __isNull: string }).__isNull);
+    expect(isNullCols).toContain('documents.deletedAt');
+    // publicAccess=true
+    const paClause = whereCall.__and.find(
+      (c: unknown) => (c as { __eq?: { col: string } }).__eq?.col === 'documents.publicAccess',
+    );
+    expect((paClause as { __eq: { val: boolean } }).__eq.val).toBe(true);
+  });
+
+  it('listPublicDocumentsForSitemap is NOT category-filtered (sitemap surfaces every public doc)', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listPublicDocumentsForSitemap({ limit: 100 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    const hasInArray = whereCall.__and.some(
+      (c: unknown) => (c as { __inArray?: unknown }).__inArray !== undefined,
+    );
+    expect(hasInArray).toBe(false);
+    expect(mockSelectChain.leftJoin).not.toHaveBeenCalled();
   });
 
   it('listMeetings WHERE includes the deletedAt isNull guard', async () => {
