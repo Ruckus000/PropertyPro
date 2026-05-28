@@ -15,10 +15,14 @@
  */
 import type { BlockType } from '@propertypro/shared';
 import type { BlockRenderer } from './types';
+import { HeroBlock } from './HeroBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
-  // populated in PR #1b and beyond
+  hero: HeroBlock,
+  // text, image: PR #2
+  // announcements: PR #3
+  // documents, meetings, contact: PR #4
 };
 
 /**

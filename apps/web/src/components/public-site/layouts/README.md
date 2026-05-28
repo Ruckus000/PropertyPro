@@ -2,11 +2,11 @@
 
 Layouts own the page chrome of public community sites. Three ship in v1:
 
-| Slug      | File             | Brand fit                                                                                  |
-|-----------|------------------|--------------------------------------------------------------------------------------------|
-| tidewater | `Tidewater.tsx`  | Coastal editorial — golden-hour palette, Fraunces italic display, hairline rules.          |
-| boulevard | `Boulevard.tsx`  | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
-| sable     | `Sable.tsx`      | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
+| Slug      | File             | Status               | Brand fit                                                                                  |
+|-----------|------------------|----------------------|--------------------------------------------------------------------------------------------|
+| tidewater | `Tidewater.tsx`  | **Shipped (PR #1b)** | Coastal editorial — golden-hour palette, Fraunces italic display, hairline rules.          |
+| boulevard | `Boulevard.tsx`  | Planned (PR #7)      | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
+| sable     | `Sable.tsx`      | Planned (PR #7)      | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
 
 ## Architecture
 
@@ -30,6 +30,12 @@ Layouts own the page chrome of public community sites. Three ship in v1:
 - All interactive elements MUST show `:focus-visible` (never suppress).
 - Heading hierarchy MUST be valid (one `<h1>`, then descending).
 - Image alt text comes from the block content; layouts do not generate alt text themselves.
+
+## Default fallback
+
+If a community's resolved `LayoutId` has no registered layout component (`layoutRegistry[id]` returns `undefined`), `_site/page.tsx` falls back to the hardcoded markup that shipped pre-PR-#1b. This makes the rollout safe: even after Tidewater ships, removing it from the registry would NOT crash the site — it would visually regress to the pre-1b baseline.
+
+The fallback is currently the live render path for `hoa_720` and `apartment` community types (which resolve to `boulevard` and `sable`, neither registered until PR #7). It is removed in PR #7 once all three layouts ship.
 
 ## What layouts are not
 

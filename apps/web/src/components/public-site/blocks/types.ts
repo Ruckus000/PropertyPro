@@ -13,6 +13,7 @@ export interface PublicCommunity {
   id: number;
   slug: string;
   name: string;
+  logoUrl: string | null;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   city: string | null;
   state: string | null;
@@ -27,7 +28,8 @@ export interface ResolvedTheme {
   bodyFont: string;
 }
 
-export type LayoutId = 'tidewater' | 'boulevard' | 'sable';
+export const LAYOUT_IDS = ['tidewater', 'boulevard', 'sable'] as const;
+export type LayoutId = (typeof LAYOUT_IDS)[number];
 
 export interface BlockRendererProps<TContent = unknown> {
   block: {

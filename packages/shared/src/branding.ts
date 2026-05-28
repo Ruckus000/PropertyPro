@@ -20,6 +20,11 @@ export interface CommunityBranding {
   logoPath?: string;
   /** Custom footer text appended to outbound emails. Plain text. */
   customEmailFooter?: string;
+  /**
+   * Layout id for the public site renderer (PR #1b). Slug from
+   * site_layout_metadata. Null/missing falls back to community_type default.
+   */
+  layoutId?: string | null;
 }
 
 /** Default branding colors used when no community branding is configured. */

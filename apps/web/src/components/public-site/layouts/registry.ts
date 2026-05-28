@@ -11,9 +11,11 @@
  * community_type → layout default (condo_718 → tidewater, etc.).
  */
 import type { LayoutId, LayoutComponent } from './types';
+import { Tidewater } from './Tidewater';
 
 export const layoutRegistry: Partial<Record<LayoutId, LayoutComponent>> = {
-  // populated in PR #1b and beyond
+  tidewater: Tidewater,
+  // boulevard, sable: PR #7
 };
 
 /**

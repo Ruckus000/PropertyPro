@@ -7,7 +7,9 @@
  */
 import type { ReactNode } from 'react';
 import type { PublicCommunity, ResolvedTheme, LayoutId } from '../blocks/types';
+import { LAYOUT_IDS } from '../blocks/types';
 
+export { LAYOUT_IDS };
 export type { LayoutId };
 
 export interface SiteBlock {

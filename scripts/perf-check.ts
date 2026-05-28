@@ -6,7 +6,7 @@ type AppBuildManifest = {
   pages?: Record<string, string[]>;
 };
 
-type RouteGroup = 'pm' | 'maintenance' | 'mobile';
+type RouteGroup = 'pm' | 'maintenance' | 'mobile' | 'site';
 
 const APP_BUILD_MANIFEST = join(process.cwd(), 'apps', 'web', '.next', 'app-build-manifest.json');
 const NEXT_OUTPUT_ROOT = join(process.cwd(), 'apps', 'web', '.next');
@@ -44,6 +44,16 @@ const ROUTE_GROUP_CANDIDATES: Record<RouteGroup, readonly string[]> = {
     '/mobile/page',
     '/(mobile)/page',
     '/(authenticated)/dashboard/page',
+  ],
+  // PR #1b: public site render path (server component, layout-registry dispatch
+  // via Tidewater for condo_718). Budgets the JS payload — this is a Florida
+  // statutory-transparency entry point so the slug-subdomain page must stay
+  // light. Spec §8.5 sets the v1 budget; the bundle-size check is the
+  // build-time signal we have today. Server-render latency budgets land with
+  // the staging perf harness in a later PR.
+  site: [
+    '/_site/page',
+    '/(public)/_site/page',
   ],
 };
 

@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import type { Metadata } from 'next';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getBrandingForCommunity,
@@ -9,6 +10,10 @@ import { getPublishedTemplate } from '@/lib/api/site-template';
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
+import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
+import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
+import { getLayout } from '@/components/public-site/layouts/registry';
+import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 
 /**
  * Resolve community ID from middleware-injected headers.
@@ -22,6 +27,19 @@ async function resolveCommunityId(): Promise<number | null> {
   if (!Number.isInteger(communityId) || communityId <= 0) return null;
 
   return communityId;
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const communityId = await resolveCommunityId();
+  if (!communityId) return { title: 'PropertyPro' };
+  const community = await getCommunityPublicInfo(communityId);
+  if (!community) return { title: 'PropertyPro' };
+  return buildCommunityMetadata({
+    id: community.id,
+    slug: community.slug,
+    name: community.name,
+    communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+  });
 }
 
 export default async function PublicSitePage() {
@@ -82,6 +100,53 @@ export default async function PublicSitePage() {
     );
   }
 
+  // Layout-registry render path (PR #1b)
+  const layoutId = resolveLayoutId(branding, community.communityType as CommunityType);
+  const Layout = getLayout(layoutId);
+
+  if (Layout) {
+    const reader = getPublicCommunityScopedReader(community.id);
+    const blocks = await reader.listSiteBlocks();
+    return (
+      <>
+        {fontLinks.map((href) => (
+          // eslint-disable-next-line @next/next/no-page-custom-font
+          <link key={href} rel="stylesheet" href={href} />
+        ))}
+        <div style={cssVars}>
+          <Layout
+            community={{
+              id: community.id,
+              slug: community.slug,
+              name: community.name,
+              logoUrl: theme.logoUrl,
+              communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+              // city / state / timezone not yet in getCommunityPublicInfo; all FL
+              // communities are America/New_York. A later PR extends the SELECT.
+              city: null,
+              state: null,
+              timezone: 'America/New_York',
+            }}
+            theme={{
+              primaryColor: theme.primaryColor,
+              secondaryColor: theme.secondaryColor,
+              accentColor: theme.accentColor,
+              headingFont: theme.fontHeading,
+              bodyFont: theme.fontBody,
+            }}
+            blocks={blocks.map((b) => ({
+              id: b.id,
+              blockType: b.blockType,
+              blockOrder: b.blockOrder,
+              content: b.content,
+            }))}
+          />
+        </div>
+      </>
+    );
+  }
+
+  // Legacy hardcoded fallback (preserved verbatim until all layouts ship in PR #7)
   return (
     <>
       {fontLinks.map((href) => (
