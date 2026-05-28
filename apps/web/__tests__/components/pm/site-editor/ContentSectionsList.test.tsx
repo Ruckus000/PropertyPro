@@ -20,6 +20,16 @@ vi.mock('@/components/pm/site-editor/AnnouncementsBlockForm', () => ({
     <div data-testid="announcements-form" data-block-order={props.blockOrder}>announcements form</div>
   ),
 }));
+vi.mock('@/components/pm/site-editor/DocumentsBlockForm', () => ({
+  DocumentsBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="documents-form" data-block-order={props.blockOrder}>documents form</div>
+  ),
+}));
+vi.mock('@/components/pm/site-editor/MeetingsBlockForm', () => ({
+  MeetingsBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="meetings-form" data-block-order={props.blockOrder}>meetings form</div>
+  ),
+}));
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -47,13 +57,15 @@ describe('<ContentSectionsList>', () => {
     expect(screen.getByText(/loading content sections/i)).toBeInTheDocument();
   });
 
-  it('shows empty state and Add buttons when there are no content blocks', async () => {
+  it('shows empty state and all 5 Add buttons when there are no content blocks', async () => {
     mockBlocks([]);
     render(wrap(<ContentSectionsList communityId={42} />));
     expect(await screen.findByText(/no content sections yet/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add text section/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add image section/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add announcements section/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add documents section/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add meetings section/i })).toBeInTheDocument();
   });
 
   it('renders a TextBlockForm for an existing text block', async () => {
@@ -128,5 +140,45 @@ describe('<ContentSectionsList>', () => {
     render(wrap(<ContentSectionsList communityId={42} />));
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Server exploded');
+  });
+
+  it('renders a DocumentsBlockForm for an existing documents block', async () => {
+    mockBlocks([
+      { id: 13, blockType: 'documents', blockOrder: 5, content: { limit: 5, includeCategories: ['budget'] } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    const form = await screen.findByTestId('documents-form');
+    expect(form).toBeInTheDocument();
+    expect(form).toHaveAttribute('data-block-order', '5');
+  });
+
+  it('renders a MeetingsBlockForm for an existing meetings block', async () => {
+    mockBlocks([
+      { id: 14, blockType: 'meetings', blockOrder: 6, content: { limit: 10, timeWindowDays: 30 } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    const form = await screen.findByTestId('meetings-form');
+    expect(form).toBeInTheDocument();
+    expect(form).toHaveAttribute('data-block-order', '6');
+  });
+
+  it('clicking "+ Add documents section" reveals a new DocumentsBlockForm', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByText(/no content sections yet/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /add documents section/i }));
+    expect(screen.getByTestId('documents-form')).toBeInTheDocument();
+    expect(screen.getByTestId('documents-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  it('clicking "+ Add meetings section" reveals a new MeetingsBlockForm', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByText(/no content sections yet/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /add meetings section/i }));
+    expect(screen.getByTestId('meetings-form')).toBeInTheDocument();
+    expect(screen.getByTestId('meetings-form')).toHaveAttribute('data-block-order', '2');
   });
 });

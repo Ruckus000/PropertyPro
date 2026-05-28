@@ -24,6 +24,32 @@ vi.mock('@propertypro/db', () => ({
     deletedAt: 'announcements.deletedAt',
     publishedAt: 'announcements.publishedAt',
   },
+  documents: {
+    id: 'documents.id',
+    communityId: 'documents.communityId',
+    categoryId: 'documents.categoryId',
+    title: 'documents.title',
+    description: 'documents.description',
+    filePath: 'documents.filePath',
+    fileName: 'documents.fileName',
+    createdAt: 'documents.createdAt',
+    deletedAt: 'documents.deletedAt',
+  },
+  documentCategories: {
+    id: 'documentCategories.id',
+    communityId: 'documentCategories.communityId',
+    name: 'documentCategories.name',
+  },
+  meetings: {
+    id: 'meetings.id',
+    communityId: 'meetings.communityId',
+    title: 'meetings.title',
+    meetingType: 'meetings.meetingType',
+    startsAt: 'meetings.startsAt',
+    endsAt: 'meetings.endsAt',
+    location: 'meetings.location',
+    deletedAt: 'meetings.deletedAt',
+  },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -32,6 +58,7 @@ vi.mock('@propertypro/db/filters', () => ({
   desc: (col: unknown) => ({ __desc: col }),
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
   gte: (col: unknown, val: unknown) => ({ __gte: { col, val } }),
+  inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
   isNull: (col: unknown) => ({ __isNull: col }),
   lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
 }));
@@ -39,6 +66,7 @@ vi.mock('@propertypro/db/filters', () => ({
 // Mock the unscoped client BEFORE importing the helper
 const mockSelectChain = {
   from: vi.fn().mockReturnThis(),
+  leftJoin: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
   orderBy: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
@@ -62,6 +90,7 @@ describe('getPublicCommunityScopedReader', () => {
     // Re-set up the chain after clearAllMocks
     mockDb.select.mockReturnValue(mockSelectChain);
     mockSelectChain.from.mockReturnValue(mockSelectChain);
+    mockSelectChain.leftJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.where.mockReturnValue(mockSelectChain);
     mockSelectChain.orderBy.mockReturnValue(mockSelectChain);
     mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
@@ -78,12 +107,12 @@ describe('getPublicCommunityScopedReader', () => {
     expect(typeof reader.listSiteBlocks).toBe('function');
   });
 
-  it('exposes stubbed listDocuments method (real impl in PR #4)', async () => {
+  it('exposes listDocuments method', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.listDocuments).toBe('function');
   });
 
-  it('exposes stubbed listMeetings method (real impl in PR #4)', async () => {
+  it('exposes listMeetings method', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.listMeetings).toBe('function');
   });
@@ -93,7 +122,7 @@ describe('getPublicCommunityScopedReader', () => {
     expect(typeof reader.listAnnouncements).toBe('function');
   });
 
-  it('exposes stubbed getContactInfo method (real impl in PR #4)', async () => {
+  it('exposes getContactInfo method (stub: returns null)', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.getContactInfo).toBe('function');
   });
@@ -190,5 +219,132 @@ describe('getPublicCommunityScopedReader', () => {
     const whereCall = mockSelectChain.where.mock.calls[0][0];
     // Without timeWindowDays, and() should receive exactly 5 conditions
     expect(whereCall.__and).toHaveLength(5);
+  });
+
+  // ---------------------------------------------------------------------------
+  // listDocuments
+  // ---------------------------------------------------------------------------
+
+  it('listDocuments returns [] immediately when includeCategories is empty', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.listDocuments({ limit: 5, includeCategories: [] });
+    expect(result).toEqual([]);
+    // No DB query should have been issued
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('listDocuments returns [] immediately when includeCategories is omitted', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.listDocuments({ limit: 5 });
+    expect(result).toEqual([]);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('listDocuments returns mapped rows with the expected shape', async () => {
+    const fakeRow = {
+      id: 10,
+      title: 'Budget Report 2025',
+      description: 'Annual budget',
+      filePath: '42/documents/budget-2025.pdf',
+      fileName: 'budget-2025.pdf',
+      categoryName: 'budget',
+      createdAt: new Date('2026-01-15T10:00:00Z'),
+    };
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([fakeRow]).then(resolve),
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listDocuments({ limit: 5, includeCategories: ['budget'] });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: 10,
+      title: 'Budget Report 2025',
+      description: 'Annual budget',
+      filePath: '42/documents/budget-2025.pdf',
+      fileName: 'budget-2025.pdf',
+      categoryName: 'budget',
+    });
+    expect(results[0].createdAt).toBeInstanceOf(Date);
+  });
+
+  it('listDocuments issues a leftJoin against documentCategories', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listDocuments({ limit: 5, includeCategories: ['minutes', 'rules'] });
+
+    // The query should use leftJoin
+    expect(mockSelectChain.leftJoin).toHaveBeenCalledTimes(1);
+    // The WHERE predicate should include the inArray filter
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    expect(whereCall).toHaveProperty('__and');
+    const inArrayClause = whereCall.__and.find(
+      (c: unknown) => (c as { __inArray?: unknown }).__inArray !== undefined,
+    );
+    expect(inArrayClause).toBeDefined();
+    expect((inArrayClause as { __inArray: { vals: string[] } }).__inArray.vals).toEqual(['minutes', 'rules']);
+  });
+
+  // ---------------------------------------------------------------------------
+  // listMeetings
+  // ---------------------------------------------------------------------------
+
+  it('listMeetings returns mapped rows with the expected shape', async () => {
+    const fakeRow = {
+      id: 5,
+      title: 'March Board Meeting',
+      meetingType: 'board',
+      startsAt: new Date('2026-03-10T18:00:00Z'),
+      endsAt: new Date('2026-03-10T20:00:00Z'),
+      location: '123 Main St',
+    };
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([fakeRow]).then(resolve),
+    );
+
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listMeetings({ limit: 10, timeWindowDays: 30 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: 5,
+      title: 'March Board Meeting',
+      meetingType: 'board',
+      location: '123 Main St',
+    });
+    expect(results[0].startsAt).toBeInstanceOf(Date);
+  });
+
+  it('listMeetings returns [] when no upcoming meetings are in the window', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listMeetings({ limit: 10, timeWindowDays: 7 });
+    expect(results).toEqual([]);
+  });
+
+  it('listMeetings WHERE predicate includes communityId, deletedAt, gte, lte conditions', async () => {
+    mockSelectChain.then.mockImplementation((resolve) =>
+      Promise.resolve([]).then(resolve),
+    );
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listMeetings({ limit: 5, timeWindowDays: 14 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    expect(whereCall).toHaveProperty('__and');
+    // 4 conditions: communityId eq, deletedAt isNull, startsAt gte, startsAt lte
+    expect(whereCall.__and).toHaveLength(4);
+    const gteClause = whereCall.__and.find(
+      (c: unknown) => (c as { __gte?: unknown }).__gte !== undefined,
+    );
+    expect(gteClause).toBeDefined();
+    const lteClause = whereCall.__and.find(
+      (c: unknown) => (c as { __lte?: unknown }).__lte !== undefined,
+    );
+    expect(lteClause).toBeDefined();
   });
 });

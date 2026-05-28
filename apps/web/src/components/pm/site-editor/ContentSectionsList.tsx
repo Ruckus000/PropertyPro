@@ -4,13 +4,19 @@ import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blo
 import { TextBlockForm } from './TextBlockForm';
 import { ImageBlockForm } from './ImageBlockForm';
 import { AnnouncementsBlockForm } from './AnnouncementsBlockForm';
+import { DocumentsBlockForm } from './DocumentsBlockForm';
+import { MeetingsBlockForm } from './MeetingsBlockForm';
 import {
   textBlockSchema,
   imageBlockSchema,
   announcementsBlockSchema,
+  documentsBlockSchema,
+  meetingsBlockSchema,
   type TextBlockContent,
   type ImageBlockContent,
   type AnnouncementsBlockContent,
+  type DocumentsBlockContent,
+  type MeetingsBlockContent,
 } from '@propertypro/shared';
 
 interface Props {
@@ -40,9 +46,19 @@ function parseAnnouncementsBlock(content: unknown): AnnouncementsBlockContent | 
   return parse.success ? parse.data : null;
 }
 
+function parseDocumentsBlock(content: unknown): DocumentsBlockContent | null {
+  const parse = documentsBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
+function parseMeetingsBlock(content: unknown): MeetingsBlockContent | null {
+  const parse = meetingsBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
 export function ContentSectionsList({ communityId }: Props) {
   const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
-  const [adding, setAdding] = useState<'text' | 'image' | 'announcements' | null>(null);
+  const [adding, setAdding] = useState<'text' | 'image' | 'announcements' | 'documents' | 'meetings' | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-content-secondary">Loading content sections…</p>;
@@ -56,7 +72,12 @@ export function ContentSectionsList({ communityId }: Props) {
   }
 
   const contentBlocks = (blocks ?? []).filter(
-    (b) => b.blockType === 'text' || b.blockType === 'image' || b.blockType === 'announcements',
+    (b) =>
+      b.blockType === 'text' ||
+      b.blockType === 'image' ||
+      b.blockType === 'announcements' ||
+      b.blockType === 'documents' ||
+      b.blockType === 'meetings',
   );
 
   return (
@@ -93,6 +114,20 @@ export function ContentSectionsList({ communityId }: Props) {
               communityId={communityId}
               blockOrder={b.blockOrder}
               initial={parseAnnouncementsBlock(b.content)}
+            />
+          )}
+          {b.blockType === 'documents' && (
+            <DocumentsBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseDocumentsBlock(b.content)}
+            />
+          )}
+          {b.blockType === 'meetings' && (
+            <MeetingsBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseMeetingsBlock(b.content)}
             />
           )}
         </div>
@@ -136,7 +171,33 @@ export function ContentSectionsList({ communityId }: Props) {
           />
         </div>
       )}
-      <div className="flex gap-2 pt-2">
+      {adding === 'documents' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New documents section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <DocumentsBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
+      {adding === 'meetings' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New meetings section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <MeetingsBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 pt-2">
         <button
           type="button"
           onClick={() => setAdding('text')}
@@ -157,6 +218,20 @@ export function ContentSectionsList({ communityId }: Props) {
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
         >
           + Add announcements section
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('documents')}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+        >
+          + Add documents section
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('meetings')}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+        >
+          + Add meetings section
         </button>
       </div>
     </section>
