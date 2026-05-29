@@ -155,7 +155,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/maintenance-requests/route.ts',
   'apps/web/src/app/api/v1/meetings/route.ts',
   'apps/web/src/app/api/v1/move-checklists/[id]/steps/[stepKey]/action/route.ts',
-  'apps/web/src/app/api/v1/move-checklists/[id]/steps/[stepKey]/route.ts',
   'apps/web/src/app/api/v1/onboarding/apartment/route.ts',
   'apps/web/src/app/api/v1/onboarding/condo/route.ts',
   'apps/web/src/app/api/v1/operations/route.ts',
