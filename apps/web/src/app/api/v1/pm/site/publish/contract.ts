@@ -28,6 +28,14 @@ const publishBodySchema = z.object({
    * else is rejected at the schema layer.
    */
   expectedPublishedAt: z.string().datetime().nullable(),
+  /**
+   * When true, stamp `communities.site_onboarding_completed_at = now()` after
+   * a successful publish. The onboarding wizard's final-step "Publish my site"
+   * action sets this; the ongoing editor's PublishBar omits it (onboarding
+   * completion is a wizard concept, not an every-publish side effect).
+   * Optional + defaults to undefined so existing editor callers are unchanged.
+   */
+  markOnboardingComplete: z.boolean().optional(),
 });
 
 export const publishCommunitySiteContract = defineRoute({

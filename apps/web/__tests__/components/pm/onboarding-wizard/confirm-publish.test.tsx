@@ -160,6 +160,25 @@ describe('<ConfirmPublish>', () => {
     });
   });
 
+  it('wizard publish sets markOnboardingComplete=true on the POST body', async () => {
+    installFetch({
+      blocks: [
+        { id: 1, blockType: 'hero', blockOrder: 1, content: {}, isDraft: true, publishedAt: null },
+      ],
+    });
+    render(wrap(<ConfirmPublish communityId={42} />));
+    await screen.findByTestId('confirm-publish-list');
+    fireEvent.click(screen.getByRole('button', { name: /publish my site/i }));
+    await waitFor(() => {
+      const publishCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('/publish'),
+      );
+      expect(publishCall).toBeDefined();
+      const body = JSON.parse((publishCall![1] as RequestInit).body as string);
+      expect(body.markOnboardingComplete).toBe(true);
+    });
+  });
+
   it('surfaces no-op message on { published: false }', async () => {
     installFetch({
       blocks: [

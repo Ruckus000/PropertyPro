@@ -16,6 +16,7 @@ import { requireRole } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { publishCommunitySite } from '@/lib/services/site-blocks-service';
+import { markSiteOnboardingComplete } from '@/lib/api/branding';
 import { publishCommunitySiteContract } from './contract';
 import type { NextRequest } from 'next/server';
 
@@ -45,6 +46,17 @@ export const POST = withErrorHandler(
       actorUserId: userId,
       expectedPublishedAt,
     });
+
+    // Wizard final-step publish marks onboarding complete. Done after (and
+    // outside) the publish transaction on purpose: completion is a separate
+    // concern from draft-promotion, and the wizard should mark complete even
+    // when the publish was a no-op (`nothing-to-publish` rolls back the tx but
+    // is not an error — the PM still finished the wizard). Errors from
+    // publishCommunitySite short-circuit before reaching here.
+    if (body.markOnboardingComplete) {
+      await markSiteOnboardingComplete(communityId);
+    }
+
     return result;
   }),
 );

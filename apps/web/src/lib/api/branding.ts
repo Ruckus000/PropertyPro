@@ -72,6 +72,51 @@ export async function getBrandingForCommunity(
   return raw as CommunityBranding;
 }
 
+/**
+ * Read the site-onboarding completion timestamp for a community.
+ * Returns `null` when the wizard has never been completed (the prod default
+ * for every existing row). Callers use null-vs-set to decide whether to
+ * surface the "customize your site" prompts (WizardEntryBanner, dashboard
+ * banner, communities-table "Site" pill).
+ *
+ * communities is the root tenant table (no communityId column), so this
+ * queries by primary key via the unscoped client — same contract as
+ * getBrandingForCommunity above.
+ */
+export async function getSiteOnboardingCompletedAt(
+  communityId: number,
+): Promise<Date | null> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ completedAt: communities.siteOnboardingCompletedAt })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  return rows[0]?.completedAt ?? null;
+}
+
+/**
+ * Stamp `site_onboarding_completed_at = now()` for a community.
+ *
+ * Called from the publish route when the wizard's final-step "Publish my
+ * site" action carries `markOnboardingComplete: true`. Writing it on every
+ * wizard publish (rather than only the first) is intentional: re-running the
+ * wizard to completion is a fresh completion event, and only null-vs-set
+ * matters to the consumers. Idempotent in effect.
+ *
+ * Callers must have already verified pm_admin/cam membership in the target
+ * community (the publish route does this before invoking).
+ */
+export async function markSiteOnboardingComplete(
+  communityId: number,
+): Promise<void> {
+  const db = createUnscopedClient();
+  await db
+    .update(communities)
+    .set({ siteOnboardingCompletedAt: new Date() })
+    .where(eq(communities.id, communityId));
+}
+
 export interface BrandingPatch {
   primaryColor?: string;
   secondaryColor?: string;

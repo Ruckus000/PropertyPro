@@ -37,6 +37,26 @@ describe('usePublishSite', () => {
     expect(data).toMatchObject({ published: true, promotedCount: 2, retiredCount: 4 });
   });
 
+  it('forwards markOnboardingComplete=true in the body when set (wizard publish)', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { published: true, publishedAt: '2026-05-15T12:00:00.000Z', promotedCount: 1, retiredCount: 0 } }),
+    });
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const { result } = renderHook(() => usePublishSite(42), { wrapper: wrap(qc) });
+    await result.current.mutateAsync({
+      expectedPublishedAt: null,
+      markOnboardingComplete: true,
+    });
+    const [, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body as string)).toEqual({
+      communityId: 42,
+      expectedPublishedAt: null,
+      markOnboardingComplete: true,
+    });
+  });
+
   it('passes through the nothing-to-publish result body', async () => {
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,

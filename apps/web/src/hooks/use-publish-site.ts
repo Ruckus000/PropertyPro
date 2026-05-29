@@ -36,6 +36,12 @@ export interface PublishSiteVariables {
    * `null` for a first-ever publish.
    */
   expectedPublishedAt: string | null;
+  /**
+   * When true, the server stamps `site_onboarding_completed_at = now()` after
+   * the publish. Set by the onboarding wizard's final step; omitted by the
+   * ongoing editor's PublishBar.
+   */
+  markOnboardingComplete?: boolean;
 }
 
 async function readJsonError(res: Response): Promise<string> {
@@ -59,11 +65,17 @@ export class PublishConflictError extends Error {
 export function usePublishSite(communityId: number) {
   const qc = useQueryClient();
   return useMutation<PublishSiteResult, Error, PublishSiteVariables>({
-    mutationFn: async ({ expectedPublishedAt }) => {
+    mutationFn: async ({ expectedPublishedAt, markOnboardingComplete }) => {
       const res = await fetch('/api/v1/pm/site/publish', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, expectedPublishedAt }),
+        body: JSON.stringify({
+          communityId,
+          expectedPublishedAt,
+          // Only include the flag when set so editor publishes send the exact
+          // body shape they always have.
+          ...(markOnboardingComplete ? { markOnboardingComplete: true } : {}),
+        }),
       });
       if (res.status === 409) {
         throw new PublishConflictError(await readJsonError(res));
