@@ -1,9 +1,18 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * Reservations — cancel a reservation (DELETE alias).
+ *
+ * DELETE /api/v1/reservations/[id]?communityId=
+ *
+ * Plan A1 drain #121. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`. Behavior matches drain #70 (`POST …/cancel`) — same
+ * service call and auth chain; only HTTP method and `communityId` carrier
+ * differ (query vs body).
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   isResidentRole,
   requireAmenitiesEnabled,
@@ -13,12 +22,10 @@ import {
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { cancelReservationForCommunity } from '@/lib/services/work-orders-service';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { reservationDeleteContract } from './contract';
 
 export const DELETE = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const reservationId = parsePositiveInt(params?.id ?? '', 'reservation id');
-
+  runRoute(reservationDeleteContract, async ({ params, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
     await assertNotDemoGrace(communityId);
@@ -30,15 +37,13 @@ export const DELETE = withErrorHandler(
     requireReservationPermission(membership);
 
     const canCancelAny = !isResidentRole(membership.role);
-    const requestId = req.headers.get('x-request-id');
-    const data = await cancelReservationForCommunity(
+
+    return cancelReservationForCommunity(
       communityId,
-      reservationId,
+      params.id,
       actorUserId,
       canCancelAny,
-      requestId,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
