@@ -14,8 +14,8 @@ export interface ComplianceCta {
  * Returns null when the CTA should be hidden (read-only user with no
  * existing document to view).
  *
- * Shared by ComplianceQueue (row primary action) and ComplianceDetailPanel
- * (side panel CTA) so the two surfaces never drift apart for the same item.
+ * Used by ComplianceRequirementCard (the collapsed primary CTA) so card
+ * surfaces resolve the same action for a given item without drifting.
  */
 export function resolveComplianceCta(
   item: ChecklistItemData,
