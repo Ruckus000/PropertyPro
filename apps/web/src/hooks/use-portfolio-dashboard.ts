@@ -35,6 +35,13 @@ export interface PortfolioCommunity {
   complianceScore: number | null;
   outstandingBalance: number;
   expiringLeases: number;
+  /**
+   * Public-site onboarding completion timestamp (ISO string over the wire),
+   * or null if the wizard was never completed. Drives the "Site" column pill.
+   */
+  siteOnboardingCompletedAt: string | null;
+  /** True when the community has unpublished draft site blocks. */
+  hasUnpublishedSiteDrafts: boolean;
 }
 
 export interface PortfolioDashboardData {

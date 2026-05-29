@@ -47,6 +47,25 @@ function complianceStatus(score: number): string {
   return 'overdue';
 }
 
+/**
+ * Derives the "Site" pill from the two raw onboarding signals.
+ *   - customized: the PM completed the wizard (site_onboarding_completed_at set)
+ *   - draft:      not completed, but unpublished draft blocks exist (started)
+ *   - default:    neither — site is still using the auto-applied starter pack
+ * Reuses existing StatusBadge keys: compliant (green), submitted (info), neutral.
+ */
+function siteStatus(
+  community: PortfolioCommunity,
+): { statusKey: string; label: string } {
+  if (community.siteOnboardingCompletedAt) {
+    return { statusKey: 'compliant', label: 'Customized' };
+  }
+  if (community.hasUnpublishedSiteDrafts) {
+    return { statusKey: 'submitted', label: 'Draft saved' };
+  }
+  return { statusKey: 'neutral', label: 'Default' };
+}
+
 // ---------------------------------------------------------------------------
 // Column definitions
 // ---------------------------------------------------------------------------
@@ -145,6 +164,26 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
     ),
     cell: ({ row }) => formatCurrency(row.original.outstandingBalance),
     enableSorting: true,
+  },
+  {
+    id: 'site',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Site" />
+    ),
+    cell: ({ row }) => {
+      const community = row.original;
+      const { statusKey, label } = siteStatus(community);
+      return (
+        <a
+          href={`/pm/onboarding/website?communityId=${community.communityId}`}
+          aria-label={`Customize the public site for ${community.communityName} (${label})`}
+          className="inline-flex rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
+        >
+          <StatusBadge status={statusKey} label={label} size="sm" subtle />
+        </a>
+      );
+    },
+    enableSorting: false,
   },
   {
     id: 'actions',

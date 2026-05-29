@@ -6,6 +6,7 @@ import { communities } from '../schema/communities';
 import { complianceChecklistItems } from '../schema/compliance-checklist-items';
 import { leases } from '../schema/leases';
 import { maintenanceRequests } from '../schema/maintenance-requests';
+import { siteBlocks } from '../schema/site-blocks';
 import { units } from '../schema/units';
 import { userRoles } from '../schema/user-roles';
 import { violationFines } from '../schema/violation-fines';
@@ -30,6 +31,10 @@ export interface ManagedCommunityPortfolioRow {
   occupiedUnits: number;
   /** Rounded occupancy percentage (apartment only when totalUnits > 0, else null) */
   occupancyRate: number | null;
+  /** Public-site onboarding completion timestamp. Null = wizard never completed. */
+  siteOnboardingCompletedAt: Date | null;
+  /** True when the community has at least one unpublished draft site_block. */
+  hasUnpublishedSiteDrafts: boolean;
 }
 
 function toCountMap<T extends { communityId: number; count: number }>(
@@ -94,6 +99,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
       slug: communities.slug,
       communityType: communities.communityType,
       timezone: communities.timezone,
+      siteOnboardingCompletedAt: communities.siteOnboardingCompletedAt,
     })
     .from(userRoles)
     .innerJoin(communities, eq(communities.id, userRoles.communityId))
@@ -181,12 +187,32 @@ export async function findManagedCommunitiesPortfolioUnscoped(
     )
     .groupBy(leases.communityId);
 
+  // Count of unpublished draft site_blocks per community — drives the
+  // "Draft saved" pill on the communities table. Same union arity
+  // ({ communityId, metric, count }) as the other portfolio aggregates.
+  const siteDraftsQuery = db
+    .select({
+      communityId: siteBlocks.communityId,
+      metric: sql<string>`'site_draft'`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(siteBlocks)
+    .where(
+      and(
+        inArray(siteBlocks.communityId, communityIds),
+        eq(siteBlocks.isDraft, true),
+        isNull(siteBlocks.deletedAt),
+      ),
+    )
+    .groupBy(siteBlocks.communityId);
+
   const allCounts = (await unionAll(
     residentsQuery,
     unitsQuery,
     maintenanceQuery,
     complianceQuery,
     occupiedQuery,
+    siteDraftsQuery,
   )) as Array<{ communityId: number; metric: string; count: number }>;
 
   const residentCountsRaw = allCounts.filter((row) => row.metric === 'resident');
@@ -194,12 +220,14 @@ export async function findManagedCommunitiesPortfolioUnscoped(
   const maintenanceCountsRaw = allCounts.filter((row) => row.metric === 'maintenance');
   const complianceCountsRaw = allCounts.filter((row) => row.metric === 'compliance');
   const occupiedUnitsRaw = allCounts.filter((row) => row.metric === 'occupied');
+  const siteDraftCountsRaw = allCounts.filter((row) => row.metric === 'site_draft');
 
   const residentCounts = toCountMap(residentCountsRaw);
   const unitCounts = toCountMap(unitCountsRaw);
   const maintenanceCounts = toCountMap(maintenanceCountsRaw);
   const complianceCounts = toCountMap(complianceCountsRaw);
   const occupiedUnitCounts = toCountMap(occupiedUnitsRaw);
+  const siteDraftCounts = toCountMap(siteDraftCountsRaw);
 
   return managedRows.map((row) => {
     const totalUnits = unitCounts.get(row.communityId) ?? 0;
@@ -222,6 +250,8 @@ export async function findManagedCommunitiesPortfolioUnscoped(
       unsatisfiedComplianceItems: complianceCounts.get(row.communityId) ?? 0,
       occupiedUnits,
       occupancyRate,
+      siteOnboardingCompletedAt: row.siteOnboardingCompletedAt ?? null,
+      hasUnpublishedSiteDrafts: (siteDraftCounts.get(row.communityId) ?? 0) > 0,
     };
   });
 }
