@@ -84,6 +84,12 @@ export default async function SiteTemplatesIndexPage() {
               Block Registry →
             </Link>
             <Link
+              href="/site-templates/documentation"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Documentation →
+            </Link>
+            <Link
               href="/site-templates/theme-presets"
               className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
