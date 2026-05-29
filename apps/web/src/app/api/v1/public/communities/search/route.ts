@@ -5,7 +5,8 @@
  * non-sensitive metadata so unauthenticated users can find a community.
  *
  * Plan A1 drain #153. Migrated to `runRoute(contract, handler)`; see
- * `./contract.ts`.
+ * `./contract.ts`. Per-IP rate limit runs before contract validation so
+ * malformed queries cannot bypass the scrape throttle.
  */
 import { runRoute } from '@propertypro/api-contract';
 import type { NextRequest } from 'next/server';
@@ -27,23 +28,27 @@ function resolveClientIp(req: NextRequest): string {
   return req.headers.get('x-real-ip') ?? 'unknown';
 }
 
-export const GET = withErrorHandler(
-  runRoute(publicCommunitiesSearchGetContract, async ({ query, req }) => {
-    const ip = resolveClientIp(req);
-    const result = getRateLimiter().check(
-      `community-search:${ip}`,
-      RATE_LIMIT_MAX,
-      RATE_LIMIT_WINDOW_MS,
-    );
-    if (!result.allowed) {
-      throw new RateLimitError(
-        `Too many search requests. Try again in ${result.retryAfter}s.`,
-      );
-    }
-
-    return searchPublicCommunities({
+const searchHandler = runRoute(
+  publicCommunitiesSearchGetContract,
+  async ({ query }) =>
+    searchPublicCommunities({
       q: query.q,
       city: query.city,
-    });
-  }),
+    }),
 );
+
+export const GET = withErrorHandler(async (req, ctx) => {
+  const ip = resolveClientIp(req);
+  const result = getRateLimiter().check(
+    `community-search:${ip}`,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS,
+  );
+  if (!result.allowed) {
+    throw new RateLimitError(
+      `Too many search requests. Try again in ${result.retryAfter}s.`,
+    );
+  }
+
+  return searchHandler(req, ctx);
+});

@@ -71,4 +71,11 @@ describe('GET /api/v1/public/communities/search', () => {
     expect(res.status).toBe(429);
     expect(searchPublicCommunitiesMock).not.toHaveBeenCalled();
   });
+
+  it('returns 429 when rate limited even for invalid query', async () => {
+    rateLimiterCheckMock.mockReturnValueOnce({ allowed: false, retryAfter: 30 });
+    const res = await GET(getRequest('q=a'));
+    expect(res.status).toBe(429);
+    expect(searchPublicCommunitiesMock).not.toHaveBeenCalled();
+  });
 });
