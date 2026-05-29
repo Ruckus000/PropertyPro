@@ -14,8 +14,8 @@
  *     → requireActiveSubscriptionForMutation
  *     → role-specific finance gates + unit scoping
  *
- * Body `superRefine` enforces lineItemId XOR payableId at the contract layer
- * (single validation layer — handler does not re-parse).
+ * Body `superRefine` requires at least one of lineItemId or payableId.
+ * (Handler enforces rent_obligation-specific exclusions at runtime.)
  *
  * Response: loose `z.unknown()` — intent payload may include provider fields.
  *
