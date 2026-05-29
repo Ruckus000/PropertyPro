@@ -1,13 +1,19 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Denied visitor detail mutations.
+ *
+ * PATCH  /api/v1/visitors/denied/[id] — update entry
+ * DELETE /api/v1/visitors/denied/[id] — soft-delete entry
+ *
+ * Plan A1 drain #122. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`. Staff-only; mirrors collection #94 auth chain.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireStaffOperator,
   requireVisitorLoggingEnabled,
@@ -17,36 +23,26 @@ import {
   updateDeniedVisitor,
   softDeleteDeniedVisitor,
 } from '@/lib/services/package-visitor-service';
-
-const updateDeniedSchema = z.object({
-  communityId: z.number().int().positive(),
-  fullName: z.string().min(1).max(240).optional(),
-  reason: z.string().min(1).max(500).optional(),
-  vehiclePlate: z.string().max(20).nullable().optional(),
-  notes: z.string().max(2000).nullable().optional(),
-  isActive: z.boolean().optional(),
-});
-
-const deleteDeniedSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+import {
+  visitorsDeniedDeleteContract,
+  visitorsDeniedUpdateContract,
+} from './contract';
 
 export const PATCH = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const deniedId = parsePositiveInt(params?.id ?? '', 'denied visitor id');
-
+  runRoute(visitorsDeniedUpdateContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = updateDeniedSchema.safeParse(body);
 
-    if (!parsed.success) {
-      throw new ValidationError('Invalid denied visitor update payload', {
-        fields: formatZodErrors(parsed.error),
-      });
+    if (
+      body.fullName === undefined
+      && body.reason === undefined
+      && body.vehiclePlate === undefined
+      && body.notes === undefined
+      && body.isActive === undefined
+    ) {
+      throw new ValidationError('At least one field must be provided for update');
     }
 
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -54,30 +50,21 @@ export const PATCH = withErrorHandler(
     requireVisitorsWritePermission(membership);
     requireStaffOperator(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const { communityId: _, ...input } = parsed.data;
-    const data = await updateDeniedVisitor(communityId, deniedId, actorUserId, input, requestId);
-
-    return NextResponse.json({ data });
-  },
+    const { communityId: _communityId, ...input } = body;
+    return updateDeniedVisitor(
+      communityId,
+      params.id,
+      actorUserId,
+      input,
+      req.headers.get('x-request-id'),
+    );
+  }),
 );
 
 export const DELETE = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const deniedId = parsePositiveInt(params?.id ?? '', 'denied visitor id');
-
+  runRoute(visitorsDeniedDeleteContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = deleteDeniedSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid denied visitor delete payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -85,9 +72,13 @@ export const DELETE = withErrorHandler(
     requireVisitorsWritePermission(membership);
     requireStaffOperator(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    await softDeleteDeniedVisitor(communityId, deniedId, actorUserId, requestId);
+    await softDeleteDeniedVisitor(
+      communityId,
+      params.id,
+      actorUserId,
+      req.headers.get('x-request-id'),
+    );
 
-    return NextResponse.json({ data: { success: true } });
-  },
+    return { success: true as const };
+  }),
 );
