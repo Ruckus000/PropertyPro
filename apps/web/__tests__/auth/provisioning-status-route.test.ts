@@ -150,7 +150,8 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest());
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toMatch(/signupRequestId/i);
+    expect(body.error?.code).toBe('VALIDATION_ERROR');
+    expect(body.error?.message).toBe('Invalid query parameters');
   });
 
   it('returns pending when no provisioning job exists yet', async () => {
@@ -159,7 +160,7 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ status: 'pending', step: 'waiting' });
+    expect(body.data).toEqual({ status: 'pending', step: 'waiting' });
     // Should not try to look up signup or generate a link
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
@@ -176,7 +177,7 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ status: 'provisioning', step: 'community_created' });
+    expect(body.data).toEqual({ status: 'provisioning', step: 'community_created' });
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
 
@@ -192,7 +193,7 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ status: 'failed', step: 'community_created' });
+    expect(body.data).toEqual({ status: 'failed', step: 'community_created' });
     expect(generateLinkMock).not.toHaveBeenCalled();
   });
 
@@ -203,7 +204,7 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({
+    expect(body.data).toEqual({
       status: 'completed',
       step: 'completed',
       loginToken: HASHED_TOKEN,
@@ -232,7 +233,7 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({
+    expect(body.data).toEqual({
       status: 'completed',
       step: 'completed',
       loginToken: 'cached-token-from-db',
@@ -257,7 +258,7 @@ describe('provisioning-status route', () => {
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(500);
     const body = await response.json();
-    expect(body.error).toMatch(/login token/i);
+    expect(body.error?.message).toMatch(/login token/i);
     // The error log moved into provisioning-service in A3 Phase 2 — the
     // route delegates magic-link generation to `generateAndCacheLoginToken`,
     // which logs with the service-level prefix.
