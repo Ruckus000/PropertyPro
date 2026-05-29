@@ -103,6 +103,7 @@ export type AdminUserRow = {
 export type AdminCommunityRow = {
   id: number;
   name: string;
+  slug: string;
   timezone: string;
 };
 
@@ -203,6 +204,73 @@ export type SiteThemePresetRow = {
   updated_at: string;
 };
 
+export type SiteStarterPackRow = {
+  id: number;
+  slug: string;
+  display_name: string;
+  community_type: 'condo_718' | 'hoa_720' | 'apartment';
+  description: string | null;
+  blocks: unknown;
+  version: number;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SiteBlockRow = {
+  id: number;
+  community_id: number;
+  block_order: number;
+  block_type: string;
+  content: unknown;
+  is_draft: boolean;
+  template_variant: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+type SiteBlockInsert = {
+  id?: number;
+  community_id: number;
+  block_order: number;
+  block_type: string;
+  content?: unknown;
+  is_draft?: boolean;
+  template_variant?: string;
+  published_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  deleted_at?: string | null;
+};
+
+export type ComplianceAuditLogRow = {
+  id: number;
+  user_id: string | null;
+  community_id: number;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  old_values: unknown | null;
+  new_values: unknown | null;
+  metadata: unknown | null;
+  created_at: string;
+};
+
+type ComplianceAuditLogInsert = {
+  id?: number;
+  user_id?: string | null;
+  community_id: number;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  old_values?: unknown | null;
+  new_values?: unknown | null;
+  metadata?: unknown | null;
+  created_at?: string;
+};
+
 export type SiteLayoutMetadataRow = {
   id: number;
   slug: string;
@@ -254,6 +322,17 @@ export type AdminDatabase = {
         SiteLayoutMetadataRow,
         Partial<SiteLayoutMetadataRow>,
         Partial<SiteLayoutMetadataRow>
+      >;
+      site_starter_packs: AdminTable<SiteStarterPackRow>;
+      site_blocks: AdminTable<
+        SiteBlockRow,
+        SiteBlockInsert,
+        Partial<SiteBlockRow>
+      >;
+      compliance_audit_log: AdminTable<
+        ComplianceAuditLogRow,
+        ComplianceAuditLogInsert,
+        Partial<ComplianceAuditLogRow>
       >;
     };
     Views: Record<string, never>;
