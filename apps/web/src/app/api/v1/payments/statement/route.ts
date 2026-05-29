@@ -1,4 +1,11 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * Payments statement — unit or community rollup.
+ *
+ * Plan A1 drain #133. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and auth-chain rationale.
+ */
+import { runRoute } from '@propertypro/api-contract';
+import type { NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -11,59 +18,60 @@ import {
   listActorUnitIdsForFinance,
   resolveStatementDateRange,
 } from '@/lib/services/finance-service';
+import { paymentStatementContract } from './contract';
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  await requireFinanceEnabled(membership);
+export const GET = withErrorHandler(
+  runRoute(paymentStatementContract, async ({ req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromQuery(req as NextRequest);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    await requireFinanceEnabled(membership);
 
-  const searchParams = new URL(req.url).searchParams;
-  const rawUnitId = searchParams.get('unitId');
-  const rawStartDate = searchParams.get('startDate');
-  const rawEndDate = searchParams.get('endDate');
+    const searchParams = new URL(req.url).searchParams;
+    const rawUnitId = searchParams.get('unitId');
+    const rawStartDate = searchParams.get('startDate');
+    const rawEndDate = searchParams.get('endDate');
 
-  const { startDate, endDate } = resolveStatementDateRange(rawStartDate, rawEndDate);
+    const { startDate, endDate } = resolveStatementDateRange(rawStartDate, rawEndDate);
 
-  // Resident / unit-owner path — preserve existing behaviour exactly.
-  if (membership.role === 'resident' && membership.isUnitOwner) {
-    const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
-    if (actorUnitIds.length === 0) {
-      throw new ForbiddenError('No unit association found for this owner');
-    }
-
-    let unitId: number;
-    if (rawUnitId) {
-      const requestedUnitId = parsePositiveInt(rawUnitId, 'unitId');
-      if (!actorUnitIds.includes(requestedUnitId)) {
-        throw new ForbiddenError('Owners can only access statements for their own unit');
-      }
-      unitId = requestedUnitId;
-    } else if (actorUnitIds.length === 1) {
-      const onlyUnitId = actorUnitIds[0];
-      if (onlyUnitId === undefined) {
+    if (membership.role === 'resident' && membership.isUnitOwner) {
+      const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
+      if (actorUnitIds.length === 0) {
         throw new ForbiddenError('No unit association found for this owner');
       }
-      unitId = onlyUnitId;
-    } else {
-      throw new BadRequestError(
-        'unitId query parameter is required when you are associated with multiple units',
-      );
+
+      let unitId: number;
+      if (rawUnitId) {
+        const requestedUnitId = parsePositiveInt(rawUnitId, 'unitId');
+        if (!actorUnitIds.includes(requestedUnitId)) {
+          throw new ForbiddenError('Owners can only access statements for their own unit');
+        }
+        unitId = requestedUnitId;
+      } else if (actorUnitIds.length === 1) {
+        const onlyUnitId = actorUnitIds[0];
+        if (onlyUnitId === undefined) {
+          throw new ForbiddenError('No unit association found for this owner');
+        }
+        unitId = onlyUnitId;
+      } else {
+        throw new BadRequestError(
+          'unitId query parameter is required when you are associated with multiple units',
+        );
+      }
+
+      const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
+      return { mode: 'unit' as const, statement };
     }
 
-    const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
-    return NextResponse.json({ data: { mode: 'unit', statement } });
-  }
+    requireFinanceReadPermission(membership);
 
-  // Staff / manager path — either pick a specific unit or get the community rollup.
-  requireFinanceReadPermission(membership);
+    if (rawUnitId) {
+      const unitId = parsePositiveInt(rawUnitId, 'unitId');
+      const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
+      return { mode: 'unit' as const, statement };
+    }
 
-  if (rawUnitId) {
-    const unitId = parsePositiveInt(rawUnitId, 'unitId');
-    const statement = await buildUnitStatement(communityId, unitId, startDate, endDate);
-    return NextResponse.json({ data: { mode: 'unit', statement } });
-  }
-
-  const communityStatement = await buildCommunityStatement(communityId, startDate, endDate);
-  return NextResponse.json({ data: { mode: 'community', statement: communityStatement } });
-});
+    const communityStatement = await buildCommunityStatement(communityId, startDate, endDate);
+    return { mode: 'community' as const, statement: communityStatement };
+  }),
+);
