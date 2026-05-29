@@ -64,6 +64,13 @@
 			"when": 1780041600001,
 			"tag": "0008_retire_jsx_template",
 			"breakpoints": true
+		},
+		{
+			"idx": 9,
+			"version": "7",
+			"when": 1780041600002,
+			"tag": "0009_site_onboarding_columns",
+			"breakpoints": true
 		}
 	]
 }

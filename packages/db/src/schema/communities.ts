@@ -76,6 +76,17 @@ export const communities = pgTable('communities', {
   customDomain: text('custom_domain'),
   /** Phase 3: When the community's public site was last published. */
   sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
+  /** Site onboarding wizard: when the PM finished the wizard (clicked Publish on
+   *  the final step). Null = wizard never completed. Authoritative completion
+   *  signal that supersedes the prior `branding.layoutId`-unset heuristic. */
+  siteOnboardingCompletedAt: timestamp('site_onboarding_completed_at', { withTimezone: true }),
+  /** Site onboarding wizard: resume state for a partially-completed wizard.
+   *  `lastCompletedStep` is the 1-based index of the furthest step the PM
+   *  finished, used to deep-link the "Resume customizing" banner. Null = no
+   *  saved progress. */
+  siteOnboardingProgress: jsonb('site_onboarding_progress').$type<{
+    lastCompletedStep?: number;
+  }>(),
   /** Mobile help: management contact info. */
   contactName: text('contact_name'),
   contactEmail: text('contact_email'),
