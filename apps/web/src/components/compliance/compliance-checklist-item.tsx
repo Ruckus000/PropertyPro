@@ -67,7 +67,7 @@ function deadlineLabelColor(item: ChecklistItemData): string {
 
 // ── Help Text ────────────────────────────────────────
 
-const HELP_TEXT: Record<string, string> = {
+export const HELP_TEXT: Record<string, string> = {
   "718_declaration": "Upload your association's recorded Declaration of Condominium, including any amendments. Typically available from the county recorder's office or your association's attorney.",
   "718_bylaws": "Upload the current bylaws and all adopted amendments. These govern the internal operations of your association.",
   "718_articles": "Upload the Articles of Incorporation filed with the Florida Division of Corporations, including any amendments.",
