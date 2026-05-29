@@ -3,17 +3,16 @@
 /**
  * Step 3 of the onboarding wizard — community identity.
  *
- * v1 ships the tagline field. Logo + hero image (spec §4.1 Step 3) ride
- * on the image-upload infrastructure (presign + finalize from spec §2.8)
- * which is shipped separately; their fields land in a follow-up slice
- * once that infra is wired into the wizard. Community name edit
- * (which writes to communities.name) also lands later.
+ * Ships the tagline field + hero image upload (spec §4.1 Step 3 — hero image
+ * rides the §2.8 presign/finalize pipeline). Logo upload and community-name
+ * edit land in a follow-up slice.
  *
- * Tagline persists to communities.branding.tagline via the wizard
- * PATCH endpoint.
+ * Tagline persists to communities.branding.tagline via the wizard PATCH
+ * endpoint; the hero image persists into the hero block via HeroImageField.
  */
 import { useState } from 'react';
 import { useWebsiteWizard } from '@/hooks/use-website-wizard';
+import { HeroImageField } from './HeroImageField';
 
 const TAGLINE_MAX = 80;
 const TAGLINE_SOFT_WARN = 60;
@@ -24,6 +23,8 @@ interface Props {
   initialTagline?: string | null;
   /** Used to surface the year in the placeholder ("welcoming Florida community since {year}"). */
   establishedYear?: number | null;
+  /** Hero headline fallback when no hero block content exists yet (schema requires one). */
+  heroFallbackHeadline?: string;
   /** Called when the user advances to Step 4. */
   onContinue?: (tagline: string | null) => void;
   /** Called when the user clicks "Skip — keep default". */
@@ -34,6 +35,7 @@ export function IdentityEditor({
   communityId,
   initialTagline,
   establishedYear,
+  heroFallbackHeadline = 'Welcome',
   onContinue,
   onSkip,
 }: Props) {
@@ -126,9 +128,13 @@ export function IdentityEditor({
         </div>
       </div>
 
+      <div className="mt-6 border-t border-default pt-4">
+        <HeroImageField communityId={communityId} fallbackHeadline={heroFallbackHeadline} />
+      </div>
+
       <p className="mt-4 rounded-md border border-default bg-surface-muted/40 p-3 text-xs text-content-secondary">
-        <strong className="font-medium text-content">Logo + hero image:</strong> coming next. They
-        ride on the image-upload pipeline and land in a follow-up update.
+        <strong className="font-medium text-content">Logo:</strong> coming next. It rides on the
+        branding upload flow and lands in a follow-up update.
       </p>
 
       <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
