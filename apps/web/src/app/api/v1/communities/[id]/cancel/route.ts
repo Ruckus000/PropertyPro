@@ -1,22 +1,3 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
-import { withErrorHandler } from '@/lib/api/error-handler';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
-import { getStripeClient } from '@/lib/services/stripe-service';
-import {
-  getBillingGroupOwner,
-  getCommunityForCancel,
-  recalculateVolumeTier,
-  softDeleteCommunityForCancellation,
-} from '@/lib/billing/billing-group-service';
-import { cancellationReasonSchema } from '@propertypro/shared';
-
-const cancelBodySchema = z.object({
-  reason: cancellationReasonSchema,
-  note: z.string().max(2000).optional(),
-});
-
 /**
  * POST /api/v1/communities/[id]/cancel
  *
@@ -24,26 +5,32 @@ const cancelBodySchema = z.object({
  * recalculate the billing group's volume tier (which may downgrade
  * the discount and notify admins).
  *
- * Authorization: caller must be the PM owner of the community's
- * billing group.
+ * Plan A1 drain #155. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
+ *
+ * Behavior change vs. pre-migration: invalid path param (non-numeric or
+ * non-positive `[id]`) now returns 400 `VALIDATION_ERROR` instead of
+ * `Number('abc') = NaN` flowing into service lookup. Unauthenticated calls
+ * with invalid body may return 400 before 401 (contract validation runs first).
  */
-export const POST = withErrorHandler(
-  async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
-    const userId = await requireAuthenticatedUserId();
-    const params = await ctx.params;
-    const communityId = Number(params.id);
+import { runRoute } from '@propertypro/api-contract';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
+import { getStripeClient } from '@/lib/services/stripe-service';
+import {
+  getBillingGroupOwner,
+  getCommunityForCancel,
+  recalculateVolumeTier,
+  softDeleteCommunityForCancellation,
+} from '@/lib/billing/billing-group-service';
+import { communityCancelPostContract } from './contract';
 
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      throw new ValidationError('Invalid JSON body');
-    }
-    const parsed = cancelBodySchema.safeParse(body);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid request body', { issues: parsed.error.issues });
-    }
-    const { reason, note } = parsed.data;
+export const POST = withErrorHandler(
+  runRoute(communityCancelPostContract, async ({ body, params }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = params.id;
+    const { reason, note } = body;
 
     const community = await getCommunityForCancel(communityId);
     if (!community) throw new NotFoundError('Community not found');
@@ -56,14 +43,12 @@ export const POST = withErrorHandler(
       throw new ForbiddenError('You do not own this billing group');
     }
 
-    // Cancel the Stripe subscription if one exists.
     if (community.stripeSubscriptionId) {
       const stripe = getStripeClient();
       try {
         await stripe.subscriptions.cancel(community.stripeSubscriptionId);
       } catch (err: unknown) {
         const maybeStripeErr = err as { code?: string; statusCode?: number };
-        // Ignore already-canceled / not-found: proceed with soft-delete.
         if (maybeStripeErr?.statusCode !== 404) throw err;
       }
     }
@@ -73,11 +58,10 @@ export const POST = withErrorHandler(
       note: note ?? null,
     });
 
-    // Recalculate volume tier — may downgrade and notify admins.
     await recalculateVolumeTier(community.billingGroupId, {
       canceledCommunityName: community.name,
     });
 
-    return NextResponse.json({ data: { canceled: true, communityId } });
-  },
+    return { canceled: true as const, communityId };
+  }),
 );
