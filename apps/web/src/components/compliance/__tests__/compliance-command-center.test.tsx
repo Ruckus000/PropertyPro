@@ -9,10 +9,13 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
 }));
 
-let mockChecklistReturn: { data: unknown[] | undefined; isLoading: boolean; error: Error | null } = {
+const refetchMock = vi.fn();
+
+let mockChecklistReturn: { data: unknown[] | undefined; isLoading: boolean; error: Error | null; refetch: () => void } = {
   data: [],
   isLoading: false,
   error: null,
+  refetch: () => {},
 };
 
 vi.mock('@/hooks/useComplianceChecklist', () => ({
@@ -59,7 +62,7 @@ function renderWithProviders(ui: ReactNode) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockChecklistReturn = { data: structuredClone(FIXTURE), isLoading: false, error: null };
+  mockChecklistReturn = { data: structuredClone(FIXTURE), isLoading: false, error: null, refetch: refetchMock };
 });
 
 describe('ComplianceCommandCenter', () => {
@@ -113,21 +116,26 @@ describe('ComplianceCommandCenter', () => {
       data: [structuredClone(FIXTURE[0])], // only the satisfied item
       isLoading: false,
       error: null,
+      refetch: refetchMock,
     };
     renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />);
     expect(screen.getByText(/fully compliant/i)).toBeVisible();
     expect(screen.getByText(/you're all caught up/i)).toBeVisible();
   });
 
-  it('renders the loading indicator when data is loading', () => {
-    mockChecklistReturn = { data: undefined, isLoading: true, error: null };
+  it('renders a loading skeleton when data is loading', () => {
+    mockChecklistReturn = { data: undefined, isLoading: true, error: null, refetch: refetchMock };
     renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />);
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByTestId('compliance-loading')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).toBeNull();
   });
 
-  it('renders the error alert when the checklist fails to load', () => {
-    mockChecklistReturn = { data: undefined, isLoading: false, error: new Error('boom') };
+  it('renders a recoverable error banner that calls refetch on Retry', () => {
+    mockChecklistReturn = { data: undefined, isLoading: false, error: new Error('boom'), refetch: refetchMock };
     renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />);
-    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't load compliance records. Please try again.");
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/couldn't load compliance records/i);
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(refetchMock).toHaveBeenCalledTimes(1);
   });
 });

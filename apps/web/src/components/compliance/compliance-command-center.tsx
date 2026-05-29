@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@propertypro/ui';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
 import { useComplianceMutations } from '@/hooks/useComplianceMutations';
 import { buildComplianceSummary, sortByPriority } from '@/lib/utils/compliance-calculator';
@@ -33,7 +35,7 @@ export function ComplianceCommandCenter({
   const router = useRouter();
   const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);
   const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
-  const { data: items = [], isLoading, error } = useComplianceChecklist(communityId);
+  const { data: items = [], isLoading, error, refetch } = useComplianceChecklist(communityId);
   const mutations = useComplianceMutations(communityId);
 
   const summary = useMemo(
@@ -81,12 +83,16 @@ export function ComplianceCommandCenter({
 
   if (error) {
     return (
-      <div
-        role="alert"
-        className="rounded-[var(--radius-md)] border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger"
-      >
-        We couldn&apos;t load compliance records. Please try again.
-      </div>
+      <AlertBanner
+        status="danger"
+        title="We couldn't load compliance records"
+        description="Please try again."
+        action={
+          <Button size="sm" variant="secondary" onClick={() => refetch()}>
+            Retry
+          </Button>
+        }
+      />
     );
   }
 
@@ -114,9 +120,7 @@ export function ComplianceCommandCenter({
       />
 
       {isLoading ? (
-        <div className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card p-8 text-center text-content-secondary">
-          Loading&hellip;
-        </div>
+        <ComplianceLoadingSkeleton />
       ) : (
         <>
           <ComplianceStatusHero summary={summary} worstItem={worst} onJumpToWorst={jumpToWorst} />
@@ -226,6 +230,30 @@ export function ComplianceCommandCenter({
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function ComplianceLoadingSkeleton() {
+  return (
+    <div
+      data-testid="compliance-loading"
+      aria-busy="true"
+      aria-label="Loading compliance records"
+      className="flex flex-col gap-6"
+    >
+      <Skeleton className="h-32 w-full" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-28 w-full" />
+        ))}
+      </div>
+      <div className="flex flex-col gap-3">
+        <Skeleton className="h-6 w-32" />
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-20 w-full" />
+        ))}
+      </div>
     </div>
   );
 }
