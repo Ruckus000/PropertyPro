@@ -8,6 +8,7 @@ import { communities } from '../src/schema/communities';
 import { complianceChecklistItems } from '../src/schema/compliance-checklist-items';
 import { leases } from '../src/schema/leases';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
+import { siteBlocks } from '../src/schema/site-blocks';
 import { units } from '../src/schema/units';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
@@ -112,6 +113,12 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     // Delete leases before units (FK: leases.unit_id -> units.id)
     await db.delete(leases).where(inArray(leases.communityId, [communityAId, communityBId, communityCId]));
     await db.delete(units).where(inArray(units.communityId, [communityAId, communityBId, communityCId]));
+    await db.delete(siteBlocks).where(inArray(siteBlocks.communityId, [communityAId, communityBId, communityCId]));
+    // Reset onboarding completion so each test starts from the "not onboarded" default.
+    await db
+      .update(communities)
+      .set({ siteOnboardingCompletedAt: null })
+      .where(inArray(communities.id, [communityAId, communityBId, communityCId]));
   });
 
   afterAll(async () => {
@@ -477,5 +484,63 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     expect(rows.length).toBe(1);
     expect(rows[0]!.communityId).toBe(communityAId);
     expect(rows[0]!.communityType).toBe('condo_718');
+  });
+
+  // --- Site onboarding signals (communities-table "Site" pill) ---
+
+  it('defaults siteOnboardingCompletedAt=null and hasUnpublishedSiteDrafts=false', async () => {
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(pmUserId);
+
+    for (const row of rows) {
+      expect(row.siteOnboardingCompletedAt).toBeNull();
+      expect(row.hasUnpublishedSiteDrafts).toBe(false);
+    }
+  });
+
+  it('surfaces siteOnboardingCompletedAt when the wizard has completed', async () => {
+    await db
+      .update(communities)
+      .set({ siteOnboardingCompletedAt: new Date('2026-05-29T10:00:00.000Z') })
+      .where(eq(communities.id, communityAId));
+
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(pmUserId);
+    const rowA = rows.find((row) => row.communityId === communityAId);
+    const rowB = rows.find((row) => row.communityId === communityBId);
+
+    expect(rowA!.siteOnboardingCompletedAt).toBeInstanceOf(Date);
+    expect(rowA!.siteOnboardingCompletedAt!.toISOString()).toBe('2026-05-29T10:00:00.000Z');
+    // Sibling community is unaffected.
+    expect(rowB!.siteOnboardingCompletedAt).toBeNull();
+  });
+
+  it('sets hasUnpublishedSiteDrafts=true only when a non-deleted draft block exists', async () => {
+    await db.insert(siteBlocks).values([
+      // A: a draft block → counts
+      { communityId: communityAId, blockOrder: 1, blockType: 'hero', isDraft: true },
+      // B: a published (is_draft=false) block → does NOT count
+      { communityId: communityBId, blockOrder: 1, blockType: 'hero', isDraft: false, publishedAt: new Date() },
+    ]);
+
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(pmUserId);
+    const rowA = rows.find((row) => row.communityId === communityAId);
+    const rowB = rows.find((row) => row.communityId === communityBId);
+
+    expect(rowA!.hasUnpublishedSiteDrafts).toBe(true);
+    expect(rowB!.hasUnpublishedSiteDrafts).toBe(false);
+  });
+
+  it('excludes soft-deleted draft blocks from hasUnpublishedSiteDrafts', async () => {
+    await db.insert(siteBlocks).values([
+      { communityId: communityAId, blockOrder: 1, blockType: 'hero', isDraft: true, deletedAt: new Date() },
+    ]);
+
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(pmUserId);
+    const rowA = rows.find((row) => row.communityId === communityAId);
+
+    expect(rowA!.hasUnpublishedSiteDrafts).toBe(false);
   });
 });
