@@ -16,6 +16,7 @@ import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/brand
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { LayoutChooser } from '@/components/pm/onboarding-wizard/LayoutChooser';
 import { PresetChooser } from '@/components/pm/onboarding-wizard/PresetChooser';
+import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -90,9 +91,16 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
         />
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-6">
+        <IdentityEditor
+          communityId={communityId}
+          initialTagline={branding?.tagline ?? null}
+          establishedYear={null}
+        />
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[
-          { n: 3, label: 'Community identity' },
           { n: 4, label: 'Welcome message' },
           { n: 5, label: 'Confirm + publish' },
         ].map((step) => (
