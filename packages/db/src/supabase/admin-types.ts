@@ -173,6 +173,20 @@ type AccessPlanInsert = Omit<
   notes?: string | null;
 };
 
+type SiteThemePresetInsert = Omit<
+  SiteThemePresetRow,
+  'id' | 'created_at' | 'updated_at' | 'description' | 'tier' | 'is_archived' | 'is_featured' | 'version'
+> & {
+  id?: number;
+  created_at?: string;
+  updated_at?: string;
+  description?: string | null;
+  tier?: 'essentials' | 'professional' | 'pm';
+  is_archived?: boolean;
+  is_featured?: boolean;
+  version?: number;
+};
+
 // ─── Site templates ───
 
 export type SiteThemePresetRow = {
@@ -231,8 +245,16 @@ export type AdminDatabase = {
       account_deletion_requests: AdminTable<AccountDeletionRequestRow>;
       users: AdminTable<AdminUserRow>;
       communities: AdminTable<AdminCommunityRow>;
-      site_theme_presets: AdminTable<SiteThemePresetRow>;
-      site_layout_metadata: AdminTable<SiteLayoutMetadataRow>;
+      site_theme_presets: AdminTable<
+        SiteThemePresetRow,
+        SiteThemePresetInsert,
+        Partial<SiteThemePresetRow>
+      >;
+      site_layout_metadata: AdminTable<
+        SiteLayoutMetadataRow,
+        Partial<SiteLayoutMetadataRow>,
+        Partial<SiteLayoutMetadataRow>
+      >;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
