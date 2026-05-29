@@ -85,10 +85,21 @@ describe('POST /api/v1/auth/resend-verification', () => {
     expect(json.error.message).toBe('Signup request not found or has expired.');
   });
 
-  it('returns 409 with alreadyVerified payload', async () => {
+  it('returns 409 with alreadyVerified payload for email_verified', async () => {
     getPendingSignupForResendMock.mockResolvedValue({
       ...pendingSignup,
       status: 'email_verified',
+    });
+    const res = await POST(buildRequest({ signupRequestId: 'req-abc' }));
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.data).toEqual({ alreadyVerified: true, signupRequestId: 'req-abc' });
+  });
+
+  it('returns 409 with alreadyVerified payload for checkout_started', async () => {
+    getPendingSignupForResendMock.mockResolvedValue({
+      ...pendingSignup,
+      status: 'checkout_started',
     });
     const res = await POST(buildRequest({ signupRequestId: 'req-abc' }));
     expect(res.status).toBe(409);
