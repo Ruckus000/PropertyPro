@@ -7,12 +7,13 @@
  *
  * Auth: Supabase SSR cookie-based session. User must be one of the demo
  * instance's user IDs (board or resident demo user).
+ *
+ * Plan A1 drain #149. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and auth-chain rationale.
  */
-import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
-import { z } from 'zod';
-import { PLAN_IDS } from '@propertypro/shared';
 import { computeDemoStatus } from '@propertypro/shared';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { ForbiddenError } from '@/lib/api/errors';
@@ -22,65 +23,34 @@ import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 import { createServerClient } from '@/lib/supabase/server';
 import { getDemoInstanceForUpgrade } from '@/lib/services/demo-conversion';
-
-// ---------------------------------------------------------------------------
-// Request validation
-// ---------------------------------------------------------------------------
-
-const upgradeBodySchema = z.object({
-  planId: z.enum(PLAN_IDS),
-  customerEmail: z.string().email('Valid email is required'),
-  customerName: z.string().min(1, 'Customer name is required').max(200),
-});
-
-// ---------------------------------------------------------------------------
-// Route handler
-// ---------------------------------------------------------------------------
+import { demoSelfServiceUpgradePostContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (
-    req: NextRequest,
-    context: { params: Promise<{ slug: string }> },
-  ): Promise<NextResponse> => {
-    const { slug } = await context.params;
+  runRoute(demoSelfServiceUpgradePostContract, async ({ params, body, req }) => {
+    const { slug } = params;
 
-    // 0. Authenticate via Supabase SSR cookie session
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) {
       throw new ForbiddenError('Authentication required');
     }
 
-    // 1. Validate request body
-    const body = await req.json();
-    const parsed = upgradeBodySchema.safeParse(body);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid request body', {
-        issues: parsed.error.issues.map((i) => ({
-          field: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-    }
+    const { planId, customerEmail, customerName } = body;
 
-    const { planId, customerEmail, customerName } = parsed.data;
-
-    // 2. Look up demo by slug
     const demo = await getDemoInstanceForUpgrade(slug);
     if (!demo || !demo.communityId) {
       throw new NotFoundError('Demo not found');
     }
 
-    // 3. Verify caller is a demo user
     const isDemoUser =
-      user.id === demo.demoResidentUserId ||
-      user.id === demo.demoBoardUserId;
+      user.id === demo.demoResidentUserId || user.id === demo.demoBoardUserId;
 
     if (!isDemoUser) {
       throw new ForbiddenError('Not authorized for this demo');
     }
 
-    // 4. Check demo status
     if (!demo.isDemo) {
       throw new ValidationError('This demo has already been converted', {
         slug: 'Community is no longer a demo',
@@ -100,7 +70,6 @@ export const POST = withErrorHandler(
       });
     }
 
-    // 5. Validate plan for community type + resolve price from DB
     if (!isPlanAvailableForCommunityType(demo.communityType, planId)) {
       throw new ValidationError('This plan is not available for this community type', {
         planId: 'Invalid plan for community type',
@@ -108,8 +77,6 @@ export const POST = withErrorHandler(
     }
     const priceId = await resolveStripePrice(planId, demo.communityType, 'month');
 
-    // 6. Create Stripe checkout session — same metadata shape as admin convert
-    //    so handleDemoConversion() works unchanged
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -127,7 +94,6 @@ export const POST = withErrorHandler(
       },
     });
 
-    // 7. Emit self_service_upgrade_started event (awaited best-effort)
     await emitConversionEvent({
       communityId: demo.communityId,
       eventType: 'self_service_upgrade_started',
@@ -136,6 +102,6 @@ export const POST = withErrorHandler(
       userId: user.id,
     });
 
-    return NextResponse.json({ data: { checkoutUrl: session.url } });
-  },
+    return { checkoutUrl: session.url };
+  }),
 );
