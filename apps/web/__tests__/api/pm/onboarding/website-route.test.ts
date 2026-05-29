@@ -4,12 +4,14 @@ import { AppError } from '@/lib/api/errors/AppError';
 
 const {
   updateBrandingMock,
+  updateCommunityNameMock,
   requireAuthMock,
   requireMembershipMock,
   resolveEffectiveCommunityIdMock,
   requirePlanFeatureMock,
 } = vi.hoisted(() => ({
   updateBrandingMock: vi.fn(),
+  updateCommunityNameMock: vi.fn(),
   requireAuthMock: vi.fn(),
   requireMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
@@ -18,6 +20,10 @@ const {
 
 vi.mock('@/lib/api/branding', () => ({
   updateBrandingForCommunity: updateBrandingMock,
+}));
+
+vi.mock('@/lib/services/community-profile-service', () => ({
+  updateCommunityName: updateCommunityNameMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -53,6 +59,7 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
     requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
+    updateCommunityNameMock.mockResolvedValue({ name: 'Sunset Condos', changed: true });
     updateBrandingMock.mockResolvedValue({
       layoutId: 'tidewater',
       themePresetSlug: null,
@@ -86,6 +93,38 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
       themePresetSlug: 'bay-light',
       tagline: 'Coastal living',
     });
+  });
+
+  it('writes the community name (with actor) and keeps it out of the branding patch', async () => {
+    const res = await PATCH(makeRequest({
+      communityId: 42,
+      name: 'Sunset Condominiums',
+      layoutId: 'tidewater',
+    }));
+    expect(res.status).toBe(200);
+    expect(updateCommunityNameMock).toHaveBeenCalledWith(42, 'Sunset Condominiums', {
+      actorUserId: 'user-1',
+    });
+    // `name` must NOT leak into the branding jsonb merge.
+    expect(updateBrandingMock).toHaveBeenCalledWith(42, { layoutId: 'tidewater' });
+  });
+
+  it('does not touch the name when the patch omits it', async () => {
+    await PATCH(makeRequest({ communityId: 42, layoutId: 'tidewater' }));
+    expect(updateCommunityNameMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a name-only patch (no branding fields)', async () => {
+    const res = await PATCH(makeRequest({ communityId: 42, name: 'New Name' }));
+    expect(res.status).toBe(200);
+    expect(updateCommunityNameMock).toHaveBeenCalledWith(42, 'New Name', { actorUserId: 'user-1' });
+  });
+
+  it('400s when name is blank (trimmed to empty)', async () => {
+    const res = await PATCH(makeRequest({ communityId: 42, name: '   ' }));
+    expect(res.status).toBe(400);
+    expect(updateCommunityNameMock).not.toHaveBeenCalled();
+    expect(updateBrandingMock).not.toHaveBeenCalled();
   });
 
   it('400s when no wizard fields are supplied', async () => {

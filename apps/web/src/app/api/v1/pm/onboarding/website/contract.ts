@@ -9,6 +9,8 @@ const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Must be a 6-digit 
 const wizardPatchBodySchema = z
   .object({
     communityId: z.number().int().positive(),
+    /** Community display name — writes communities.name with an audit entry. */
+    name: z.string().trim().min(1).max(200).optional(),
     layoutId: z.string().min(1).max(80).nullable().optional(),
     themePresetSlug: z.string().min(1).max(120).nullable().optional(),
     tagline: z.string().max(80).nullable().optional(),
@@ -20,6 +22,7 @@ const wizardPatchBodySchema = z
   })
   .refine(
     (b) =>
+      b.name !== undefined ||
       b.layoutId !== undefined ||
       b.themePresetSlug !== undefined ||
       b.tagline !== undefined ||

@@ -9,6 +9,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 export interface WizardPatch {
+  /** Community display name (writes communities.name with an audit entry). */
+  name?: string;
   layoutId?: string | null;
   themePresetSlug?: string | null;
   tagline?: string | null;

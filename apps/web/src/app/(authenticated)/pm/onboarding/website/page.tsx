@@ -96,6 +96,7 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
       <div className="mt-6">
         <IdentityEditor
           communityId={communityId}
+          initialName={community?.name ?? null}
           initialTagline={branding?.tagline ?? null}
           establishedYear={null}
           heroFallbackHeadline={community?.name ? `Welcome to ${community.name}` : 'Welcome'}

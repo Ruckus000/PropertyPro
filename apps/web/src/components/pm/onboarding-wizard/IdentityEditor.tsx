@@ -17,8 +17,12 @@ import { HeroImageField } from './HeroImageField';
 const TAGLINE_MAX = 80;
 const TAGLINE_SOFT_WARN = 60;
 
+const NAME_MAX = 200;
+
 interface Props {
   communityId: number;
+  /** Current community name — pre-fills the editable name field. */
+  initialName?: string | null;
   /** Initial tagline value if the wizard is being resumed. */
   initialTagline?: string | null;
   /** Used to surface the year in the placeholder ("welcoming Florida community since {year}"). */
@@ -33,15 +37,21 @@ interface Props {
 
 export function IdentityEditor({
   communityId,
+  initialName,
   initialTagline,
   establishedYear,
   heroFallbackHeadline = 'Welcome',
   onContinue,
   onSkip,
 }: Props) {
+  const [name, setName] = useState<string>(initialName ?? '');
   const [tagline, setTagline] = useState<string>(initialTagline ?? '');
   const [outcome, setOutcome] = useState<string | null>(null);
   const wizard = useWebsiteWizard(communityId);
+
+  const nameTrimmed = name.trim();
+  const nameEmpty = nameTrimmed.length === 0;
+  const nameTooLong = nameTrimmed.length > NAME_MAX;
 
   const trimmed = tagline.trim();
   const charCount = trimmed.length;
@@ -57,11 +67,24 @@ export function IdentityEditor({
       setOutcome(`Tagline must be ${TAGLINE_MAX} characters or fewer.`);
       return;
     }
+    if (nameEmpty) {
+      setOutcome('Community name is required.');
+      return;
+    }
+    if (nameTooLong) {
+      setOutcome(`Community name must be ${NAME_MAX} characters or fewer.`);
+      return;
+    }
     setOutcome(null);
     // Empty tagline writes null (= unset) so the user can clear it.
     const payload = trimmed.length === 0 ? null : trimmed;
     try {
-      await wizard.mutateAsync({ tagline: payload });
+      await wizard.mutateAsync({
+        tagline: payload,
+        // Only send the name when it actually changed, so unchanged Continues
+        // don't write communities.name or emit an audit entry.
+        ...(nameTrimmed !== (initialName ?? '').trim() ? { name: nameTrimmed } : {}),
+      });
       onContinue?.(payload);
     } catch (err) {
       setOutcome(err instanceof Error ? err.message : 'Failed to save identity.');
@@ -82,7 +105,30 @@ export function IdentityEditor({
           Add your community identity
         </h2>
         <p className="mt-1 text-sm text-content-secondary">
-          A short tagline shown alongside the welcome headline on your public site.
+          Your community name and a short tagline shown on your public site.
+        </p>
+      </div>
+
+      <div className="mb-4 space-y-1">
+        <label htmlFor="wizard-community-name" className="block text-sm font-medium text-content">
+          Community name <span className="text-error">*</span>
+        </label>
+        <input
+          id="wizard-community-name"
+          data-testid="wizard-community-name-input"
+          type="text"
+          maxLength={NAME_MAX}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          aria-invalid={nameEmpty || nameTooLong ? 'true' : undefined}
+          aria-describedby="wizard-community-name-help"
+          className={`w-full rounded-md border bg-surface-card px-3 py-2 text-base text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive ${
+            nameEmpty || nameTooLong ? 'border-error' : 'border-default'
+          }`}
+        />
+        <p id="wizard-community-name-help" className="text-xs text-content-secondary">
+          The official name shown to residents and visitors.
         </p>
       </div>
 
@@ -154,7 +200,7 @@ export function IdentityEditor({
           <button
             type="button"
             onClick={handleContinue}
-            disabled={wizard.isPending || overHard}
+            disabled={wizard.isPending || overHard || nameEmpty || nameTooLong}
             className="inline-flex items-center rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse disabled:opacity-50 disabled:cursor-not-allowed hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
           >
             {wizard.isPending ? 'Saving…' : 'Continue'}
