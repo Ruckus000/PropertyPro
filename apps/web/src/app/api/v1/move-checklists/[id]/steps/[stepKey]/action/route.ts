@@ -1,12 +1,18 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * POST /api/v1/move-checklists/[id]/steps/[stepKey]/action
+ *
+ * Admin-only integration actions on actionable move-checklist steps.
+ *
+ * Plan A1 drain #150. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and auth-chain rationale.
+ */
 import { createElement } from 'react';
+import { runRoute } from '@propertypro/api-contract';
+import { isAdminRole } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError, NotFoundError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { ValidationError, NotFoundError, ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { isAdminRole } from '@propertypro/shared';
 import {
   createInspectionRequestForChecklist,
   getMoveChecklist,
@@ -17,36 +23,18 @@ import { createOnboardingInvitation } from '@/lib/services/onboarding-service';
 import { getBaseUrl } from '@/lib/utils/url';
 import { ACTIONABLE_STEPS } from '@propertypro/db';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
-
-const actionSchema = z.object({
-  communityId: z.number().int().positive(),
-  action: z.enum(['create_inspection', 'send_invite', 'send_welcome']),
-});
+import { moveChecklistStepActionPostContract } from './contract';
 
 export const POST = withErrorHandler(
-  async (
-    req: NextRequest,
-    { params }: { params: Promise<{ id: string; stepKey: string }> },
-  ) => {
+  runRoute(moveChecklistStepActionPostContract, async ({ params, body, req }) => {
     const userId = await requireAuthenticatedUserId();
-    const { id: rawId, stepKey } = await params;
-    const checklistId = Number(rawId);
-    if (!Number.isInteger(checklistId) || checklistId <= 0) {
-      throw new ValidationError('Invalid checklist ID');
-    }
+    const checklistId = params.id;
+    const { stepKey } = params;
+    const { communityId, action } = body;
 
-    const body = await req.json();
-    const parseResult = actionSchema.safeParse(body);
-    if (!parseResult.success) {
-      throw new ValidationError('Invalid action', {
-        fields: formatZodErrors(parseResult.error),
-      });
-    }
-
-    const { communityId, action } = parseResult.data;
     const membership = await requireCommunityMembership(communityId, userId);
     if (!isAdminRole(membership.role)) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      throw new ForbiddenError('Forbidden');
     }
 
     const checklist = await getMoveChecklist(communityId, checklistId);
@@ -59,10 +47,8 @@ export const POST = withErrorHandler(
       throw new ValidationError(`Action "${action}" not supported for step "${stepKey}"`);
     }
 
-    // Dispatch integration action
     switch (action) {
       case 'send_welcome': {
-        // Load resident and community for the welcome email
         const ctx = await getResidentAndCommunityForWelcomeEmail(
           communityId,
           checklist.residentId,
@@ -91,19 +77,21 @@ export const POST = withErrorHandler(
           userId,
         );
 
-        return NextResponse.json({
+        return {
           data: updated,
           action: { triggered: action, stepKey },
-        });
+        };
       }
 
       case 'send_invite': {
-        // Reuse the onboarding invitation flow
         const result = await createOnboardingInvitation({
           communityId,
           userId: checklist.residentId,
           actorUserId: userId,
-          inviterName: req.headers.get('x-user-full-name') || req.headers.get('x-user-email') || 'Your administrator',
+          inviterName:
+            req.headers.get('x-user-full-name') ||
+            req.headers.get('x-user-email') ||
+            'Your administrator',
         });
 
         const updated = await updateChecklistStep(
@@ -118,14 +106,13 @@ export const POST = withErrorHandler(
           userId,
         );
 
-        return NextResponse.json({
+        return {
           data: updated,
           action: { triggered: action, stepKey },
-        });
+        };
       }
 
       case 'create_inspection': {
-        // Create a maintenance request of category 'inspection'
         const request = await createInspectionRequestForChecklist(communityId, {
           unitId: checklist.unitId,
           submittedById: userId,
@@ -147,11 +134,11 @@ export const POST = withErrorHandler(
           userId,
         );
 
-        return NextResponse.json({
+        return {
           data: updated,
           action: { triggered: action, stepKey },
-        });
+        };
       }
     }
-  },
+  }),
 );
