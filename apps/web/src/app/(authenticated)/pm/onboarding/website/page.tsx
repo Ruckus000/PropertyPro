@@ -13,7 +13,9 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { hasRole } from '@/lib/api/role-guard';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
+import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { LayoutChooser } from '@/components/pm/onboarding-wizard/LayoutChooser';
+import { PresetChooser } from '@/components/pm/onboarding-wizard/PresetChooser';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -53,9 +55,10 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
-  const [branding, community] = await Promise.all([
+  const [branding, community, presets] = await Promise.all([
     getBrandingForCommunity(communityId),
     getCommunityPublicInfo(communityId),
+    listThemePresetsForWizard(),
   ]);
 
   return (
@@ -79,9 +82,16 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
 
       <LayoutChooser communityId={communityId} initialLayoutId={branding?.layoutId ?? null} />
 
-      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="mt-6">
+        <PresetChooser
+          communityId={communityId}
+          presets={presets}
+          initialPresetSlug={branding?.themePresetSlug ?? null}
+        />
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
-          { n: 2, label: 'Color & font preset' },
           { n: 3, label: 'Community identity' },
           { n: 4, label: 'Welcome message' },
           { n: 5, label: 'Confirm + publish' },
