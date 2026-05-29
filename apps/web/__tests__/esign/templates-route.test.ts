@@ -120,6 +120,15 @@ describe('GET /api/v1/esign/templates', () => {
     ).rejects.toThrow('Invalid status filter');
     expect(listTemplatesMock).not.toHaveBeenCalled();
   });
+
+  it('rejects an invalid type with ValidationError (400 path) — #232 contract', async () => {
+    await expect(
+      GET(
+        new NextRequest(`http://localhost:3000/api/v1/esign/templates?communityId=${COMMUNITY_ID}&type=invalid`),
+      ),
+    ).rejects.toThrow('Invalid type filter');
+    expect(listTemplatesMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/v1/esign/templates', () => {
