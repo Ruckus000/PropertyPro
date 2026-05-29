@@ -4,8 +4,11 @@
  * GET    /api/v1/onboarding/apartment  — load or initialize wizard state
  * PATCH  /api/v1/onboarding/apartment  — save one wizard step
  * POST   /api/v1/onboarding/apartment  — complete wizard
+ *
+ * Plan A1 drain #139. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { z } from 'zod';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
@@ -14,7 +17,6 @@ import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import {
@@ -35,11 +37,14 @@ import {
   getCommunityForWizardSeed,
   updateWizardStateRow,
 } from '@/lib/onboarding/wizard-common';
+import {
+  onboardingApartmentGetContract,
+  onboardingApartmentPatchContract,
+  onboardingApartmentPostContract,
+} from './contract';
 
 const WIZARD_TYPE = 'apartment';
-const MAX_STEP_INDEX = 1; // 0 Profile, 1 Compliance Preview
-
-const communityIdSchema = z.coerce.number().int().positive();
+const MAX_STEP_INDEX = 1;
 
 const profileSchema = z.object({
   name: z.string().trim().min(1),
@@ -70,23 +75,6 @@ const profileSchema = z.object({
   logoPath: z.string().trim().optional().nullable(),
 });
 
-const patchWizardSchema = z
-  .object({
-    communityId: z.number().int().positive(),
-    step: z.number().int().min(0).max(MAX_STEP_INDEX).optional(),
-    currentStep: z.number().int().min(1).max(MAX_STEP_INDEX + 1).optional(),
-    stepData: z.unknown(),
-  })
-  .refine((payload) => payload.step !== undefined || payload.currentStep !== undefined, {
-    path: ['step'],
-    message: 'step (0-1) or currentStep (1-2) is required',
-  });
-
-const completeWizardSchema = z.object({
-  communityId: z.number().int().positive(),
-  action: z.enum(['complete']).optional(),
-});
-
 function requireApartmentCommunity(communityType: CommunityType): void {
   const features = getFeaturesForCommunity(communityType);
   if (!features.hasLeaseTracking) {
@@ -104,7 +92,6 @@ function validateStepPatch(step: number, rawStepData: unknown): Partial<WizardSt
     return { profile: profileSchema.parse(normalized.profile) as ProfileStepData };
   }
 
-  // Step 1 (compliance preview) has no data to save
   return {};
 }
 
@@ -113,193 +100,157 @@ function sectionLabelForStep(step: number): 'profile' | 'compliance_preview' {
   return 'compliance_preview';
 }
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
-  const rawCommunityId = searchParams.get('communityId');
+export const GET = withErrorHandler(
+  runRoute(onboardingApartmentGetContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requireApartmentCommunity(membership.communityType);
 
-  const communityIdResult = communityIdSchema.safeParse(rawCommunityId);
-  if (!communityIdResult.success) {
-    throw new ValidationError('Invalid or missing communityId query parameter', {
-      fields: formatZodErrors(communityIdResult.error),
-    });
-  }
+    const scoped = createScopedClient(communityId);
 
-  const communityId = resolveEffectiveCommunityId(req, communityIdResult.data);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireApartmentCommunity(membership.communityType);
+    const community = await getCommunityForWizardSeed(scoped, communityId);
+    const initialStepData = community
+      ? { profile: buildProfileFromCommunity(community) }
+      : undefined;
 
-  const scoped = createScopedClient(communityId);
+    const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE, initialStepData);
+    const stepData = normalizeWizardStepData(wizard.stepData);
 
-  // Pre-populate profile step from existing community data (collected during signup)
-  const community = await getCommunityForWizardSeed(scoped, communityId);
-  const initialStepData = community
-    ? { profile: buildProfileFromCommunity(community) }
-    : undefined;
-
-  const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE, initialStepData);
-
-  const stepData = normalizeWizardStepData(wizard.stepData);
-
-  return NextResponse.json({
-    data: {
+    return {
       status: wizard.status,
       lastCompletedStep: wizard.lastCompletedStep,
       nextStep: deriveNextStep(wizard.lastCompletedStep, MAX_STEP_INDEX),
       stepData,
       completedAt: toIsoString(wizard.completedAt),
-    },
-  });
-});
+    };
+  }),
+);
 
-export const PATCH = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parseResult = patchWizardSchema.safeParse(body);
+export const PATCH = withErrorHandler(
+  runRoute(onboardingApartmentPatchContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    const actorUserId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  if (!parseResult.success) {
-    throw new ValidationError('Validation failed', {
-      fields: formatZodErrors(parseResult.error),
+    requireApartmentCommunity(membership.communityType);
+    requireMutationAuthorization(membership.role);
+    await requireActiveSubscriptionForMutation(communityId);
+
+    const step = normalizeStepIndex(body.step, body.currentStep);
+    const stepPatch = validateStepPatch(step, body.stepData);
+
+    const scoped = createScopedClient(communityId);
+    const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
+
+    const existingStepData = normalizeWizardStepData(wizard.stepData);
+    const mergedStepData = mergeStepData(existingStepData, stepPatch);
+
+    if (step === 0 && mergedStepData.profile) {
+      await updateCommunityProfile(scoped, communityId, mergedStepData.profile);
+    }
+
+    const existingLastStep = wizard.lastCompletedStep ?? -1;
+    const lastCompletedStep = Math.max(existingLastStep, step);
+    const status = wizard.status === 'skipped' ? 'in_progress' : wizard.status;
+
+    await updateWizardStateRow(
+      scoped,
+      communityId,
+      WIZARD_TYPE,
+      {
+        status,
+        lastCompletedStep,
+        stepData: mergedStepData,
+        updatedAt: new Date(),
+      },
+    );
+
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'update',
+      resourceType: 'onboarding_wizard',
+      resourceId: `${communityId}-${WIZARD_TYPE}`,
+      communityId,
+      newValues: {
+        step,
+        section: sectionLabelForStep(step),
+        stepData: stepPatch,
+      },
     });
-  }
 
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  const actorUserId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireApartmentCommunity(membership.communityType);
-  requireMutationAuthorization(membership.role);
-  await requireActiveSubscriptionForMutation(communityId);
-
-  const step = normalizeStepIndex(parseResult.data.step, parseResult.data.currentStep);
-  const stepPatch = validateStepPatch(step, parseResult.data.stepData);
-
-  const scoped = createScopedClient(communityId);
-  const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
-
-  const existingStepData = normalizeWizardStepData(wizard.stepData);
-  const mergedStepData = mergeStepData(existingStepData, stepPatch);
-
-  if (step === 0 && mergedStepData.profile) {
-    await updateCommunityProfile(scoped, communityId, mergedStepData.profile);
-  }
-
-  const existingLastStep = wizard.lastCompletedStep ?? -1;
-  const lastCompletedStep = Math.max(existingLastStep, step);
-  const status = wizard.status === 'skipped' ? 'in_progress' : wizard.status;
-
-  await updateWizardStateRow(
-    scoped,
-    communityId,
-    WIZARD_TYPE,
-    {
-      status,
-      lastCompletedStep,
-      stepData: mergedStepData,
-      updatedAt: new Date(),
-    },
-  );
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'update',
-    resourceType: 'onboarding_wizard',
-    resourceId: `${communityId}-${WIZARD_TYPE}`,
-    communityId,
-    newValues: {
-      step,
-      section: sectionLabelForStep(step),
-      stepData: stepPatch,
-    },
-  });
-
-  return NextResponse.json({
-    data: {
+    return {
       success: true,
       step,
       lastCompletedStep,
       nextStep: deriveNextStep(lastCompletedStep, MAX_STEP_INDEX),
       status,
       stepData: mergedStepData,
-    },
-  });
-});
+    };
+  }),
+);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parseResult = completeWizardSchema.safeParse(body);
+export const POST = withErrorHandler(
+  runRoute(onboardingApartmentPostContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    const actorUserId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  if (!parseResult.success) {
-    throw new ValidationError('Validation failed', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
+    requireApartmentCommunity(membership.communityType);
+    requireMutationAuthorization(membership.role);
+    await requireActiveSubscriptionForMutation(communityId);
 
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  const actorUserId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    const scoped = createScopedClient(communityId);
+    const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
 
-  requireApartmentCommunity(membership.communityType);
-  requireMutationAuthorization(membership.role);
-  await requireActiveSubscriptionForMutation(communityId);
-
-  const scoped = createScopedClient(communityId);
-  const wizard = await getOrCreateWizardState(scoped, communityId, WIZARD_TYPE);
-
-  if (wizard.status === 'completed') {
-    return NextResponse.json({
-      data: {
+    if (wizard.status === 'completed') {
+      return {
         success: true,
-        status: 'completed',
+        status: 'completed' as const,
         completedAt: toIsoString(wizard.completedAt),
         noop: true,
+      };
+    }
+
+    const now = new Date();
+    const stepData = normalizeWizardStepData(wizard.stepData);
+
+    await updateWizardStateRow(
+      scoped,
+      communityId,
+      WIZARD_TYPE,
+      {
+        status: 'completed',
+        lastCompletedStep: MAX_STEP_INDEX,
+        stepData,
+        completedAt: now,
+        updatedAt: now,
       },
-    });
-  }
+    );
 
-  const now = new Date();
-  const stepData = normalizeWizardStepData(wizard.stepData);
+    await createChecklistItems(
+      communityId,
+      actorUserId,
+      membership.role,
+      membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+    );
 
-  // Mark wizard as completed
-  await updateWizardStateRow(
-    scoped,
-    communityId,
-    WIZARD_TYPE,
-    {
-      status: 'completed',
-      lastCompletedStep: MAX_STEP_INDEX,
-      stepData,
-      completedAt: now,
-      updatedAt: now,
-    },
-  );
-
-  // Create checklist items for the post-onboarding checklist
-  await createChecklistItems(
-    communityId,
-    actorUserId,
-    membership.role,
-    membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
-  );
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'update',
-    resourceType: 'onboarding_wizard',
-    resourceId: `${communityId}-${WIZARD_TYPE}`,
-    communityId,
-    newValues: {
-      status: 'completed',
-      completedAt: now.toISOString(),
-    },
-  });
-
-  return NextResponse.json(
-    {
-      data: {
-        success: true,
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'update',
+      resourceType: 'onboarding_wizard',
+      resourceId: `${communityId}-${WIZARD_TYPE}`,
+      communityId,
+      newValues: {
         status: 'completed',
         completedAt: now.toISOString(),
       },
-    }
-  );
-});
+    });
+
+    return {
+      success: true,
+      status: 'completed' as const,
+      completedAt: now.toISOString(),
+    };
+  }),
+);
