@@ -25,6 +25,7 @@ import { requireRole } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { updateBrandingForCommunity } from '@/lib/api/branding';
+import { updateCommunityName } from '@/lib/services/community-profile-service';
 import { wizardPatchContract } from './contract';
 import type { NextRequest } from 'next/server';
 
@@ -43,13 +44,19 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
 
 export const PATCH = withErrorHandler(
   runRoute(wizardPatchContract, async ({ body, req }) => {
-    const { communityId } = await ensurePmAccess(req, body.communityId);
+    const { userId, communityId } = await ensurePmAccess(req, body.communityId);
 
-    // Build the patch from whichever fields the wizard step supplied.
-    // The contract validates each field's shape; we just forward to the
-    // merge helper.
-    const { communityId: _id, ...rest } = body;
-    const branding = await updateBrandingForCommunity(communityId, rest);
+    // `name` is a top-level communities column, NOT branding — pull it out so
+    // it never leaks into the branding jsonb merge below.
+    const { communityId: _id, name, ...brandingPatch } = body;
+    const branding = await updateBrandingForCommunity(communityId, brandingPatch);
+
+    // Community-name edit (spec §4.1 Step 3) — the service writes
+    // communities.name and emits a `community` update audit entry, no-opping
+    // when the value is unchanged.
+    if (name !== undefined) {
+      await updateCommunityName(communityId, name, { actorUserId: userId });
+    }
 
     return {
       branding: {

@@ -49,7 +49,7 @@ beforeEach(() => {
 
 describe('<IdentityEditor>', () => {
   it('renders the tagline textarea with the establishedYear-based placeholder', async () => {
-    render(wrap(<IdentityEditor communityId={42} establishedYear={1985} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" establishedYear={1985} />));
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
     expect(input.placeholder).toContain('1985');
   });
@@ -57,7 +57,7 @@ describe('<IdentityEditor>', () => {
   it('seeds the input from initialTagline (resume)', async () => {
     render(
       wrap(
-        <IdentityEditor communityId={42} initialTagline="Coastal living, refined" />,
+        <IdentityEditor communityId={42} initialName="Sunset Condos" initialTagline="Coastal living, refined" />,
       ),
     );
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
@@ -65,7 +65,7 @@ describe('<IdentityEditor>', () => {
   });
 
   it('updates the counter as the user types', async () => {
-    render(wrap(<IdentityEditor communityId={42} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" />));
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'Hello world' } });
     await waitFor(() =>
@@ -75,7 +75,7 @@ describe('<IdentityEditor>', () => {
 
   it('Continue PATCHes the trimmed tagline value', async () => {
     const onContinue = vi.fn();
-    render(wrap(<IdentityEditor communityId={42} onContinue={onContinue} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" onContinue={onContinue} />));
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '  Calm coastal living  ' } });
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
@@ -90,7 +90,7 @@ describe('<IdentityEditor>', () => {
 
   it('Continue PATCHes null when the tagline is empty (clears the value)', async () => {
     const onContinue = vi.fn();
-    render(wrap(<IdentityEditor communityId={42} initialTagline="old" onContinue={onContinue} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" initialTagline="old" onContinue={onContinue} />));
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
@@ -103,7 +103,7 @@ describe('<IdentityEditor>', () => {
   });
 
   it('disables Continue and shows an error when over the hard cap', async () => {
-    render(wrap(<IdentityEditor communityId={42} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" />));
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
     // 81 chars — one over the 80-char cap
     fireEvent.change(input, { target: { value: 'a'.repeat(81) } });
@@ -112,9 +112,39 @@ describe('<IdentityEditor>', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('seeds the community-name input from initialName', async () => {
+    render(wrap(<IdentityEditor communityId={42} initialName="Palm Shores HOA" />));
+    const input = await screen.findByTestId('wizard-community-name-input') as HTMLInputElement;
+    expect(input.value).toBe('Palm Shores HOA');
+  });
+
+  it('includes name in the PATCH only when it changed', async () => {
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" />));
+    const nameInput = await screen.findByTestId('wizard-community-name-input') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Sunset Condominiums' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+    await waitFor(() => {
+      const patchCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => typeof c[0] === 'string' && (c[0] as string).endsWith('/onboarding/website'),
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse((patchCall![1] as RequestInit).body as string);
+      expect(body.name).toBe('Sunset Condominiums');
+    });
+  });
+
+  it('disables Continue and shows a required error when the name is cleared', async () => {
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" />));
+    const nameInput = await screen.findByTestId('wizard-community-name-input') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: '   ' } });
+    const button = screen.getByRole('button', { name: /continue/i });
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('Skip calls onSkip without firing a PATCH', async () => {
     const onSkip = vi.fn();
-    render(wrap(<IdentityEditor communityId={42} onSkip={onSkip} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" onSkip={onSkip} />));
     await screen.findByTestId('wizard-tagline-input');
     fireEvent.click(screen.getByRole('button', { name: /skip/i }));
     expect(onSkip).toHaveBeenCalled();
@@ -130,7 +160,7 @@ describe('<IdentityEditor>', () => {
       status: 500,
       json: async () => ({ error: { message: 'Save failed' } }),
     } as Response));
-    render(wrap(<IdentityEditor communityId={42} />));
+    render(wrap(<IdentityEditor communityId={42} initialName="Sunset Condos" />));
     const input = await screen.findByTestId('wizard-tagline-input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'A nice tagline' } });
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
