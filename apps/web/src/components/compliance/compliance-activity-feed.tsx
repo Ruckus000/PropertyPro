@@ -151,7 +151,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
               >
                 <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${actionDotColor(entry.action)}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-content-secondary leading-relaxed">
+                  <p className="text-sm text-content-secondary leading-relaxed">
                     <span className="inline-flex items-center gap-1 text-content-tertiary">
                       {actionIcon(entry.action)}
                     </span>{" "}
