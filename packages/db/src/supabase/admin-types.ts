@@ -189,6 +189,21 @@ export type SiteThemePresetRow = {
   updated_at: string;
 };
 
+export type SiteLayoutMetadataRow = {
+  id: number;
+  slug: string;
+  display_name: string;
+  tagline: string | null;
+  description: string | null;
+  tier: 'essentials' | 'professional' | 'pm';
+  is_archived: boolean;
+  is_featured: boolean;
+  default_preset_slug: string | null;
+  version: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AdminDatabase = {
   public: {
     Tables: {
@@ -217,6 +232,7 @@ export type AdminDatabase = {
       users: AdminTable<AdminUserRow>;
       communities: AdminTable<AdminCommunityRow>;
       site_theme_presets: AdminTable<SiteThemePresetRow>;
+      site_layout_metadata: AdminTable<SiteLayoutMetadataRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
