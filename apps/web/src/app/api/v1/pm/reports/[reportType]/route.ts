@@ -1,5 +1,12 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * GET /api/v1/pm/reports/[reportType]
+ *
+ * Cross-community portfolio reports for property managers.
+ *
+ * Plan A1 drain #159. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 // AUTHZ: PM portfolio route — cross-community aggregation by design.
 import {
   isPmAdminInAnyCommunity,
@@ -10,37 +17,12 @@ import {
   getDelinquencyAgingReport,
 } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
-
-const REPORT_TYPES = ['maintenance', 'compliance', 'occupancy', 'violations', 'delinquency'] as const;
-type ReportType = (typeof REPORT_TYPES)[number];
-
-const querySchema = z.object({
-  dateFrom: z.coerce.date().optional(),
-  dateTo: z.coerce.date().optional(),
-  communityIds: z
-    .string()
-    .transform((s) => s.split(',').map(Number).filter((n) => !isNaN(n) && n > 0))
-    .optional(),
-}).refine(
-  (data) => {
-    if (data.dateFrom && !data.dateTo) return false;
-    if (!data.dateFrom && data.dateTo) return false;
-    return true;
-  },
-  { message: 'Both dateFrom and dateTo must be provided together', path: ['dateFrom'] },
-).refine(
-  (data) => {
-    if (data.dateFrom && data.dateTo) return data.dateFrom <= data.dateTo;
-    return true;
-  },
-  { message: 'dateFrom must be before or equal to dateTo', path: ['dateFrom'] },
-);
+import { pmReportGetContract, type PmReportType } from './contract';
 
 export const GET = withErrorHandler(
-  async (req: NextRequest, { params }: { params: Promise<{ reportType: string }> }) => {
+  runRoute(pmReportGetContract, async ({ params, query }) => {
     const userId = await requireAuthenticatedUserId();
 
     const isPm = await isPmAdminInAnyCommunity(userId);
@@ -48,48 +30,20 @@ export const GET = withErrorHandler(
       throw new ForbiddenError('This endpoint is only available to property managers');
     }
 
-    const { reportType } = await params;
-    if (!REPORT_TYPES.includes(reportType as ReportType)) {
-      throw new ValidationError(`Invalid report type: ${reportType}. Valid types: ${REPORT_TYPES.join(', ')}`);
-    }
-
-    const { searchParams } = new URL(req.url);
-    const rawQuery = {
-      dateFrom: searchParams.get('dateFrom') ?? undefined,
-      dateTo: searchParams.get('dateTo') ?? undefined,
-      communityIds: searchParams.get('communityIds') ?? undefined,
-    };
-
-    const parseResult = querySchema.safeParse(rawQuery);
-    if (!parseResult.success) {
-      throw new ValidationError('Invalid report query', {
-        fields: formatZodErrors(parseResult.error),
-      });
-    }
-
-    const { dateFrom, dateTo, communityIds } = parseResult.data;
+    const { dateFrom, dateTo, communityIds } = query;
     const dateRange = dateFrom && dateTo ? { from: dateFrom, to: dateTo } : undefined;
 
-    let data: unknown;
-
-    switch (reportType as ReportType) {
+    switch (params.reportType as PmReportType) {
       case 'maintenance':
-        data = await getMaintenanceVolumeReport(userId, communityIds, dateRange);
-        break;
+        return getMaintenanceVolumeReport(userId, communityIds, dateRange);
       case 'compliance':
-        data = await getComplianceStatusReport(userId, communityIds);
-        break;
+        return getComplianceStatusReport(userId, communityIds);
       case 'occupancy':
-        data = await getOccupancyTrendsReport(userId, communityIds, dateRange);
-        break;
+        return getOccupancyTrendsReport(userId, communityIds, dateRange);
       case 'violations':
-        data = await getViolationSummaryReport(userId, communityIds, dateRange);
-        break;
+        return getViolationSummaryReport(userId, communityIds, dateRange);
       case 'delinquency':
-        data = await getDelinquencyAgingReport(userId, communityIds);
-        break;
+        return getDelinquencyAgingReport(userId, communityIds);
     }
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
