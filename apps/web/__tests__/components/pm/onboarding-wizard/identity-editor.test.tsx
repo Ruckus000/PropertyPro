@@ -6,6 +6,13 @@ import type { ReactNode } from 'react';
 import React from 'react';
 import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
 
+// HeroImageField has its own test (HeroImageField.test.tsx) and fires its own
+// queries/uploads on mount. Stub it here so these tests stay scoped to the
+// tagline behavior (and don't consume the tagline PATCH's mockImplementationOnce).
+vi.mock('@/components/pm/onboarding-wizard/HeroImageField', () => ({
+  HeroImageField: () => <div data-testid="hero-image-field-stub" />,
+}));
+
 function wrap(node: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

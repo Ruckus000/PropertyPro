@@ -98,6 +98,7 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
           communityId={communityId}
           initialTagline={branding?.tagline ?? null}
           establishedYear={null}
+          heroFallbackHeadline={community?.name ? `Welcome to ${community.name}` : 'Welcome'}
         />
       </div>
 
