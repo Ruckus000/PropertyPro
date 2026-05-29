@@ -752,8 +752,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents/search?communityId=${communityA.id}`)),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    for (const doc of json.data) {
+    const json = await parseJson<{ data: { data: Array<Record<string, unknown>> } }>(response);
+    for (const doc of json.data.data) {
       expect(doc['communityId']).toBe(communityA.id);
       expect(doc['communityId']).not.toBe(communityB.id);
     }
@@ -797,8 +797,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents/search?communityId=${communityA.id}`)),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    const titles = json.data.map((d) => d['title']);
+    const json = await parseJson<{ data: { data: Array<Record<string, unknown>> } }>(response);
+    const titles = json.data.data.map((d) => d['title']);
     expect(titles).not.toContain(softDeletedTitle);
   });
 

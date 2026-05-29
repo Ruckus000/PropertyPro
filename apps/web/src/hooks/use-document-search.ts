@@ -13,10 +13,12 @@ export interface DocumentSearchRecord {
 }
 
 interface DocumentSearchResponse {
-  data: DocumentSearchRecord[];
-  pagination: {
-    nextCursor: number | null;
-    limit: number;
+  data: {
+    data: DocumentSearchRecord[];
+    pagination: {
+      nextCursor: number | null;
+      limit: number;
+    };
   };
 }
 
@@ -60,12 +62,10 @@ export function useDocumentSearch(communityId: number): UseDocumentSearchResult 
           throw new Error(`Search failed (${res.status})`);
         }
 
-        // Documented exception to the requestJson rule: response is flat
-        // { data: [], pagination } — requestJson returns json.data and would
-        // discard pagination.
         const json = (await res.json()) as DocumentSearchResponse;
-        setItems((prev) => (cursor ? [...prev, ...json.data] : json.data));
-        setNextCursor(json.pagination.nextCursor);
+        const page = json.data;
+        setItems((prev) => (cursor ? [...prev, ...page.data] : page.data));
+        setNextCursor(page.pagination.nextCursor);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Search failed');
       }

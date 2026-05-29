@@ -56,8 +56,10 @@ describe('p1-14 document search route', () => {
 
     const res = await GET(req);
     const json = (await res.json()) as {
-      data: Array<{ id: number }>;
-      pagination: { nextCursor: number | null; limit: number };
+      data: {
+        data: Array<{ id: number }>;
+        pagination: { nextCursor: number | null; limit: number };
+      };
     };
 
     expect(res.status).toBe(200);
@@ -72,8 +74,8 @@ describe('p1-14 document search route', () => {
         communityType: 'condo_718',
       }),
     );
-    expect(json.data[0]?.id).toBe(1);
-    expect(json.pagination.limit).toBe(10);
+    expect(json.data.data[0]?.id).toBe(1);
+    expect(json.data.pagination.limit).toBe(10);
   });
 
   it('returns 403 for authenticated non-member', async () => {

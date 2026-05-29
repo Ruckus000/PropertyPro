@@ -3,8 +3,7 @@
  *
  * Behavior moved verbatim from components/documents/document-search.tsx.
  * The hook owns the useTransition + raw fetch + state machine. Response is
- * the flat single-wrap shape { data: [], pagination } — requestJson would
- * discard `pagination`, so raw fetch is a documented exception.
+ * the B1 envelope `{ data: { data: [], pagination } }`.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -26,7 +25,9 @@ function makeRecord(id: number): DocumentSearchRecord {
 function okResponse(data: DocumentSearchRecord[], nextCursor: number | null) {
   return {
     ok: true,
-    json: async () => ({ data, pagination: { nextCursor, limit: 20 } }),
+    json: async () => ({
+      data: { data, pagination: { nextCursor, limit: 20 } },
+    }),
   } as unknown as Response;
 }
 

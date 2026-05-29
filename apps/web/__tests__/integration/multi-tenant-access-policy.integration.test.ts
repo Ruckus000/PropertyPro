@@ -437,10 +437,10 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents/search?communityId=${communityA.id}`)),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
+    const json = await parseJson<{ data: { data: Array<Record<string, unknown>> } }>(response);
 
     // Collect all searchText from results
-    const searchTexts = json.data
+    const searchTexts = json.data.data
       .map((d) => d['searchText'] as string | null)
       .filter(Boolean) as string[];
 
@@ -462,9 +462,9 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/documents/search?communityId=${communityC.id}`)),
     );
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
+    const json = await parseJson<{ data: { data: Array<Record<string, unknown>> } }>(response);
 
-    const searchTexts = json.data
+    const searchTexts = json.data.data
       .map((d) => d['searchText'] as string | null)
       .filter(Boolean) as string[];
 
