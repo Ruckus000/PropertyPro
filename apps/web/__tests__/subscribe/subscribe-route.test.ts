@@ -119,6 +119,24 @@ describe('POST /api/v1/subscribe', () => {
     );
   });
 
+  it('returns 400 when community is not found', async () => {
+    getCommunityForCheckoutMock.mockResolvedValue(null);
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(400);
+    expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+
+  it('includes accessPlanId in checkout metadata when an active plan exists', async () => {
+    findActiveAccessPlanIdForCommunityMock.mockResolvedValue(99);
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(200);
+    expect(stripeCheckoutCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ accessPlanId: '99' }),
+      }),
+    );
+  });
+
   it('returns 400 when planId is invalid', async () => {
     const res = await POST(buildRequest({ planId: 'not_a_plan' }));
     expect(res.status).toBe(400);
