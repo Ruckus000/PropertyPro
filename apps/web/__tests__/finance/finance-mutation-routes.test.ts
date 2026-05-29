@@ -278,6 +278,18 @@ describe('WS66 finance mutation routes', () => {
     );
   });
 
+  it('rejects create-intent body with neither lineItemId nor payableId', async () => {
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        payableType: 'assessment_line_item',
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
+  });
+
   it('guards payment intent creation for finance admins', async () => {
     const response = await createIntentPost(
       jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
