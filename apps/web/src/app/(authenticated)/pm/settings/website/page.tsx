@@ -13,12 +13,13 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { hasRole } from '@/lib/api/role-guard';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
-import { getCommunityPublicInfo } from '@/lib/api/branding';
+import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
 import { ContentSectionsList } from '@/components/pm/site-editor/ContentSectionsList';
 import { PublishBar } from '@/components/pm/site-editor/PublishBar';
+import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -70,13 +71,20 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
     if (parsed.success) initial = parsed.data;
   }
 
-  const communityInfo = await getCommunityPublicInfo(communityId);
+  const [communityInfo, branding] = await Promise.all([
+    getCommunityPublicInfo(communityId),
+    getBrandingForCommunity(communityId),
+  ]);
   const previewUrl = communityInfo
     ? buildCommunityUrl(communityInfo.slug, '/?preview=true')
     : null;
+  // PR #5b-f — substitute signal for "wizard not run yet". The
+  // canonical site_onboarding_completed_at column lands later.
+  const showWizardBanner = !branding?.layoutId;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
+      {showWizardBanner && <WizardEntryBanner communityId={communityId} />}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-content">Website</h1>
@@ -89,17 +97,26 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
             your changes live.
           </p>
         </div>
-        {previewUrl && (
+        <div className="flex shrink-0 items-center gap-2">
           <a
-            href={previewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="preview-draft-link"
-            className="inline-flex shrink-0 items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+            href={`/pm/onboarding/website?communityId=${communityId}`}
+            data-testid="run-wizard-link"
+            className="inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
           >
-            Preview Draft
+            Re-run onboarding
           </a>
-        )}
+          {previewUrl && (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="preview-draft-link"
+              className="inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+            >
+              Preview Draft
+            </a>
+          )}
+        </div>
       </div>
 
       <section aria-labelledby="welcome-tab" className="rounded-md border border-default bg-surface-card p-6 shadow-e0">
