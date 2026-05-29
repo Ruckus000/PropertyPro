@@ -413,9 +413,9 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     );
 
     expect(response.status).toBe(200);
-    const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
+    const json = await parseJson<{ data: { data: Array<Record<string, unknown>> } }>(response);
 
-    const found = json.data.find((d) => d['title'] === `Searchable Doc ${kit.runSuffix}`);
+    const found = json.data.data.find((d) => d['title'] === `Searchable Doc ${kit.runSuffix}`);
     expect(found).toBeDefined();
   });
 
