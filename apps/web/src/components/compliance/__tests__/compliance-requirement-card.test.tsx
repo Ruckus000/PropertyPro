@@ -77,6 +77,16 @@ describe('ComplianceRequirementCard — collapsed', () => {
     const toggle = screen.getByRole('button', { name: /show details/i });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
+
+  it('shows and fires View document for a read-only user with a document', () => {
+    const item = { ...overdueItem, documentId: 42 };
+    render(
+      <ComplianceRequirementCard item={item} communityId={9} canWrite={false} {...handlers} />,
+      { wrapper: wrapper() },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'View document' }));
+    expect(handlers.onView).toHaveBeenCalledWith(item);
+  });
 });
 
 describe('ComplianceRequirementCard — expanded', () => {

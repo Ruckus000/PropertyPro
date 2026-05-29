@@ -11,6 +11,7 @@ import { getTemplateDefaultVisibility } from './compliance-visibility';
 import { ComplianceItemActions } from './compliance-item-actions';
 import { HELP_TEXT, type ChecklistItemData } from './compliance-checklist-item';
 import type { AuditEntry } from '@/hooks/use-compliance-activity';
+import { cn } from '@/lib/utils';
 
 export interface ComplianceRequirementCardProps {
   item: ChecklistItemData;
@@ -32,6 +33,13 @@ function statusIcon(status: ComplianceStatus): LucideIcon {
   if (status === 'satisfied') return CheckCircle2;
   if (status === 'not_applicable') return MinusCircle;
   return Clock;
+}
+
+function statusIconColor(status: ComplianceStatus): string {
+  if (status === 'overdue') return 'text-[var(--status-danger)]';
+  if (status === 'satisfied') return 'text-[var(--status-success)]';
+  if (status === 'not_applicable') return 'text-[var(--status-neutral)]';
+  return 'text-[var(--status-warning)]';
 }
 
 function formatDate(iso: string | null | undefined): string | null {
@@ -79,20 +87,27 @@ export function ComplianceRequirementCard({
 
   function dispatchCta() {
     if (!cta) return;
-    if (cta.handler === 'upload') onUpload(item);
-    else if (cta.handler === 'link') onLink(item);
-    else if (cta.handler === 'view') onView(item);
-    else if (cta.handler === 'mark_applicable') onMarkApplicable(item);
+    switch (cta.handler) {
+      case 'upload': return onUpload(item);
+      case 'link': return onLink(item);
+      case 'view': return onView(item);
+      case 'mark_applicable': return onMarkApplicable(item);
+      default: {
+        const _exhaustive: never = cta.handler;
+        console.error('Unhandled CTA handler:', _exhaustive);
+      }
+    }
   }
 
   return (
     <article
-      className={`rounded-[var(--radius-md)] border bg-surface-card ${
-        variant === 'done' ? 'border-edge-subtle opacity-90' : 'border-edge-subtle'
-      }`}
+      className={cn(
+        'rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card',
+        variant === 'done' && 'opacity-90',
+      )}
     >
       <div className="flex items-start gap-3 p-4">
-        <span aria-hidden="true" className="mt-0.5 shrink-0">
+        <span aria-hidden="true" className={`mt-0.5 shrink-0 ${statusIconColor(item.status)}`}>
           <StatusIcon size={18} />
         </span>
         <div className="min-w-0 flex-1">
@@ -190,7 +205,7 @@ export function ComplianceRequirementCard({
               <ul className="mt-2 flex flex-col gap-1 text-sm text-content-secondary">
                 {recentEvents.map((e) => (
                   <li key={e.id}>
-                    {new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {formatDate(e.createdAt) ?? e.createdAt}
                     {' — '}
                     {e.action.replace(/_/g, ' ')}
                   </li>
