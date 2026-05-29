@@ -8,10 +8,12 @@
  *
  * Upgrades only — downgrades and cancellation stay on the Stripe portal.
  * Reauth-protected (requires fresh pp-reauth cookie).
+ *
+ * Plan A1 drain #148. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and auth-chain rationale.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
-import { PLAN_IDS, comparePlanTiers, type PlanId } from '@propertypro/shared';
+import { runRoute } from '@propertypro/api-contract';
+import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -27,105 +29,88 @@ import {
 import { isPlanAvailableForCommunityType } from '@/lib/auth/signup-schema';
 import { emitConversionEvent } from '@/lib/services/conversion-events';
 import { getCommunityForChangePlan } from '@/lib/billing/billing-group-service';
+import { subscribeChangePlanPostContract } from './contract';
 
-const changePlanSchema = z.object({
-  planId: z.enum(PLAN_IDS),
-  billingInterval: z.enum(['month', 'year']),
-});
+export const POST = withErrorHandler(
+  runRoute(subscribeChangePlanPostContract, async ({ body, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, null);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'settings', 'write');
+    await requireFreshReauth(userId);
 
-export const POST = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
-  const userId = await requireAuthenticatedUserId();
-  const communityId = resolveEffectiveCommunityId(req, null);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'settings', 'write');
-  await requireFreshReauth(userId);
+    const { planId, billingInterval } = body;
 
-  const body = await req.json();
-  const parsed = changePlanSchema.safeParse(body);
-  if (!parsed.success) {
-    throw new ValidationError('Invalid request body', {
-      issues: parsed.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })),
-    });
-  }
-  const { planId, billingInterval } = parsed.data;
+    const community = await getCommunityForChangePlan(communityId);
+    if (!community) {
+      throw new ValidationError('Community not found', { communityId: 'Not found' });
+    }
 
-  const community = await getCommunityForChangePlan(communityId);
-  if (!community) {
-    throw new ValidationError('Community not found', { communityId: 'Not found' });
-  }
-
-  if (!community.stripeSubscriptionId || community.subscriptionStatus !== 'active') {
-    throw new AppError(
-      'No active subscription to change. Start a subscription first.',
-      400,
-      'NO_ACTIVE_SUBSCRIPTION',
-    );
-  }
-
-  if (!isPlanAvailableForCommunityType(community.communityType, planId)) {
-    throw new ValidationError('This plan is not available for your community type', {
-      planId: 'Invalid plan for community type',
-    });
-  }
-
-  // Block downgrades and cross-ladder switches; allow tier upgrades and
-  // same-plan interval changes (e.g. monthly → annual on Essentials).
-  const currentPlan = community.subscriptionPlan as PlanId | null;
-  if (currentPlan) {
-    const cmp = comparePlanTiers(currentPlan, planId);
-    if (cmp === null || cmp > 0) {
+    if (!community.stripeSubscriptionId || community.subscriptionStatus !== 'active') {
       throw new AppError(
-        'Only upgrades are supported in-app. Use the Stripe billing portal to downgrade or cancel.',
+        'No active subscription to change. Start a subscription first.',
         400,
-        'DOWNGRADE_NOT_SUPPORTED',
+        'NO_ACTIVE_SUBSCRIPTION',
       );
     }
-    // Same plan: only valid if the billing interval is actually changing —
-    // otherwise we'd issue a Stripe update with an identical price and
-    // trigger an empty proration invoice for the customer.
-    if (cmp === 0) {
-      const currentInterval = await getActiveSubscriptionInterval(
-        community.stripeSubscriptionId,
-      ).catch(() => null);
-      if (currentInterval === billingInterval) {
+
+    if (!isPlanAvailableForCommunityType(community.communityType, planId)) {
+      throw new ValidationError('This plan is not available for your community type', {
+        planId: 'Invalid plan for community type',
+      });
+    }
+
+    const currentPlan = community.subscriptionPlan as PlanId | null;
+    if (currentPlan) {
+      const cmp = comparePlanTiers(currentPlan, planId);
+      if (cmp === null || cmp > 0) {
         throw new AppError(
-          'You are already on this plan and billing interval.',
+          'Only upgrades are supported in-app. Use the Stripe billing portal to downgrade or cancel.',
           400,
-          'NO_OP_PLAN_CHANGE',
+          'DOWNGRADE_NOT_SUPPORTED',
         );
       }
+      if (cmp === 0) {
+        const currentInterval = await getActiveSubscriptionInterval(
+          community.stripeSubscriptionId,
+        ).catch(() => null);
+        if (currentInterval === billingInterval) {
+          throw new AppError(
+            'You are already on this plan and billing interval.',
+            400,
+            'NO_OP_PLAN_CHANGE',
+          );
+        }
+      }
     }
-  }
 
-  const priceId = await resolveStripePrice(planId, community.communityType, billingInterval);
+    const priceId = await resolveStripePrice(planId, community.communityType, billingInterval);
 
-  try {
-    await changeSubscriptionPlan(community.stripeSubscriptionId, priceId);
-  } catch (err) {
-    console.error('[change-plan] Stripe update failed:', err);
-    if (err instanceof AppError) throw err;
-    throw new AppError(
-      'Could not update your subscription. Please try again or contact support.',
-      502,
-      'STRIPE_UPDATE_FAILED',
-    );
-  }
+    try {
+      await changeSubscriptionPlan(community.stripeSubscriptionId, priceId);
+    } catch (err) {
+      console.error('[change-plan] Stripe update failed:', err);
+      if (err instanceof AppError) throw err;
+      throw new AppError(
+        'Could not update your subscription. Please try again or contact support.',
+        502,
+        'STRIPE_UPDATE_FAILED',
+      );
+    }
 
-  await emitConversionEvent({
-    communityId,
-    eventType: 'self_service_plan_changed',
-    source: 'web_app',
-    // Stable dedupe within a 1-minute window: if the same user double-submits
-    // identical plan+interval, we only record one funnel event. Bucketing by
-    // minute keeps a legitimate change-then-revert from being swallowed.
-    dedupeKey: `community:${communityId}:plan-change:${planId}:${billingInterval}:${Math.floor(Date.now() / 60_000)}`,
-    userId,
-    metadata: {
-      fromPlan: currentPlan ?? 'unknown',
-      toPlan: planId,
-      billingInterval,
-    },
-  });
+    await emitConversionEvent({
+      communityId,
+      eventType: 'self_service_plan_changed',
+      source: 'web_app',
+      dedupeKey: `community:${communityId}:plan-change:${planId}:${billingInterval}:${Math.floor(Date.now() / 60_000)}`,
+      userId,
+      metadata: {
+        fromPlan: currentPlan ?? 'unknown',
+        toPlan: planId,
+        billingInterval,
+      },
+    });
 
-  return NextResponse.json({ data: { ok: true, planId, billingInterval } });
-});
+    return { ok: true as const, planId, billingInterval };
+  }),
+);

@@ -1,8 +1,5 @@
 /**
- * Unit tests for POST /api/v1/subscribe/change-plan.
- *
- * Covers reauth gate, downgrade rejection, missing-subscription rejection,
- * Stripe failure handling, and the happy upgrade path.
+ * Unit tests for POST /api/v1/subscribe/change-plan (A1 drain #148).
  */
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -17,7 +14,7 @@ const {
   changeSubscriptionPlanMock,
   getActiveSubscriptionIntervalMock,
   emitConversionEventMock,
-  selectCommunityMock,
+  getCommunityForChangePlanMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -28,7 +25,7 @@ const {
   changeSubscriptionPlanMock: vi.fn(),
   getActiveSubscriptionIntervalMock: vi.fn(),
   emitConversionEventMock: vi.fn(),
-  selectCommunityMock: vi.fn(),
+  getCommunityForChangePlanMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -54,32 +51,12 @@ vi.mock('@/lib/services/stripe-service', () => ({
 vi.mock('@/lib/services/conversion-events', () => ({
   emitConversionEvent: emitConversionEventMock,
 }));
+vi.mock('@/lib/billing/billing-group-service', () => ({
+  getCommunityForChangePlan: getCommunityForChangePlanMock,
+}));
 
-// Pass-through wrapper so thrown errors propagate as rejections instead of
-// being caught and serialized into JSON responses.
 vi.mock('@/lib/api/error-handler', () => ({
   withErrorHandler: <H extends (...args: unknown[]) => unknown>(handler: H): H => handler,
-}));
-
-// Drizzle chain mock: db.select(...).from(...).where(...).limit(...) → array
-vi.mock('@propertypro/db/unsafe', () => ({
-  createUnscopedClient: () => ({
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: selectCommunityMock,
-        }),
-      }),
-    }),
-  }),
-}));
-
-vi.mock('@propertypro/db', () => ({
-  communities: { id: 'communities.id' },
-}));
-
-vi.mock('@propertypro/db/filters', () => ({
-  eq: vi.fn((a: unknown, b: unknown) => ({ a, b })),
 }));
 
 vi.mock('@/lib/auth/signup-schema', () => ({
@@ -112,13 +89,13 @@ describe('POST /api/v1/subscribe/change-plan', () => {
     });
     requirePermissionMock.mockReturnValue(undefined);
     requireFreshReauthMock.mockResolvedValue(undefined);
-    selectCommunityMock.mockResolvedValue([{
+    getCommunityForChangePlanMock.mockResolvedValue({
       id: 1,
       communityType: 'condo_718',
       stripeSubscriptionId: 'sub_abc',
       subscriptionPlan: 'essentials',
       subscriptionStatus: 'active',
-    }]);
+    });
     resolveStripePriceMock.mockResolvedValue('price_new');
     changeSubscriptionPlanMock.mockResolvedValue({ id: 'sub_abc' });
     getActiveSubscriptionIntervalMock.mockResolvedValue('month');
@@ -135,7 +112,11 @@ describe('POST /api/v1/subscribe/change-plan', () => {
     expect(emitConversionEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: 'self_service_plan_changed',
-        metadata: expect.objectContaining({ fromPlan: 'essentials', toPlan: 'professional', billingInterval: 'month' }),
+        metadata: expect.objectContaining({
+          fromPlan: 'essentials',
+          toPlan: 'professional',
+          billingInterval: 'month',
+        }),
       }),
     );
   });
@@ -164,13 +145,13 @@ describe('POST /api/v1/subscribe/change-plan', () => {
   });
 
   it('rejects downgrades with DOWNGRADE_NOT_SUPPORTED', async () => {
-    selectCommunityMock.mockResolvedValue([{
+    getCommunityForChangePlanMock.mockResolvedValue({
       id: 1,
       communityType: 'condo_718',
       stripeSubscriptionId: 'sub_abc',
       subscriptionPlan: 'professional',
       subscriptionStatus: 'active',
-    }]);
+    });
     await expect(
       POST(buildRequest({ planId: 'essentials', billingInterval: 'month' })),
     ).rejects.toMatchObject({ code: 'DOWNGRADE_NOT_SUPPORTED', statusCode: 400 });
@@ -178,13 +159,13 @@ describe('POST /api/v1/subscribe/change-plan', () => {
   });
 
   it('rejects when community has no active subscription', async () => {
-    selectCommunityMock.mockResolvedValue([{
+    getCommunityForChangePlanMock.mockResolvedValue({
       id: 1,
       communityType: 'condo_718',
       stripeSubscriptionId: null,
       subscriptionPlan: null,
       subscriptionStatus: null,
-    }]);
+    });
     await expect(
       POST(buildRequest({ planId: 'professional', billingInterval: 'month' })),
     ).rejects.toMatchObject({ code: 'NO_ACTIVE_SUBSCRIPTION', statusCode: 400 });
