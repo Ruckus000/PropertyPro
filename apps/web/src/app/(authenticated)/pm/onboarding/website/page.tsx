@@ -18,6 +18,7 @@ import { LayoutChooser } from '@/components/pm/onboarding-wizard/LayoutChooser';
 import { PresetChooser } from '@/components/pm/onboarding-wizard/PresetChooser';
 import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
 import { WelcomeMessageEditor } from '@/components/pm/onboarding-wizard/WelcomeMessageEditor';
+import { ConfirmPublish } from '@/components/pm/onboarding-wizard/ConfirmPublish';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -107,18 +108,11 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
         />
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-3">
-        {[
-          { n: 5, label: 'Confirm + publish' },
-        ].map((step) => (
-          <div
-            key={step.n}
-            className="rounded-md border border-dashed border-default bg-surface-muted/40 p-3 text-xs text-content-secondary"
-          >
-            <p className="font-medium uppercase tracking-wide">Step {step.n} of 5</p>
-            <p className="mt-1">{step.label} — coming next.</p>
-          </div>
-        ))}
+      <div className="mt-6">
+        <ConfirmPublish
+          communityId={communityId}
+          communitySlug={community?.slug ?? null}
+        />
       </div>
     </div>
   );
