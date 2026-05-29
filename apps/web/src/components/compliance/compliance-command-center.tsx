@@ -88,7 +88,7 @@ export function ComplianceCommandCenter({
         title="We couldn't load compliance records"
         description="Please try again."
         action={
-          <Button size="sm" variant="secondary" onClick={() => refetch()}>
+          <Button size="sm" variant="secondary" onClick={() => refetch()} aria-label="Retry loading compliance records">
             Retry
           </Button>
         }

@@ -15,7 +15,7 @@ let mockChecklistReturn: { data: unknown[] | undefined; isLoading: boolean; erro
   data: [],
   isLoading: false,
   error: null,
-  refetch: () => {},
+  refetch: refetchMock,
 };
 
 vi.mock('@/hooks/useComplianceChecklist', () => ({
