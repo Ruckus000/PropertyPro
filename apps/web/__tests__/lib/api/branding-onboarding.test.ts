@@ -27,6 +27,10 @@ vi.mock('@propertypro/db', () => ({
     id: 'communities.id',
     siteOnboardingCompletedAt: 'communities.siteOnboardingCompletedAt',
   },
+  siteLayoutMetadata: {
+    slug: 'siteLayoutMetadata.slug',
+    defaultPresetSlug: 'siteLayoutMetadata.defaultPresetSlug',
+  },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -38,6 +42,7 @@ vi.mock('@propertypro/db/filters', () => ({
 import {
   getSiteOnboardingCompletedAt,
   markSiteOnboardingComplete,
+  seedDefaultSiteBranding,
 } from '@/lib/api/branding';
 
 function setupSelect(result: unknown[]) {
@@ -103,5 +108,96 @@ describe('markSiteOnboardingComplete', () => {
       a: 'communities.id',
       b: 42,
     });
+  });
+});
+
+describe('seedDefaultSiteBranding', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Wire both the select and update chains; tests vary mockLimit per call.
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere });
+    mockSelect.mockReturnValue({ from: mockFrom });
+    mockUpdateWhere.mockResolvedValue(undefined);
+    mockSet.mockReturnValue({ where: mockUpdateWhere });
+    mockUpdate.mockReturnValue({ set: mockSet });
+  });
+
+  it('seeds layoutId (from community type) + themePresetSlug (layout default) for a fresh community', async () => {
+    mockLimit
+      // 1) getBrandingForCommunity → no existing branding
+      .mockResolvedValueOnce([{ branding: null }])
+      // 2) site_layout_metadata read → tidewater's default preset
+      .mockResolvedValueOnce([{ defaultPresetSlug: 'bay-light' }])
+      // 3) updateBrandingForCommunity's internal getBranding → still empty
+      .mockResolvedValueOnce([{ branding: null }]);
+
+    await seedDefaultSiteBranding(7, 'condo_718');
+
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
+    const setArg = mockSet.mock.calls[0][0] as { branding: Record<string, unknown> };
+    expect(setArg.branding).toEqual({ layoutId: 'tidewater', themePresetSlug: 'bay-light' });
+  });
+
+  it('maps hoa_720 → boulevard and apartment → sable', async () => {
+    // hoa_720
+    mockLimit
+      .mockResolvedValueOnce([{ branding: null }])
+      .mockResolvedValueOnce([{ defaultPresetSlug: 'palm-shadow' }])
+      .mockResolvedValueOnce([{ branding: null }]);
+    await seedDefaultSiteBranding(8, 'hoa_720');
+    expect((mockSet.mock.calls[0][0] as { branding: Record<string, unknown> }).branding).toEqual({
+      layoutId: 'boulevard',
+      themePresetSlug: 'palm-shadow',
+    });
+
+    vi.clearAllMocks();
+    mockWhere.mockReturnValue({ limit: mockLimit });
+    mockFrom.mockReturnValue({ where: mockWhere });
+    mockSelect.mockReturnValue({ from: mockFrom });
+    mockSet.mockReturnValue({ where: mockUpdateWhere });
+    mockUpdate.mockReturnValue({ set: mockSet });
+    mockUpdateWhere.mockResolvedValue(undefined);
+
+    // apartment
+    mockLimit
+      .mockResolvedValueOnce([{ branding: null }])
+      .mockResolvedValueOnce([{ defaultPresetSlug: 'linen-bronze' }])
+      .mockResolvedValueOnce([{ branding: null }]);
+    await seedDefaultSiteBranding(9, 'apartment');
+    expect((mockSet.mock.calls[0][0] as { branding: Record<string, unknown> }).branding).toEqual({
+      layoutId: 'sable',
+      themePresetSlug: 'linen-bronze',
+    });
+  });
+
+  it('no-ops when the community already has a layoutId (never clobbers a PM choice)', async () => {
+    mockLimit.mockResolvedValueOnce([{ branding: { layoutId: 'sable', themePresetSlug: 'x' } }]);
+
+    await seedDefaultSiteBranding(7, 'condo_718');
+
+    // Returned before the layout read or any update.
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('no-ops for an unknown community type', async () => {
+    mockLimit.mockResolvedValueOnce([{ branding: null }]);
+
+    await seedDefaultSiteBranding(7, 'unknown_type');
+
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('writes themePresetSlug=null when the layout has no default preset row', async () => {
+    mockLimit
+      .mockResolvedValueOnce([{ branding: null }])
+      // layout row missing → no defaultPresetSlug
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ branding: null }]);
+
+    await seedDefaultSiteBranding(7, 'condo_718');
+
+    const setArg = mockSet.mock.calls[0][0] as { branding: Record<string, unknown> };
+    expect(setArg.branding).toEqual({ layoutId: 'tidewater', themePresetSlug: null });
   });
 });
