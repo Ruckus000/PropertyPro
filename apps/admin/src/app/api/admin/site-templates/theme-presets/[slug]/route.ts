@@ -1,7 +1,8 @@
 /**
  * Theme preset mutation API (per-slug).
  *
- * PATCH /api/admin/site-templates/theme-presets/[slug] — update fields.
+ * PATCH  /api/admin/site-templates/theme-presets/[slug] — update fields.
+ * DELETE /api/admin/site-templates/theme-presets/[slug] — remove or archive.
  *
  * Editable fields: displayName, description, tokens (partial), tier,
  * isFeatured, isArchived. The slug itself is immutable (it's how
@@ -11,6 +12,12 @@
  * see how many revisions a preset has gone through. The increment is
  * done on the row via SQL math expression; if you want history /
  * rollback semantics, that's a later slice.
+ *
+ * DELETE is usage-aware: a preset that any community references (via
+ * branding.themePresetSlug) or that a layout names as its
+ * default_preset_slug (FK onDelete:restrict) is ARCHIVED (is_archived=true)
+ * rather than hard-deleted, so live sites keep resolving their tokens.
+ * Only a fully-unreferenced preset is hard-deleted.
  *
  * AUTHZ: requirePlatformAdmin gates the route. site_theme_presets is
  * NOT tenant-scoped — catalog data, not community-scoped.
@@ -175,4 +182,92 @@ export async function PATCH(
   }
 
   return NextResponse.json({ preset: shape(data as SiteThemePresetRow) });
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  context: { params: Promise<{ slug: string }> },
+) {
+  await requirePlatformAdmin();
+
+  const { slug } = await context.params;
+  if (!slug || typeof slug !== 'string') {
+    return NextResponse.json(
+      { error: { message: 'Invalid preset slug' } },
+      { status: 400 },
+    );
+  }
+
+  const db = createAdminTypedClient();
+
+  // Confirm the preset exists (and learn its current archive state for
+  // idempotency on the archive branch).
+  const { data: preset, error: readErr } = await db
+    .from('site_theme_presets')
+    .select('id, is_archived')
+    .eq('slug', slug)
+    .single();
+  if (readErr) {
+    if (readErr.code === 'PGRST116') {
+      return NextResponse.json(
+        { error: { message: `Theme preset not found: ${slug}` } },
+        { status: 404 },
+      );
+    }
+    return NextResponse.json({ error: { message: readErr.message } }, { status: 500 });
+  }
+
+  // Usage check 1 — non-deleted communities referencing this preset via the
+  // branding jsonb. head:true keeps it a COUNT, no rows transferred.
+  const { count: communityCount, error: cErr } = await db
+    .from('communities')
+    .select('id', { count: 'exact', head: true })
+    .filter('branding->>themePresetSlug', 'eq', slug)
+    .is('deleted_at', null);
+  if (cErr) {
+    return NextResponse.json({ error: { message: cErr.message } }, { status: 500 });
+  }
+
+  // Usage check 2 — layouts that name this preset as their default. The FK
+  // is onDelete:restrict, so a hard delete here would error at the DB anyway.
+  const { count: layoutCount, error: lErr } = await db
+    .from('site_layout_metadata')
+    .select('slug', { count: 'exact', head: true })
+    .eq('default_preset_slug', slug);
+  if (lErr) {
+    return NextResponse.json({ error: { message: lErr.message } }, { status: 500 });
+  }
+
+  const communities = communityCount ?? 0;
+  const layouts = layoutCount ?? 0;
+
+  if (communities > 0 || layouts > 0) {
+    // In use → archive instead of delete so live sites keep resolving tokens.
+    if (!(preset as { is_archived: boolean }).is_archived) {
+      const { error: archiveErr } = await db
+        .from('site_theme_presets')
+        .update({ is_archived: true, updated_at: new Date().toISOString() })
+        .eq('slug', slug);
+      if (archiveErr) {
+        return NextResponse.json({ error: { message: archiveErr.message } }, { status: 500 });
+      }
+    }
+    return NextResponse.json({
+      archived: true,
+      deleted: false,
+      communityCount: communities,
+      layoutCount: layouts,
+    });
+  }
+
+  // Fully unreferenced → hard delete.
+  const { error: delErr } = await db
+    .from('site_theme_presets')
+    .delete()
+    .eq('slug', slug);
+  if (delErr) {
+    return NextResponse.json({ error: { message: delErr.message } }, { status: 500 });
+  }
+
+  return NextResponse.json({ archived: false, deleted: true });
 }
