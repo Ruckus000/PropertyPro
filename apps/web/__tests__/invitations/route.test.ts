@@ -3,41 +3,36 @@ import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 
 const {
-  createScopedClientMock,
-  scopedQueryMock,
-  scopedInsertMock,
-  scopedUpdateMock,
   logAuditEventMock,
   sendEmailMock,
-  createAdminClientMock,
-  communitiesTable,
-  usersTable,
-  userRolesTable,
-  invitationsTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  resolveEffectiveCommunityIdMock,
+  assertNotDemoGraceMock,
+  createInvitationMock,
+  getCommunityNameForInvitationMock,
+  getUserForInvitationMock,
+  getUserRoleForInvitationMock,
+  findInvitationByTokenMock,
+  createSupabaseAuthUserFromInvitationMock,
+  markInvitationConsumedMock,
 } = vi.hoisted(() => ({
-  createScopedClientMock: vi.fn(),
-  scopedQueryMock: vi.fn(),
-  scopedInsertMock: vi.fn(),
-  scopedUpdateMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'test_1' }),
-  createAdminClientMock: vi.fn(),
-  communitiesTable: Symbol('communities'),
-  usersTable: Symbol('users'),
-  userRolesTable: Symbol('user_roles'),
-  invitationsTable: Symbol('invitations'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue(undefined),
+  resolveEffectiveCommunityIdMock: vi.fn(),
+  assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
+  createInvitationMock: vi.fn().mockResolvedValue(undefined),
+  getCommunityNameForInvitationMock: vi.fn(),
+  getUserForInvitationMock: vi.fn(),
+  getUserRoleForInvitationMock: vi.fn(),
+  findInvitationByTokenMock: vi.fn(),
+  createSupabaseAuthUserFromInvitationMock: vi.fn(),
+  markInvitationConsumedMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
-  communities: communitiesTable,
-  users: usersTable,
-  userRoles: userRolesTable,
-  invitations: invitationsTable,
-  createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
 }));
 
@@ -49,46 +44,46 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
+vi.mock('@/lib/api/tenant-context', () => ({
+  resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
+}));
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
+}));
+
 vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
-  InvitationEmail: (props: unknown) => ({ type: 'InvitationEmail', props } as any),
+  InvitationEmail: (props: unknown) => ({ type: 'InvitationEmail', props }) as { type: string; props: unknown },
 }));
 
-vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminClient: createAdminClientMock,
+vi.mock('@/lib/services/invitations-service', () => ({
+  createInvitation: createInvitationMock,
+  getCommunityNameForInvitation: getCommunityNameForInvitationMock,
+  getUserForInvitation: getUserForInvitationMock,
+  getUserRoleForInvitation: getUserRoleForInvitationMock,
+  findInvitationByToken: findInvitationByTokenMock,
+  createSupabaseAuthUserFromInvitation: createSupabaseAuthUserFromInvitationMock,
+  markInvitationConsumed: markInvitationConsumedMock,
 }));
 
-
-vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
-import { POST, PATCH } from '../../src/app/api/v1/invitations/route';
+import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
 
 describe('p1-20 invitation auth flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('inviter-uuid');
-    createScopedClientMock.mockReturnValue({
-      query: scopedQueryMock,
-      // After A3 drain #60, helpers in `invitations-service` use
-      // `selectFrom(table, projection, eq(pk, value))` instead of
-      // `scoped.query(table)` + JS .find(). The test's mocked rows still
-      // come from `scopedQueryMock`; selectFrom delegates to the same
-      // queue so each `mockResolvedValueOnce` feeds the next helper call.
-      selectFrom: scopedQueryMock,
-      insert: scopedInsertMock,
-      update: scopedUpdateMock,
-    });
+    resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
   });
 
   it('POST sends invitation email with correct link and community name', async () => {
-    scopedQueryMock
-      // communities
-      .mockResolvedValueOnce([{ id: 99, name: 'Sunset Condos' }])
-      // users
-      .mockResolvedValueOnce([
-        { id: 'user-1', email: 'resident@example.com', fullName: 'Jane Resident' },
-      ])
-      // user_roles
-      .mockResolvedValueOnce([{ id: 1, userId: 'user-1', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }]);
+    getCommunityNameForInvitationMock.mockResolvedValueOnce({ id: 99, name: 'Sunset Condos' });
+    getUserForInvitationMock.mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'resident@example.com',
+      fullName: 'Jane Resident',
+    });
+    getUserRoleForInvitationMock.mockResolvedValueOnce('resident');
 
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'POST',
@@ -99,11 +94,9 @@ describe('p1-20 invitation auth flow', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    expect(createScopedClientMock).toHaveBeenCalledWith(99);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(99, 'inviter-uuid');
-    expect(scopedInsertMock).toHaveBeenCalledWith(
-      invitationsTable,
-      expect.objectContaining({ userId: 'user-1' }),
+    expect(createInvitationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 99, userId: 'user-1', invitedBy: 'inviter-uuid' }),
     );
 
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
@@ -111,8 +104,7 @@ describe('p1-20 invitation auth flow', () => {
     expect(emailArgs.to).toBe('resident@example.com');
     expect(emailArgs.subject).toContain('Sunset Condos');
 
-    // Inspect the React element props passed to InvitationEmail
-    const reactEl = emailArgs.react;
+    const reactEl = emailArgs.react as { props: { branding: { communityName: string }; inviteUrl: string } };
     expect(reactEl.props.branding.communityName).toBe('Sunset Condos');
     expect(reactEl.props.inviteUrl).toContain('/auth/accept-invite?token=');
     expect(reactEl.props.inviteUrl).toContain('communityId=99');
@@ -120,6 +112,9 @@ describe('p1-20 invitation auth flow', () => {
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'user_invited', communityId: 99 }),
     );
+
+    const json = (await res.json()) as { data: { success: boolean } };
+    expect(json.data.success).toBe(true);
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
@@ -137,29 +132,19 @@ describe('p1-20 invitation auth flow', () => {
 
   it('PATCH consumes token, creates auth user, and returns email', async () => {
     const token = 'tok123';
-    // invitations
-    scopedQueryMock
-      .mockResolvedValueOnce([
-        {
-          id: 1,
-          token,
-          userId: 'user-1',
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          consumedAt: null,
-        },
-      ])
-      // users
-      .mockResolvedValueOnce([
-        { id: 'user-1', email: 'resident@example.com', fullName: 'Jane Resident' },
-      ]);
-
-    createAdminClientMock.mockReturnValue({
-      auth: {
-        admin: {
-          createUser: vi.fn().mockResolvedValue({ data: {}, error: null }),
-        },
-      },
+    findInvitationByTokenMock.mockResolvedValueOnce({
+      id: 1,
+      token,
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      consumedAt: null,
     });
+    getUserForInvitationMock.mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'resident@example.com',
+      fullName: 'Jane Resident',
+    });
+    createSupabaseAuthUserFromInvitationMock.mockResolvedValueOnce({ ok: true });
 
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
@@ -171,11 +156,7 @@ describe('p1-20 invitation auth flow', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { email: string } };
     expect(json.data.email).toBe('resident@example.com');
-    expect(scopedUpdateMock).toHaveBeenCalledWith(
-      invitationsTable,
-      expect.objectContaining({ consumedAt: expect.any(Date) }),
-      expect.anything(),
-    );
+    expect(markInvitationConsumedMock).toHaveBeenCalledWith(55, token, expect.any(Date));
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'update', communityId: 55 }),
     );
@@ -183,10 +164,13 @@ describe('p1-20 invitation auth flow', () => {
 
   it('PATCH rejects already used token', async () => {
     const token = 'used123';
-    scopedQueryMock
-      .mockResolvedValueOnce([
-        { id: 1, token, userId: 'user-1', expiresAt: new Date(Date.now() + 1000).toISOString(), consumedAt: new Date().toISOString() },
-      ]);
+    findInvitationByTokenMock.mockResolvedValueOnce({
+      id: 1,
+      token,
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() + 1000),
+      consumedAt: new Date(),
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
@@ -202,10 +186,13 @@ describe('p1-20 invitation auth flow', () => {
 
   it('PATCH rejects expired token', async () => {
     const token = 'exp123';
-    scopedQueryMock
-      .mockResolvedValueOnce([
-        { id: 1, token, userId: 'user-1', expiresAt: new Date(Date.now() - 1000).toISOString(), consumedAt: null },
-      ]);
+    findInvitationByTokenMock.mockResolvedValueOnce({
+      id: 1,
+      token,
+      userId: 'user-1',
+      expiresAt: new Date(Date.now() - 1000),
+      consumedAt: null,
+    });
 
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
