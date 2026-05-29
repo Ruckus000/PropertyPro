@@ -139,3 +139,29 @@ describe('ComplianceRequirementCard — expanded', () => {
     expect(screen.queryByRole('button', { name: /link existing document/i })).toBeNull();
   });
 });
+
+describe('ComplianceRequirementCard — done variant', () => {
+  const satisfiedItem: ChecklistItemData = {
+    id: 2,
+    templateKey: '718_bylaws',
+    title: 'Bylaws',
+    description: null,
+    category: 'governing_documents',
+    statuteReference: '§718.112',
+    documentId: 555,
+    documentPostedAt: '2026-05-01T00:00:00.000Z',
+    deadline: null,
+    status: 'satisfied',
+  };
+
+  it('shows the View document CTA for a satisfied item', () => {
+    render(
+      <ComplianceRequirementCard item={satisfiedItem} communityId={9} canWrite variant="done" {...handlers} />,
+      { wrapper: wrapper() },
+    );
+    // satisfied => resolveComplianceCta returns View document / view
+    const cta = screen.getByRole('button', { name: 'View document' });
+    fireEvent.click(cta);
+    expect(handlers.onView).toHaveBeenCalledWith(satisfiedItem);
+  });
+});
