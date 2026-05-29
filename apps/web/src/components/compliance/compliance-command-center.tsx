@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
@@ -55,9 +56,10 @@ export function ComplianceCommandCenter({
 
   function jumpToWorst() {
     if (!worst) return;
-    const el = document.querySelector(`[data-card-id="${worst.id}"]`);
-    if (el && 'scrollIntoView' in el) {
-      (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const el = document.querySelector<HTMLElement>(`[data-card-id="${worst.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      requestAnimationFrame(() => el.focus({ preventScroll: true }));
     }
   }
 
@@ -160,7 +162,7 @@ export function ComplianceCommandCenter({
               </div>
             ) : (
               needsYou.map((item) => (
-                <div key={item.id} data-card-id={item.id}>
+                <div key={item.id} data-card-id={item.id} tabIndex={-1}>
                   <ComplianceRequirementCard
                     item={item}
                     communityId={communityId}
@@ -176,12 +178,12 @@ export function ComplianceCommandCenter({
 
           {done.length > 0 && (
             <details className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-content-secondary">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-content-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--border-focus)]">
                 You&apos;re caught up on {done.length} {done.length === 1 ? 'record' : 'records'}
               </summary>
               <div className="flex flex-col gap-3 p-4 pt-0">
                 {done.map((item) => (
-                  <div key={item.id} data-card-id={item.id}>
+                  <div key={item.id} data-card-id={item.id} tabIndex={-1}>
                     <ComplianceRequirementCard
                       item={item}
                       communityId={communityId}
@@ -235,9 +237,10 @@ function KpiCard({
     <article className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card p-5">
       <div className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">{label}</div>
       <div
-        className={`mt-2 flex items-center gap-2 text-3xl font-bold tabular-nums ${
-          tone === 'alert' ? 'text-[var(--status-danger)]' : 'text-content'
-        }`}
+        className={cn(
+          'mt-2 flex items-center gap-2 text-3xl font-bold tabular-nums',
+          tone === 'alert' ? 'text-[var(--status-danger)]' : 'text-content',
+        )}
       >
         {tone === 'alert' && <AlertTriangle size={20} aria-hidden="true" />}
         {value}

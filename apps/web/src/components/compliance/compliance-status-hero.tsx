@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { cn } from '@/lib/utils';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@propertypro/ui';
@@ -48,15 +49,15 @@ export function ComplianceStatusHero({ summary, worstItem, onJumpToWorst }: Comp
   return (
     <section
       aria-labelledby="compliance-hero-title"
-      className={`rounded-[var(--radius-md)] border-l-4 ${styles.border} ${styles.bg} p-5`}
+      className={cn('rounded-[var(--radius-md)] border-l-4 p-5', styles.border, styles.bg)}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span aria-hidden="true" className={`mt-0.5 shrink-0 ${styles.fg}`}>
+          <span aria-hidden="true" className={cn('mt-0.5 shrink-0', styles.fg)}>
             <Icon size={24} />
           </span>
           <div>
-            <h2 id="compliance-hero-title" className={`text-lg font-semibold ${styles.fg}`}>
+            <h2 id="compliance-hero-title" className={cn('text-lg font-semibold', styles.fg)}>
               {tone === 'success' ? 'Fully compliant' : 'Action required'}
             </h2>
             <p className="mt-1 text-sm text-content-secondary">{heroVerdict(summary, tone)}</p>
@@ -84,7 +85,7 @@ export function ComplianceStatusHero({ summary, worstItem, onJumpToWorst }: Comp
           aria-label="Compliance readiness"
           className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-muted"
         >
-          <div className={`h-full ${styles.bar}`} style={{ width: `${pct}%` }} />
+          <div className={cn('h-full', styles.bar)} style={{ width: `${pct}%` }} />
         </div>
       </div>
     </section>
