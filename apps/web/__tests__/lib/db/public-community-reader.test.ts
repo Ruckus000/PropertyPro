@@ -10,7 +10,6 @@ vi.mock('@propertypro/db', () => ({
     blockType: 'siteBlocks.blockType',
     content: 'siteBlocks.content',
     isDraft: 'siteBlocks.isDraft',
-    templateVariant: 'siteBlocks.templateVariant',
     deletedAt: 'siteBlocks.deletedAt',
   },
   announcements: {
@@ -173,12 +172,13 @@ describe('getPublicCommunityScopedReader', () => {
     // The query should select FROM siteBlocks
     expect(mockSelectChain.from).toHaveBeenCalled();
 
-    // The WHERE clause should include all four predicates
+    // The WHERE clause should include all three predicates (post-#9e:
+    // template_variant column dropped from the schema).
     expect(mockSelectChain.where).toHaveBeenCalledTimes(1);
     const whereCall = mockSelectChain.where.mock.calls[0][0];
     // Mock 'and' wraps its args in { __and: clauses[] }
     expect(whereCall).toHaveProperty('__and');
-    expect(whereCall.__and).toHaveLength(4);
+    expect(whereCall.__and).toHaveLength(3);
   });
 
   it('listSiteBlocks orders by blockOrder ascending', async () => {
@@ -208,10 +208,11 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listSiteBlocks();
     const whereCall = mockSelectChain.where.mock.calls[0][0];
-    // 4 predicates: communityId, templateVariant, deletedAt isNull, isDraft=false
-    expect(whereCall.__and).toHaveLength(4);
+    // 3 predicates: communityId, deletedAt isNull, isDraft=false
+    // (template_variant column was dropped in PR #9e.)
+    expect(whereCall.__and).toHaveLength(3);
     // The is_draft=false predicate is appended last
-    const isDraftClause = whereCall.__and[3];
+    const isDraftClause = whereCall.__and[2];
     expect(isDraftClause).toHaveProperty('__eq');
     expect(isDraftClause.__eq.col).toBe('siteBlocks.isDraft');
     expect(isDraftClause.__eq.val).toBe(false);
@@ -221,8 +222,8 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.listSiteBlocks({ includeDrafts: true });
     const whereCall = mockSelectChain.where.mock.calls[0][0];
-    // Only 3 predicates: communityId, templateVariant, deletedAt isNull
-    expect(whereCall.__and).toHaveLength(3);
+    // Only 2 predicates: communityId, deletedAt isNull
+    expect(whereCall.__and).toHaveLength(2);
     // None of the remaining predicates target isDraft
     const targetsIsDraft = whereCall.__and.some(
       (c: { __eq?: { col: unknown } }) => c?.__eq?.col === 'siteBlocks.isDraft',

@@ -107,8 +107,8 @@ export async function upsertPublishedBlock({
     // Step 1: Soft-delete any existing row of the SAME draft-state at this
     // blockOrder. The predicate intentionally does NOT include blockType.
     // The partial unique index
-    // `site_blocks_community_order_draft_variant_partial` is keyed on
-    // (community_id, block_order, is_draft, template_variant)
+    // `site_blocks_community_order_draft_partial` is keyed on
+    // (community_id, block_order, is_draft) post-migration 0008
     // WHERE deleted_at IS NULL — block_type is NOT part of the uniqueness
     // constraint. Filtering soft-delete on block_type would leave a row of
     // a different type at the same order, and the subsequent insert would
@@ -204,7 +204,7 @@ export type PublishCommunitySiteResult =
  * Order matters: the soft-delete (step 3) moves prior rows out of the
  * partial unique index BEFORE the draft-promotion (step 4) inserts the
  * new keys. Without step 3 first, two rows would briefly share
- * `(community_id, block_order, is_draft=false, template_variant)` and
+ * `(community_id, block_order, is_draft=false)` and
  * violate the constraint mid-transaction.
  */
 export async function publishCommunitySite({

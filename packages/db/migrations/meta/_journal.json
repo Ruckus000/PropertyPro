@@ -1,62 +1,69 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1778104090479,
-      "tag": "0000_nappy_guardian",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1778106092617,
-      "tag": "0001_round_pixie",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1778115661662,
-      "tag": "0002_reconcile_help_articles_user_search",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1778694790784,
-      "tag": "0003_maintenance_unit_label",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1779814172957,
-      "tag": "0004_site_blocks_foundation",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1779836874265,
-      "tag": "0005_site_blocks_rls_hardening",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1779905382570,
-      "tag": "0006_site_assets_storage",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1780041600000,
-      "tag": "0007_documents_public_access",
-      "breakpoints": true
-    }
-  ]
+	"version": "7",
+	"dialect": "postgresql",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "7",
+			"when": 1778104090479,
+			"tag": "0000_nappy_guardian",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1778106092617,
+			"tag": "0001_round_pixie",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1778115661662,
+			"tag": "0002_reconcile_help_articles_user_search",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "7",
+			"when": 1778694790784,
+			"tag": "0003_maintenance_unit_label",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "7",
+			"when": 1779814172957,
+			"tag": "0004_site_blocks_foundation",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "7",
+			"when": 1779836874265,
+			"tag": "0005_site_blocks_rls_hardening",
+			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1779905382570,
+			"tag": "0006_site_assets_storage",
+			"breakpoints": true
+		},
+		{
+			"idx": 7,
+			"version": "7",
+			"when": 1780041600000,
+			"tag": "0007_documents_public_access",
+			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "7",
+			"when": 1780041600001,
+			"tag": "0008_retire_jsx_template",
+			"breakpoints": true
+		}
+	]
 }

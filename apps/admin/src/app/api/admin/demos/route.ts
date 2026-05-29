@@ -242,67 +242,15 @@ export async function POST(request: NextRequest) {
     captureException(err, { level: 'warning', extra: { context: '[demos/POST] Failed to emit demo_created event' } });
   }
 
-  // Compile and store site_blocks when template IDs are provided
-  if (publicTemplateId !== undefined || mobileTemplateId !== undefined) {
-    const communityId = seedResult.communityId;
-    const now = new Date().toISOString();
-    const adminDb = createAdminClient();
-
-    const templateCompilations: Promise<void>[] = [];
-
-    if (publicTemplateId !== undefined) {
-      const publicTemplate = getTemplateById(publicTemplateId)!;
-      templateCompilations.push(
-        compileDemoTemplate({ templateId: publicTemplateId, communityName: prospectName, branding }).then(
-          async (publicHtml) => {
-            await adminDb.from('site_blocks').upsert({
-              community_id: communityId,
-              block_type: 'jsx_template',
-              block_order: 0,
-              content: {
-                jsxSource: publicTemplate.build({ communityName: prospectName, branding }),
-                compiledHtml: publicHtml,
-                compiledAt: now,
-              },
-              is_draft: false,
-              published_at: now,
-              template_variant: 'public',
-            } as never, { onConflict: 'community_id,block_type,is_draft,template_variant' });
-          },
-        ),
-      );
-    }
-
-    if (mobileTemplateId !== undefined) {
-      const mobileTemplate = getTemplateById(mobileTemplateId)!;
-      templateCompilations.push(
-        compileDemoTemplate({ templateId: mobileTemplateId, communityName: prospectName, branding }).then(
-          async (mobileHtml) => {
-            await adminDb.from('site_blocks').upsert({
-              community_id: communityId,
-              block_type: 'jsx_template',
-              block_order: 0,
-              content: {
-                jsxSource: mobileTemplate.build({ communityName: prospectName, branding }),
-                compiledHtml: mobileHtml,
-                compiledAt: now,
-              },
-              is_draft: false,
-              published_at: now,
-              template_variant: 'mobile',
-            } as never, { onConflict: 'community_id,block_type,is_draft,template_variant' });
-          },
-        ),
-      );
-    }
-
-    try {
-      await Promise.all(templateCompilations);
-    } catch (err) {
-      captureException(err, { extra: { context: '[demos/POST] Failed to compile/store site_blocks' } });
-      // Non-fatal: demo was created, templates can be regenerated later
-    }
-  }
+  // PR #9e — JSX template site_blocks rows are no longer rendered by the
+  // public site (PR #9d retired the render path) and the block_type +
+  // template_variant columns that powered them are dropped in migration
+  // 0008. The demo creation flow accepted publicTemplateId /
+  // mobileTemplateId for backward-compatible callers but the rows it
+  // produced are unreadable from any current surface; the insertion is
+  // removed here. The accepted parameters remain (silently ignored) so
+  // existing API consumers don't break — they'll be cleaned up in a
+  // later admin-side slice.
 
   // Generate preview tokens (1-hour TTL)
   const residentToken = generateDemoToken({
