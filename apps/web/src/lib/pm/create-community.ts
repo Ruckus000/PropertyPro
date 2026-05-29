@@ -9,6 +9,7 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import { seedDefaultSiteBranding } from '@/lib/api/branding';
 import type { CommunityType } from '@propertypro/shared';
 
 interface CreateCommunityInput {
@@ -120,6 +121,18 @@ export async function createCommunityForPm(
     // + categories + audit log). The PM can manually customize via the editor.
     // eslint-disable-next-line no-console
     console.error('applyStarterPackToCommunity failed', { communityId, err });
+  }
+
+  // 5c. Seed default site branding — layout (from community type) + the
+  // layout's default theme preset (spec §4.0). Best-effort + idempotent for
+  // the same reason as 5b: a catalog read failure must not lose the community.
+  // Leaves site_onboarding_completed_at null so the "customize your site"
+  // prompts still surface.
+  try {
+    await seedDefaultSiteBranding(communityId, input.communityType);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('seedDefaultSiteBranding failed', { communityId, err });
   }
 
   // 6. Audit log (outside transaction — best-effort, should not fail community creation)
