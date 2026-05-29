@@ -7,6 +7,7 @@ const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   resolveEffectiveCommunityIdMock,
+  requirePermissionMock,
   requestCommunityDeletionMock,
   findCoolingCommunityDeletionRequestMock,
   interveneCommunityDeletionMock,
@@ -14,6 +15,7 @@ const {
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
   requestCommunityDeletionMock: vi.fn(),
   findCoolingCommunityDeletionRequestMock: vi.fn(),
   interveneCommunityDeletionMock: vi.fn(),
@@ -32,7 +34,7 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 vi.mock('@/lib/db/access-control', () => ({
-  requirePermission: vi.fn(),
+  requirePermission: requirePermissionMock,
 }));
 
 vi.mock('@/lib/services/account-lifecycle-service', () => ({
@@ -72,6 +74,7 @@ describe('POST /api/v1/communities/delete', () => {
     expect(res.status).toBe(200);
     expect(json.data).toEqual({ id: 99, status: 'cooling', communityId: 7 });
     expect(requestCommunityDeletionMock).toHaveBeenCalledWith(7, 'admin-user');
+    expect(requirePermissionMock).toHaveBeenCalledWith(adminMembership, 'settings', 'write');
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -82,10 +85,24 @@ describe('POST /api/v1/communities/delete', () => {
 
     expect(res.status).toBe(401);
     expect(requestCommunityDeletionMock).not.toHaveBeenCalled();
+    expect(requirePermissionMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when membership is denied', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const req = new NextRequest(POST_URL, { method: 'POST' });
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(requestCommunityDeletionMock).not.toHaveBeenCalled();
+    expect(requirePermissionMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when settings write permission is denied', async () => {
+    requirePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError();
+    });
 
     const req = new NextRequest(POST_URL, { method: 'POST' });
     const res = await POST(req);
@@ -116,6 +133,7 @@ describe('DELETE /api/v1/communities/delete', () => {
       adminUserId: 'admin-user',
       notes: 'Cancelled by community administrator',
     });
+    expect(requirePermissionMock).toHaveBeenCalledWith(adminMembership, 'settings', 'write');
   });
 
   it('returns 404 when no active deletion request exists', async () => {
@@ -126,6 +144,7 @@ describe('DELETE /api/v1/communities/delete', () => {
 
     expect(res.status).toBe(404);
     expect(interveneCommunityDeletionMock).not.toHaveBeenCalled();
+    expect(requirePermissionMock).toHaveBeenCalledWith(adminMembership, 'settings', 'write');
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -136,10 +155,24 @@ describe('DELETE /api/v1/communities/delete', () => {
 
     expect(res.status).toBe(401);
     expect(interveneCommunityDeletionMock).not.toHaveBeenCalled();
+    expect(requirePermissionMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when membership is denied', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
+
+    const req = new NextRequest(DELETE_URL, { method: 'DELETE' });
+    const res = await DELETE(req);
+
+    expect(res.status).toBe(403);
+    expect(interveneCommunityDeletionMock).not.toHaveBeenCalled();
+    expect(requirePermissionMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when settings write permission is denied', async () => {
+    requirePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError();
+    });
 
     const req = new NextRequest(DELETE_URL, { method: 'DELETE' });
     const res = await DELETE(req);
