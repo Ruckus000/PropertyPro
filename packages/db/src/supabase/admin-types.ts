@@ -103,6 +103,7 @@ export type AdminUserRow = {
 export type AdminCommunityRow = {
   id: number;
   name: string;
+  slug: string;
   timezone: string;
 };
 
