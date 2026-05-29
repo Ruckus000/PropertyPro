@@ -76,12 +76,20 @@ export default async function SiteTemplatesIndexPage() {
               update.
             </p>
           </div>
-          <Link
-            href="/site-templates/theme-presets"
-            className="shrink-0 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Theme Presets →
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href="/site-templates/block-registry"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Block Registry →
+            </Link>
+            <Link
+              href="/site-templates/theme-presets"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Theme Presets →
+            </Link>
+          </div>
         </div>
         <LayoutsTable layouts={layouts} />
       </div>
