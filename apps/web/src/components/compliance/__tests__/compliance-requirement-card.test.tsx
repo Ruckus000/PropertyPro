@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import { ComplianceRequirementCard } from '../compliance-requirement-card';
 import type { ChecklistItemData } from '../compliance-checklist-item';
+import type { AuditEntry } from '@/hooks/use-compliance-activity';
 
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -75,5 +76,66 @@ describe('ComplianceRequirementCard — collapsed', () => {
     );
     const toggle = screen.getByRole('button', { name: /show details/i });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('ComplianceRequirementCard — expanded', () => {
+  it('reveals status checks, statute, and the full action row on expand', () => {
+    render(
+      <ComplianceRequirementCard item={overdueItem} communityId={9} canWrite {...handlers} />,
+      { wrapper: wrapper() },
+    );
+    fireEvent.click(screen.getByRole('button', { name: /show details/i }));
+
+    // status checks
+    expect(screen.getByText(/document on file/i)).toBeVisible();
+    expect(screen.getByText(/posted to owner portal/i)).toBeVisible();
+    expect(screen.getByText(/audit trail/i)).toBeVisible();
+
+    // expert detail
+    expect(screen.getByText('§718.111(12)(g)')).toBeVisible();
+
+    // guided "what's required" help text (HELP_TEXT['718_declaration'])
+    expect(screen.getByText(/recorded declaration of condominium/i)).toBeVisible();
+
+    // full action row (overdue, writable, no doc, non-board => Upload + Link + N/A)
+    expect(screen.getByRole('button', { name: /upload document for/i })).toBeVisible();
+    expect(screen.getByRole('button', { name: /link existing document/i })).toBeVisible();
+    expect(screen.getByRole('button', { name: /mark .* as not applicable/i })).toBeVisible();
+  });
+
+  it('renders recent activity when supplied, empty message when not', () => {
+    const events: AuditEntry[] = [
+      {
+        id: 7,
+        userId: 'u1',
+        action: 'unlink_document',
+        resourceType: 'compliance_item',
+        resourceId: '1',
+        metadata: null,
+        createdAt: '2026-05-20T12:00:00.000Z',
+      },
+    ];
+    const { rerender } = render(
+      <ComplianceRequirementCard item={overdueItem} communityId={9} canWrite recentEvents={events} {...handlers} />,
+      { wrapper: wrapper() },
+    );
+    fireEvent.click(screen.getByRole('button', { name: /show details/i }));
+    expect(screen.getByText(/unlink document/i)).toBeVisible();
+
+    rerender(
+      <ComplianceRequirementCard item={overdueItem} communityId={9} canWrite recentEvents={[]} {...handlers} />,
+    );
+    expect(screen.getByText(/no recent activity/i)).toBeVisible();
+  });
+
+  it('does not render write actions for a read-only user', () => {
+    render(
+      <ComplianceRequirementCard item={overdueItem} communityId={9} canWrite={false} {...handlers} />,
+      { wrapper: wrapper() },
+    );
+    fireEvent.click(screen.getByRole('button', { name: /show details/i }));
+    expect(screen.queryByRole('button', { name: /upload document for/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /link existing document/i })).toBeNull();
   });
 });

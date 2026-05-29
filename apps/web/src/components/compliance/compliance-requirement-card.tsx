@@ -6,8 +6,10 @@ import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Clock, MinusCircl
 import type { LucideIcon } from 'lucide-react';
 import type { ComplianceStatus } from '@/lib/utils/compliance-calculator';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
-import { statusLabel, statusVariant } from './compliance-pill-mapping';
-import type { ChecklistItemData } from './compliance-checklist-item';
+import { statusLabel, statusVariant, VISIBILITY_LABEL } from './compliance-pill-mapping';
+import { getTemplateDefaultVisibility } from './compliance-visibility';
+import { ComplianceItemActions } from './compliance-item-actions';
+import { HELP_TEXT, type ChecklistItemData } from './compliance-checklist-item';
 import type { AuditEntry } from '@/hooks/use-compliance-activity';
 
 export interface ComplianceRequirementCardProps {
@@ -32,6 +34,29 @@ function statusIcon(status: ComplianceStatus): LucideIcon {
   return Clock;
 }
 
+function formatDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function StatusCheck({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li className="flex items-center gap-2 text-sm">
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+          ok ? 'bg-status-success-bg text-status-success' : 'bg-status-warning-bg text-status-warning'
+        }`}
+      >
+        {ok ? '✓' : '!'}
+      </span>
+      <span className="text-content-secondary">{label}</span>
+    </li>
+  );
+}
+
 export function ComplianceRequirementCard({
   item,
   communityId,
@@ -49,6 +74,8 @@ export function ComplianceRequirementCard({
   const [expanded, setExpanded] = useState(false);
   const cta = resolveComplianceCta(item, canWrite, role);
   const StatusIcon = statusIcon(item.status);
+  const visibility = getTemplateDefaultVisibility(item.templateKey);
+  const deadline = formatDate(item.deadline);
 
   function dispatchCta() {
     if (!cta) return;
@@ -94,6 +121,87 @@ export function ComplianceRequirementCard({
           </div>
         </div>
       </div>
+
+      {expanded && (
+        <div className="border-t border-edge-subtle px-4 py-4">
+          <ul className="flex flex-col gap-2" aria-label="Status checks">
+            <StatusCheck ok={!!item.documentId} label="Document on file" />
+            <StatusCheck ok={!!item.documentPostedAt} label="Posted to owner portal" />
+            <StatusCheck ok label="Audit trail recorded" />
+          </ul>
+
+          <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            {item.statuteReference && (
+              <div>
+                <dt className="text-xs uppercase tracking-wider text-content-tertiary">Statute</dt>
+                <dd className="text-content-secondary">{item.statuteReference}</dd>
+              </div>
+            )}
+            {deadline && (
+              <div>
+                <dt className="text-xs uppercase tracking-wider text-content-tertiary">Deadline</dt>
+                <dd className="text-content-secondary">{deadline}</dd>
+              </div>
+            )}
+            {item.rollingWindow?.months ? (
+              <div>
+                <dt className="text-xs uppercase tracking-wider text-content-tertiary">Posting window</dt>
+                <dd className="text-content-secondary">Rolling {item.rollingWindow.months} mo</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-xs uppercase tracking-wider text-content-tertiary">Visibility</dt>
+              <dd className="text-content-secondary">{VISIBILITY_LABEL[visibility]}</dd>
+            </div>
+          </dl>
+
+          {HELP_TEXT[item.templateKey] && (
+            <div className="mt-4 rounded-[var(--radius-sm)] bg-[var(--status-info-bg)] p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-[var(--status-info)]">
+                What&apos;s required?
+              </p>
+              <p className="mt-1 text-sm text-[var(--status-info)]">{HELP_TEXT[item.templateKey]}</p>
+            </div>
+          )}
+
+          {canWrite ? (
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-edge-subtle pt-4">
+              <ComplianceItemActions
+                item={item}
+                communityId={communityId}
+                onUpload={() => onUpload(item)}
+                onLink={() => onLink(item)}
+                onMarkNA={() => onMarkNA(item)}
+                onMarkApplicable={() => onMarkApplicable(item)}
+                onUnlink={() => onUnlink(item)}
+              />
+            </div>
+          ) : item.documentId ? (
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-edge-subtle pt-4">
+              <Button size="sm" variant="secondary" onClick={() => onView(item)}>
+                View document
+              </Button>
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-content-tertiary">Recent activity</h4>
+            {recentEvents && recentEvents.length > 0 ? (
+              <ul className="mt-2 flex flex-col gap-1 text-sm text-content-secondary">
+                {recentEvents.map((e) => (
+                  <li key={e.id}>
+                    {new Date(e.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {' — '}
+                    {e.action.replace(/_/g, ' ')}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-content-secondary">No recent activity.</p>
+            )}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
