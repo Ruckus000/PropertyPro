@@ -93,7 +93,7 @@ export function UploadDocumentModal({
     >
       <div
         className="
-          w-full max-w-lg mx-4
+          w-full max-w-[560px] mx-4
           rounded-[var(--radius-lg)] bg-surface-card
           border border-edge-subtle
           shadow-[var(--elevation-e3)]
