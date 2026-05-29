@@ -26,6 +26,17 @@ export interface CommunityBranding {
    */
   layoutId?: string | null;
   /**
+   * Theme preset slug (PR #5b). References site_theme_presets.slug.
+   * Null/missing falls back to the layout's default_preset_slug.
+   * Set by the onboarding wizard Step 2 (color & font preset).
+   */
+  themePresetSlug?: string | null;
+  /**
+   * Community tagline (PR #5b Step 3). One-liner, ≤ 80 chars. Renders
+   * on the public-site hero block alongside the headline.
+   */
+  tagline?: string | null;
+  /**
    * Cumulative bytes consumed by community-site-assets uploads (PR #2).
    * Incremented at finalize, decremented on hard-delete by the
    * account-lifecycle cron. Used to enforce per-plan quotas

@@ -84,6 +84,12 @@ export interface BrandingPatch {
   customEmailFooter?: string;
   /** Running total of site-asset bytes consumed by this community (managed by quota helpers) */
   assetsBytesUsed?: number;
+  /** PR #5b Step 1 — wizard layout choice. Slug from site_layout_metadata. */
+  layoutId?: string | null;
+  /** PR #5b Step 2 — wizard preset choice. Slug from site_theme_presets. */
+  themePresetSlug?: string | null;
+  /** PR #5b Step 3 — community tagline. */
+  tagline?: string | null;
 }
 
 /**
