@@ -1,29 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { ComplianceCommandCenter } from '../compliance-command-center';
 
-// Mutable return value so individual tests can override it.
-let mockChecklistReturn: {
-  data: unknown[] | undefined;
-  isLoading: boolean;
-  error: Error | null;
-} = {
-  data: [
-    {
-      id: 1, templateKey: '718_declaration', title: 'Declaration',
-      category: 'governing_documents', status: 'satisfied',
-      documentId: 99, documentPostedAt: '2026-05-01T00:00:00.000Z',
-      deadline: null, rollingWindow: null, isApplicable: true,
-    },
-    {
-      id: 2, templateKey: '718_insurance', title: 'Insurance',
-      category: 'insurance', status: 'overdue',
-      documentId: null, documentPostedAt: null,
-      deadline: '2026-05-01T00:00:00.000Z', rollingWindow: null, isApplicable: true,
-    },
-  ],
+const pushMock = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
+
+let mockChecklistReturn: { data: unknown[] | undefined; isLoading: boolean; error: Error | null } = {
+  data: [],
   isLoading: false,
   error: null,
 };
@@ -36,6 +23,8 @@ vi.mock('@/hooks/useComplianceChecklist', () => ({
 vi.mock('@/hooks/useComplianceMutations', () => ({
   useComplianceMutations: () => ({
     linkDocument: { mutate: vi.fn() },
+    unlinkDocument: { mutate: vi.fn() },
+    markNotApplicable: { mutate: vi.fn() },
     markApplicable: { mutate: vi.fn() },
   }),
 }));
@@ -48,179 +37,97 @@ vi.mock('@/hooks/use-compliance-activity', () => ({
   }),
 }));
 
-function renderWithProviders(ui: React.ReactNode) {
+const FIXTURE = [
+  {
+    id: 1, templateKey: '718_declaration', title: 'Declaration',
+    description: null, category: 'governing_documents', status: 'satisfied',
+    statuteReference: '§718.111', documentId: 99, documentPostedAt: '2026-05-01T00:00:00.000Z',
+    deadline: null, rollingWindow: null, isApplicable: true,
+  },
+  {
+    id: 2, templateKey: '718_insurance', title: 'Insurance',
+    description: null, category: 'insurance', status: 'overdue',
+    statuteReference: '§718.111', documentId: null, documentPostedAt: null,
+    deadline: '2026-05-01T00:00:00.000Z', rollingWindow: null, isApplicable: true,
+  },
+];
+
+function renderWithProviders(ui: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
 beforeEach(() => {
-  mockChecklistReturn = {
-    data: [
-      {
-        id: 1, templateKey: '718_declaration', title: 'Declaration',
-        category: 'governing_documents', status: 'satisfied',
-        documentId: 99, documentPostedAt: '2026-05-01T00:00:00.000Z',
-        deadline: null, rollingWindow: null, isApplicable: true,
-      },
-      {
-        id: 2, templateKey: '718_insurance', title: 'Insurance',
-        category: 'insurance', status: 'overdue',
-        documentId: null, documentPostedAt: null,
-        deadline: '2026-05-01T00:00:00.000Z', rollingWindow: null, isApplicable: true,
-      },
-    ],
-    isLoading: false,
-    error: null,
-  };
+  vi.clearAllMocks();
+  mockChecklistReturn = { data: structuredClone(FIXTURE), isLoading: false, error: null };
 });
 
 describe('ComplianceCommandCenter', () => {
   it('renders the page header with breadcrumb and title', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />);
     expect(screen.getByRole('heading', { level: 1, name: 'Compliance' })).toBeInTheDocument();
     expect(screen.getByLabelText('Breadcrumb')).toBeInTheDocument();
   });
 
-  it('shows all four KPI labels', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    // Use getAllByText since KPI label text may also appear in the attention banner copy
+  it('renders the risk-first hero with a danger verdict when overdue', () => {
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />);
+    expect(screen.getByText(/record is overdue|records are overdue/i)).toBeVisible();
+    expect(screen.getByRole('progressbar', { name: /compliance readiness/i })).toBeInTheDocument();
+  });
+
+  it('renders the four metric labels', () => {
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />);
     expect(screen.getAllByText(/readiness/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/posting windows/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/posting windows/i)).toBeInTheDocument();
     expect(screen.getAllByText(/overdue/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/needs board action/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/needs board action/i)).toBeInTheDocument();
   });
 
-  it('shows the CAM/Board view toggle for cam role', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'false');
+  it('puts the overdue item in the Needs-you zone and the satisfied item in the Done zone', () => {
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />);
+    expect(screen.getByRole('heading', { name: 'Needs you' })).toBeInTheDocument();
+    expect(screen.getByText('Insurance')).toBeVisible();
+    // Done zone is a collapsed <details> summary
+    expect(screen.getByText(/caught up on 1 record/i)).toBeInTheDocument();
   });
 
-  it('hides the view toggle for owner role', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="owner" canWrite={false} />,
-    );
-    expect(screen.queryByRole('button', { name: 'CAM view' })).not.toBeInTheDocument();
+  it('does NOT render a CAM/Board view toggle', () => {
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />);
+    expect(screen.queryByRole('button', { name: 'CAM view' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Board view' })).toBeNull();
   });
 
-  it('shows the view toggle for the new manager role', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="manager" canWrite={true} />,
-    );
-    expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'false');
+  it('navigates to /documents when Upload record is clicked (writable user)', () => {
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Upload record' }));
+    expect(pushMock).toHaveBeenCalledWith('/documents');
   });
 
-  it('hides the attention banner when no items need attention', () => {
+  it('hides the Upload record action for a read-only user', () => {
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="owner" canWrite={false} />);
+    expect(screen.queryByRole('button', { name: 'Upload record' })).toBeNull();
+  });
+
+  it('shows a success hero and an all-caught-up empty state when nothing needs attention', () => {
     mockChecklistReturn = {
-      data: [
-        {
-          id: 1, templateKey: '718_declaration', title: 'Declaration',
-          category: 'governing_documents', status: 'satisfied',
-          documentId: 99, documentPostedAt: '2026-05-01T00:00:00.000Z',
-          deadline: null, rollingWindow: null, isApplicable: true,
-        },
-      ],
+      data: [structuredClone(FIXTURE[0])], // only the satisfied item
       isLoading: false,
       error: null,
     };
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
-    );
-    expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />);
+    expect(screen.getByText(/fully compliant/i)).toBeVisible();
+    expect(screen.getByText(/you're all caught up/i)).toBeVisible();
   });
 
   it('renders the loading indicator when data is loading', () => {
     mockChecklistReturn = { data: undefined, isLoading: true, error: null };
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
-    );
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />);
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('renders the error message when the checklist fails to load', () => {
+  it('renders the error alert when the checklist fails to load', () => {
     mockChecklistReturn = { data: undefined, isLoading: false, error: new Error('boom') };
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
-    );
-    expect(
-      screen.getByText("We couldn't load compliance records. Please try again."),
-    ).toBeInTheDocument();
-  });
-
-  // C.2 smoke tests — selection lifecycle
-  it('auto-selects the highest-priority item on initial render', () => {
-    // sortByPriority puts overdue (id=2, "Insurance") before satisfied (id=1, "Declaration").
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    // The detail panel should show the selected item's title.
-    // "Insurance" appears multiple times (table row + panel header), so use getAllByText.
-    expect(screen.getAllByText('Insurance').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('updates the detail panel when a row CTA is clicked', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    // "Declaration" (satisfied, id=1) has a "View document" CTA in the queue row.
-    // Clicking it should select that item and show its title in the detail panel.
-    const viewButtons = screen.getAllByRole('button', { name: /View document/i });
-    // Non-null assertion: getAllByRole throws if no elements found, so [0] is always defined.
-    await user.click(viewButtons[0]!);
-    // After click, "Declaration" title should be visible at least twice (row + panel).
-    expect(screen.getAllByText('Declaration').length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('renders the detail panel with the selected item title', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    // The detail panel's "Selected record" heading and the item title are both visible.
-    expect(screen.getByText('Selected record')).toBeInTheDocument();
-    // First selected item is the overdue "Insurance" record.
-    expect(screen.getAllByText('Insurance').length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('shows the hidden-by-filter notice when the active filter excludes the selected item', () => {
-    // Default fixture: "Insurance" (overdue, id=2) is auto-selected as the top-priority item.
-    // Clicking the "Satisfied" filter chip excludes it (it is 'overdue', not 'satisfied').
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    // Activate the "Satisfied" filter — hides the auto-selected "Insurance" item.
-    fireEvent.click(screen.getByRole('button', { name: /Satisfied/i }));
-    // The detail panel should show the hidden-by-filter notice.
-    expect(screen.getByRole('alert')).toBeInTheDocument();
-    expect(screen.getByText(/Selected record is hidden by the current filter/i)).toBeInTheDocument();
-  });
-});
-
-describe('ComplianceCommandCenter — view persistence', () => {
-  afterEach(() => {
-    window.localStorage.clear();
-  });
-
-  it('reads view preference from localStorage on mount', () => {
-    window.localStorage.setItem('compliance.audienceView.1', 'board');
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('writes view preference to localStorage on toggle', () => {
-    renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Board view' }));
-    expect(window.localStorage.getItem('compliance.audienceView.1')).toBe('board');
+    renderWithProviders(<ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />);
+    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't load compliance records. Please try again.");
   });
 });
