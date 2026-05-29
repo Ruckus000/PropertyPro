@@ -104,7 +104,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/calendar/google/callback/route.ts',
   'apps/web/src/app/api/v1/calendar/google/connect/route.ts',
   'apps/web/src/app/api/v1/calendar/google/sync/route.ts',
-  'apps/web/src/app/api/v1/communities/delete/route.ts',
   'apps/web/src/app/api/v1/compliance/route.ts',
   'apps/web/src/app/api/v1/contracts/route.ts',
   'apps/web/src/app/api/v1/demo/[slug]/enter/route.ts',
