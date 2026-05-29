@@ -103,6 +103,9 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
     try {
       const result = await publish.mutateAsync({
         expectedPublishedAt: deriveExpectedPublishedAt(blocksQ.data),
+        // Final wizard step — stamp onboarding complete so the dashboard
+        // banner / "Site" pill / WizardEntryBanner stop prompting.
+        markOnboardingComplete: true,
       });
       setOutcome(classifyOutcome(result, communitySlug));
     } catch (err) {

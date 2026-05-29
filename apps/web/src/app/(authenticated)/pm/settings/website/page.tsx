@@ -13,7 +13,10 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { hasRole } from '@/lib/api/role-guard';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
-import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
+import {
+  getCommunityPublicInfo,
+  getSiteOnboardingCompletedAt,
+} from '@/lib/api/branding';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
@@ -71,16 +74,17 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
     if (parsed.success) initial = parsed.data;
   }
 
-  const [communityInfo, branding] = await Promise.all([
+  const [communityInfo, onboardingCompletedAt] = await Promise.all([
     getCommunityPublicInfo(communityId),
-    getBrandingForCommunity(communityId),
+    getSiteOnboardingCompletedAt(communityId),
   ]);
   const previewUrl = communityInfo
     ? buildCommunityUrl(communityInfo.slug, '/?preview=true')
     : null;
-  // PR #5b-f — substitute signal for "wizard not run yet". The
-  // canonical site_onboarding_completed_at column lands later.
-  const showWizardBanner = !branding?.layoutId;
+  // Canonical signal: the wizard stamps site_onboarding_completed_at on its
+  // final-step publish. Null = wizard never completed → show the banner.
+  // (Replaces the prior branding.layoutId-unset substitute heuristic.)
+  const showWizardBanner = onboardingCompletedAt === null;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">

@@ -2,14 +2,13 @@
  * Dismissible "Customize your site" banner.
  *
  * Renders on the PM website settings page when the community hasn't
- * been customized through the wizard yet (signal: branding.layoutId
- * is unset). Spec §4.1's third entry-point is a dashboard-level
- * banner gated on a site_onboarding_completed_at column; that column
- * isn't shipped yet so we use the substitute layoutId-set signal.
+ * completed the onboarding wizard yet. The caller gates on the canonical
+ * signal `communities.site_onboarding_completed_at IS NULL` (stamped by
+ * the wizard's final-step publish).
  *
  * Pure server component — no client state, no dismissal persistence.
- * A future iteration can add user_preferences-backed dismissal once
- * the column ships.
+ * A future iteration can add user_preferences-backed dismissal (spec
+ * §4.1 entry-point 2).
  */
 import { Sparkles } from 'lucide-react';
 

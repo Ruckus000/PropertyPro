@@ -12,16 +12,22 @@ const {
   requireMembershipMock,
   resolveEffectiveCommunityIdMock,
   requirePlanFeatureMock,
+  markOnboardingCompleteMock,
 } = vi.hoisted(() => ({
   publishMock: vi.fn(),
   requireAuthMock: vi.fn(),
   requireMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
   requirePlanFeatureMock: vi.fn(),
+  markOnboardingCompleteMock: vi.fn(),
 }));
 
 vi.mock('@/lib/services/site-blocks-service', () => ({
   publishCommunitySite: publishMock,
+}));
+
+vi.mock('@/lib/api/branding', () => ({
+  markSiteOnboardingComplete: markOnboardingCompleteMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -62,6 +68,7 @@ describe('POST /api/v1/pm/site/publish', () => {
     requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
+    markOnboardingCompleteMock.mockResolvedValue(undefined);
   });
 
   it('200s and forwards the parsed expectedPublishedAt as a Date to publishCommunitySite', async () => {
@@ -121,6 +128,65 @@ describe('POST /api/v1/pm/site/publish', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data).toEqual({ published: false, reason: 'nothing-to-publish' });
+  });
+
+  it('does NOT mark onboarding complete when the flag is absent (editor publish)', async () => {
+    publishMock.mockResolvedValueOnce({
+      published: true,
+      publishedAt: new Date('2026-05-15T12:00:00.000Z'),
+      promotedCount: 2,
+      retiredCount: 1,
+    });
+    const res = await POST(makeRequest(VALID_BODY));
+    expect(res.status).toBe(200);
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled();
+  });
+
+  it('marks onboarding complete when markOnboardingComplete=true (wizard publish)', async () => {
+    publishMock.mockResolvedValueOnce({
+      published: true,
+      publishedAt: new Date('2026-05-15T12:00:00.000Z'),
+      promotedCount: 4,
+      retiredCount: 0,
+    });
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, markOnboardingComplete: true }),
+    );
+    expect(res.status).toBe(200);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledTimes(1);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith(42);
+  });
+
+  it('marks onboarding complete even when the publish was a no-op (wizard finished with no draft changes)', async () => {
+    publishMock.mockResolvedValueOnce({
+      published: false,
+      reason: 'nothing-to-publish',
+    });
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, markOnboardingComplete: true }),
+    );
+    expect(res.status).toBe(200);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledTimes(1);
+    expect(markOnboardingCompleteMock).toHaveBeenCalledWith(42);
+  });
+
+  it('does NOT mark onboarding complete when the publish errors (409 conflict)', async () => {
+    publishMock.mockRejectedValueOnce(
+      new ConflictError('Another editor published changes while you were working.'),
+    );
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, markOnboardingComplete: true }),
+    );
+    expect(res.status).toBe(409);
+    expect(markOnboardingCompleteMock).not.toHaveBeenCalled();
+  });
+
+  it('400s when markOnboardingComplete is not a boolean', async () => {
+    const res = await POST(
+      makeRequest({ ...VALID_BODY, markOnboardingComplete: 'yes' }),
+    );
+    expect(res.status).toBe(400);
+    expect(publishMock).not.toHaveBeenCalled();
   });
 
   it('409s when the service throws ConflictError (optimistic-concurrency mismatch)', async () => {
