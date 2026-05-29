@@ -224,7 +224,6 @@ export type SiteBlockRow = {
   block_type: string;
   content: unknown;
   is_draft: boolean;
-  template_variant: string;
   published_at: string | null;
   created_at: string;
   updated_at: string;

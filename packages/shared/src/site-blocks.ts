@@ -4,12 +4,22 @@
  */
 
 export const BLOCK_TYPES = [
-  'hero', 'announcements', 'documents', 'meetings', 'contact', 'text', 'image', 'jsx_template',
+  'hero', 'announcements', 'documents', 'meetings', 'contact', 'text', 'image',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
 
+/**
+ * PR #9e — retained as a back-compat re-export for any consumer that
+ * imported TEMPLATE_VARIANTS / TemplateVariant before the column drop.
+ * The values exist in code but are not persisted anywhere; callers
+ * should remove references in their next touch.
+ *
+ * @deprecated The site_blocks.template_variant column was dropped in
+ * migration 0008; this constant is no longer meaningful.
+ */
 export const TEMPLATE_VARIANTS = ['public', 'mobile'] as const;
+/** @deprecated See TEMPLATE_VARIANTS. */
 export type TemplateVariant = (typeof TEMPLATE_VARIANTS)[number];
 
 export interface HeroBlockContent {
@@ -52,10 +62,15 @@ export interface ImageBlockContent {
   caption?: string;                    // max 300 chars
 }
 
+/**
+ * @deprecated PR #9e — the jsx_template block type was retired in
+ * migration 0008. The shape lingers here so any pre-#9e callers
+ * still typecheck while they migrate off the type.
+ */
 export interface JsxTemplateBlockContent {
-  jsxSource: string;                   // raw JSX source, max 100,000 chars
-  compiledHtml?: string;               // server-compiled static HTML
-  compiledAt?: string;                 // ISO timestamp of last compilation
+  jsxSource: string;
+  compiledHtml?: string;
+  compiledAt?: string;
 }
 
 export type BlockContent =
@@ -65,8 +80,7 @@ export type BlockContent =
   | MeetingsBlockContent
   | ContactBlockContent
   | TextBlockContent
-  | ImageBlockContent
-  | JsxTemplateBlockContent;
+  | ImageBlockContent;
 
 /**
  * Maps block type to its content interface for type-safe usage.
@@ -79,7 +93,6 @@ export interface BlockContentMap {
   contact: ContactBlockContent;
   text: TextBlockContent;
   image: ImageBlockContent;
-  jsx_template: JsxTemplateBlockContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,14 +203,8 @@ export function validateBlockContent(type: BlockType, content: unknown): string 
       if (c.caption && c.caption.length > 300) return 'Caption max 300 chars';
       return null;
     }
-    case 'jsx_template': {
-      const c = content as JsxTemplateBlockContent;
-      if (typeof c.jsxSource !== 'string') return 'jsxSource must be a string';
-      if (c.jsxSource.length > 100_000) return 'jsxSource max 100,000 chars';
-      return null;
-    }
     default:
-      return `Unknown block type: ${type}`;
+      return `Unknown block type: ${type as string}`;
   }
 }
 
@@ -220,7 +227,5 @@ export function getDefaultBlockContent(type: BlockType): BlockContent {
       return { body: '', format: 'plain' };
     case 'image':
       return { url: '', alt: '' };
-    case 'jsx_template':
-      return { jsxSource: '' };
   }
 }

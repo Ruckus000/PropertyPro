@@ -164,7 +164,6 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       const includeDrafts = opts?.includeDrafts === true;
       const conditions = [
         eq(siteBlocks.communityId, communityId),
-        eq(siteBlocks.templateVariant, 'public'),
         isNull(siteBlocks.deletedAt),
       ];
       if (!includeDrafts) {
