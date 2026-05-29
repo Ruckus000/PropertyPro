@@ -17,6 +17,7 @@ import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { LayoutChooser } from '@/components/pm/onboarding-wizard/LayoutChooser';
 import { PresetChooser } from '@/components/pm/onboarding-wizard/PresetChooser';
 import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
+import { WelcomeMessageEditor } from '@/components/pm/onboarding-wizard/WelcomeMessageEditor';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -99,9 +100,15 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
         />
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mt-6">
+        <WelcomeMessageEditor
+          communityId={communityId}
+          defaultHeadline={community?.name ? `Welcome to ${community.name}` : 'Welcome'}
+        />
+      </div>
+
+      <div className="mt-8 grid grid-cols-1 gap-3">
         {[
-          { n: 4, label: 'Welcome message' },
           { n: 5, label: 'Confirm + publish' },
         ].map((step) => (
           <div
