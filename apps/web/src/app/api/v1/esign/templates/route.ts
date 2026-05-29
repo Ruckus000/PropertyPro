@@ -1,11 +1,11 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireEsignReadPermission,
   requireEsignWritePermission,
@@ -17,40 +17,10 @@ import {
   listTemplates,
 } from '@/lib/services/esign-service';
 import type { EsignTemplateStatus, EsignTemplateType } from '@propertypro/shared';
-
-const createTemplateSchema = z.object({
-  communityId: z.number().int().positive(),
-  name: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(2000).optional(),
-  templateType: z.enum([
-    'proxy',
-    'consent',
-    'lease_addendum',
-    'maintenance_auth',
-    'violation_ack',
-    'assessment_agreement',
-    'custom',
-  ]),
-  sourceDocumentPath: z.string().trim().min(1),
-  fieldsSchema: z.object({
-    version: z.literal(1),
-    fields: z.array(
-      z.object({
-        id: z.string(),
-        type: z.enum(['signature', 'initials', 'date', 'text', 'checkbox']),
-        signerRole: z.string(),
-        page: z.number().int().min(0),
-        x: z.number().min(0).max(100),
-        y: z.number().min(0).max(100),
-        width: z.number().gt(0).max(100),
-        height: z.number().gt(0).max(100),
-        required: z.boolean(),
-        label: z.string().optional(),
-      }),
-    ),
-    signerRoles: z.array(z.string().min(1)),
-  }),
-});
+import {
+  esignTemplatesCreateContract,
+  esignTemplatesListContract,
+} from './contract';
 
 const listStatusSchema = z.enum(['active', 'archived']);
 const listTypeSchema = z.enum([
@@ -63,83 +33,71 @@ const listTypeSchema = z.enum([
   'custom',
 ]);
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+export const GET = withErrorHandler(
+  runRoute(esignTemplatesListContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  await requireEsignReadPermission(membership);
+    await requireEsignReadPermission(membership);
 
-  const { searchParams } = new URL(req.url);
-  const rawStatus = searchParams.get('status');
-  const rawType = searchParams.get('type');
+    const { searchParams } = new URL(req.url);
+    const rawStatus = searchParams.get('status');
+    const rawType = searchParams.get('type');
 
-  // Validate enum query params via safeParse + throw new ValidationError so
-  // that invalid client input produces a 400 with a structured error envelope
-  // instead of falling through `withErrorHandler`'s generic 500 + Sentry path.
-  let status: EsignTemplateStatus | undefined;
-  if (rawStatus) {
-    const parsed = listStatusSchema.safeParse(rawStatus);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid status filter', {
-        fields: [{
-          field: 'status',
-          message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
-        }],
-      });
+    let status: EsignTemplateStatus | undefined;
+    if (rawStatus) {
+      const parsed = listStatusSchema.safeParse(rawStatus);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid status filter', {
+          fields: [{
+            field: 'status',
+            message: `status must be one of: ${listStatusSchema.options.join(', ')}`,
+          }],
+        });
+      }
+      status = parsed.data as EsignTemplateStatus;
     }
-    status = parsed.data as EsignTemplateStatus;
-  }
-  let type: EsignTemplateType | undefined;
-  if (rawType) {
-    const parsed = listTypeSchema.safeParse(rawType);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid type filter', {
-        fields: [{
-          field: 'type',
-          message: `type must be one of: ${listTypeSchema.options.join(', ')}`,
-        }],
-      });
+    let type: EsignTemplateType | undefined;
+    if (rawType) {
+      const parsed = listTypeSchema.safeParse(rawType);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid type filter', {
+          fields: [{
+            field: 'type',
+            message: `type must be one of: ${listTypeSchema.options.join(', ')}`,
+          }],
+        });
+      }
+      type = parsed.data as EsignTemplateType;
     }
-    type = parsed.data as EsignTemplateType;
-  }
 
-  const data = await listTemplates(communityId, { status, type });
+    return listTemplates(communityId, { status, type });
+  }),
+);
 
-  return NextResponse.json({ data });
-});
+export const POST = withErrorHandler(
+  runRoute(esignTemplatesCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromBody(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parseResult = createTemplateSchema.safeParse(body);
+    await requireEsignWritePermission(membership);
+    await requirePlanFeature(communityId, 'hasEsign');
 
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid template payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  await requireEsignWritePermission(membership);
-  await requirePlanFeature(communityId, 'hasEsign');
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await createTemplate(
-    communityId,
-    actorUserId,
-    {
-      name: parseResult.data.name,
-      templateType: parseResult.data.templateType,
-      sourceDocumentPath: parseResult.data.sourceDocumentPath,
-      fieldsSchema: parseResult.data.fieldsSchema,
-      description: parseResult.data.description,
-    },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    const requestId = req.headers.get('x-request-id');
+    return createTemplate(
+      communityId,
+      actorUserId,
+      {
+        name: body.name,
+        templateType: body.templateType,
+        sourceDocumentPath: body.sourceDocumentPath,
+        fieldsSchema: body.fieldsSchema,
+        description: body.description,
+      },
+      requestId,
+    );
+  }),
+);
