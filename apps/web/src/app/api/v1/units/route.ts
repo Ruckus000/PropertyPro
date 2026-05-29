@@ -1,26 +1,16 @@
 /**
  * Units CRUD API — manages units within a community post-onboarding.
  *
- * GET    /api/v1/units?communityId=N  — list all units for a community
- * POST   /api/v1/units               — create a new unit
- * PATCH  /api/v1/units               — update an existing unit
- * DELETE /api/v1/units               — soft-delete a unit
- *
- * All routes use:
- * - withErrorHandler (AGENTS #43)
- * - createScopedClient for tenant isolation (AGENTS #7, #14)
- * - logAuditEvent for mutations (P1-27)
- * - Zod validation
+ * Plan A1 drain #136. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and auth-chain rationale.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -34,36 +24,12 @@ import {
   softDeleteUnitById,
   updateUnitById,
 } from '@/lib/services/unit-service';
-
-const communityIdSchema = z.coerce.number().int().positive();
-
-const createUnitSchema = z.object({
-  communityId: z.number().int().positive(),
-  unitNumber: z.string().min(1, 'Unit number is required'),
-  building: z.string().nullable().optional(),
-  floor: z.number().int().nullable().optional(),
-  bedrooms: z.number().int().min(0).nullable().optional(),
-  bathrooms: z.number().int().min(0).nullable().optional(),
-  sqft: z.number().int().min(0).nullable().optional(),
-  rentAmount: z.string().nullable().optional(),
-});
-
-const updateUnitSchema = z.object({
-  communityId: z.number().int().positive(),
-  unitId: z.number().int().positive(),
-  unitNumber: z.string().min(1).optional(),
-  building: z.string().nullable().optional(),
-  floor: z.number().int().nullable().optional(),
-  bedrooms: z.number().int().min(0).nullable().optional(),
-  bathrooms: z.number().int().min(0).nullable().optional(),
-  sqft: z.number().int().min(0).nullable().optional(),
-  rentAmount: z.string().nullable().optional(),
-});
-
-const deleteUnitSchema = z.object({
-  communityId: z.number().int().positive(),
-  unitId: z.number().int().positive(),
-});
+import {
+  unitsCreateContract,
+  unitsDeleteContract,
+  unitsListContract,
+  unitsUpdateContract,
+} from './contract';
 
 function normalizeRentAmount(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -79,30 +45,8 @@ function requireApartmentCommunityForRent(communityType: string): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// GET — list units for a community
-// ---------------------------------------------------------------------------
-
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
-  const rawCommunityId = searchParams.get('communityId');
-
-  const communityIdResult = communityIdSchema.safeParse(rawCommunityId);
-  if (!communityIdResult.success) {
-    throw new ValidationError('Invalid or missing communityId query parameter', {
-      fields: formatZodErrors(communityIdResult.error),
-    });
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, communityIdResult.data);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'units', 'read');
-  const scoped = createScopedClient(communityId);
-
-  const rows = await listUnitsForCommunity(scoped);
-
-  const data = (rows as Record<string, unknown>[]).map((row) => ({
+function mapUnitRow(row: Record<string, unknown>) {
+  return {
     id: row['id'] as number,
     communityId: row['communityId'] as number,
     unitNumber: row['unitNumber'] as string,
@@ -115,175 +59,156 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     ownerUserId: (row['ownerUserId'] as string | null) ?? null,
     createdAt: row['createdAt'] as string,
     updatedAt: row['updatedAt'] as string,
-  }));
+  };
+}
 
-  return NextResponse.json({ data });
-});
+export const GET = withErrorHandler(
+  runRoute(unitsListContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'units', 'read');
+    const scoped = createScopedClient(communityId);
 
-// ---------------------------------------------------------------------------
-// POST — create a new unit
-// ---------------------------------------------------------------------------
+    const rows = await listUnitsForCommunity(scoped);
+    return (rows as Record<string, unknown>[]).map(mapUnitRow);
+  }),
+);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parseResult = createUnitSchema.safeParse(body);
+export const POST = withErrorHandler(
+  runRoute(unitsCreateContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const actorUserId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'units', 'write');
+    await requireActiveSubscriptionForMutation(communityId);
+    const scoped = createScopedClient(communityId);
 
-  if (!parseResult.success) {
-    throw new ValidationError('Validation failed', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const actorUserId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'units', 'write');
-  await requireActiveSubscriptionForMutation(communityId);
-  const scoped = createScopedClient(communityId);
-
-  const { unitNumber, building, floor, bedrooms, bathrooms, sqft } = parseResult.data;
-  const rentAmount = normalizeRentAmount(parseResult.data.rentAmount);
-  if (rentAmount !== undefined) {
-    requireApartmentCommunityForRent(membership.communityType);
-  }
-
-  // Check for duplicate unit number within the community
-  const duplicate = await getUnitByNumber(scoped, unitNumber);
-  if (duplicate) {
-    throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
-  }
-
-  const newUnit = await createUnitForCommunity(scoped, {
-    unitNumber,
-    building: building ?? null,
-    floor: floor ?? null,
-    bedrooms: bedrooms ?? null,
-    bathrooms: bathrooms ?? null,
-    sqft: sqft ?? null,
-    rentAmount: rentAmount ?? null,
-  });
-  if (!newUnit) {
-    throw new Error('Failed to create unit');
-  }
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'create',
-    resourceType: 'unit',
-    resourceId: String(newUnit['id']),
-    communityId,
-    newValues: { unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount },
-  });
-
-  void tryAutoComplete(communityId, actorUserId, 'add_units');
-
-  return NextResponse.json(
-    {
-      data: {
-        id: newUnit['id'] as number,
-        communityId,
-        unitNumber,
-        building: building ?? null,
-        floor: floor ?? null,
-        bedrooms: bedrooms ?? null,
-        bathrooms: bathrooms ?? null,
-        sqft: sqft ?? null,
-        rentAmount: rentAmount ?? null,
-        ownerUserId: null,
-        createdAt: newUnit['createdAt'] as string,
-        updatedAt: newUnit['updatedAt'] as string,
-      },
+    const { unitNumber, building, floor, bedrooms, bathrooms, sqft } = body;
+    const rentAmount = normalizeRentAmount(body.rentAmount);
+    if (rentAmount !== undefined) {
+      requireApartmentCommunityForRent(membership.communityType);
     }
-  );
-});
 
-// ---------------------------------------------------------------------------
-// PATCH — update an existing unit
-// ---------------------------------------------------------------------------
-
-export const PATCH = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parseResult = updateUnitSchema.safeParse(body);
-
-  if (!parseResult.success) {
-    throw new ValidationError('Validation failed', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft } = parseResult.data;
-  const actorUserId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'units', 'write');
-  await requireActiveSubscriptionForMutation(communityId);
-  const scoped = createScopedClient(communityId);
-  const rentAmount = normalizeRentAmount(parseResult.data.rentAmount);
-  if (rentAmount !== undefined) {
-    requireApartmentCommunityForRent(membership.communityType);
-    throw new ValidationError(
-      'Update lease rentAmount via /api/v1/leases. Unit rentAmount is derived to prevent rent drift.',
-    );
-  }
-
-  const existing = await getUnitById(scoped, unitId);
-
-  if (!existing) {
-    throw new NotFoundError(`Unit ${unitId} not found in community ${communityId}`);
-  }
-
-  // Check for duplicate unit number if changing it
-  if (unitNumber !== undefined) {
     const duplicate = await getUnitByNumber(scoped, unitNumber);
-    if (duplicate && (duplicate['id'] as number) !== unitId) {
+    if (duplicate) {
       throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
     }
-  }
 
-  const oldValues: Record<string, unknown> = {};
-  const newValues: Record<string, unknown> = {};
-  const updateData: Record<string, unknown> = {};
-
-  const fields = [
-    ['unitNumber', unitNumber],
-    ['building', building],
-    ['floor', floor],
-    ['bedrooms', bedrooms],
-    ['bathrooms', bathrooms],
-    ['sqft', sqft],
-    ['rentAmount', rentAmount],
-  ] as const;
-
-  for (const [key, value] of fields) {
-    if (value !== undefined) {
-      oldValues[key] = existing[key] ?? null;
-      newValues[key] = value ?? null;
-      updateData[key] = value ?? null;
+    const newUnit = await createUnitForCommunity(scoped, {
+      unitNumber,
+      building: building ?? null,
+      floor: floor ?? null,
+      bedrooms: bedrooms ?? null,
+      bathrooms: bathrooms ?? null,
+      sqft: sqft ?? null,
+      rentAmount: rentAmount ?? null,
+    });
+    if (!newUnit) {
+      throw new Error('Failed to create unit');
     }
-  }
 
-  if (Object.keys(updateData).length === 0) {
-    throw new ValidationError('No fields to update');
-  }
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'create',
+      resourceType: 'unit',
+      resourceId: String(newUnit['id']),
+      communityId,
+      newValues: { unitNumber, building, floor, bedrooms, bathrooms, sqft, rentAmount },
+    });
 
-  updateData['updatedAt'] = new Date();
+    void tryAutoComplete(communityId, actorUserId, 'add_units');
 
-  await updateUnitById(scoped, unitId, updateData);
+    return {
+      id: newUnit['id'] as number,
+      communityId,
+      unitNumber,
+      building: building ?? null,
+      floor: floor ?? null,
+      bedrooms: bedrooms ?? null,
+      bathrooms: bathrooms ?? null,
+      sqft: sqft ?? null,
+      rentAmount: rentAmount ?? null,
+      ownerUserId: null,
+      createdAt: newUnit['createdAt'] as string,
+      updatedAt: newUnit['updatedAt'] as string,
+    };
+  }),
+);
 
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'update',
-    resourceType: 'unit',
-    resourceId: String(unitId),
-    communityId,
-    oldValues,
-    newValues,
-  });
+export const PATCH = withErrorHandler(
+  runRoute(unitsUpdateContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const { unitId, unitNumber, building, floor, bedrooms, bathrooms, sqft } = body;
+    const actorUserId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'units', 'write');
+    await requireActiveSubscriptionForMutation(communityId);
+    const scoped = createScopedClient(communityId);
+    const rentAmount = normalizeRentAmount(body.rentAmount);
+    if (rentAmount !== undefined) {
+      requireApartmentCommunityForRent(membership.communityType);
+      throw new ValidationError(
+        'Update lease rentAmount via /api/v1/leases. Unit rentAmount is derived to prevent rent drift.',
+      );
+    }
 
-  return NextResponse.json({
-    data: {
+    const existing = await getUnitById(scoped, unitId);
+
+    if (!existing) {
+      throw new NotFoundError(`Unit ${unitId} not found in community ${communityId}`);
+    }
+
+    if (unitNumber !== undefined) {
+      const duplicate = await getUnitByNumber(scoped, unitNumber);
+      if (duplicate && (duplicate['id'] as number) !== unitId) {
+        throw new ValidationError(`Unit number "${unitNumber}" already exists in this community`);
+      }
+    }
+
+    const oldValues: Record<string, unknown> = {};
+    const newValues: Record<string, unknown> = {};
+    const updateData: Record<string, unknown> = {};
+
+    const fields = [
+      ['unitNumber', unitNumber],
+      ['building', building],
+      ['floor', floor],
+      ['bedrooms', bedrooms],
+      ['bathrooms', bathrooms],
+      ['sqft', sqft],
+      ['rentAmount', rentAmount],
+    ] as const;
+
+    for (const [key, value] of fields) {
+      if (value !== undefined) {
+        oldValues[key] = existing[key] ?? null;
+        newValues[key] = value ?? null;
+        updateData[key] = value ?? null;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new ValidationError('No fields to update');
+    }
+
+    updateData['updatedAt'] = new Date();
+
+    await updateUnitById(scoped, unitId, updateData);
+
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'update',
+      resourceType: 'unit',
+      resourceId: String(unitId),
+      communityId,
+      oldValues,
+      newValues,
+    });
+
+    return {
       id: unitId,
       communityId,
       unitNumber: unitNumber ?? (existing['unitNumber'] as string),
@@ -293,63 +218,50 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       bathrooms: bathrooms !== undefined ? (bathrooms ?? null) : (existing['bathrooms'] as number | null),
       sqft: sqft !== undefined ? (sqft ?? null) : (existing['sqft'] as number | null),
       rentAmount: rentAmount !== undefined ? (rentAmount ?? null) : (existing['rentAmount'] as string | null),
-    },
-  });
-});
+    };
+  }),
+);
 
-// ---------------------------------------------------------------------------
-// DELETE — soft-delete a unit
-// ---------------------------------------------------------------------------
+export const DELETE = withErrorHandler(
+  runRoute(unitsDeleteContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const { unitId } = body;
+    const actorUserId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'units', 'write');
+    await requireActiveSubscriptionForMutation(communityId);
+    const scoped = createScopedClient(communityId);
 
-export const DELETE = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parseResult = deleteUnitSchema.safeParse(body);
+    const existing = await getUnitById(scoped, unitId);
 
-  if (!parseResult.success) {
-    throw new ValidationError('Validation failed', {
-      fields: formatZodErrors(parseResult.error),
+    if (!existing) {
+      throw new NotFoundError(`Unit ${unitId} not found in community ${communityId}`);
+    }
+
+    const activeResidents = await listResidentRolesForUnit(scoped, unitId);
+
+    if (activeResidents.length > 0) {
+      throw new ValidationError(
+        `Cannot delete unit ${unitId}: ${activeResidents.length} active resident(s) are still assigned. Reassign or remove them first.`,
+      );
+    }
+
+    await softDeleteUnitById(scoped, unitId);
+
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'delete',
+      resourceType: 'unit',
+      resourceId: String(unitId),
+      communityId,
+      oldValues: {
+        unitNumber: existing['unitNumber'],
+        building: existing['building'],
+        floor: existing['floor'],
+      },
     });
-  }
 
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const { unitId } = parseResult.data;
-  const actorUserId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'units', 'write');
-  await requireActiveSubscriptionForMutation(communityId);
-  const scoped = createScopedClient(communityId);
-
-  const existing = await getUnitById(scoped, unitId);
-
-  if (!existing) {
-    throw new NotFoundError(`Unit ${unitId} not found in community ${communityId}`);
-  }
-
-  // Check for active residents assigned to this unit
-  const activeResidents = await listResidentRolesForUnit(scoped, unitId);
-
-  if (activeResidents.length > 0) {
-    throw new ValidationError(
-      `Cannot delete unit ${unitId}: ${activeResidents.length} active resident(s) are still assigned. Reassign or remove them first.`,
-    );
-  }
-
-  // Soft-delete the unit
-  await softDeleteUnitById(scoped, unitId);
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'delete',
-    resourceType: 'unit',
-    resourceId: String(unitId),
-    communityId,
-    oldValues: {
-      unitNumber: existing['unitNumber'],
-      building: existing['building'],
-      floor: existing['floor'],
-    },
-  });
-
-  return NextResponse.json({ data: { success: true } });
-});
+    return { success: true as const };
+  }),
+);
