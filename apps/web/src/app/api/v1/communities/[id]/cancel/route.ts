@@ -7,6 +7,11 @@
  *
  * Plan A1 drain #155. Migrated to `runRoute(contract, handler)`; see
  * `./contract.ts`.
+ *
+ * Behavior change vs. pre-migration: invalid path param (non-numeric or
+ * non-positive `[id]`) now returns 400 `VALIDATION_ERROR` instead of
+ * `Number('abc') = NaN` flowing into service lookup. Unauthenticated calls
+ * with invalid body may return 400 before 401 (contract validation runs first).
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';

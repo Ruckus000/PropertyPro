@@ -112,6 +112,7 @@ describe('POST /api/v1/communities/[id]/cancel', () => {
     expect(res.status).toBe(403);
     const json = await res.json();
     expect(json.error.message).toBe('You do not own this billing group');
+    expect(stripeCancelMock).not.toHaveBeenCalled();
     expect(softDeleteCommunityForCancellationMock).not.toHaveBeenCalled();
   });
 
