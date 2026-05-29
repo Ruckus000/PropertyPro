@@ -4,8 +4,9 @@
  * Plan A1 drain #122. Staff-operator denied-visitor update and soft-delete.
  * Sibling collection drained in #94.
  *
- * PATCH: body validated by contract; "at least one field" rule preserved
- * in-handler after auth (#117 precedent). `communityId` in body +
+ * PATCH: body validated by contract; "at least one field" guard added
+ * in-handler after auth (#117 precedent — not present pre-migration).
+ * `communityId` in body +
  * `resolveEffectiveCommunityId` in-handler (replaces `parseCommunityIdFromBody`).
  *
  * DELETE response: tight `z.object({ success: true })` — synthesized.

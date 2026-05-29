@@ -134,6 +134,8 @@ describe('PATCH /api/v1/visitors/denied/[id]', () => {
     );
 
     expect(res.status).toBe(400);
+    expect(requireAuthenticatedUserIdMock).toHaveBeenCalled();
+    expect(resolveEffectiveCommunityIdMock).not.toHaveBeenCalled();
     expect(updateDeniedVisitorMock).not.toHaveBeenCalled();
   });
 
