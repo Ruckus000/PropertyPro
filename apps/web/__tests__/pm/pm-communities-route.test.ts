@@ -16,6 +16,10 @@ vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
 
+vi.mock('@propertypro/db', () => ({
+  createScopedClient: vi.fn(),
+}));
+
 vi.mock('@/lib/api/pm-communities', () => ({
   listManagedCommunitiesForPm: listManagedCommunitiesForPmMock,
 }));
@@ -24,26 +28,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
   isPmAdminInAnyCommunity: isPmAdminInAnyCommunityMock,
 }));
 
-vi.mock('@/lib/auth/signup', () => ({
-  checkSignupSubdomainAvailability: vi.fn(),
-}));
-
-vi.mock('@/lib/pm/create-community', () => ({
-  createCommunityForPm: vi.fn(),
-}));
-
-vi.mock('@/lib/services/stripe-service', () => ({
-  createAddCommunityCheckout: vi.fn(),
-}));
-
-vi.mock('@/lib/billing/billing-group-service', () => ({
-  getOrCreateBillingGroupForPm: vi.fn(),
-  createPendingAddToGroupSignup: vi.fn(),
-}));
-
 import { GET } from '../../src/app/api/v1/pm/communities/route';
 
-describe('pm communities route', () => {
+describe('GET /api/v1/pm/communities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('pm-user-1');
@@ -102,6 +89,7 @@ describe('pm communities route', () => {
 
     expect(res.status).toBe(400);
     expect(listManagedCommunitiesForPmMock).not.toHaveBeenCalled();
+    expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 for authenticated users without PM role', async () => {
