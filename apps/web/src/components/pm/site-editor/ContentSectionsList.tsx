@@ -7,6 +7,8 @@ import { AnnouncementsBlockForm } from './AnnouncementsBlockForm';
 import { DocumentsBlockForm } from './DocumentsBlockForm';
 import { MeetingsBlockForm } from './MeetingsBlockForm';
 import { ContactBlockForm } from './ContactBlockForm';
+import { FaqBlockForm } from './FaqBlockForm';
+import { AmenitiesBlockForm } from './AmenitiesBlockForm';
 import {
   textBlockSchema,
   imageBlockSchema,
@@ -14,16 +16,25 @@ import {
   documentsBlockSchema,
   meetingsBlockSchema,
   contactBlockSchema,
+  faqBlockSchema,
+  amenitiesBlockSchema,
   type TextBlockContent,
   type ImageBlockContent,
   type AnnouncementsBlockContent,
   type DocumentsBlockContent,
   type MeetingsBlockContent,
   type ContactBlockContent,
+  type FaqBlockContent,
+  type AmenitiesBlockContent,
 } from '@propertypro/shared';
 
 interface Props {
   communityId: number;
+  /**
+   * Pro+ gate (hasSitePolishBlocks). When false, the FAQ/Amenities "add"
+   * affordances render disabled-but-visible for upsell (spec §4.3).
+   */
+  hasSitePolishBlocks?: boolean;
 }
 
 const HERO_BLOCK_ORDER = 1;
@@ -64,9 +75,29 @@ function parseContactBlock(content: unknown): ContactBlockContent | null {
   return parse.success ? parse.data : null;
 }
 
-export function ContentSectionsList({ communityId }: Props) {
+function parseFaqBlock(content: unknown): FaqBlockContent | null {
+  const parse = faqBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
+function parseAmenitiesBlock(content: unknown): AmenitiesBlockContent | null {
+  const parse = amenitiesBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
+export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }: Props) {
   const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
-  const [adding, setAdding] = useState<'text' | 'image' | 'announcements' | 'documents' | 'meetings' | 'contact' | null>(null);
+  const [adding, setAdding] = useState<
+    | 'text'
+    | 'image'
+    | 'announcements'
+    | 'documents'
+    | 'meetings'
+    | 'contact'
+    | 'faq'
+    | 'amenities'
+    | null
+  >(null);
 
   if (isLoading) {
     return <p className="text-sm text-content-secondary">Loading content sections…</p>;
@@ -86,7 +117,9 @@ export function ContentSectionsList({ communityId }: Props) {
       b.blockType === 'announcements' ||
       b.blockType === 'documents' ||
       b.blockType === 'meetings' ||
-      b.blockType === 'contact',
+      b.blockType === 'contact' ||
+      b.blockType === 'faq' ||
+      b.blockType === 'amenities',
   );
 
   return (
@@ -144,6 +177,20 @@ export function ContentSectionsList({ communityId }: Props) {
               communityId={communityId}
               blockOrder={b.blockOrder}
               initial={parseContactBlock(b.content)}
+            />
+          )}
+          {b.blockType === 'faq' && (
+            <FaqBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseFaqBlock(b.content)}
+            />
+          )}
+          {b.blockType === 'amenities' && (
+            <AmenitiesBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseAmenitiesBlock(b.content)}
             />
           )}
         </div>
@@ -226,6 +273,32 @@ export function ContentSectionsList({ communityId }: Props) {
           />
         </div>
       )}
+      {adding === 'faq' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New FAQ section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <FaqBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
+      {adding === 'amenities' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New amenities section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <AmenitiesBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 pt-2">
         <button
           type="button"
@@ -268,6 +341,26 @@ export function ContentSectionsList({ communityId }: Props) {
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
         >
           + Add contact section
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('faq')}
+          disabled={!hasSitePolishBlocks}
+          title={hasSitePolishBlocks ? undefined : 'Upgrade to Professional to add FAQ sections'}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          + Add FAQ section
+          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('amenities')}
+          disabled={!hasSitePolishBlocks}
+          title={hasSitePolishBlocks ? undefined : 'Upgrade to Professional to add amenities sections'}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          + Add amenities section
+          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
         </button>
       </div>
     </section>

@@ -35,6 +35,16 @@ vi.mock('@/components/pm/site-editor/ContactBlockForm', () => ({
     <div data-testid="contact-form" data-block-order={props.blockOrder}>contact form</div>
   ),
 }));
+vi.mock('@/components/pm/site-editor/FaqBlockForm', () => ({
+  FaqBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="faq-form" data-block-order={props.blockOrder}>faq form</div>
+  ),
+}));
+vi.mock('@/components/pm/site-editor/AmenitiesBlockForm', () => ({
+  AmenitiesBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="amenities-form" data-block-order={props.blockOrder}>amenities form</div>
+  ),
+}));
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -206,5 +216,59 @@ describe('<ContentSectionsList>', () => {
     fireEvent.click(screen.getByRole('button', { name: /add contact section/i }));
     expect(screen.getByTestId('contact-form')).toBeInTheDocument();
     expect(screen.getByTestId('contact-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  // --- Pro+ polish blocks (faq / amenities), gated by hasSitePolishBlocks ---
+
+  it('disables the FAQ and Amenities add buttons when hasSitePolishBlocks is absent (upsell)', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByText(/no content sections yet/i);
+    expect(screen.getByRole('button', { name: /add faq section/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /add amenities section/i })).toBeDisabled();
+  });
+
+  it('enables the FAQ and Amenities add buttons when hasSitePolishBlocks is true', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    await screen.findByText(/no content sections yet/i);
+    expect(screen.getByRole('button', { name: /add faq section/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /add amenities section/i })).not.toBeDisabled();
+  });
+
+  it('clicking "+ Add FAQ section" reveals a new FaqBlockForm when enabled', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    await screen.findByText(/no content sections yet/i);
+    fireEvent.click(screen.getByRole('button', { name: /add faq section/i }));
+    expect(screen.getByTestId('faq-form')).toBeInTheDocument();
+    expect(screen.getByTestId('faq-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  it('clicking "+ Add amenities section" reveals a new AmenitiesBlockForm when enabled', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    await screen.findByText(/no content sections yet/i);
+    fireEvent.click(screen.getByRole('button', { name: /add amenities section/i }));
+    expect(screen.getByTestId('amenities-form')).toBeInTheDocument();
+    expect(screen.getByTestId('amenities-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  it('renders a FaqBlockForm for an existing faq block', async () => {
+    mockBlocks([
+      { id: 16, blockType: 'faq', blockOrder: 8, content: { items: [{ question: 'Q', answer: 'A' }] } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    const form = await screen.findByTestId('faq-form');
+    expect(form).toHaveAttribute('data-block-order', '8');
+  });
+
+  it('renders an AmenitiesBlockForm for an existing amenities block', async () => {
+    mockBlocks([
+      { id: 17, blockType: 'amenities', blockOrder: 9, content: { items: [{ name: 'Pool' }] } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    const form = await screen.findByTestId('amenities-form');
+    expect(form).toHaveAttribute('data-block-order', '9');
   });
 });

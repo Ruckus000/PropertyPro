@@ -60,7 +60,15 @@ export function useContentBlocks(communityId: number) {
 }
 
 export interface UpsertContentBlockInput {
-  blockType: 'text' | 'image' | 'announcements' | 'documents' | 'meetings' | 'contact';
+  blockType:
+    | 'text'
+    | 'image'
+    | 'announcements'
+    | 'documents'
+    | 'meetings'
+    | 'contact'
+    | 'faq'
+    | 'amenities';
   blockOrder: number;
   content: unknown;
 }

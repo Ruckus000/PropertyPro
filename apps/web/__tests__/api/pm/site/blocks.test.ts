@@ -309,6 +309,61 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     }));
   });
 
+  it('PATCHes a faq block (Pro+) and enforces hasSitePolishBlocks', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'faq',
+      blockOrder: 8,
+      content: { items: [{ question: 'When are meetings?', answer: 'Quarterly.' }] },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(42, 'hasSitePolishBlocks');
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'faq',
+      blockOrder: 8,
+      content: { items: [{ question: 'When are meetings?', answer: 'Quarterly.' }] },
+    }));
+  });
+
+  it('PATCHes an amenities block (Pro+) and enforces hasSitePolishBlocks', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'amenities',
+      blockOrder: 9,
+      content: { items: [{ name: 'Heated Pool', description: 'Open daily.' }] },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(42, 'hasSitePolishBlocks');
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'amenities',
+      blockOrder: 9,
+    }));
+  });
+
+  it('403s a faq block when the plan lacks hasSitePolishBlocks (but has hasSiteEditor)', async () => {
+    requirePlanFeatureMock.mockImplementation((_id: number, key: string) =>
+      key === 'hasSitePolishBlocks'
+        ? Promise.reject(new AppError('This feature requires the Professional plan or higher.', 403, 'PLAN_UPGRADE_REQUIRED'))
+        : Promise.resolve(undefined),
+    );
+    const body = {
+      communityId: 42,
+      blockType: 'faq',
+      blockOrder: 8,
+      content: { items: [{ question: 'Q?', answer: 'A.' }] },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(403);
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT enforce hasSitePolishBlocks for non-polish (text) blocks', async () => {
+    await PATCH(makePatchRequest(VALID_TEXT_BODY));
+    expect(requirePlanFeatureMock).not.toHaveBeenCalledWith(42, 'hasSitePolishBlocks');
+  });
+
   it('400s on invalid text content (missing required body field)', async () => {
     const body = { ...VALID_TEXT_BODY, content: {} }; // body field is required
     const res = await PATCH(makePatchRequest(body));
