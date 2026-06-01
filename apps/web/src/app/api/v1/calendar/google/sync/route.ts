@@ -1,10 +1,13 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * POST /api/v1/calendar/google/sync
+ *
+ * Plan A1 drain #163. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import {
   requireCalendarSyncEnabledForMembership,
@@ -12,31 +15,19 @@ import {
 } from '@/lib/calendar/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { syncGoogleCalendar } from '@/lib/services/calendar-sync-service';
+import { calendarGoogleSyncPostContract } from './contract';
 
-const syncSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+export const POST = withErrorHandler(
+  runRoute(calendarGoogleSyncPostContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromBody(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = syncSchema.safeParse(body);
+    requireCalendarSyncEnabledForMembership(membership);
+    requireCalendarSyncWritePermission(membership);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid calendar sync payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireCalendarSyncEnabledForMembership(membership);
-  requireCalendarSyncWritePermission(membership);
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await syncGoogleCalendar(communityId, actorUserId, requestId);
-
-  return NextResponse.json({ data });
-});
+    const requestId = req.headers.get('x-request-id');
+    return syncGoogleCalendar(communityId, actorUserId, requestId);
+  }),
+);
