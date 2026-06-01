@@ -6,6 +6,7 @@
  *   - PR #2: text, image
  *   - PR #3: announcements
  *   - PR #4: documents, meetings, contact
+ *   - PR #10b: faq, gallery, amenities (Pro+ polish blocks)
  *
  * Once a block type has both a schema entry AND a renderer entry, it is
  * "live" — the page renderer in PR #1b+ uses the registry to dispatch.
@@ -22,6 +23,9 @@ import { AnnouncementsBlock } from './AnnouncementsBlock';
 import { DocumentsBlock } from './DocumentsBlock';
 import { MeetingsBlock } from './MeetingsBlock';
 import { ContactBlock } from './ContactBlock';
+import { FaqBlock } from './FaqBlock';
+import { GalleryBlock } from './GalleryBlock';
+import { AmenitiesBlock } from './AmenitiesBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
@@ -32,6 +36,9 @@ export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>
   documents: DocumentsBlock,
   meetings: MeetingsBlock,
   contact: ContactBlock,
+  faq: FaqBlock,
+  gallery: GalleryBlock,
+  amenities: AmenitiesBlock,
 };
 
 export function hasRenderer(blockType: BlockType): boolean {
