@@ -68,6 +68,7 @@ export interface UpsertContentBlockInput {
     | 'meetings'
     | 'contact'
     | 'faq'
+    | 'gallery'
     | 'amenities';
   blockOrder: number;
   content: unknown;

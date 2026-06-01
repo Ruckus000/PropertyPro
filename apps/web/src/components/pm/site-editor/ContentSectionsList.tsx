@@ -9,6 +9,7 @@ import { MeetingsBlockForm } from './MeetingsBlockForm';
 import { ContactBlockForm } from './ContactBlockForm';
 import { FaqBlockForm } from './FaqBlockForm';
 import { AmenitiesBlockForm } from './AmenitiesBlockForm';
+import { GalleryBlockForm } from './GalleryBlockForm';
 import {
   textBlockSchema,
   imageBlockSchema,
@@ -18,6 +19,7 @@ import {
   contactBlockSchema,
   faqBlockSchema,
   amenitiesBlockSchema,
+  galleryBlockSchema,
   type TextBlockContent,
   type ImageBlockContent,
   type AnnouncementsBlockContent,
@@ -26,6 +28,7 @@ import {
   type ContactBlockContent,
   type FaqBlockContent,
   type AmenitiesBlockContent,
+  type GalleryBlockContent,
 } from '@propertypro/shared';
 
 interface Props {
@@ -85,6 +88,11 @@ function parseAmenitiesBlock(content: unknown): AmenitiesBlockContent | null {
   return parse.success ? parse.data : null;
 }
 
+function parseGalleryBlock(content: unknown): GalleryBlockContent | null {
+  const parse = galleryBlockSchema.safeParse(content);
+  return parse.success ? parse.data : null;
+}
+
 export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }: Props) {
   const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
   const [adding, setAdding] = useState<
@@ -95,6 +103,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
     | 'meetings'
     | 'contact'
     | 'faq'
+    | 'gallery'
     | 'amenities'
     | null
   >(null);
@@ -119,6 +128,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
       b.blockType === 'meetings' ||
       b.blockType === 'contact' ||
       b.blockType === 'faq' ||
+      b.blockType === 'gallery' ||
       b.blockType === 'amenities',
   );
 
@@ -191,6 +201,13 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
               communityId={communityId}
               blockOrder={b.blockOrder}
               initial={parseAmenitiesBlock(b.content)}
+            />
+          )}
+          {b.blockType === 'gallery' && (
+            <GalleryBlockForm
+              communityId={communityId}
+              blockOrder={b.blockOrder}
+              initial={parseGalleryBlock(b.content)}
             />
           )}
         </div>
@@ -299,6 +316,19 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           />
         </div>
       )}
+      {adding === 'gallery' && (
+        <div className="rounded-md border-2 border-dashed border-default bg-surface-card p-4">
+          <div className="mb-3 text-xs text-content-secondary">
+            New gallery section #{nextBlockOrder(contentBlocks)}
+          </div>
+          <GalleryBlockForm
+            communityId={communityId}
+            blockOrder={nextBlockOrder(contentBlocks)}
+            initial={null}
+            onSaved={() => setAdding(null)}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 pt-2">
         <button
           type="button"
@@ -350,6 +380,16 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add FAQ section
+          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAdding('gallery')}
+          disabled={!hasSitePolishBlocks}
+          title={hasSitePolishBlocks ? undefined : 'Upgrade to Professional to add gallery sections'}
+          className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          + Add gallery section
           {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
         </button>
         <button

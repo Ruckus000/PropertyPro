@@ -34,8 +34,9 @@ export const blocksUpsertContract = defineRoute({
     body: z.object({
       communityId: z.number().int().positive(),
       // hero has its own dedicated endpoint at /api/v1/pm/site/hero.
-      // faq + amenities (Pro+ polish blocks) added in PR #10c; the handler
-      // additionally gates them on hasSitePolishBlocks. gallery follows in #10d.
+      // faq + amenities + gallery are the Pro+ polish blocks (faq/amenities
+      // in PR #10c, gallery in #10d); the handler additionally gates all
+      // three on hasSitePolishBlocks (POLISH_BLOCK_TYPES).
       blockType: z.enum([
         'text',
         'image',
@@ -44,6 +45,7 @@ export const blocksUpsertContract = defineRoute({
         'meetings',
         'contact',
         'faq',
+        'gallery',
         'amenities',
       ]),
       blockOrder: z.number().int().min(2).max(99), // 1 is reserved for the hero block
