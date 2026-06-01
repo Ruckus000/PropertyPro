@@ -84,6 +84,24 @@ const BLOCK_META: Record<BlockType, BlockMeta> = {
     rendererPath: `${RENDERER_DIR}/ContactBlock.tsx`,
     summary: 'Management contact details (name, email, phone).',
   },
+  faq: {
+    label: 'FAQ',
+    tier: 'professional',
+    rendererPath: `${RENDERER_DIR}/FaqBlock.tsx`,
+    summary: 'Pro+ polish block — a heading plus a list of question/answer pairs.',
+  },
+  gallery: {
+    label: 'Gallery',
+    tier: 'professional',
+    rendererPath: `${RENDERER_DIR}/GalleryBlock.tsx`,
+    summary: 'Pro+ polish block — a captioned image grid (alt text or decorative per image).',
+  },
+  amenities: {
+    label: 'Amenities',
+    tier: 'professional',
+    rendererPath: `${RENDERER_DIR}/AmenitiesBlock.tsx`,
+    summary: 'Pro+ polish block — a list of community amenities with optional descriptions.',
+  },
 };
 
 const DOC_BASE = 'docs/design-system/patterns';

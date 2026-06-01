@@ -71,6 +71,13 @@
 			"when": 1780041600002,
 			"tag": "0009_site_onboarding_columns",
 			"breakpoints": true
+		},
+		{
+			"idx": 10,
+			"version": "7",
+			"when": 1780041600003,
+			"tag": "0010_site_polish_block_types",
+			"breakpoints": true
 		}
 	]
 }

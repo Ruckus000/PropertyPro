@@ -14,6 +14,9 @@ import { documentsBlockSchema } from './documents';
 import { meetingsBlockSchema } from './meetings';
 import { announcementsBlockSchema } from './announcements';
 import { contactBlockSchema } from './contact';
+import { faqBlockSchema } from './faq';
+import { galleryBlockSchema } from './gallery';
+import { amenitiesBlockSchema } from './amenities';
 
 export const blockSchemaRegistry = {
   hero: heroBlockSchema,
@@ -23,6 +26,9 @@ export const blockSchemaRegistry = {
   meetings: meetingsBlockSchema,
   announcements: announcementsBlockSchema,
   contact: contactBlockSchema,
+  faq: faqBlockSchema,
+  gallery: galleryBlockSchema,
+  amenities: amenitiesBlockSchema,
 } satisfies Record<BlockType, z.ZodType>;
 
 export { BLOCK_TYPES, blockTypeSchema } from './types';
@@ -34,3 +40,16 @@ export { documentsBlockSchema, type DocumentsBlockContent } from './documents';
 export { meetingsBlockSchema, type MeetingsBlockContent } from './meetings';
 export { announcementsBlockSchema, type AnnouncementsBlockContent } from './announcements';
 export { contactBlockSchema, type ContactBlockContent } from './contact';
+export { faqBlockSchema, faqItemSchema, type FaqBlockContent, type FaqItem } from './faq';
+export {
+  galleryBlockSchema,
+  galleryImageSchema,
+  type GalleryBlockContent,
+  type GalleryImage,
+} from './gallery';
+export {
+  amenitiesBlockSchema,
+  amenityItemSchema,
+  type AmenitiesBlockContent,
+  type AmenityItem,
+} from './amenities';
