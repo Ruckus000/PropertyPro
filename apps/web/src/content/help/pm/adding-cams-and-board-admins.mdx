@@ -28,7 +28,6 @@ relatedArticles:
   - inviting-and-managing-residents
 featured: false
 contextPaths:
-  - /pm/dashboard
   - /pm/dashboard/communities
   - /pm/dashboard/communities/*
   - /pm/dashboard/*
@@ -47,23 +46,27 @@ Five role tiers carry admin capabilities:
 - **`property_manager_admin`** — portfolio-level admin (PMs and their staff).
 - **`pm_admin`** — alias for property_manager_admin.
 
-Each role has a defined permission set codified in `packages/shared/src/permissions/`. You can read the permission matrix in the role's profile page.
+Each role has a defined permission set codified in `packages/shared/src/manager-permissions.ts`.
 
 ## Adding a CAM or board admin
 
 <StepByStep>
-<Step title="Invite as a resident first">
-Use [Inviting and managing residents](/help/residents/inviting-and-managing-residents) to add the person to the community. They'll accept the invitation and create their PropertyPro account.
+<Step title="Open Add Resident">
+On the community's **Residents** page, click **Add Resident** and enter the person's name, email, and phone.
 </Step>
 
-<Step title="Promote to the admin role">
-Once they've accepted, open their profile in the community's resident list. Click **Change role** and pick the admin role (CAM, board_member, board_president, site_manager).
+<Step title="Pick the admin role">
+In the **Role** dropdown, choose the admin role directly — **Community Association Manager**, **Board Member**, **Board President**, or **Site Manager**. The role is set as you add them. Keep **Send invitation email** checked so they get portal access.
 </Step>
 
 <Step title="Confirm immediately">
-The new admin sees admin features on their next page load. Walk them through the dashboard to verify they have what they need (and only what they need).
+Once they accept the invitation, the new admin sees admin features on their next page load. Walk them through the dashboard to verify they have what they need (and only what they need).
 </Step>
 </StepByStep>
+
+<Callout type="info" title="Setting a role vs. changing it later">
+You choose a member's role when you add them. PropertyPro doesn't yet offer an in-app control to change or remove an existing member's role from the resident list — that capability is on the roadmap. For now, assign the correct role when you add someone; anywhere this guide describes promoting, demoting, or removing an existing member, that change currently goes through PropertyPro support.
+</Callout>
 
 For property-manager admins (your own team), use the PM dashboard's team-management area rather than the per-community resident list — that grants portfolio-level access in one step rather than per-community.
 
@@ -113,8 +116,8 @@ Before removing access, open the [audit trail](/help/audit/reviewing-the-audit-t
 Reassign open work orders, transfer ownership of draft documents, and update any community contacts that pointed to this CAM.
 </Step>
 
-<Step title="Demote and remove access">
-On the resident page, click **Change role** and pick a non-admin role, or click **Remove from community** to revoke access entirely. The CAM's PropertyPro account stays (they can use it elsewhere); their access to your portfolio ends.
+<Step title="Remove their admin access">
+To revoke a departing CAM's access, contact PropertyPro support to change their role or remove them from the community (existing-member role changes aren't self-serve yet — see the note above). Their PropertyPro account stays (they can use it elsewhere); their access to your portfolio ends.
 </Step>
 
 <Step title="Communicate the change">
@@ -130,7 +133,7 @@ Admins who shouldn't have access anymore are a primary cause of data leaks and u
 
 Every quarter:
 
-1. List every admin across your portfolio (PM dashboard → Admins report).
+1. List the admins in each community (open the community's **Residents** page and note who holds an admin role — CAM, board member, board president, or site manager).
 2. Verify each one is still in their role (CAM still works on this account; board member still on the board).
 3. Demote or remove anyone whose access is outdated.
 
@@ -157,7 +160,7 @@ Track grants and revocations in the audit trail. For temporary grants, set a cal
 If an admin reports they can't do something they should:
 
 1. Confirm their role on their profile.
-2. Check the resource permission matrix (`packages/shared/src/permissions/matrix.ts`) — they may genuinely lack permission.
+2. Check the resource permission matrix (`packages/shared/src/manager-permissions.ts`) — they may genuinely lack permission.
 3. If they should have it, escalate to support; a stuck role assignment occasionally needs a manual fix.
 
 If an admin can do something they shouldn't:
