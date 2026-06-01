@@ -80,23 +80,31 @@ describeDb('letter-suffixed units across search and visitor flow', () => {
       new NextRequest(apiUrl(`/api/v1/search/units?communityId=${communityId}&q=a&limit=20`)),
     );
     expect(searchAResponse.status).toBe(200);
-    const searchAJson = await parseJson<{ results: Array<{ label: string }> }>(searchAResponse);
-    expect(searchAJson.results.some((result) => result.label === unitA101)).toBe(true);
+    const searchAJson = await parseJson<{ data: { results: Array<{ label: string }> } }>(
+      searchAResponse,
+    );
+    expect(searchAJson.data.results.some((result) => result.label === unitA101)).toBe(true);
 
     const searchPhResponse = await searchUnitsRoute.GET(
       new NextRequest(apiUrl(`/api/v1/search/units?communityId=${communityId}&q=PH&limit=20`)),
     );
     expect(searchPhResponse.status).toBe(200);
-    const searchPhJson = await parseJson<{ results: Array<{ label: string }> }>(searchPhResponse);
-    expect(searchPhJson.results.some((result) => result.label === unitPH1)).toBe(true);
+    const searchPhJson = await parseJson<{ data: { results: Array<{ label: string }> } }>(
+      searchPhResponse,
+    );
+    expect(searchPhJson.data.results.some((result) => result.label === unitPH1)).toBe(true);
 
     const searchNumericResponse = await searchUnitsRoute.GET(
       new NextRequest(apiUrl(`/api/v1/search/units?communityId=${communityId}&q=10&limit=20`)),
     );
     expect(searchNumericResponse.status).toBe(200);
-    const searchNumericJson = await parseJson<{ results: Array<{ label: string }> }>(searchNumericResponse);
-    expect(searchNumericJson.results.some((result) => result.label === unitNumeric)).toBe(true);
-    expect(searchNumericJson.results.some((result) => result.label === unit101B)).toBe(true);
+    const searchNumericJson = await parseJson<{ data: { results: Array<{ label: string }> } }>(
+      searchNumericResponse,
+    );
+    expect(searchNumericJson.data.results.some((result) => result.label === unitNumeric)).toBe(
+      true,
+    );
+    expect(searchNumericJson.data.results.some((result) => result.label === unit101B)).toBe(true);
   });
 
   it('registers a visitor with lowercase letter label and lists canonical hostUnitLabel', async () => {

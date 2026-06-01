@@ -1,33 +1,40 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * GET /api/v1/search/units — staff unit label search.
+ *
+ * Plan A1 drain #161. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireStaffOperator } from '@/lib/logistics/common';
 import { searchUnitsByLabel } from '@/lib/services/units-lookup';
+import { searchUnitsContract } from './contract';
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requireStaffOperator(membership);
+export const GET = withErrorHandler(
+  runRoute(searchUnitsContract, async ({ query, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requireStaffOperator(membership);
 
-  const { searchParams } = new URL(req.url);
-  const q = searchParams.get('q')?.trim() ?? '';
-  const rawLimit = Number(searchParams.get('limit') ?? '10');
-  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 20);
+    const q = query.q?.trim() ?? '';
+    const limit = Math.min(Math.max(query.limit ?? 10, 1), 20);
 
-  if (q.length < 1) {
-    return NextResponse.json({ results: [] });
-  }
+    if (q.length < 1) {
+      return { results: [] };
+    }
 
-  const results = await searchUnitsByLabel(communityId, q, limit);
-  return NextResponse.json({
-    results: results.map((r) => ({
-      id: r.id,
-      label: r.unitNumber,
-      building: r.building,
-      floor: r.floor,
-    })),
-  });
-});
+    const results = await searchUnitsByLabel(communityId, q, limit);
+    return {
+      results: results.map((r) => ({
+        id: r.id,
+        label: r.unitNumber,
+        building: r.building,
+        floor: r.floor,
+      })),
+    };
+  }),
+);
