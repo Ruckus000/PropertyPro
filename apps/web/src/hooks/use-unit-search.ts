@@ -10,7 +10,7 @@ export interface UnitSearchResult {
 }
 
 interface UnitSearchResponse {
-  results?: UnitSearchResult[];
+  data?: { results?: UnitSearchResult[] };
 }
 
 export const UNIT_SEARCH_FETCH_LIMIT = 10;
@@ -34,13 +34,11 @@ async function searchUnits(
     limit: String(UNIT_SEARCH_FETCH_LIMIT),
   });
 
-  // Search routes still return a flat `{ results }` payload, so this hook keeps
-  // the response adapter local until the route-envelope migration reaches them.
   const res = await fetch(`/api/v1/search/units?${params.toString()}`, { signal });
   if (!res.ok) throw new Error('Search failed');
 
   const json = (await res.json()) as UnitSearchResponse;
-  return json.results ?? [];
+  return json.data?.results ?? [];
 }
 
 export function useUnitSearch(communityId: number) {

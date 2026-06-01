@@ -40,10 +40,12 @@ describe('useUnitSearch', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('builds the unit search request and parses the flat results payload', async () => {
+  it('builds the unit search request and parses the canonical results payload', async () => {
     mockFetch.mockReturnValue(
       jsonResponse({
-        results: [{ id: 101, label: 'PH-A', building: 'Tower', floor: 12 }],
+        data: {
+          results: [{ id: 101, label: 'PH-A', building: 'Tower', floor: 12 }],
+        },
       }),
     );
     const controller = new AbortController();
