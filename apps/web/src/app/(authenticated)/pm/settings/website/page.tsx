@@ -85,9 +85,11 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   // Pro+ gate for the FAQ/Gallery/Amenities polish blocks (spec §4.3). When
   // false, ContentSectionsList renders their "add" affordances disabled-but-
   // visible for upsell; the upsert route enforces the same gate server-side.
-  const hasSitePolishBlocks = communityInfo
-    ? (await getEffectiveFeaturesForPage(communityId, communityInfo.communityType)).hasSitePolishBlocks
-    : false;
+  // membership.communityType is the typed CommunityType source (same idiom as
+  // contracts/page.tsx); communityInfo.communityType is a plain DB string.
+  const hasSitePolishBlocks = (
+    await getEffectiveFeaturesForPage(communityId, membership.communityType)
+  ).hasSitePolishBlocks;
   // Canonical signal: the wizard stamps site_onboarding_completed_at on its
   // final-step publish. Null = wizard never completed → show the banner.
   // (Replaces the prior branding.layoutId-unset substitute heuristic.)
