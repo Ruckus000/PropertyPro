@@ -27,8 +27,6 @@ relatedArticles:
   - managing-multiple-communities
 featured: false
 contextPaths:
-  - /billing
-  - /billing/portal
   - /settings/billing
   - /settings/billing/change-plan
 ---
@@ -90,7 +88,7 @@ The change takes effect immediately for upgrades; downgrades apply at the next b
 
 <StepByStep>
 <Step title="Open the billing portal">
-Visit `/billing/portal`. This launches the Stripe-hosted billing portal in a secure popup.
+Visit `/billing/portal`. This redirects you to the Stripe-hosted billing portal.
 </Step>
 
 <Step title="Add or update a card / bank account">
@@ -106,7 +104,7 @@ Multiple methods can be on file; only the default is used for autopay.
 
 ## Invoices and receipts
 
-Every billing cycle generates an invoice. Find them at `/billing`:
+Every billing cycle generates an invoice. Find them at `/settings/billing`:
 
 - **Outstanding**: bills not yet paid.
 - **Paid**: receipts for completed payments.
