@@ -92,6 +92,8 @@ describe('POST /api/v1/pm/bulk/announcements', () => {
 
     expect(response.status).toBe(401);
     expect(isPmAdminInAnyCommunityMock).not.toHaveBeenCalled();
+    expect(findManagedCommunitiesPortfolioUnscopedMock).not.toHaveBeenCalled();
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
     expect(broadcastBulkAnnouncementToCommunityMock).not.toHaveBeenCalled();
   });
 
@@ -107,7 +109,9 @@ describe('POST /api/v1/pm/bulk/announcements', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(isPmAdminInAnyCommunityMock).toHaveBeenCalledWith('pm-user-1');
     expect(findManagedCommunitiesPortfolioUnscopedMock).not.toHaveBeenCalled();
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
     expect(broadcastBulkAnnouncementToCommunityMock).not.toHaveBeenCalled();
   });
 
@@ -121,6 +125,7 @@ describe('POST /api/v1/pm/bulk/announcements', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
     expect(broadcastBulkAnnouncementToCommunityMock).not.toHaveBeenCalled();
   });
 
