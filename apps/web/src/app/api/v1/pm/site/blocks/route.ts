@@ -28,6 +28,15 @@ import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader
 import { blocksListContract, blocksUpsertContract } from './contract';
 import type { NextRequest } from 'next/server';
 
+/**
+ * Pro+ "polish" block types. On top of the hasSiteEditor gate every block
+ * passes, these require the hasSitePolishBlocks plan feature. gallery is
+ * listed ahead of its editor (PR #10d); the upsert contract enum is the gate
+ * on which types can actually reach this handler today (faq + amenities in
+ * #10c).
+ */
+const POLISH_BLOCK_TYPES = new Set<string>(['faq', 'gallery', 'amenities']);
+
 async function ensurePmAccess(req: NextRequest, communityId: number) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
@@ -60,6 +69,13 @@ export const GET = withErrorHandler(
 export const PATCH = withErrorHandler(
   runRoute(blocksUpsertContract, async ({ body, req }) => {
     const { userId, communityId } = await ensurePmAccess(req, body.communityId);
+
+    // Pro+ gate: the polish block types require hasSitePolishBlocks on top of
+    // the hasSiteEditor gate ensurePmAccess already enforced. Essentials PMs
+    // get a 403 PLAN_UPGRADE_REQUIRED here.
+    if (POLISH_BLOCK_TYPES.has(body.blockType)) {
+      await requirePlanFeature(communityId, 'hasSitePolishBlocks');
+    }
 
     const schema = blockSchemaRegistry[body.blockType as keyof typeof blockSchemaRegistry];
     if (!schema) {
