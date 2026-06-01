@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { SignupEmailDeliveryError } from '../../src/lib/api/errors';
+import { SignupEmailDeliveryError, ValidationError } from '../../src/lib/api/errors';
 
 const { checkSignupSubdomainAvailabilityMock, submitSignupMock } = vi.hoisted(() => ({
   checkSignupSubdomainAvailabilityMock: vi.fn(),
@@ -58,8 +58,18 @@ describe('GET /api/v1/auth/signup', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/auth/signup');
 
     const res = await GET(req);
+    const body = (await res.json()) as {
+      error: {
+        code: string;
+        message: string;
+        details?: { fields?: Array<{ field: string }> };
+      };
+    };
 
     expect(res.status).toBe(400);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toBe('Invalid query parameters');
+    expect(body.error.details?.fields?.some((entry) => entry.field === 'subdomain')).toBe(true);
     expect(checkSignupSubdomainAvailabilityMock).not.toHaveBeenCalled();
   });
 });
@@ -91,6 +101,34 @@ describe('POST /api/v1/auth/signup', () => {
     expect(submitSignupMock).toHaveBeenCalledWith({
       email: 'jordan@example.com',
     });
+  });
+
+  it('returns structured 400 fieldErrors when submitSignup rejects validation', async () => {
+    submitSignupMock.mockRejectedValueOnce(
+      new ValidationError('Invalid signup payload', {
+        fieldErrors: { email: ['Please enter a valid email address'] },
+      }),
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/v1/auth/signup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email' }),
+    });
+
+    const res = await POST(req);
+    const body = (await res.json()) as {
+      error: {
+        code: string;
+        details?: { fieldErrors?: { email?: string[] } };
+      };
+    };
+
+    expect(res.status).toBe(400);
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.details?.fieldErrors?.email).toEqual([
+      'Please enter a valid email address',
+    ]);
   });
 
   it('returns a structured 503 when signup email delivery fails', async () => {
