@@ -114,6 +114,9 @@ export {
   meetingsBlockSchema,
   announcementsBlockSchema,
   contactBlockSchema,
+  faqBlockSchema,
+  galleryBlockSchema,
+  amenitiesBlockSchema,
 } from './site-blocks/index';
 export type {
   BlockType,
@@ -124,6 +127,12 @@ export type {
   MeetingsBlockContent,
   AnnouncementsBlockContent,
   ContactBlockContent,
+  FaqBlockContent,
+  FaqItem,
+  GalleryBlockContent,
+  GalleryImage,
+  AmenitiesBlockContent,
+  AmenityItem,
 } from './site-blocks/index';
 // Preserve URL safety helpers from the old flat file — they remain useful
 // generic utilities even after the rest of site-blocks.ts is retired.

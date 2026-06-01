@@ -6,7 +6,11 @@
  */
 import { z } from 'zod';
 
-/** The 7 v1 block types. PR #10 adds 'faq' | 'gallery' | 'amenities'. */
+/**
+ * All supported block types. The first 7 are v1 (Essentials+); the final 3
+ * (`faq`, `gallery`, `amenities`) are the Pro+ "polish blocks" added in PR #10,
+ * gated to the `hasSitePolishBlocks` plan feature at the write path.
+ */
 export const BLOCK_TYPES = [
   'hero',
   'text',
@@ -15,6 +19,9 @@ export const BLOCK_TYPES = [
   'meetings',
   'announcements',
   'contact',
+  'faq',
+  'gallery',
+  'amenities',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
