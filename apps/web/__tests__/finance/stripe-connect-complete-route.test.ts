@@ -131,6 +131,10 @@ describe('POST /api/v1/stripe/connect/complete', () => {
 
     expect(response.status).toBe(401);
     expect(validateConnectOAuthStateMock).not.toHaveBeenCalled();
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(requireFinanceEnabledMock).not.toHaveBeenCalled();
+    expect(requireFinanceWritePermissionMock).not.toHaveBeenCalled();
+    expect(requireFinanceAdminWriteMock).not.toHaveBeenCalled();
     expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
     expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
   });
@@ -153,7 +157,12 @@ describe('POST /api/v1/stripe/connect/complete', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(requireFinanceEnabledMock).not.toHaveBeenCalled();
+    expect(requireFinanceWritePermissionMock).not.toHaveBeenCalled();
+    expect(requireFinanceAdminWriteMock).not.toHaveBeenCalled();
     expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
+    expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when finance write permission is denied', async () => {
@@ -176,6 +185,27 @@ describe('POST /api/v1/stripe/connect/complete', () => {
     expect(response.status).toBe(403);
     expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
     expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when subscription guard blocks mutation', async () => {
+    requireActiveSubscriptionForMutationMock.mockRejectedValueOnce(
+      new AppError('Subscription required', 403, 'SUBSCRIPTION_REQUIRED'),
+    );
+
+    const response = await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 42,
+          code: 'ac_test_code',
+          state: 'valid-state-token',
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
   });
 
   it('returns 400 for invalid body without side effects', async () => {
