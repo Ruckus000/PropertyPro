@@ -108,12 +108,9 @@ Residents see the new charge on their Payments page and receive an email with th
 
 ## Late fees
 
-Late fees apply automatically if you configured them on the recurring schedule. To apply a one-off late fee or override:
+Late fees are configured on the assessment itself — there's no one-off "apply a fee" action. When you create or edit a recurring assessment, set the **late-fee amount** and a **grace period** (the number of days after the due date before the fee applies). PropertyPro then adds the fee automatically to any charge still unpaid past the grace window.
 
-1. Open the relevant assessment row.
-2. Click **Apply late fee**.
-3. Enter the amount and reason.
-4. The fee posts to the resident's balance.
+To change how a late fee behaves, edit the assessment schedule and update the late-fee amount or grace period.
 
 <Callout type="warning" title="Bylaws govern late fee amounts">
 PropertyPro does not enforce statutory caps on late fees. Florida statute limits how much can be charged; your bylaws may set further constraints. Verify any late-fee amount against your governing documents before applying.
@@ -141,15 +138,11 @@ Each special assessment shows its collection rate over time. A healthy assessmen
 
 Use the per-unit delinquency report to identify residents who need outreach versus those genuinely refusing.
 
-## Refunds and credits
+## Waiving a late fee
 
-To refund a paid assessment (board decided to reverse, vendor came in under budget):
+When the board forgives a fee — a resident appeals successfully, or it was applied in error — waive it rather than deleting it. Late fees can be waived from the **Delinquency** view using **Waive Late Fees**.
 
-1. Open the assessment.
-2. Click **Issue credit** on each affected unit (or **Refund all**).
-3. The credit applies to the resident's balance or processes back to their payment method per their preference.
-
-Credits show on resident statements with a clear description so they understand why their balance moved.
+A waived fee drops out of the unit's outstanding balance but stays on the record with a `waived` status, so the audit trail still shows the fee was applied and later forgiven. PropertyPro records the waiver; any money movement back to a card or bank account is handled through your payment processor, not in PropertyPro.
 
 ## Reporting
 
@@ -166,5 +159,5 @@ Pull these monthly for the management committee and annually for the board's yea
 
 - **Mid-year rate change** — increase the recurring amount effective on a specific date; existing prior-month invoices keep the old amount.
 - **Move-in proration** — for unit ownership changes, manually prorate the first month's assessment.
-- **Forgive a late fee** — when a resident appeals successfully, issue a credit equal to the fee. Don't delete the fee — the audit trail should show what was applied and why it was forgiven.
+- **Forgive a late fee** — when a resident appeals successfully, waive the fee from the Delinquency view. Don't delete it — the audit trail should show the fee was applied and then waived.
 - **Bad debt write-off** — work with your accountant. PropertyPro keeps the record; the accounting treatment happens in your books.
