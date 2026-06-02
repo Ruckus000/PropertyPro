@@ -16,7 +16,9 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   and: vi.fn((...args: unknown[]) => ({ __and: args })),
+  asc: vi.fn((col: unknown) => ({ __asc: col })),
   desc: vi.fn((col: unknown) => ({ __desc: col })),
+  gte: vi.fn((col: unknown, val: unknown) => ({ __gte: { col, val } })),
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: { col, val } })),
   isNull: vi.fn((col: unknown) => ({ __isNull: col })),
   isNotNull: vi.fn((col: unknown) => ({ __isNotNull: col })),
@@ -138,9 +140,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
-import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks } from '@/lib/services/site-blocks-service';
+import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks, reorderSiteBlock } from '@/lib/services/site-blocks-service';
 import { createScopedClient } from '@propertypro/db';
-import { ConflictError } from '@/lib/api/errors';
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 
 const createScopedClientMock = vi.mocked(createScopedClient);
 
@@ -618,5 +620,209 @@ describe('cleanupSoftDeletedSiteBlocks', () => {
     const ltClause = where.__and[1];
     const cutoff = ltClause.__lt!.val;
     expect(now.getTime() - cutoff.getTime()).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reorderSiteBlock — per-block ↑/↓ move (draft-copy semantics)
+// ---------------------------------------------------------------------------
+
+describe('reorderSiteBlock', () => {
+  // Three published content blocks in order 2,3,4 (no drafts). The merged
+  // editor view the service reads is the draft-wins dedupe of these rows.
+  function threeContentBlocks() {
+    return [
+      { id: 12, blockType: 'text', blockOrder: 2, content: { body: 'A' }, isDraft: false },
+      { id: 13, blockType: 'image', blockOrder: 3, content: { imagePath: '42/c/b.webp', altText: 'B' }, isDraft: false },
+      { id: 14, blockType: 'text', blockOrder: 4, content: { body: 'C' }, isDraft: false },
+    ];
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSelectQueue([]);
+    setUpdateReturnQueue([]);
+    resetUpdateCalls();
+  });
+
+  it('moves a block DOWN: swaps its order with the next block, writing two draft rows', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    const result = await reorderSiteBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockId: 12, // block A at order 2
+      direction: 'down',
+    });
+
+    // A (order 2) swaps with B (order 3): A→3, B→2.
+    expect(result).toEqual({ movedBlockId: 12, fromOrder: 2, toOrder: 3 });
+    expect(scopedClient.insert).toHaveBeenCalledTimes(2);
+    // Moving block A gets the neighbor's order (3) with A's content + type.
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 3, isDraft: true, publishedAt: null, content: { body: 'A' } }),
+    );
+    // Neighbor B gets the moving block's order (2) with B's content + type.
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'image', blockOrder: 2, isDraft: true, publishedAt: null, content: { imagePath: '42/c/b.webp', altText: 'B' } }),
+    );
+  });
+
+  it('moves a block UP: swaps its order with the previous block', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    const result = await reorderSiteBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockId: 13, // block B at order 3
+      direction: 'up',
+    });
+
+    expect(result).toEqual({ movedBlockId: 13, fromOrder: 3, toOrder: 2 });
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'image', blockOrder: 2, content: { imagePath: '42/c/b.webp', altText: 'B' } }),
+    );
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 3, content: { body: 'A' } }),
+    );
+  });
+
+  it('soft-deletes existing DRAFT rows at the two affected orders before inserting (sidesteps the partial unique index)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12, direction: 'down' });
+
+    expect(scopedClient.softDelete).toHaveBeenCalledTimes(1);
+    const [, predicate] = scopedClient.softDelete.mock.calls[0] as [unknown, { __and: Array<Record<string, unknown>> }];
+    // Predicate scopes to the two affected orders via inArray …
+    const inArrayClause = predicate.__and.find((c) => '__inArray' in c) as { __inArray: { vals: number[] } } | undefined;
+    expect(inArrayClause).toBeDefined();
+    expect(inArrayClause!.__inArray.vals.sort()).toEqual([2, 3]);
+    // … and only matches draft rows (is_draft = true).
+    const isDraftClause = predicate.__and.find((c) => '__eq' in c && (c as { __eq: { val: unknown } }).__eq.val === true);
+    expect(isDraftClause).toBeDefined();
+  });
+
+  it('uses the draft-wins winning content when a slot has both a published and a draft row', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    // Slot 2 has a published row (id 12) shadowed by a draft (id 99). The draft
+    // is the winning row the editor shows and the one reorder must copy.
+    setSelectQueue([[
+      { id: 12, blockType: 'text', blockOrder: 2, content: { body: 'published' }, isDraft: false },
+      { id: 99, blockType: 'text', blockOrder: 2, content: { body: 'draft-wins' }, isDraft: true },
+      { id: 13, blockType: 'image', blockOrder: 3, content: { imagePath: '42/c/b.webp', altText: 'B' }, isDraft: false },
+    ]]);
+
+    const result = await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 99, direction: 'down' });
+
+    expect(result).toEqual({ movedBlockId: 99, fromOrder: 2, toOrder: 3 });
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockOrder: 3, content: { body: 'draft-wins' } }),
+    );
+  });
+
+  it('creates a draft copy of a published-only block at its new order', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]); // all published, no drafts
+
+    await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 14, direction: 'up' });
+
+    // Block C (published-only, order 4) becomes a DRAFT copy at order 3.
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 3, isDraft: true, content: { body: 'C' } }),
+    );
+  });
+
+  it('acquires SELECT FOR UPDATE on the community row before reordering', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12, direction: 'down' });
+
+    expect(txExecuteMock).toHaveBeenCalledTimes(1);
+    const sqlArg = txExecuteMock.mock.calls[0][0] as { __sql: { strings: string[]; values: unknown[] } };
+    expect(sqlArg.__sql.strings.join('')).toContain('FOR UPDATE');
+    expect(sqlArg.__sql.values).toContain(42);
+  });
+
+  it('writes an inline audit row recording the reorder', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12, direction: 'down' });
+
+    expect(txAuditValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        communityId: 42,
+        userId: 'user-1',
+        action: 'update',
+        resourceType: 'site_block',
+        resourceId: '12',
+        metadata: expect.objectContaining({ reorder: true, direction: 'down', fromOrder: 2, toOrder: 3 }),
+      }),
+    );
+  });
+
+  it('throws NotFoundError when the blockId is not among the community content blocks', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 999, direction: 'down' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+  });
+
+  it('throws ValidationError when moving the first block UP (no neighbor)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12, direction: 'up' }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(scopedClient.softDelete).not.toHaveBeenCalled();
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+  });
+
+  it('throws ValidationError when moving the last block DOWN (no neighbor)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 14, direction: 'down' }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('treats the hero (order 1) as out of scope — a lone content block has no neighbor to swap with', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    // The select is scoped to block_order >= 2, so the hero never appears. A
+    // single content block at order 2 cannot move up (hero is not a neighbor).
+    setSelectQueue([[
+      { id: 20, blockType: 'text', blockOrder: 2, content: { body: 'only' }, isDraft: false },
+    ]]);
+
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 20, direction: 'up' }),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 });
