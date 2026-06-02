@@ -657,6 +657,67 @@ StructuredOutput shape:
 `
 }
 
+function memoryUpdatePrompt(batchSummary) {
+  return `Update the A1 drain corpus memory after a successfully-merged batch.
+
+## Batch summary (just landed)
+
+${JSON.stringify(batchSummary, null, 2)}
+
+## Files to update
+
+1. **Session log:** \`/Users/jphilistin/.claude/projects/-Users-jphilistin-Documents-Coding-PropertyPro/memory/session_2026_05_26_a1_drains_51_to_60.md\`
+   - Update the header line ("**N drains (#51–#X) across Y PRs.** Allowlist 179 → Z. Contracted 53 → W.").
+   - Append a new row to the "What landed" table:
+     \`| Move N (Auto-batch) | [PR1] / [PR2] / [PR3] | #IDs descriptions | findings summary |\`
+   - Append merge SHAs to the "Main HEAD evolution" line.
+
+2. **Index file:** \`/Users/jphilistin/.claude/projects/-Users-jphilistin-Documents-Coding-PropertyPro/memory/MEMORY.md\`
+   - Update the one-line summary for the A1 session entry (drain count, allowlist, contracted).
+
+## Verify the new counts
+
+Run from the project root:
+\`\`\`bash
+cd /Users/jphilistin/Documents/Coding/PropertyPro
+git fetch origin --quiet
+pnpm guard:contracts | tail -3
+\`\`\`
+
+The output's "Allowlist:" and "Contracted:" numbers ARE the new canonical
+counts (do not derive them from arithmetic — guard:contracts is the source
+of truth).
+
+## Return
+
+StructuredOutput shape:
+
+\`\`\`
+{
+  ok: true,
+  updatedAllowlistCount: <from guard:contracts>,
+  updatedContractedCount: <from guard:contracts>,
+  sessionLogPath: "<path>",
+  memoryMdPath: "<path>"
+}
+\`\`\`
+
+On failure (file not found, parse error, etc.):
+
+\`\`\`
+{
+  ok: false,
+  reason: "<specific error>",
+  updatedAllowlistCount: <last-known from input batchSummary>,
+  updatedContractedCount: <last-known from input batchSummary>
+}
+\`\`\`
+
+Do NOT fail the workflow if memory update fails — return ok:false and
+include the last-known counts. The orchestrator handles it.
+`
+}
+
 function dedupeFindings(a, b) {
   // Two findings are duplicates if they target the same file+line(±2) with
   // similar severity. The "description" field is too freeform for exact match.
@@ -836,29 +897,82 @@ const mergeFailureSkips = readyToMerge
     prUrl: d.result.prUrl,
   }))
 
-// Phase 3+ will be added in subsequent tasks. For now, return what we have.
+phase('Memory')
+
+let updatedCounts = {
+  lastKnownAllowlistCount: state.lastKnownAllowlistCount,
+  lastKnownContractedCount: state.lastKnownContractedCount,
+}
+
+if (mergedDrains.length > 0) {
+  const memoryOutput = await agent(
+    memoryUpdatePrompt({
+      mergedDrains: mergedDrains.map(d => ({
+        route: d.pick.route,
+        prUrl: d.result.prUrl,
+        prNumber: d.result.prNumber,
+        mergeCommit: merges.find(m => m.prNumber === d.result.prNumber)?.mergeCommit,
+        classification: d.pick.classification,
+      })),
+      moveIndex: state.batchesAttempted + 1,
+      tsIso,
+      previousAllowlistCount: state.lastKnownAllowlistCount,
+      previousContractedCount: state.lastKnownContractedCount,
+    }),
+    {
+      schema: MEMORY_UPDATE_SCHEMA,
+      label: 'memory-update',
+      phase: 'Memory',
+    }
+  )
+
+  if (memoryOutput?.ok) {
+    updatedCounts = {
+      lastKnownAllowlistCount: memoryOutput.updatedAllowlistCount,
+      lastKnownContractedCount: memoryOutput.updatedContractedCount,
+    }
+    log(`Memory updated. New allowlist=${updatedCounts.lastKnownAllowlistCount}, contracted=${updatedCounts.lastKnownContractedCount}`)
+  } else {
+    log(`Memory update failed: ${memoryOutput?.reason ?? 'unknown'}. Counts NOT advanced.`)
+  }
+}
+
+const allNewSkips = [
+  ...preVet.rejected.map(r => ({
+    route: r.route,
+    classification: r.classification === 'RUNNER_BLOCKED' ? 'PERMANENT' : 'NEEDS_HUMAN',
+    reason: r.reason,
+  })),
+  ...newSkips,
+  ...ciSkips,
+  ...mergeFailureSkips,
+]
+
+const updatedSkipList = { ...state.skipList }
+for (const skip of allNewSkips) {
+  updatedSkipList[skip.route] = {
+    classification: skip.classification,
+    reason: skip.reason,
+    lastAttemptedAt: tsIso,
+    attemptCount: (updatedSkipList[skip.route]?.attemptCount ?? 0) + 1,
+  }
+}
+
 return {
   merged: mergedDrains.length,
+  skipped: allNewSkips,
   mergeCommits: merges.filter(m => m.state === 'MERGED').map(m => m.mergeCommit),
-  skipped: [
-    ...preVet.rejected.map(r => ({
-      route: r.route,
-      classification: r.classification === 'RUNNER_BLOCKED' ? 'PERMANENT' : 'NEEDS_HUMAN',
-      reason: r.reason,
-    })),
-    ...newSkips,
-    ...ciSkips,
-    ...mergeFailureSkips,
-  ],
   findings: {
     high: reviewedDrains.flatMap(d => d.findings).filter(f => f.severity === 'HIGH').length,
     mediumAdopted: adoptedDrains.reduce((s, d) => s + d.adoption.adopted.length, 0),
     dismissed: adoptedDrains.reduce((s, d) => s + d.adoption.dismissed.length, 0),
   },
-  updatedState: state,
-  _debug: {
-    picks: preVet.picks,
-    successful: adoptedDrains.map(s => ({ pr: s.result.prUrl, route: s.pick.route })),
-    findings: reviewedDrains.map(d => ({ route: d.pick.route, findings: d.findings })),
+  updatedState: {
+    ...state,
+    lastKnownAllowlistCount: updatedCounts.lastKnownAllowlistCount,
+    lastKnownContractedCount: updatedCounts.lastKnownContractedCount,
+    lastSuccessfulBatchAt: tsIso,
+    batchesAttempted: (state.batchesAttempted ?? 0) + 1,
+    skipList: updatedSkipList,
   },
 }
