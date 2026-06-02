@@ -61,7 +61,7 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     if (readErr.code === 'PGRST116') return NextResponse.json({ error: { message: `Starter pack not found: ${slug}` } }, { status: 404 });
     return NextResponse.json({ error: { message: readErr.message } }, { status: 500 });
   }
-  const row = pack as { id: number; community_type: string; is_archived: boolean };
+  const row = pack as { id: number; community_type: StarterPackRow['community_type']; is_archived: boolean };
 
   if (row.is_archived) {
     // Already archived — idempotent no-op.

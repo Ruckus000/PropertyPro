@@ -188,6 +188,18 @@ type SiteThemePresetInsert = Omit<
   version?: number;
 };
 
+type SiteStarterPackInsert = Omit<
+  SiteStarterPackRow,
+  'id' | 'created_at' | 'updated_at' | 'description' | 'is_archived' | 'version'
+> & {
+  id?: number;
+  created_at?: string;
+  updated_at?: string;
+  description?: string | null;
+  is_archived?: boolean;
+  version?: number;
+};
+
 // ─── Site templates ───
 
 export type SiteThemePresetRow = {
@@ -322,7 +334,11 @@ export type AdminDatabase = {
         Partial<SiteLayoutMetadataRow>,
         Partial<SiteLayoutMetadataRow>
       >;
-      site_starter_packs: AdminTable<SiteStarterPackRow>;
+      site_starter_packs: AdminTable<
+        SiteStarterPackRow,
+        SiteStarterPackInsert,
+        Partial<SiteStarterPackRow>
+      >;
       site_blocks: AdminTable<
         SiteBlockRow,
         SiteBlockInsert,

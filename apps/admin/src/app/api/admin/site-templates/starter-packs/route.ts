@@ -21,7 +21,7 @@ import {
 export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
   const ct = new URL(request.url).searchParams.get('communityType');
-  let communityType: string | null = null;
+  let communityType: z.infer<typeof communityTypeSchema> | null = null;
   if (ct) {
     const parsed = communityTypeSchema.safeParse(ct);
     if (!parsed.success) return NextResponse.json({ error: { message: `Invalid communityType: ${ct}` } }, { status: 400 });
