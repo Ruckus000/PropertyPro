@@ -25,11 +25,17 @@ import {
   siteBlocks,
   type AuditAction,
 } from '@propertypro/db';
-import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies pm_admin + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import type { HeroBlockContent } from '@propertypro/shared';
-import { ConflictError } from '@/lib/api/errors';
+import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
+
+/**
+ * Content blocks occupy block_order 2..99; the hero is reserved at order 1
+ * (spec §2.7). Reorder operates only on content blocks, so reads start here.
+ */
+const MIN_CONTENT_BLOCK_ORDER = 2;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -350,6 +356,178 @@ class NothingToPublishRollback extends Error {
   constructor() {
     super('publishCommunitySite: no drafts to promote — rolling back');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Per-block reorder (spec §9 PR #8 — ↑/↓ move controls)
+// ---------------------------------------------------------------------------
+
+export interface ReorderSiteBlockInput {
+  communityId: number;
+  actorUserId: string;
+  /**
+   * The id of the WINNING (merged draft-wins) content-block row to move — the
+   * `id` the editor's GET surfaced for that slot. Must be a content block
+   * (block_order >= 2); the hero is not reorderable.
+   */
+  blockId: number;
+  direction: 'up' | 'down';
+}
+
+export interface ReorderSiteBlockResult {
+  movedBlockId: number;
+  /** The moved block's order before the swap. */
+  fromOrder: number;
+  /** The moved block's order after the swap (the neighbor's old order). */
+  toOrder: number;
+}
+
+interface MergedContentBlock {
+  id: number;
+  blockType: string;
+  blockOrder: number;
+  content: unknown;
+  isDraft: boolean;
+}
+
+/**
+ * Moves a content block one position up or down by swapping its `block_order`
+ * with the adjacent content block, writing the result to the DRAFT layer.
+ *
+ * Mirrors the per-block edit model (upsertPublishedBlock with isDraft=true):
+ * the swap is expressed as draft rows so the public site keeps serving the
+ * last-published order until the PM publishes. A published-only block being
+ * moved gets a draft COPY at its new order (content taken from the merged
+ * draft-wins view), which `publishCommunitySite` later promotes.
+ *
+ * Partial-unique-index safety: the two affected slots' existing draft rows are
+ * soft-deleted first (removing them from
+ * `site_blocks_community_order_draft_partial`), then two fresh draft rows are
+ * inserted at the swapped orders. Published rows (is_draft=false) live under a
+ * different index key, so they never collide with the inserts — they remain in
+ * place, shadowed, until publish. No order-mutating UPDATE runs, so there is no
+ * mid-transaction uniqueness collision (no park-then-renumber needed).
+ *
+ * AUTHZ: caller (route layer) verifies pm_admin/cam membership + hasSiteEditor.
+ */
+export async function reorderSiteBlock({
+  communityId,
+  actorUserId,
+  blockId,
+  direction,
+}: ReorderSiteBlockInput): Promise<ReorderSiteBlockResult> {
+  const db = createUnscopedClient();
+
+  return db.transaction(async (tx) => {
+    // Serialize concurrent reorders/publishes for this community (matches
+    // publishCommunitySite's lock) so the read-merge-write below is atomic.
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
+    const scoped = createScopedClient(
+      communityId,
+      tx as unknown as Parameters<typeof createScopedClient>[1],
+    );
+
+    // Read the community's non-deleted content blocks (order >= 2; the hero at
+    // order 1 is excluded). Build the same merged draft-wins view the editor
+    // sees so the swap operates on the rows the PM is actually looking at.
+    const rows = await tx
+      .select({
+        id: siteBlocks.id,
+        blockType: siteBlocks.blockType,
+        blockOrder: siteBlocks.blockOrder,
+        content: siteBlocks.content,
+        isDraft: siteBlocks.isDraft,
+      })
+      .from(siteBlocks)
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          isNull(siteBlocks.deletedAt),
+          gte(siteBlocks.blockOrder, MIN_CONTENT_BLOCK_ORDER),
+        ),
+      )
+      .orderBy(asc(siteBlocks.blockOrder));
+
+    const byOrder = new Map<number, MergedContentBlock>();
+    for (const row of rows) {
+      const existing = byOrder.get(row.blockOrder);
+      if (!existing || (row.isDraft && !existing.isDraft)) {
+        byOrder.set(row.blockOrder, row);
+      }
+    }
+    const merged = [...byOrder.values()].sort((a, b) => a.blockOrder - b.blockOrder);
+
+    const index = merged.findIndex((b) => b.id === blockId);
+    if (index === -1) {
+      throw new NotFoundError('Content section not found for this community');
+    }
+
+    const neighborIndex = direction === 'up' ? index - 1 : index + 1;
+    if (neighborIndex < 0 || neighborIndex >= merged.length) {
+      throw new ValidationError(
+        `Cannot move this section ${direction}: it is already ${direction === 'up' ? 'first' : 'last'}.`,
+      );
+    }
+
+    // Both indices are in-bounds: `index` was found above and `neighborIndex`
+    // passed the bounds check, so the elements are present.
+    const moving = merged[index]!;
+    const neighbor = merged[neighborIndex]!;
+    const fromOrder = moving.blockOrder;
+    const toOrder = neighbor.blockOrder;
+
+    // Step 1: clear any existing draft rows at the two affected slots so the
+    // inserts below can't collide on the partial unique index.
+    await scoped.softDelete(
+      siteBlocks,
+      and(
+        inArray(siteBlocks.blockOrder, [fromOrder, toOrder]),
+        eq(siteBlocks.isDraft, true),
+        isNull(siteBlocks.deletedAt),
+      ),
+    );
+
+    // Step 2: write the swapped draft rows. Each carries the winning row's
+    // content + type, so a published-only block becomes a draft copy at its
+    // new order.
+    await scoped.insert(siteBlocks, {
+      communityId,
+      blockType: moving.blockType,
+      blockOrder: toOrder,
+      isDraft: true,
+      publishedAt: null,
+      content: moving.content as Record<string, unknown>,
+    });
+    await scoped.insert(siteBlocks, {
+      communityId,
+      blockType: neighbor.blockType,
+      blockOrder: fromOrder,
+      isDraft: true,
+      publishedAt: null,
+      content: neighbor.content as Record<string, unknown>,
+    });
+
+    // Step 3: audit row inside the same tx.
+    await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'site_block',
+      resourceId: String(blockId),
+      metadata: {
+        reorder: true,
+        direction,
+        fromOrder,
+        toOrder,
+        swappedWithBlockId: neighbor.id,
+      },
+    });
+
+    return { movedBlockId: blockId, fromOrder, toOrder };
+  });
 }
 
 // ---------------------------------------------------------------------------
