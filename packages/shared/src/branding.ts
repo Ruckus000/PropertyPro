@@ -43,6 +43,31 @@ export interface CommunityBranding {
    * (siteAssetsQuotaBytes on PlanFeatureConfig).
    */
   assetsBytesUsed?: number;
+  /**
+   * Pro+ custom CSS overrides (PR #11). Token-allowlist only — NO raw CSS.
+   * Applied LAST in the public-site CSS-variable cascade (after the resolved
+   * theme), so these win over branding colors/fonts. Gated to the
+   * hasSiteCustomCss plan feature at the write path. Null/missing = no
+   * overrides (the resolved theme applies unchanged).
+   */
+  customCssOverrides?: CustomCssOverrides | null;
+}
+
+/**
+ * Pro+ custom CSS override fields (token allowlist). Every field is an
+ * optional, validated token — there is no raw-CSS, selector, or class-name
+ * surface. Colors are 6-digit hex; bodyFont is one of the curated
+ * ALLOWED_FONTS (validated at the write path, where the font list lives).
+ */
+export interface CustomCssOverrides {
+  /** 6-digit hex, e.g. "#2563EB". Overrides --theme-primary (+ derived hover). */
+  primaryColor?: string;
+  /** 6-digit hex. Overrides --theme-secondary. */
+  secondaryColor?: string;
+  /** 6-digit hex. Overrides --theme-accent. */
+  accentColor?: string;
+  /** Curated Google Font family. Overrides --theme-font-body. */
+  bodyFont?: string;
 }
 
 /** Default branding colors used when no community branding is configured. */

@@ -23,6 +23,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { resizeLogo } from '@/lib/services/image-processor';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
@@ -31,23 +32,37 @@ const PRESIGN_TTL_SECONDS = 60 * 60; // 1 hour for logo read
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const allowedFontsArray = ALLOWED_FONTS as readonly string[];
 
+const hexColor = z.string().regex(HEX_RE, 'Must be a 6-digit hex color');
+const allowedFont = z
+  .string()
+  .refine((v) => allowedFontsArray.includes(v), { message: 'Must be an allowed font family' });
+
+// PR #11 — Pro+ custom CSS overrides. `.strict()` is the sanitization
+// boundary: only these four validated token fields are accepted. Any unknown
+// key (a raw-CSS string, a selector, a class name) is rejected with a 400 —
+// there is no arbitrary-CSS path.
+const customCssOverridesSchema = z
+  .object({
+    primaryColor: hexColor.optional(),
+    secondaryColor: hexColor.optional(),
+    accentColor: hexColor.optional(),
+    bodyFont: allowedFont.optional(),
+  })
+  .strict();
+
 const patchSchema = z.object({
   communityId: z.number().int().positive(),
-  primaryColor: z.string().regex(HEX_RE, 'Must be a 6-digit hex color').optional(),
-  secondaryColor: z.string().regex(HEX_RE, 'Must be a 6-digit hex color').optional(),
-  accentColor: z.string().regex(HEX_RE, 'Must be a 6-digit hex color').optional(),
-  fontHeading: z
-    .string()
-    .refine((v) => allowedFontsArray.includes(v), { message: 'Must be an allowed font family' })
-    .optional(),
-  fontBody: z
-    .string()
-    .refine((v) => allowedFontsArray.includes(v), { message: 'Must be an allowed font family' })
-    .optional(),
+  primaryColor: hexColor.optional(),
+  secondaryColor: hexColor.optional(),
+  accentColor: hexColor.optional(),
+  fontHeading: allowedFont.optional(),
+  fontBody: allowedFont.optional(),
   /** Raw Supabase Storage path of the user-uploaded image (pre-processing) */
   logoStoragePath: z.string().min(1).max(500).optional(),
   /** Custom footer text for outbound emails */
   customEmailFooter: z.string().max(500).optional(),
+  /** Pro+ token-allowlist overrides; null clears them. Gated at write. */
+  customCssOverrides: customCssOverridesSchema.nullable().optional(),
 });
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -89,6 +104,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     fontBody,
     logoStoragePath,
     customEmailFooter,
+    customCssOverrides,
   } = parseResult.data;
 
   const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
@@ -96,6 +112,13 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
   const membership = await requireCommunityMembership(communityId, userId);
   if (membership.role !== 'pm_admin') {
     throw new ForbiddenError('Only property managers can update branding settings');
+  }
+
+  // PR #11 — custom CSS overrides are a Pro+ feature. Gate only when the
+  // payload touches them, so the rest of the branding PATCH (colors, fonts,
+  // logo) stays available to every tier. 403 PLAN_UPGRADE_REQUIRED otherwise.
+  if (customCssOverrides !== undefined) {
+    await requirePlanFeature(communityId, 'hasSiteCustomCss');
   }
 
   // Process logo if a raw upload path was provided
@@ -152,6 +175,7 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
     ...(fontBody !== undefined && { fontBody }),
     ...(canonicalLogoPath !== undefined && { logoPath: canonicalLogoPath }),
     ...(customEmailFooter !== undefined && { customEmailFooter }),
+    ...(customCssOverrides !== undefined && { customCssOverrides }),
   });
 
   await logAuditEvent({

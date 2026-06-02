@@ -14,6 +14,7 @@ const {
   logAuditEventMock,
   resizeLogoMock,
   fileTypeFromBufferMock,
+  requirePlanFeatureMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -25,6 +26,7 @@ const {
   logAuditEventMock: vi.fn(),
   resizeLogoMock: vi.fn(),
   fileTypeFromBufferMock: vi.fn(),
+  requirePlanFeatureMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -54,6 +56,7 @@ vi.mock('file-type', () => ({
 
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: requirePlanFeatureMock }));
 import { GET, PATCH } from '../../src/app/api/v1/pm/branding/route';
 
 const PM_MEMBERSHIP = { role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin', communityId: 1, userId: 'pm-1', communityType: 'condo_718' };
@@ -67,6 +70,7 @@ describe('pm branding route', () => {
     getBrandingForCommunityMock.mockResolvedValue({ primaryColor: '#1a56db' });
     updateBrandingForCommunityMock.mockResolvedValue({ primaryColor: '#aabbcc' });
     logAuditEventMock.mockResolvedValue(undefined);
+    requirePlanFeatureMock.mockResolvedValue(undefined);
     // Default: valid PNG magic bytes detected
     fileTypeFromBufferMock.mockResolvedValue({ mime: 'image/png', ext: 'png' });
   });
@@ -141,6 +145,100 @@ describe('pm branding route', () => {
 
       expect(res.status).toBe(400);
       expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    // --- PR #11: Pro+ customCssOverrides (token allowlist, gated) ---
+
+    it('persists customCssOverrides and enforces hasSiteCustomCss', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 1,
+          customCssOverrides: { primaryColor: '#112233', bodyFont: 'Lato' },
+        }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(200);
+      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
+        customCssOverrides: { primaryColor: '#112233', bodyFont: 'Lato' },
+      });
+    });
+
+    it('returns 403 when the plan lacks hasSiteCustomCss', async () => {
+      requirePlanFeatureMock.mockRejectedValueOnce(new ForbiddenError('Upgrade required'));
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: { primaryColor: '#112233' } }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(403);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown key inside customCssOverrides (strict — no raw CSS)', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 1,
+          customCssOverrides: { primaryColor: '#112233', rawCss: 'body{display:none}' },
+        }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(400);
+      expect(requirePlanFeatureMock).not.toHaveBeenCalled();
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid hex inside customCssOverrides', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: { accentColor: 'red' } }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(400);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-allowlisted bodyFont inside customCssOverrides', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: { bodyFont: 'Comic Sans MS' } }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(400);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('clears overrides with null (still gated)', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: null }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(200);
+      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, { customCssOverrides: null });
+    });
+
+    it('does NOT gate a plain color PATCH on hasSiteCustomCss', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, primaryColor: '#aabbcc' }),
+      });
+      await PATCH(req);
+      expect(requirePlanFeatureMock).not.toHaveBeenCalled();
     });
 
     it('returns 403 for non-PM user', async () => {

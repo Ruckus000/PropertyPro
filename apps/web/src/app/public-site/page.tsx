@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
 import type { Metadata } from 'next';
 import type { CommunityType } from '@propertypro/shared';
 import { createPresignedDownloadUrl } from '@propertypro/db';
@@ -97,7 +97,13 @@ export default async function PublicSitePage() {
     community.name,
     community.communityType as CommunityType,
   );
-  const cssVars = toCssVars(theme);
+  // PR #11 — Pro+ custom CSS overrides win over the resolved theme. The
+  // helper is defensive (skips bad hex / non-allowlisted fonts) and emits only
+  // validated token CSS variables, never raw CSS.
+  const cssVars = {
+    ...toCssVars(theme),
+    ...customCssOverridesToCssVars(rawBranding?.customCssOverrides),
+  };
   const fontLinks = toFontLinks(theme);
 
   // PR #9d — JSX template render branch retired. Community public sites
