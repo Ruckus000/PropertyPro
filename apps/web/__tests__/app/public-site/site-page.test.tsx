@@ -48,6 +48,7 @@ vi.mock('@propertypro/theme', () => ({
   })),
   toCssVars: vi.fn(() => ({})),
   toFontLinks: vi.fn(() => []),
+  customCssOverridesToCssVars: vi.fn(() => ({})),
 }));
 
 // Mock html-sanitizer passthrough
