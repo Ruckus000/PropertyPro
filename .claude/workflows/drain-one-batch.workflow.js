@@ -229,6 +229,17 @@ ${skipBlock}
    - **COMPLEX_SKIP**: Stripe API calls, reauth gate, FSM/multi-branch
      auth, Supabase Storage + image processing, fire-and-forget
      notifications with side effects.
+   - **COMPLEX_SKIP (hard-tier pagination)**: a PAGINATED GET whose
+     user-visible order is NOT exactly \`id desc\` / \`id asc\` — e.g.
+     pinned/newest feeds, \`sortOrder asc\`, calendar/time order, name
+     directories, or merged/joined feeds. \`api-patterns.md\` names these
+     route families as needing a sort-preserving keyset design FIRST, so
+     they are NOT safe for the id-only \`paginate()\` template:
+     announcements, faqs, reservations, visitors, vendors, assessments,
+     amenities, forum/threads, calendar events, elections, leases. Reject
+     any such route UNLESS you confirm its GET truly orders by \`id\` alone
+     (a 4-method CRUD route whose GET returns a small non-paginated list is
+     fine — classify it MULTI_METHOD, not PAGINATED).
 
 4. Justification: 1 sentence per pick (why drainable, what shape).
 
@@ -998,11 +1009,17 @@ const allNewSkips = [
 
 const updatedSkipList = { ...state.skipList }
 for (const skip of allNewSkips) {
+  const existing = updatedSkipList[skip.route]
+  // Never downgrade an established PERMANENT classification. A re-skip of a
+  // permanent route comes back from pre-vet as ALREADY_SKIPPED, which maps to
+  // NEEDS_HUMAN — that would wrongly drop it out of the next run's
+  // permanentSkips filter. Keep the PERMANENT verdict (and its reason) sticky.
+  const keepPermanent = existing?.classification === 'PERMANENT'
   updatedSkipList[skip.route] = {
-    classification: skip.classification,
-    reason: skip.reason,
+    classification: keepPermanent ? 'PERMANENT' : skip.classification,
+    reason: keepPermanent ? existing.reason : skip.reason,
     lastAttemptedAt: tsIso,
-    attemptCount: (updatedSkipList[skip.route]?.attemptCount ?? 0) + 1,
+    attemptCount: (existing?.attemptCount ?? 0) + 1,
   }
 }
 
