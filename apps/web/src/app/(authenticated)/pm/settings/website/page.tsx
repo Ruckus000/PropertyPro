@@ -16,8 +16,10 @@ import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader
 import {
   getCommunityPublicInfo,
   getSiteOnboardingCompletedAt,
+  getBrandingForCommunity,
 } from '@/lib/api/branding';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { CustomStylingForm } from '@/components/pm/site-editor/CustomStylingForm';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
@@ -75,21 +77,24 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
     if (parsed.success) initial = parsed.data;
   }
 
-  const [communityInfo, onboardingCompletedAt] = await Promise.all([
+  const [communityInfo, onboardingCompletedAt, currentBranding, features] = await Promise.all([
     getCommunityPublicInfo(communityId),
     getSiteOnboardingCompletedAt(communityId),
+    getBrandingForCommunity(communityId),
+    // membership.communityType is the typed CommunityType source (same idiom as
+    // contracts/page.tsx); communityInfo.communityType is a plain DB string.
+    getEffectiveFeaturesForPage(communityId, membership.communityType),
   ]);
   const previewUrl = communityInfo
     ? buildCommunityUrl(communityInfo.slug, '/?preview=true')
     : null;
-  // Pro+ gate for the FAQ/Gallery/Amenities polish blocks (spec §4.3). When
-  // false, ContentSectionsList renders their "add" affordances disabled-but-
-  // visible for upsell; the upsert route enforces the same gate server-side.
-  // membership.communityType is the typed CommunityType source (same idiom as
-  // contracts/page.tsx); communityInfo.communityType is a plain DB string.
-  const hasSitePolishBlocks = (
-    await getEffectiveFeaturesForPage(communityId, membership.communityType)
-  ).hasSitePolishBlocks;
+  // Pro+ gates (spec §4.3). When false, the UI renders the affordances
+  // disabled-but-visible for upsell; the write routes enforce the same gates
+  // server-side. Polish blocks → ContentSectionsList; custom CSS → the Custom
+  // Styling section below.
+  const hasSitePolishBlocks = features.hasSitePolishBlocks;
+  const hasSiteCustomCss = features.hasSiteCustomCss;
+  const customCssInitial = currentBranding?.customCssOverrides ?? null;
   // Canonical signal: the wizard stamps site_onboarding_completed_at on its
   // final-step publish. Null = wizard never completed → show the banner.
   // (Replaces the prior branding.layoutId-unset substitute heuristic.)
@@ -142,6 +147,24 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
       <div className="mt-8">
         <ContentSectionsList communityId={communityId} hasSitePolishBlocks={hasSitePolishBlocks} />
       </div>
+
+      <section
+        aria-labelledby="custom-styling-tab"
+        className="mt-8 rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      >
+        <h2 id="custom-styling-tab" className="mb-1 text-lg font-medium text-content">
+          Custom Styling
+        </h2>
+        <p className="mb-4 text-sm text-content-secondary">
+          Override your selected preset&rsquo;s colors and body font. These win over the theme on
+          your public site.
+        </p>
+        <CustomStylingForm
+          communityId={communityId}
+          initial={customCssInitial}
+          hasSiteCustomCss={hasSiteCustomCss}
+        />
+      </section>
 
       <PublishBar communityId={communityId} />
     </div>
