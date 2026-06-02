@@ -27,3 +27,14 @@ export function handleOptions(req: NextRequest) {
     headers: corsHeaders(req.headers.get('origin')),
   });
 }
+
+/** Apply platform-admin CORS headers to a route handler response. */
+export function mergeAdminCorsHeaders(
+  response: NextResponse,
+  origin: string | null,
+): NextResponse {
+  for (const [key, value] of Object.entries(corsHeaders(origin))) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
