@@ -36,8 +36,12 @@ import { GET } from '../../src/app/api/v1/search/route';
 const MEMBERSHIP = {
   userId: 'user-1',
   communityId: 42,
+  communityName: 'Sunset Condos',
   role: 'manager',
   communityType: 'condo_718',
+  subscriptionPlan: 'pro',
+  subscriptionStatus: 'active',
+  freeAccessExpiresAt: null,
   isUnitOwner: false,
   isAdmin: true,
   displayTitle: 'Board Member',
