@@ -319,6 +319,29 @@ Use the matching canonical template:
 4. **DELETE** any legacy incompatible test file.
 5. **EDIT** \`scripts/verify-contracts.ts\` — remove the one allowlist line for this route.
 
+## Consumer safety — DO NOT break client hooks (drain #656 lesson)
+
+The migrated route's wire shape MUST stay **byte-identical** to the
+pre-migration response (\`{ data: ... }\` and every field/key unchanged). When
+the wire shape is preserved, client consumers need NO changes — leave them
+alone.
+
+- **Default: do not edit any file under \`apps/web/src/hooks/\` or other
+  consumers.** If you feel you must, that almost always means you changed the
+  wire shape — STOP and restore byte-identical output instead.
+- If a consumer edit is genuinely unavoidable (e.g. typecheck forces it),
+  then you MUST find and run that consumer's EXISTING test file. Grep for
+  consumers and their tests. Derive the API path from the route file
+  \`${pick.route}\` (drop the leading \`apps/web/src/app\` and trailing
+  \`/route.ts\` → e.g. \`/api/v1/search\`) and grep for it:
+  \`\`\`bash
+  grep -rl "/api/v1/<the-path-segment>" apps/web/src/hooks apps/web/src/components | head
+  \`\`\`
+  Run every existing \`*.test.ts\` that covers a file you touched (e.g.
+  \`apps/web/src/hooks/__tests__/<hook>.test.ts\`). A green new route test is
+  NOT enough — drain #656 merged a broken consumer because only the new
+  route test was run, and CI caught the hook's existing test failing.
+
 ## Test coverage minimums
 
 - Happy path with required fields.
@@ -340,6 +363,8 @@ pnpm --filter @propertypro/api-contract build
 pnpm guard:contracts          # Expect Contracted +N, Allowlist -1
 pnpm typecheck
 cd apps/web && pnpm exec vitest run __tests__/<domain>/<slug>-route.test.ts
+# If you edited ANY consumer (a hook/component), also run its existing test:
+# cd apps/web && pnpm exec vitest run src/hooks/__tests__/<hook>.test.ts
 \`\`\`
 
 If any check fails, fix and re-run. If a check repeatedly fails and you can't resolve, return \`{ok: false, reason: "<specific error>"}\`.
@@ -452,6 +477,12 @@ Use StructuredOutput with shape:
 \`\`\`
 
 If ZERO findings, return \`{findings: []}\`. Do not invent findings.
+
+**You MUST end your turn by calling the StructuredOutput tool** with the
+schema above — even when there are zero findings (call it with
+\`{findings: []}\`). Do NOT end with a prose summary or an empty turn: a
+completion without a StructuredOutput call is dropped as a null result and
+wastes the batch (this happened on the drain #656 batch).
 `
 }
 
@@ -507,6 +538,12 @@ Same as the code-review reviewer.
 Same schema as the code-review reviewer (StructuredOutput).
 
 If ZERO findings, return \`{findings: []}\`. Do not invent findings.
+
+**You MUST end your turn by calling the StructuredOutput tool** with the
+schema above — even when there are zero findings (call it with
+\`{findings: []}\`). Do NOT end with a prose summary or an empty turn: a
+completion without a StructuredOutput call is dropped as a null result and
+wastes the batch (this happened on the drain #656 batch).
 `
 }
 
@@ -675,18 +712,29 @@ ${JSON.stringify(batchSummary, null, 2)}
 2. **Index file:** \`/Users/jphilistin/.claude/projects/-Users-jphilistin-Documents-Coding-PropertyPro/memory/MEMORY.md\`
    - Update the one-line summary for the A1 session entry (drain count, allowlist, contracted).
 
-## Verify the new counts
+## Determine the new counts — MECHANICAL extraction, NO arithmetic
 
-Run from the project root:
+Run from the project root and extract the two integers PROGRAMMATICALLY:
 \`\`\`bash
 cd /Users/jphilistin/Documents/Coding/PropertyPro
 git fetch origin --quiet
-pnpm guard:contracts | tail -3
+pnpm guard:contracts 2>&1 | grep -oE 'Contracted: [0-9]+; Allowlist: [0-9]+'
 \`\`\`
+That prints a single line like \`Contracted: 177; Allowlist: 61\`. Use EXACTLY
+those two integers:
+  - updatedContractedCount = the integer after "Contracted: "
+  - updatedAllowlistCount  = the integer after "Allowlist: "
 
-The output's "Allowlist:" and "Contracted:" numbers ARE the new canonical
-counts (do not derive them from arithmetic — guard:contracts is the source
-of truth).
+HARD RULES (a violation here corrupts the corpus and trips the skill's
+staleness-abort guard on the next run):
+- These two guard integers are the ONLY source of truth for the counts.
+- Do NOT compute them by incrementing the prior session-log tally (e.g.
+  taking "Contracted 53 → 190" and adding the number of merged drains). That
+  produces WRONG numbers — the live guard count also reflects concurrent
+  non-A1 churn from other workers landing during the batch.
+- When you edit the session-log header and the MEMORY.md one-liner, write
+  these exact guard integers as the endpoints (e.g. "Allowlist 179 → 61.
+  Contracted 53 → 177"), never a hand-incremented value.
 
 ## Return
 
