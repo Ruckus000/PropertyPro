@@ -19,8 +19,25 @@ describe('access-policies strict matrix', () => {
     expect(normalizeCategoryName('Correspondence')).toBe('announcements');
     expect(normalizeCategoryName('Communications')).toBe('announcements');
     expect(normalizeCategoryName('Lease Agreements')).toBe('lease_docs');
+    expect(normalizeCategoryName('Financial Records')).toBe('financial_records');
+    expect(normalizeCategoryName('Financials')).toBe('financial_records');
+    expect(normalizeCategoryName('Contracts')).toBe('contracts');
     expect(normalizeCategoryName('custom category')).toBe('unknown');
     expect(normalizeCategoryName(null)).toBe('unknown');
+  });
+
+  it('keeps financial_records/contracts visible only to elevated roles (behavior-preserving)', () => {
+    for (const communityType of ['condo_718', 'hoa_720'] as CommunityType[]) {
+      for (const key of ['financial_records', 'contracts'] as const) {
+        // Elevated roles see them...
+        expect(canAccessCategory('owner', communityType, key)).toBe(true);
+        expect(canAccessCategory('board_member', communityType, key)).toBe(true);
+        expect(canAccessCategory('property_manager_admin', communityType, key)).toBe(true);
+        // ...restricted roles do not (same as the prior 'unknown' fallthrough).
+        expect(canAccessCategory('tenant', communityType, key)).toBe(false);
+        expect(canAccessCategory('cam', communityType, key)).toBe(false);
+      }
+    }
   });
 
   it('classifies elevated and restricted roles', () => {

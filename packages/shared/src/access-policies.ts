@@ -78,6 +78,13 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
   move_out_docs: 'move_in_out_docs',
   move_in_out: 'move_in_out_docs',
   moving_documents: 'move_in_out_docs',
+
+  financial_records: 'financial_records',
+  financials: 'financial_records',
+  financial: 'financial_records',
+
+  contracts: 'contracts',
+  contract: 'contracts',
 };
 
 /**

@@ -96,6 +96,7 @@ const CONDO_HOA_CATEGORIES: CategoryTemplate[] = [
   { name: 'Meeting Records', description: 'Notices, agendas, and minutes' },
   { name: 'Correspondence', description: 'Owner communications and notices' },
   { name: 'Contracts', description: 'Vendor and service contracts' },
+  { name: 'Inspection Reports', description: 'Milestone inspections, SIRS, and structural reports' },
 ];
 
 const APARTMENT_CATEGORIES: CategoryTemplate[] = [
