@@ -108,26 +108,46 @@ Without arguments, defaults: `{ maxBatches: Infinity, stopFloor: undefined }`.
 
 ## 6. Invoke the workflow
 
-Capture the current ISO timestamp via Bash:
+Capture the current ISO timestamp AND resolve the workflow paths via Bash. The
+two `.workflow.js` files live next to this skill under the same checkout's
+`.claude/workflows/`, so resolve them from THIS checkout's repo root (run from
+the current working directory, NOT a hardcoded path — that makes it work from
+a feature-branch worktree pre-merge and from the main checkout post-merge):
 
 ```bash
 date -u +%Y-%m-%dT%H:%M:%S.000Z
+git rev-parse --show-toplevel
 ```
 
-Pass the result as `tsIso`. Then invoke the workflow:
+Let `<TS>` be the first line and `<REPO_ROOT>` be the second. Invoke the loop by
+**scriptPath**, not name — project workflows are not reliably name-resolvable
+in every session, whereas an absolute scriptPath always loads. Pass the
+per-batch workflow's absolute path as `childWorkflowPath` so the loop invokes
+it by scriptPath too:
 
 ```
 Workflow({
-  name: 'drain-loop',
-  args: { state, tsIso: "<from-date-output>", overrides },
+  scriptPath: "<REPO_ROOT>/.claude/workflows/drain-loop.workflow.js",
+  args: {
+    state,
+    tsIso: "<TS>",
+    overrides,
+    childWorkflowPath: "<REPO_ROOT>/.claude/workflows/drain-one-batch.workflow.js",
+  },
 })
 ```
+
+Note: structured `args` cross the Workflow tool boundary as a JSON string; the
+outer-loop workflow already JSON-parses it defensively, so pass `args` as a
+normal object here.
 
 Wait for completion (the harness automatically resumes you on task notification).
 
 ## 7. On workflow completion
 
-The workflow returns `{ updatedState, summary }`.
+The workflow returns `{ updatedState, summary }`. The Workflow tool result
+arrives as a JSON **string** in the task-completion notification — `JSON.parse`
+it (or read it as JSON) before destructuring `updatedState` / `summary`.
 
 - Write `updatedState` back to `~/.claude/state/drain-progress.json`
   (pretty-print with 2-space indent).

@@ -23,6 +23,14 @@ const { state: seedState, tsIso, overrides } = parsedArgs
 const maxBatches = overrides?.maxBatches ?? Infinity
 const stopFloor = overrides?.stopFloor  // may be undefined
 
+// Per-batch workflow reference. The skill passes an absolute path
+// (childWorkflowPath) so we invoke the child by scriptPath — project
+// workflows are not reliably name-resolvable in every session. Falls back to
+// name resolution when no path was supplied (e.g. direct name-based testing).
+const childRef = parsedArgs.childWorkflowPath
+  ? { scriptPath: parsedArgs.childWorkflowPath }
+  : 'drain-one-batch'
+
 let state = seedState
 let dryBatches = 0
 let batchesDone = 0
@@ -53,7 +61,7 @@ while (true) {
 
   let result
   try {
-    result = await workflow('drain-one-batch', {
+    result = await workflow(childRef, {
       state,
       tsIso,
       batchIndex: batchesDone,
