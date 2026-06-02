@@ -1,0 +1,474 @@
+/**
+ * Route unit tests — `GET/POST/DELETE /api/v1/documents`.
+ *
+ * Added alongside the Plan A1 auto-drain. Covers the contracted runRoute
+ * envelope: paginated GET (service args, cursor/pageSize, categoryId filter,
+ * empty-string params), POST upload (auth chain, `?? null` description
+ * coalescing, top-level `warnings` sibling preservation), DELETE soft-delete
+ * (auth chain, audit log, `{ deleted: true, id }` body), 401s, 400 input
+ * validation (non-numeric / zero ids — symmetric on GET + DELETE), and the
+ * 403 gates. Fixtures use raw Drizzle-row fields only (the services return
+ * `Record<string, unknown>` rows / `DocumentMutationResult`).
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+
+const {
+  requireAuthenticatedUserIdMock,
+  requireCommunityMembershipMock,
+  resolveEffectiveCommunityIdMock,
+  validateUploadFilePathMock,
+  assertNotDemoGraceMock,
+  requirePermissionMock,
+  requireActiveSubscriptionForMutationMock,
+  isElevatedRoleMock,
+  createUploadedDocumentMock,
+  paginateAccessibleDocumentsMock,
+  getDocumentForDeletionAuditMock,
+  softDeleteDocumentMock,
+  tryAutoCompleteMock,
+  logAuditEventMock,
+} = vi.hoisted(() => ({
+  requireAuthenticatedUserIdMock: vi.fn(),
+  requireCommunityMembershipMock: vi.fn(),
+  resolveEffectiveCommunityIdMock: vi.fn(),
+  validateUploadFilePathMock: vi.fn(),
+  assertNotDemoGraceMock: vi.fn(),
+  requirePermissionMock: vi.fn(),
+  requireActiveSubscriptionForMutationMock: vi.fn(),
+  isElevatedRoleMock: vi.fn(),
+  createUploadedDocumentMock: vi.fn(),
+  paginateAccessibleDocumentsMock: vi.fn(),
+  getDocumentForDeletionAuditMock: vi.fn(),
+  softDeleteDocumentMock: vi.fn(),
+  tryAutoCompleteMock: vi.fn(),
+  logAuditEventMock: vi.fn(),
+}));
+
+vi.mock('@/lib/api/auth', () => ({
+  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
+}));
+
+vi.mock('@/lib/api/community-membership', () => ({
+  requireCommunityMembership: requireCommunityMembershipMock,
+}));
+
+vi.mock('@/lib/api/tenant-context', () => ({
+  resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
+}));
+
+vi.mock('@/lib/api/upload-path', () => ({
+  validateUploadFilePath: validateUploadFilePathMock,
+}));
+
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: assertNotDemoGraceMock,
+}));
+
+vi.mock('@/lib/db/access-control', () => ({
+  requirePermission: requirePermissionMock,
+}));
+
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
+}));
+
+vi.mock('@propertypro/shared', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, isElevatedRole: isElevatedRoleMock };
+});
+
+vi.mock('@/lib/documents/create-uploaded-document', () => ({
+  createUploadedDocument: createUploadedDocumentMock,
+}));
+
+vi.mock('@/lib/services/onboarding-checklist-service', () => ({
+  tryAutoComplete: tryAutoCompleteMock,
+}));
+
+vi.mock('@/lib/services/documents-service', () => ({
+  paginateAccessibleDocuments: paginateAccessibleDocumentsMock,
+  getDocumentForDeletionAudit: getDocumentForDeletionAuditMock,
+  softDeleteDocument: softDeleteDocumentMock,
+}));
+
+vi.mock('@propertypro/db', () => ({
+  logAuditEvent: logAuditEventMock,
+}));
+
+import { DELETE, GET, POST } from '../../src/app/api/v1/documents/route';
+
+const MEMBERSHIP = {
+  userId: 'user-admin',
+  communityId: 42,
+  role: 'board_president' as const,
+  isAdmin: true,
+  isUnitOwner: false,
+  displayTitle: 'Board President',
+  communityType: 'condo_718' as const,
+  permissions: {},
+};
+
+const DOCUMENT_ROW = {
+  id: 7,
+  communityId: 42,
+  title: 'Bylaws',
+  description: null,
+  categoryId: 3,
+  filePath: 'community-42/bylaws.pdf',
+  fileName: 'bylaws.pdf',
+  createdAt: new Date('2026-05-23T00:00:00.000Z'),
+  updatedAt: new Date('2026-05-23T00:00:00.000Z'),
+  deletedAt: null,
+};
+
+const DOCUMENT_ROW_JSON = {
+  ...DOCUMENT_ROW,
+  createdAt: '2026-05-23T00:00:00.000Z',
+  updatedAt: '2026-05-23T00:00:00.000Z',
+};
+
+interface PaginatedJson {
+  data: {
+    data: unknown[];
+    pagination: { nextCursor: string | null; hasMore: boolean; pageSize: number };
+  };
+}
+
+function getReq(url: string): NextRequest {
+  return new NextRequest(url);
+}
+
+function jsonPost(payload: unknown, headers?: Record<string, string>): NextRequest {
+  return new NextRequest('http://localhost:3000/api/v1/documents', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { 'content-type': 'application/json', ...(headers ?? {}) },
+  });
+}
+
+function deleteReq(url: string): NextRequest {
+  return new NextRequest(url, { method: 'DELETE' });
+}
+
+const VALID_CREATE_BODY = {
+  communityId: 42,
+  title: 'Bylaws',
+  categoryId: 3,
+  filePath: 'community-42/bylaws.pdf',
+  fileName: 'bylaws.pdf',
+  fileSize: 1024,
+};
+
+describe('GET /api/v1/documents', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
+    resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
+    paginateAccessibleDocumentsMock.mockResolvedValue({
+      data: [DOCUMENT_ROW],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+  });
+
+  it('returns paginated documents (no categoryId / no cursor)', async () => {
+    const res = await GET(getReq('http://localhost:3000/api/v1/documents?communityId=42'));
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as PaginatedJson;
+    expect(json.data.data).toEqual([DOCUMENT_ROW_JSON]);
+    expect(json.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
+    expect(paginateAccessibleDocumentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: {
+          communityId: 42,
+          role: 'board_president',
+          communityType: 'condo_718',
+          isUnitOwner: false,
+          permissions: {},
+        },
+        categoryId: null,
+        cursor: undefined,
+        pageSize: undefined,
+      }),
+    );
+  });
+
+  it('forwards cursor, pageSize, and categoryId filter', async () => {
+    await GET(
+      getReq(
+        'http://localhost:3000/api/v1/documents?communityId=42&categoryId=3&cursor=abc&pageSize=25',
+      ),
+    );
+
+    expect(paginateAccessibleDocumentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryId: 3, cursor: 'abc', pageSize: 25 }),
+    );
+  });
+
+  it('treats empty-string cursor and pageSize as missing', async () => {
+    await GET(
+      getReq('http://localhost:3000/api/v1/documents?communityId=42&cursor=&pageSize='),
+    );
+
+    expect(paginateAccessibleDocumentsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: undefined, pageSize: undefined }),
+    );
+  });
+
+  it('returns 400 when communityId is missing', async () => {
+    const res = await GET(getReq('http://localhost:3000/api/v1/documents'));
+    expect(res.status).toBe(400);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when communityId is non-numeric', async () => {
+    const res = await GET(getReq('http://localhost:3000/api/v1/documents?communityId=abc'));
+    expect(res.status).toBe(400);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when communityId is zero', async () => {
+    const res = await GET(getReq('http://localhost:3000/api/v1/documents?communityId=0'));
+    expect(res.status).toBe(400);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when categoryId is non-numeric', async () => {
+    const res = await GET(
+      getReq('http://localhost:3000/api/v1/documents?communityId=42&categoryId=abc'),
+    );
+    expect(res.status).toBe(400);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const res = await GET(getReq('http://localhost:3000/api/v1/documents?communityId=42'));
+    expect(res.status).toBe(401);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when membership check fails', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError('Not a member'));
+
+    const res = await GET(getReq('http://localhost:3000/api/v1/documents?communityId=42'));
+    expect(res.status).toBe(403);
+    expect(paginateAccessibleDocumentsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/v1/documents', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
+    resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    validateUploadFilePathMock.mockReturnValue(undefined);
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
+    requirePermissionMock.mockReturnValue(undefined);
+    requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
+    createUploadedDocumentMock.mockResolvedValue({ document: DOCUMENT_ROW, warnings: [] });
+  });
+
+  it('creates a document and returns the row (no warnings)', async () => {
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: unknown; warnings?: unknown };
+    expect(json.data).toEqual(DOCUMENT_ROW_JSON);
+    expect('warnings' in json).toBe(false);
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-admin',
+        communityId: 42,
+        title: 'Bylaws',
+        description: null,
+        categoryId: 3,
+        filePath: 'community-42/bylaws.pdf',
+        fileName: 'bylaws.pdf',
+        fileSize: 1024,
+        sourceType: 'library',
+      }),
+    );
+  });
+
+  it('coalesces an omitted description to null', async () => {
+    await POST(jsonPost(VALID_CREATE_BODY));
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ description: null }),
+    );
+  });
+
+  it('preserves a top-level warnings sibling when the service returns warnings', async () => {
+    const warnings = [{ code: 'duplicate_title', message: 'A document with this title exists' }];
+    createUploadedDocumentMock.mockResolvedValueOnce({ document: DOCUMENT_ROW, warnings });
+
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: unknown; warnings?: unknown };
+    expect(json.data).toEqual(DOCUMENT_ROW_JSON);
+    expect(json.warnings).toEqual(warnings);
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+    expect(res.status).toBe(401);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when title is empty', async () => {
+    const res = await POST(jsonPost({ ...VALID_CREATE_BODY, title: '' }));
+    expect(res.status).toBe(400);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when categoryId is missing', async () => {
+    const { categoryId, ...rest } = VALID_CREATE_BODY;
+    void categoryId;
+    const res = await POST(jsonPost(rest));
+    expect(res.status).toBe(400);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when fileSize is not positive', async () => {
+    const res = await POST(jsonPost({ ...VALID_CREATE_BODY, fileSize: 0 }));
+    expect(res.status).toBe(400);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the documents/write permission gate fails', async () => {
+    requirePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError('Insufficient permissions');
+    });
+
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+    expect(res.status).toBe(403);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('runs assertNotDemoGrace before requireCommunityMembership', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo grace'));
+
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+    expect(res.status).toBe(403);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/v1/documents', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-admin');
+    resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    assertNotDemoGraceMock.mockResolvedValue(undefined);
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
+    isElevatedRoleMock.mockReturnValue(true);
+    requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
+    getDocumentForDeletionAuditMock.mockResolvedValue({
+      title: 'Bylaws',
+      categoryId: 3,
+      filePath: 'community-42/bylaws.pdf',
+      fileName: 'bylaws.pdf',
+    });
+    softDeleteDocumentMock.mockResolvedValue([{ id: 7 }]);
+    logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  it('soft-deletes a document and writes an audit entry', async () => {
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=7&communityId=42'),
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { deleted: boolean; id: number } };
+    expect(json.data).toEqual({ deleted: true, id: 7 });
+    expect(softDeleteDocumentMock).toHaveBeenCalledWith(42, 7);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-admin',
+        action: 'delete',
+        resourceType: 'document',
+        resourceId: '7',
+        communityId: 42,
+        oldValues: {
+          title: 'Bylaws',
+          categoryId: 3,
+          filePath: 'community-42/bylaws.pdf',
+          fileName: 'bylaws.pdf',
+        },
+      }),
+    );
+  });
+
+  it('returns 400 when id is non-numeric', async () => {
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=abc&communityId=42'),
+    );
+    expect(res.status).toBe(400);
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when id is zero', async () => {
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=0&communityId=42'),
+    );
+    expect(res.status).toBe(400);
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when communityId is missing', async () => {
+    const res = await DELETE(deleteReq('http://localhost:3000/api/v1/documents?id=7'));
+    expect(res.status).toBe(400);
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 (Document not found) when no row matches the audit lookup', async () => {
+    getDocumentForDeletionAuditMock.mockResolvedValueOnce(null);
+
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=7&communityId=42'),
+    );
+    expect(res.status).toBe(400);
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=7&communityId=42'),
+    );
+    expect(res.status).toBe(401);
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the caller is not an elevated role', async () => {
+    isElevatedRoleMock.mockReturnValueOnce(false);
+
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=7&communityId=42'),
+    );
+    expect(res.status).toBe(403);
+    expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('runs assertNotDemoGrace before requireCommunityMembership', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo grace'));
+
+    const res = await DELETE(
+      deleteReq('http://localhost:3000/api/v1/documents?id=7&communityId=42'),
+    );
+    expect(res.status).toBe(403);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(softDeleteDocumentMock).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,121 @@
+/**
+ * Route contracts for `/api/v1/documents` — GET (paginated list) + POST
+ * (upload metadata) + DELETE (soft-delete).
+ *
+ * Plan A1 auto-drain. All three methods migrated from the pre-migration
+ * `withErrorHandler` handlers in `./route.ts`.
+ *
+ * GET auth surface (preserved verbatim):
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, query.communityId)
+ *     → requireCommunityMembership
+ *     → paginateAccessibleDocuments({ filter, categoryId, cursor, pageSize })
+ *
+ * GET inputs: `communityId` (required) and `categoryId` (optional) are now
+ * Zod-validated `z.coerce.number().int().positive()` in the contract. The
+ * pre-migration handler validated them by hand with bespoke messages
+ * ("communityId query parameter is required and must be a positive integer"
+ * / "categoryId query parameter must be a positive integer"); those become
+ * the canonical 400 `VALIDATION_ERROR` — status unchanged (400 either way).
+ * `cursor` / `pageSize` follow the canonical paginated shape.
+ *
+ * GET response: `paginated: true` with `z.unknown()` (loose). Document rows
+ * carry `Date` fields (`createdAt`, etc.); a tight per-item schema would
+ * `safeParse`-fail before `NextResponse.json` ISO-serializes them. Wire
+ * envelope is the canonical double-wrap `{ data: { data, pagination } }`.
+ *
+ * POST auth surface (preserved verbatim — note the order):
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → validateUploadFilePath (sync)
+ *     → assertNotDemoGrace (ASYNC — awaited)
+ *     → requireCommunityMembership
+ *     → requirePermission(membership, 'documents', 'write') (sync)
+ *     → requireActiveSubscriptionForMutation (ASYNC — awaited)
+ *     → createUploadedDocument(...)
+ *
+ * POST `description` is `?? null`-coalesced (service signature wants
+ * `string | null`). POST response is loose `z.unknown()` — `result.document`
+ * is a raw Drizzle row (`Record<string, unknown>`) with Date fields, and the
+ * handler additionally spreads an optional `warnings` array onto the envelope
+ * when non-empty. Wire shape stays byte-identical:
+ *   `{ data: <row>, warnings?: [...] }`.
+ *
+ * DELETE auth surface (preserved verbatim — mutating, so demo-grace first):
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, query.communityId)
+ *     → assertNotDemoGrace (ASYNC — awaited)
+ *     → requireCommunityMembership
+ *     → isElevatedRole gate (→ ForbiddenError when false)
+ *     → requireActiveSubscriptionForMutation (ASYNC — awaited)
+ *     → getDocumentForDeletionAudit → softDeleteDocument → logAuditEvent
+ *
+ * DELETE inputs `id` + `communityId` are Zod-validated positive ints. DELETE
+ * response is a synthesized `{ deleted: true, id }` shape with no Dates, so a
+ * tight `z.object({...})` is used.
+ *
+ * `permission` metadata matches the runtime gates: `documents`/`read` (GET),
+ * `documents`/`write` (POST + DELETE — the DELETE `isElevatedRole` check is a
+ * mutating write gate). `documents` IS in `RBAC_RESOURCES`; `RBAC_ACTIONS`
+ * has only `read`/`write`, so the DELETE pairs the verb with `write`.
+ */
+import { defineRoute, z } from '@propertypro/api-contract';
+
+const listQuerySchema = z.object({
+  communityId: z.coerce.number().int().positive(),
+  categoryId: z.coerce.number().int().positive().optional(),
+  cursor: z.string().min(1).max(256).optional(),
+  pageSize: z.coerce.number().int().positive().optional(),
+});
+
+export const createDocumentBodySchema = z.object({
+  communityId: z.number().int().positive(),
+  title: z.string().min(1).max(500),
+  description: z.string().nullable().optional(),
+  categoryId: z.number().int().positive(),
+  filePath: z.string().min(1),
+  fileName: z.string().min(1),
+  fileSize: z.number().int().positive(),
+  mimeType: z.string().min(1).optional(),
+});
+
+export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
+
+const deleteQuerySchema = z.object({
+  id: z.coerce.number().int().positive(),
+  communityId: z.coerce.number().int().positive(),
+});
+
+export const documentsListContract = defineRoute({
+  method: 'GET',
+  path: '/api/v1/documents',
+  request: {
+    query: listQuerySchema,
+  },
+  response: z.unknown(),
+  paginated: true,
+  permission: { resource: 'documents', action: 'read' },
+});
+
+export const documentsCreateContract = defineRoute({
+  method: 'POST',
+  path: '/api/v1/documents',
+  request: {
+    body: createDocumentBodySchema,
+  },
+  response: z.unknown(),
+  permission: { resource: 'documents', action: 'write' },
+});
+
+export const documentsDeleteContract = defineRoute({
+  method: 'DELETE',
+  path: '/api/v1/documents',
+  request: {
+    query: deleteQuerySchema,
+  },
+  response: z.object({
+    deleted: z.literal(true),
+    id: z.number().int().positive(),
+  }),
+  permission: { resource: 'documents', action: 'write' },
+});
