@@ -1,16 +1,25 @@
 /**
  * Contracts API — CRUD for vendor contract tracking (P3-52).
  *
- * Patterns:
- * - withErrorHandler for structured error responses
+ * Plan A1 auto-drain. Migrated GET/POST/PATCH to `runRoute(contract, handler)`;
+ * see `./contract.ts` for schemas + auth-chain rationale.
+ *
+ * Patterns preserved verbatim from the pre-migration handler:
  * - createScopedClient for tenant isolation (AGENTS #13)
  * - logAuditEvent on every mutation
- * - Zod validation on request bodies
  * - Compliance-community-only feature gate via hasCompliance (AGENTS #34)
  * - Bid embargo enforced server-side: bid details hidden until biddingClosesAt
+ *
+ * Wire-shape notes:
+ * - GET: pre-migration returned a bespoke flat `{ data, alerts }` envelope.
+ *   The runner emits `{ data: <payload> }`, so `alerts` is now folded inside
+ *   `data` → `{ data: { contracts, alerts } }` (B1 "fold meta into data").
+ *   Consumer `apps/web/src/hooks/use-contracts.ts` updated to match.
+ * - POST/PATCH: unchanged `{ data: <row> }`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -32,9 +41,14 @@ import {
   listContractsForCommunity,
   updateContractById,
 } from '@/lib/services/contract-service';
+import {
+  contractsCreateContract,
+  contractsListContract,
+  contractsUpdateContract,
+} from './contract';
 
 // ---------------------------------------------------------------------------
-// Validation schemas
+// Validation schemas (POST body branches; PATCH body lives in ./contract.ts)
 // ---------------------------------------------------------------------------
 
 const contractStatusValues = ['draft', 'active', 'expired', 'terminated'] as const;
@@ -55,27 +69,6 @@ const createContractSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format')
     .nullable()
     .optional(),
-  documentId: z.number().int().positive().nullable().optional(),
-  complianceChecklistItemId: z.number().int().positive().nullable().optional(),
-  biddingClosesAt: z.string().datetime().nullable().optional(),
-  conflictOfInterest: z.boolean().optional(),
-  conflictOfInterestNote: z.string().nullable().optional(),
-  status: z.enum(contractStatusValues).optional(),
-});
-
-const updateContractSchema = z.object({
-  id: z.number().int().positive(),
-  communityId: z.number().int().positive(),
-  title: z.string().min(1).max(500).optional(),
-  vendorName: z.string().min(1).max(500).optional(),
-  description: z.string().nullable().optional(),
-  contractValue: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/)
-    .nullable()
-    .optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   documentId: z.number().int().positive().nullable().optional(),
   complianceChecklistItemId: z.number().int().positive().nullable().optional(),
   biddingClosesAt: z.string().datetime().nullable().optional(),
@@ -179,152 +172,140 @@ function applyBidEmbargo(
 // GET — List contracts with expiration alerts and bid info
 // ---------------------------------------------------------------------------
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
+export const GET = withErrorHandler(
+  runRoute(contractsListContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requireComplianceCommunity(membership.communityType);
+    requirePermission(membership, 'contracts', 'read');
 
-  const rawCommunityId = searchParams.get('communityId');
-  if (!rawCommunityId) {
-    throw new ValidationError('communityId query parameter is required');
-  }
+    const scoped = createScopedClient(communityId);
+    const contractRows = await listContractsForCommunity(scoped);
+    const bidRows = await listContractBidsForCommunity(scoped);
+    const contractRecords = contractRows.map(coerceContractRow);
 
-  const parsedCommunityId = Number(rawCommunityId);
-  if (!Number.isInteger(parsedCommunityId) || parsedCommunityId <= 0) {
-    throw new ValidationError('communityId must be a positive integer');
-  }
+    // Group bids by contractId and apply embargo
+    const bidsByContract = new Map<number, Record<string, unknown>[]>();
+    for (const bid of bidRows) {
+      const contractId = bid['contractId'] as number;
+      const existing = bidsByContract.get(contractId) ?? [];
+      existing.push(bid);
+      bidsByContract.set(contractId, existing);
+    }
 
-  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireComplianceCommunity(membership.communityType);
-  requirePermission(membership, 'contracts', 'read');
+    const contractsWithBids = contractRecords.map((contract) => {
+      const contractBidsList = bidsByContract.get(contract.id) ?? [];
+      const embargoResult = applyBidEmbargo(contract, contractBidsList);
+      return {
+        ...contract,
+        bidSummary: {
+          bids: embargoResult.bids,
+          embargoed: embargoResult.embargoed,
+          bidCount: embargoResult.bidCount,
+          biddingClosesAt: embargoResult.biddingClosesAt,
+        },
+      };
+    });
 
-  const scoped = createScopedClient(communityId);
-  const contractRows = await listContractsForCommunity(scoped);
-  const bidRows = await listContractBidsForCommunity(scoped);
-  const contractRecords = contractRows.map(coerceContractRow);
+    // Compute expiration alerts
+    const alerts = getContractExpirationAlerts(contractRecords);
 
-  // Group bids by contractId and apply embargo
-  const bidsByContract = new Map<number, Record<string, unknown>[]>();
-  for (const bid of bidRows) {
-    const contractId = bid['contractId'] as number;
-    const existing = bidsByContract.get(contractId) ?? [];
-    existing.push(bid);
-    bidsByContract.set(contractId, existing);
-  }
-
-  const contractsWithBids = contractRecords.map((contract) => {
-    const contractBidsList = bidsByContract.get(contract.id) ?? [];
-    const embargoResult = applyBidEmbargo(contract, contractBidsList);
-    return {
-      ...contract,
-      bidSummary: {
-        bids: embargoResult.bids,
-        embargoed: embargoResult.embargoed,
-        bidCount: embargoResult.bidCount,
-        biddingClosesAt: embargoResult.biddingClosesAt,
-      },
-    };
-  });
-
-  // Compute expiration alerts
-  const alerts = getContractExpirationAlerts(contractRecords);
-
-  return NextResponse.json({ data: contractsWithBids, alerts });
-});
+    // Folded shape: runner wraps this once → { data: { contracts, alerts } }.
+    return { contracts: contractsWithBids, alerts };
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // POST — Create contract or bid (dispatched by 'action' field)
 // ---------------------------------------------------------------------------
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const bodyObj = body as Record<string, unknown>;
-  const action = bodyObj['action'] as string | undefined;
+export const POST = withErrorHandler(
+  runRoute(contractsCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const bodyObj = body as Record<string, unknown>;
+    const action = bodyObj['action'] as string | undefined;
 
-  if (action === 'add_bid') {
-    return handleCreateBid(bodyObj, actorUserId, req);
-  }
+    if (action === 'add_bid') {
+      return handleCreateBid(bodyObj, actorUserId, req);
+    }
 
-  // Default: create contract
-  return handleCreateContract(bodyObj, actorUserId, req);
-});
+    // Default: create contract
+    return handleCreateContract(bodyObj, actorUserId, req);
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // PATCH — Update contract
 // ---------------------------------------------------------------------------
 
-export const PATCH = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parseResult = updateContractSchema.safeParse(body);
+export const PATCH = withErrorHandler(
+  runRoute(contractsUpdateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const { id, communityId: rawCommunityId, ...fields } = body;
+    const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requireComplianceCommunity(membership.communityType);
+    requirePermission(membership, 'contracts', 'write');
 
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid update payload', {
-      fields: formatZodErrors(parseResult.error),
+    const scoped = createScopedClient(communityId);
+
+    const existing = await getContractById(scoped, id);
+    if (!existing) {
+      throw new NotFoundError('Contract not found');
+    }
+
+    // Validate documentId belongs to this community if provided
+    if (fields.documentId) {
+      const document = await getContractDocumentById(scoped, fields.documentId);
+      if (!document) {
+        throw new ValidationError('Document not found in this community');
+      }
+    }
+
+    // Validate complianceChecklistItemId belongs to this community if provided
+    if (fields.complianceChecklistItemId) {
+      const checklistItem = await getContractChecklistItemById(
+        scoped,
+        fields.complianceChecklistItemId,
+      );
+      if (!checklistItem) {
+        throw new ValidationError('Compliance checklist item not found in this community');
+      }
+    }
+
+    const updateData: Record<string, unknown> = {};
+    const oldValues: Record<string, unknown> = {};
+    const newValues: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) {
+        updateData[key] = value;
+        oldValues[key] = existing[key];
+        newValues[key] = value;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new ValidationError('No fields to update');
+    }
+
+    const updated = await updateContractById(scoped, id, updateData);
+
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'update',
+      resourceType: 'contract',
+      resourceId: String(id),
+      communityId,
+      oldValues,
+      newValues,
     });
-  }
 
-  const { id, communityId: rawCommunityId, ...fields } = parseResult.data;
-  const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requireComplianceCommunity(membership.communityType);
-  requirePermission(membership, 'contracts', 'write');
-
-  const scoped = createScopedClient(communityId);
-
-  const existing = await getContractById(scoped, id);
-  if (!existing) {
-    throw new NotFoundError('Contract not found');
-  }
-
-  // Validate documentId belongs to this community if provided
-  if (fields.documentId) {
-    const document = await getContractDocumentById(scoped, fields.documentId);
-    if (!document) {
-      throw new ValidationError('Document not found in this community');
-    }
-  }
-
-  // Validate complianceChecklistItemId belongs to this community if provided
-  if (fields.complianceChecklistItemId) {
-    const checklistItem = await getContractChecklistItemById(scoped, fields.complianceChecklistItemId);
-    if (!checklistItem) {
-      throw new ValidationError('Compliance checklist item not found in this community');
-    }
-  }
-
-  const updateData: Record<string, unknown> = {};
-  const oldValues: Record<string, unknown> = {};
-  const newValues: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(fields)) {
-    if (value !== undefined) {
-      updateData[key] = value;
-      oldValues[key] = existing[key];
-      newValues[key] = value;
-    }
-  }
-
-  if (Object.keys(updateData).length === 0) {
-    throw new ValidationError('No fields to update');
-  }
-
-  const updated = await updateContractById(scoped, id, updateData);
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'update',
-    resourceType: 'contract',
-    resourceId: String(id),
-    communityId,
-    oldValues,
-    newValues,
-  });
-
-  return NextResponse.json({ data: updated });
-});
+    return updated;
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -334,7 +315,7 @@ async function handleCreateContract(
   body: Record<string, unknown>,
   actorUserId: string,
   req: NextRequest,
-): Promise<NextResponse> {
+): Promise<Record<string, unknown>> {
   const parseResult = createContractSchema.safeParse(body);
   if (!parseResult.success) {
     throw new ValidationError('Invalid contract payload', {
@@ -403,14 +384,14 @@ async function handleCreateContract(
     },
   });
 
-  return NextResponse.json({ data: created });
+  return created;
 }
 
 async function handleCreateBid(
   body: Record<string, unknown>,
   actorUserId: string,
   req: NextRequest,
-): Promise<NextResponse> {
+): Promise<Record<string, unknown>> {
   const parseResult = createBidSchema.safeParse(body);
   if (!parseResult.success) {
     throw new ValidationError('Invalid bid payload', {
@@ -458,5 +439,5 @@ async function handleCreateBid(
     },
   });
 
-  return NextResponse.json({ data: created });
+  return created;
 }
