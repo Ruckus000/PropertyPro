@@ -102,7 +102,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/documents/drafts/[id]/images/route.ts',
   'apps/web/src/app/api/v1/documents/drafts/[id]/publish/route.ts',
   'apps/web/src/app/api/v1/documents/route.ts',
-  'apps/web/src/app/api/v1/esign/sign/[submissionExternalId]/[slug]/route.ts',
   'apps/web/src/app/api/v1/esign/submissions/[id]/download/route.ts',
   'apps/web/src/app/api/v1/esign/templates/[id]/pdf/route.ts',
   'apps/web/src/app/api/v1/export/route.ts',
