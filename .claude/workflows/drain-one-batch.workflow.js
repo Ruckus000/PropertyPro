@@ -510,6 +510,51 @@ If ZERO findings, return \`{findings: []}\`. Do not invent findings.
 `
 }
 
+function adoptPrompt(drain) {
+  const actionableFindings = drain.findings.filter(f =>
+    f.severity === 'HIGH' ||
+    (f.severity === 'MEDIUM' && !f.isCoverageExpansion)
+  )
+
+  return `Adopt review findings on PR #${drain.result.prNumber} (branch
+\`${drain.result.branch}\`, worktree \`${drain.result.worktreePath}\`).
+
+## Findings to address
+
+${JSON.stringify(actionableFindings, null, 2)}
+
+## Rules
+
+1. **Verify each finding against the actual PR diff before applying.**
+   Run \`gh pr diff ${drain.result.prNumber}\`. If the claimed-missing code
+   already exists in the diff, the finding is a stale-local-disk false
+   positive (drain #62 lesson) — dismiss it silently with reason
+   "false-positive-on-diff-inspection".
+2. For each verified-actionable finding:
+   - \`cd ${drain.result.worktreePath}\`
+   - Edit the file per \`suggestedFix\`.
+   - Run \`pnpm exec vitest run\` on the relevant test file to verify the
+     fix doesn't break tests.
+   - If tests still pass, \`git add <file> && git commit -m "Adopt review: <description>"\`.
+   - If tests fail, REVERT the edit (\`git checkout -- <file>\`), add to \`failed\`.
+3. Push at end: \`git push --force-with-lease\`.
+
+## Return
+
+StructuredOutput shape:
+
+\`\`\`
+{
+  adopted: ["<description>", ...],
+  dismissed: [{finding: "<description>", reason: "<why>"}, ...],
+  failed: [{finding: "<description>", reason: "<test failure msg>"}, ...]
+}
+\`\`\`
+
+If \`actionableFindings\` is empty, return \`{adopted: [], dismissed: [], failed: []}\` immediately.
+`
+}
+
 function dedupeFindings(a, b) {
   // Two findings are duplicates if they target the same file+line(±2) with
   // similar severity. The "description" field is too freeform for exact match.
@@ -615,6 +660,25 @@ const reviewedDrains = await parallel(
 
 log(`Review stage complete. Findings: ${reviewedDrains.map(d => `${d.pick.route.split('/').pop()}:${d.findings.length}`).join(', ')}`)
 
+const adoptedDrains = await parallel(
+  reviewedDrains.map((drain) => async () => {
+    const actionable = drain.findings.filter(f =>
+      f.severity === 'HIGH' || (f.severity === 'MEDIUM' && !f.isCoverageExpansion)
+    )
+    if (actionable.length === 0) {
+      return { ...drain, adoption: { adopted: [], dismissed: [], failed: [] } }
+    }
+    const adoption = await agent(adoptPrompt(drain), {
+      schema: ADOPT_RESULT_SCHEMA,
+      label: `adopt:${drain.pick.route.split('/').pop()}`,
+      phase: 'Pipeline',
+    })
+    return { ...drain, adoption: adoption ?? { adopted: [], dismissed: [], failed: [] } }
+  })
+).then(arr => arr.filter(Boolean))
+
+log(`Adopt stage: ${adoptedDrains.reduce((s, d) => s + d.adoption.adopted.length, 0)} findings adopted across all drains`)
+
 // Phase 3+ will be added in subsequent tasks. For now, return what we have.
 return {
   merged: 0,
@@ -629,13 +693,13 @@ return {
   mergeCommits: [],
   findings: {
     high: reviewedDrains.flatMap(d => d.findings).filter(f => f.severity === 'HIGH').length,
-    mediumAdopted: 0,  // populated by adopt stage in Task 7
-    dismissed: 0,
+    mediumAdopted: adoptedDrains.reduce((s, d) => s + d.adoption.adopted.length, 0),
+    dismissed: adoptedDrains.reduce((s, d) => s + d.adoption.dismissed.length, 0),
   },
   updatedState: state,
   _debug: {
     picks: preVet.picks,
-    successful: successful.map(s => ({ pr: s.result.prUrl, route: s.pick.route })),
+    successful: adoptedDrains.map(s => ({ pr: s.result.prUrl, route: s.pick.route })),
     findings: reviewedDrains.map(d => ({ route: d.pick.route, findings: d.findings })),
   },
 }
