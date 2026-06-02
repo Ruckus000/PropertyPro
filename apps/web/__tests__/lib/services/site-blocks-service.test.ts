@@ -21,6 +21,7 @@ vi.mock('@propertypro/db/filters', () => ({
   isNull: vi.fn((col: unknown) => ({ __isNull: col })),
   isNotNull: vi.fn((col: unknown) => ({ __isNotNull: col })),
   lt: vi.fn((col: unknown, val: unknown) => ({ __lt: { col, val } })),
+  inArray: vi.fn((col: unknown, vals: unknown) => ({ __inArray: { col, vals } })),
   sql: Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: { strings: [...strings], values } }),
     {},
@@ -29,34 +30,60 @@ vi.mock('@propertypro/db/filters', () => ({
 
 // Hoisted so the test file can configure transaction behavior and inspect
 // the tx call surface.
-const { createUnscopedClientMock, txExecuteMock, txSelectMock, txUpdateMock, txInsertMock, txAuditValuesMock, dbDeleteMock, setDeleteReturning, getDeleteWhereArg } = vi.hoisted(() => {
+interface UpdateCall { set?: Record<string, unknown>; where?: { __and: Array<Record<string, unknown>> } }
+const {
+  createUnscopedClientMock,
+  txExecuteMock,
+  txSelectMock,
+  txUpdateMock,
+  txInsertMock,
+  txAuditValuesMock,
+  dbDeleteMock,
+  setSelectQueue,
+  setUpdateReturnQueue,
+  getUpdateCalls,
+  resetUpdateCalls,
+  setDeleteReturning,
+  getDeleteWhereArg,
+} = vi.hoisted(() => {
   const txExecuteMock = vi.fn().mockResolvedValue(undefined);
   const txAuditValuesMock = vi.fn().mockResolvedValue(undefined);
   const txInsertMock = vi.fn(() => ({ values: txAuditValuesMock }));
-  // .select() chain: orderBy + limit are terminal-ish; .where() returns
-  // chainable; the final await resolves to an array of rows. Tests set
-  // `txSelectRows` per-call before invoking the SUT.
-  let txSelectRows: unknown[] = [];
+
+  // .select() chain. Each .select() call consumes the NEXT array from
+  // `selectQueue` (default []). publishCommunitySite may issue two selects in
+  // one call (optimistic-concurrency newest-published, then draft block_orders)
+  // so per-call control matters. The chain is thenable AND supports
+  // orderBy/limit so both the `.orderBy().limit()` path and the awaited
+  // `.where()` path resolve to the same queued rows.
+  let selectQueue: unknown[][] = [];
+  let selectIdx = 0;
   const txSelectMock = vi.fn(() => {
+    const rows = selectQueue[selectIdx++] ?? [];
     const chain: Record<string, unknown> = {};
-    chain.from = vi.fn(() => chain);
-    chain.where = vi.fn(() => chain);
-    chain.orderBy = vi.fn(() => chain);
-    chain.limit = vi.fn(() => Promise.resolve(txSelectRows));
-    // For .select().from().where() that awaits without orderBy/limit
-    // (publishCommunitySite optimistic-concurrency path), make the chain
-    // thenable.
-    chain.then = (resolve: (v: unknown) => void) => Promise.resolve(txSelectRows).then(resolve);
+    chain.from = () => chain;
+    chain.where = () => chain;
+    chain.orderBy = () => chain;
+    chain.limit = () => Promise.resolve(rows);
+    chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+      Promise.resolve(rows).then(resolve, reject);
     return chain;
   });
-  // .update() chain: set/where/returning. Tests set `txUpdateReturning` to
-  // control returning() output (used for retired/promoted count).
-  let txUpdateReturning: unknown[] = [];
+
+  // .update() chain. Captures set/where per call (for slot-aware assertions)
+  // and returns the next array from `updateReturnQueue` from .returning()
+  // (used for retired/promoted counts).
+  let updateReturnQueue: unknown[][] = [];
+  let updateIdx = 0;
+  const updateCalls: UpdateCall[] = [];
   const txUpdateMock = vi.fn(() => {
+    const call: UpdateCall = {};
+    updateCalls.push(call);
+    const rows = updateReturnQueue[updateIdx++] ?? [];
     const chain: Record<string, unknown> = {};
-    chain.set = vi.fn(() => chain);
-    chain.where = vi.fn(() => chain);
-    chain.returning = vi.fn(() => Promise.resolve(txUpdateReturning));
+    chain.set = (s: Record<string, unknown>) => { call.set = s; return chain; };
+    chain.where = (w: UpdateCall['where']) => { call.where = w; return chain; };
+    chain.returning = () => Promise.resolve(rows);
     return chain;
   });
 
@@ -97,9 +124,11 @@ const { createUnscopedClientMock, txExecuteMock, txSelectMock, txUpdateMock, txI
     txInsertMock,
     txAuditValuesMock,
     dbDeleteMock,
-    // Test-only setters for the chain mocks.
-    setSelectRows: (rows: unknown[]) => { txSelectRows = rows; },
-    setUpdateReturning: (rows: unknown[]) => { txUpdateReturning = rows; },
+    // Test-only setters/getters for the chain mocks.
+    setSelectQueue: (q: unknown[][]) => { selectQueue = q; selectIdx = 0; },
+    setUpdateReturnQueue: (q: unknown[][]) => { updateReturnQueue = q; updateIdx = 0; },
+    getUpdateCalls: () => updateCalls,
+    resetUpdateCalls: () => { updateCalls.length = 0; },
     setDeleteReturning: (rows: unknown[]) => { dbDeleteReturning = rows; },
     getDeleteWhereArg: () => dbDeleteWhereArg,
   };
@@ -290,23 +319,19 @@ describe('upsertPublishedHero (back-compat caller)', () => {
 describe('publishCommunitySite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default chain returns: no current published row (so optimistic check
-    // resolves to "current=null"); update returning [] means 0 rows.
-    // Tests override per-case.
+    // Reset the per-call select/update queues + captured update calls. Tests
+    // queue the rows each select/update should resolve to, in call order.
+    setSelectQueue([]);
+    setUpdateReturnQueue([]);
+    resetUpdateCalls();
   });
 
   it('acquires SELECT FOR UPDATE on the community row before reading state', async () => {
-    // promoted = 1 so we don't trip the nothing-to-publish path
-    txUpdateMock.mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]), // 3 retired
-    } as unknown as ReturnType<typeof txUpdateMock>))
-    .mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 10 }, { id: 11 }]), // 2 promoted
-    } as unknown as ReturnType<typeof txUpdateMock>));
+    setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]); // draft block_orders
+    setUpdateReturnQueue([
+      [{ id: 1 }, { id: 2 }, { id: 3 }], // retire
+      [{ id: 10 }, { id: 11 }], // promote
+    ]);
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
     expect(txExecuteMock).toHaveBeenCalledTimes(1);
@@ -317,16 +342,11 @@ describe('publishCommunitySite', () => {
   });
 
   it('returns { published:true, retiredCount, promotedCount } on a successful publish', async () => {
-    txUpdateMock.mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]),
-    } as unknown as ReturnType<typeof txUpdateMock>))
-    .mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 10 }, { id: 11 }]),
-    } as unknown as ReturnType<typeof txUpdateMock>));
+    setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]);
+    setUpdateReturnQueue([
+      [{ id: 1 }, { id: 2 }, { id: 3 }], // 3 retired
+      [{ id: 10 }, { id: 11 }], // 2 promoted
+    ]);
 
     const result = await publishCommunitySite({
       communityId: 42,
@@ -343,17 +363,8 @@ describe('publishCommunitySite', () => {
     }
   });
 
-  it('returns { published:false, reason:nothing-to-publish } when no drafts exist', async () => {
-    txUpdateMock.mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 1 }]), // 1 retired
-    } as unknown as ReturnType<typeof txUpdateMock>))
-    .mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([]), // 0 promoted
-    } as unknown as ReturnType<typeof txUpdateMock>));
+  it('returns nothing-to-publish and mutates nothing when no draft rows exist', async () => {
+    setSelectQueue([[]]); // no draft block_orders
 
     const result = await publishCommunitySite({
       communityId: 42,
@@ -361,22 +372,57 @@ describe('publishCommunitySite', () => {
       expectedPublishedAt: null,
     });
     expect(result).toEqual({ published: false, reason: 'nothing-to-publish' });
-    // Audit row must NOT have been written for a no-op publish.
+    // No retire/promote UPDATE and no audit row for a no-op publish — the
+    // nothing-to-publish short-circuit happens BEFORE any mutation now, so the
+    // prior published rows are never even touched.
+    expect(txUpdateMock).not.toHaveBeenCalled();
     expect(txAuditValuesMock).not.toHaveBeenCalled();
+  });
+
+  it('retires ONLY published rows at block_orders that have a live draft (keeps un-drafted published blocks)', async () => {
+    // Drafts exist at slots 2 and 3 only. The retire UPDATE must be scoped to
+    // those slots via inArray — published rows at any other slot (e.g. the
+    // hero at order 1, or an un-edited block at order 4) survive the publish.
+    setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]);
+    setUpdateReturnQueue([
+      [{ id: 100 }, { id: 101 }], // retired (slots 2,3)
+      [{ id: 200 }, { id: 201 }], // promoted
+    ]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    const updateCalls = getUpdateCalls();
+    expect(updateCalls).toHaveLength(2);
+    // First UPDATE = retire. Its predicate must include an inArray over the
+    // draft block_orders [2, 3].
+    const retireWhere = updateCalls[0].where;
+    const inArrayClause = retireWhere?.__and.find((c) => '__inArray' in c) as
+      | { __inArray: { vals: number[] } }
+      | undefined;
+    expect(inArrayClause).toBeDefined();
+    expect(inArrayClause!.__inArray.vals).toEqual([2, 3]);
+    // First UPDATE soft-deletes (sets deletedAt); second promotes (is_draft=false).
+    expect(updateCalls[0].set).toHaveProperty('deletedAt');
+    expect(updateCalls[1].set).toMatchObject({ isDraft: false });
+  });
+
+  it('de-duplicates draft block_orders before building the retire predicate', async () => {
+    setSelectQueue([[{ blockOrder: 4 }, { blockOrder: 4 }, { blockOrder: 7 }]]);
+    setUpdateReturnQueue([[{ id: 1 }], [{ id: 2 }]]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    const inArrayClause = getUpdateCalls()[0].where?.__and.find((c) => '__inArray' in c) as
+      | { __inArray: { vals: number[] } }
+      | undefined;
+    expect(inArrayClause!.__inArray.vals).toEqual([4, 7]);
   });
 
   it('throws ConflictError when expectedPublishedAt does not match the current max', async () => {
     const stored = new Date('2026-05-01T10:00:00Z');
     const stale = new Date('2026-04-29T10:00:00Z');
-    // Optimistic-concurrency SELECT returns the stored value.
-    txSelectMock.mockImplementationOnce(() => {
-      const chain: Record<string, unknown> = {};
-      chain.from = vi.fn(() => chain);
-      chain.where = vi.fn(() => chain);
-      chain.orderBy = vi.fn(() => chain);
-      chain.limit = vi.fn(() => Promise.resolve([{ publishedAt: stored }]));
-      return chain;
-    });
+    // First select = optimistic-concurrency newest-published row.
+    setSelectQueue([[{ publishedAt: stored }]]);
 
     await expect(
       publishCommunitySite({
@@ -392,24 +438,14 @@ describe('publishCommunitySite', () => {
 
   it('accepts matching expectedPublishedAt and proceeds to promote', async () => {
     const stored = new Date('2026-05-01T10:00:00Z');
-    txSelectMock.mockImplementationOnce(() => {
-      const chain: Record<string, unknown> = {};
-      chain.from = vi.fn(() => chain);
-      chain.where = vi.fn(() => chain);
-      chain.orderBy = vi.fn(() => chain);
-      chain.limit = vi.fn(() => Promise.resolve([{ publishedAt: stored }]));
-      return chain;
-    });
-    txUpdateMock.mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 1 }]),
-    } as unknown as ReturnType<typeof txUpdateMock>))
-    .mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 10 }, { id: 11 }]),
-    } as unknown as ReturnType<typeof txUpdateMock>));
+    setSelectQueue([
+      [{ publishedAt: stored }], // optimistic-concurrency select
+      [{ blockOrder: 2 }], // draft block_orders select
+    ]);
+    setUpdateReturnQueue([
+      [{ id: 1 }], // retire
+      [{ id: 10 }, { id: 11 }], // promote
+    ]);
 
     const result = await publishCommunitySite({
       communityId: 42,
@@ -420,16 +456,11 @@ describe('publishCommunitySite', () => {
   });
 
   it('writes an inline audit row with action=update, resourceType=community_site on success', async () => {
-    txUpdateMock.mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([]),
-    } as unknown as ReturnType<typeof txUpdateMock>))
-    .mockImplementationOnce(() => ({
-      set: vi.fn().mockReturnThis(),
-      where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{ id: 10 }, { id: 11 }, { id: 12 }]),
-    } as unknown as ReturnType<typeof txUpdateMock>));
+    setSelectQueue([[{ blockOrder: 2 }]]);
+    setUpdateReturnQueue([
+      [], // 0 retired
+      [{ id: 10 }, { id: 11 }, { id: 12 }], // 3 promoted
+    ]);
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
     expect(txAuditValuesMock).toHaveBeenCalledWith(

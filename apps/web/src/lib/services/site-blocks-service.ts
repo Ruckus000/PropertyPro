@@ -25,7 +25,7 @@ import {
   siteBlocks,
   type AuditAction,
 } from '@propertypro/db';
-import { and, desc, eq, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies pm_admin + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import type { HeroBlockContent } from '@propertypro/shared';
@@ -190,22 +190,25 @@ export type PublishCommunitySiteResult =
  *   2. Read the current max `published_at` across published, non-deleted
  *      site_blocks. If `expectedPublishedAt` is supplied and doesn't match,
  *      throw `ConflictError` so the editor reloads.
- *   3. Soft-delete every currently-published, non-deleted site_blocks row
- *      for the community.
- *   4. Promote every draft row (is_draft=true, deleted_at IS NULL) to
+ *   3. Read the set of `block_order`s that have a live draft. If empty, roll
+ *      back and return `{ published: false, reason: 'nothing-to-publish' }`
+ *      (no mutations run). Callers surface this as a 200 "no changes".
+ *   4. Soft-delete the currently-published rows ONLY at those block_orders —
+ *      the slots being republished. Published rows at slots WITHOUT a draft
+ *      (e.g. the hero, or any block the PM didn't edit/move this session) are
+ *      kept intact. This makes the published site equal the merged
+ *      draft-wins editor view (spec §2.7), rather than wiping every published
+ *      block whenever a single draft exists.
+ *   5. Promote every draft row (is_draft=true, deleted_at IS NULL) to
  *      published (is_draft=false, published_at=now()).
- *   5. Audit row (action='update', resourceType='community_site') inside
+ *   6. Audit row (action='update', resourceType='community_site') inside
  *      the same tx so the mutation has provenance.
  *
- * If no drafts exist at step 4, the function rolls back implicitly and
- * returns `{ published: false, reason: 'nothing-to-publish' }`. Callers
- * surface this as a 200 with a "no changes" message rather than a 409.
- *
- * Order matters: the soft-delete (step 3) moves prior rows out of the
- * partial unique index BEFORE the draft-promotion (step 4) inserts the
- * new keys. Without step 3 first, two rows would briefly share
- * `(community_id, block_order, is_draft=false)` and
- * violate the constraint mid-transaction.
+ * Order matters: the soft-delete (step 4) moves the superseded published rows
+ * out of the partial unique index BEFORE the draft-promotion (step 5) flips
+ * the draft rows to `is_draft=false` at the same block_orders. Every promoted
+ * draft sits at a block_order whose published row was just retired, so no two
+ * rows ever share `(community_id, block_order, is_draft=false)` mid-tx.
  */
 export async function publishCommunitySite({
   communityId,
@@ -257,7 +260,29 @@ export async function publishCommunitySite({
       }
     }
 
-    // Step 3: soft-delete every currently-published row for the community.
+    // Step 3: which block_orders have a live draft? Publish promotes those
+    // drafts and retires ONLY the published rows they supersede.
+    const draftRows = await tx
+      .select({ blockOrder: siteBlocks.blockOrder })
+      .from(siteBlocks)
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.isDraft, true),
+          isNull(siteBlocks.deletedAt),
+        ),
+      );
+    const draftOrders = [...new Set(draftRows.map((r) => r.blockOrder))];
+
+    // No drafts → nothing to publish. Roll back BEFORE any mutation so the
+    // prior published rows are never touched. Drizzle's transaction wrapper
+    // undoes the (no-op) tx and the outer .catch converts the sentinel.
+    if (draftOrders.length === 0) {
+      throw new NothingToPublishRollback();
+    }
+
+    // Step 4: soft-delete the published rows AT the slots being republished
+    // only — published blocks at slots without a draft survive untouched.
     // Returns the count of rows affected so we can surface it in the audit
     // row and the result object.
     const retiredResult = await tx
@@ -268,12 +293,13 @@ export async function publishCommunitySite({
           eq(siteBlocks.communityId, communityId),
           eq(siteBlocks.isDraft, false),
           isNull(siteBlocks.deletedAt),
+          inArray(siteBlocks.blockOrder, draftOrders),
         ),
       )
       .returning({ id: siteBlocks.id });
     const retiredCount = retiredResult.length;
 
-    // Step 4: promote drafts. Capture the new publishedAt up front so the
+    // Step 5: promote drafts. Capture the new publishedAt up front so the
     // returned timestamp matches what landed in the rows.
     const publishedAt = new Date();
     const promotedResult = await tx
@@ -289,14 +315,7 @@ export async function publishCommunitySite({
       .returning({ id: siteBlocks.id });
     const promotedCount = promotedResult.length;
 
-    // If nothing was promoted, this publish is a no-op. Rollback by
-    // throwing — Drizzle's transaction wrapper undoes the soft-delete
-    // step so the prior published rows remain visible.
-    if (promotedCount === 0) {
-      throw new NothingToPublishRollback();
-    }
-
-    // Step 5: audit row inside the same tx so the publish has atomic
+    // Step 6: audit row inside the same tx so the publish has atomic
     // provenance.
     await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
       userId: actorUserId,
