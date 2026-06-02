@@ -11,10 +11,12 @@ import type { ContractRecord, ExpirationAlert } from '@/components/contracts/typ
  * `ContractTable.tsx`, plus the inline POST/PATCH `fetch` calls in
  * `ContractForm.tsx` and `BidTracker.tsx`.
  *
- * The GET /api/v1/contracts response is non-standard — it returns
- * `{ data: ContractRecord[], alerts: ExpirationAlert[] }` (alerts at the
- * top level alongside data, not nested under data). `requestJson` would
- * unwrap and discard `alerts`, so the read hook does its own fetch.
+ * The GET /api/v1/contracts response is the canonical `{ data: ... }`
+ * envelope with BOTH the contract list and the expiration alerts folded
+ * inside `data`: `{ data: { contracts: ContractRecord[], alerts:
+ * ExpirationAlert[] } }`. `requestJson` would only return the inner `data`
+ * object (losing the typed split this hook exposes), so the read hook does
+ * its own fetch and plucks `data.contracts` / `data.alerts`.
  *
  * The mutation hooks below talk to the same endpoint but use the standard
  * `{ data: T }` envelope, so they go through `requestJson`.
@@ -38,16 +40,15 @@ export function useContracts({ communityId, enabled = true }: UseContractsOption
     queryFn: async () => {
       const res = await fetch(`/api/v1/contracts?communityId=${communityId}`);
       const json = (await res.json()) as {
-        data?: ContractRecord[];
-        alerts?: ExpirationAlert[];
+        data?: { contracts?: ContractRecord[]; alerts?: ExpirationAlert[] };
         error?: { message?: string };
       };
       if (!res.ok) {
         throw new Error(json.error?.message ?? 'Failed to load contracts');
       }
       return {
-        contracts: json.data ?? [],
-        alerts: json.alerts ?? [],
+        contracts: json.data?.contracts ?? [],
+        alerts: json.data?.alerts ?? [],
       };
     },
     enabled: enabled && communityId > 0,
