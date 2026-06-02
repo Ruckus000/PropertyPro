@@ -40,6 +40,20 @@ describe('access-policies strict matrix', () => {
     }
   });
 
+  it('grants condo/HOA insurance + elections to owners, board, PM-admins, and CAMs (not tenants)', () => {
+    for (const communityType of ['condo_718', 'hoa_720'] as CommunityType[]) {
+      for (const key of ['insurance', 'elections'] as const) {
+        expect(canAccessCategory('owner', communityType, key)).toBe(true);
+        expect(canAccessCategory('board_member', communityType, key)).toBe(true);
+        expect(canAccessCategory('property_manager_admin', communityType, key)).toBe(true);
+        // CAMs administer insurance/elections, so they can see these...
+        expect(canAccessCategory('cam', communityType, key)).toBe(true);
+        // ...but tenants cannot.
+        expect(canAccessCategory('tenant', communityType, key)).toBe(false);
+      }
+    }
+  });
+
   it('classifies elevated and restricted roles', () => {
     expect(isElevatedRole('owner')).toBe(true);
     expect(isElevatedRole('property_manager_admin')).toBe(true);

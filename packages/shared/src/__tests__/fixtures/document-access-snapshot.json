@@ -76,8 +76,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
-      "insurance": false,
-      "elections": false,
+      "insurance": true,
+      "elections": true,
       "unknown": false
     },
     "site_manager": {
@@ -190,8 +190,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
-      "insurance": false,
-      "elections": false,
+      "insurance": true,
+      "elections": true,
       "unknown": false
     },
     "site_manager": {
