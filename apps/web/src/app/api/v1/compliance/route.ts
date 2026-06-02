@@ -1,17 +1,35 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Compliance Checklist API — condo/HOA only.
+ *
+ * GET   /api/v1/compliance?communityId=N — list checklist items + derived status
+ * POST  /api/v1/compliance                — generate checklist from template
+ * PATCH /api/v1/compliance                — apply a per-item action
+ *
+ * Plan A1 auto-drain. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the three schemas and rationale. Auth chains preserved
+ * verbatim — note the mutating methods (POST/PATCH) run `assertNotDemoGrace`
+ * BEFORE `requireCommunityMembership`, and the sync feature-gate
+ * `requireCondoCommunity` + sync `requirePermission` run AFTER membership.
+ *
+ * Wire shapes are byte-identical to pre-migration (the handler returns the
+ * inner payload; the runner wraps `{ data: <payload> }`):
+ *   - GET   → `{ data: [...] }`
+ *   - POST  → `{ data: inserted }` (success) OR
+ *             `{ data: { data, meta } }` (already-generated / race / empty)
+ *   - PATCH → `{ data: result }`
+ */
 import { logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
   type CommunityType,
 } from '@propertypro/shared';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import {
   calculateComplianceStatus,
@@ -24,14 +42,11 @@ import {
   listComplianceChecklistItems,
   updateComplianceChecklistItem,
 } from '@/lib/services/compliance-service';
-
-const communityIdQuerySchema = z.coerce.number().int().positive();
-
-const generateChecklistSchema = z
-  .object({
-    communityId: z.number().int().positive(),
-  })
-  .strict();
+import {
+  complianceGetContract,
+  complianceGenerateContract,
+  compliancePatchContract,
+} from './contract';
 
 /**
  * Feature gate: Require condo/HOA community for compliance features
@@ -52,224 +67,18 @@ function isUniqueViolation(error: unknown): boolean {
   return maybeCode === '23505';
 }
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-  const { searchParams } = new URL(req.url);
-  const parsedCommunityId = communityIdQuerySchema.safeParse(searchParams.get('communityId'));
-
-  if (!parsedCommunityId.success) {
-    throw new ValidationError('Invalid or missing communityId query parameter', {
-      fields: formatZodErrors(parsedCommunityId.error),
-    });
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId.data);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requireCondoCommunity(membership.communityType);
-  requirePermission(membership, 'compliance', 'read');
-
-  const rows = await listComplianceChecklistItems(communityId);
-
-  const data = rows.map((row) => {
-    const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
-    const documentPostedAt = row['documentPostedAt']
-      ? new Date(row['documentPostedAt'] as string)
-      : null;
-
-    const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
-    const rollingWindowMonths =
-      typeof rollingWindowRecord?.months === 'number'
-        ? rollingWindowRecord.months
-        : null;
-
-    return {
-      ...row,
-      status: calculateComplianceStatus({
-        isApplicable: row['isApplicable'] as boolean | undefined,
-        documentId: (row['documentId'] as number | null) ?? null,
-        documentPostedAt,
-        deadline,
-        rollingWindowMonths,
-      }),
-    };
-  });
-
-  if (data.length > 0) {
-    void tryAutoComplete(communityId, userId, 'review_compliance');
-  }
-
-  return NextResponse.json({ data });
-});
-
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-
-  const body: unknown = await req.json();
-  const parsedBody = generateChecklistSchema.safeParse(body);
-
-  if (!parsedBody.success) {
-    throw new ValidationError('Invalid compliance generation payload', {
-      fields: formatZodErrors(parsedBody.error),
-    });
-  }
-
-  const communityId = resolveEffectiveCommunityId(req, parsedBody.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, userId);
-
-  // Feature gate: compliance is only available for condo/HOA communities
-  requireCondoCommunity(membership.communityType);
-  requirePermission(membership, 'compliance', 'write');
-
-  const existing = await listComplianceChecklistItems(communityId);
-  if (existing.length > 0) {
-    return NextResponse.json({ data: { data: existing, meta: { alreadyGenerated: true } } });
-  }
-
-  const template = getComplianceTemplate(membership.communityType);
-  if (template.length === 0) {
-    console.warn(
-      `[compliance] Empty template for community type "${membership.communityType}" despite hasCompliance=true. Skipping checklist generation.`,
-    );
-    return NextResponse.json({ data: { data: [], meta: { emptyTemplate: true } } });
-  }
-
-  const now = new Date();
-  const rows = template.map((item) => ({
-    templateKey: item.templateKey,
-    title: item.title,
-    description: item.description,
-    category: item.category,
-    statuteReference: item.statuteReference,
-    deadline: item.deadlineDays ? calculatePostingDeadline(now, item.deadlineDays) : null,
-    rollingWindow: item.rollingMonths ? { months: item.rollingMonths } : null,
-    isConditional: item.isConditional ?? false,
-    documentId: null,
-    documentPostedAt: null,
-    lastModifiedBy: userId,
-  }));
-
-  try {
-    await insertComplianceChecklistItems(communityId, rows);
-  } catch (error) {
-    if (!isUniqueViolation(error)) {
-      throw error;
-    }
-
-    const raced = await listComplianceChecklistItems(communityId);
-    return NextResponse.json({ data: { data: raced, meta: { alreadyGenerated: true } } });
-  }
-
-  const inserted = await listComplianceChecklistItems(communityId);
-  if (inserted.length < template.length) {
-    console.warn(
-      `[compliance] Expected ${template.length} checklist items for community ${communityId}, `
-      + `but found ${inserted.length}. Possible data inconsistency.`,
-    );
-  }
-
-  await logAuditEvent({
-    userId,
-    action: 'create',
-    resourceType: 'compliance_checklist',
-    resourceId: String(communityId),
-    communityId,
-    newValues: {
-      communityType: membership.communityType,
-      itemCount: inserted.length,
-      templateKeys: template.map((item) => item.templateKey),
-    },
-  });
-
-  return NextResponse.json({ data: inserted });
-});
-
-// ---------------------------------------------------------------------------
-// PATCH /api/v1/compliance — link/unlink documents, mark applicable/not-applicable
-// ---------------------------------------------------------------------------
-
-const patchSchema = z
-  .object({
-    id: z.number().int().positive(),
-    communityId: z.number().int().positive(),
-    action: z.enum([
-      'link_document',
-      'unlink_document',
-      'mark_not_applicable',
-      'mark_applicable',
-    ]),
-    documentId: z.number().int().positive().optional(),
-  })
-  .strict()
-  .refine(
-    (d) => d.action !== 'link_document' || d.documentId != null,
-    { message: 'documentId is required when action is link_document', path: ['documentId'] },
-  );
-
-export const PATCH = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-
-  const body: unknown = await req.json();
-  const parsed = patchSchema.safeParse(body);
-
-  if (!parsed.success) {
-    throw new ValidationError('Invalid compliance patch payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const { id, action: patchAction, documentId } = parsed.data;
-  const communityId = resolveEffectiveCommunityId(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requireCondoCommunity(membership.communityType);
-  requirePermission(membership, 'compliance', 'write');
-
-  // Build the update payload based on the action
-  let updateData: Record<string, unknown>;
-  switch (patchAction) {
-    case 'link_document':
-      updateData = {
-        documentId: documentId!,
-        documentPostedAt: new Date(),
-        lastModifiedBy: userId,
-      };
-      break;
-    case 'unlink_document':
-      updateData = {
-        documentId: null,
-        documentPostedAt: null,
-        lastModifiedBy: userId,
-      };
-      break;
-    case 'mark_not_applicable':
-      updateData = {
-        isApplicable: false,
-        lastModifiedBy: userId,
-      };
-      break;
-    case 'mark_applicable':
-      updateData = {
-        isApplicable: true,
-        lastModifiedBy: userId,
-      };
-      break;
-  }
-
-  const row = await updateComplianceChecklistItem(communityId, id, updateData);
-  if (!row) {
-    throw new ValidationError('Checklist item not found or does not belong to this community');
-  }
-
+/** Decorate a checklist row with its derived compliance status. */
+function withDerivedStatus(row: Record<string, unknown>): Record<string, unknown> {
   const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
   const documentPostedAt = row['documentPostedAt']
     ? new Date(row['documentPostedAt'] as string)
     : null;
+
   const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
   const rollingWindowMonths =
     typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
 
-  const result = {
+  return {
     ...row,
     status: calculateComplianceStatus({
       isApplicable: row['isApplicable'] as boolean | undefined,
@@ -279,16 +88,165 @@ export const PATCH = withErrorHandler(async (req: NextRequest) => {
       rollingWindowMonths,
     }),
   };
+}
 
-  await logAuditEvent({
-    userId,
-    action: patchAction,
-    resourceType: 'compliance_checklist_item',
-    resourceId: String(id),
-    communityId,
-    metadata: { itemTitle: row['title'] as string },
-    newValues: { documentId: documentId ?? null },
-  });
+export const GET = withErrorHandler(
+  runRoute(complianceGetContract, async ({ query, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requireCondoCommunity(membership.communityType);
+    requirePermission(membership, 'compliance', 'read');
 
-  return NextResponse.json({ data: result });
-});
+    const rows = await listComplianceChecklistItems(communityId);
+    const data = rows.map(withDerivedStatus);
+
+    if (data.length > 0) {
+      void tryAutoComplete(communityId, userId, 'review_compliance');
+    }
+
+    return data;
+  }),
+);
+
+export const POST = withErrorHandler(
+  runRoute(complianceGenerateContract, async ({ body, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+
+    // Feature gate: compliance is only available for condo/HOA communities
+    requireCondoCommunity(membership.communityType);
+    requirePermission(membership, 'compliance', 'write');
+
+    const existing = await listComplianceChecklistItems(communityId);
+    if (existing.length > 0) {
+      return { data: existing, meta: { alreadyGenerated: true } };
+    }
+
+    const template = getComplianceTemplate(membership.communityType);
+    if (template.length === 0) {
+      console.warn(
+        `[compliance] Empty template for community type "${membership.communityType}" despite hasCompliance=true. Skipping checklist generation.`,
+      );
+      return { data: [], meta: { emptyTemplate: true } };
+    }
+
+    const now = new Date();
+    const rows = template.map((item) => ({
+      templateKey: item.templateKey,
+      title: item.title,
+      description: item.description,
+      category: item.category,
+      statuteReference: item.statuteReference,
+      deadline: item.deadlineDays ? calculatePostingDeadline(now, item.deadlineDays) : null,
+      rollingWindow: item.rollingMonths ? { months: item.rollingMonths } : null,
+      isConditional: item.isConditional ?? false,
+      documentId: null,
+      documentPostedAt: null,
+      lastModifiedBy: userId,
+    }));
+
+    try {
+      await insertComplianceChecklistItems(communityId, rows);
+    } catch (error) {
+      if (!isUniqueViolation(error)) {
+        throw error;
+      }
+
+      const raced = await listComplianceChecklistItems(communityId);
+      return { data: raced, meta: { alreadyGenerated: true } };
+    }
+
+    const inserted = await listComplianceChecklistItems(communityId);
+    if (inserted.length < template.length) {
+      console.warn(
+        `[compliance] Expected ${template.length} checklist items for community ${communityId}, `
+        + `but found ${inserted.length}. Possible data inconsistency.`,
+      );
+    }
+
+    await logAuditEvent({
+      userId,
+      action: 'create',
+      resourceType: 'compliance_checklist',
+      resourceId: String(communityId),
+      communityId,
+      newValues: {
+        communityType: membership.communityType,
+        itemCount: inserted.length,
+        templateKeys: template.map((item) => item.templateKey),
+      },
+    });
+
+    return inserted;
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// PATCH /api/v1/compliance — link/unlink documents, mark applicable/not-applicable
+// ---------------------------------------------------------------------------
+
+export const PATCH = withErrorHandler(
+  runRoute(compliancePatchContract, async ({ body, req }) => {
+    const userId = await requireAuthenticatedUserId();
+
+    const { id, action: patchAction, documentId } = body;
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requireCondoCommunity(membership.communityType);
+    requirePermission(membership, 'compliance', 'write');
+
+    // Build the update payload based on the action
+    let updateData: Record<string, unknown>;
+    switch (patchAction) {
+      case 'link_document':
+        updateData = {
+          documentId: documentId!,
+          documentPostedAt: new Date(),
+          lastModifiedBy: userId,
+        };
+        break;
+      case 'unlink_document':
+        updateData = {
+          documentId: null,
+          documentPostedAt: null,
+          lastModifiedBy: userId,
+        };
+        break;
+      case 'mark_not_applicable':
+        updateData = {
+          isApplicable: false,
+          lastModifiedBy: userId,
+        };
+        break;
+      case 'mark_applicable':
+        updateData = {
+          isApplicable: true,
+          lastModifiedBy: userId,
+        };
+        break;
+    }
+
+    const row = await updateComplianceChecklistItem(communityId, id, updateData);
+    if (!row) {
+      throw new ValidationError('Checklist item not found or does not belong to this community');
+    }
+
+    const result = withDerivedStatus(row);
+
+    await logAuditEvent({
+      userId,
+      action: patchAction,
+      resourceType: 'compliance_checklist_item',
+      resourceId: String(id),
+      communityId,
+      metadata: { itemTitle: row['title'] as string },
+      newValues: { documentId: documentId ?? null },
+    });
+
+    return result;
+  }),
+);
