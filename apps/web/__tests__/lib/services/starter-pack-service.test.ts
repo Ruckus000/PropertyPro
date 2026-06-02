@@ -45,8 +45,9 @@ function buildUnscopedClient(packBlocks: unknown[] | null, slug = 'florida-condo
   return buildUnscopedClientFromRows(rows);
 }
 
-// Capture the `.where()` predicate so tests can assert the catalog query is
-// data-driven (community_type + is_archived) rather than slug-hardcoded. The
+// Capture the `.where()` predicate (and `.orderBy()` args) so tests can assert
+// the catalog query is data-driven (community_type + is_archived) rather than
+// slug-hardcoded, AND that it orders "latest wins" (version desc, id desc). The
 // chain is select().from().where().orderBy().limit().
 function buildUnscopedClientFromRows(rows: unknown[]) {
   const limitMock = vi.fn().mockResolvedValue(rows);
@@ -57,6 +58,7 @@ function buildUnscopedClientFromRows(rows: unknown[]) {
   return {
     select: selectMock,
     getWhereArg: () => whereMock.mock.calls[0]?.[0],
+    getOrderByArgs: () => orderByMock.mock.calls[0] ?? [],
   };
 }
 
@@ -167,6 +169,15 @@ describe('applyStarterPackToCommunity', () => {
     const serialized = JSON.stringify(unscopedClient.getWhereArg());
     expect(serialized).toContain('condo_718');
     expect(serialized).not.toContain('florida-condo-v1');
+    // The ordering IS the "latest wins" contract: orderBy(version desc, id desc).
+    // Limitation: siteStarterPacks is a single Symbol mock, so its `.version`
+    // and `.id` property accesses both yield `undefined` — the two columns are
+    // not distinguishable here. Asserting exactly two `__desc` clauses still
+    // catches "ordering dropped" and "wrong number of sort keys" regressions.
+    const orderByArgs = unscopedClient.getOrderByArgs();
+    expect(orderByArgs).toHaveLength(2);
+    expect(orderByArgs[0]).toHaveProperty('__desc');
+    expect(orderByArgs[1]).toHaveProperty('__desc');
   });
 
   it('no-ops when every pack for the type is archived (no row returned)', async () => {
