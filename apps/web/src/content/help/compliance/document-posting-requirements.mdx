@@ -45,7 +45,7 @@ contextPaths:
   - /communities/*/compliance
 ---
 
-Florida statute specifies both **which** records associations must make available and **when** — usually within 30 days of the record being finalized. PropertyPro links each document category to the specific obligation it satisfies.
+Florida statute specifies both **which** records associations must make available and **when** — usually within 30 days of the record being finalized. PropertyPro tracks each obligation as a requirement on the Compliance dashboard, where you link the document that satisfies it.
 
 <Callout type="florida-statute" title="Condo: § 718.111(12)(g)">
 Condo associations with 25 or more units must post certain records on an association-managed website. The statute calls out bylaws, articles, rules, financial records, contracts over a threshold, meeting materials, and more.
@@ -55,9 +55,9 @@ Condo associations with 25 or more units must post certain records on an associa
 HOAs with 100 or more parcels have parallel requirements. Document categories differ slightly; the compliance dashboard shows only the categories that apply to your community type.
 </Callout>
 
-## Categories we track
+## Records the statute requires
 
-The compliance engine maps each posted document to one of these statutory categories:
+The Compliance dashboard tracks one requirement per statutory record type. The common ones:
 
 - **Governing documents** — declaration / bylaws / articles of incorporation / rules.
 - **Financial records** — annual budget, financial report, reserve study, audit.
@@ -67,6 +67,8 @@ The compliance engine maps each posted document to one of these statutory catego
 - **Elections** — candidate bios, ballots, voting outcomes.
 - **Official records summary** — a current index of what records are available.
 
+These are compliance **requirements**, not document-library categories. You satisfy each one by linking a document to it on the Compliance dashboard, whatever category that document lives under in the library.
+
 ## How the 30-day window works
 
 <StepByStep>
@@ -74,8 +76,8 @@ The compliance engine maps each posted document to one of these statutory catego
 A document is approved, signed, or adopted — for example, meeting minutes are approved at the next meeting.
 </Step>
 
-<Step title="Upload it promptly">
-Upload the file under the correct category in Documents. The 30-day clock starts from the finalization date, not the upload date.
+<Step title="Upload it and link it">
+Upload the file in Documents, then link it to the matching requirement on the Compliance dashboard. The 30-day clock starts from the finalization date, not the upload date.
 </Step>
 
 <Step title="PropertyPro tracks the clock">
@@ -89,17 +91,17 @@ Even if you post early, the posting time is saved in the audit log. Late posting
 
 ## What counts as "posted"
 
-In PropertyPro, a document counts as posted the moment it's uploaded **and** assigned to the correct statutory category with its finalization date set. If the file is only uploaded but miscategorized, the compliance engine won't credit it.
+In PropertyPro, a requirement counts as satisfied once you **link a document to it** on the Compliance dashboard and that document's finalization date is set. Uploading a file to the library alone doesn't satisfy a requirement — you have to link it.
 
-<Callout type="warning" title="Category matters">
-Uploading a budget under "Other" instead of "Annual Budget" won't satisfy the requirement even though the file is visible to residents. Always double-check the category dropdown.
+<Callout type="warning" title="Link the document, don't just upload it">
+A budget sitting in the library won't satisfy the "Annual Budget" requirement until you link it on the Compliance dashboard. After uploading, open Compliance and attach the document to the requirement it covers.
 </Callout>
 
 ## Common pitfalls
 
 - **Undated documents**: if no finalization date is set, the engine treats the upload date as the clock start. That can artificially mark an on-time record as late.
 - **Superseded records**: replacing an old file keeps the statutory obligation satisfied as long as the current version is available.
-- **Unit-count changes**: crossing the 25-unit (condo) or 100-parcel (HOA) threshold flips new categories from Not Applicable to required.
+- **Unit-count changes**: crossing the 25-unit (condo) or 100-parcel (HOA) threshold flips new requirements from Not Applicable to required.
 
 ## Where to look
 
