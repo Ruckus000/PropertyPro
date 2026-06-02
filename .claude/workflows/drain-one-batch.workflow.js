@@ -607,6 +607,56 @@ StructuredOutput shape:
 `
 }
 
+function rebaseAndMergePrompt(drains) {
+  const list = drains.map(d => ({
+    prNumber: d.result.prNumber,
+    branch: d.result.branch,
+    worktreePath: d.result.worktreePath,
+  }))
+
+  return `Sequentially rebase + merge these PRs onto the current
+\`origin/main\`. Run them in the order given.
+
+PRs to merge:
+${JSON.stringify(list, null, 2)}
+
+## Per-PR procedure
+
+For each PR in order:
+
+1. \`cd /Users/jphilistin/Documents/Coding/PropertyPro && git fetch origin --quiet\`
+2. \`cd <worktreePath>\`
+3. \`git rebase origin/main\`
+4. **If rebase reports a conflict on \`scripts/verify-contracts.ts\`** (allowlist line collision because a sibling drain merged first):
+   - \`Read\` the conflicted file FIRST (important — the harness needs this).
+   - The file will contain Git conflict markers around the allowlist removals. **Delete BOTH conflict-marked lines** (one was already removed by the sibling that merged first; the corpus rule is: drop both). This collapses the conflict cleanly.
+   - \`git add scripts/verify-contracts.ts\`
+   - \`git rebase --continue\`
+5. **If rebase reports any OTHER conflict** (route source, test file, etc.):
+   - \`git rebase --abort\`
+   - Mark this PR as REBASE_FAILED, move to next.
+6. \`git push --force-with-lease\`
+7. Wait for CI on the rebased branch. Poll \`gh pr checks <pr>\` every 90s, max 10 min.
+   - If RED: mark CI_FAILED_AFTER_REBASE, skip to next PR.
+   - If TIMEOUT: mark CI_FAILED_AFTER_REBASE, skip.
+8. \`gh pr merge <pr> --squash\`. Capture the merge commit SHA from \`gh pr view <pr> --json mergeCommit\`.
+9. Mark this PR MERGED with the sha.
+
+## Return
+
+StructuredOutput shape:
+
+\`\`\`
+{
+  merges: [
+    { prNumber: <int>, state: "MERGED" | "REBASE_FAILED" | "MERGE_FAILED" | "CI_FAILED_AFTER_REBASE", mergeCommit: "<sha>", reason: "<if non-MERGED>" },
+    ...
+  ]
+}
+\`\`\`
+`
+}
+
 function dedupeFindings(a, b) {
   // Two findings are duplicates if they target the same file+line(±2) with
   // similar severity. The "description" field is too freeform for exact match.
@@ -761,9 +811,35 @@ const ciSkips = adoptedDrains.filter(d => {
   prUrl: d.result.prUrl,
 }))
 
+phase('Rebase+Merge')
+
+let merges = []
+if (readyToMerge.length > 0) {
+  const mergeOutput = await agent(rebaseAndMergePrompt(readyToMerge), {
+    schema: MERGE_RESULT_SCHEMA,
+    label: 'rebase-merge',
+    phase: 'Rebase+Merge',
+  })
+  merges = mergeOutput?.merges ?? []
+  log(`Merge stage: ${merges.filter(m => m.state === 'MERGED').length} of ${readyToMerge.length} merged`)
+}
+
+const mergedDrains = readyToMerge.filter(d =>
+  merges.find(m => m.prNumber === d.result.prNumber)?.state === 'MERGED'
+)
+const mergeFailureSkips = readyToMerge
+  .filter(d => merges.find(m => m.prNumber === d.result.prNumber)?.state !== 'MERGED')
+  .map(d => ({
+    route: d.pick.route,
+    classification: merges.find(m => m.prNumber === d.result.prNumber)?.state === 'REBASE_FAILED' ? 'NEEDS_HUMAN' : 'TRANSIENT',
+    reason: merges.find(m => m.prNumber === d.result.prNumber)?.reason || 'merge failed',
+    prUrl: d.result.prUrl,
+  }))
+
 // Phase 3+ will be added in subsequent tasks. For now, return what we have.
 return {
-  merged: 0,
+  merged: mergedDrains.length,
+  mergeCommits: merges.filter(m => m.state === 'MERGED').map(m => m.mergeCommit),
   skipped: [
     ...preVet.rejected.map(r => ({
       route: r.route,
@@ -772,8 +848,8 @@ return {
     })),
     ...newSkips,
     ...ciSkips,
+    ...mergeFailureSkips,
   ],
-  mergeCommits: [],
   findings: {
     high: reviewedDrains.flatMap(d => d.findings).filter(f => f.severity === 'HIGH').length,
     mediumAdopted: adoptedDrains.reduce((s, d) => s + d.adoption.adopted.length, 0),
