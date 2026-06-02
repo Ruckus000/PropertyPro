@@ -135,6 +135,13 @@ export type {
   AmenitiesBlockContent,
   AmenityItem,
 } from './site-blocks/index';
+export {
+  starterPackBlocksSchema,
+  validateStarterPackBlocks,
+  type StarterPackBlock,
+  type StarterPackFieldError,
+  type ValidateStarterPackBlocksResult,
+} from './site-blocks/index';
 // Preserve URL safety helpers from the old flat file — they remain useful
 // generic utilities even after the rest of site-blocks.ts is retired.
 export { isSafeUrl, isSafeImageUrl } from './site-blocks';
