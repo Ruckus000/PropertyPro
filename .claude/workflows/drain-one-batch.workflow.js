@@ -226,6 +226,13 @@ ${skipBlock}
    - **RUNNER_BLOCKED**: custom Cache-Control headers, cookie-set,
      multipart upload, 429 with retryAfter, raw-body signatures, OAuth
      redirect, binary CSV/PDF/ZIP responses, unauth+token verification.
+   - **NEVER pick \`apps/web/src/app/api/v1/internal/*\` cron routes.** They
+     authenticate with \`requireCronSecret\` (a bearer-token gate), NOT the
+     community-membership chain the runner models; they do cross-tenant
+     orchestration with email/provisioning/Sentry/snapshot side effects and
+     several return health-style 503 status codes. These are PERMANENTLY
+     out of scope — reject every \`internal/*\` route as RUNNER_BLOCKED even
+     if it looks like a simple POST.
    - **COMPLEX_SKIP**: Stripe API calls, reauth gate, FSM/multi-branch
      auth, Supabase Storage + image processing, fire-and-forget
      notifications with side effects.
@@ -270,6 +277,16 @@ Use the StructuredOutput tool. Schema:
   ]
 }
 \`\`\`
+
+## Quality over quantity — do NOT pad to reach 3
+
+3 is a MAXIMUM, not a target. Pick ONLY routes you are confident are cleanly
+drainable. If only 1 or 2 qualify, return 1 or 2. Returning a single solid
+pick is far better than padding with a marginal route — a wrong pick wastes a
+full implement+review+CI cycle and risks merging something it shouldn't.
+NEVER reach for a cron/binary/side-effect/Storage route just to hit 3. If
+nothing qualifies, return \`{ picks: [], rejected: [...] }\` — an honest empty
+batch is the correct signal that the drainable pool is exhausted.
 
 If you find fewer than 3 viable picks, return what you have. Do not fabricate.
 `
