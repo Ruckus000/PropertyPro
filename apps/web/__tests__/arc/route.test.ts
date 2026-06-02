@@ -201,6 +201,7 @@ describe('GET /api/v1/arc', () => {
     expect(response.status).toBe(200);
     expect(json.data.data).toHaveLength(1);
     expect(json.data.data[0].__mapped).toBe(true);
+    expect(json.data.pagination).toEqual({ nextCursor: null, hasMore: false, pageSize: 50 });
     expect(resolveEffectiveCommunityIdMock).toHaveBeenCalledWith(expect.any(Request), COMMUNITY_ID);
   });
 
@@ -292,6 +293,13 @@ describe('POST /api/v1/arc', () => {
 
     expect(response.status).toBe(401);
     expect(assertNotDemoGraceMock).not.toHaveBeenCalled();
+    expect(createArcSubmissionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the body is invalid', async () => {
+    const response = await POST(makePostRequest({ communityId: COMMUNITY_ID }));
+
+    expect(response.status).toBe(400);
     expect(createArcSubmissionForCommunityMock).not.toHaveBeenCalled();
   });
 
