@@ -95,6 +95,12 @@ export default async function SiteTemplatesIndexPage() {
             >
               Theme Presets →
             </Link>
+            <Link
+              href="/site-templates/starter-packs"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Starter Packs →
+            </Link>
           </div>
         </div>
         <LayoutsTable layouts={layouts} />
