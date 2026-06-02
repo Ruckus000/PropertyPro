@@ -3,11 +3,12 @@
  * command-palette/useDataSearch.ts → hooks/use-data-search.ts).
  *
  * Documented exception to the requestJson rule: the hook is an abortable,
- * multi-keystroke search backed by manual fetch + AbortController. The
- * /api/v1/search route returns the AggregatedSearchResponse at the top level
- * (NOT the standard { data } envelope), and the catch path relies on the bare
- * `${res.status}` thrown error plus AbortSignal-aware swallowing — behaviors
- * requestJson would change. The hook therefore keeps raw fetch verbatim.
+ * multi-keystroke search backed by manual fetch + AbortController. After the
+ * A1 contract drain the /api/v1/search route returns the AggregatedSearchResponse
+ * inside the standard { data } envelope, which the hook unwraps manually. The
+ * catch path still relies on the bare `${res.status}` thrown error plus
+ * AbortSignal-aware swallowing — behaviors requestJson would change. The hook
+ * therefore keeps raw fetch verbatim.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -75,7 +76,7 @@ describe('useDataSearch', () => {
   it('normalizes aggregated search results into the configured group order', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => aggregatedBody(),
+      json: async () => ({ data: aggregatedBody() }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -97,7 +98,7 @@ describe('useDataSearch', () => {
   it('issues GET /api/v1/search with exact params + abort signal', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => aggregatedBody(),
+      json: async () => ({ data: aggregatedBody() }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -118,7 +119,7 @@ describe('useDataSearch', () => {
   it('toggles isSearching around a successful request', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => aggregatedBody(),
+      json: async () => ({ data: aggregatedBody() }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -194,7 +195,7 @@ describe('useDataSearch', () => {
       // Second call: resolves successfully.
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => aggregatedBody(),
+        json: async () => ({ data: aggregatedBody() }),
       });
     vi.stubGlobal('fetch', fetchMock);
 
