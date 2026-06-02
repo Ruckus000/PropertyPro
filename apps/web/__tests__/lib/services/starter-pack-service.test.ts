@@ -18,6 +18,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: { col, val } })),
   and: vi.fn((...args: unknown[]) => ({ __and: args })),
+  desc: vi.fn((col: unknown) => ({ __desc: col })),
   isNull: vi.fn((col: unknown) => ({ __isNull: col })),
 }));
 
@@ -39,13 +40,24 @@ function buildScopedClient(existingBlocks: unknown[] = []) {
   };
 }
 
-function buildUnscopedClient(packBlocks: unknown[] | null) {
-  const rows = packBlocks !== null ? [{ blocks: packBlocks }] : [];
+function buildUnscopedClient(packBlocks: unknown[] | null, slug = 'florida-condo-v1') {
+  const rows = packBlocks !== null ? [{ slug, blocks: packBlocks }] : [];
+  return buildUnscopedClientFromRows(rows);
+}
+
+// Capture the `.where()` predicate so tests can assert the catalog query is
+// data-driven (community_type + is_archived) rather than slug-hardcoded. The
+// chain is select().from().where().orderBy().limit().
+function buildUnscopedClientFromRows(rows: unknown[]) {
   const limitMock = vi.fn().mockResolvedValue(rows);
-  const whereMock = vi.fn(() => ({ limit: limitMock }));
+  const orderByMock = vi.fn(() => ({ limit: limitMock }));
+  const whereMock = vi.fn(() => ({ orderBy: orderByMock, limit: limitMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));
-  return { select: selectMock };
+  return {
+    select: selectMock,
+    getWhereArg: () => whereMock.mock.calls[0]?.[0],
+  };
 }
 
 describe('applyStarterPackToCommunity', () => {
@@ -53,7 +65,7 @@ describe('applyStarterPackToCommunity', () => {
     vi.clearAllMocks();
   });
 
-  it('maps condo_718 to florida-condo-v1 and inserts each block via scoped.insert', async () => {
+  it('inserts each block from the selected pack via scoped.insert', async () => {
     const scopedClient = buildScopedClient([]);
     createScopedClientMock.mockReturnValue(scopedClient as never);
     const unscopedClient = buildUnscopedClient([HERO_BLOCK, TEXT_BLOCK]);
@@ -84,10 +96,10 @@ describe('applyStarterPackToCommunity', () => {
     );
   });
 
-  it('maps hoa_720 to florida-hoa-v1 and resolves with the correct packSlug', async () => {
+  it('resolves with the slug of the selected hoa_720 pack', async () => {
     const scopedClient = buildScopedClient([]);
     createScopedClientMock.mockReturnValue(scopedClient as never);
-    const unscopedClient = buildUnscopedClient([HERO_BLOCK]);
+    const unscopedClient = buildUnscopedClient([HERO_BLOCK], 'florida-hoa-v1');
     createUnscopedClientMock.mockReturnValue(unscopedClient as never);
 
     const result = await applyStarterPackToCommunity(20, 'hoa_720');
@@ -97,10 +109,10 @@ describe('applyStarterPackToCommunity', () => {
     expect(result.blockCount).toBe(1);
   });
 
-  it('maps apartment to apartment-v1 and resolves with the correct packSlug', async () => {
+  it('resolves with the slug of the selected apartment pack', async () => {
     const scopedClient = buildScopedClient([]);
     createScopedClientMock.mockReturnValue(scopedClient as never);
-    const unscopedClient = buildUnscopedClient([HERO_BLOCK]);
+    const unscopedClient = buildUnscopedClient([HERO_BLOCK], 'apartment-v1');
     createUnscopedClientMock.mockReturnValue(unscopedClient as never);
 
     const result = await applyStarterPackToCommunity(30, 'apartment');
@@ -119,19 +131,10 @@ describe('applyStarterPackToCommunity', () => {
 
     const result = await applyStarterPackToCommunity(10, 'condo_718');
 
-    expect(result).toEqual({ applied: false, blockCount: 0, packSlug: 'florida-condo-v1' });
+    expect(result).toEqual({ applied: false, blockCount: 0, packSlug: null });
     // createUnscopedClient should never be called — we bailed out before the pack lookup
     expect(createUnscopedClientMock).not.toHaveBeenCalled();
     expect(scopedClient.insert).not.toHaveBeenCalled();
-  });
-
-  it('no-ops when communityType is not mapped in STARTER_PACK_SLUG_BY_TYPE', async () => {
-    // Bypass the TypeScript guard to simulate a future widening of CommunityType
-    // without a matching pack entry.
-    const result = await applyStarterPackToCommunity(99, 'unknown_type' as never);
-    expect(result).toEqual({ applied: false, blockCount: 0, packSlug: null });
-    expect(createScopedClientMock).not.toHaveBeenCalled();
-    expect(createUnscopedClientMock).not.toHaveBeenCalled();
   });
 
   it('returns applied:false when the pack row does not exist in the catalog', async () => {
@@ -143,7 +146,37 @@ describe('applyStarterPackToCommunity', () => {
 
     const result = await applyStarterPackToCommunity(10, 'condo_718');
 
-    expect(result).toEqual({ applied: false, blockCount: 0, packSlug: 'florida-condo-v1' });
+    expect(result).toEqual({ applied: false, blockCount: 0, packSlug: null });
     expect(scopedClient.insert).not.toHaveBeenCalled();
+  });
+
+  it('selects the highest-version non-archived pack for the community type', async () => {
+    const scopedClient = buildScopedClient([]); // no published blocks yet → not idempotent-skipped
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    // The catalog query resolves to the latest pack's blocks.
+    const unscopedClient = buildUnscopedClientFromRows([
+      { slug: 'florida-condo-v2', blocks: [{ blockType: 'hero', blockOrder: 1, content: { headline: 'v2' } }] },
+    ]);
+    createUnscopedClientMock.mockReturnValue(unscopedClient as never);
+
+    const res = await applyStarterPackToCommunity(42, 'condo_718');
+
+    expect(res.applied).toBe(true);
+    expect(res.blockCount).toBe(1);
+    // The where predicate must include community_type and is_archived=false (no hardcoded slug).
+    const serialized = JSON.stringify(unscopedClient.getWhereArg());
+    expect(serialized).toContain('condo_718');
+    expect(serialized).not.toContain('florida-condo-v1');
+  });
+
+  it('no-ops when every pack for the type is archived (no row returned)', async () => {
+    const scopedClient = buildScopedClient([]);
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    const unscopedClient = buildUnscopedClientFromRows([]); // query returns nothing
+    createUnscopedClientMock.mockReturnValue(unscopedClient as never);
+
+    const res = await applyStarterPackToCommunity(42, 'condo_718');
+
+    expect(res).toEqual({ applied: false, blockCount: 0, packSlug: null });
   });
 });
