@@ -5,15 +5,25 @@
  * and due_date < today, then updates them to status='overdue'.
  *
  * Schedule: 0 6 * * * (vercel.json)
+ *
+ * Plan A1 auto-drain. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Cron-secret auth chain
+ * preserved verbatim:
+ *   requireCronSecret(req, process.env.ASSESSMENT_CRON_SECRET)
+ *     → processOverdueTransitions()
+ *
+ * Wire shape `{ data: summary }` byte-identical to pre-migration.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import { processOverdueTransitions } from '@/lib/services/assessment-automation-service';
+import { assessmentOverdueContract } from './contract';
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  requireCronSecret(req, process.env.ASSESSMENT_CRON_SECRET);
+export const POST = withErrorHandler(
+  runRoute(assessmentOverdueContract, async ({ req }) => {
+    requireCronSecret(req, process.env.ASSESSMENT_CRON_SECRET);
 
-  const summary = await processOverdueTransitions();
-  return NextResponse.json({ data: summary });
-});
+    return processOverdueTransitions();
+  }),
+);
