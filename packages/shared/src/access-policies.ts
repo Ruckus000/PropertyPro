@@ -78,6 +78,23 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
   move_out_docs: 'move_in_out_docs',
   move_in_out: 'move_in_out_docs',
   moving_documents: 'move_in_out_docs',
+
+  financial_records: 'financial_records',
+  financials: 'financial_records',
+  financial: 'financial_records',
+
+  contracts: 'contracts',
+  contract: 'contracts',
+
+  insurance: 'insurance',
+  insurance_certificates: 'insurance',
+  coverage: 'insurance',
+
+  elections: 'elections',
+  election: 'elections',
+  voting_records: 'elections',
+
+  compliance: 'inspection_reports',
 };
 
 /**
@@ -136,7 +153,7 @@ const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<CommunityRole, Catego
     board_member: 'all',
     board_president: 'all',
     property_manager_admin: 'all',
-    cam: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes'],
+    cam: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes', 'insurance', 'elections'],
     tenant: ['declaration', 'rules', 'inspection_reports'],
     site_manager: [],
   },
@@ -145,7 +162,7 @@ const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<CommunityRole, Catego
     board_member: 'all',
     board_president: 'all',
     property_manager_admin: 'all',
-    cam: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes'],
+    cam: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes', 'insurance', 'elections'],
     tenant: ['declaration', 'rules', 'inspection_reports'],
     site_manager: [],
   },

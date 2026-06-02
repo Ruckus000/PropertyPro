@@ -18,6 +18,7 @@ import { createAdminClient } from '../supabase/admin';
 import { createUnscopedClient } from '../unsafe';
 import {
   getComplianceTemplate,
+  getDefaultDocumentCategories,
   getPresetPermissions,
   isPresetKey,
   type CommunityBranding,
@@ -72,12 +73,6 @@ export type DemoDocumentCategoryKey =
   | 'move_in_out_docs';
 
 export type SeededDocumentCategoryIds = Record<DemoDocumentCategoryKey, number | undefined>;
-
-interface DemoCategoryDefinition {
-  key: DemoDocumentCategoryKey;
-  name: string;
-  description: string;
-}
 
 const STORAGE_RETRY_DELAYS_MS = [400, 1000, 2000] as const;
 
@@ -876,90 +871,49 @@ async function upsertRegistryEntry(
   `);
 }
 
-function getDemoCategoryDefinitions(
-  communityType: 'condo_718' | 'hoa_720' | 'apartment',
-): DemoCategoryDefinition[] {
-  if (communityType === 'apartment') {
-    return [
-      {
-        key: 'rules',
-        name: 'Rules',
-        description: 'Community rules and policy updates.',
-      },
-      {
-        key: 'announcements',
-        name: 'Announcements',
-        description: 'Building-wide notices and updates.',
-      },
-      {
-        key: 'maintenance_records',
-        name: 'Maintenance Records',
-        description: 'Operational maintenance and work order records.',
-      },
-      {
-        key: 'lease_docs',
-        name: 'Lease Docs',
-        description: 'Lease agreements and related lease forms.',
-      },
-      {
-        key: 'community_handbook',
-        name: 'Community Handbook',
-        description: 'Resident handbook and onboarding materials.',
-      },
-      {
-        key: 'move_in_out_docs',
-        name: 'Move In/Out Docs',
-        description: 'Move-in and move-out instructions and forms.',
-      },
-    ];
-  }
-
-  return [
-    {
-      key: 'declaration',
-      name: 'Declaration',
-      description: 'Governing declaration and related amendments.',
-    },
-    {
-      key: 'rules',
-      name: 'Rules & Regulations',
-      description: 'Rules, regulations, and published policy updates.',
-    },
-    {
-      key: 'inspection_reports',
-      name: 'Inspection Reports',
-      description: 'Safety and statutory inspection documentation.',
-    },
-    {
-      key: 'meeting_minutes',
-      name: 'Meeting Minutes',
-      description: 'Board and owner meeting minutes and packets.',
-    },
-    {
-      key: 'announcements',
-      name: 'Announcements',
-      description: 'Community announcements and notice records.',
-    },
-  ];
-}
+/**
+ * Maps the seed's stable logical category keys to the provisioned production
+ * category names per community type. Demo communities are seeded with the same
+ * categories as production (getDefaultDocumentCategories), while the document
+ * seeding below keeps referencing these logical keys unchanged.
+ */
+const DEMO_CATEGORY_NAME_BY_KEY: Record<
+  'condo_718' | 'hoa_720' | 'apartment',
+  Partial<Record<DemoDocumentCategoryKey, string>>
+> = {
+  condo_718: {
+    declaration: 'Governing Documents',
+    rules: 'Governing Documents',
+    inspection_reports: 'Inspection Reports',
+    meeting_minutes: 'Meeting Records',
+    announcements: 'Correspondence',
+  },
+  hoa_720: {
+    declaration: 'Governing Documents',
+    rules: 'Governing Documents',
+    inspection_reports: 'Inspection Reports',
+    meeting_minutes: 'Meeting Records',
+    announcements: 'Correspondence',
+  },
+  apartment: {
+    rules: 'Rules',
+    announcements: 'Communications',
+    maintenance_records: 'Maintenance Records',
+    inspection_reports: 'Compliance',
+    lease_docs: 'Lease Agreements',
+    community_handbook: 'Community Handbook',
+    move_in_out_docs: 'Move In/Out Docs',
+  },
+};
 
 export async function seedDocumentCategories(
   communityId: number,
   communityType: 'condo_718' | 'hoa_720' | 'apartment',
 ): Promise<SeededDocumentCategoryIds> {
-  const definitions = getDemoCategoryDefinitions(communityType);
-  const categoryIds: SeededDocumentCategoryIds = {
-    declaration: undefined,
-    rules: undefined,
-    inspection_reports: undefined,
-    meeting_minutes: undefined,
-    announcements: undefined,
-    maintenance_records: undefined,
-    lease_docs: undefined,
-    community_handbook: undefined,
-    move_in_out_docs: undefined,
-  };
+  // Demo communities use the same provisioned categories as production.
+  const definitions = getDefaultDocumentCategories(communityType);
 
+  const idByName = new Map<string, number>();
   for (const definition of definitions) {
     const existing = await db
       .select({ id: documentCategories.id })
@@ -981,7 +935,7 @@ export async function seedDocumentCategories(
           updatedAt: new Date(),
         })
         .where(eq(documentCategories.id, existing[0].id));
-      categoryIds[definition.key] = existing[0].id;
+      idByName.set(definition.name, existing[0].id);
       continue;
     }
 
@@ -995,7 +949,27 @@ export async function seedDocumentCategories(
       })
       .returning({ id: documentCategories.id });
 
-    categoryIds[definition.key] = created?.id;
+    if (created) {
+      idByName.set(definition.name, created.id);
+    }
+  }
+
+  // Resolve the seed's logical keys to provisioned category ids for this type.
+  const nameByKey = DEMO_CATEGORY_NAME_BY_KEY[communityType];
+  const categoryIds: SeededDocumentCategoryIds = {
+    declaration: undefined,
+    rules: undefined,
+    inspection_reports: undefined,
+    meeting_minutes: undefined,
+    announcements: undefined,
+    maintenance_records: undefined,
+    lease_docs: undefined,
+    community_handbook: undefined,
+    move_in_out_docs: undefined,
+  };
+  for (const key of Object.keys(categoryIds) as DemoDocumentCategoryKey[]) {
+    const name = nameByKey[key];
+    categoryIds[key] = name ? idByName.get(name) : undefined;
   }
 
   return categoryIds;

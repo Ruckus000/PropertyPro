@@ -1,0 +1,163 @@
+---
+title: "Creating and tracking assessments"
+description: "Admin workflow for issuing recurring dues, special assessments, and late fees — and reading the assessment register."
+category: "finance"
+slug: "creating-and-tracking-assessments"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - assessment
+  - special assessment
+  - dues
+  - late fee
+  - billing
+  - assess
+  - charge
+  - recurring
+  - register
+  - admin billing
+featureGates:
+  - hasFinance
+tags:
+  - finance
+  - admin
+  - florida
+updatedAt: "2026-05-26"
+lastReviewedAt: "2026-05-26"
+relatedArticles:
+  - paying-dues-and-assessments
+  - understanding-your-assessment-balance
+  - setting-up-online-payments
+featured: false
+contextPaths:
+  - /assessments
+  - /communities/*/assessments
+  - /communities/*/payments
+---
+
+The assessments register is where admins create, schedule, and track every charge that hits resident accounts — regular dues, special assessments, and late fees. This is the admin counterpart to the resident-facing Payments view.
+
+<Callout type="warning" title="Authority for assessments">
+The board is the legal authority for setting and approving assessments. PropertyPro records what was authorized but does not vote, ratify, or recommend amounts. Always anchor an assessment record to a board action (meeting minute, written consent) so the audit trail is complete.
+</Callout>
+
+## Recurring dues
+
+Most communities run a recurring monthly, quarterly, or annual assessment cycle. Set it up once and PropertyPro generates the charges automatically.
+
+<StepByStep>
+<Step title="Open Assessments → Recurring schedule">
+From the assessments page, click the Recurring tab.
+</Step>
+
+<Step title="Define the schedule">
+- **Frequency**: monthly / quarterly / annually
+- **Amount**: per-unit dollar value (or per-unit-type if your community varies)
+- **Due day**: which day of the cycle (e.g., 1st of each month)
+- **Grace period**: days after due date before a late fee applies
+</Step>
+
+<Step title="Apply to units">
+Select all units, a unit-type subset, or specific units. New units added to the community after this point inherit the schedule automatically.
+</Step>
+
+<Step title="Activate">
+Once activated, PropertyPro queues the next charge and emails residents in advance. Residents can pay online if your community has Stripe connected.
+</Step>
+</StepByStep>
+
+## Special assessments
+
+Special assessments are one-time charges approved by the board for a specific purpose — a roof project, an insurance shortfall, a SIRS-driven repair.
+
+<StepByStep>
+<Step title="Verify board authorization">
+Confirm the board has voted to approve the special assessment, with the amount, allocation method, and due date in the meeting minutes.
+</Step>
+
+<Step title="Create the assessment">
+Open Assessments → **New special assessment**. Enter the title (e.g., "2026 Roof Replacement Special Assessment"), the total amount, and the allocation method.
+</Step>
+
+<Step title="Pick the allocation">
+- **Equal per unit** — every unit pays the same dollar amount
+- **By unit percentage** — each unit's recorded share applies
+- **Custom** — manually enter per-unit amounts (use sparingly)
+</Step>
+
+<Step title="Set the schedule">
+- **Single charge** — entire amount due on one date.
+- **Installments** — split into 2-12 payments with their own due dates.
+- **Effective date** — when the charge appears on resident accounts.
+</Step>
+
+<Step title="Attach supporting documents">
+The meeting minute authorizing the assessment, any vendor estimates, the reserve-study reference. These attach to the assessment record for the audit trail.
+</Step>
+
+<Step title="Publish">
+Residents see the new charge on their Payments page and receive an email with the schedule and purpose.
+</Step>
+</StepByStep>
+
+## Late fees
+
+Late fees are configured on the assessment itself — there's no one-off "apply a fee" action. When you create or edit a recurring assessment, set the **late-fee amount** and a **grace period** (the number of days after the due date before the fee applies). PropertyPro then adds the fee automatically to any charge still unpaid past the grace window.
+
+To change how a late fee behaves, edit the assessment schedule and update the late-fee amount or grace period.
+
+<Callout type="warning" title="Bylaws govern late fee amounts">
+PropertyPro does not enforce statutory caps on late fees. Florida statute limits how much can be charged; your bylaws may set further constraints. Verify any late-fee amount against your governing documents before applying.
+</Callout>
+
+## The register
+
+The Assessments register lists every assessment with:
+
+- Title and date
+- Affected units (count + total amount)
+- Collected to date / outstanding balance
+- Delinquency count (units past due)
+- Linked documents
+
+Sort by outstanding balance to see what's still owed; sort by date to walk the year's billing chronologically.
+
+## Reading collection rates
+
+Each special assessment shows its collection rate over time. A healthy assessment hits ~80% paid by the due date and ~95% within 60 days. Lower rates indicate either:
+
+- A communication problem (residents didn't know about the assessment)
+- A genuine affordability problem
+- A specific delinquency pattern needing follow-up
+
+Use the per-unit delinquency report to identify residents who need outreach versus those genuinely refusing.
+
+## Waiving a late fee
+
+When the board forgives a fee — a resident appeals successfully, or it was applied in error — waive it rather than deleting it. Late fees can be waived from the **Delinquency** view using **Waive Late Fees**.
+
+A waived fee drops out of the unit's outstanding balance but stays on the record with a `waived` status, so the audit trail still shows the fee was applied and later forgiven. PropertyPro records the waiver; any money movement back to a card or bank account is handled through your payment processor, not in PropertyPro.
+
+## Reporting
+
+The Reports section under Assessments lets you export:
+
+- Year-to-date collections vs. billed
+- Delinquency aging (30/60/90+ days)
+- Per-unit assessment history
+- Special assessment recap (allocation + collection)
+
+Pull these monthly for the management committee and annually for the board's year-end review.
+
+## Common patterns
+
+- **Mid-year rate change** — increase the recurring amount effective on a specific date; existing prior-month invoices keep the old amount.
+- **Move-in proration** — for unit ownership changes, manually prorate the first month's assessment.
+- **Forgive a late fee** — when a resident appeals successfully, waive the fee from the Delinquency view. Don't delete it — the audit trail should show the fee was applied and then waived.
+- **Bad debt write-off** — work with your accountant. PropertyPro keeps the record; the accounting treatment happens in your books.

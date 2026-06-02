@@ -1,0 +1,155 @@
+---
+title: "Assigning vendors to work orders"
+description: "Triage maintenance requests, convert them to work orders, and assign the right vendor or in-house staff."
+category: "maintenance"
+slug: "assigning-vendors-to-work-orders"
+roles:
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - work order
+  - vendor
+  - assign
+  - dispatch
+  - triage
+  - maintenance inbox
+  - operations
+  - contractor
+  - in-house
+  - priority
+featureGates:
+  - hasWorkOrders
+tags:
+  - maintenance
+  - admin
+updatedAt: "2026-05-26"
+lastReviewedAt: "2026-05-26"
+relatedArticles:
+  - submitting-a-maintenance-request
+  - tracking-maintenance-status
+featured: false
+contextPaths:
+  - /communities/*/operations
+  - /maintenance/inbox
+---
+
+When a resident submits a maintenance request, staff move it through triage, decide whether it needs a vendor, and dispatch the work. Work orders are the admin-side artifact that connects the request to the vendor doing the work.
+
+## The Operations inbox
+
+Open Operations from the sidebar (the legacy `/maintenance/inbox` route redirects here). The Requests tab shows everything queued for triage:
+
+- Unit and resident
+- Category (Plumbing, Electrical, HVAC, etc.)
+- Priority — Urgent / High / Normal / Low
+- Submitted timestamp
+- Photos and description
+- Current status
+
+Sort by priority and submitted date to find what needs attention first. Urgent items always come to the top.
+
+## From request to work order
+
+<StepByStep>
+<Step title="Open a request">
+Click any row in the inbox. The detail page shows the resident narrative, photos, and any back-and-forth comments.
+</Step>
+
+<Step title="Confirm the diagnosis">
+Read the resident's description. For ambiguous reports, send a clarifying comment before dispatching ("Can you confirm whether the leak is below or above the sink?"). Avoid sending a vendor on a fishing trip.
+</Step>
+
+<Step title="Create a work order">
+Click **Convert to work order**. The work order inherits the unit, category, priority, and attachments. Add internal-only notes the resident won't see.
+</Step>
+
+<Step title="Assign a vendor or in-house staff">
+Pick from your vendor list (HVAC contractor, plumbing service, in-house maintenance). Multi-trade jobs may need more than one assignment — create separate work orders.
+</Step>
+
+<Step title="Set the schedule">
+Enter the scheduled date and time window. The resident sees the appointment on their request page and gets an email confirmation.
+</Step>
+</StepByStep>
+
+## Vendor selection
+
+PropertyPro lets you maintain a vendor directory with:
+
+- Trade specialty (plumbing, electrical, HVAC, general)
+- Contact info (phone, email)
+- Service area
+- Insurance certificate (uploaded under Documents → Contracts)
+- Notes from past jobs
+
+When you assign, the chosen vendor receives an email with the work order details and access to a vendor-scoped view of the relevant request.
+
+<Callout type="tip" title="Keep insurance current">
+Before assigning a vendor, verify their certificate of insurance is on file and current. An uninsured vendor on association property is a liability hole. PropertyPro flags vendors with expired insurance in the directory.
+</Callout>
+
+## Priority and SLA
+
+Each priority level has a target response window — your community sets the policy, but a typical pattern is:
+
+- **Urgent**: 4-hour response
+- **High**: 24-hour response
+- **Normal**: 5-business-day response
+- **Low**: scheduled within the month
+
+The Operations dashboard surfaces work orders breaching SLA so nothing slips silently.
+
+## Vendor accountability
+
+After the work order is completed:
+
+<StepByStep>
+<Step title="Vendor marks complete with notes">
+The vendor records what was done, parts used, and any follow-up needed. Photos of the completed work are ideal.
+</Step>
+
+<Step title="Resident confirms">
+The resident sees the work-complete update on their request and can confirm or flag remaining issues.
+</Step>
+
+<Step title="Invoice and close">
+Once the resident confirms, mark the work order closed. The vendor's invoice (if any) gets attached for the audit trail.
+</Step>
+</StepByStep>
+
+## Reassigning a work order
+
+If the assigned vendor declines or can't fit the schedule:
+
+1. Open the work order.
+2. Click **Reassign**.
+3. Pick a new vendor. The original assignment closes with a "reassigned" status; the new vendor receives the dispatch.
+
+Keep notes on the reason — chronic decline patterns from a vendor signal it's time to find a replacement.
+
+## Working with the resident
+
+Comments on the request thread are visible to the resident. Internal-only notes (on the work-order side) stay between staff. Use the right surface:
+
+- **Resident-visible comments** — schedule changes, questions about access, completion confirmation.
+- **Internal notes** — vendor pricing comparisons, performance concerns, decisions about what to charge back.
+
+## Common patterns
+
+- **Recurring vendor issues** — same vendor, same problem repeating. Demote them to back-up status or replace.
+- **Resident escalation** — when a resident calls instead of commenting, log a summary on the work order so the audit trail is complete.
+- **Emergency dispatch** — for Urgent items outside business hours, the on-call vendor list (in the directory) takes precedence over standard assignments.
+
+## Reporting
+
+The Operations dashboard's Reports tab summarizes:
+
+- Average resolution time by category
+- Vendor scorecard (on-time rate, repeat issues)
+- Spend by category and vendor (where invoice data is captured)
+- Open ticket aging
+
+Use the weekly summary in your management committee report.

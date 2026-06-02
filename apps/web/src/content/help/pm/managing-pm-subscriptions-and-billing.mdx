@@ -1,0 +1,171 @@
+---
+title: "Managing PM subscriptions and billing"
+description: "Pick the right plan for each community, change plans as needs evolve, and keep PropertyPro billing aligned with the management contract."
+category: "pm"
+slug: "managing-pm-subscriptions-and-billing"
+roles:
+  - property_manager_admin
+  - pm_admin
+keywords:
+  - subscription
+  - billing
+  - plan
+  - invoice
+  - stripe
+  - change plan
+  - upgrade
+  - downgrade
+  - payment method
+  - portfolio billing
+tags:
+  - pm
+  - admin
+updatedAt: "2026-05-26"
+lastReviewedAt: "2026-05-26"
+relatedArticles:
+  - onboarding-a-new-community
+  - managing-multiple-communities
+featured: false
+contextPaths:
+  - /settings/billing
+  - /settings/billing/change-plan
+---
+
+PropertyPro bills per community. As a property manager, you typically manage billing centrally — you (or your company) pay for every community in your portfolio, then pass costs through per your management agreement.
+
+## Plan tiers
+
+Each plan tier unlocks a defined set of features:
+
+- **Starter** — basic resident communication, document library, and meetings.
+- **Standard** — adds compliance dashboard, finance, maintenance triage.
+- **Pro** — adds e-sign, polls, advanced reporting, custom branding.
+- **Enterprise** — everything in Pro plus custom-domain, premium support, SLA.
+
+Specific feature mappings are documented at the plan selection screen. Confirm with the board which features they expect before choosing.
+
+<Callout type="tip" title="Don't over-buy on day one">
+Communities often start on Starter or Standard and upgrade as they discover features they want. Upgrades are seamless — features unlock immediately. Downgrades are more disruptive (features disappear), so start lower and grow into the higher tier rather than the reverse.
+</Callout>
+
+## Setting up billing on a new community
+
+<StepByStep>
+<Step title="During community creation">
+The onboarding flow asks for plan selection and a payment method. Use your management company's central card or ACH account.
+</Step>
+
+<Step title="Verify the billing email">
+Set the billing email to your accounting team's address — not a personal admin. Receipts, invoices, and dunning notifications all go there.
+</Step>
+
+<Step title="Choose the billing cycle">
+Monthly is simplest. Annual is usually 10-15% cheaper but harder to right-size if the community's needs change mid-year.
+</Step>
+</StepByStep>
+
+## Changing plans
+
+<StepByStep>
+<Step title="Open Settings → Billing → Change plan">
+From within the community (or your PM dashboard's per-community billing view), open the plan-change flow at `/settings/billing/change-plan`.
+</Step>
+
+<Step title="Pick the new plan">
+The screen shows what's included and what changes vs. your current plan.
+</Step>
+
+<Step title="Review proration">
+PropertyPro prorates upgrades on the spot (you pay the difference today) and downgrades at the next renewal (no refund mid-cycle).
+</Step>
+
+<Step title="Confirm">
+The change takes effect immediately for upgrades; downgrades apply at the next billing cycle so residents don't lose features mid-month without warning.
+</Step>
+</StepByStep>
+
+## Updating the payment method
+
+<StepByStep>
+<Step title="Open the billing portal">
+Visit `/billing/portal`. This redirects you to the Stripe-hosted billing portal.
+</Step>
+
+<Step title="Add or update a card / bank account">
+Manage saved methods, set defaults, and update card-on-file details.
+</Step>
+
+<Step title="Verify the change">
+Return to PropertyPro. The billing page shows the updated method.
+</Step>
+</StepByStep>
+
+Multiple methods can be on file; only the default is used for autopay.
+
+## Invoices and receipts
+
+Every billing cycle generates an invoice. Find them at `/settings/billing`:
+
+- **Outstanding**: bills not yet paid.
+- **Paid**: receipts for completed payments.
+- **Failed**: charges that didn't go through (retried automatically with a dunning sequence).
+
+Each invoice can be downloaded as PDF for your records and tax filings.
+
+## Portfolio-level billing
+
+If your management company centralizes billing across communities:
+
+- **Single payer model** — one card/account on file at the PM level pays for every community in the portfolio. Configure during onboarding.
+- **Per-community model** — each community's board sets up their own billing. You see the status across all communities but don't manage payments.
+
+Most PM relationships use the single-payer model with cost pass-through in the management agreement.
+
+## Failed payments and dunning
+
+If a charge fails:
+
+1. **Email notification** — billing email receives an immediate alert.
+2. **Automatic retry** — PropertyPro retries 3 days later, then 7 days later.
+3. **Service downgrade** — after 14 days unpaid, the community downgrades to Starter (with a 30-day grace period before harder restrictions).
+4. **Final notice** — at 30 days, the account enters a frozen state where residents see a banner but data isn't deleted.
+
+Resolve quickly — update the payment method and PropertyPro retries the charge automatically.
+
+## Cancelling a subscription
+
+If a community leaves your management portfolio:
+
+<StepByStep>
+<Step title="Coordinate handoff first">
+The new management company should be added as admin before you cancel. Otherwise the community loses access.
+</Step>
+
+<Step title="Cancel via Settings → Billing">
+Pick the cancellation reason (changed management, dissolved, switching tools). The community remains active until the end of the paid period.
+</Step>
+
+<Step title="Confirm data retention">
+By default, community data is retained for 90 days after cancellation in case the relationship resumes. After that, archive policy applies.
+</Step>
+</StepByStep>
+
+## Refunds
+
+PropertyPro refunds aren't automatic. To request:
+
+1. Open Help → Contact Management with the invoice number and reason.
+2. Support reviews — most refund requests are for billing errors or service issues.
+3. Approved refunds process back to the original payment method within 5-10 business days.
+
+## Tax and record-keeping
+
+PropertyPro invoices contain the company name, billing address, and an invoice number suitable for accounting. Your finance team can pull invoices automatically via the Stripe-hosted billing portal.
+
+For tax purposes, PropertyPro subscription fees are usually a deductible business expense for your management company. Pass-through to communities is a separate arrangement governed by your management agreement.
+
+## Common questions
+
+- **"Can a community switch plans monthly?"** Yes, but try not to. Frequent plan changes confuse residents (features appearing and disappearing). Pick the right plan and stick with it.
+- **"What if the board wants a feature we're not paying for?"** Upgrade the plan. The cost is typically small relative to the management fee and the feature value to the board.
+- **"Does the resident pay PropertyPro directly?"** No — communities are billed at the association level. Residents pay assessments to the association; the association covers PropertyPro from its budget.

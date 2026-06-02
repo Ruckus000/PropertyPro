@@ -1,0 +1,162 @@
+---
+title: "Onboarding a new community"
+description: "End-to-end checklist for adding a new condo, HOA, or apartment community to your management portfolio."
+category: "pm"
+slug: "onboarding-a-new-community"
+roles:
+  - property_manager_admin
+  - pm_admin
+keywords:
+  - onboarding
+  - new community
+  - setup
+  - kickoff
+  - subdomain
+  - plan selection
+  - initial setup
+  - cam
+  - import residents
+  - go-live
+tags:
+  - pm
+  - admin
+updatedAt: "2026-05-26"
+lastReviewedAt: "2026-05-26"
+relatedArticles:
+  - managing-multiple-communities
+  - adding-cams-and-board-admins
+  - managing-pm-subscriptions-and-billing
+featured: false
+contextPaths:
+  - /pm/dashboard/communities
+  - /pm/dashboard/communities/new
+  - /onboarding/*
+---
+
+Adding a community to your portfolio is the first thing a new management engagement requires. A clean onboarding sets up everything downstream — compliance, communication, billing — for years.
+
+## Before you start
+
+Have these ready:
+
+- **Community legal name and address** — what appears on the legal records.
+- **Community type** — condo (§718), HOA (§720), or apartment.
+- **Unit count** — and a roster if available (CSV with unit numbers).
+- **Resident roster** — emails of owners and tenants if available (also CSV-able).
+- **Board roster** — president, members, term ends.
+- **Management agreement** — the signed contract between your company and the association.
+- **Plan choice** — which PropertyPro plan tier the community will run on. See [Managing PM subscriptions and billing](/help/pm/managing-pm-subscriptions-and-billing).
+
+If anything's missing, you can still create the community and fill in later — but the more you have upfront, the faster the first week of operations.
+
+## Day 1 — Create the community
+
+<StepByStep>
+<Step title="Open PM Dashboard → Add community">
+From `/pm/dashboard/communities`, click **Add community** (or visit `/pm/dashboard/communities/new`).
+</Step>
+
+<Step title="Enter the basics">
+Community name, the subdomain residents will visit (e.g., `sunset-condos.getpropertypro.com`), community type, and unit count.
+</Step>
+
+<Step title="Pick the plan">
+Choose the plan tier that matches the community's needs and budget. Plan choice drives which features are enabled — `hasCompliance`, `hasMeetings`, `hasFinance`, etc. You can change later, but downgrades restrict feature visibility.
+</Step>
+
+<Step title="Set the initial admin">
+The first admin is usually the board president or the lead CAM. Enter their email and PropertyPro sends an invitation.
+</Step>
+
+<Step title="Submit">
+PropertyPro provisions the community within a few minutes — database setup, subdomain DNS, default email templates, FAQ scaffolding. You'll get a confirmation email when ready.
+</Step>
+</StepByStep>
+
+## Day 1-3 — Initial setup
+
+Once the community is provisioned:
+
+<StepByStep>
+<Step title="Configure community details">
+Open the community's Settings page. Verify the address, contact info, fiscal year, and any community-specific bylaws references. Adjust default notification cadences.
+</Step>
+
+<Step title="Upload governing documents">
+Bylaws, declaration, rules, articles. Use [Documents → Upload](/help/documents/uploading-documents) and pick the **Governing Documents** category for each. Set the finalization date to when each document was last adopted.
+</Step>
+
+<Step title="Bulk-import units">
+For apartment communities, import the unit roster via CSV (see [Managing units and buildings](/help/apartment/managing-units-and-buildings)). Condos and HOAs may not need this if the unit list is small.
+</Step>
+
+<Step title="Add the board roster">
+Promote board members from the resident list with their correct role (board_president, board_member). Their access takes effect immediately.
+</Step>
+
+<Step title="Configure branding">
+Apply PM-level branding ([Customizing PM branding](/help/pm/customizing-pm-branding)) or community-specific branding if the board prefers their own look.
+</Step>
+</StepByStep>
+
+## Day 4-7 — Resident onboarding
+
+<StepByStep>
+<Step title="Bulk-invite residents">
+Use [Inviting and managing residents](/help/residents/inviting-and-managing-residents) to send invitations. Owners typically come first; tenants follow once their owners are onboarded.
+</Step>
+
+<Step title="Set up self-service join">
+For communities where you don't have every email, enable the self-service join flow. Residents discover the community via subdomain and submit requests for approval.
+</Step>
+
+<Step title="Post a kickoff announcement">
+Use [Creating and publishing announcements](/help/announcements/creating-and-publishing-announcements) to introduce PropertyPro to residents. Brief, friendly, explaining what to expect and where to get help.
+</Step>
+
+<Step title="Train the local admin">
+Walk the CAM or board president through the dashboard for an hour. Cover the compliance dashboard, document library, maintenance triage, and how to publish meeting notices.
+</Step>
+</StepByStep>
+
+## Week 2 — Compliance and communication baseline
+
+- Review the **compliance dashboard**. Anything overdue from before your management took over? Triage with the board.
+- Configure **meeting cadences**. Schedule the next board meeting and set up the notice ahead of statutory windows.
+- Set up the **transparency page** (condos and HOAs subject to statutory requirements). See [Configuring the transparency page](/help/transparency/configuring-the-transparency-page).
+- Configure **online payments** if the community wants Stripe enabled. See [Setting up online payments](/help/finance/setting-up-online-payments).
+
+## Month 1 — Cadence in place
+
+By the end of the first month:
+
+- Every required statutory document is posted (compliance dashboard at 100% or with Not Applicable explained).
+- Recurring assessments are billing.
+- Maintenance requests are flowing through Operations.
+- Residents know how to log in and find their dashboard.
+
+If anything is still loose, schedule a 30-minute follow-up with the board to align on remaining work.
+
+## Common pitfalls
+
+- **Skipping document upload on day 1** — leads to a 30-day compliance window starting late. Get the basics up immediately even if some documents are still being collected.
+- **Wrong plan choice** — choosing a too-low plan locks out features the community needs. Confirm plan and pricing with the board before activating.
+- **Roster mismatches** — owners and units must match. CSV imports flag mismatches; investigate before going live.
+- **Not training the local admin** — a CAM who doesn't know where to find things calls you for everything. Invest the training hour.
+
+## Handoff to local operations
+
+After the first month, the community should be running on autopilot. Your role shifts from setup to oversight — monthly compliance check, portfolio review, response to escalations.
+
+Document the onboarding in your internal records. When the next community comes on, you have a template to follow.
+
+## Templating future onboardings
+
+After several onboardings, develop a per-customer template:
+
+- **Welcome announcement** copy
+- **Initial documents list** specific to your management style
+- **Training agenda** for the local admin
+- **Day-by-day timing** so future kickoffs hit milestones predictably
+
+Templating saves the next CAM coming on board several hours each onboarding.

@@ -72,8 +72,8 @@ const PRESET_DOC_CATEGORIES: Record<PresetKey, Record<CommunityType, 'all' | Kno
     apartment: 'all',
   },
   cam: {
-    condo_718: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes'],
-    hoa_720: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes'],
+    condo_718: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes', 'insurance', 'elections'],
+    hoa_720: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes', 'insurance', 'elections'],
     apartment: [],
   },
   site_manager: {

@@ -1,0 +1,159 @@
+---
+title: "Tracking vendor contracts"
+description: "Use the contracts module to log every vendor agreement, surface upcoming expirations, and keep statutorily required disclosures current."
+category: "contracts"
+slug: "tracking-vendor-contracts"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - contracts
+  - vendor contracts
+  - agreements
+  - service contract
+  - expiration
+  - renewal
+  - vendor agreement
+  - statutory disclosure
+  - threshold
+  - rfp
+featureGates:
+  - hasCompliance
+tags:
+  - contracts
+  - admin
+  - florida
+statutes:
+  - "§718.111(12)(g)"
+  - "§720.303"
+updatedAt: "2026-05-26"
+lastReviewedAt: "2026-05-26"
+relatedArticles:
+  - assigning-vendors-to-work-orders
+  - document-posting-requirements
+  - organizing-the-document-library
+featured: false
+contextPaths:
+  - /contracts
+  - /contracts/*
+---
+
+The contracts module is where every active and historical vendor agreement lives — landscaping, security, elevator service, insurance, management. Florida statute requires associations to post material vendor contracts; PropertyPro keeps them indexed and surfaces expirations before they bite.
+
+<Callout type="florida-statute" title="Posting threshold">
+Both §718.111(12)(g) (condos with 25+ units) and §720.303 (HOAs with 100+ parcels) require associations to make vendor contracts above the statutory dollar threshold available to members. Verify the current threshold with your attorney; statute amendments adjust it periodically.
+</Callout>
+
+## What belongs in contracts
+
+- Vendor service agreements (landscaping, pool, security, elevator)
+- Management contracts (with your management company)
+- Insurance policies and certificates of insurance
+- Banking and reserve-investment agreements
+- Professional services (attorney, accountant, engineer)
+
+Anything time-bounded with payment terms belongs here. One-off purchases (a single repair) do not — those live under the related work order.
+
+## Logging a new contract
+
+<StepByStep>
+<Step title="Open Contracts">
+Click Contracts in the sidebar. The list shows every contract sorted by next-action date.
+</Step>
+
+<Step title="New contract">
+Click **New contract**. Pick the vendor from your directory or add a new one inline.
+</Step>
+
+<Step title="Enter the terms">
+- **Effective date** — when the contract starts.
+- **Expiration date** — end of the current term.
+- **Renewal type** — auto-renew, manual renewal, or fixed.
+- **Notice period** — how many days before expiration you must give notice to non-renew. This drives the alert window.
+- **Amount** — total contract value or recurring amount.
+</Step>
+
+<Step title="Upload the signed PDF">
+Attach the executed contract. PropertyPro stores it under Documents → Contracts automatically.
+</Step>
+
+<Step title="Mark statutorily public if applicable">
+If the contract exceeds your statutory threshold, mark it for the transparency page so it auto-publishes to the public records section.
+</Step>
+</StepByStep>
+
+## Expiration alerts
+
+PropertyPro flags contracts as they approach their notice period:
+
+- **Calm** — more than 90 days to expiration
+- **Aware** — within the notice period but not yet inside the no-go window
+- **Urgent** — past the notice period; renewal or non-renewal needs an immediate decision
+- **Expired** — past expiration without recorded renewal
+
+Work the Aware bucket every month. Once a contract goes Urgent, your options narrow — the contract may auto-renew at unfavorable terms if no action is taken.
+
+## Renewal workflow
+
+<StepByStep>
+<Step title="Open the expiring contract">
+The Contracts dashboard surfaces upcoming expirations.
+</Step>
+
+<Step title="Choose renew or non-renew">
+- **Renew**: enter the renewed terms (often a price change) and upload the renewal addendum.
+- **Non-renew**: send the non-renewal notice within the notice window. PropertyPro records the notice date.
+</Step>
+
+<Step title="If non-renewing, plan the transition">
+Start an RFP for replacement vendors well before expiration. Use the bulk-document feature to circulate the RFP to candidates.
+</Step>
+</StepByStep>
+
+## RFPs and bid comparison
+
+For large contracts (management, insurance, elevator service), document the RFP process:
+
+1. Upload the RFP document.
+2. Track which vendors received it.
+3. Attach each vendor's response.
+4. Record the board's selection rationale in a meeting minute.
+
+This creates an audit trail satisfying both transparency requirements and any future challenge to the board's selection.
+
+## Insurance certificates
+
+A common pattern: a vendor's main contract is multi-year, but their insurance certificate renews annually. Track them separately:
+
+- **Contract record** — the underlying multi-year agreement.
+- **Insurance attachment** — replaced each year. The contract page shows the certificate's expiration so a lapsed cert is visible at a glance.
+
+<Callout type="warning" title="Lapsed insurance is high-risk">
+A vendor working on association property without current insurance leaves the association exposed. PropertyPro flags lapsed insurance prominently in the vendor directory and on the contract record — don't dismiss those alerts.
+</Callout>
+
+## Public posting on the transparency page
+
+For contracts above the statutory threshold, the public transparency page shows:
+
+- Vendor name
+- Contract type
+- Effective and expiration dates
+- A redacted PDF if any sensitive fields exist (rate cards, pricing schedules)
+
+The full unredacted contract is available to members through the normal records-request process.
+
+## Retention
+
+Contracts are retained as long as the relationship is active and for the retention period afterward per Florida statute (typically 7 years for financial records). PropertyPro does not auto-delete — the audit history is preserved.
+
+## Common pitfalls
+
+- **Auto-renewal without notice review** — many vendors set aggressive auto-renew terms. Set the notice period correctly in PropertyPro so you get the alert in time.
+- **Missing signatures** — if the signed copy isn't uploaded, the contract is unenforceable. Track the signature status on every record.
+- **Verbal modifications** — any change to a contract must be in writing. Verbal agreements with vendors are not enforceable; route changes through a contract amendment.

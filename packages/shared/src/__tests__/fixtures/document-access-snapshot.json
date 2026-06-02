@@ -10,6 +10,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "tenant": {
@@ -22,6 +26,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "board_member": {
@@ -34,6 +42,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "board_president": {
@@ -46,6 +58,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "cam": {
@@ -58,6 +74,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": true,
+      "elections": true,
       "unknown": false
     },
     "site_manager": {
@@ -70,6 +90,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "property_manager_admin": {
@@ -82,6 +106,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     }
   },
@@ -96,6 +124,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "tenant": {
@@ -108,6 +140,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "board_member": {
@@ -120,6 +156,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "board_president": {
@@ -132,6 +172,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "cam": {
@@ -144,6 +188,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": true,
+      "elections": true,
       "unknown": false
     },
     "site_manager": {
@@ -156,6 +204,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "property_manager_admin": {
@@ -168,6 +220,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     }
   },
@@ -182,6 +238,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "tenant": {
@@ -194,6 +254,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "board_member": {
@@ -206,6 +270,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "board_president": {
@@ -218,6 +286,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "cam": {
@@ -230,6 +302,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "site_manager": {
@@ -242,6 +318,10 @@
       "lease_docs": false,
       "community_handbook": false,
       "move_in_out_docs": false,
+      "financial_records": false,
+      "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "property_manager_admin": {
@@ -254,6 +334,10 @@
       "lease_docs": true,
       "community_handbook": true,
       "move_in_out_docs": true,
+      "financial_records": true,
+      "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     }
   }

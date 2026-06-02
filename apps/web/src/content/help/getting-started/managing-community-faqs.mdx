@@ -1,0 +1,140 @@
+---
+title: "Managing community FAQs"
+description: "Author the quick-answer FAQs that appear in the help center for your community — and keep them current as policies evolve."
+category: "getting-started"
+slug: "managing-community-faqs"
+roles:
+  - board_member
+  - board_president
+  - cam
+  - site_manager
+  - property_manager_admin
+  - manager
+  - pm_admin
+keywords:
+  - faq
+  - faqs
+  - frequently asked questions
+  - help authoring
+  - quick answers
+  - community help
+  - manage faq
+  - sortOrder
+  - reorder
+  - help editor
+tags:
+  - getting-started
+  - admin
+updatedAt: "2026-05-26"
+lastReviewedAt: "2026-05-26"
+relatedArticles:
+  - welcome-to-propertypro
+  - reading-and-managing-announcements
+featured: false
+contextPaths:
+  - /help/manage
+  - /help
+---
+
+PropertyPro's library of help articles covers the platform itself. **Community FAQs** are the short, community-specific quick answers — pool hours, trash pickup days, who to call for what. Every community admin can author and curate them; residents see them in the help center and inline on relevant pages.
+
+## What an FAQ is for
+
+- **Community-specific policies** — "Are short-term rentals allowed?", "When are quiet hours?"
+- **Operational details** — "When is trash picked up?", "How do I reserve the clubhouse?"
+- **Contact routing** — "Who do I call for a clogged drain at midnight?"
+- **Local context** — "Where is the storm shelter?", "What's the gate code policy?"
+
+For everything else — how to use a PropertyPro feature, statutory requirements, generic guidance — the platform's help articles already cover it. Don't duplicate.
+
+## Opening the FAQ editor
+
+<StepByStep>
+<Step title="Navigate to /help/manage">
+From the help center, admins see a **Manage FAQs** link. Click it (or visit `/help/manage` directly). Non-admins are redirected back to the help center.
+</Step>
+
+<Step title="Review existing FAQs">
+The editor shows every FAQ currently published for this community, in the order residents see them.
+</Step>
+</StepByStep>
+
+## Authoring an FAQ
+
+<StepByStep>
+<Step title="Click New FAQ">
+A row appears with empty Question and Answer fields.
+</Step>
+
+<Step title="Write the question">
+Phrase the question the way a resident would ask it — natural, specific, slightly informal. "When does the pool open?" beats "Pool hours."
+</Step>
+
+<Step title="Write the answer">
+Keep it short — 2-4 sentences usually. If the answer is long, write a brief summary and link to a document or external resource. Long answers belong in a posted document, not a FAQ.
+</Step>
+
+<Step title="Save">
+Changes save inline. The FAQ is immediately visible to residents on the help center.
+</Step>
+</StepByStep>
+
+## Ordering FAQs
+
+The sortOrder field controls display order. To rearrange:
+
+- **Drag and drop** the FAQ row in the editor. PropertyPro recomputes the order automatically.
+- **Group related FAQs** together so residents reading one finds the next naturally.
+- **Put the most-asked questions at the top** — most residents bounce after reading the first few items.
+
+## Editing or removing FAQs
+
+- **Edit**: click any field in an existing row, make the change, click outside the field to save.
+- **Delete**: click the trash icon next to the row. Deletion is immediate. The audit trail captures the deletion event.
+
+<Callout type="warning" title="Outdated FAQs erode trust">
+A FAQ saying "pool opens May 1" that's still up in October hurts more than no FAQ. Schedule a quarterly review to walk every FAQ for accuracy. Better to delete a stale one than leave it published.
+</Callout>
+
+## Writing guidance
+
+### Good FAQs
+- Match real questions you've received via phone or email
+- Use plain language, not jargon
+- Link to a specific document when the answer references one ("See the parking policy at...")
+- Are dated or seasonally-aware where relevant
+
+### Bad FAQs
+- Vague ("How does this work?")
+- Long, multi-paragraph answers — those belong in posted documents
+- Duplicates of platform help articles (uploading documents, managing notifications)
+- Stale ("As of 2024..." that's still live in 2026)
+
+## What residents see
+
+Residents browsing the help center see FAQs grouped at the top, before platform articles. The contextual help drawer (the `?` button) also surfaces relevant FAQs based on the page the resident is on.
+
+Each FAQ has a thumbs-up / thumbs-down feedback button. Use that signal to identify FAQs that aren't working — low ratings often mean the question is being misread or the answer is too short.
+
+## Bulk operations
+
+There's no CSV import for FAQs today — they're a low-volume content type. For initial bulk-load when onboarding a community, copy-paste each question and answer from your existing source (a Google Doc, an old website).
+
+If you manage many communities and have FAQs that should apply everywhere ("Our property management company can be reached at..."), set those at the PM-branding level rather than per-community. They'll fan out automatically.
+
+## Cadence
+
+- **Weekly**: clear any FAQ flagged as outdated.
+- **Quarterly**: walk every FAQ for accuracy.
+- **After policy changes**: update relevant FAQs the same day the policy changes go live.
+- **After resident escalations**: when a resident asks something that should have been findable, add the FAQ that day.
+
+## Audit trail
+
+Every FAQ create, edit, and delete is captured in the compliance audit log with the admin's name and timestamp. If a resident later says "the FAQ told me X," the trail shows what was actually published when.
+
+## Common questions about FAQs
+
+- **"Can FAQs link to PropertyPro help articles?"** Yes — paste the article URL into the answer and it renders as a link.
+- **"Are FAQs visible publicly?"** No, they're behind authentication. Public-facing answers belong on the [transparency page](/help/transparency/configuring-the-transparency-page).
+- **"Can different roles see different FAQs?"** Not today. Every FAQ is visible to every resident in the community. Role-specific guidance belongs in announcements or direct messages.

@@ -155,7 +155,7 @@ describeDb('demo seed integration', () => {
     const palm = seededCommunities.find((row) => row.slug === 'palm-shores-hoa');
     const bay = seededCommunities.find((row) => row.slug === 'sunset-ridge-apartments');
 
-    // sunset-condos (condo_718): expect exactly 5 system categories
+    // sunset-condos (condo_718): expect exactly 8 system categories
     const sunsetCategories = await db
       .select()
       .from(documentCategories)
@@ -163,9 +163,9 @@ describeDb('demo seed integration', () => {
         eq(documentCategories.communityId, sunset!.id),
         eq(documentCategories.isSystem, true),
       ));
-    expect(sunsetCategories).toHaveLength(5);
+    expect(sunsetCategories).toHaveLength(8);
 
-    // palm-shores-hoa (hoa_720): expect exactly 5 system categories
+    // palm-shores-hoa (hoa_720): expect exactly 8 system categories
     const palmCategories = await db
       .select()
       .from(documentCategories)
@@ -173,9 +173,9 @@ describeDb('demo seed integration', () => {
         eq(documentCategories.communityId, palm!.id),
         eq(documentCategories.isSystem, true),
       ));
-    expect(palmCategories).toHaveLength(5);
+    expect(palmCategories).toHaveLength(8);
 
-    // sunset-ridge-apartments (apartment): expect exactly 6 system categories
+    // sunset-ridge-apartments (apartment): expect exactly 8 system categories
     const bayCategories = await db
       .select()
       .from(documentCategories)
@@ -183,7 +183,7 @@ describeDb('demo seed integration', () => {
         eq(documentCategories.communityId, bay!.id),
         eq(documentCategories.isSystem, true),
       ));
-    expect(bayCategories).toHaveLength(6);
+    expect(bayCategories).toHaveLength(8);
   }, 30_000);
 
   it('has zero documents without a category', async () => {

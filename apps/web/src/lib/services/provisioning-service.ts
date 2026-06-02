@@ -37,7 +37,7 @@ import {
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
-import { getComplianceTemplate } from '@propertypro/shared';
+import { getComplianceTemplate, getDefaultDocumentCategories } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 import { resolvePendingSignupAddress } from './provisioning-address';
 
@@ -88,23 +88,6 @@ function nextStep(last: string | null): ProvisioningStepSuccess {
 // Default document categories
 // ---------------------------------------------------------------------------
 
-type CategoryTemplate = { name: string; description: string };
-
-const CONDO_HOA_CATEGORIES: CategoryTemplate[] = [
-  { name: 'Governing Documents', description: 'Articles, bylaws, declarations, and rules' },
-  { name: 'Financial Records', description: 'Budgets, financial reports, and audits' },
-  { name: 'Meeting Records', description: 'Notices, agendas, and minutes' },
-  { name: 'Correspondence', description: 'Owner communications and notices' },
-  { name: 'Contracts', description: 'Vendor and service contracts' },
-];
-
-const APARTMENT_CATEGORIES: CategoryTemplate[] = [
-  { name: 'Lease Agreements', description: 'Signed lease agreements and addenda' },
-  { name: 'Maintenance Records', description: 'Work orders and inspection reports' },
-  { name: 'Communications', description: 'Tenant notices and correspondence' },
-  { name: 'Financials', description: 'Rent rolls and financial summaries' },
-  { name: 'Compliance', description: 'Inspections, certifications, and permits' },
-];
 
 // ---------------------------------------------------------------------------
 // Step implementations
@@ -283,8 +266,7 @@ async function stepCategoriesCreated(ctx: JobContext): Promise<void> {
   const communityId = ctx.communityId;
   if (!communityId) throw new Error('[provisioning] categories_created: communityId not set');
 
-  const templates =
-    ctx.signup.communityType === 'apartment' ? APARTMENT_CATEGORIES : CONDO_HOA_CATEGORIES;
+  const templates = getDefaultDocumentCategories(ctx.signup.communityType);
 
   const rows = templates.map((t) => ({
     communityId,
