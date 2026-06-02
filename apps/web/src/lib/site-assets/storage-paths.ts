@@ -7,10 +7,14 @@
  */
 import { randomUUID } from 'node:crypto';
 
+// Re-exported from the client-safe module so existing server-side importers of
+// `SITE_ASSETS_BUCKET` / `buildPublicAssetUrl` keep their import path. Client
+// components must import these from './public-url' directly to avoid pulling
+// this module's node:crypto import into the browser bundle.
+export { SITE_ASSETS_BUCKET, buildPublicAssetUrl } from './public-url';
+
 const VALID_KINDS = ['logo', 'hero', 'content'] as const;
 export type AssetKind = (typeof VALID_KINDS)[number];
-
-export const SITE_ASSETS_BUCKET = 'community-site-assets';
 
 function sanitizeFilename(name: string): string {
   if (name.includes('/') || name.includes('\\')) {
@@ -62,10 +66,4 @@ export function parseSiteAssetPath(path: string): ParsedSiteAssetPath | null {
   if (!filename || filename === '.' || filename === '..') return null;
   if (filename.includes('/') || filename.includes('\\')) return null;
   return { communityId, kind: kind as AssetKind, filename };
-}
-
-export function buildPublicAssetUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!base) return `/site-assets/${path}`;
-  return `${base}/storage/v1/object/public/${SITE_ASSETS_BUCKET}/${path}`;
 }

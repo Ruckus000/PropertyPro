@@ -45,6 +45,11 @@ vi.mock('@/components/pm/site-editor/AmenitiesBlockForm', () => ({
     <div data-testid="amenities-form" data-block-order={props.blockOrder}>amenities form</div>
   ),
 }));
+vi.mock('@/components/pm/site-editor/GalleryBlockForm', () => ({
+  GalleryBlockForm: (props: { blockOrder: number; initial: unknown }) => (
+    <div data-testid="gallery-form" data-block-order={props.blockOrder}>gallery form</div>
+  ),
+}));
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -270,5 +275,30 @@ describe('<ContentSectionsList>', () => {
     render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
     const form = await screen.findByTestId('amenities-form');
     expect(form).toHaveAttribute('data-block-order', '9');
+  });
+
+  it('disables the Gallery add button when hasSitePolishBlocks is absent (upsell)', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByText(/no content sections yet/i);
+    expect(screen.getByRole('button', { name: /add gallery section/i })).toBeDisabled();
+  });
+
+  it('clicking "+ Add gallery section" reveals a new GalleryBlockForm when enabled', async () => {
+    mockBlocks([]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    await screen.findByText(/no content sections yet/i);
+    fireEvent.click(screen.getByRole('button', { name: /add gallery section/i }));
+    expect(screen.getByTestId('gallery-form')).toBeInTheDocument();
+    expect(screen.getByTestId('gallery-form')).toHaveAttribute('data-block-order', '2');
+  });
+
+  it('renders a GalleryBlockForm for an existing gallery block', async () => {
+    mockBlocks([
+      { id: 18, blockType: 'gallery', blockOrder: 10, content: { images: [{ imagePath: '42/content/a.webp', altText: 'A' }] } },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
+    const form = await screen.findByTestId('gallery-form');
+    expect(form).toHaveAttribute('data-block-order', '10');
   });
 });

@@ -342,6 +342,22 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     }));
   });
 
+  it('PATCHes a gallery block (Pro+) and enforces hasSitePolishBlocks', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'gallery',
+      blockOrder: 10,
+      content: { images: [{ imagePath: '42/content/pool.webp', altText: 'The pool' }] },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(42, 'hasSitePolishBlocks');
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({
+      blockType: 'gallery',
+      blockOrder: 10,
+    }));
+  });
+
   it('403s a faq block when the plan lacks hasSitePolishBlocks (but has hasSiteEditor)', async () => {
     requirePlanFeatureMock.mockImplementation((_id: number, key: string) =>
       key === 'hasSitePolishBlocks'

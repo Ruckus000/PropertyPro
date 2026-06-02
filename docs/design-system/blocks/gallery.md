@@ -39,7 +39,12 @@ Identical pipeline to the [image block](./image.md): two-step presigned upload (
 
 ## Editor
 
-`apps/web/src/components/pm/site-editor/GalleryBlockForm.tsx` — ships in PR #10c alongside the tier-gated write path. The "add Gallery" affordance is gated to `hasSitePolishBlocks`.
+[`apps/web/src/components/pm/site-editor/GalleryBlockForm.tsx`](../../../apps/web/src/components/pm/site-editor/GalleryBlockForm.tsx) (PR #10d).
+
+- Multi-image list editor. Each row: file picker → preview thumbnail, a decorative checkbox, alt text (hidden when decorative), and an optional caption.
+- **Upload-on-Save**: newly-picked files upload through `useImageUpload` (presign → PUT → finalize) only when Save is clicked; existing images (from `initial`) are preserved by their `imagePath` without re-uploading. finalize requires `altText.min(1)`, so decorative uploads send a `'Decorative image'` placeholder (the block content still records `decorative: true`, no alt).
+- Save is gated on every non-decorative image having alt text; "Add image" is capped at 24.
+- The "add Gallery" affordance in `ContentSectionsList` is gated to `hasSitePolishBlocks`.
 
 ## API
 
@@ -47,7 +52,7 @@ Identical pipeline to the [image block](./image.md): two-step presigned upload (
 |-------|--------------------------|--------------------------------------------------------------------------------|
 | PATCH | `/api/v1/pm/site/blocks` | `{ communityId, blockType: 'gallery', blockOrder, content: GalleryBlockContent }` |
 
-The upsert contract enum and the conditional `hasSitePolishBlocks` server gate are added in PR #10c; until then the write path does not accept `gallery`.
+The upsert contract enum accepts `gallery` and the handler enforces the conditional `hasSitePolishBlocks` gate (`POLISH_BLOCK_TYPES`) on top of `hasSiteEditor`.
 
 Authorization: `pm_admin`/`cam` role + `hasSiteEditor` **and** `hasSitePolishBlocks` (Pro+).
 
