@@ -41,7 +41,7 @@ export function StarterPackBlocksEditor({ value, onChange }: Props) {
   return (
     <div className="space-y-3" data-testid="blocks-editor">
       {value.map((b, i) => (
-        <div key={i} className="rounded border border-gray-200 p-3" data-testid={`block-row-${i}`}>
+        <div key={b.blockOrder} className="rounded border border-gray-200 p-3" data-testid={`block-row-${i}`}>
           <div className="mb-2 flex items-center gap-2">
             <span className="text-xs text-gray-500">#{b.blockOrder}</span>
             <select

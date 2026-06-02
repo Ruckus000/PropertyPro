@@ -37,7 +37,12 @@ export function StarterPacksTable({ packs: initial }: { packs: StarterPackRow[] 
 
   async function refresh() {
     const res = await fetch(API);
-    if (res.ok) { const b = await res.json() as { packs: StarterPackRow[] }; setRows(b.packs); }
+    if (res.ok) {
+      const b = await res.json() as { packs: StarterPackRow[] };
+      setRows(b.packs);
+    } else {
+      setError('Saved, but the list could not be refreshed — reload the page to see the latest.');
+    }
   }
 
   function startEdit(row: StarterPackRow) { setEditingId(row.id); setDraftBlocks(row.blocks ?? []); setError(null); }
