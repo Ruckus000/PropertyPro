@@ -6,6 +6,8 @@ import React from 'react';
 import {
   useContentBlocks,
   useUpsertContentBlock,
+  useReorderBlocks,
+  type SiteBlockSummary,
 } from '@/hooks/use-content-blocks';
 
 function makeWrapper() {
@@ -178,5 +180,120 @@ describe('useUpsertContentBlock', () => {
 
     // invalidateQueries marks the cached entry stale
     expect(client.getQueryState(queryKey)?.isInvalidated).toBe(true);
+  });
+});
+
+describe('useReorderBlocks', () => {
+  const blocksKey = (id: number) => ['pm', 'site', 'blocks', id];
+
+  function block(partial: Partial<SiteBlockSummary> & { id: number; blockOrder: number }): SiteBlockSummary {
+    return {
+      blockType: 'text',
+      content: {},
+      isDraft: false,
+      publishedAt: null,
+      ...partial,
+    };
+  }
+
+  it('POSTs /api/v1/pm/site/blocks/reorder with communityId, blockId, direction in the body', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { ok: true, movedBlockId: 12, fromOrder: 2, toOrder: 3 } }),
+    });
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper: makeWrapper() });
+    await result.current.mutateAsync({ blockId: 12, direction: 'down' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/v1/pm/site/blocks/reorder',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'content-type': 'application/json' }),
+      }),
+    );
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(call[1].body as string)).toEqual({ communityId: 7, blockId: 12, direction: 'down' });
+  });
+
+  it('optimistically swaps the moved block with its neighbor while the request is in flight', async () => {
+    // fetch never resolves → the optimistic cache update stays visible.
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise(() => {}));
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    client.setQueryData<SiteBlockSummary[]>(blocksKey(7), [
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      block({ id: 12, blockOrder: 2 }),
+      block({ id: 13, blockType: 'image', blockOrder: 3 }),
+    ]);
+
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
+    act(() => {
+      result.current.mutate({ blockId: 12, direction: 'down' });
+    });
+
+    await waitFor(() => {
+      const cached = client.getQueryData<SiteBlockSummary[]>(blocksKey(7))!;
+      // Block 12 now sits at order 3, block 13 at order 2 — order-sorted, the
+      // hero (1) stays first.
+      expect(cached.map((b) => b.id)).toEqual([1, 13, 12]);
+      expect(cached.find((b) => b.id === 12)!.blockOrder).toBe(3);
+      expect(cached.find((b) => b.id === 13)!.blockOrder).toBe(2);
+    });
+  });
+
+  it('rolls back the optimistic swap when the request fails', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: { code: 'VALIDATION_ERROR', message: 'already last' } }),
+    });
+
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const original = [
+      block({ id: 12, blockOrder: 2 }),
+      block({ id: 13, blockType: 'image', blockOrder: 3 }),
+    ];
+    client.setQueryData<SiteBlockSummary[]>(blocksKey(7), original);
+
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
+    await act(async () => {
+      await expect(result.current.mutateAsync({ blockId: 12, direction: 'down' })).rejects.toThrow(/already last/);
+    });
+
+    const cached = client.getQueryData<SiteBlockSummary[]>(blocksKey(7))!;
+    expect(cached.map((b) => b.id)).toEqual([12, 13]);
+    expect(cached.find((b) => b.id === 12)!.blockOrder).toBe(2);
+  });
+
+  it('invalidates the blocks query cache on settle', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { ok: true, movedBlockId: 12, fromOrder: 2, toOrder: 3 } }),
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    client.setQueryData<SiteBlockSummary[]>(blocksKey(7), [
+      block({ id: 12, blockOrder: 2 }),
+      block({ id: 13, blockType: 'image', blockOrder: 3 }),
+    ]);
+
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ blockId: 12, direction: 'down' });
+    });
+    expect(client.getQueryState(blocksKey(7))?.isInvalidated).toBe(true);
   });
 });
