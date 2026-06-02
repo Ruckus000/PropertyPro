@@ -20,7 +20,8 @@
  * Query schema mirrors the drained sibling search routes
  * (`/api/v1/search/residents`, `/meetings`, etc.):
  *   - `q`: optional string (trimmed in-handler; empty → '')
- *   - `limit`: optional coerced int, clamped to [1, 20] in-handler
+ *   - `limit`: optional coerced int, range-validated to [1, 20] by the schema
+ *     (default 3 applied in-handler)
  *   - `communityId`: optional coerced positive int; `?? null` in-handler so
  *     `resolveEffectiveCommunityId` falls back to the header tenant.
  *
@@ -31,9 +32,10 @@
  * malformed non-empty `communityId` with a 400 `VALIDATION_ERROR`. An absent
  * or empty `communityId` still collapses to `undefined` (the runner maps
  * empty-string query params to `undefined`) → `?? null` → header fallback,
- * matching the prior behavior. The old `limit` clamp (`Math.min(Math.max(...,
- * 1), 20)`) is preserved in-handler; `limit` keeps `min(1).max(20)` in the
- * schema so out-of-range values 400 the same way the sibling routes do.
+ * matching the prior behavior. The old in-handler `limit` clamp
+ * (`Math.min(Math.max(..., 1), 20)`) is dropped in favor of the schema's
+ * `min(1).max(20)`: out-of-range values now 400 the same way the sibling
+ * routes do, and the handler only applies the default of 3.
  *
  * Response intentionally typed `z.unknown()` (loose). The aggregated payload
  * embeds per-group `results` rows whose shape is `{ [key: string]: unknown }`

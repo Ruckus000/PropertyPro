@@ -14,8 +14,8 @@
  * This route has NO `requirePermission` gate — per-group read/feature/admin
  * access is enforced inside `searchAccessibleGroups`.
  *
- * `q` is trimmed and `limit` clamped to [1, 20] (default 3) in-handler,
- * preserving the pre-migration parsing exactly.
+ * `q` is trimmed in-handler. `limit` is range-validated by the contract
+ * schema (`min(1).max(20)`); the handler only applies the default of 3.
  *
  * Envelope migration: the pre-migration handler returned the bare
  * `AggregatedSearchResponse`; the runner wraps it as `{ data: {...} }`. The
@@ -37,7 +37,10 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
 
     const q = query.q?.trim() ?? '';
-    const limit = Math.min(Math.max(query.limit ?? 3, 1), 20);
+    // Range validation lives in the contract schema (`min(1).max(20)`); the
+    // handler only supplies the default. Avoid dual-validation (contract OR
+    // handler, never both).
+    const limit = query.limit ?? 3;
 
     const groups = await searchAccessibleGroups(communityId, membership, q, limit);
     const response: AggregatedSearchResponse = {
