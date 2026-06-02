@@ -397,6 +397,135 @@ Or on failure:
 `
 }
 
+function codeReviewPrompt(drain) {
+  return `Run \`/code-review --effort high\` on PR #${drain.prNumber} at branch
+\`${drain.branch}\`.
+
+## CRITICAL: do NOT read local-disk files
+
+The PR branch is NOT checked out in your working directory. Reading local
+disk files will give you stale main-branch content and produce
+false-positive findings. ALWAYS verify file contents via:
+
+- \`gh pr diff ${drain.prNumber}\` (full diff)
+- \`gh pr diff ${drain.prNumber} --name-only\` (file list)
+- \`git show "origin/${drain.branch}:<path>"\` (specific file at HEAD)
+
+Run \`git fetch origin\` first.
+
+## What to look for
+
+General correctness bugs: null-deref, off-by-one, race conditions, security
+(injection/XSS), unhandled edge cases the implementor missed. Do NOT focus
+on style or naming — the corpus reviewer will catch convention violations.
+
+## Severity bands
+
+- HIGH: definitely-broken behavior, real bug
+- MEDIUM: likely issue, may need correction, missing test coverage of a
+  documented branch
+- LOW: nit, style, alternative phrasing — skip
+
+For each finding, classify \`isCoverageExpansion: true\` if the only issue
+is "this branch isn't tested" on a route that has 8+ tests already.
+Otherwise \`isCoverageExpansion: false\`.
+
+## Return
+
+Use StructuredOutput with shape:
+
+\`\`\`
+{
+  findings: [
+    {
+      severity: "HIGH" | "MEDIUM" | "LOW",
+      confidence: 0-100,
+      file: "<path>",
+      line: <int> (optional),
+      description: "<what's wrong, 1-2 sentences>",
+      suggestedFix: "<concrete edit, 1-2 sentences>",
+      isCoverageExpansion: <bool>
+    },
+    ...
+  ]
+}
+\`\`\`
+
+If ZERO findings, return \`{findings: []}\`. Do not invent findings.
+`
+}
+
+function corpusReviewPrompt(drain) {
+  return `Review PR #${drain.prNumber} as the PropertyPro A1 contract-drain
+corpus reviewer. Branch: \`${drain.branch}\`. Route: \`${drain.pick.route}\`.
+Classification: \`${drain.pick.classification}\`.
+
+## CRITICAL: do NOT read local-disk files
+
+The PR branch is NOT in your local working dir. Reading local files gives
+stale content and produces false-positive findings. ALWAYS verify via:
+
+- \`gh pr diff ${drain.prNumber}\`
+- \`git show "origin/${drain.branch}:<path>"\`
+
+\`git fetch origin\` first.
+
+## What to look for (corpus-specific)
+
+1. **Auth chain preserved verbatim?** Compare the pre-migration source
+   (\`git show origin/main:${drain.pick.route}\`) against the migrated
+   handler. Same order? Same sync vs async? No missing or extra gates?
+   \`assertNotDemoGrace\` BEFORE \`requireCommunityMembership\` on mutating
+   methods?
+2. **Mock fixture uses real service return-type fields?** Read the service
+   function from \`apps/web/src/lib/services/<file>.ts\`. Verify the mock
+   fixture in the test file uses ONLY fields present in the service's TS
+   return type. THIS IS THE #1 CORPUS FINDING — drains #67, #76, #80, #91
+   all had this. Be thorough.
+3. **RBAC resource naming matches \`packages/shared/src/rbac-matrix.ts\`?**
+   Plural \`'finances'\` (not \`'finance'\`). Snake_case \`'work_orders'\`
+   (not \`'workOrders'\`).
+4. **Response model justified?** Loose \`z.unknown()\` if service returns
+   Drizzle rows with Date fields. Tight \`z.object({...})\` only for
+   synthesized return shapes.
+5. **\`?? null\` coercion preserved** where service signature requires
+   \`string | null\` not \`string | undefined\`?
+6. **Business-rule error messages byte-identical?**
+7. **\`params.id = '0'\` test present alongside \`params.id = 'abc'\`?**
+   Symmetric coverage standard from drain #92.
+8. **Per-gate 403 tests, with downstream-gate-not-called assertion?**
+9. **Allowlist edit: exactly one line removed, alphabetical order intact?**
+10. **For paginated routes: \`paginated: true\` flag set?**
+11. **Validation-layer discipline: contract OR handler, NEVER both?**
+
+## Severity bands
+
+Same as the code-review reviewer.
+
+## Return
+
+Same schema as the code-review reviewer (StructuredOutput).
+
+If ZERO findings, return \`{findings: []}\`. Do not invent findings.
+`
+}
+
+function dedupeFindings(a, b) {
+  // Two findings are duplicates if they target the same file+line(±2) with
+  // similar severity. The "description" field is too freeform for exact match.
+  const all = [...a, ...b]
+  const seen = []
+  for (const f of all) {
+    const dup = seen.find(s =>
+      s.file === f.file &&
+      Math.abs((s.line ?? 0) - (f.line ?? 0)) <= 2 &&
+      s.severity === f.severity
+    )
+    if (!dup) seen.push(f)
+  }
+  return seen
+}
+
 phase('Pre-vet')
 
 const permanentSkips = Object.entries(state.skipList ?? {})
@@ -457,6 +586,35 @@ const newSkips = failedImpl.map(f => ({
   reason: f.result.reason || 'Implementor returned ok:false',
 }))
 
+phase('Pipeline')  // (already declared, but harmless to repeat as a label hint)
+
+const reviewedDrains = await parallel(
+  successful.map((drain) => async () => {
+    const [codeReviewResult, corpusResult] = await parallel([
+      () => agent(codeReviewPrompt(drain.result), {
+        schema: REVIEW_FINDINGS_SCHEMA,
+        label: `code-review:${drain.pick.route.split('/').pop()}`,
+        phase: 'Pipeline',
+      }),
+      () => agent(corpusReviewPrompt({ ...drain.result, pick: drain.pick }), {
+        agentType: 'feature-dev:code-reviewer',
+        schema: REVIEW_FINDINGS_SCHEMA,
+        label: `corpus:${drain.pick.route.split('/').pop()}`,
+        phase: 'Pipeline',
+      }),
+    ])
+
+    const cr = codeReviewResult?.findings ?? []
+    const co = corpusResult?.findings ?? []
+    return {
+      ...drain,
+      findings: dedupeFindings(cr, co),
+    }
+  })
+).then(arr => arr.filter(Boolean))
+
+log(`Review stage complete. Findings: ${reviewedDrains.map(d => `${d.pick.route.split('/').pop()}:${d.findings.length}`).join(', ')}`)
+
 // Phase 3+ will be added in subsequent tasks. For now, return what we have.
 return {
   merged: 0,
@@ -469,7 +627,15 @@ return {
     ...newSkips,
   ],
   mergeCommits: [],
-  findings: { high: 0, mediumAdopted: 0, dismissed: 0 },
+  findings: {
+    high: reviewedDrains.flatMap(d => d.findings).filter(f => f.severity === 'HIGH').length,
+    mediumAdopted: 0,  // populated by adopt stage in Task 7
+    dismissed: 0,
+  },
   updatedState: state,
-  _debug: { picks: preVet.picks, successful: successful.map(s => ({ pr: s.result.prUrl, route: s.pick.route })) },
+  _debug: {
+    picks: preVet.picks,
+    successful: successful.map(s => ({ pr: s.result.prUrl, route: s.pick.route })),
+    findings: reviewedDrains.map(d => ({ route: d.pick.route, findings: d.findings })),
+  },
 }
