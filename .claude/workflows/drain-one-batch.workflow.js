@@ -241,6 +241,17 @@ ${skipBlock}
      (a 4-method CRUD route whose GET returns a small non-paginated list is
      fine — classify it MULTI_METHOD, not PAGINATED).
 
+   **NOT a blocker — platform-admin CORS:** a \`apps/web/src/app/api/v1/admin/*\`
+   route that ONLY adds CORS via \`mergeAdminCorsHeaders(response, origin)\` /
+   \`corsHeaders(origin)\` and re-exports \`handleOptions as OPTIONS\` is
+   **DRAINABLE** (classify SIMPLE_POST/SIMPLE_GET/MULTI_METHOD per its methods),
+   NOT RUNNER_BLOCKED. The runner handles it by wrapping \`runRoute(...)\` output
+   in an outer \`withErrorHandler\` that re-applies the CORS merge — proven in the
+   merged drains #178 (admin/access-plans/community/[id]) and #179
+   (admin/deletion-requests/[id]/intervene). Only reject an admin route when it
+   ALSO has a real blocker (cookie-set, redirect, binary body, Cache-Control
+   no-store, multipart, reauth).
+
 4. Justification: 1 sentence per pick (why drainable, what shape).
 
 ## Return
