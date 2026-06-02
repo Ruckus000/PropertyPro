@@ -7,6 +7,7 @@
  * validateStarterPackBlocks is authoritative regardless of input path.
  */
 import { useState } from 'react';
+import { DOCUMENT_CATEGORIES } from '@propertypro/shared';
 
 export interface EditorBlock { blockType: string; blockOrder: number; content: Record<string, unknown>; }
 
@@ -77,7 +78,19 @@ function BlockContentFields({ type, content, onChange, index }: { type: string; 
   const num = (k: string) => (content[k] as number | undefined) ?? '';
   const str = (k: string) => (content[k] as string | undefined) ?? '';
   const bool = (k: string) => Boolean(content[k]);
-  const set = (k: string, v: unknown) => onChange({ ...content, [k]: v });
+  // Setting a key to `undefined` DELETES it rather than persisting an empty
+  // value. Block schemas use .min(1)/.strict(), so an empty string would fail
+  // validation: dropping an optional key lets it validate as absent, and
+  // dropping a required key surfaces a proper "required" server error.
+  const set = (k: string, v: unknown) => {
+    if (v === undefined) {
+      const next = { ...content };
+      delete next[k];
+      onChange(next);
+    } else {
+      onChange({ ...content, [k]: v });
+    }
+  };
   const numField = (k: string, label: string) => (
     <label className="block text-xs text-gray-600">{label}
       <input type="number" data-testid={`field-${index}-${k}`} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
@@ -87,7 +100,7 @@ function BlockContentFields({ type, content, onChange, index }: { type: string; 
   const textField = (k: string, label: string) => (
     <label className="block text-xs text-gray-600">{label}
       <input type="text" data-testid={`field-${index}-${k}`} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
-        value={str(k)} onChange={(e) => set(k, e.target.value)} />
+        value={str(k)} onChange={(e) => set(k, e.target.value === '' ? undefined : e.target.value)} />
     </label>
   );
   const boolField = (k: string, label: string) => (
@@ -95,6 +108,17 @@ function BlockContentFields({ type, content, onChange, index }: { type: string; 
       <input type="checkbox" data-testid={`field-${index}-${k}`} checked={bool(k)} onChange={(e) => set(k, e.target.checked)} />{label}
     </label>
   );
+  // Toggle a document category. Rebuilds includeCategories in canonical
+  // DOCUMENT_CATEGORIES order (independent of click order); drops the key
+  // entirely when nothing is selected (optional + absent validates).
+  const selectedCategories = Array.isArray(content.includeCategories) ? (content.includeCategories as string[]) : [];
+  const toggleCategory = (cat: string, checked: boolean) => {
+    const nextSet = new Set(selectedCategories);
+    if (checked) nextSet.add(cat);
+    else nextSet.delete(cat);
+    const ordered = DOCUMENT_CATEGORIES.filter((c) => nextSet.has(c));
+    set('includeCategories', ordered.length > 0 ? ordered : undefined);
+  };
 
   switch (type) {
     case 'hero':
@@ -106,11 +130,22 @@ function BlockContentFields({ type, content, onChange, index }: { type: string; 
       return <div className="grid grid-cols-2 gap-2">{numField('limit', 'Limit')}{numField('timeWindowDays', 'Time window (days)')}</div>;
     case 'documents':
       return <div className="grid grid-cols-2 gap-2">{numField('limit', 'Limit')}
-        <label className="block text-xs text-gray-600">Categories (comma-separated)
-          <input type="text" data-testid={`field-${index}-includeCategories`} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
-            value={(content.includeCategories as string[] | undefined)?.join(',') ?? ''}
-            onChange={(e) => onChange({ ...content, includeCategories: e.target.value ? e.target.value.split(',').map((s) => s.trim()).filter(Boolean) : [] })} />
-        </label></div>;
+        <fieldset className="block text-xs text-gray-600">
+          <legend>Categories</legend>
+          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
+            {DOCUMENT_CATEGORIES.map((cat) => (
+              <label key={cat} className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  data-testid={`field-${index}-cat-${cat}`}
+                  checked={selectedCategories.includes(cat)}
+                  onChange={(e) => toggleCategory(cat, e.target.checked)}
+                />
+                {cat}
+              </label>
+            ))}
+          </div>
+        </fieldset></div>;
     case 'contact':
       return <div className="flex gap-4">{boolField('showBoard', 'Show board')}{boolField('showManagement', 'Show management')}</div>;
     default:
