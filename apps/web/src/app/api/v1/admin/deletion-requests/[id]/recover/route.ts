@@ -1,38 +1,32 @@
 /**
  * POST /api/v1/admin/deletion-requests/[id]/recover
  *
- * Recover a soft-deleted user or community. Reads request_type from
- * the deletion request to dispatch to the correct recovery function.
+ * Recover a soft-deleted user or community. Reads request_type from the
+ * deletion request to dispatch to the correct recovery function.
  *
  * Auth: platform admin (platform_admin_users row)
+ *
+ * Plan A1 drain — migrated to `runRoute(contract, handler)`; see `./contract.ts`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';
-import { corsHeaders, handleOptions } from '@/lib/api/admin-cors';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { handleOptions, mergeAdminCorsHeaders } from '@/lib/api/admin-cors';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import {
   getDeletionRequestType,
   recoverCommunity,
   recoverUser,
 } from '@/lib/services/account-lifecycle-service';
+import { adminDeletionRequestRecoverContract } from './contract';
 
 export { handleOptions as OPTIONS };
 
-export const POST = withErrorHandler(
-  async (
-    req: NextRequest,
-    context: { params: Promise<{ id: string }> },
-  ): Promise<NextResponse> => {
+const runRecoverDeletionRequest = runRoute(
+  adminDeletionRequestRecoverContract,
+  async ({ params }) => {
     const adminUserId = await requirePlatformAdmin();
-    const origin = req.headers.get('origin');
-    const { id } = await context.params;
-    const requestId = Number(id);
-
-    if (Number.isNaN(requestId) || requestId <= 0) {
-      throw new ValidationError('Invalid deletion request ID');
-    }
+    const requestId = params.id;
 
     // Look up the deletion request to determine type
     const requestType = await getDeletionRequestType(requestId);
@@ -40,11 +34,14 @@ export const POST = withErrorHandler(
       throw new NotFoundError('Deletion request not found');
     }
 
-    const result =
-      requestType === 'user'
-        ? await recoverUser(requestId, adminUserId)
-        : await recoverCommunity(requestId, adminUserId);
-
-    return NextResponse.json({ data: result }, { headers: corsHeaders(origin) });
+    return requestType === 'user'
+      ? recoverUser(requestId, adminUserId)
+      : recoverCommunity(requestId, adminUserId);
   },
 );
+
+export const POST = withErrorHandler(async (req, ctx) => {
+  const origin = req.headers.get('origin');
+  const response = await runRecoverDeletionRequest(req, ctx);
+  return mergeAdminCorsHeaders(response, origin);
+});
