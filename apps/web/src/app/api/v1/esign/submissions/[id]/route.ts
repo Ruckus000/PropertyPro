@@ -1,26 +1,30 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * E-Sign submission detail API — get submission with preview/download URLs.
+ *
+ * GET /api/v1/esign/submissions/[id]
+ *
+ * Plan A1 drain #118 — migrated to `runRoute(contract, handler)`;
+ * see `./contract.ts` for schemas and auth-chain rationale.
+ */
+import { runRoute } from '@propertypro/api-contract';
+import { createPresignedDownloadUrl } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { BadRequestError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
 import { getSubmission, getTemplate } from '@/lib/services/esign-service';
-import { createPresignedDownloadUrl } from '@propertypro/db';
+import { esignSubmissionDetailContract } from './contract';
 
 export const GET = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const id = Number(params?.id);
-    if (!id || isNaN(id)) throw new BadRequestError('Invalid ID');
-
+  runRoute(esignSubmissionDetailContract, async ({ params, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignReadPermission(membership);
 
-    const data = await getSubmission(communityId, id);
+    const data = await getSubmission(communityId, params.id);
     const template = await getTemplate(communityId, data.submission.templateId);
 
     const previewPath =
@@ -47,12 +51,10 @@ export const GET = withErrorHandler(
       }
     }
 
-    return NextResponse.json({
-      data: {
-        ...data,
-        previewPdfUrl,
-        downloadUrl,
-      },
-    });
-  },
+    return {
+      ...data,
+      previewPdfUrl,
+      downloadUrl,
+    };
+  }),
 );

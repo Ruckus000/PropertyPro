@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
 
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: vi.fn().mockResolvedValue('user-123'),
@@ -39,7 +40,7 @@ import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
 import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-service';
 
 function makeRequest(body: Record<string, unknown>) {
-  return new Request('http://localhost/api/v1/pm/communities', {
+  return new NextRequest('http://localhost/api/v1/pm/communities', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

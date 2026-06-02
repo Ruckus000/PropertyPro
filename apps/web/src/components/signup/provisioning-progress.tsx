@@ -102,7 +102,9 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         // Network/server error — keep polling silently
         return;
       }
-      const data: ProvisioningStatusResponse = await res.json();
+      const json = (await res.json()) as { data?: ProvisioningStatusResponse };
+      const data = json.data;
+      if (!data) return;
 
       if (data.status === 'pending') {
         // Webhook hasn't fired yet — show first stage as active, keep polling

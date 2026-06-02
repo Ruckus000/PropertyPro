@@ -1,6 +1,10 @@
 /**
  * POST /api/v1/reauth/verify
  *
+ * Plan A1 drain #171. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`. The pp-reauth cookie is minted inside the handler and
+ * applied on the outer `withErrorHandler` response (transparency #141 pattern).
+ *
  * Verifies the user's current password and mints a short-lived pp-reauth
  * cookie (15 min) that is required by sensitive routes (export, billing
  * portal, account deletion).
@@ -8,75 +12,59 @@
  * The password is verified server-side via a stateless Supabase client so
  * a stolen session cookie alone cannot grant re-auth status.
  */
-import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { AppError, UnauthorizedError, BadRequestError } from '@/lib/api/errors';
+import { AppError, UnauthorizedError } from '@/lib/api/errors';
 import { requireAuthenticatedUser } from '@/lib/api/auth';
 import { mintReauthCookie } from '@/lib/api/reauth-guard';
+import { reauthVerifyPostContract } from './contract';
 
-const BodySchema = z.object({
-  password: z.string().min(1, 'Password is required'),
-});
+export const POST = withErrorHandler(async (req, ctx) => {
+  let cookieParams: Awaited<ReturnType<typeof mintReauthCookie>> | undefined;
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  // 1. Require active session and resolve the user's email
-  const user = await requireAuthenticatedUser();
-  if (!user.email) {
-    throw new UnauthorizedError('Cannot re-authenticate without an email address');
-  }
+  const inner = runRoute(reauthVerifyPostContract, async ({ body }) => {
+    const user = await requireAuthenticatedUser();
+    if (!user.email) {
+      throw new UnauthorizedError('Cannot re-authenticate without an email address');
+    }
 
-  // 2. Parse and validate request body
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    throw new BadRequestError('Request body must be JSON');
-  }
-  const parseResult = BodySchema.safeParse(body);
-  if (!parseResult.success) {
-    throw new BadRequestError(parseResult.error.issues[0]?.message ?? 'Invalid request');
-  }
-  const { password } = parseResult.data;
+    const { password } = body;
 
-  // 3. Verify the password using a stateless Supabase client
-  //    (persistSession: false means no cookies are written — we only check the result)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase environment variables');
-  }
-  const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Missing Supabase environment variables');
+    }
+    const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { error: signInError } = await anonClient.auth.signInWithPassword({
+      email: user.email,
+      password,
+    });
+    if (signInError) {
+      throw new UnauthorizedError('Incorrect password');
+    }
+
+    try {
+      cookieParams = await mintReauthCookie(user.id);
+    } catch (err) {
+      console.error('[reauth] mintReauthCookie failed:', err);
+      throw new AppError(
+        'Re-authentication is misconfigured on the server. Please contact support.',
+        500,
+        'REAUTH_MISCONFIGURED',
+      );
+    }
+
+    return { ok: true as const };
   });
-  const { error: signInError } = await anonClient.auth.signInWithPassword({
-    email: user.email,
-    password,
-  });
-  if (signInError) {
-    throw new UnauthorizedError('Incorrect password');
-  }
 
-  // 4. Mint the pp-reauth cookie and return it in the response.
-  //    A failure here means the password was correct but the server is
-  //    misconfigured (REAUTH_JWT_SECRET unset/short in production). We surface
-  //    that as a structured 500 so the client can show a real message instead
-  //    of the generic "An unexpected error occurred" — which previously read
-  //    to users as "your password is wrong."
-  let cookieParams: Awaited<ReturnType<typeof mintReauthCookie>>;
-  try {
-    cookieParams = await mintReauthCookie(user.id);
-  } catch (err) {
-    console.error('[reauth] mintReauthCookie failed:', err);
-    throw new AppError(
-      'Re-authentication is misconfigured on the server. Please contact support.',
-      500,
-      'REAUTH_MISCONFIGURED',
-    );
+  const res = await inner(req, ctx);
+  if (cookieParams) {
+    const { name, value, ...options } = cookieParams;
+    res.cookies.set(name, value, options);
   }
-  const { name, value, ...options } = cookieParams;
-  const response = NextResponse.json({ data: { ok: true } });
-  response.cookies.set(name, value, options);
-  return response;
+  return res;
 });

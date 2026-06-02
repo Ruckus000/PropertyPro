@@ -4,13 +4,14 @@
  * All callers must have already verified the user holds property_manager_admin
  * in the target community before calling these functions.
  */
-import { communities } from '@propertypro/db';
+import { cache } from 'react';
+import { communities, siteLayoutMetadata } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
 // AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq, and, isNull } from '@propertypro/db/filters';
-import type { CommunityBranding } from '@propertypro/shared';
+import type { CommunityBranding, CustomCssOverrides } from '@propertypro/shared';
 
 /**
  * Public info about a community for the public site renderer.
@@ -27,10 +28,13 @@ export interface CommunityPublicInfo {
 /**
  * Fetch community public info by ID for the public site renderer.
  * Returns null if the community does not exist or is soft-deleted.
+ *
+ * Wrapped in React.cache so that generateMetadata and PublicSitePage share
+ * a single DB read per request instead of issuing two identical SELECTs.
  */
-export async function getCommunityPublicInfo(
+export const getCommunityPublicInfo = cache(async (
   communityId: number,
-): Promise<CommunityPublicInfo | null> {
+): Promise<CommunityPublicInfo | null> => {
   const db = createUnscopedClient();
   const rows = await db
     .select({
@@ -45,7 +49,7 @@ export async function getCommunityPublicInfo(
     .limit(1);
 
   return rows[0] ?? null;
-}
+});
 
 /**
  * Read the current branding for a community.
@@ -68,6 +72,51 @@ export async function getBrandingForCommunity(
   return raw as CommunityBranding;
 }
 
+/**
+ * Read the site-onboarding completion timestamp for a community.
+ * Returns `null` when the wizard has never been completed (the prod default
+ * for every existing row). Callers use null-vs-set to decide whether to
+ * surface the "customize your site" prompts (WizardEntryBanner, dashboard
+ * banner, communities-table "Site" pill).
+ *
+ * communities is the root tenant table (no communityId column), so this
+ * queries by primary key via the unscoped client — same contract as
+ * getBrandingForCommunity above.
+ */
+export async function getSiteOnboardingCompletedAt(
+  communityId: number,
+): Promise<Date | null> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ completedAt: communities.siteOnboardingCompletedAt })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  return rows[0]?.completedAt ?? null;
+}
+
+/**
+ * Stamp `site_onboarding_completed_at = now()` for a community.
+ *
+ * Called from the publish route when the wizard's final-step "Publish my
+ * site" action carries `markOnboardingComplete: true`. Writing it on every
+ * wizard publish (rather than only the first) is intentional: re-running the
+ * wizard to completion is a fresh completion event, and only null-vs-set
+ * matters to the consumers. Idempotent in effect.
+ *
+ * Callers must have already verified pm_admin/cam membership in the target
+ * community (the publish route does this before invoking).
+ */
+export async function markSiteOnboardingComplete(
+  communityId: number,
+): Promise<void> {
+  const db = createUnscopedClient();
+  await db
+    .update(communities)
+    .set({ siteOnboardingCompletedAt: new Date() })
+    .where(eq(communities.id, communityId));
+}
+
 export interface BrandingPatch {
   primaryColor?: string;
   secondaryColor?: string;
@@ -78,6 +127,16 @@ export interface BrandingPatch {
   logoPath?: string;
   /** Custom footer text for outbound emails */
   customEmailFooter?: string;
+  /** Running total of site-asset bytes consumed by this community (managed by quota helpers) */
+  assetsBytesUsed?: number;
+  /** PR #5b Step 1 — wizard layout choice. Slug from site_layout_metadata. */
+  layoutId?: string | null;
+  /** PR #5b Step 2 — wizard preset choice. Slug from site_theme_presets. */
+  themePresetSlug?: string | null;
+  /** PR #5b Step 3 — community tagline. */
+  tagline?: string | null;
+  /** PR #11 — Pro+ custom CSS token overrides; null clears them. */
+  customCssOverrides?: CustomCssOverrides | null;
 }
 
 /**
@@ -102,4 +161,53 @@ export async function updateBrandingForCommunity(
   await db.update(communities).set({ branding: updated }).where(eq(communities.id, communityId));
 
   return updated;
+}
+
+/**
+ * Maps a community type to its default public-site layout (spec §4.0).
+ * condo_718 → tidewater · hoa_720 → boulevard · apartment → sable.
+ */
+const SITE_LAYOUT_BY_COMMUNITY_TYPE: Record<string, string> = {
+  condo_718: 'tidewater',
+  hoa_720: 'boulevard',
+  apartment: 'sable',
+};
+
+/**
+ * Seed the default site branding (layout + theme preset) for a freshly-created
+ * community (spec §4.0 — "the site is always live").
+ *
+ * Derives `layoutId` from the community type, then reads that layout's
+ * `default_preset_slug` from the platform-level `site_layout_metadata` catalog
+ * for `themePresetSlug`. Merges into the community's branding jsonb.
+ *
+ * Idempotent: if branding already carries a `layoutId` (community already
+ * customized, or this ran before), it no-ops so a re-run never clobbers a PM's
+ * choice. Best-effort by contract — the caller (`createCommunityForPm`)
+ * wraps it in try/catch so a catalog read failure never rolls back creation.
+ *
+ * NOTE: this only seeds branding; the starter-pack *blocks* are applied
+ * separately by `applyStarterPackToCommunity`. Completion tracking
+ * (`site_onboarding_completed_at`) is intentionally left null so the dashboard
+ * prompts still surface — see [[getSiteOnboardingCompletedAt]].
+ */
+export async function seedDefaultSiteBranding(
+  communityId: number,
+  communityType: string,
+): Promise<void> {
+  const existing = await getBrandingForCommunity(communityId);
+  if (existing?.layoutId) return; // already customized/seeded — never clobber
+
+  const layoutId = SITE_LAYOUT_BY_COMMUNITY_TYPE[communityType];
+  if (!layoutId) return; // unknown type → leave branding to the renderer default
+
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ defaultPresetSlug: siteLayoutMetadata.defaultPresetSlug })
+    .from(siteLayoutMetadata)
+    .where(eq(siteLayoutMetadata.slug, layoutId))
+    .limit(1);
+  const themePresetSlug = rows[0]?.defaultPresetSlug ?? null;
+
+  await updateBrandingForCommunity(communityId, { layoutId, themePresetSlug });
 }

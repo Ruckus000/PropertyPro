@@ -82,6 +82,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/work-orders-service.ts'),
   // Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
   resolve(repoRoot, 'apps/web/src/lib/services/elections-service.ts'),
+  // PR #8a: site-blocks atomic publish + transactional upserts.
+  // publishCommunitySite runs a single transaction (SELECT FOR UPDATE on
+  // communities → soft-delete published → promote drafts → audit log) per
+  // spec §2.7. upsertPublishedBlock also wraps its soft-delete + insert in
+  // a transaction. Both require createUnscopedClient().transaction().
+  // Caller authorization is verified upstream at the route layer (pm_admin
+  // membership + hasSiteEditor plan feature).
+  resolve(repoRoot, 'apps/web/src/lib/services/site-blocks-service.ts'),
   // Community-scoped user display-name resolution for board/forum and elections UX
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing
@@ -211,6 +219,21 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/deny/route.ts'),
   // Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped
   resolve(repoRoot, 'apps/web/src/lib/services/revenue-snapshot-data-service.ts'),
+  // PR #1a: Public-site community reader — unauthenticated /_site context, no TenantContext
+  // available. Applies explicit community_id + deletedAt predicates on every read.
+  resolve(repoRoot, 'apps/web/src/lib/db/public-community-reader.ts'),
+  // PR #2: Site asset quota lookup — communities is the root tenant table (no communityId column);
+  // plan resolution requires unscoped read. Routes calling these helpers MUST have already
+  // verified caller's pm_admin membership in the target community.
+  resolve(repoRoot, 'apps/web/src/lib/site-assets/quota.ts'),
+  // PR #5: Starter pack apply — reads platform-level site_starter_packs catalog (no community_id);
+  // inserts into site_blocks via scoped client after community creation.
+  resolve(repoRoot, 'apps/web/src/lib/services/starter-pack-service.ts'),
+  // PR #5b: Theme preset catalog reader — reads platform-level site_theme_presets
+  // (no community_id). Powers the onboarding wizard Step 2 preset chooser.
+  // Routes calling this helper MUST have already verified pm_admin / cam membership
+  // in the target community and the `hasSiteEditor` plan feature.
+  resolve(repoRoot, 'apps/web/src/lib/db/theme-preset-catalog.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [
@@ -255,6 +278,10 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'maintenance_comments',
   // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
   'user_search_index',
+  // PR #1a: site_blocks platform tables — ENABLE RLS covered by 0005_site_blocks_rls_hardening
+  'site_theme_presets',
+  'site_starter_packs',
+  'site_layout_metadata',
 ]);
 
 function listRuntimeSourceFiles(dir: string): string[] {

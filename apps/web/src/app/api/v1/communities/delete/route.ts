@@ -4,46 +4,55 @@
  *
  * Community admin requests or cancels community deletion.
  * Community ID from x-community-id header (set by middleware).
+ *
+ * Plan A1 drain #158. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { AppError } from '@/lib/api/errors/AppError';
 import {
   findCoolingCommunityDeletionRequest,
   interveneCommunityDeletion,
   requestCommunityDeletion,
 } from '@/lib/services/account-lifecycle-service';
-import { AppError } from '@/lib/api/errors/AppError';
+import {
+  communityDeleteDeleteContract,
+  communityDeletePostContract,
+} from './contract';
 
-// POST — request community deletion
-export const POST = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
-  const userId = await requireAuthenticatedUserId();
-  const communityId = resolveEffectiveCommunityId(req, null);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'settings', 'write');
+export const POST = withErrorHandler(
+  runRoute(communityDeletePostContract, async ({ req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, null);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'settings', 'write');
 
-  const request = await requestCommunityDeletion(communityId, userId);
-  return NextResponse.json({ data: request });
-});
+    return requestCommunityDeletion(communityId, userId);
+  }),
+);
 
-// DELETE — cancel community deletion
-export const DELETE = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
-  const userId = await requireAuthenticatedUserId();
-  const communityId = resolveEffectiveCommunityId(req, null);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'settings', 'write');
+export const DELETE = withErrorHandler(
+  runRoute(communityDeleteDeleteContract, async ({ req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, null);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'settings', 'write');
 
-  const activeRequestId = await findCoolingCommunityDeletionRequest(communityId);
-  if (activeRequestId === null) {
-    throw new AppError('No active deletion request found', 404, 'NOT_FOUND');
-  }
+    const activeRequestId = await findCoolingCommunityDeletionRequest(communityId);
+    if (activeRequestId === null) {
+      throw new AppError('No active deletion request found', 404, 'NOT_FOUND');
+    }
 
-  await interveneCommunityDeletion(activeRequestId, {
-    adminUserId: userId,
-    notes: 'Cancelled by community administrator',
-  });
-  return NextResponse.json({ data: { cancelled: true } });
-});
+    await interveneCommunityDeletion(activeRequestId, {
+      adminUserId: userId,
+      notes: 'Cancelled by community administrator',
+    });
+
+    return { cancelled: true as const };
+  }),
+);

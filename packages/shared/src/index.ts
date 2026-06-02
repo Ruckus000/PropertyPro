@@ -100,12 +100,44 @@ export type NewCommunityRole = (typeof NEW_COMMUNITY_ROLES)[number];
 /** Any community role — legacy or new. Used during the hybrid migration period. */
 export type AnyCommunityRole = CommunityRole | NewCommunityRole;
 
+// PR #1a — Property Landing Page block schemas (Zod-based)
+// The old flat file at './site-blocks.ts' still exports validateBlockContent
+// and getDefaultBlockContent; those are no longer publicly exported here.
+// The flat file itself is retired in PR #9.
+export {
+  BLOCK_TYPES,
+  blockTypeSchema,
+  blockSchemaRegistry,
+  heroBlockSchema,
+  textBlockSchema,
+  imageBlockSchema,
+  documentsBlockSchema,
+  meetingsBlockSchema,
+  announcementsBlockSchema,
+  contactBlockSchema,
+  faqBlockSchema,
+  galleryBlockSchema,
+  amenitiesBlockSchema,
+} from './site-blocks/index';
 export type {
-  BlockType, BlockContent, BlockContentMap,
-  HeroBlockContent, AnnouncementsBlockContent, DocumentsBlockContent,
-  MeetingsBlockContent, ContactBlockContent, TextBlockContent, ImageBlockContent, JsxTemplateBlockContent,
-} from './site-blocks';
-export { BLOCK_TYPES, validateBlockContent, getDefaultBlockContent, isSafeUrl, isSafeImageUrl } from './site-blocks';
+  BlockType,
+  HeroBlockContent,
+  TextBlockContent,
+  ImageBlockContent,
+  DocumentsBlockContent,
+  MeetingsBlockContent,
+  AnnouncementsBlockContent,
+  ContactBlockContent,
+  FaqBlockContent,
+  FaqItem,
+  GalleryBlockContent,
+  GalleryImage,
+  AmenitiesBlockContent,
+  AmenityItem,
+} from './site-blocks/index';
+// Preserve URL safety helpers from the old flat file — they remain useful
+// generic utilities even after the rest of site-blocks.ts is retired.
+export { isSafeUrl, isSafeImageUrl } from './site-blocks';
 export * from './demo-templates';
 export * from './demo-content-strategies';
 export * from './reauth';

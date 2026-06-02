@@ -41,6 +41,11 @@ export const COMMUNITY_FEATURE_KEYS = [
   'hasAccountingConnectors',
   'hasEsign',
   'hasEmergencyNotifications',
+  'hasSiteEditor',
+  'hasSitePolishBlocks',
+  'hasSiteCustomCss',
+  'hasSiteCustomDomain',
+  'hasSitePortfolioTemplates',
 ] as const;
 
 export type CommunityFeatureKey = (typeof COMMUNITY_FEATURE_KEYS)[number];

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
+import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -39,29 +40,14 @@ vi.mock('@/lib/services/calendar-sync-service', () => ({
   syncGoogleCalendar: syncGoogleCalendarMock,
 }));
 
-vi.mock('@/lib/api/error-handler', () => ({
-  withErrorHandler: (fn: Function) =>
-    async (...args: unknown[]) => {
-      try {
-        return await fn(...args);
-      } catch (error: unknown) {
-        if (error && typeof error === 'object' && 'statusCode' in error && 'toJSON' in error) {
-          const { NextResponse } = await import('next/server');
-          return NextResponse.json((error as { toJSON: () => unknown }).toJSON(), {
-            status: (error as { statusCode: number }).statusCode,
-          });
-        }
-        throw error;
-      }
-    },
-}));
-
 vi.mock('@/lib/finance/request', () => ({
   parseCommunityIdFromBody: parseCommunityIdFromBodyMock,
 }));
 
+vi.mock('@/lib/middleware/demo-grace-guard', () => ({
+  assertNotDemoGrace: vi.fn().mockResolvedValue(undefined),
+}));
 
-vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 import { POST } from '../../src/app/api/v1/calendar/google/sync/route';
 
 describe('Google Calendar sync route', () => {
@@ -79,8 +65,12 @@ describe('Google Calendar sync route', () => {
     requireCalendarSyncWritePermissionMock.mockReturnValue(undefined);
   });
 
-  it('triggers a Google Calendar sync and returns 200', async () => {
-    syncGoogleCalendarMock.mockResolvedValue({ synced: true, count: 3 });
+  it('triggers a Google Calendar sync and returns sync stats', async () => {
+    syncGoogleCalendarMock.mockResolvedValue({
+      syncedCount: 3,
+      syncedAt: '2026-06-01T12:00:00.000Z',
+      syncToken: 'token-abc',
+    });
 
     const response = await POST(
       new NextRequest('http://localhost:3000/api/v1/calendar/google/sync', {
@@ -92,8 +82,30 @@ describe('Google Calendar sync route', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data).toEqual({ synced: true, count: 3 });
+    expect(json.data).toEqual({
+      syncedCount: 3,
+      syncedAt: '2026-06-01T12:00:00.000Z',
+      syncToken: 'token-abc',
+    });
+    expect(requireCalendarSyncEnabledForMembershipMock).toHaveBeenCalled();
+    expect(requireCalendarSyncWritePermissionMock).toHaveBeenCalled();
     expect(syncGoogleCalendarMock).toHaveBeenCalledWith(42, 'session-user-1', 'req-456');
+  });
+
+  it('returns 401 without calling sync when unauthenticated', async () => {
+    requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
+
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/v1/calendar/google/sync', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 42 }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(syncGoogleCalendarMock).not.toHaveBeenCalled();
+    expect(requireCalendarSyncEnabledForMembershipMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when calendar sync is disabled for the community', async () => {
@@ -110,6 +122,7 @@ describe('Google Calendar sync route', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(syncGoogleCalendarMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 when user lacks calendar_sync write permission', async () => {
@@ -126,5 +139,20 @@ describe('Google Calendar sync route', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(syncGoogleCalendarMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for invalid body without calling sync', async () => {
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/v1/calendar/google/sync', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 'not-a-number' }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(syncGoogleCalendarMock).not.toHaveBeenCalled();
+    expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
   });
 });

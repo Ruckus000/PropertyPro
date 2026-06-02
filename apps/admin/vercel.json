@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- 'apps/web/src/app/api/v1/' 'apps/admin/src/app/api/' 'packages/api-contract/' 'scripts/verify-contracts.ts' && exit 0 || exit 1"
+}

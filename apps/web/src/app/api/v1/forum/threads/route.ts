@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -13,6 +13,7 @@ import {
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { createForumThreadForCommunity, paginateForumThreadsForCommunity } from '@/lib/services/polls-service';
+import { forumThreadsCreateContract, forumThreadsListContract } from './contract';
 
 const createThreadSchema = z.object({
   communityId: z.number().int().positive(),
@@ -25,67 +26,66 @@ const listThreadsQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().optional(),
 });
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+export const GET = withErrorHandler(
+  runRoute(forumThreadsListContract, async ({ req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromQuery(req);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireCommunityBoardEnabled(membership);
-  requirePollReadPermission(membership);
+    requireCommunityBoardEnabled(membership);
+    requirePollReadPermission(membership);
 
-  const { searchParams } = new URL(req.url);
-  const parsedQuery = listThreadsQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters', {
-      fields: formatZodErrors(parsedQuery.error),
+    const { searchParams } = new URL(req.url);
+    const parsedQuery = listThreadsQuerySchema.safeParse({
+      cursor: searchParams.get('cursor') || undefined,
+      pageSize: searchParams.get('pageSize') || undefined,
     });
-  }
+    if (!parsedQuery.success) {
+      throw new ValidationError('Invalid query parameters', {
+        fields: formatZodErrors(parsedQuery.error),
+      });
+    }
 
-  const result = await paginateForumThreadsForCommunity({
-    communityId,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-  });
+    const result = await paginateForumThreadsForCommunity({
+      communityId,
+      cursor: parsedQuery.data.cursor,
+      pageSize: parsedQuery.data.pageSize,
+    });
 
-  return NextResponse.json({
-    data: {
+    return {
       data: result.data,
       pagination: result.pagination,
-    },
-  });
-});
+    };
+  }),
+);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = createThreadSchema.safeParse(body);
+export const POST = withErrorHandler(
+  runRoute(forumThreadsCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const parsed = createThreadSchema.safeParse(body);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid thread payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
+    if (!parsed.success) {
+      throw new ValidationError('Invalid thread payload', {
+        fields: formatZodErrors(parsed.error),
+      });
+    }
 
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  requireCommunityBoardEnabled(membership);
-  requirePollWritePermission(membership);
+    requireCommunityBoardEnabled(membership);
+    requirePollWritePermission(membership);
 
-  const requestId = req.headers.get('x-request-id');
-  const data = await createForumThreadForCommunity(
-    communityId,
-    actorUserId,
-    {
-      title: parsed.data.title,
-      body: parsed.data.body,
-    },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    const requestId = req.headers.get('x-request-id');
+    return createForumThreadForCommunity(
+      communityId,
+      actorUserId,
+      {
+        title: parsed.data.title,
+        body: parsed.data.body,
+      },
+      requestId,
+    );
+  }),
+);

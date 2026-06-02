@@ -4,167 +4,132 @@
  * GET   /api/v1/arc  — paginated ARC submissions (Plan B3 rollout)
  * POST  /api/v1/arc  — create a new ARC submission
  *
- * GET pagination (Plan B3):
- * - Cursor-based via the canonical `paginate()` helper from `@propertypro/db`.
- * - Filters (`status`, `unitId`, and the resident-role `allowedUnitIds`
- *   safeguard) push into the SQL `where` predicate. The prior service
- *   `listArcSubmissionsForCommunity` already built a where clause but
- *   returned an unbounded result set; the route now owns the where
- *   construction inline so the service helper could be deleted.
- * - Order by `id` desc — for monotonic bigserial PKs this is equivalent to
- *   the previous `(createdAt desc, id desc)` composite ordering.
- * - Response envelope is double-wrapped per the paginated-route contract:
- *   `{ data: { data: ArcSubmission[], pagination: { nextCursor, hasMore, pageSize } } }`.
+ * Plan A1 drain #173 — both methods migrated to `runRoute(contract, handler)`;
+ * see `./contract.ts`.
  *
- * Resident-with-no-units short circuit: if a resident has zero allowed unit
- * ids, paginate would receive `inArray(unitId, [])` (drizzle-illegal). We
- * return an empty paginated envelope before reaching paginate, matching the
- * service's prior `return []` behavior.
+ * GET pagination (Plan B3):
+ * - Cursor-based via `paginateArcSubmissionsForCommunity()`.
+ * - Filters push into SQL via the service helper.
+ * - Order by `id` desc — monotonic bigserial PKs.
+ * - Response envelope: `{ data: { data: ArcSubmission[], pagination } }`.
+ *
+ * Resident-with-no-units short circuit preserved in-handler before paginate.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
-import { createScopedClient, type ArcSubmissionStatus } from '@propertypro/db';
+import { runRoute } from '@propertypro/api-contract';
+import type { ArcSubmissionStatus } from '@propertypro/db';
+import { createScopedClient } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   getActorUnitIds,
   isResidentRole,
   requireArcEnabled,
-  requireArcSubmitterRole } from '@/lib/violations/common';
+  requireArcSubmitterRole,
+} from '@/lib/violations/common';
 import {
   createArcSubmissionForCommunity,
   paginateArcSubmissionsForCommunity,
 } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePermission } from '@/lib/db/access-control';
+import { z } from 'zod';
+import { arcCreateContract, arcListContract } from './contract';
 
-const createArcSchema = z.object({
-  communityId: z.number().int().positive(),
-  unitId: z.number().int().positive(),
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().min(1).max(4000),
-  projectType: z.string().trim().min(1).max(120),
-  estimatedStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  estimatedCompletionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  attachmentDocumentIds: z.array(z.number().int().positive()).optional(),
-});
+const listArcStatusSchema = z.enum([
+  'submitted',
+  'under_review',
+  'approved',
+  'denied',
+  'withdrawn',
+]);
 
-const listArcStatusSchema = z.enum(['submitted', 'under_review', 'approved', 'denied', 'withdrawn']);
+export const GET = withErrorHandler(
+  runRoute(arcListContract, async ({ query, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-const listQuerySchema = z.object({
-  cursor: z.string().min(1).max(256).optional(),
-  pageSize: z.coerce.number().int().positive().optional(),
-});
+    await requireArcEnabled(membership);
+    requirePermission(membership, 'arc_submissions', 'read');
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const communityId = parseCommunityIdFromQuery(req);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
+    const { searchParams } = new URL(req.url);
+    const rawStatus = searchParams.get('status');
+    const parsedStatus = rawStatus ? listArcStatusSchema.safeParse(rawStatus) : null;
+    if (rawStatus && !parsedStatus?.success) {
+      throw new ValidationError('Invalid ARC status filter', {
+        fields: [
+          {
+            field: 'status',
+            message:
+              'status must be one of submitted, under_review, approved, denied, withdrawn',
+          },
+        ],
+      });
+    }
 
-  await requireArcEnabled(membership);
-  requirePermission(membership, 'arc_submissions', 'read');
+    const status = parsedStatus?.success
+      ? (parsedStatus.data as ArcSubmissionStatus)
+      : undefined;
+    const unitId = query.unitId;
 
-  const { searchParams } = new URL(req.url);
-  const rawStatus = searchParams.get('status');
-  const rawUnitId = searchParams.get('unitId');
+    const scoped = createScopedClient(communityId);
+    const residentUnitIds = isResidentRole(membership.role)
+      ? await getActorUnitIds(scoped, actorUserId)
+      : undefined;
 
-  const parsedStatus = rawStatus ? listArcStatusSchema.safeParse(rawStatus) : null;
-  if (rawStatus && !parsedStatus?.success) {
-    throw new ValidationError('Invalid ARC status filter', {
-      fields: [{ field: 'status', message: 'status must be one of submitted, under_review, approved, denied, withdrawn' }],
+    if (residentUnitIds && unitId !== undefined && !residentUnitIds.includes(unitId)) {
+      throw new ForbiddenError('You can only view ARC submissions for your own unit');
+    }
+
+    const result = await paginateArcSubmissionsForCommunity({
+      communityId,
+      cursor: query.cursor,
+      pageSize: query.pageSize,
+      status,
+      unitId,
+      allowedUnitIds: residentUnitIds,
     });
-  }
 
-  const status = parsedStatus?.success ? (parsedStatus.data as ArcSubmissionStatus) : undefined;
-  const unitId = rawUnitId ? parsePositiveInt(rawUnitId, 'unitId') : undefined;
+    return { data: result.data, pagination: result.pagination };
+  }),
+);
 
-  const scoped = createScopedClient(communityId);
-  const residentUnitIds = isResidentRole(membership.role)
-    ? await getActorUnitIds(scoped, actorUserId)
-    : undefined;
+export const POST = withErrorHandler(
+  runRoute(arcCreateContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-  if (residentUnitIds && unitId !== undefined && !residentUnitIds.includes(unitId)) {
-    throw new ForbiddenError('You can only view ARC submissions for your own unit');
-  }
+    await requireArcEnabled(membership);
+    requirePermission(membership, 'arc_submissions', 'write');
+    requireArcSubmitterRole(membership);
 
-  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
-  // are treated as missing rather than passed to Zod, which would 400 on the
-  // `min(1)` / `positive()` constraints.
-  const parsedQuery = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
+    const scoped = createScopedClient(communityId);
+    const unitIds = await getActorUnitIds(scoped, actorUserId);
+    if (!unitIds.includes(body.unitId)) {
+      throw new ForbiddenError(
+        'Residents can only submit ARC applications for their own unit',
+      );
+    }
 
-  const result = await paginateArcSubmissionsForCommunity({
-    communityId,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-    status,
-    unitId,
-    allowedUnitIds: residentUnitIds,
-  });
-
-  return NextResponse.json({
-    data: {
-      data: result.data,
-      pagination: result.pagination,
-    },
-  });
-});
-
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parseResult = createArcSchema.safeParse(body);
-
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid ARC submission payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  await requireArcEnabled(membership);
-  requirePermission(membership, 'arc_submissions', 'write');
-  requireArcSubmitterRole(membership);
-
-  const scoped = createScopedClient(communityId);
-  const unitIds = await getActorUnitIds(scoped, actorUserId);
-  if (!unitIds.includes(parseResult.data.unitId)) {
-    return NextResponse.json(
+    const requestId = req.headers.get('x-request-id');
+    return createArcSubmissionForCommunity(
+      communityId,
+      actorUserId,
       {
-        error: {
-          code: 'FORBIDDEN',
-          message: 'Residents can only submit ARC applications for their own unit' } },
-      { status: 403 },
+        unitId: body.unitId,
+        title: body.title,
+        description: body.description,
+        projectType: body.projectType,
+        estimatedStartDate: body.estimatedStartDate ?? null,
+        estimatedCompletionDate: body.estimatedCompletionDate ?? null,
+        attachmentDocumentIds: body.attachmentDocumentIds,
+      },
+      requestId,
     );
-  }
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await createArcSubmissionForCommunity(
-    communityId,
-    actorUserId,
-    {
-      unitId: parseResult.data.unitId,
-      title: parseResult.data.title,
-      description: parseResult.data.description,
-      projectType: parseResult.data.projectType,
-      estimatedStartDate: parseResult.data.estimatedStartDate ?? null,
-      estimatedCompletionDate: parseResult.data.estimatedCompletionDate ?? null,
-      attachmentDocumentIds: parseResult.data.attachmentDocumentIds },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+  }),
+);

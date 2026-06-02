@@ -1,12 +1,9 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireCommunityBoardEnabled,
   requireForumModerationPermission,
@@ -19,20 +16,14 @@ import {
   getForumThreadWithRepliesForCommunity,
   updateForumThreadForCommunity,
 } from '@/lib/services/polls-service';
-
-const updateThreadSchema = z.object({
-  communityId: z.number().int().positive(),
-  title: z.string().trim().min(1).max(240).optional(),
-  body: z.string().trim().min(1).max(8000).optional(),
-  isPinned: z.boolean().optional(),
-  isLocked: z.boolean().optional(),
-});
+import {
+  forumThreadDeleteContract,
+  forumThreadDetailGetContract,
+  forumThreadUpdateContract,
+} from './contract';
 
 export const GET = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const threadId = parsePositiveInt(params?.id ?? '', 'thread id');
-
+  runRoute(forumThreadDetailGetContract, async ({ params, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
     const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -40,36 +31,23 @@ export const GET = withErrorHandler(
     requireCommunityBoardEnabled(membership);
     requirePollReadPermission(membership);
 
-    const data = await getForumThreadWithRepliesForCommunity(communityId, threadId);
-    return NextResponse.json({ data });
-  },
+    return getForumThreadWithRepliesForCommunity(communityId, params.id);
+  }),
 );
 
 export const PATCH = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const threadId = parsePositiveInt(params?.id ?? '', 'thread id');
-
+  runRoute(forumThreadUpdateContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = updateThreadSchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid thread update payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
 
     if (
-      parsed.data.title === undefined
-      && parsed.data.body === undefined
-      && parsed.data.isPinned === undefined
-      && parsed.data.isLocked === undefined
+      body.title === undefined
+      && body.body === undefined
+      && body.isPinned === undefined
+      && body.isLocked === undefined
     ) {
       throw new ValidationError('At least one field must be provided for update');
     }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = parseCommunityIdFromBody(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
@@ -78,28 +56,23 @@ export const PATCH = withErrorHandler(
     requireForumModerationPermission(membership);
 
     const requestId = req.headers.get('x-request-id');
-    const data = await updateForumThreadForCommunity(
+    return updateForumThreadForCommunity(
       communityId,
-      threadId,
+      params.id,
       actorUserId,
       {
-        title: parsed.data.title,
-        body: parsed.data.body,
-        isPinned: parsed.data.isPinned,
-        isLocked: parsed.data.isLocked,
+        title: body.title,
+        body: body.body,
+        isPinned: body.isPinned,
+        isLocked: body.isLocked,
       },
       requestId,
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
 
 export const DELETE = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const threadId = parsePositiveInt(params?.id ?? '', 'thread id');
-
+  runRoute(forumThreadDeleteContract, async ({ params, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromQuery(req);
     await assertNotDemoGrace(communityId);
@@ -110,8 +83,8 @@ export const DELETE = withErrorHandler(
     requireForumModerationPermission(membership);
 
     const requestId = req.headers.get('x-request-id');
-    await deleteForumThreadForCommunity(communityId, threadId, actorUserId, requestId);
+    await deleteForumThreadForCommunity(communityId, params.id, actorUserId, requestId);
 
-    return NextResponse.json({ data: { id: threadId, deleted: true } });
-  },
+    return { id: params.id, deleted: true as const };
+  }),
 );

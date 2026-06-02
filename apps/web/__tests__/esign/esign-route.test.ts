@@ -298,13 +298,12 @@ describe('E-Sign Routes', () => {
       expect(json.data.fields.every((f: { signerRole: string }) => f.signerRole === 'signer')).toBe(true);
     });
 
-    it('throws BadRequestError when slug is missing', async () => {
+    it('rejects an empty slug param', async () => {
       const req = makeRequest('/api/v1/esign/sign/sub-ext/');
       const context = makeRouteParams({ submissionExternalId: 'sub-ext', slug: '' });
 
-      // The route handler checks for falsy slug — empty string is falsy
-      // The actual route should throw BadRequestError
-      await expect(signingGET(req, context)).rejects.toThrow('Missing signing slug');
+      await expect(signingGET(req, context)).rejects.toThrow();
+      expect(getSignerContextMock).not.toHaveBeenCalled();
     });
   });
 
@@ -560,7 +559,11 @@ describe('E-Sign Routes', () => {
       });
       const context = makeRouteParams({ id: 'abc' });
 
-      await expect(remindPOST(req, context)).rejects.toThrow('Invalid ID');
+      // Post drain #82: runner Zod-validates params.id. This test file mocks
+      // withErrorHandler as a passthrough (line 85-87), so the runner's
+      // ContractValidationError bubbles out instead of being caught and
+      // converted to a 400 response. Pre-migration threw BadRequestError('Invalid ID').
+      await expect(remindPOST(req, context)).rejects.toThrow('Invalid path parameters');
     });
 
     it('rejects missing signerId in body', async () => {

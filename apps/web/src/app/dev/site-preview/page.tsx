@@ -11,7 +11,7 @@ import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 /**
  * Dev-only preview route for testing community branding.
  *
- * Usage: /_site/preview?communityId=1
+ * Usage: /dev/site-preview?communityId=1
  *
  * Renders the public site template with the specified community's branding.
  * Only available in development mode.

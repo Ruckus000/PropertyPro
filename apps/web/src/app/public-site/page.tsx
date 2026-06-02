@@ -1,0 +1,277 @@
+import { headers } from 'next/headers';
+import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
+import type { Metadata } from 'next';
+import type { CommunityType } from '@propertypro/shared';
+import { createPresignedDownloadUrl } from '@propertypro/db';
+import {
+  getBrandingForCommunity,
+  getCommunityPublicInfo,
+} from '@/lib/api/branding';
+import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
+import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
+import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
+import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
+import { getLayout } from '@/components/public-site/layouts/registry';
+import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+
+/**
+ * Resolve community ID from middleware-injected headers.
+ */
+async function resolveCommunityId(): Promise<number | null> {
+  const requestHeaders = await headers();
+  const communityIdStr = requestHeaders.get('x-community-id');
+  if (!communityIdStr) return null;
+
+  const communityId = Number(communityIdStr);
+  if (!Number.isInteger(communityId) || communityId <= 0) return null;
+
+  return communityId;
+}
+
+/**
+ * Preview mode is set by the middleware when the request carries
+ * `?preview=true` on the public-site rewrite (PR #8c). In preview mode the
+ * page reads draft site blocks instead of published ones and renders a
+ * banner indicating the visitor is seeing unpublished content.
+ */
+async function resolvePreviewMode(): Promise<boolean> {
+  const requestHeaders = await headers();
+  return requestHeaders.get('x-preview') === 'true';
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const communityId = await resolveCommunityId();
+  if (!communityId) return { title: 'PropertyPro' };
+  const community = await getCommunityPublicInfo(communityId);
+  if (!community) return { title: 'PropertyPro' };
+  return buildCommunityMetadata({
+    id: community.id,
+    slug: community.slug,
+    name: community.name,
+    communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+  });
+}
+
+export default async function PublicSitePage() {
+  const communityId = await resolveCommunityId();
+  const isPreview = await resolvePreviewMode();
+  if (!communityId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-content-secondary">Community not found.</p>
+      </div>
+    );
+  }
+
+  const community = await getCommunityPublicInfo(communityId);
+  if (!community) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-content-secondary">Community not found.</p>
+      </div>
+    );
+  }
+
+  // Resolve theme from branding settings.
+  //
+  // getBrandingForCommunity returns the raw CommunityBranding shape, which
+  // carries `logoPath` (a Supabase Storage object key), NOT a public URL.
+  // resolveTheme reads `branding.logoUrl` — so passing the raw branding object
+  // produces `theme.logoUrl === null` even when a logo is configured, and the
+  // public-site header silently renders text-only. Mirror the auth-page
+  // pattern (lib/auth/resolve-auth-page-branding.ts:64-78): presign the
+  // download URL first, then hand resolveTheme a branding object with the
+  // populated logoUrl field.
+  const rawBranding = await getBrandingForCommunity(community.id);
+  let logoUrl: string | null = null;
+  if (rawBranding?.logoPath) {
+    try {
+      logoUrl = await createPresignedDownloadUrl('documents', rawBranding.logoPath);
+    } catch {
+      // Non-fatal — render the page without a logo rather than crash.
+    }
+  }
+  const branding = rawBranding ? { ...rawBranding, logoUrl } : null;
+  const theme = resolveTheme(
+    branding,
+    community.name,
+    community.communityType as CommunityType,
+  );
+  // PR #11 — Pro+ custom CSS overrides win over the resolved theme. The
+  // helper is defensive (skips bad hex / non-allowlisted fonts) and emits only
+  // validated token CSS variables, never raw CSS.
+  const cssVars = {
+    ...toCssVars(theme),
+    ...customCssOverridesToCssVars(rawBranding?.customCssOverrides),
+  };
+  const fontLinks = toFontLinks(theme);
+
+  // PR #9d — JSX template render branch retired. Community public sites
+  // now render exclusively through the block-model layout registry.
+  // Layout-registry render path (PR #1b)
+  const layoutId = resolveLayoutId(branding, community.communityType as CommunityType);
+  const Layout = getLayout(layoutId);
+
+  if (Layout) {
+    const reader = getPublicCommunityScopedReader(community.id);
+    const blocks = await reader.listSiteBlocks({ includeDrafts: isPreview });
+    return (
+      <>
+        {fontLinks.map((href) => (
+          // eslint-disable-next-line @next/next/no-page-custom-font
+          <link key={href} rel="stylesheet" href={href} />
+        ))}
+        <div style={cssVars}>
+          {isPreview && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="preview-banner"
+              className="sticky top-0 z-50 border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
+            >
+              Preview mode — showing unpublished drafts. Visitors see the last published version.
+            </div>
+          )}
+          <Layout
+            community={{
+              id: community.id,
+              slug: community.slug,
+              name: community.name,
+              logoUrl: theme.logoUrl,
+              communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+              // city / state / timezone not yet in getCommunityPublicInfo; all FL
+              // communities are America/New_York. A later PR extends the SELECT.
+              city: null,
+              state: null,
+              timezone: 'America/New_York',
+            }}
+            theme={{
+              primaryColor: theme.primaryColor,
+              secondaryColor: theme.secondaryColor,
+              accentColor: theme.accentColor,
+              headingFont: theme.fontHeading,
+              bodyFont: theme.fontBody,
+            }}
+            blocks={blocks.map((b) => ({
+              id: b.id,
+              blockType: b.blockType,
+              blockOrder: b.blockOrder,
+              content: b.content,
+            }))}
+          />
+        </div>
+      </>
+    );
+  }
+
+  // Legacy hardcoded fallback (preserved verbatim until all layouts ship in PR #7)
+  return (
+    <>
+      {fontLinks.map((href) => (
+        // eslint-disable-next-line @next/next/no-page-custom-font
+        <link key={href} rel="stylesheet" href={href} />
+      ))}
+      <div style={cssVars} className="min-h-screen flex flex-col font-body">
+        <PublicSiteHeader theme={theme} />
+
+        <main id="main-content" className="flex-1">
+          {/* Hero section */}
+          <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl">
+              <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
+                {community.name}
+              </h1>
+              <p className="mt-4 text-lg text-content-inverse/80">
+                Your community portal for documents, meetings, and more.
+              </p>
+              <div className="mt-8">
+                <a
+                  href="/auth/login"
+                  className="inline-flex items-center rounded-md bg-surface-card px-6 py-3 text-base font-medium text-primary shadow-e2 hover:bg-surface-hover transition-colors"
+                >
+                  Resident Login
+                </a>
+              </div>
+            </div>
+          </section>
+
+          {/* Features / Quick Links */}
+          <section className="bg-surface-card px-4 py-16 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-5xl">
+              <h2 className="font-heading text-2xl font-semibold text-content text-center mb-10">
+                Community Resources
+              </h2>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <FeatureCard
+                  title="Documents"
+                  description="Access community documents, budgets, and meeting minutes."
+                  icon="documents"
+                />
+                <FeatureCard
+                  title="Meetings"
+                  description="View upcoming board meetings and community events."
+                  icon="meetings"
+                />
+                <FeatureCard
+                  title="Announcements"
+                  description="Stay updated with the latest community news."
+                  icon="announcements"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* CTA section */}
+          <section className="bg-accent px-4 py-12 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <h2 className="font-heading text-xl font-semibold text-content">
+                Have questions?
+              </h2>
+              <p className="mt-2 text-secondary">
+                Contact your community management team for assistance.
+              </p>
+            </div>
+          </section>
+        </main>
+
+        <PublicSiteFooter communityName={community.name} />
+      </div>
+    </>
+  );
+}
+
+function FeatureCard({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description: string;
+  icon: 'documents' | 'meetings' | 'announcements';
+}) {
+  const icons = {
+    documents: (
+      <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    meetings: (
+      <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+    announcements: (
+      <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+      </svg>
+    ),
+  };
+
+  return (
+    <div className="rounded-md border border-edge bg-surface-card p-6 shadow-e1">
+      <div className="mb-3">{icons[icon]}</div>
+      <h3 className="font-heading text-lg font-semibold text-content">{title}</h3>
+      <p className="mt-1 text-sm text-secondary">{description}</p>
+    </div>
+  );
+}

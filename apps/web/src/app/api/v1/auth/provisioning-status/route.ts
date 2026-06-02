@@ -4,91 +4,76 @@
  * Called by the post-checkout ProvisioningProgress client component every 2s.
  * No auth required — secured by unguessable signupRequestId UUID.
  *
- * Returns current provisioning step. On completion, generates a one-time
- * magic link token (cached in pending_signups.payload) for auto-login.
+ * Plan A1 drain #152. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`. Success payloads are canonical `{ data: { status, step, ... } }`.
  */
-import { NextResponse } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { AppError } from '@/lib/api/errors';
 import {
   generateAndCacheLoginToken,
   getPendingSignupBySignupRequestId,
   getProvisioningJobBySignupRequestId,
 } from '@/lib/services/provisioning-service';
+import { provisioningStatusGetContract } from './contract';
 
-export async function GET(request: Request): Promise<NextResponse> {
-  const { searchParams } = new URL(request.url);
-  const signupRequestId = searchParams.get('signupRequestId');
+export const GET = withErrorHandler(
+  runRoute(provisioningStatusGetContract, async ({ query }) => {
+    const { signupRequestId } = query;
 
-  if (!signupRequestId) {
-    return NextResponse.json(
-      { error: 'signupRequestId query parameter is required' },
-      { status: 400 },
-    );
-  }
+    const job = await getProvisioningJobBySignupRequestId(signupRequestId);
 
-  // Look up the provisioning job
-  const job = await getProvisioningJobBySignupRequestId(signupRequestId);
-
-  // No job yet — webhook hasn't fired. Normal during the first few polls.
-  if (!job) {
-    return NextResponse.json({ status: 'pending', step: 'waiting' });
-  }
-
-  // Failed
-  if (job.status === 'failed') {
-    return NextResponse.json({
-      status: 'failed',
-      step: job.lastSuccessfulStatus ?? 'initiated',
-    });
-  }
-
-  // Completed — generate or return cached magic link token
-  if (job.status === 'completed') {
-    const signup = await getPendingSignupBySignupRequestId(signupRequestId);
-
-    if (!signup) {
-      return NextResponse.json(
-        { error: 'Signup record not found' },
-        { status: 500 },
-      );
+    if (!job) {
+      return { status: 'pending' as const, step: 'waiting' };
     }
 
-    // Check for cached token in payload
-    const payload = (signup.payload ?? {}) as Record<string, unknown>;
-    const cachedToken = typeof payload.loginToken === 'string' ? payload.loginToken : null;
+    if (job.status === 'failed') {
+      return {
+        status: 'failed' as const,
+        step: job.lastSuccessfulStatus ?? 'initiated',
+      };
+    }
 
-    if (cachedToken) {
-      return NextResponse.json({
-        status: 'completed',
+    if (job.status === 'completed') {
+      const signup = await getPendingSignupBySignupRequestId(signupRequestId);
+
+      if (!signup) {
+        throw new AppError('Signup record not found', 500, 'INTERNAL_ERROR');
+      }
+
+      const payload = (signup.payload ?? {}) as Record<string, unknown>;
+      const cachedToken =
+        typeof payload.loginToken === 'string' ? payload.loginToken : null;
+
+      if (cachedToken) {
+        return {
+          status: 'completed' as const,
+          step: 'completed',
+          loginToken: cachedToken,
+          communityId: job.communityId,
+        };
+      }
+
+      const loginToken = await generateAndCacheLoginToken(
+        signupRequestId,
+        signup.email,
+        payload,
+      );
+      if (!loginToken) {
+        throw new AppError('Failed to generate login token', 500, 'INTERNAL_ERROR');
+      }
+
+      return {
+        status: 'completed' as const,
         step: 'completed',
-        loginToken: cachedToken,
+        loginToken,
         communityId: job.communityId,
-      });
+      };
     }
 
-    // Generate fresh magic link token (and cache it for subsequent polls)
-    const loginToken = await generateAndCacheLoginToken(
-      signupRequestId,
-      signup.email,
-      payload,
-    );
-    if (!loginToken) {
-      return NextResponse.json(
-        { error: 'Failed to generate login token' },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json({
-      status: 'completed',
-      step: 'completed',
-      loginToken,
-      communityId: job.communityId,
-    });
-  }
-
-  // In progress
-  return NextResponse.json({
-    status: 'provisioning',
-    step: job.lastSuccessfulStatus ?? 'initiated',
-  });
-}
+    return {
+      status: 'provisioning' as const,
+      step: job.lastSuccessfulStatus ?? 'initiated',
+    };
+  }),
+);

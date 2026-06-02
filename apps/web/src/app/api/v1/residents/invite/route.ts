@@ -7,17 +7,17 @@
  * If resident creation succeeds but the invitation email fails, the endpoint
  * still returns the created user with `invitationFailed: true` so the UI can
  * prompt a retry.
+ *
+ * Plan A1 drain #140. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
-import { NEW_COMMUNITY_ROLES, PRESET_KEYS, type NewCommunityRole, type PresetKey } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -27,125 +27,98 @@ import {
   getCommunityTypeForOnboarding,
 } from '@/lib/services/onboarding-service';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import { residentsInvitePostContract } from './contract';
 
-const createAndInviteSchema = z.object({
-  communityId: z.number().int().positive(),
-  email: z.string().email(),
-  fullName: z.string().min(1, 'Full name is required'),
-  phone: z.string().nullable().optional(),
-  role: z.enum(NEW_COMMUNITY_ROLES) as z.ZodType<NewCommunityRole>,
-  unitId: z.number().int().positive().nullable().optional(),
-  isUnitOwner: z.boolean().optional().default(false),
-  presetKey: (z.enum(PRESET_KEYS as unknown as [string, ...string[]]) as z.ZodType<PresetKey>).optional(),
-  ttlDays: z.number().int().positive().default(7),
-  sendInvitation: z.boolean().optional().default(true),
-});
+export const POST = withErrorHandler(
+  runRoute(residentsInvitePostContract, async ({ body, req }) => {
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parseResult = createAndInviteSchema.safeParse(body);
+    const {
+      email,
+      fullName,
+      phone,
+      role,
+      unitId,
+      isUnitOwner,
+      presetKey,
+      ttlDays,
+      sendInvitation,
+    } = body;
 
-  if (!parseResult.success) {
-    throw new ValidationError('Validation failed', {
-      fields: formatZodErrors(parseResult.error),
+    const actorUserId = await requireAuthenticatedUserId();
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    requirePermission(membership, 'residents', 'write');
+
+    await requireActiveSubscriptionForMutation(communityId);
+
+    if (role === 'manager' && !presetKey) {
+      throw new ValidationError('presetKey is required when role is "manager"');
+    }
+
+    const communityType = await getCommunityTypeForOnboarding(communityId);
+
+    if (role === 'resident' && isUnitOwner && communityType === 'apartment') {
+      throw new ValidationError('Owners are not allowed in apartment communities');
+    }
+
+    const { userId, isNewUser } = await createOnboardingResident({
+      communityId,
+      email,
+      fullName,
+      phone: phone ?? null,
+      role,
+      unitId: unitId ?? null,
+      actorUserId,
+      communityType,
+      isUnitOwner,
+      presetKey,
     });
-  }
 
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const {
-    email,
-    fullName,
-    phone,
-    role,
-    unitId,
-    isUnitOwner,
-    presetKey,
-    ttlDays,
-    sendInvitation,
-  } = parseResult.data;
+    let invitationToken: string | null = null;
+    let invitationExpiresAt: Date | null = null;
+    let invitationFailed = false;
 
-  // Auth + authz
-  const actorUserId = await requireAuthenticatedUserId();
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  requirePermission(membership, 'residents', 'write');
+    if (sendInvitation) {
+      try {
+        const inviterName =
+          req.headers.get('x-user-full-name') ||
+          req.headers.get('x-user-email') ||
+          'Your administrator';
+        const invitation = await createOnboardingInvitation({
+          communityId,
+          userId,
+          ttlDays,
+          actorUserId,
+          inviterName,
+        });
+        invitationToken = invitation.token;
+        invitationExpiresAt = invitation.expiresAt;
+      } catch (inviteError) {
+        invitationFailed = true;
+        console.error('[residents/invite] Invitation failed after resident created:', inviteError);
 
-  // Subscription check
-  await requireActiveSubscriptionForMutation(communityId);
-
-  // Validate hybrid-model invariants
-  if (role === 'manager' && !presetKey) {
-    throw new ValidationError('presetKey is required when role is "manager"');
-  }
-
-  const communityType = await getCommunityTypeForOnboarding(communityId);
-
-  if (role === 'resident' && isUnitOwner && communityType === 'apartment') {
-    throw new ValidationError('Owners are not allowed in apartment communities');
-  }
-
-  // Step 1: Create resident (user + role)
-  const { userId, isNewUser } = await createOnboardingResident({
-    communityId,
-    email,
-    fullName,
-    phone: phone ?? null,
-    role,
-    unitId: unitId ?? null,
-    actorUserId,
-    communityType,
-    isUnitOwner,
-    presetKey,
-  });
-
-  // Step 2: Send invitation (best-effort — don't fail the whole request)
-  let invitationToken: string | null = null;
-  let invitationExpiresAt: Date | null = null;
-  let invitationFailed = false;
-
-  if (sendInvitation) {
-    try {
-      const inviterName = req.headers.get('x-user-full-name')
-        || req.headers.get('x-user-email')
-        || 'Your administrator';
-      const invitation = await createOnboardingInvitation({
-        communityId,
-        userId,
-        ttlDays,
-        actorUserId,
-        inviterName,
-      });
-      invitationToken = invitation.token;
-      invitationExpiresAt = invitation.expiresAt;
-    } catch (inviteError) {
-      invitationFailed = true;
-      // Log but don't throw — the resident was created successfully
-      console.error('[residents/invite] Invitation failed after resident created:', inviteError);
-
-      await logAuditEvent({
-        userId: actorUserId,
-        action: 'create',
-        resourceType: 'invitation_failed',
-        resourceId: userId,
-        communityId,
-        newValues: {
-          error: inviteError instanceof Error ? inviteError.message : 'Unknown error',
-        },
-      });
+        await logAuditEvent({
+          userId: actorUserId,
+          action: 'create',
+          resourceType: 'invitation_failed',
+          resourceId: userId,
+          communityId,
+          newValues: {
+            error: inviteError instanceof Error ? inviteError.message : 'Unknown error',
+          },
+        });
+      }
     }
-  }
 
-  void tryAutoComplete(communityId, actorUserId, 'invite_first_member');
+    void tryAutoComplete(communityId, actorUserId, 'invite_first_member');
 
-  return NextResponse.json(
-    {
-      data: {
-        userId,
-        isNewUser,
-        invitationFailed,
-        ...(invitationToken && { token: invitationToken }),
-        ...(invitationExpiresAt && { expiresAt: invitationExpiresAt.toISOString() }),
-      },
-    }
-  );
-});
+    return {
+      userId,
+      isNewUser,
+      invitationFailed,
+      ...(invitationToken && { token: invitationToken }),
+      ...(invitationExpiresAt && { expiresAt: invitationExpiresAt.toISOString() }),
+    };
+  }),
+);

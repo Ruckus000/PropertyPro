@@ -180,7 +180,12 @@ describe('Emergency Broadcast Routes', () => {
     };
 
     it('creates draft broadcast with valid input (status 200)', async () => {
-      const createdBroadcast = { id: 5, ...validPayload, status: 'draft' };
+      const createdBroadcast = {
+        broadcastId: 5,
+        recipientCount: 42,
+        smsEligibleCount: 30,
+        emailCount: 40,
+      };
       createBroadcastMock.mockResolvedValue(createdBroadcast);
 
       const req = new NextRequest(
@@ -196,7 +201,7 @@ describe('Emergency Broadcast Routes', () => {
       const json = await res.json();
 
       expect(res.status).toBe(200);
-      expect(json.id).toBe(5);
+      expect(json.data).toEqual(createdBroadcast);
       expect(createBroadcastMock).toHaveBeenCalledWith(
         expect.objectContaining({
           communityId: 100,
@@ -207,7 +212,7 @@ describe('Emergency Broadcast Routes', () => {
       );
     });
 
-    it('returns 422 for missing required fields (empty title)', async () => {
+    it('returns 400 for missing required fields (empty title)', async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/v1/emergency-broadcasts',
         {
@@ -218,10 +223,12 @@ describe('Emergency Broadcast Routes', () => {
       );
 
       const res = await POST(req);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('returns 422 for invalid severity value', async () => {
+    it('returns 400 for invalid severity value', async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/v1/emergency-broadcasts',
         {
@@ -232,7 +239,9 @@ describe('Emergency Broadcast Routes', () => {
       );
 
       const res = await POST(req);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error.code).toBe('VALIDATION_ERROR');
     });
   });
 
@@ -240,7 +249,7 @@ describe('Emergency Broadcast Routes', () => {
 
   describe('POST /api/v1/emergency-broadcasts/[id]/send', () => {
     it('executes broadcast and returns result', async () => {
-      const sendResult = { broadcastId: 10, recipientCount: 42, status: 'sending' };
+      const sendResult = { smsQueued: 3, emailSent: 39 };
       executeBroadcastMock.mockResolvedValue(sendResult);
 
       const req = new NextRequest(
@@ -258,7 +267,8 @@ describe('Emergency Broadcast Routes', () => {
       const json = await res.json();
 
       expect(res.status).toBe(200);
-      expect(json.recipientCount).toBe(42);
+      expect(json.data.smsQueued).toBe(3);
+      expect(json.data.emailSent).toBe(39);
       expect(executeBroadcastMock).toHaveBeenCalledWith(10, 100, 'user-1');
     });
 

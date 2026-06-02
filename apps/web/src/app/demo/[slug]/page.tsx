@@ -18,7 +18,6 @@ import type { DemoTheme } from '@propertypro/db';
 import type { CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { getBrandingForCommunity } from '@/lib/api/branding';
-import { getPublishedTemplate } from '@/lib/api/site-template';
 
 interface DemoLandingPageProps {
   params: Promise<{ slug: string }>;
@@ -110,17 +109,11 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
   const logoUrl = branding?.logoPath ? buildLogoUrl(branding.logoPath) : (legacy.logoUrl ?? theme.logoUrl);
   const primaryColor = theme.primaryColor ?? legacy.primaryColor;
 
-  const compiledHtml = isExpired ? null : await getPublishedTemplate(communityId, 'public');
-
+  // PR #9d — demo public landing no longer falls into a JSX template
+  // render. The block-model layout registry is the only public-site
+  // render contract; demos surface the entry section directly.
   const typeLabel = communityTypeLabel(instance.communityType);
   const enterPath = `/api/v1/demo/${slug}/enter`;
-
-  const templateVars: Record<string, string> = {
-    ...cssVars,
-    '--pp-primary': theme.primaryColor,
-    '--pp-secondary': theme.secondaryColor,
-    '--pp-accent': theme.accentColor,
-  };
 
   const entrySection = (
     <div
@@ -207,25 +200,6 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
             The demo for <strong>{instance.communityName}</strong> is no longer available.
             Contact your PropertyPro representative for a new demo link.
           </p>
-        </div>
-      </main>
-    );
-  }
-
-  if (compiledHtml) {
-    return (
-      <main className="min-h-screen bg-[var(--surface-base)]">
-        {fontLinks.map((href) => (
-          // eslint-disable-next-line @next/next/no-page-custom-font
-          <link key={href} rel="stylesheet" href={href} />
-        ))}
-        {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
-        <script src="/assets/tailwind.min.js" async />
-        <div style={templateVars} className="font-body">
-          <div dangerouslySetInnerHTML={{ __html: compiledHtml }} />
-        </div>
-        <div className="flex justify-center border-t border-[var(--border-default)] bg-[var(--surface-base)] px-4 py-10">
-          {entrySection}
         </div>
       </main>
     );

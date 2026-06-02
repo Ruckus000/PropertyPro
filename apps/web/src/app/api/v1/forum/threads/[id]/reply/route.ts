@@ -1,13 +1,40 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Forum thread replies — create + soft-delete.
+ *
+ * POST   /api/v1/forum/threads/[id]/reply  — create a reply
+ * DELETE /api/v1/forum/threads/[id]/reply  — author or moderator soft-delete
+ *
+ * Plan A1 drain #90. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for schemas and rationale.
+ *
+ * Auth chains preserved verbatim from the pre-migration handler:
+ *   POST:    requireAuthenticatedUserId → resolveEffectiveCommunityId →
+ *            assertNotDemoGrace → requireCommunityMembership →
+ *            requireCommunityBoardEnabled → requirePollWritePermission →
+ *            createForumReplyForCommunity(communityId, params.id,
+ *              actorUserId, body.body, x-request-id)
+ *   DELETE:  same prefix, then
+ *            canModerateReplies = membership.isAdmin &&
+ *              checkPermissionV2(role, communityType, 'polls', 'write',
+ *                { isUnitOwner, permissions }) →
+ *            deleteForumReplyForCommunity(communityId, params.id,
+ *              body.replyId, actorUserId, canModerateReplies,
+ *              x-request-id, body.moderationReason)
+ *
+ * The `&&` short-circuit on `canModerateReplies` is preserved verbatim — when
+ * `membership.isAdmin === false`, `checkPermissionV2` is NOT invoked.
+ *
+ * Behavior change vs. pre-migration: `ValidationError('Invalid reply payload')`
+ * / `'Invalid reply moderation payload'` shifts to the canonical
+ * `VALIDATION_ERROR` envelope. Status code 400 unchanged. Success wire shape
+ * `{ data: ... }` byte-identical for both methods.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
-import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireCommunityBoardEnabled,
   requirePollWritePermission,
@@ -17,96 +44,64 @@ import {
   createForumReplyForCommunity,
   deleteForumReplyForCommunity,
 } from '@/lib/services/polls-service';
-
-const createReplySchema = z.object({
-  communityId: z.number().int().positive(),
-  body: z.string().trim().min(1).max(8000),
-});
-
-const deleteReplySchema = z.object({
-  communityId: z.number().int().positive(),
-  replyId: z.number().int().positive(),
-  moderationReason: z.string().trim().min(1).max(500).optional(),
-});
+import {
+  forumReplyCreateContract,
+  forumReplyDeleteContract,
+} from './contract';
 
 export const POST = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const threadId = parsePositiveInt(params?.id ?? '', 'thread id');
-
+  runRoute(forumReplyCreateContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = createReplySchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid reply payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
     requirePollWritePermission(membership);
 
-    const requestId = req.headers.get('x-request-id');
-    const data = await createForumReplyForCommunity(
+    return createForumReplyForCommunity(
       communityId,
-      threadId,
+      params.id,
       actorUserId,
-      parsed.data.body,
-      requestId,
+      body.body,
+      req.headers.get('x-request-id'),
     );
-
-    return NextResponse.json({ data });
-  },
+  }),
 );
 
 export const DELETE = withErrorHandler(
-  async (req: NextRequest, context?: { params: Promise<Record<string, string>> }) => {
-    const params = await context?.params;
-    const threadId = parsePositiveInt(params?.id ?? '', 'thread id');
-
+  runRoute(forumReplyDeleteContract, async ({ params, body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const body: unknown = await req.json();
-    const parsed = deleteReplySchema.safeParse(body);
-
-    if (!parsed.success) {
-      throw new ValidationError('Invalid reply moderation payload', {
-        fields: formatZodErrors(parsed.error),
-      });
-    }
-
-    const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
     requirePollWritePermission(membership);
-    const canModerateReplies = membership.isAdmin && checkPermissionV2(
-      membership.role,
-      membership.communityType,
-      'polls',
-      'write',
-      {
-        isUnitOwner: membership.isUnitOwner,
-        permissions: membership.permissions,
-      },
-    );
 
-    const requestId = req.headers.get('x-request-id');
+    const canModerateReplies =
+      membership.isAdmin &&
+      checkPermissionV2(
+        membership.role,
+        membership.communityType,
+        'polls',
+        'write',
+        {
+          isUnitOwner: membership.isUnitOwner,
+          permissions: membership.permissions,
+        },
+      );
+
     await deleteForumReplyForCommunity(
       communityId,
-      threadId,
-      parsed.data.replyId,
+      params.id,
+      body.replyId,
       actorUserId,
       canModerateReplies,
-      requestId,
-      parsed.data.moderationReason,
+      req.headers.get('x-request-id'),
+      body.moderationReason,
     );
 
-    return NextResponse.json({ data: { id: parsed.data.replyId, deleted: true } });
-  },
+    return { id: body.replyId, deleted: true as const };
+  }),
 );

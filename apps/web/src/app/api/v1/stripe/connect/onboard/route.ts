@@ -1,46 +1,37 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * POST /api/v1/stripe/connect/onboard
+ *
+ * Plan A1 drain #164. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { ValidationError } from '@/lib/api/errors';
+import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import {
   requireFinanceAdminWrite,
   requireFinanceEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { startConnectOnboarding } from '@/lib/services/finance-service';
+import { stripeConnectOnboardPostContract } from './contract';
 
-const onboardSchema = z.object({
-  communityId: z.number().int().positive(),
-});
+export const POST = withErrorHandler(
+  runRoute(stripeConnectOnboardPostContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = parseCommunityIdFromBody(req, body.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
+    await requireFinanceEnabled(membership);
+    requireFinanceWritePermission(membership);
+    requireFinanceAdminWrite(membership);
+    await requireActiveSubscriptionForMutation(communityId);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parseResult = onboardSchema.safeParse(body);
-
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid Stripe Connect onboarding payload', {
-      fields: formatZodErrors(parseResult.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parseResult.data.communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-  await requireFinanceEnabled(membership);
-  requireFinanceWritePermission(membership);
-  requireFinanceAdminWrite(membership);
-  await requireActiveSubscriptionForMutation(communityId);
-
-  const result = await startConnectOnboarding(
-    communityId,
-    actorUserId,
-    req.headers.get('x-request-id'),
-  );
-
-  return NextResponse.json({ data: result });
-});
+    return startConnectOnboarding(
+      communityId,
+      actorUserId,
+      req.headers.get('x-request-id'),
+    );
+  }),
+);

@@ -1,5 +1,7 @@
 import type { CommunityType } from '../index';
 
+export type DefaultVisibility = 'public_page' | 'owner_portal' | 'owner_only' | 'board';
+
 export interface ComplianceTemplateItem {
   templateKey: string;
   title: string;
@@ -9,6 +11,7 @@ export interface ComplianceTemplateItem {
   deadlineDays?: number;
   rollingMonths?: number;
   isConditional?: boolean;
+  defaultVisibility: DefaultVisibility;
 }
 
 export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
@@ -19,6 +22,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§718.111(12)(g)(2)(a)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_bylaws',
@@ -27,6 +31,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§718.111(12)(g)(2)(b)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_articles',
@@ -35,6 +40,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§718.111(12)(g)(2)(c)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_rules',
@@ -43,6 +49,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§718.111(12)(g)(2)(d)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_qa_sheet',
@@ -51,6 +58,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§718.504',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_budget',
@@ -59,6 +67,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'financial_records',
     statuteReference: '§718.112(2)(f)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_financial_report',
@@ -67,6 +76,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'financial_records',
     statuteReference: '§718.111(13)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_minutes_rolling_12m',
@@ -75,6 +85,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'meeting_records',
     statuteReference: '§718.111(12)(g)(2)(e)',
     rollingMonths: 12,
+    defaultVisibility: 'board',
   },
   {
     templateKey: '718_video_recordings',
@@ -84,6 +95,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     statuteReference: '§718.111(12)(g)(2)(f)',
     rollingMonths: 12,
     isConditional: true,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_affidavits',
@@ -92,6 +104,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'meeting_records',
     statuteReference: '§718.111(12)(g)(2)(g)',
     deadlineDays: 30,
+    defaultVisibility: 'board',
   },
   {
     templateKey: '718_insurance',
@@ -100,6 +113,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'insurance',
     statuteReference: '§718.111(11)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_only',
   },
   {
     templateKey: '718_contracts',
@@ -108,6 +122,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'operations',
     statuteReference: '§718.111(12)(g)(2)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_only',
   },
   {
     templateKey: '718_conflict_contracts',
@@ -117,6 +132,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     statuteReference: '§718.3026',
     deadlineDays: 30,
     isConditional: true,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_bids',
@@ -126,6 +142,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     statuteReference: '§718.111(12)(g)(2)',
     rollingMonths: 12,
     isConditional: true,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_inspection_reports',
@@ -134,6 +151,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'operations',
     statuteReference: '§553.899, §718.301(4)(p)',
     isConditional: true,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '718_sirs',
@@ -142,6 +160,7 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'operations',
     statuteReference: '§718.112(2)(g)',
     isConditional: true,
+    defaultVisibility: 'owner_portal',
   },
 ] as const;
 
@@ -153,6 +172,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§720.303(4)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '720_articles',
@@ -161,6 +181,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§720.303(4)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '720_bylaws_rules',
@@ -169,6 +190,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'governing_documents',
     statuteReference: '§720.303(4)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '720_budget',
@@ -177,6 +199,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'financial_records',
     statuteReference: '§720.303(6)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '720_financial_report',
@@ -185,6 +208,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'financial_records',
     statuteReference: '§720.303(7)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '720_minutes_rolling_12m',
@@ -193,6 +217,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'meeting_records',
     statuteReference: '§720.303(4)',
     rollingMonths: 12,
+    defaultVisibility: 'board',
   },
   {
     templateKey: '720_meeting_notices',
@@ -201,6 +226,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'meeting_records',
     statuteReference: '§720.303(2)',
     rollingMonths: 12,
+    defaultVisibility: 'owner_portal',
   },
   {
     templateKey: '720_insurance',
@@ -209,6 +235,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'insurance',
     statuteReference: '§720.303(4)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_only',
   },
   {
     templateKey: '720_contracts',
@@ -217,6 +244,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     category: 'operations',
     statuteReference: '§720.303(4)',
     deadlineDays: 30,
+    defaultVisibility: 'owner_only',
   },
   {
     templateKey: '720_bids',
@@ -226,6 +254,7 @@ export const HOA_720_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     statuteReference: '§720.303(4)',
     rollingMonths: 12,
     isConditional: true,
+    defaultVisibility: 'board',
   },
 ] as const;
 

@@ -557,8 +557,11 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
       new NextRequest(apiUrl('/api/v1/assessments')),
     );
     expect(missingContextResponse.status).toBe(400);
-    const missingContextBody = await parseJson<{ error: { message: string } }>(missingContextResponse);
-    expect(missingContextBody.error.message).toMatch(/communityId/i);
+    const missingContextBody = await parseJson<{ error: { message: string; code: string } }>(
+      missingContextResponse,
+    );
+    expect(missingContextBody.error.code).toBe('VALIDATION_ERROR');
+    expect(missingContextBody.error.message).toMatch(/Invalid query parameters/i);
   });
 
   it('records audit events for Phase 5 mutation flows with request-id correlation', async () => {

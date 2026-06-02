@@ -32,17 +32,11 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
           : `/api/v1/documents?communityId=${communityId}&pageSize=100`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("fetch failed");
-        const json = (await res.json()) as
-          | { data?: DocumentRow[] }
-          | { data?: { data?: DocumentRow[]; pagination?: unknown } };
-        // /api/v1/documents/search returns `{ data: DocumentRow[] }` (flat).
-        // /api/v1/documents (Plan B3) returns `{ data: { data, pagination } }`.
-        // Handle both shapes — first page only is sufficient for the
-        // initial-empty-search "recent docs" preview.
-        const innerData = (json as { data?: unknown }).data;
+        const json = (await res.json()) as { data?: { data?: DocumentRow[] } | DocumentRow[] };
+        const innerData = json.data;
         const rows = Array.isArray(innerData)
           ? innerData
-          : (innerData as { data?: DocumentRow[] } | undefined)?.data ?? [];
+          : innerData?.data ?? [];
         setDocuments(rows as DocumentRow[]);
       } catch {
         setDocuments([]);

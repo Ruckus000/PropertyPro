@@ -8,6 +8,8 @@ import {
 // AUTHZ: P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
+import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import { seedDefaultSiteBranding } from '@/lib/api/branding';
 import { getDefaultDocumentCategories, type CommunityType } from '@propertypro/shared';
 
 interface CreateCommunityInput {
@@ -88,6 +90,31 @@ export async function createCommunityForPm(
 
   // 5. Generate onboarding checklist (outside transaction — uses scoped client, is idempotent)
   await createChecklistItems(communityId, input.userId, 'pm_admin', input.communityType);
+
+  // 5b. Apply starter pack (outside transaction — best-effort, idempotent)
+  // PR #5: §4.0 "site is always live" guarantee — pre-populate published site_blocks so
+  // the community public site is never in an empty-state when it first goes live.
+  try {
+    await applyStarterPackToCommunity(communityId, input.communityType);
+  } catch (err) {
+    // PR #5: starter pack application is best-effort. Failure here MUST NOT
+    // roll back community creation (that would lose the community + memberships
+    // + categories + audit log). The PM can manually customize via the editor.
+    // eslint-disable-next-line no-console
+    console.error('applyStarterPackToCommunity failed', { communityId, err });
+  }
+
+  // 5c. Seed default site branding — layout (from community type) + the
+  // layout's default theme preset (spec §4.0). Best-effort + idempotent for
+  // the same reason as 5b: a catalog read failure must not lose the community.
+  // Leaves site_onboarding_completed_at null so the "customize your site"
+  // prompts still surface.
+  try {
+    await seedDefaultSiteBranding(communityId, input.communityType);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('seedDefaultSiteBranding failed', { communityId, err });
+  }
 
   // 6. Audit log (outside transaction — best-effort, should not fail community creation)
   await logAuditEvent({

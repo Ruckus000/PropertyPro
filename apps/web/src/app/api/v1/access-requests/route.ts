@@ -4,22 +4,16 @@
  * POST  /api/v1/access-requests  — public: submit a self-service resident access request
  * GET   /api/v1/access-requests  — admin: list pending access requests for review
  *
- * Invariants:
- * - POST is public (no session required) — registered in TOKEN_AUTH_ROUTES
- * - GET requires an authenticated admin with residents.write permission
- * - withErrorHandler for structured errors
+ * Plan A1 drain #113 — both methods migrated to `runRoute(contract, handler)`;
+ * see `./contract.ts` for schemas and auth-chain rationale.
  *
- * GET pagination (Plan B3 rollout, A3 service wrapper):
- * - Cursor-based via the canonical `paginate()` helper, called from
- *   `paginatePendingAccessRequests` in access-request-service. The
- *   `status='pending'` filter is pushed into the SQL `where` predicate
- *   instead of the previous in-memory filter on a full-table fetch — this
- *   removes an O(N) anti-pattern that scaled with total access-request volume,
- *   not just the pending subset.
- * - Response envelope is double-wrapped per the paginated-route contract:
- *   `{ data: { data: AccessRequest[], pagination: { nextCursor, hasMore, pageSize } } }`.
+ * POST is public (no session required) — registered in TOKEN_AUTH_ROUTES.
+ *
+ * GET pagination (Plan B3):
+ * - Cursor-based via `paginatePendingAccessRequests` in access-request-service.
+ * - Response envelope: `{ data: { data: AccessRequest[], pagination } }`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
@@ -31,72 +25,44 @@ import {
   paginatePendingAccessRequests,
   submitAccessRequest,
 } from '@/lib/services/access-request-service';
-
-const submitSchema = z.object({
-  communityId: z.number().int().positive(),
-  communitySlug: z.string().min(1),
-  email: z.string().email(),
-  fullName: z.string().min(1).max(255),
-  phone: z.string().max(50).optional(),
-  claimedUnitNumber: z.string().max(100).optional(),
-  isUnitOwner: z.boolean().default(false),
-  refCode: z.string().max(50).optional(),
-});
+import {
+  accessRequestsListContract,
+  accessRequestsSubmitContract,
+} from './contract';
 
 const listQuerySchema = z.object({
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
 
-// ---------------------------------------------------------------------------
-// POST — public: submit a resident access request
-// ---------------------------------------------------------------------------
+export const POST = withErrorHandler(
+  runRoute(accessRequestsSubmitContract, async ({ body }) => {
+    return submitAccessRequest(body);
+  }),
+);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const parsed = submitSchema.safeParse(body);
-  if (!parsed.success) {
-    throw new ValidationError('Validation failed');
-  }
+export const GET = withErrorHandler(
+  runRoute(accessRequestsListContract, async ({ query, req }) => {
+    const userId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, query.communityId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    requirePermission(membership, 'residents', 'write');
 
-  const result = await submitAccessRequest(parsed.data);
-  return NextResponse.json({ data: result });
-});
+    const { searchParams } = req.nextUrl;
+    const parsedQuery = listQuerySchema.safeParse({
+      cursor: searchParams.get('cursor') || undefined,
+      pageSize: searchParams.get('pageSize') || undefined,
+    });
+    if (!parsedQuery.success) {
+      throw new ValidationError('Invalid query parameters');
+    }
 
-// ---------------------------------------------------------------------------
-// GET — admin: list pending access requests
-// ---------------------------------------------------------------------------
+    const result = await paginatePendingAccessRequests({
+      communityId: membership.communityId,
+      cursor: parsedQuery.data.cursor,
+      pageSize: parsedQuery.data.pageSize,
+    });
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
-  const { searchParams } = req.nextUrl;
-  const rawCommunityId = searchParams.get('communityId');
-  const parsedCommunityId = rawCommunityId ? Number(rawCommunityId) : null;
-  const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
-  const membership = await requireCommunityMembership(communityId, userId);
-  requirePermission(membership, 'residents', 'write');
-
-  // Use `||` not `??` so empty-string query params (`?cursor=`, `?pageSize=`)
-  // are treated as missing rather than passed to Zod, which would 400 on the
-  // `min(1)` / `positive()` constraints.
-  const parsedQuery = listQuerySchema.safeParse({
-    cursor: searchParams.get('cursor') || undefined,
-    pageSize: searchParams.get('pageSize') || undefined,
-  });
-  if (!parsedQuery.success) {
-    throw new ValidationError('Invalid query parameters');
-  }
-
-  const result = await paginatePendingAccessRequests({
-    communityId: membership.communityId,
-    cursor: parsedQuery.data.cursor,
-    pageSize: parsedQuery.data.pageSize,
-  });
-
-  return NextResponse.json({
-    data: {
-      data: result.data,
-      pagination: result.pagination,
-    },
-  });
-});
+    return { data: result.data, pagination: result.pagination };
+  }),
+);

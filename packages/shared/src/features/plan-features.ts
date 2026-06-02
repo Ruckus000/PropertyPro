@@ -18,6 +18,8 @@ export interface PlanFeatureConfig {
   readonly maxAdmins: number;
   readonly displayName: string;
   readonly monthlyPriceUsd: number;
+  /** Maximum cumulative bytes a community can store in `community-site-assets`. */
+  readonly siteAssetsQuotaBytes: number;
 }
 
 /**
@@ -44,10 +46,12 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       requiresPublicWebsite: true,
       hasAnnouncements: true,
       hasEmergencyNotifications: true,
+      hasSiteEditor: true,
     },
     maxAdmins: 3,
     displayName: 'Essentials',
     monthlyPriceUsd: 199,
+    siteAssetsQuotaBytes: 100 * 1024 * 1024, // 100 MB
   },
 
   professional: {
@@ -77,10 +81,15 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasVisitorLogging: true,
       hasCalendarSync: true,
       hasAccountingConnectors: true,
+      // Site editor (Pro tier adds polish blocks + custom CSS)
+      hasSiteEditor: true,
+      hasSitePolishBlocks: true,
+      hasSiteCustomCss: true,
     },
     maxAdmins: Infinity,
     displayName: 'Professional',
     monthlyPriceUsd: 349,
+    siteAssetsQuotaBytes: 500 * 1024 * 1024, // 500 MB
   },
 
   operations_plus: {
@@ -102,10 +111,15 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasPackageLogging: true,
       hasVisitorLogging: true,
       hasLeaseTracking: true,
+      // Site editor (full suite for apartment/PM tier)
+      hasSiteEditor: true,
+      hasSitePolishBlocks: true,
+      hasSiteCustomCss: true,
     },
     maxAdmins: Infinity,
     displayName: 'Operations Plus',
     monthlyPriceUsd: 499,
+    siteAssetsQuotaBytes: 2 * 1024 * 1024 * 1024, // 2 GB
   },
 };
 

@@ -28,6 +28,7 @@ export type RouteCategory =
   | 'read'
   | 'public'
   | 'esign-sign'
+  | 'site-uploads'
   | 'webhook';
 
 /** Rate limit tiers per route category. */
@@ -52,6 +53,15 @@ const RATE_LIMIT_TIERS: Record<RouteCategory, RateLimitTier> = {
    * defense; this tier is a secondary throttle.
    */
   'esign-sign': { limit: 10, windowMs: 60_000 },
+
+  /**
+   * Site asset upload routes (presign + finalize): 20 requests per 5
+   * minutes per authenticated user. Per spec §8.4 the intent is "per
+   * community"; the existing limiter keys by user, which is approximately
+   * equivalent because PMs only have membership in communities they manage.
+   * A future infrastructure pass may add community-keyed limits.
+   */
+  'site-uploads': { limit: 20, windowMs: 5 * 60_000 },
 
   /** Webhook routes: exempt (Stripe retries need to succeed) */
   webhook: { limit: 0, windowMs: 0 },
@@ -87,6 +97,15 @@ const WEBHOOK_PATHS = [
  */
 const ESIGN_SIGN_PATH_PREFIX = '/api/v1/esign/sign/';
 
+/**
+ * Site asset upload route prefixes (PR #2). Matched before the generic
+ * write/read classification so the tighter site-uploads tier applies.
+ */
+const SITE_UPLOAD_PATH_PREFIXES = [
+  '/api/v1/site/uploads/',
+  '/api/v1/site/images/',
+];
+
 /** API route prefix for identifying API requests. */
 const API_PREFIX = '/api/';
 
@@ -108,6 +127,11 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
   // before the generic API_PREFIX classification below.
   if (pathname.startsWith(ESIGN_SIGN_PATH_PREFIX)) {
     return 'esign-sign';
+  }
+
+  // Site asset upload routes — tighter tier than generic write.
+  if (SITE_UPLOAD_PATH_PREFIXES.some((p) => pathname.startsWith(p))) {
+    return 'site-uploads';
   }
 
   // Public unauthenticated API endpoints

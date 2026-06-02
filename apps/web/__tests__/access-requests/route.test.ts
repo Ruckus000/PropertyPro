@@ -226,7 +226,7 @@ describe('Access Request Routes', () => {
       expect(json.data.resent).toBe(true);
     });
 
-    it('throws ValidationError when required fields are missing', async () => {
+    it('throws ContractValidationError when required fields are missing', async () => {
       const invalidBody = {
         communityId: 1,
         // missing communitySlug, email, fullName
@@ -234,16 +234,17 @@ describe('Access Request Routes', () => {
       };
 
       const req = makeJsonRequest('/api/v1/access-requests', invalidBody);
-      await expect(submitPOST(req)).rejects.toThrow('Validation failed');
+      await expect(submitPOST(req)).rejects.toMatchObject({ source: 'body' });
       expect(submitAccessRequestMock).not.toHaveBeenCalled();
     });
 
-    it('throws ValidationError when email is invalid', async () => {
+    it('throws ContractValidationError when email is invalid', async () => {
       const req = makeJsonRequest('/api/v1/access-requests', {
         ...validBody,
         email: 'not-an-email',
       });
-      await expect(submitPOST(req)).rejects.toThrow('Validation failed');
+      await expect(submitPOST(req)).rejects.toMatchObject({ source: 'body' });
+      expect(submitAccessRequestMock).not.toHaveBeenCalled();
     });
 
     it('does not require optional fields (phone, claimedUnitNumber, refCode)', async () => {
@@ -278,7 +279,7 @@ describe('Access Request Routes', () => {
         pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
 
-      const req = makeRequest('/api/v1/access-requests');
+      const req = makeRequest('/api/v1/access-requests?communityId=1');
       const response = await listGET(req);
       const json = await response.json();
 
@@ -304,7 +305,7 @@ describe('Access Request Routes', () => {
         pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
 
-      const req = makeRequest('/api/v1/access-requests');
+      const req = makeRequest('/api/v1/access-requests?communityId=1');
       const response = await listGET(req);
       const json = await response.json();
 
@@ -322,7 +323,7 @@ describe('Access Request Routes', () => {
         pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
       });
 
-      const req = makeRequest('/api/v1/access-requests?cursor=&pageSize=');
+      const req = makeRequest('/api/v1/access-requests?communityId=1&cursor=&pageSize=');
       const response = await listGET(req);
       expect(response.status).toBe(200);
       expect(paginatePendingAccessRequestsMock).toHaveBeenCalledWith({
@@ -338,7 +339,7 @@ describe('Access Request Routes', () => {
         pagination: { nextCursor: 'next-opaque', hasMore: true, pageSize: 25 },
       });
 
-      const req = makeRequest('/api/v1/access-requests?cursor=abc&pageSize=25');
+      const req = makeRequest('/api/v1/access-requests?communityId=1&cursor=abc&pageSize=25');
       const response = await listGET(req);
       const json = await response.json();
 

@@ -1,54 +1,57 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Accounting Export API
+ *
+ * POST /api/v1/accounting/export — export ledger entries to QuickBooks/Xero.
+ *
+ * Plan A1 drain #170. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts`.
+ *
+ * Authorization invariants (preserved verbatim):
+ *   requireAuthenticatedUserId
+ *   → resolveEffectiveCommunityId(req, body.communityId)
+ *   → requireCommunityMembership(communityId, actorUserId)
+ *   → requireAccountingEnabled(membership)            (SYNC)
+ *   → requireAccountingWritePermission(membership)    (SYNC)
+ *   → exportLedgerToAccounting(..., requestId)
+ *
+ * The pre-migration handler called `parseCommunityIdFromBody(req, body.communityId)`,
+ * which already delegates to `resolveEffectiveCommunityId` under the hood
+ * (drain #10 lesson). The only wire delta is the 400 envelope for invalid
+ * body, which becomes the canonical `VALIDATION_ERROR` shape; status
+ * unchanged at 400.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ValidationError } from '@/lib/api/errors';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
-import { parseCommunityIdFromBody } from '@/lib/finance/request';
+import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
 import { exportLedgerToAccounting } from '@/lib/services/accounting-connectors-service';
+import { accountingExportContract } from './contract';
 
-const exportSchema = z.object({
-  communityId: z.number().int().positive(),
-  provider: z.enum(['quickbooks', 'xero']),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  limit: z.number().int().min(1).max(500).optional(),
-});
+export const POST = withErrorHandler(
+  runRoute(accountingExportContract, async ({ body, req }) => {
+    const actorUserId = await requireAuthenticatedUserId();
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    const membership = await requireCommunityMembership(communityId, actorUserId);
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const actorUserId = await requireAuthenticatedUserId();
-  const body: unknown = await req.json();
-  const parsed = exportSchema.safeParse(body);
+    requireAccountingEnabled(membership);
+    requireAccountingWritePermission(membership);
 
-  if (!parsed.success) {
-    throw new ValidationError('Invalid accounting export payload', {
-      fields: formatZodErrors(parsed.error),
-    });
-  }
-
-  const communityId = parseCommunityIdFromBody(req, parsed.data.communityId);
-  const membership = await requireCommunityMembership(communityId, actorUserId);
-
-  requireAccountingEnabled(membership);
-  requireAccountingWritePermission(membership);
-
-  const requestId = req.headers.get('x-request-id');
-  const data = await exportLedgerToAccounting(
-    communityId,
-    actorUserId,
-    parsed.data.provider,
-    {
-      startDate: parsed.data.startDate,
-      endDate: parsed.data.endDate,
-      limit: parsed.data.limit,
-    },
-    requestId,
-  );
-
-  return NextResponse.json({ data });
-});
+    const requestId = req.headers.get('x-request-id');
+    return exportLedgerToAccounting(
+      communityId,
+      actorUserId,
+      body.provider,
+      {
+        startDate: body.startDate,
+        endDate: body.endDate,
+        limit: body.limit,
+      },
+      requestId,
+    );
+  }),
+);

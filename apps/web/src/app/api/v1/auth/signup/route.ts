@@ -1,38 +1,28 @@
-import { NextResponse, type NextRequest } from 'next/server';
+/**
+ * GET + POST /api/v1/auth/signup
+ *
+ * Plan A1 drain #166. Migrated to `runRoute(contract, handler)`; see `./contract.ts`.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
 import {
   checkSignupSubdomainAvailability,
   submitSignup,
 } from '@/lib/auth/signup';
-import { signupSubdomainSchema } from '@/lib/auth/signup-schema';
+import {
+  authSignupGetContract,
+  authSignupPostContract,
+} from './contract';
 
-export const GET = withErrorHandler(async (req: NextRequest) => {
-  const { searchParams } = new URL(req.url);
-  const parseResult = signupSubdomainSchema.safeParse({
-    subdomain: searchParams.get('subdomain'),
-    signupRequestId: searchParams.get('signupRequestId') ?? undefined,
-  });
+export const GET = withErrorHandler(
+  runRoute(authSignupGetContract, async ({ query }) =>
+    checkSignupSubdomainAvailability(query.subdomain, {
+      excludeSignupRequestId: query.signupRequestId,
+      signupRequestId: query.signupRequestId,
+    }),
+  ),
+);
 
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid subdomain lookup payload', {
-      fieldErrors: parseResult.error.flatten().fieldErrors,
-    });
-  }
-
-  const availability = await checkSignupSubdomainAvailability(
-    parseResult.data.subdomain,
-    {
-      excludeSignupRequestId: parseResult.data.signupRequestId,
-      signupRequestId: parseResult.data.signupRequestId,
-    },
-  );
-
-  return NextResponse.json({ data: availability });
-});
-
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const body: unknown = await req.json();
-  const result = await submitSignup(body);
-  return NextResponse.json({ data: result });
-});
+export const POST = withErrorHandler(
+  runRoute(authSignupPostContract, async ({ body }) => submitSignup(body)),
+);
