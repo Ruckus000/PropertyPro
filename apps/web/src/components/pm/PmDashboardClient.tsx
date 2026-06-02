@@ -16,6 +16,7 @@ import { PortfolioTable } from './PortfolioTable';
 import { ViewToggle, getStoredViewMode, storeViewMode, type ViewMode } from './ViewToggle';
 import { AddCommunityModal } from './add-community-modal';
 import { CommunityAddedModal } from './CommunityAddedModal';
+import { SiteSetupBanner } from './SiteSetupBanner';
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
@@ -57,8 +58,16 @@ export function PmDashboardClient() {
     offset: pagination.pageIndex * pagination.pageSize,
   });
 
+  // Soft nudge when any loaded community hasn't completed its public site.
+  // (Scoped to the current page of results — acceptable for a dismissible
+  // nudge; the vast majority of portfolios fit on one page.)
+  const hasIncompleteSite = (data?.communities ?? []).some(
+    (c) => c.siteOnboardingCompletedAt === null,
+  );
+
   return (
     <div className="space-y-6">
+      <SiteSetupBanner hasIncompleteSite={hasIncompleteSite} />
       <PageHeader
         title="Communities"
         description={

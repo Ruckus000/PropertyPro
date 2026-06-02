@@ -124,6 +124,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // The unsafe-client usage moved into the user-profile-service in A3 Phase 2,
   // so the route itself no longer needs the allowance.
   resolve(repoRoot, 'apps/web/src/lib/services/user-profile-service.ts'),
+  // User preferences — per-user platform-level key/value (no community_id);
+  // caller authorizes on user identity and only touches the actor's own rows.
+  resolve(repoRoot, 'apps/web/src/lib/services/user-preferences-service.ts'),
   // E-02: Account settings page — reads user row (no community_id on users table)
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/settings/account/page.tsx'),
   // Phase 1B: Phone OTP verification — queries/updates users table (no community_id column).
