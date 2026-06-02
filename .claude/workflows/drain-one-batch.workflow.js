@@ -305,6 +305,21 @@ Use the matching canonical template:
 - **PAGINATED** — mirror \`apps/web/src/app/api/v1/visitors/denied/{contract.ts,route.ts}\` (tri-state filter) or \`apps/web/src/app/api/v1/polls/{contract.ts,route.ts}\` (boolean filters + time-dependent service args). Set \`paginated: true\` on the contract.
 - **MULTI_METHOD** — two contracts in one file (one per method).
 
+## Platform-admin CORS routes (\`apps/web/src/app/api/v1/admin/*\`)
+
+If the pre-migration route attaches CORS headers (\`mergeAdminCorsHeaders(response, origin)\`
+/ \`corsHeaders(origin)\`) and/or re-exports an OPTIONS handler
+(\`export { handleOptions as OPTIONS }\`), you MUST preserve that exactly. The
+runner returns a JSON response, so wrap its output: keep an OUTER
+\`withErrorHandler(async (req, ctx) => { ... })\` that (a) resolves the origin,
+(b) \`const response = await runRoute(contract, handler)(req, ctx)\`, (c)
+\`return mergeAdminCorsHeaders(response, origin)\`, and (d) still
+\`export { handleOptions as OPTIONS }\`. Mirror the already-merged drains
+\`apps/web/src/app/api/v1/admin/access-plans/community/[id]/{contract.ts,route.ts}\`
+(GET, drain #178) and \`apps/web/src/app/api/v1/admin/deletion-requests/[id]/intervene/{contract.ts,route.ts}\`
+(POST, drain #179) — read both before writing. Auth is the platform-admin chain
+(NOT community membership); preserve it verbatim.
+
 ## Corpus rules to follow
 
 1. **Auth chain preserved verbatim** from pre-migration. Same order, same sync vs async behavior.
