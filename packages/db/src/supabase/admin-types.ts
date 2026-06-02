@@ -105,6 +105,7 @@ export type AdminCommunityRow = {
   name: string;
   slug: string;
   timezone: string;
+  community_type: 'condo_718' | 'hoa_720' | 'apartment';
 };
 
 // ─── Database definition for typed client ───

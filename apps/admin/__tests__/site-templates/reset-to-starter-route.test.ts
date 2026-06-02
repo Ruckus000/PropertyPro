@@ -129,7 +129,7 @@ describe('POST /api/admin/site-templates/communities/[id]/reset-to-starter', () 
 
   it('happy path: snapshots current rows, inserts pack blocks, writes audit log', async () => {
     const { client } = buildClient({
-      community: { data: { id: 42, slug: 'sunset-condos', name: 'Sunset Condos' }, error: null },
+      community: { data: { id: 42, slug: 'sunset-condos', name: 'Sunset Condos', community_type: 'condo_718' }, error: null },
       pack: {
         data: {
           slug: 'florida-condo-v1',
@@ -245,6 +245,31 @@ describe('POST /api/admin/site-templates/communities/[id]/reset-to-starter', () 
     );
     expect(res.status).toBe(400);
     expect((await res.json()).error.message).toMatch(/archived/i);
+  });
+
+  it('400s when the pack community_type does not match the community (no destructive write)', async () => {
+    const { client, calls } = buildClient({
+      community: { data: { id: 42, slug: 'sunset-condos', name: 'Sunset Condos', community_type: 'condo_718' }, error: null },
+      pack: {
+        data: {
+          slug: 'apartment-v1',
+          blocks: [{ blockType: 'hero', blockOrder: 1, content: { headline: 'Hi' } }],
+          is_archived: false,
+          community_type: 'apartment',
+        },
+        error: null,
+      },
+    });
+    createAdminTypedClientMock.mockReturnValue(client);
+    const { POST } = await importHandler();
+    const res = await POST(
+      makeRequest({ starterPackSlug: 'apartment-v1', confirmCommunitySlug: 'sunset-condos' }) as unknown as Parameters<typeof POST>[0],
+      { params: Promise.resolve({ id: '42' }) },
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toMatch(/community type/i);
+    // The guard runs BEFORE any destructive op — no site_blocks snapshot/insert.
+    expect(calls).not.toContain('site_blocks');
   });
 
   it('throws when requirePlatformAdmin rejects', async () => {

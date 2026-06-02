@@ -89,7 +89,7 @@ export async function POST(
   // 1. Verify community + slug match (confirm-by-slug guard)
   const { data: community, error: commErr } = await db
     .from('communities')
-    .select('id, slug, name')
+    .select('id, slug, name, community_type')
     .eq('id', communityId)
     .single();
   if (commErr || !community) {
@@ -120,6 +120,22 @@ export async function POST(
   if ((pack as { is_archived: boolean }).is_archived) {
     return NextResponse.json(
       { error: { message: `Starter pack is archived: ${starterPackSlug}` } },
+      { status: 400 },
+    );
+  }
+
+  // Type-match guard: a pack only seeds blocks meaningful for its community
+  // type, so refuse to apply a pack whose community_type differs from the
+  // target community's. Checked BEFORE the destructive snapshot/apply below.
+  const communityType = (community as { community_type: string }).community_type;
+  const packType = (pack as { community_type: string }).community_type;
+  if (communityType !== packType) {
+    return NextResponse.json(
+      {
+        error: {
+          message: `Starter pack community type (${packType}) does not match the community community type (${communityType})`,
+        },
+      },
       { status: 400 },
     );
   }
