@@ -2,33 +2,30 @@
  * GET /api/v1/admin/access-plans/community/[id] — List plans for a specific community
  *
  * Auth: platform admin (platform_admin_users row)
+ *
+ * Plan A1 drain #178 — migrated to `runRoute(contract, handler)`; see `./contract.ts`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';
-import { corsHeaders, handleOptions } from '@/lib/api/admin-cors';
-import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { handleOptions, mergeAdminCorsHeaders } from '@/lib/api/admin-cors';
 import { listAccessPlansWithStatus } from '@/lib/services/account-lifecycle-service';
+import { adminAccessPlansCommunityListContract } from './contract';
 
 export { handleOptions as OPTIONS };
 
-export const GET = withErrorHandler(
-  async (
-    req: NextRequest,
-    context: { params: Promise<{ id: string }> },
-  ): Promise<NextResponse> => {
+const runListCommunityAccessPlans = runRoute(
+  adminAccessPlansCommunityListContract,
+  async ({ params }) => {
     const adminUserId = await requirePlatformAdmin();
     void adminUserId;
-    const origin = req.headers.get('origin');
-    const { id } = await context.params;
-    const communityId = Number(id);
 
-    if (Number.isNaN(communityId) || communityId <= 0) {
-      throw new ValidationError('Invalid community ID');
-    }
-
-    const data = await listAccessPlansWithStatus({ communityId });
-
-    return NextResponse.json({ data }, { headers: corsHeaders(origin) });
+    return listAccessPlansWithStatus({ communityId: params.id });
   },
 );
+
+export const GET = withErrorHandler(async (req, ctx) => {
+  const origin = req.headers.get('origin');
+  const response = await runListCommunityAccessPlans(req, ctx);
+  return mergeAdminCorsHeaders(response, origin);
+});
