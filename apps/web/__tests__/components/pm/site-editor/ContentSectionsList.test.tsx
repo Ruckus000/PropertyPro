@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
@@ -300,5 +300,101 @@ describe('<ContentSectionsList>', () => {
     render(wrap(<ContentSectionsList communityId={42} hasSitePolishBlocks />));
     const form = await screen.findByTestId('gallery-form');
     expect(form).toHaveAttribute('data-block-order', '10');
+  });
+});
+
+describe('<ContentSectionsList> reorder controls', () => {
+  // Always-resolving fetch returning the given blocks. The initial GET, the
+  // reorder POST (which only checks res.ok), and the post-settle refetch all
+  // read this shape harmlessly.
+  function mockFetchWithBlocks(blocks: object[]) {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { blocks, ok: true } }),
+    });
+  }
+
+  const TWO_BLOCKS = [
+    { id: 10, blockType: 'text', blockOrder: 2, content: { body: 'A' } },
+    { id: 11, blockType: 'image', blockOrder: 3, content: { imagePath: '/b.webp', altText: 'B' } },
+  ];
+
+  it('renders keyboard-accessible Move up / Move down buttons for each content block', async () => {
+    mockFetchWithBlocks(TWO_BLOCKS);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+
+    const ups = screen.getAllByRole('button', { name: /move .* up/i });
+    const downs = screen.getAllByRole('button', { name: /move .* down/i });
+    expect(ups).toHaveLength(2);
+    expect(downs).toHaveLength(2);
+  });
+
+  it('disables Move up on the first block and Move down on the last block', async () => {
+    mockFetchWithBlocks(TWO_BLOCKS);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+
+    const ups = screen.getAllByRole('button', { name: /move .* up/i });
+    const downs = screen.getAllByRole('button', { name: /move .* down/i });
+    // First block (order 2): up disabled, down enabled.
+    expect(ups[0]).toBeDisabled();
+    expect(downs[0]).not.toBeDisabled();
+    // Last block (order 3): up enabled, down disabled.
+    expect(ups[1]).not.toBeDisabled();
+    expect(downs[1]).toBeDisabled();
+  });
+
+  it('clicking Move down POSTs the reorder request with the block id and direction', async () => {
+    mockFetchWithBlocks(TWO_BLOCKS);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+
+    const downs = screen.getAllByRole('button', { name: /move .* down/i });
+    fireEvent.click(downs[0]); // move the first block (id 10) down
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/pm/site/blocks/reorder',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    const reorderCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => c[0] === '/api/v1/pm/site/blocks/reorder',
+    )!;
+    expect(JSON.parse(reorderCall[1].body as string)).toEqual({
+      communityId: 42,
+      blockId: 10,
+      direction: 'down',
+    });
+  });
+
+  it('clicking Move up on the second block POSTs direction "up" with its id', async () => {
+    mockFetchWithBlocks(TWO_BLOCKS);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+
+    const ups = screen.getAllByRole('button', { name: /move .* up/i });
+    fireEvent.click(ups[1]); // move the second block (id 11) up
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/pm/site/blocks/reorder',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    const reorderCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => c[0] === '/api/v1/pm/site/blocks/reorder',
+    )!;
+    expect(JSON.parse(reorderCall[1].body as string)).toMatchObject({ blockId: 11, direction: 'up' });
+  });
+
+  it('does not render reorder buttons when there is only one content block (nothing to swap)', async () => {
+    mockFetchWithBlocks([{ id: 20, blockType: 'text', blockOrder: 2, content: { body: 'only' } }]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+    // A lone block can't move in either direction — both controls disabled.
+    expect(screen.getByRole('button', { name: /move .* up/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /move .* down/i })).toBeDisabled();
   });
 });

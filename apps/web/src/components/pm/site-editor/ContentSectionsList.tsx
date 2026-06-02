@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { ChevronUp, ChevronDown } from 'lucide-react';
+import { useContentBlocks, useReorderBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { TextBlockForm } from './TextBlockForm';
 import { ImageBlockForm } from './ImageBlockForm';
 import { AnnouncementsBlockForm } from './AnnouncementsBlockForm';
@@ -95,6 +96,7 @@ function parseGalleryBlock(content: unknown): GalleryBlockContent | null {
 
 export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }: Props) {
   const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
+  const reorder = useReorderBlocks(communityId);
   const [adding, setAdding] = useState<
     | 'text'
     | 'image'
@@ -142,10 +144,32 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           No content sections yet — add a text or image block below.
         </p>
       )}
-      {contentBlocks.map((b) => (
+      {contentBlocks.map((b, index) => (
         <div key={b.id} className="rounded-md border border-default bg-surface-card p-4">
-          <div className="mb-3 text-xs text-content-secondary">
-            #{b.blockOrder} — {b.blockType}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="text-xs text-content-secondary">
+              #{b.blockOrder} — {b.blockType}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => reorder.mutate({ blockId: b.id, direction: 'up' })}
+                disabled={index === 0 || reorder.isPending}
+                aria-label={`Move ${b.blockType} section up`}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-default text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <ChevronUp className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => reorder.mutate({ blockId: b.id, direction: 'down' })}
+                disabled={index === contentBlocks.length - 1 || reorder.isPending}
+                aria-label={`Move ${b.blockType} section down`}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-default text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
           {b.blockType === 'text' && (
             <TextBlockForm
