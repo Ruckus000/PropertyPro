@@ -99,12 +99,23 @@ describe('pm branding route', () => {
       expect(json.data).toEqual({ primaryColor: '#1a56db' });
     });
 
+    it('returns 200 with empty object when no branding set', async () => {
+      getBrandingForCommunityMock.mockResolvedValueOnce(null);
+      const req = new NextRequest('http://localhost/api/v1/pm/branding?communityId=1');
+      const res = await GET(req);
+
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as { data: unknown };
+      expect(json.data).toEqual({});
+    });
+
     it('returns 403 for non-PM user', async () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         ...PM_MEMBERSHIP,
-        role: 'owner',
+        role: 'resident',
         isAdmin: false,
         isUnitOwner: true,
+        displayTitle: 'Owner',
       });
       const req = new NextRequest('http://localhost/api/v1/pm/branding?communityId=1');
       const res = await GET(req);
@@ -146,20 +157,6 @@ describe('pm branding route', () => {
       );
     });
 
-    it('gates customCssOverrides behind hasSiteCustomCss', async () => {
-      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 1,
-          customCssOverrides: { primaryColor: '#112233' },
-        }),
-      });
-      await PATCH(req);
-
-      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
-    });
-
     it('returns 400 for invalid hex color', async () => {
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
@@ -172,7 +169,99 @@ describe('pm branding route', () => {
       expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
     });
 
-    it('returns 403 for non-PM user without calling demo grace or update', async () => {
+    it('persists customCssOverrides and enforces hasSiteCustomCss', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 1,
+          customCssOverrides: { primaryColor: '#112233', bodyFont: 'Lato' },
+        }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(200);
+      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
+        customCssOverrides: { primaryColor: '#112233', bodyFont: 'Lato' },
+      });
+    });
+
+    it('returns 403 when the plan lacks hasSiteCustomCss', async () => {
+      requirePlanFeatureMock.mockRejectedValueOnce(new ForbiddenError('Upgrade required'));
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: { primaryColor: '#112233' } }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(403);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown key inside customCssOverrides (strict — no raw CSS)', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          communityId: 1,
+          customCssOverrides: { primaryColor: '#112233', rawCss: 'body{display:none}' },
+        }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(400);
+      expect(requirePlanFeatureMock).not.toHaveBeenCalled();
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid hex inside customCssOverrides', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: { accentColor: 'red' } }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(400);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-allowlisted bodyFont inside customCssOverrides', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: { bodyFont: 'Comic Sans MS' } }),
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(400);
+      expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('clears overrides with null (still gated)', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customCssOverrides: null }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(200);
+      expect(requirePlanFeatureMock).toHaveBeenCalledWith(1, 'hasSiteCustomCss');
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, { customCssOverrides: null });
+    });
+
+    it('does NOT gate a plain color PATCH on hasSiteCustomCss', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, primaryColor: '#aabbcc' }),
+      });
+      await PATCH(req);
+      expect(requirePlanFeatureMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 for non-PM user — demo grace runs but update does not', async () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         ...PM_MEMBERSHIP,
         role: 'cam',
