@@ -41,6 +41,15 @@ describe('operations route', () => {
       isUnitOwner: false,
       isAdmin: true,
     });
+    listOperationsForCommunityMock.mockResolvedValue({
+      data: [],
+      meta: {
+        cursor: null,
+        limit: 25,
+        partialFailure: false,
+        unavailableSources: [],
+      },
+    });
   });
 
   it('returns 200 with partial failure metadata when one source is unavailable', async () => {
@@ -111,6 +120,32 @@ describe('operations route', () => {
 
     expect(res.status).toBe(403);
     expect(json.error?.message ?? json.error).toMatch(/resident/i);
+    expect(listOperationsForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when unauthenticated', async () => {
+    const { UnauthorizedError } = await import('@/lib/api/errors');
+    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/operations?communityId=42&limit=25'),
+    );
+
+    expect(res.status).toBe(401);
+    expect(listOperationsForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when maintenance read permission is denied', async () => {
+    const { ForbiddenError } = await import('@/lib/api/errors');
+    requirePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError('Forbidden');
+    });
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/operations?communityId=42&limit=25'),
+    );
+
+    expect(res.status).toBe(403);
     expect(listOperationsForCommunityMock).not.toHaveBeenCalled();
   });
 
