@@ -426,17 +426,50 @@ if (!preVet || preVet.picks.length === 0) {
 
 log(`Pre-vet picked ${preVet.picks.length} candidate(s): ${preVet.picks.map(p => p.route.split('/').pop()).join(', ')}`)
 
-// Phase 2+ will be added in subsequent tasks. For now, return the picks
-// in `notes` so we can verify the phase works in isolation.
+const mainSha = (await agent(
+  `Run: \`cd /Users/jphilistin/Documents/Coding/PropertyPro && git fetch origin --quiet && git rev-parse origin/main\`. Return ONLY the 40-char SHA, no quotes, no whitespace.`,
+  { label: 'main-sha' }
+)).trim()
+log(`origin/main tip: ${mainSha}`)
+
+phase('Pipeline')
+
+const implementResults = await parallel(
+  preVet.picks.map((pick, idx) => () =>
+    agent(implementPrompt(pick, mainSha), {
+      schema: IMPLEMENT_RESULT_SCHEMA,
+      label: `impl:${pick.route.split('/').pop()}`,
+      phase: 'Pipeline',
+    }).then(r => ({ pick, result: r }))
+  )
+)
+
+// Filter out failed implementations
+const successful = implementResults.filter(x => x !== null && x.result.ok)
+const failedImpl = implementResults.filter(x => x !== null && !x.result.ok)
+
+log(`Implement stage: ${successful.length} succeeded, ${failedImpl.length} failed`)
+
+// Add failed implementations to skip list
+const newSkips = failedImpl.map(f => ({
+  route: f.pick.route,
+  classification: 'NEEDS_HUMAN',
+  reason: f.result.reason || 'Implementor returned ok:false',
+}))
+
+// Phase 3+ will be added in subsequent tasks. For now, return what we have.
 return {
   merged: 0,
-  skipped: preVet.rejected.map(r => ({
-    route: r.route,
-    classification: r.classification === 'RUNNER_BLOCKED' ? 'PERMANENT' : 'NEEDS_HUMAN',
-    reason: r.reason,
-  })),
+  skipped: [
+    ...preVet.rejected.map(r => ({
+      route: r.route,
+      classification: r.classification === 'RUNNER_BLOCKED' ? 'PERMANENT' : 'NEEDS_HUMAN',
+      reason: r.reason,
+    })),
+    ...newSkips,
+  ],
   mergeCommits: [],
   findings: { high: 0, mediumAdopted: 0, dismissed: 0 },
   updatedState: state,
-  _debug: { picks: preVet.picks },
+  _debug: { picks: preVet.picks, successful: successful.map(s => ({ pr: s.result.prUrl, route: s.pick.route })) },
 }
