@@ -15,6 +15,7 @@ import { CommunityCardGrid } from './CommunityCardGrid';
 import { PortfolioTable } from './PortfolioTable';
 import { ViewToggle, getStoredViewMode, storeViewMode, type ViewMode } from './ViewToggle';
 import { AddCommunityModal } from './add-community-modal';
+import { CommunityAddedModal } from './CommunityAddedModal';
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
@@ -122,6 +123,9 @@ export function PmDashboardClient() {
         onClose={() => setIsAddModalOpen(false)}
         billingGroupId={billingGroupId}
       />
+
+      {/* Confirmation shown when Stripe checkout returns after adding a community. */}
+      <CommunityAddedModal />
     </div>
   );
 }
