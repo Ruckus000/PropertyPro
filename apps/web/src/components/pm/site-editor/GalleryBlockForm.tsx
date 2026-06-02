@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { GalleryBlockContent, GalleryImage } from '@propertypro/shared';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
-import { buildPublicAssetUrl } from '@/lib/site-assets/storage-paths';
+import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 
 interface Props {
   communityId: number;
