@@ -6,6 +6,7 @@ export * from './community-join-requests';
 export * from './enums';
 export * from './communities';
 export * from './users';
+export * from './user-preferences';
 export * from './user-roles';
 export * from './units';
 export * from './document-categories';

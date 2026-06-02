@@ -36,6 +36,9 @@ vi.mock('@/components/pm/add-community-modal', () => ({
 vi.mock('@/components/pm/CommunityAddedModal', () => ({
   CommunityAddedModal: () => null,
 }));
+vi.mock('@/components/pm/SiteSetupBanner', () => ({
+  SiteSetupBanner: () => null,
+}));
 vi.mock('@/components/pm/CommunityFilters', () => ({
   CommunityFilters: () => null,
 }));
