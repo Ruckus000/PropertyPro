@@ -83,3 +83,15 @@ describe('DELETE [slug] (archive)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('auth', () => {
+  it('PATCH rejects when not a platform admin', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+    await expect(PATCH(patchReq({ displayName: 'X' }) as any, ctx('florida-condo-v1'))).rejects.toThrow('not-admin');
+  });
+
+  it('DELETE rejects when not a platform admin', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+    await expect(DELETE(new Request('http://localhost/x', { method: 'DELETE' }) as any, ctx('florida-condo-v1'))).rejects.toThrow('not-admin');
+  });
+});

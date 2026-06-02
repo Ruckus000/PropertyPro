@@ -21,6 +21,9 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   await requirePlatformAdmin();
   const { slug } = await context.params;
+  if (!slug || typeof slug !== 'string') {
+    return NextResponse.json({ error: { message: 'Invalid starter pack slug' } }, { status: 400 });
+  }
   let json: unknown = {};
   try { json = await request.json(); } catch { /* empty body allowed */ }
   const parsed = bodySchema.safeParse(json ?? {});

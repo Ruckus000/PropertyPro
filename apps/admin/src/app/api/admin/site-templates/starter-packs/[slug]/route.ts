@@ -23,6 +23,9 @@ const patchBodySchema = z.object({
 export async function PATCH(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   await requirePlatformAdmin();
   const { slug } = await context.params;
+  if (!slug || typeof slug !== 'string') {
+    return NextResponse.json({ error: { message: 'Invalid starter pack slug' } }, { status: 400 });
+  }
   let json: unknown;
   try { json = await request.json(); } catch { return NextResponse.json({ error: { message: 'Body must be valid JSON' } }, { status: 400 }); }
   const parsed = patchBodySchema.safeParse(json);
@@ -53,6 +56,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
 export async function DELETE(_request: NextRequest, context: { params: Promise<{ slug: string }> }) {
   await requirePlatformAdmin();
   const { slug } = await context.params;
+  if (!slug || typeof slug !== 'string') {
+    return NextResponse.json({ error: { message: 'Invalid starter pack slug' } }, { status: 400 });
+  }
   const db = createAdminTypedClient();
 
   const { data: pack, error: readErr } = await db
