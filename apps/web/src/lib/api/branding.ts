@@ -11,7 +11,7 @@ import { communities, siteLayoutMetadata } from '@propertypro/db';
 // AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq, and, isNull } from '@propertypro/db/filters';
-import type { CommunityBranding } from '@propertypro/shared';
+import type { CommunityBranding, CustomCssOverrides } from '@propertypro/shared';
 
 /**
  * Public info about a community for the public site renderer.
@@ -135,6 +135,8 @@ export interface BrandingPatch {
   themePresetSlug?: string | null;
   /** PR #5b Step 3 — community tagline. */
   tagline?: string | null;
+  /** PR #11 — Pro+ custom CSS token overrides; null clears them. */
+  customCssOverrides?: CustomCssOverrides | null;
 }
 
 /**
