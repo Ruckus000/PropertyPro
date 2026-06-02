@@ -36,7 +36,7 @@ export type { BlockType } from './types';
 export { heroBlockSchema, type HeroBlockContent } from './hero';
 export { textBlockSchema, type TextBlockContent } from './text';
 export { imageBlockSchema, type ImageBlockContent } from './image';
-export { documentsBlockSchema, type DocumentsBlockContent } from './documents';
+export { documentsBlockSchema, DOCUMENT_CATEGORIES, type DocumentsBlockContent, type DocumentCategory } from './documents';
 export { meetingsBlockSchema, type MeetingsBlockContent } from './meetings';
 export { announcementsBlockSchema, type AnnouncementsBlockContent } from './announcements';
 export { contactBlockSchema, type ContactBlockContent } from './contact';

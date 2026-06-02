@@ -5,13 +5,22 @@
 import { z } from 'zod';
 import { sorLimitSchema } from './types';
 
-const documentCategorySchema = z.enum([
+/**
+ * The closed set of document categories a documents block may filter to.
+ * Single source of truth — consumed by the schema below AND by editor UIs
+ * (e.g. the admin starter-pack block editor) so they can't drift.
+ */
+export const DOCUMENT_CATEGORIES = [
   'budget',
   'minutes',
   'financial',
   'rules',
   'other',
-]);
+] as const;
+
+export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
+
+const documentCategorySchema = z.enum(DOCUMENT_CATEGORIES);
 
 export const documentsBlockSchema = z
   .object({

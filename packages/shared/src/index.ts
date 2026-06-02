@@ -118,9 +118,11 @@ export {
   faqBlockSchema,
   galleryBlockSchema,
   amenitiesBlockSchema,
+  DOCUMENT_CATEGORIES,
 } from './site-blocks/index';
 export type {
   BlockType,
+  DocumentCategory,
   HeroBlockContent,
   TextBlockContent,
   ImageBlockContent,
