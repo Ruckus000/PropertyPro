@@ -253,6 +253,150 @@ If you find fewer than 3 viable picks, return what you have. Do not fabricate.
 `
 }
 
+function implementPrompt(pick, mainTipSha) {
+  return `Implement A1 contract-allowlist drain for the route:
+**${pick.route}**
+
+## Worktree
+
+- Worktree path: \`/Users/jphilistin/Documents/Coding/PropertyPro/.claude/worktrees/drain-${pick.route.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(-40)}\`
+- Branch: \`a1/auto-drain-${pick.route.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(-40)}\`
+- Base commit: \`${mainTipSha}\` (origin/main tip)
+
+Create the worktree first:
+\`\`\`bash
+cd /Users/jphilistin/Documents/Coding/PropertyPro
+git worktree add <worktree-path> origin/main -b <branch>
+cd <worktree-path>
+\`\`\`
+
+## Read the pre-migration source
+
+\`\`\`bash
+cat ${pick.route}
+\`\`\`
+
+## Read the service function's TS return type — CRITICAL
+
+**Before writing the test fixture, you MUST \`Read\` the service function's
+TypeScript return type from its source file in \`apps/web/src/lib/services/<service>.ts\`.
+Read at least 30 lines around the function definition to see the return type
+annotation in full. Then construct the mock fixture using ONLY fields present
+in that real return type — do not invent additional fields (no \`connectedAt\`,
+no \`generatedAt\`, no \`recipientCount\` unless they appear in the source).
+Failing this rule produces tests that green-bar against fictional contracts.**
+
+## Classification: ${pick.classification}
+
+Use the matching canonical template:
+
+- **SIMPLE_POST** / **SIMPLE_GET** — mirror \`apps/web/src/app/api/v1/elections/[id]/vote/{contract.ts,route.ts}\` and \`apps/web/__tests__/elections/elections-vote-route.test.ts\`.
+- **PAGINATED** — mirror \`apps/web/src/app/api/v1/visitors/denied/{contract.ts,route.ts}\` (tri-state filter) or \`apps/web/src/app/api/v1/polls/{contract.ts,route.ts}\` (boolean filters + time-dependent service args). Set \`paginated: true\` on the contract.
+- **MULTI_METHOD** — two contracts in one file (one per method).
+
+## Corpus rules to follow
+
+1. **Auth chain preserved verbatim** from pre-migration. Same order, same sync vs async behavior.
+2. **\`assertNotDemoGrace\` runs BEFORE \`requireCommunityMembership\`** on any mutating method.
+3. **Async helpers must be \`await\`ed**: \`requireFinanceEnabled\`, \`requirePlanFeature\`, \`requireActiveSubscriptionForMutation\`, \`requireVisitorLoggingEnabled\`, \`requireArcEnabled\`, \`requireViolationsEnabled\`, \`assertNotDemoGrace\`.
+4. **Sync helpers are NOT \`await\`ed**: \`requireFinanceWritePermission\`, \`requireAccountingEnabled\`, \`requirePollsEnabled\`, \`requireStaffOperator\`, \`requireFinanceAdminWrite\`, \`requirePermission\`.
+5. **Response model**:
+   - Loose \`z.unknown()\` for services returning Drizzle rows (Date fields safeParse-fail tight schemas).
+   - Tight \`z.object({...})\` only for synthesized return shapes with no Dates (e.g., \`{success: true}\`, \`{disconnected: true}\`).
+6. **\`?? null\` coercion** on optional body fields where the service signature expects \`string | null\` (not \`string | undefined\`).
+7. **Tri-state / boolean query filters parsed manually in handler** from \`new URL(req.url).searchParams\` — NOT declared in Zod (preserves \`'garbage' → undefined\` and \`'true' | '1' → true\` semantics).
+8. **Time-dependent service args**: capture \`now: new Date()\` ONCE in handler before the paginate call.
+9. **Test file naming**: \`apps/web/__tests__/<domain>/<slug>-route.test.ts\`. Delete any legacy \`__tests__/<domain>/route.test.ts\` that's incompatible — don't leave duplication.
+10. **RBAC resource naming**: verify against \`packages/shared/src/rbac-matrix.ts\` BEFORE writing \`permission\` metadata. Plural/snake-case examples: \`'finances'\` (NOT \`'finance'\`), \`'work_orders'\` (NOT \`'workOrders'\`).
+11. **Validation-layer discipline**: declare in contract OR parse in handler, NEVER both. The runner has already validated by the time the handler runs.
+12. **Business-rule error messages preserved byte-identical** when consumers might surface \`json.error?.message\`.
+
+## File list
+
+1. **CREATE** \`<route-dir>/contract.ts\` with the contract(s) + docblock explaining auth chain, behavior changes, response model rationale.
+2. **REWRITE** \`<route-dir>/route.ts\` to use \`runRoute(contract, handler)\`. Preserve auth chain.
+3. **CREATE** \`apps/web/__tests__/<domain>/<slug>-route.test.ts\` mirroring the canonical template structure (vi.hoisted mocks, beforeEach setup, request helpers).
+4. **DELETE** any legacy incompatible test file.
+5. **EDIT** \`scripts/verify-contracts.ts\` — remove the one allowlist line for this route.
+
+## Test coverage minimums
+
+- Happy path with required fields.
+- Happy path with optional fields omitted (assert \`?? null\` coercion).
+- 401 unauth.
+- 400 per body validation field.
+- 400 \`params.id = 'abc'\` (non-numeric) AS A SEPARATE CASE from 400 \`params.id = '0'\` (zero). Symmetric on both methods if multi-method.
+- 403 per auth gate (assert downstream gates NOT called when this gate fires).
+- For paginated GETs: missing-cursor and with-cursor happy paths, invalid pageSize.
+- x-request-id null forwarding (header absent, assert service called with \`null\` at correct positional index).
+
+## Local checks
+
+Run BEFORE opening the PR:
+
+\`\`\`bash
+pnpm install --silent
+pnpm --filter @propertypro/api-contract build
+pnpm guard:contracts          # Expect Contracted +N, Allowlist -1
+pnpm typecheck
+cd apps/web && pnpm exec vitest run __tests__/<domain>/<slug>-route.test.ts
+\`\`\`
+
+If any check fails, fix and re-run. If a check repeatedly fails and you can't resolve, return \`{ok: false, reason: "<specific error>"}\`.
+
+## Open the PR
+
+\`\`\`bash
+gh pr create --title "Drain ${pick.route} to runRoute (A1 auto-drain)" --body "$(cat <<'EOF'
+## Summary
+- Migrates \`${pick.route}\` from \`withErrorHandler(async ...)\` to \`withErrorHandler(runRoute(contract, ...))\`.
+- Auth chain preserved verbatim. Wire shape \`{ data: ... }\` byte-identical.
+
+## Allowlist delta
+- KNOWN_UNCONTRACTED_ROUTES: ${'${oldCount}'} → ${'${newCount}'}
+
+## Test plan
+- [x] pnpm --filter @propertypro/api-contract build
+- [x] pnpm guard:contracts
+- [x] pnpm typecheck
+- [x] pnpm --filter @propertypro/web exec vitest run __tests__/<domain>/<slug>-route.test.ts
+
+🤖 Auto-drained via drain-loop workflow
+EOF
+)"
+\`\`\`
+
+Capture the PR URL and PR number from the gh output.
+
+## Return
+
+Use StructuredOutput with this shape:
+
+\`\`\`
+{
+  ok: true,
+  prUrl: "https://github.com/.../pull/XXX",
+  prNumber: XXX,
+  branch: "<branch>",
+  worktreePath: "<worktree-path>",
+  contractsDelta: <int>,    // from guard:contracts output
+  allowlistDelta: -1,
+  localChecksOk: true,
+}
+\`\`\`
+
+Or on failure:
+
+\`\`\`
+{
+  ok: false,
+  reason: "<specific error message>",
+  worktreePath: "<worktree-path>",  // so the orchestrator can clean up
+}
+\`\`\`
+`
+}
+
 phase('Pre-vet')
 
 const permanentSkips = Object.entries(state.skipList ?? {})
