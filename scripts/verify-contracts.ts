@@ -111,7 +111,6 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/internal/generate-assessments/route.ts',
   'apps/web/src/app/api/v1/internal/late-fee-processor/route.ts',
   'apps/web/src/app/api/v1/internal/notification-digests/process/route.ts',
-  'apps/web/src/app/api/v1/internal/payment-reminders/route.ts',
   'apps/web/src/app/api/v1/internal/provision/route.ts',
   'apps/web/src/app/api/v1/internal/provisioning-watchdog/route.ts',
   'apps/web/src/app/api/v1/internal/readiness/route.ts',
