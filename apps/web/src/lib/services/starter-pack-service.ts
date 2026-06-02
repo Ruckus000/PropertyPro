@@ -1,9 +1,11 @@
 /**
  * PR #5: Apply a community-type-matched starter pack to a new community.
  *
- * Called from createCommunityForPm AFTER the community is inserted. Reads
- * the matching site_starter_packs row, then inserts one published
- * site_blocks row per entry in the pack's blocks jsonb.
+ * Called from createCommunityForPm AFTER the community is inserted. Selects
+ * the highest-version, non-archived site_starter_packs row for the
+ * community_type (ties broken by id desc), then inserts one published
+ * site_blocks row per entry in the pack's blocks jsonb. No-ops when every
+ * pack for the type is archived (or none exists).
  *
  * Idempotent: if the community already has any published site_blocks,
  * skip the apply.
@@ -15,14 +17,8 @@
 import { createScopedClient, siteBlocks, siteStarterPacks } from '@propertypro/db';
 // AUTHZ: PR #5 starter pack lookup — siteStarterPacks is platform-level catalog; caller verifies community creation.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { eq } from '@propertypro/db/filters';
+import { and, desc, eq } from '@propertypro/db/filters';
 import type { CommunityType } from '@propertypro/shared';
-
-const STARTER_PACK_SLUG_BY_TYPE: Record<CommunityType, string> = {
-  condo_718: 'florida-condo-v1',
-  hoa_720: 'florida-hoa-v1',
-  apartment: 'apartment-v1',
-};
 
 interface StarterPackBlock {
   blockType: string;
@@ -40,32 +36,29 @@ export async function applyStarterPackToCommunity(
   communityId: number,
   communityType: CommunityType,
 ): Promise<ApplyStarterPackResult> {
-  const packSlug = STARTER_PACK_SLUG_BY_TYPE[communityType];
-  // Defensive: if STARTER_PACK_SLUG_BY_TYPE ever drifts from CommunityType
-  // (e.g. a new variant added without a pack mapping), no-op instead of
-  // executing a query with an undefined slug.
-  if (!packSlug) {
-    return { applied: false, blockCount: 0, packSlug: null };
-  }
-
   const scoped = createScopedClient(communityId);
   // queryWhere auto-injects community_id and deleted_at IS NULL; add isDraft=false to find published blocks.
   const existing = await scoped.queryWhere(siteBlocks, eq(siteBlocks.isDraft, false));
   if (existing.length > 0) {
-    return { applied: false, blockCount: 0, packSlug };
+    return { applied: false, blockCount: 0, packSlug: null };
   }
 
   const db = createUnscopedClient();
+  // Latest non-archived pack for this community type. `version` is the
+  // authority for "latest" (the slug's -vN suffix is a human label only);
+  // `id desc` breaks ties deterministically.
   const packRows = await db
-    .select({ blocks: siteStarterPacks.blocks })
+    .select({ slug: siteStarterPacks.slug, blocks: siteStarterPacks.blocks })
     .from(siteStarterPacks)
-    .where(eq(siteStarterPacks.slug, packSlug))
+    .where(and(eq(siteStarterPacks.communityType, communityType), eq(siteStarterPacks.isArchived, false)))
+    .orderBy(desc(siteStarterPacks.version), desc(siteStarterPacks.id))
     .limit(1);
 
   const pack = packRows[0];
   if (!pack || !Array.isArray(pack.blocks)) {
-    return { applied: false, blockCount: 0, packSlug };
+    return { applied: false, blockCount: 0, packSlug: null };
   }
+  const packSlug = pack.slug;
 
   const blocks = pack.blocks as StarterPackBlock[];
   const now = new Date();
