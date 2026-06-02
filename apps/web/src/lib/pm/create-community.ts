@@ -8,7 +8,7 @@ import {
 // AUTHZ: P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
-import type { CommunityType } from '@propertypro/shared';
+import { getDefaultDocumentCategories, type CommunityType } from '@propertypro/shared';
 
 interface CreateCommunityInput {
   userId: string;
@@ -28,25 +28,6 @@ interface CreateCommunityResult {
   communityId: number;
   slug: string;
 }
-
-type CategoryTemplate = { name: string; description: string };
-
-const CONDO_HOA_CATEGORIES: CategoryTemplate[] = [
-  { name: 'Governing Documents', description: 'Articles, bylaws, declarations, and rules' },
-  { name: 'Financial Records', description: 'Budgets, financial reports, and audits' },
-  { name: 'Meeting Records', description: 'Notices, agendas, and minutes' },
-  { name: 'Correspondence', description: 'Official letters and notices' },
-  { name: 'Contracts', description: 'Vendor and service contracts' },
-  { name: 'Inspection Reports', description: 'Milestone inspections, SIRS, and structural reports' },
-];
-
-const APARTMENT_CATEGORIES: CategoryTemplate[] = [
-  { name: 'Lease Agreements', description: 'Signed lease agreements and addenda' },
-  { name: 'Maintenance Records', description: 'Work orders and inspection reports' },
-  { name: 'Communications', description: 'Tenant notices and correspondence' },
-  { name: 'Financials', description: 'Rent rolls and financial summaries' },
-  { name: 'Compliance', description: 'Inspection reports and certificates' },
-];
 
 export async function createCommunityForPm(
   input: CreateCommunityInput,
@@ -86,8 +67,7 @@ export async function createCommunityForPm(
     });
 
     // 3. Insert default document categories
-    const templates =
-      input.communityType === 'apartment' ? APARTMENT_CATEGORIES : CONDO_HOA_CATEGORIES;
+    const templates = getDefaultDocumentCategories(input.communityType);
     await tx.insert(documentCategories).values(
       templates.map((t) => ({
         communityId: cId,

@@ -15,6 +15,8 @@ export const KNOWN_DOCUMENT_CATEGORY_KEYS = [
   'move_in_out_docs',
   'financial_records',
   'contracts',
+  'insurance',
+  'elections',
 ] as const;
 
 export const DOCUMENT_CATEGORY_KEYS = [

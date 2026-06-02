@@ -12,6 +12,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "tenant": {
@@ -26,6 +28,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "board_member": {
@@ -40,6 +44,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "board_president": {
@@ -54,6 +60,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "cam": {
@@ -68,6 +76,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "site_manager": {
@@ -82,6 +92,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "property_manager_admin": {
@@ -96,6 +108,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     }
   },
@@ -112,6 +126,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "tenant": {
@@ -126,6 +142,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "board_member": {
@@ -140,6 +158,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "board_president": {
@@ -154,6 +174,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "cam": {
@@ -168,6 +190,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "site_manager": {
@@ -182,6 +206,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "property_manager_admin": {
@@ -196,6 +222,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     }
   },
@@ -212,6 +240,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "tenant": {
@@ -226,6 +256,8 @@
       "move_in_out_docs": true,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "board_member": {
@@ -240,6 +272,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "board_president": {
@@ -254,6 +288,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     },
     "cam": {
@@ -268,6 +304,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "site_manager": {
@@ -282,6 +320,8 @@
       "move_in_out_docs": false,
       "financial_records": false,
       "contracts": false,
+      "insurance": false,
+      "elections": false,
       "unknown": false
     },
     "property_manager_admin": {
@@ -296,6 +336,8 @@
       "move_in_out_docs": true,
       "financial_records": true,
       "contracts": true,
+      "insurance": true,
+      "elections": true,
       "unknown": true
     }
   }

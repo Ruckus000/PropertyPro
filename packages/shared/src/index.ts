@@ -78,6 +78,7 @@ export function toInitials(name: string | null): string {
 export * from './branding';
 export * from './compliance/templates';
 export * from './access-policies';
+export * from './default-document-categories';
 export * from './rbac-matrix';
 export * from './features';
 export * from './plans';

@@ -85,6 +85,16 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
 
   contracts: 'contracts',
   contract: 'contracts',
+
+  insurance: 'insurance',
+  insurance_certificates: 'insurance',
+  coverage: 'insurance',
+
+  elections: 'elections',
+  election: 'elections',
+  voting_records: 'elections',
+
+  compliance: 'inspection_reports',
 };
 
 /**
