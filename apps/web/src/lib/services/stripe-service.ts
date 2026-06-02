@@ -257,7 +257,7 @@ export async function createAddCommunityCheckout(input: {
     mode: 'subscription',
     customer: input.stripeCustomerId,
     line_items: [{ price: priceId, quantity: 1 }],
-    return_url: `${input.returnBaseUrl}/pm/dashboard?added_session_id={CHECKOUT_SESSION_ID}`,
+    return_url: `${input.returnBaseUrl}/pm/dashboard/communities?added_session_id={CHECKOUT_SESSION_ID}`,
     metadata: {
       kind: 'add_to_group',
       billingGroupId: String(input.billingGroupId),

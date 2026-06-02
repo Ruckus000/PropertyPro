@@ -33,6 +33,9 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/pm/add-community-modal', () => ({
   AddCommunityModal: () => null,
 }));
+vi.mock('@/components/pm/CommunityAddedModal', () => ({
+  CommunityAddedModal: () => null,
+}));
 vi.mock('@/components/pm/CommunityFilters', () => ({
   CommunityFilters: () => null,
 }));

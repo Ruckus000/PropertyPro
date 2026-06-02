@@ -252,6 +252,38 @@ describe('stripe-service', () => {
   });
 
   // -----------------------------------------------------------------------
+  // createAddCommunityCheckout
+  // -----------------------------------------------------------------------
+  describe('createAddCommunityCheckout', () => {
+    it('returns to the real PM dashboard page (/pm/dashboard/communities) with added_session_id', async () => {
+      checkoutSessionsCreateMock.mockResolvedValue({
+        id: 'cs_add_1',
+        client_secret: 'cs_add_secret',
+      });
+
+      const { createAddCommunityCheckout } = await importService();
+      const result = await createAddCommunityCheckout({
+        billingGroupId: 7,
+        stripeCustomerId: 'cus_123',
+        pendingSignupId: 99,
+        communityType: 'condo_718',
+        planId: 'essentials',
+        candidateSlug: 'palm-shores',
+        returnBaseUrl: 'https://app.example.com',
+      });
+
+      expect(result).toEqual({ clientSecret: 'cs_add_secret', sessionId: 'cs_add_1' });
+      const args = checkoutSessionsCreateMock.mock.calls[0]![0];
+      // Must land on a route that actually exists (the portfolio dashboard),
+      // not the page-less /pm/dashboard which 404s.
+      expect(args.return_url).toBe(
+        'https://app.example.com/pm/dashboard/communities?added_session_id={CHECKOUT_SESSION_ID}',
+      );
+      expect(args.metadata).toMatchObject({ kind: 'add_to_group', billingGroupId: '7' });
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // retrieveCheckoutSession
   // -----------------------------------------------------------------------
   describe('retrieveCheckoutSession', () => {
