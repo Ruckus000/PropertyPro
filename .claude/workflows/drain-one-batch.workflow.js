@@ -555,6 +555,58 @@ If \`actionableFindings\` is empty, return \`{adopted: [], dismissed: [], failed
 `
 }
 
+function ciWaitPrompt(prNumbers) {
+  return `Poll GitHub CI for these PRs until all are settled or 30 minutes
+elapse:
+
+${prNumbers.map(n => `- #${n}`).join('\n')}
+
+## Required checks (must all PASS to call a PR GREEN)
+
+- Build
+- Lint
+- Typecheck
+- Unit Tests
+- integration-tests
+- migration-ordering
+- no-mock-guard
+- branch-freshness
+- verify-scoped-db-access (both runs)
+- perf-budget
+- perf-check
+
+Vercel checks are EXCLUDED — they're auto-skipped on drain PRs via
+\`ignoreCommand\` (commit \`9ac5e657\`).
+
+## Polling logic
+
+For each PR not yet settled:
+1. Run \`gh pr checks <pr_number>\`.
+2. If any required check has \`fail\`: mark RED with \`failedChecks\`.
+3. If all required checks have \`pass\`: mark GREEN.
+4. Else: still pending, check again next iteration.
+
+Sleep 90 seconds between polling rounds.
+
+Cap: 30 minutes total wall clock. Any PR still pending at the cap is
+marked TIMEOUT.
+
+## Return
+
+StructuredOutput shape:
+
+\`\`\`
+{
+  results: [
+    { prNumber: <int>, state: "GREEN" | "RED" | "TIMEOUT", failedChecks: ["<name>", ...] },
+    ...
+  ],
+  waitedSeconds: <int>
+}
+\`\`\`
+`
+}
+
 function dedupeFindings(a, b) {
   // Two findings are duplicates if they target the same file+line(±2) with
   // similar severity. The "description" field is too freeform for exact match.
@@ -679,6 +731,36 @@ const adoptedDrains = await parallel(
 
 log(`Adopt stage: ${adoptedDrains.reduce((s, d) => s + d.adoption.adopted.length, 0)} findings adopted across all drains`)
 
+phase('CI wait')
+
+const prsToWait = adoptedDrains.map(d => d.result.prNumber)
+let ciResults = []
+
+if (prsToWait.length > 0) {
+  const ciOutput = await agent(ciWaitPrompt(prsToWait), {
+    schema: CI_WAIT_RESULT_SCHEMA,
+    label: 'ci-wait',
+    phase: 'CI wait',
+  })
+  ciResults = ciOutput?.results ?? []
+  log(`CI wait complete after ${ciOutput?.waitedSeconds ?? 0}s: ${ciResults.map(r => `#${r.prNumber}:${r.state}`).join(', ')}`)
+}
+
+// Drains that didn't reach GREEN are dropped from merge
+const readyToMerge = adoptedDrains.filter(d => {
+  const ci = ciResults.find(r => r.prNumber === d.result.prNumber)
+  return ci?.state === 'GREEN'
+})
+const ciSkips = adoptedDrains.filter(d => {
+  const ci = ciResults.find(r => r.prNumber === d.result.prNumber)
+  return ci?.state === 'RED' || ci?.state === 'TIMEOUT'
+}).map(d => ({
+  route: d.pick.route,
+  classification: 'TRANSIENT',
+  reason: `CI ${ciResults.find(r => r.prNumber === d.result.prNumber)?.state}: ${(ciResults.find(r => r.prNumber === d.result.prNumber)?.failedChecks || []).join(', ')}`,
+  prUrl: d.result.prUrl,
+}))
+
 // Phase 3+ will be added in subsequent tasks. For now, return what we have.
 return {
   merged: 0,
@@ -689,6 +771,7 @@ return {
       reason: r.reason,
     })),
     ...newSkips,
+    ...ciSkips,
   ],
   mergeCommits: [],
   findings: {
