@@ -10,6 +10,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { UnauthorizedError } from '../../src/lib/api/errors';
 
 const {
   createScopedClientMock,
@@ -203,6 +204,59 @@ describe('p2-37 leases route', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Auth gate: unauthenticated → 401 (asserted on every method)
+  // -------------------------------------------------------------------------
+
+  describe('unauthenticated → 401', () => {
+    beforeEach(() => {
+      requireAuthenticatedUserIdMock.mockRejectedValue(
+        new UnauthorizedError('Authentication required'),
+      );
+    });
+
+    it('GET returns 401 and does not resolve membership', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?communityId=42');
+      const res = await GET(req);
+      expect(res.status).toBe(401);
+      expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    });
+
+    it('POST returns 401 and does not resolve membership', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'POST',
+        body: JSON.stringify({
+          communityId: 42,
+          unitId: 10,
+          residentId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          startDate: '2026-01-01',
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(401);
+      expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    });
+
+    it('PATCH returns 401 and does not resolve membership', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases', {
+        method: 'PATCH',
+        body: JSON.stringify({ id: 1, communityId: 42, status: 'terminated' }),
+        headers: { 'content-type': 'application/json' },
+      });
+      const res = await PATCH(req);
+      expect(res.status).toBe(401);
+      expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    });
+
+    it('DELETE returns 401 and does not resolve membership', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?id=1&communityId=42');
+      const res = await DELETE(req);
+      expect(res.status).toBe(401);
+      expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Zod validation
   // -------------------------------------------------------------------------
 
@@ -216,8 +270,13 @@ describe('p2-37 leases route', () => {
 
       const res = await POST(req);
       expect(res.status).toBe(400);
+      // Post-migration: body validation is enforced by the contract runner,
+      // so the envelope is the canonical `VALIDATION_ERROR` ('Invalid request
+      // body') rather than the bespoke pre-migration 'Invalid lease payload'.
+      // No consumer surfaces this message (requestJson consumers don't read
+      // it for body-validation failures).
       const json = (await res.json()) as { error: { message: string } };
-      expect(json.error.message).toContain('Invalid lease payload');
+      expect(json.error.message).toContain('Invalid request body');
     });
 
     it('POST rejects invalid date format', async () => {
@@ -303,9 +362,27 @@ describe('p2-37 leases route', () => {
       expect(res.status).toBe(400);
     });
 
-    it('DELETE rejects non-positive id', async () => {
+    it('DELETE rejects zero id (id=0)', async () => {
       const req = new NextRequest('http://localhost:3000/api/v1/leases?id=0&communityId=42');
       const res = await DELETE(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('DELETE rejects non-numeric id (id=abc) as a separate case', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?id=abc&communityId=42');
+      const res = await DELETE(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('DELETE rejects zero communityId (communityId=0)', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?id=1&communityId=0');
+      const res = await DELETE(req);
+      expect(res.status).toBe(400);
+    });
+
+    it('GET rejects non-numeric communityId (communityId=abc)', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/leases?communityId=abc');
+      const res = await GET(req);
       expect(res.status).toBe(400);
     });
   });
