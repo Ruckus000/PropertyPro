@@ -102,14 +102,14 @@ export function useDataSearch(
           if (!res.ok) {
             throw new Error(`${res.status}`);
           }
-          return res.json() as Promise<AggregatedSearchResponse>;
+          return res.json() as Promise<{ data: AggregatedSearchResponse }>;
         })
-        .then((data) => {
+        .then((payload) => {
           if (controller.signal.aborted) {
             return;
           }
 
-          setGroups(normalizeGroups(searchGroups, data.groups));
+          setGroups(normalizeGroups(searchGroups, payload.data.groups));
           setIsSearching(false);
         })
         .catch((err) => {
