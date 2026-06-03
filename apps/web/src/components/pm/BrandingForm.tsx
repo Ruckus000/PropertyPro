@@ -12,6 +12,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { CommunityBranding } from '@propertypro/shared';
 import { ALLOWED_FONTS } from '@propertypro/theme';
 import { BrandingPreview } from './BrandingPreview';
+import { SiteLogoField } from './SiteLogoField';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useSaveBranding } from '@/hooks/use-branding-form';
 
@@ -59,6 +60,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
   const [customEmailFooter, setCustomEmailFooter] = useState(initialBranding.customEmailFooter ?? '');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | undefined>(undefined);
+  const [siteLogoFile, setSiteLogoFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const objectUrlRef = useRef<string | undefined>(undefined);
@@ -123,6 +125,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
         fontBody,
         customEmailFooter,
         logoFile,
+        siteLogoFile,
       });
 
       // DOM/state side-effects stay in the component (not data).
@@ -163,6 +166,11 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
             onChange={handleLogoChange}
             className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive/20"
           />
+        </div>
+
+        {/* Site (wordmark) logo — cropped, shown in the public-site header */}
+        <div>
+          <SiteLogoField onChange={setSiteLogoFile} />
         </div>
 
         {/* Primary color */}

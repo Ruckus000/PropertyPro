@@ -32,6 +32,8 @@ export interface SaveBrandingInput {
   customEmailFooter: string;
   /** A newly-selected logo file to upload, or null to leave the logo unchanged. */
   logoFile: File | null;
+  /** A newly-cropped site (wordmark) logo to upload, or null to leave it unchanged. */
+  siteLogoFile?: File | null;
 }
 
 async function uploadLogo(communityId: number, file: File): Promise<string> {
@@ -75,11 +77,17 @@ async function saveBranding(input: SaveBrandingInput): Promise<void> {
     fontBody,
     customEmailFooter,
     logoFile,
+    siteLogoFile,
   } = input;
 
   let logoStoragePath: string | undefined;
   if (logoFile) {
     logoStoragePath = await uploadLogo(communityId, logoFile);
+  }
+
+  let siteLogoStoragePath: string | undefined;
+  if (siteLogoFile) {
+    siteLogoStoragePath = await uploadLogo(communityId, siteLogoFile);
   }
 
   const res = await fetch('/api/v1/pm/branding', {
@@ -94,6 +102,7 @@ async function saveBranding(input: SaveBrandingInput): Promise<void> {
       fontBody,
       customEmailFooter: customEmailFooter || undefined,
       ...(logoStoragePath !== undefined && { logoStoragePath }),
+      ...(siteLogoStoragePath !== undefined && { siteLogoStoragePath }),
     }),
   });
 
