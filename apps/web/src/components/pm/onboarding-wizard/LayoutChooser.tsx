@@ -53,10 +53,16 @@ interface Props {
   onContinue?: (slug: string) => void;
   /** Called when the user clicks "Skip — keep default". */
   onSkip?: () => void;
+  /** Called as soon as the user picks a layout (drives the live preview). */
+  onSelect?: (slug: string) => void;
 }
 
-export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip }: Props) {
+export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip, onSelect }: Props) {
   const [selected, setSelected] = useState<string>(initialLayoutId ?? 'tidewater');
+  const choose = (slug: string) => {
+    setSelected(slug);
+    onSelect?.(slug);
+  };
   const [outcome, setOutcome] = useState<string | null>(null);
   const wizard = useWebsiteWizard(communityId);
 
@@ -107,7 +113,7 @@ export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip
                 name="wizard-layout"
                 value={layout.slug}
                 checked={isSelected}
-                onChange={() => setSelected(layout.slug)}
+                onChange={() => choose(layout.slug)}
                 className="sr-only"
               />
               <div className="mb-2 flex items-center justify-between">

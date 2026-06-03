@@ -14,8 +14,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { hasRole } from '@/lib/api/role-guard';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
-import { LayoutChooser } from '@/components/pm/onboarding-wizard/LayoutChooser';
-import { PresetChooser } from '@/components/pm/onboarding-wizard/PresetChooser';
+import { WizardLayoutThemePreview } from '@/components/pm/onboarding-wizard/WizardLayoutThemePreview';
 import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
 import { WelcomeMessageEditor } from '@/components/pm/onboarding-wizard/WelcomeMessageEditor';
 import { ConfirmPublish } from '@/components/pm/onboarding-wizard/ConfirmPublish';
@@ -83,15 +82,12 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
         </p>
       </div>
 
-      <LayoutChooser communityId={communityId} initialLayoutId={branding?.layoutId ?? null} />
-
-      <div className="mt-6">
-        <PresetChooser
-          communityId={communityId}
-          presets={presets}
-          initialPresetSlug={branding?.themePresetSlug ?? null}
-        />
-      </div>
+      <WizardLayoutThemePreview
+        communityId={communityId}
+        presets={presets}
+        initialLayoutId={branding?.layoutId ?? null}
+        initialPresetSlug={branding?.themePresetSlug ?? null}
+      />
 
       <div className="mt-6">
         <IdentityEditor
