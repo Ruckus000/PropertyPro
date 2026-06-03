@@ -249,6 +249,18 @@ ${skipBlock}
      several return health-style 503 status codes. These are PERMANENTLY
      out of scope — reject every \`internal/*\` route as RUNNER_BLOCKED even
      if it looks like a simple POST.
+   - **"binary" means the RESPONSE BODY is binary — judge the return, NOT the
+     path name.** A route is only binary-RUNNER_BLOCKED if its handler returns
+     a Buffer/ReadableStream/\`new Response(<bytes>)\` or a \`NextResponse\` with
+     \`Content-Type: application/pdf|text/csv|application/zip\` +
+     \`Content-Disposition: attachment\`. A handler under a \`/download\` or
+     \`/pdf\` path that returns \`NextResponse.json({ data: { downloadUrl } })\`
+     or \`{ data: { pdfUrl } }\` (a PRESIGNED-URL string via
+     \`createPresignedDownloadUrl\`) is a normal **JSON SIMPLE_GET → DRAINABLE**,
+     NOT binary. \`git show\` the source and check the actual \`return\` before
+     rejecting on a \`download\`/\`pdf\`/\`export\` path name (e.g.
+     \`esign/submissions/[id]/download\` and \`esign/templates/[id]/pdf\` return
+     JSON and ARE drainable).
    - **COMPLEX_SKIP**: Stripe API calls, reauth gate, FSM/multi-branch
      auth, Supabase Storage + image processing, fire-and-forget
      notifications with side effects.
