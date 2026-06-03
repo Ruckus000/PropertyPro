@@ -125,6 +125,8 @@ export interface BrandingPatch {
   fontBody?: string;
   /** Supabase Storage path of the already-processed 400×400 WebP logo */
   logoPath?: string;
+  /** Supabase Storage path of the already-processed wordmark site logo (≤600×180 WebP) */
+  siteLogoPath?: string;
   /** Custom footer text for outbound emails */
   customEmailFooter?: string;
   /** Running total of site-asset bytes consumed by this community (managed by quota helpers) */

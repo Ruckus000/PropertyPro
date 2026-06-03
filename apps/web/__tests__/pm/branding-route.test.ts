@@ -13,6 +13,7 @@ const {
   createPresignedUploadUrlMock,
   logAuditEventMock,
   resizeLogoMock,
+  resizeSiteLogoMock,
   fileTypeFromBufferMock,
   assertNotDemoGraceMock,
   requirePlanFeatureMock,
@@ -26,6 +27,7 @@ const {
   createPresignedUploadUrlMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   resizeLogoMock: vi.fn(),
+  resizeSiteLogoMock: vi.fn(),
   fileTypeFromBufferMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn().mockResolvedValue(undefined),
   requirePlanFeatureMock: vi.fn().mockResolvedValue(undefined),
@@ -51,6 +53,7 @@ vi.mock('@propertypro/db', () => ({
 }));
 vi.mock('@/lib/services/image-processor', () => ({
   resizeLogo: resizeLogoMock,
+  resizeSiteLogo: resizeSiteLogoMock,
 }));
 vi.mock('file-type', () => ({
   fileTypeFromBuffer: fileTypeFromBufferMock,
@@ -313,6 +316,37 @@ describe('pm branding route', () => {
       expect(res.status).toBe(400);
       expect(resizeLogoMock).not.toHaveBeenCalled();
       expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
+
+    it('processes a site logo via resizeSiteLogo and persists siteLogoPath', async () => {
+      createPresignedDownloadUrlMock.mockResolvedValueOnce('http://storage/raw-site-logo');
+      createPresignedUploadUrlMock.mockResolvedValueOnce({ signedUrl: 'http://storage/put-site-logo' });
+      fileTypeFromBufferMock.mockResolvedValueOnce({ mime: 'image/png', ext: 'png' });
+      resizeSiteLogoMock.mockResolvedValueOnce(Buffer.from('processed-wordmark'));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn()
+          // GET the raw upload
+          .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) })
+          // PUT the processed webp
+          .mockResolvedValueOnce({ ok: true }),
+      );
+
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, siteLogoStoragePath: 'uploads/raw/site-logo.png' }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(200);
+      expect(resizeSiteLogoMock).toHaveBeenCalledTimes(1);
+      expect(resizeLogoMock).not.toHaveBeenCalled();
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
+        siteLogoPath: 'communities/1/branding/site-logo.webp',
+      });
 
       vi.unstubAllGlobals();
     });

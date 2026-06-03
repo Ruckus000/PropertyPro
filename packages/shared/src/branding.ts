@@ -16,8 +16,14 @@ export interface CommunityBranding {
   fontHeading?: string;
   /** Google Font family name for body text, e.g. "Open Sans". */
   fontBody?: string;
-  /** Supabase Storage path to the processed 400×400 WebP logo. */
+  /** Supabase Storage path to the processed 400×400 WebP logo (avatar/auth). */
   logoPath?: string;
+  /**
+   * Supabase Storage path to the processed wordmark logo (≤600×180 WebP,
+   * aspect preserved) shown in the public-site header. Separate from logoPath
+   * so the square avatar and the horizontal wordmark can differ.
+   */
+  siteLogoPath?: string;
   /** Custom footer text appended to outbound emails. Plain text. */
   customEmailFooter?: string;
   /**

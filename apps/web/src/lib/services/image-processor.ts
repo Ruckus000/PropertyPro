@@ -26,6 +26,30 @@ export async function resizeLogo(input: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
+const SITE_LOGO_MAX_WIDTH = 600;
+const SITE_LOGO_MAX_HEIGHT = 180;
+const SITE_LOGO_QUALITY = 90;
+
+/**
+ * Resize a (typically pre-cropped) logo to a wordmark-friendly WebP that fits
+ * within SITE_LOGO_MAX_WIDTH × SITE_LOGO_MAX_HEIGHT, preserving aspect ratio
+ * and never upscaling. Unlike resizeLogo (which cover-crops to a 400×400
+ * square for avatar/auth contexts), this keeps the logo's shape so a
+ * horizontal wordmark renders correctly in the public-site header. EXIF
+ * stripped. Server-only (sharp).
+ */
+export async function resizeSiteLogo(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .resize({
+      width: SITE_LOGO_MAX_WIDTH,
+      height: SITE_LOGO_MAX_HEIGHT,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: SITE_LOGO_QUALITY })
+    .toBuffer();
+}
+
 const SITE_IMAGE_QUALITY = 82;
 
 export interface SiteImageVariants {

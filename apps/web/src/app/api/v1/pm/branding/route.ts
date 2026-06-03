@@ -25,11 +25,59 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { resizeLogo } from '@/lib/services/image-processor';
+import { resizeLogo, resizeSiteLogo } from '@/lib/services/image-processor';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { getPmBrandingContract, patchPmBrandingContract } from './contract';
 
 const PRESIGN_TTL_SECONDS = 60 * 60;
+const ALLOWED_LOGO_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+
+/**
+ * Download a raw uploaded image from storage, validate its type, run it
+ * through `resize`, and re-upload the processed WebP to the canonical branding
+ * path `communities/{id}/branding/{canonicalName}`. Returns that canonical
+ * path. Shared by the square avatar logo (resizeLogo) and the wordmark site
+ * logo (resizeSiteLogo).
+ */
+async function processAndStoreBrandingImage(
+  communityId: number,
+  storagePath: string,
+  resize: (input: Buffer) => Promise<Buffer>,
+  canonicalName: string,
+): Promise<string> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const rawSignedUrl = await createPresignedDownloadUrl('documents', storagePath, PRESIGN_TTL_SECONDS);
+  const signedUrl = rawSignedUrl.startsWith('http')
+    ? rawSignedUrl
+    : new URL(rawSignedUrl, supabaseUrl).toString();
+  const res = await fetch(signedUrl);
+  if (!res.ok) {
+    throw new ValidationError('Could not fetch uploaded logo from storage');
+  }
+  const rawBuffer = Buffer.from(await res.arrayBuffer());
+
+  const { fileTypeFromBuffer } = await import('file-type');
+  const detectedType = await fileTypeFromBuffer(rawBuffer);
+  if (!detectedType || !(ALLOWED_LOGO_MIMES as readonly string[]).includes(detectedType.mime)) {
+    throw new ValidationError('Invalid image file: only PNG, JPEG, and WebP are accepted');
+  }
+
+  const processedBuffer = await resize(rawBuffer);
+  const canonicalPath = `communities/${communityId}/branding/${canonicalName}`;
+  const signedUpload = await createPresignedUploadUrl('documents', canonicalPath, { upsert: true });
+  const uploadUrl = signedUpload.signedUrl.startsWith('http')
+    ? signedUpload.signedUrl
+    : new URL(signedUpload.signedUrl, supabaseUrl).toString();
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'content-type': 'image/webp' },
+    body: new Uint8Array(processedBuffer),
+  });
+  if (!uploadRes.ok) {
+    throw new ValidationError('Failed to save processed logo');
+  }
+  return canonicalPath;
+}
 
 export const GET = withErrorHandler(
   runRoute(getPmBrandingContract, async ({ query, req }) => {
@@ -61,51 +109,28 @@ export const PATCH = withErrorHandler(
 
     let canonicalLogoPath: string | undefined;
     if (body.logoStoragePath) {
-      const rawSignedUrl = await createPresignedDownloadUrl(
-        'documents',
+      canonicalLogoPath = await processAndStoreBrandingImage(
+        communityId,
         body.logoStoragePath,
-        PRESIGN_TTL_SECONDS,
+        resizeLogo,
+        'logo.webp',
       );
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-      const signedUrl = rawSignedUrl.startsWith('http')
-        ? rawSignedUrl
-        : new URL(rawSignedUrl, supabaseUrl).toString();
-      const res = await fetch(signedUrl);
-      if (!res.ok) {
-        throw new ValidationError('Could not fetch uploaded logo from storage');
-      }
-      const rawBuffer = Buffer.from(await res.arrayBuffer());
+    }
 
-      const { fileTypeFromBuffer } = await import('file-type');
-      const detectedType = await fileTypeFromBuffer(rawBuffer);
-      const ALLOWED_LOGO_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
-      if (!detectedType || !(ALLOWED_LOGO_MIMES as readonly string[]).includes(detectedType.mime)) {
-        throw new ValidationError('Invalid image file: only PNG, JPEG, and WebP are accepted');
-      }
-
-      const processedBuffer = await resizeLogo(rawBuffer);
-
-      canonicalLogoPath = `communities/${communityId}/branding/logo.webp`;
-      const signedUpload = await createPresignedUploadUrl('documents', canonicalLogoPath, {
-        upsert: true,
-      });
-      const uploadUrl = signedUpload.signedUrl.startsWith('http')
-        ? signedUpload.signedUrl
-        : new URL(signedUpload.signedUrl, supabaseUrl).toString();
-
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'content-type': 'image/webp' },
-        body: new Uint8Array(processedBuffer),
-      });
-      if (!uploadRes.ok) {
-        throw new ValidationError('Failed to save processed logo');
-      }
+    let canonicalSiteLogoPath: string | undefined;
+    if (body.siteLogoStoragePath) {
+      canonicalSiteLogoPath = await processAndStoreBrandingImage(
+        communityId,
+        body.siteLogoStoragePath,
+        resizeSiteLogo,
+        'site-logo.webp',
+      );
     }
 
     const {
       communityId: _communityId,
       logoStoragePath: _logoStoragePath,
+      siteLogoStoragePath: _siteLogoStoragePath,
       primaryColor,
       secondaryColor,
       accentColor,
@@ -122,6 +147,7 @@ export const PATCH = withErrorHandler(
       ...(fontHeading !== undefined && { fontHeading }),
       ...(fontBody !== undefined && { fontBody }),
       ...(canonicalLogoPath !== undefined && { logoPath: canonicalLogoPath }),
+      ...(canonicalSiteLogoPath !== undefined && { siteLogoPath: canonicalSiteLogoPath }),
       ...(customEmailFooter !== undefined && { customEmailFooter }),
       ...(customCssOverrides !== undefined && { customCssOverrides }),
     });
