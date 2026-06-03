@@ -3,12 +3,13 @@
  * POST /api/v1/admin/access-plans  — Grant free access to a community
  *
  * Auth: platform admin (platform_admin_users row)
+ *
+ * Plan A1 auto-drain — migrated to `runRoute(contract, handler)`; see `./contract.ts`.
  */
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePlatformAdmin } from '@/lib/api/require-platform-admin';
-import { corsHeaders, handleOptions } from '@/lib/api/admin-cors';
+import { handleOptions, mergeAdminCorsHeaders } from '@/lib/api/admin-cors';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import {
   communityExistsAdmin,
@@ -16,68 +17,42 @@ import {
   grantFreeAccess,
   listAccessPlansWithStatus,
 } from '@/lib/services/account-lifecycle-service';
+import {
+  adminAccessPlansGrantContract,
+  adminAccessPlansListContract,
+} from './contract';
 
 export { handleOptions as OPTIONS };
-
-// ---------------------------------------------------------------------------
-// Schemas
-// ---------------------------------------------------------------------------
-
-const grantBodySchema = z.object({
-  communityId: z.number().int().positive(),
-  durationMonths: z.number().int().min(1).max(60),
-  gracePeriodDays: z.number().int().min(0).max(365).optional().default(30),
-  notes: z.string().max(1000).optional(),
-});
 
 // ---------------------------------------------------------------------------
 // GET — list access plans
 // ---------------------------------------------------------------------------
 
-export const GET = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
+const runListAccessPlans = runRoute(adminAccessPlansListContract, async ({ query }) => {
   const adminUserId = await requirePlatformAdmin();
   void adminUserId; // used only for auth guard
+
+  return query.communityId !== undefined
+    ? listAccessPlansWithStatus({ communityId: query.communityId })
+    : listAccessPlansWithStatus();
+});
+
+export const GET = withErrorHandler(async (req, ctx) => {
   const origin = req.headers.get('origin');
-
-  const url = new URL(req.url);
-  const communityIdParam = url.searchParams.get('communityId');
-
-  let data;
-  if (communityIdParam) {
-    const communityId = Number(communityIdParam);
-    if (Number.isNaN(communityId) || communityId <= 0) {
-      throw new ValidationError('communityId must be a positive integer');
-    }
-    data = await listAccessPlansWithStatus({ communityId });
-  } else {
-    data = await listAccessPlansWithStatus();
-  }
-
-  return NextResponse.json({ data }, { headers: corsHeaders(origin) });
+  const response = await runListAccessPlans(req, ctx);
+  return mergeAdminCorsHeaders(response, origin);
 });
 
 // ---------------------------------------------------------------------------
 // POST — grant free access
 // ---------------------------------------------------------------------------
 
-export const POST = withErrorHandler(async (req: NextRequest): Promise<NextResponse> => {
+const runGrantFreeAccess = runRoute(adminAccessPlansGrantContract, async ({ body }) => {
   const adminUserId = await requirePlatformAdmin();
-  const origin = req.headers.get('origin');
 
-  const body = await req.json();
-  const parsed = grantBodySchema.safeParse(body);
-  if (!parsed.success) {
-    throw new ValidationError('Invalid request body', {
-      issues: parsed.error.issues.map((i) => ({
-        field: i.path.join('.'),
-        message: i.message,
-      })),
-    });
-  }
+  const { communityId, durationMonths, gracePeriodDays, notes } = body;
 
-  const { communityId, durationMonths, gracePeriodDays, notes } = parsed.data;
-
-  // Verify community exists
+  // Verify community exists (business rule — preserved byte-identical).
   if (!(await communityExistsAdmin(communityId))) {
     throw new ValidationError('Community not found', { communityId: 'Community does not exist' });
   }
@@ -89,8 +64,11 @@ export const POST = withErrorHandler(async (req: NextRequest): Promise<NextRespo
     grantedBy: adminUserId,
   });
 
-  return NextResponse.json(
-    { data: { ...plan, status: computeAccessPlanStatus(plan) } },
-    { headers: corsHeaders(origin) },
-  );
+  return { ...plan, status: computeAccessPlanStatus(plan) };
+});
+
+export const POST = withErrorHandler(async (req, ctx) => {
+  const origin = req.headers.get('origin');
+  const response = await runGrantFreeAccess(req, ctx);
+  return mergeAdminCorsHeaders(response, origin);
 });
