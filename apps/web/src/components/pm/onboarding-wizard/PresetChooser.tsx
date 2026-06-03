@@ -34,6 +34,8 @@ interface Props {
   onContinue?: (slug: string) => void;
   /** Called when the user clicks "Skip — keep default". */
   onSkip?: () => void;
+  /** Called as soon as the user picks a preset (drives the live preview). */
+  onSelect?: (slug: string) => void;
 }
 
 function Swatch({ color, label }: { color?: string; label: string }) {
@@ -54,9 +56,14 @@ export function PresetChooser({
   initialPresetSlug,
   onContinue,
   onSkip,
+  onSelect,
 }: Props) {
   const fallback = presets.find((p) => p.isFeatured)?.slug ?? presets[0]?.slug ?? null;
   const [selected, setSelected] = useState<string | null>(initialPresetSlug ?? fallback);
+  const choose = (slug: string) => {
+    setSelected(slug);
+    onSelect?.(slug);
+  };
   const [outcome, setOutcome] = useState<string | null>(null);
   const wizard = useWebsiteWizard(communityId);
 
@@ -137,7 +144,7 @@ export function PresetChooser({
                 name="wizard-preset"
                 value={preset.slug}
                 checked={isSelected}
-                onChange={() => setSelected(preset.slug)}
+                onChange={() => choose(preset.slug)}
                 className="sr-only"
               />
               <div className="mb-2 flex items-center justify-between gap-2">
