@@ -185,6 +185,22 @@ const MEMORY_UPDATE_SCHEMA = {
   },
 }
 
+// ---------- Resilient agent wrapper ----------
+// A direct `await agent({schema})` THROWS if the subagent finishes without
+// calling StructuredOutput (a flaky failure mode), which crashes the whole
+// batch. parallel() already absorbs that to null; safeAgent gives direct
+// (non-parallel) calls the same graceful degradation. Every direct call site
+// already handles a null result (`?? []`, `if (!x)`), so a drop now degrades
+// instead of aborting the batch.
+async function safeAgent(prompt, opts) {
+  try {
+    return await agent(prompt, opts)
+  } catch (e) {
+    log(`agent ${opts?.label ?? '(unlabeled)'} dropped/failed: ${e?.message ?? e}`)
+    return null
+  }
+}
+
 // ---------- Prompt template generators ----------
 
 function preVetPrompt(skipListRoutes) {
@@ -842,7 +858,7 @@ const permanentSkips = Object.entries(state.skipList ?? {})
   .filter(([_, entry]) => entry.classification === 'PERMANENT')
   .map(([route]) => route)
 
-const preVet = await agent(preVetPrompt(permanentSkips), {
+const preVet = await safeAgent(preVetPrompt(permanentSkips), {
   schema: PRE_VET_SCHEMA,
   label: 'pre-vet',
   phase: 'Pre-vet',
@@ -865,10 +881,10 @@ if (!preVet || preVet.picks.length === 0) {
 
 log(`Pre-vet picked ${preVet.picks.length} candidate(s): ${preVet.picks.map(p => p.route.split('/').pop()).join(', ')}`)
 
-const mainSha = (await agent(
+const mainSha = ((await safeAgent(
   `Run: \`cd /Users/jphilistin/Documents/Coding/PropertyPro && git fetch origin --quiet && git rev-parse origin/main\`. Return ONLY the 40-char SHA, no quotes, no whitespace.`,
   { label: 'main-sha' }
-)).trim()
+)) ?? '').trim()
 log(`origin/main tip: ${mainSha}`)
 
 phase('Pipeline')
@@ -933,7 +949,7 @@ const adoptedDrains = await parallel(
     if (actionable.length === 0) {
       return { ...drain, adoption: { adopted: [], dismissed: [], failed: [] } }
     }
-    const adoption = await agent(adoptPrompt(drain), {
+    const adoption = await safeAgent(adoptPrompt(drain), {
       schema: ADOPT_RESULT_SCHEMA,
       label: `adopt:${drain.pick.route.split('/').pop()}`,
       phase: 'Pipeline',
@@ -950,7 +966,7 @@ const prsToWait = adoptedDrains.map(d => d.result.prNumber)
 let ciResults = []
 
 if (prsToWait.length > 0) {
-  const ciOutput = await agent(ciWaitPrompt(prsToWait), {
+  const ciOutput = await safeAgent(ciWaitPrompt(prsToWait), {
     schema: CI_WAIT_RESULT_SCHEMA,
     label: 'ci-wait',
     phase: 'CI wait',
@@ -978,7 +994,7 @@ phase('Rebase+Merge')
 
 let merges = []
 if (readyToMerge.length > 0) {
-  const mergeOutput = await agent(rebaseAndMergePrompt(readyToMerge), {
+  const mergeOutput = await safeAgent(rebaseAndMergePrompt(readyToMerge), {
     schema: MERGE_RESULT_SCHEMA,
     label: 'rebase-merge',
     phase: 'Rebase+Merge',
@@ -1007,7 +1023,7 @@ let updatedCounts = {
 }
 
 if (mergedDrains.length > 0) {
-  const memoryOutput = await agent(
+  const memoryOutput = await safeAgent(
     memoryUpdatePrompt({
       mergedDrains: mergedDrains.map(d => ({
         route: d.pick.route,
