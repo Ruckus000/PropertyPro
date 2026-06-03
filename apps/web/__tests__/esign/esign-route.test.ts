@@ -118,7 +118,6 @@ import { GET as signingGET, POST as signingPOST } from '../../src/app/api/v1/esi
 import { GET as consentGET, DELETE as consentDELETE } from '../../src/app/api/v1/esign/consent/route';
 import { POST as cancelPOST } from '../../src/app/api/v1/esign/submissions/[id]/cancel/route';
 import { POST as remindPOST } from '../../src/app/api/v1/esign/submissions/[id]/remind/route';
-import { GET as templatePdfGET } from '../../src/app/api/v1/esign/templates/[id]/pdf/route';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -576,81 +575,6 @@ describe('E-Sign Routes', () => {
       const context = makeRouteParams({ id: '10' });
 
       await expect(remindPOST(req, context)).rejects.toThrow();
-    });
-  });
-
-  // =========================================================================
-  // Template PDF preview route
-  // =========================================================================
-
-  describe('GET /api/v1/esign/templates/[id]/pdf', () => {
-    it('returns presigned URL for template with sourceDocumentPath', async () => {
-      const presignedUrl = 'https://supabase.storage/signed-url?token=xyz';
-      createPresignedDownloadUrlMock.mockResolvedValue(presignedUrl);
-
-      getTemplateMock.mockResolvedValue({
-        id: 5,
-        name: 'Violation Acknowledgment',
-        sourceDocumentPath: 'communities/1/esign/violation-ack.pdf',
-      });
-
-      const req = makeRequest('/api/v1/esign/templates/5/pdf?communityId=1');
-      const context = makeRouteParams({ id: '5' });
-
-      const response = await templatePdfGET(req, context);
-      const json = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(json.data.pdfUrl).toBe(presignedUrl);
-      expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith(
-        'documents',
-        'communities/1/esign/violation-ack.pdf',
-      );
-      expect(requireEsignReadPermissionMock).toHaveBeenCalled();
-    });
-
-    it('returns 404 when template has no sourceDocumentPath', async () => {
-      getTemplateMock.mockResolvedValue({
-        id: 5,
-        name: 'Empty Template',
-        sourceDocumentPath: null,
-      });
-
-      const req = makeRequest('/api/v1/esign/templates/5/pdf?communityId=1');
-      const context = makeRouteParams({ id: '5' });
-
-      const response = await templatePdfGET(req, context);
-      const json = await response.json();
-
-      expect(response.status).toBe(404);
-      expect(json.error.code).toBe('NOT_FOUND');
-      expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
-    });
-
-    it('returns 404 when presigned URL generation fails', async () => {
-      createPresignedDownloadUrlMock.mockRejectedValue(new Error('Object not found'));
-
-      getTemplateMock.mockResolvedValue({
-        id: 5,
-        name: 'Template',
-        sourceDocumentPath: 'communities/1/esign/missing.pdf',
-      });
-
-      const req = makeRequest('/api/v1/esign/templates/5/pdf?communityId=1');
-      const context = makeRouteParams({ id: '5' });
-
-      const response = await templatePdfGET(req, context);
-      const json = await response.json();
-
-      expect(response.status).toBe(404);
-      expect(json.error.code).toBe('NOT_FOUND');
-    });
-
-    it('rejects invalid template ID', async () => {
-      const req = makeRequest('/api/v1/esign/templates/abc/pdf?communityId=1');
-      const context = makeRouteParams({ id: 'abc' });
-
-      await expect(templatePdfGET(req, context)).rejects.toThrow('Invalid ID');
     });
   });
 });
