@@ -93,6 +93,7 @@ describe('BrandingForm behavior (drained hook mocked)', () => {
       fontBody: 'Inter',
       customEmailFooter: '',
       logoFile: null,
+      siteLogoFile: null,
     });
     // Success side-effect: success banner shown.
     expect(
