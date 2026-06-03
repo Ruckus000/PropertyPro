@@ -20,7 +20,10 @@ export function PublicSiteHeader({ theme }: PublicSiteHeaderProps) {
             <img
               src={theme.logoUrl}
               alt={`${theme.communityName} logo`}
-              className="h-10 w-10 rounded-md object-cover"
+              // w-auto + object-contain renders a horizontal wordmark at its
+              // natural aspect; a square logo still resolves to ~40×40. max-w
+              // keeps a very wide wordmark from crowding the header.
+              className="h-10 w-auto max-w-[200px] rounded-md object-contain"
             />
           ) : null}
           <span

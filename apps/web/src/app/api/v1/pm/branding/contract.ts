@@ -63,6 +63,7 @@ export const patchPmBrandingBodySchema = z.object({
   fontHeading: allowedFont.optional(),
   fontBody: allowedFont.optional(),
   logoStoragePath: z.string().min(1).max(500).optional(),
+  siteLogoStoragePath: z.string().min(1).max(500).optional(),
   customEmailFooter: z.string().max(500).optional(),
   customCssOverrides: customCssOverridesSchema.nullable().optional(),
 });

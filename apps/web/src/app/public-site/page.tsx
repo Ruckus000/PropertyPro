@@ -92,11 +92,23 @@ export default async function PublicSitePage() {
     }
   }
   const branding = rawBranding ? { ...rawBranding, logoUrl } : null;
+  // The public-site header prefers the wordmark site logo (≤600×180, aspect
+  // preserved) over the square avatar logo. resolveTheme still reads the square
+  // logoUrl for non-header contexts; the header logo is threaded separately.
+  let siteLogoUrl: string | null = null;
+  if (rawBranding?.siteLogoPath) {
+    try {
+      siteLogoUrl = await createPresignedDownloadUrl('documents', rawBranding.siteLogoPath);
+    } catch {
+      // Non-fatal — fall back to the square logo / text.
+    }
+  }
   const theme = resolveTheme(
     branding,
     community.name,
     community.communityType as CommunityType,
   );
+  const headerLogoUrl = siteLogoUrl ?? theme.logoUrl;
   // PR #11 — Pro+ custom CSS overrides win over the resolved theme. The
   // helper is defensive (skips bad hex / non-allowlisted fonts) and emits only
   // validated token CSS variables, never raw CSS.
@@ -137,7 +149,7 @@ export default async function PublicSitePage() {
               id: community.id,
               slug: community.slug,
               name: community.name,
-              logoUrl: theme.logoUrl,
+              logoUrl: headerLogoUrl,
               communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
               // city / state / timezone not yet in getCommunityPublicInfo; all FL
               // communities are America/New_York. A later PR extends the SELECT.
