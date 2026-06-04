@@ -52,6 +52,12 @@ export function useCustomDomain(communityId: number, initial?: DomainState) {
   return useQuery<DomainState>({
     queryKey: domainQueryKey(communityId),
     initialData: initial,
+    // The page server-fetches the same state via getDomain(); treat it as fresh
+    // on arrival and only refetch after staleTime so mount doesn't fire a
+    // redundant GET. Mutations (set/verify/remove) update the cache directly, so
+    // state transitions don't depend on this refetch.
+    initialDataUpdatedAt: () => Date.now(),
+    staleTime: 30_000,
     queryFn: async ({ signal }) => {
       const res = await fetch(`/api/v1/pm/site/domain?communityId=${communityId}`, { signal });
       if (!res.ok) {

@@ -170,13 +170,10 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
         />
       </section>
 
-      <section
-        aria-labelledby="custom-domain-tab"
-        className="mt-8 rounded-md border border-default bg-surface-card p-6 shadow-e0"
-      >
-        <h2 id="custom-domain-tab" className="sr-only">
-          Custom Domain
-        </h2>
+      <section className="mt-8 rounded-md border border-default bg-surface-card p-6 shadow-e0">
+        {/* The card owns its visible <h2> heading (carries the "(Pro)" suffix
+            when gated), consistent with the sibling "Welcome"/"Custom Styling"
+            section headings. */}
         <CustomDomainCard
           communityId={communityId}
           hasSiteCustomDomain={features.hasSiteCustomDomain}

@@ -94,9 +94,9 @@ export function CustomDomainCard({
   const state = data ?? initial;
 
   const heading = (
-    <h3 className="text-lg font-medium text-content">
+    <h2 className="text-lg font-medium text-content">
       Custom Domain{!hasSiteCustomDomain && ' (Pro)'}
-    </h3>
+    </h2>
   );
 
   // --- Gated: visible-but-disabled upsell ----------------------------------
