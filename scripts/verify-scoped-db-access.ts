@@ -73,6 +73,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // P3-47: White-label branding — communities is the root tenant table (no communityId column);
   // getBrandingForCommunity must query by primary key directly.
   resolve(repoRoot, 'apps/web/src/lib/api/branding.ts'),
+  // Custom domain — communities is the root tenant table (no community_id column);
+  // the service reads/writes custom_domain* columns by primary key directly.
+  // Caller authorization (pm_admin/cam membership + hasSiteCustomDomain plan) is
+  // verified upstream at the route layer.
+  resolve(repoRoot, 'apps/web/src/lib/services/custom-domain-service.ts'),
   // JSX site template — public site queries published template by community_id (root tenant key)
   resolve(repoRoot, 'apps/web/src/lib/api/site-template.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
