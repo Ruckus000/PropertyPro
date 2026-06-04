@@ -44,6 +44,27 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      # Run pending DB migrations BEFORE shipping the new code, and gate the
+      # deploy on their success. Migrations are additive (expand pattern), so
+      # running them ahead of the code swap is safe: old code ignores new
+      # columns/tables. This prevents the schema-drift class of outage where
+      # Vercel ships code that selects columns the production DB doesn't have.
+      # Requires the DIRECT_URL secret (direct 5432 connection) in the
+      # `production` environment — drizzle.config.ts reads process.env.DIRECT_URL.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "::error::DIRECT_URL secret is not set for the production environment."
+            echo "Add it under Settings → Environments → production → secrets (direct 5432 connection)."
+            exit 1
+          fi
+          pnpm --filter @propertypro/db db:migrate
+
       - name: Install Vercel CLI
         run: pnpm add -g vercel@50.23.2
 

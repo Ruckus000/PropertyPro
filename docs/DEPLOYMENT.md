@@ -186,15 +186,16 @@ Production deploys happen automatically when a PR is merged to `main`:
 
 1. PR passes CI checks (lint, typecheck, test, build)
 2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
-3. If the PR includes migrations, run `pnpm --filter @propertypro/db db:migrate` against production with `DIRECT_URL`
-4. Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`
-5. PR is merged to `main`
-6. `deploy.yml` triggers after CI succeeds on `main`: builds via Vercel CLI and deploys to production
-7. Smoke test verifies HTTP 200 at the deployment URL
+3. PR is merged to `main`
+4. `deploy.yml` triggers after CI succeeds on `main`: installs deps, **runs pending DB migrations** (`db:migrate` via `DIRECT_URL`, gating the deploy on success), then builds via Vercel CLI and deploys to production
+5. Smoke test verifies HTTP 200 at the deployment URL
+6. (Optional) Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`
 
-Do not merge migration-backed app code until the target database has applied
-the migration and readiness has passed. This keeps app code from running ahead
-of the database schema.
+Migrations run automatically as a gated step in `deploy.yml` *before* the new
+code is deployed (expand pattern: additive migrations are safe to apply ahead
+of the code swap). A failed migration aborts the deploy, so app code never ships
+ahead of its schema. This requires the `DIRECT_URL` secret (direct 5432
+connection) to be present in the `production` GitHub environment.
 
 ### 7.2 Hotfix Deploy
 
@@ -208,8 +209,10 @@ For urgent production fixes:
 
 ### 7.3 Database Migration Deploy
 
-Migrations are not run automatically by `deploy.yml`. Run them before promoting
-app traffic for production, staging, local, or one-off recovery paths:
+Production migrations run **automatically** as a gated step in `deploy.yml`
+(see §7.1) — a failed migration aborts the deploy before the new code ships.
+The commands below are for local verification, staging, or one-off recovery
+paths:
 
 ```bash
 # Via scripts/with-env-local.sh (local verification)
