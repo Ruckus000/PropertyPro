@@ -3,7 +3,7 @@
  * Every tenant-scoped table references communities.id.
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, boolean, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 import { billingGroups } from './billing-groups';
 
@@ -74,6 +74,10 @@ export const communities = pgTable('communities', {
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
   /** Phase 3: Optional custom domain for the community's public site. */
   customDomain: text('custom_domain'),
+  /** Phase 2: lifecycle of the custom domain — null | 'pending' | 'active' | 'error'. */
+  customDomainStatus: text('custom_domain_status'),
+  /** Phase 2: when the custom domain first became active. */
+  customDomainVerifiedAt: timestamp('custom_domain_verified_at', { withTimezone: true }),
   /** Phase 3: When the community's public site was last published. */
   sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
   /** Site onboarding wizard: when the PM finished the wizard (clicked Publish on
@@ -104,4 +108,10 @@ export const communities = pgTable('communities', {
   index('communities_next_reminder_at_idx')
     .on(table.nextReminderAt)
     .where(sql`next_reminder_at IS NOT NULL`),
+  // Partial unique index: one community per custom domain (among live rows).
+  // Mirrors migration 0012 — declared here so drizzle-kit generate does not
+  // emit a DROP INDEX on the next schema diff.
+  uniqueIndex('communities_custom_domain_unique')
+    .on(table.customDomain)
+    .where(sql`custom_domain IS NOT NULL AND deleted_at IS NULL`),
 ]);

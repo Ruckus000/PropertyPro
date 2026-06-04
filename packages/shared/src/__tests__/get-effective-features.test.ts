@@ -117,6 +117,20 @@ describe('getEffectiveFeatures', () => {
     });
   });
 
+  describe('hasSiteCustomDomain (Pro+ gating)', () => {
+    it('condo_718 + professional has hasSiteCustomDomain:true', () => {
+      expect(getEffectiveFeatures('condo_718', 'professional').hasSiteCustomDomain).toBe(true);
+    });
+
+    it('condo_718 + operations_plus has hasSiteCustomDomain:true', () => {
+      expect(getEffectiveFeatures('condo_718', 'operations_plus').hasSiteCustomDomain).toBe(true);
+    });
+
+    it('condo_718 + essentials does NOT have hasSiteCustomDomain', () => {
+      expect(getEffectiveFeatures('condo_718', 'essentials').hasSiteCustomDomain).toBe(false);
+    });
+  });
+
   it('result has all 29 CommunityFeatures keys', () => {
     const features = getEffectiveFeatures('condo_718', 'essentials');
     const resultKeys = Object.keys(features).sort();
