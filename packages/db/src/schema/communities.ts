@@ -3,7 +3,7 @@
  * Every tenant-scoped table references communities.id.
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, boolean, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 import { billingGroups } from './billing-groups';
 
@@ -108,4 +108,10 @@ export const communities = pgTable('communities', {
   index('communities_next_reminder_at_idx')
     .on(table.nextReminderAt)
     .where(sql`next_reminder_at IS NOT NULL`),
+  // Partial unique index: one community per custom domain (among live rows).
+  // Mirrors migration 0012 — declared here so drizzle-kit generate does not
+  // emit a DROP INDEX on the next schema diff.
+  uniqueIndex('communities_custom_domain_unique')
+    .on(table.customDomain)
+    .where(sql`custom_domain IS NOT NULL AND deleted_at IS NULL`),
 ]);
