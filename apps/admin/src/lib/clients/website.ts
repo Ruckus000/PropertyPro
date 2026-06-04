@@ -2,6 +2,8 @@
  * Shared client-website display and status helpers.
  */
 
+import { sanitizeCustomDomain } from '@propertypro/shared';
+
 export type WebsiteUrlSource = 'custom_domain' | 'slug_fallback';
 
 export interface WebsiteDomainInput {
@@ -25,36 +27,6 @@ export interface SiteLiveStatus {
   isBillingEligible: boolean;
   isLive: boolean;
   blockingReasons: Array<'publish_required' | 'billing_inactive'>;
-}
-
-function isValidHostname(hostname: string): boolean {
-  if (hostname.length < 3 || hostname.length > 253) return false;
-  if (!hostname.includes('.')) return false;
-
-  const labels = hostname.split('.');
-  return labels.every((label) => (
-    label.length >= 1
-    && label.length <= 63
-    && /^[a-z0-9-]+$/i.test(label)
-    && !label.startsWith('-')
-    && !label.endsWith('-')
-  ));
-}
-
-function sanitizeCustomDomain(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-
-  const normalized = raw.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const withoutProtocol = normalized.replace(/^https?:\/\//, '');
-  const hostname = withoutProtocol
-    .split(/[/?#]/, 1)[0]
-    ?.split(':', 1)[0]
-    ?.trim() ?? '';
-
-  if (!hostname || !isValidHostname(hostname)) return null;
-  return hostname;
 }
 
 export function getWebsiteDomainInfo(input: WebsiteDomainInput): WebsiteDomainInfo {
