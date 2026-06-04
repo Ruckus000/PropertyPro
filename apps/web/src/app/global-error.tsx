@@ -35,20 +35,47 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           <p style={{ marginBottom: '1.5rem', color: '#4b5563' }}>
             An unexpected error occurred. Please try again.
           </p>
-          <button
-            type="button"
-            onClick={reset}
+          <div
             style={{
-              padding: '0.5rem 1.5rem',
-              borderRadius: '0.375rem',
-              border: '1px solid #d1d5db',
-              backgroundColor: '#fff',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              justifyContent: 'center',
             }}
           >
-            Try again
-          </button>
+            <button
+              type="button"
+              onClick={reset}
+              style={{
+                padding: '0.5rem 1.5rem',
+                borderRadius: '0.375rem',
+                border: '1px solid #d1d5db',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+              }}
+            >
+              Try again
+            </button>
+            {/* Static link only: this last-resort boundary may render with
+                broken CSS/JS, so no auth detection here. `/` lands community
+                subdomain users on their dashboard and everyone else on the
+                public/marketing landing. */}
+            <a
+              href="/"
+              style={{
+                padding: '0.5rem 1.5rem',
+                borderRadius: '0.375rem',
+                border: '1px solid #d1d5db',
+                backgroundColor: '#fff',
+                color: 'inherit',
+                textDecoration: 'none',
+                fontSize: '0.875rem',
+              }}
+            >
+              Go home
+            </a>
+          </div>
         </main>
       </body>
     </html>
