@@ -676,7 +676,14 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
 
     const hasCommunityContext =
-      tenantContext.source !== 'none' && !tenantContext.isReservedSubdomain;
+      tenantContext.source !== 'none' &&
+      // A 'custom_domain' source is fully handled by the dedicated block above
+      // (resolved → already returned; unresolved/inactive → must fall through to
+      // default handling, NOT the subdomain auth-split, so an unknown foreign
+      // host neither renders a community-less public site nor redirects an
+      // authenticated user to /dashboard on the foreign host).
+      tenantContext.source !== 'custom_domain' &&
+      !tenantContext.isReservedSubdomain;
 
     if (hasCommunityContext) {
       const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
