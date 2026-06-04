@@ -12,6 +12,11 @@
  * server-only env secrets. Must never be imported by edge middleware.
  */
 import { communities, logAuditEvent } from '@propertypro/db';
+// Custom domain lives on communities, the root tenant table (no community_id
+// column); the scoped client cannot target it. Caller authz (pm_admin/cam +
+// hasSiteCustomDomain + not-demo-grace) is enforced at the route layer
+// (apps/web/src/app/api/v1/pm/site/domain/*).
+// AUTHZ: communities is the root tenant table — query/write by primary key via the unsafe client.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq } from '@propertypro/db/filters';
 import { assertCustomDomainAllowed, CustomDomainNotAllowedError } from '@propertypro/shared';
