@@ -29,6 +29,9 @@ describe('isOwnDomain', () => {
   it('strips a port on the root domain before comparing', () => {
     expect(isOwnDomain('sunset.localhost', 'localhost:3000')).toBe(true);
   });
+  it('does not flag a domain that shares a suffix but is not a subdomain', () => {
+    expect(isOwnDomain('evilgetpropertypro.com', 'getpropertypro.com')).toBe(false);
+  });
 });
 
 describe('assertCustomDomainAllowed', () => {
