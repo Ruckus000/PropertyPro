@@ -48,6 +48,8 @@ root.
 | D6 | Writes to `communities` use **`createUnscopedClient`** (`@propertypro/db/unsafe`) after route-layer auth | `communities` is the root tenant table and cannot be `community_id`-scoped. Mirrors `branding.ts` / `plan-guard.ts`. |
 | D7 | Domain release on PM **Remove** action in-cycle; community-purge release is a documented follow-up | Soft-delete's `deleted_at IS NULL` middleware filter already stops serving immediately, so there is no correctness/security gap — only a Vercel-project orphan to clean up later. |
 | D8 | Env vars: **`VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID`** (canonical Vercel CLI names) | Already present in `.env.local`; reused instead of inventing `VERCEL_API_TOKEN`/`VERCEL_TEAM_ID`. `VERCEL_ORG_ID` is team-scoped (`team_…`) → every Domains API call passes `?teamId=$VERCEL_ORG_ID`. |
+| D9 | Auth gate: **`requireRole(['pm_admin','cam'])`** + `requirePlanFeature('hasSiteCustomDomain')` + `assertNotDemoGrace` | Mirrors the `pm/site/publish` route, the closest sibling (site management). *Not* `requirePermission('settings','write')` (that is the `communities/delete` lifecycle pattern). CAMs manage the site, so they manage its domain. |
+| D10 | **One domain at a time** — to change it, Remove then Add (no in-place replace) | An in-place overwrite would orphan the previous host in the Vercel project (unreleased). `POST set` rejects when a domain already exists; the UI shows Add xor Remove. Zero replace-path complexity. |
 
 ---
 
@@ -68,6 +70,9 @@ Migration **0012** adds:
   — prevents two communities claiming the same host (closes a tenant-isolation /
   domain-hijack hole) and makes the reverse lookup unambiguous. Index only; no RLS
   change (adding columns/index to an existing RLS-enabled table needs no new policy).
+  **Data-safety:** the column has been inert (effectively all-`NULL`); the migration
+  must still verify no existing non-`NULL` duplicate `custom_domain` values before
+  the unique index is created, or `CREATE UNIQUE INDEX` will fail.
 
 The DNS records to display are returned **live by Vercel** on Add/Verify actions;
 we persist status, not the records. The settings page renders persisted status on
@@ -89,23 +94,37 @@ validator, consumed by both admin and the new web route — no drift.
 
 `resolveCommunityContext`
 ([subdomain-router.ts](../../../packages/shared/src/middleware/subdomain-router.ts))
-gains base-domain awareness:
+gains base-domain awareness. **The function stays pure** — it does *not* read
+`process.env`. The middleware reads `NEXT_PUBLIC_ROOT_DOMAIN` (fallback
+`getpropertypro.com`) and **passes `rootDomain` in as an input param**, keeping the
+shared package decoupled from web env vars and trivially testable.
 
-1. **Host under the root domain** (`*.<NEXT_PUBLIC_ROOT_DOMAIN>` or equal) → existing
-   subdomain logic, unchanged.
+1. **Host under the root domain** (host equals `rootDomain` or ends with `.<rootDomain>`,
+   after stripping the port) → existing subdomain logic, unchanged.
 2. **Foreign host** → new `'custom_domain'` source carrying the **full host**.
    Middleware does a `custom_domain = <host> AND custom_domain_status = 'active' AND deleted_at IS NULL`
    lookup, sets `x-community-id`, and rewrites `/` → `/public-site` exactly like the
    subdomain path ([middleware.ts:623-696](../../../apps/web/src/middleware.ts)). Only
    the `/` branch handles custom hosts in v1 (D4).
 
-Reuses the **edge-safe supabase middleware client** already proven by
-`findCommunityIdBySlug` ([middleware.ts:286-300](../../../apps/web/src/middleware.ts)).
-Port is stripped via the existing `host.split(':')[0]` normalization.
+The incoming host is **lowercased before lookup** (the write path sanitizes to
+lowercase, and the partial unique index is on the raw column). Reuses the
+**edge-safe supabase middleware client** already proven by `findCommunityIdBySlug`
+([middleware.ts:286-300](../../../apps/web/src/middleware.ts)). Port stripped via the
+existing `host.split(':')[0]` normalization.
 
 **Cache:** the lookup caches **positive (`active`) hits only**. Custom-domain misses
 are **not** negative-cached, so a `pending → active` flip serves immediately instead
 of 404ing for up to the 5-minute TTL.
+
+**Auth-split safety (D4):** a foreign host **never carries a PropertyPro session** —
+Supabase cookies are host-scoped (no `domain:` / `COOKIE_DOMAIN` is wired in
+`apps/web/src/lib`), so `getUser()` is null on the custom host and the public site
+always renders. The custom-domain `/` branch therefore serves `/public-site` directly
+and **must not** perform the authenticated→`/dashboard` same-host redirect that the
+subdomain branch does ([middleware.ts:663-674](../../../apps/web/src/middleware.ts)) —
+that redirect targets the foreign host, where `/dashboard` is not served (D4). Stated
+explicitly so it is not "fixed" into a bug later.
 
 ### Vercel Domains client — `apps/web/src/lib/domains/`
 
@@ -135,24 +154,38 @@ pin every JSON field):
 ## API routes — `apps/web/src/app/api/v1/pm/site/domain/`
 
 Plan A1 (`defineRoute` + `runRoute` from `@propertypro/api-contract`, colocated
-`contract.ts`; `request: {}` required even for no-input). Every handler:
-`requireAuthenticatedUserId` → `requireCommunityMembership` →
-`requirePermission('settings','write')` → `requirePlanFeature('hasSiteCustomDomain')`.
+`contract.ts`; `request: {}` required even for no-input). Every handler mirrors the
+`pm/site/publish` auth chain (D9), **not** `requirePermission`:
+
+```
+requireAuthenticatedUserId()
+resolveEffectiveCommunityId(req, body?.communityId ?? null)
+assertNotDemoGrace(communityId)
+const membership = await requireCommunityMembership(communityId, userId)
+requireRole(membership, ['pm_admin','cam'], 'Only property managers can manage the custom domain')
+await requirePlanFeature(communityId, 'hasSiteCustomDomain')
+```
+
 Single-object `{ data: … }` envelopes (not list endpoints). All mutations →
-`logAuditEvent` ([audit-logger.ts:75](../../../packages/db/src/utils/audit-logger.ts)).
+`logAuditEvent` ([audit-logger.ts:75](../../../packages/db/src/utils/audit-logger.ts))
+with new `custom_domain_set` / `custom_domain_verified` / `custom_domain_removed`
+values added to the `AuditAction` **TypeScript union** (`audit-logger.ts:11-12`) —
+**no migration** (the union is widened in code; the DB `action` column is `text` —
+confirm it is not a pg-enum/CHECK in PR5, low risk) — and `resourceType: 'community'`.
 
 | Method | Purpose | Notes |
 |---|---|---|
 | `GET` | current status + (if pending) the DNS records to add | **no Vercel call** — renders persisted status; records fetched only on Add/Verify |
-| `POST` | set domain | validate(shared) → `addProjectDomain` → store `pending` → return DNS records; duplicate → 409 |
+| `POST` | set domain | validate(shared) → **reject 409 if a domain is already configured** (D10: Remove first) → `addProjectDomain` → store `pending` → return DNS records. Duplicate-host (other community) → 409 `DOMAIN_ALREADY_CLAIMED`. A Vercel "domain already exists in this project" response is treated as success-idempotent, not `error`. |
 | `POST .../verify` | re-read Vercel; maybe promote `pending→active` + stamp `verified_at` | the manual button |
-| `DELETE` | remove | `removeProjectDomain` → reset columns to `NULL` |
+| `DELETE` | remove | `removeProjectDomain` → reset `custom_domain*` columns to `NULL` |
 
 ### Error handling (via `withErrorHandler` → `{error:{code,message}}`)
 
 - Unconfigured env → `AppError(503, 'DOMAIN_PROVISIONING_UNAVAILABLE')`.
 - Invalid / own-domain / malformed → `ValidationError(400)` (before any Vercel call).
-- Already claimed → `AppError(409, 'DOMAIN_ALREADY_CLAIMED')` (service check + unique-index backstop; translate PG unique violation, don't leak it).
+- Domain already configured for this community → `AppError(409, 'DOMAIN_ALREADY_CONFIGURED')` (D10 — Remove first; checked before any Vercel call).
+- Already claimed by another community → `AppError(409, 'DOMAIN_ALREADY_CLAIMED')` (service check + unique-index backstop; translate PG unique violation, don't leak it).
 - Plan lacks feature → existing `requirePlanFeature` 403 `PLAN_UPGRADE_REQUIRED`.
 - Vercel down/network → `AppError(502, 'DOMAIN_PROVIDER_ERROR')`, message scrubbed of token.
 - **`VERCEL_TOKEN` is server-only: never logged, never in client bundle, never returned.** Vercel's own error code/message (no secrets) may be surfaced to the PM. Requests logged with `requestId`.
@@ -214,8 +247,8 @@ PR4 (middleware routing) ── independent, reads schema from PR2
 | **PR1** | Lift `sanitizeCustomDomain`/`isValidHostname` → `@propertypro/shared`; repoint admin import; add own-domain blocklist | New shared export → `pnpm --filter @propertypro/shared build` before web resolves (local-only trap). Admin `website-status.test.ts` stays green. |
 | **PR2** | Migration 0012 (status + verified_at + partial unique index); enable flag in both feature maps | Existing-table columns need no new RLS; partial index hand-written; journal entry 0012 TAB-indented. Mirror `hasSiteCustomCss` enablement. |
 | **PR3** | Vercel Domains client + tests | Node-runtime only — **never** imported by `middleware.ts` (edge build-only failure). |
-| **PR4** | Base-domain-aware `resolveCommunityContext` + middleware foreign-host branch + positive-only cache | **Riskiest.** Regression: `*.getpropertypro.com` must still resolve as a subdomain under the unset-`NEXT_PUBLIC_ROOT_DOMAIN` CI fallback. Reuses edge-safe supabase client. |
-| **PR5** | Domain service (`createUnscopedClient`) + 4 A1 routes + Remove-action release | Live Vercel can't run in CI → mock client at module boundary; grep `vi.mock('@propertypro/db')` factories for new exports. Duplicate → clean 409. |
+| **PR4** | `rootDomain`-param base-domain awareness in (pure) `resolveCommunityContext` + middleware foreign-host branch (lowercased lookup) + positive-only cache + skip authed→dashboard redirect on custom host | **Riskiest.** Regression: `*.getpropertypro.com` must still resolve as a subdomain under the unset-`NEXT_PUBLIC_ROOT_DOMAIN` CI fallback. Smoke: CSP renders public site on the custom host. Reuses edge-safe supabase client. |
+| **PR5** | Domain service (`createUnscopedClient`) + 4 A1 routes (D9 auth chain) + Remove-action release | Live Vercel can't run in CI → mock client at module boundary; grep `vi.mock('@propertypro/db')` factories for new exports. Set-when-exists → 409 (D10); duplicate-host → 409; Vercel re-add idempotent. Add `custom_domain_*` to `AuditAction` union. |
 | **PR6** | PM Domain card UI + react-query hooks | Client component fetches JSON only — no server-only imports; real web build in final-verify. |
 
 PR1+PR2 could bundle but are kept apart (cross-app vs `packages/db`) to narrow blast
@@ -228,8 +261,8 @@ radius. PR3 and PR4 are fully parallel-safe.
 - **PR1:** valid hosts pass; scheme/path/port stripped; own root + `*.<root>` rejected; reserved labels rejected; empty/overlong rejected; admin tests green.
 - **PR2:** migration applies; unique index rejects 2nd claim, allows two `NULL`s, allows re-claim after soft-delete; `getEffectiveFeatures('condo_718','professional').hasSiteCustomDomain===true`, `…'essentials'…===false`.
 - **PR3:** mocked `fetch` — add returns records; each status maps; remove ok; non-2xx → typed error; `teamId` on every call; unconfigured env throws.
-- **PR4:** foreign host + active → header+rewrite; foreign + pending → not served; unknown foreign → not served & not negative-cached (serves after activation); **regression:** subdomain still resolves under CI fallback; apex (2-label) handled; port stripped.
-- **PR5:** each gate 4xx; set→pending; duplicate→409; invalid→400; verify pending→active flips + stamps; remove→releases+resets; unconfigured→503.
+- **PR4:** foreign host + active → header+rewrite; foreign + pending → not served; unknown foreign → not served & not negative-cached (serves after activation); mixed-case host matches lowercased row; **regression:** subdomain still resolves under CI fallback; apex (2-label) handled; port stripped; `resolveCommunityContext` stays pure (rootDomain passed in); authed request on custom `/` does not redirect to `/dashboard`.
+- **PR5:** each gate 4xx (incl. `cam` allowed, other roles 403, demo-grace blocked); set→pending; **set-when-already-set→409 (D10)**; duplicate-host→409; invalid/own-domain→400; verify pending→active flips + stamps; remove→releases+resets; Vercel re-add idempotent; unconfigured→503.
 - **PR6:** loading/empty/error/success; gated upsell when off; status pill; focus ring; `pnpm --filter @propertypro/web build`.
 
 ---
