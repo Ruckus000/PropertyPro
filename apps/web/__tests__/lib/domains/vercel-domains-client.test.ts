@@ -4,6 +4,7 @@ import {
   getDomainStatus,
   removeProjectDomain,
   DomainProvisioningUnavailableError,
+  DomainProviderError,
 } from '@/lib/domains/vercel-domains-client';
 
 const ENV = { VERCEL_TOKEN: 't0ken', VERCEL_PROJECT_ID: 'prj_x', VERCEL_ORG_ID: 'team_y' };
@@ -54,5 +55,22 @@ describe('vercel-domains-client', () => {
     const [url, init] = spy.mock.calls[0]!;
     expect((init as RequestInit).method).toBe('DELETE');
     expect(String(url)).toContain('/v9/projects/prj_x/domains/www.foo.com');
+  });
+
+  it('tolerates 404 on removeProjectDomain', async () => {
+    mockFetch(404, { error: { code: 'domain_not_found', message: 'not found' } });
+    await expect(removeProjectDomain('www.foo.com')).resolves.toBeUndefined();
+  });
+
+  it('throws DomainProviderError on remove >=400 non-404', async () => {
+    mockFetch(403, { error: { code: 'forbidden', message: 'Forbidden' } });
+    await expect(removeProjectDomain('www.foo.com')).rejects.toBeInstanceOf(DomainProviderError);
+  });
+
+  it('returns error status on addProjectDomain >=400', async () => {
+    mockFetch(422, { error: { code: 'invalid_domain', message: 'Domain is invalid' } });
+    const res = await addProjectDomain('not-a-domain');
+    expect(res.status).toBe('error');
+    expect(res.reason).toBe('Domain is invalid');
   });
 });
