@@ -314,6 +314,19 @@ describe('verifyDomain', () => {
     expect(state.status).toBe('pending');
     expect(state.verifiedAt).toBe(existing.toISOString());
   });
+
+  it('translates provisioning-unconfigured to AppError 503', async () => {
+    selectRowsQueue.push([
+      { customDomain: 'www.example.com', customDomainStatus: 'pending', customDomainVerifiedAt: null },
+    ]);
+    getDomainStatusMock.mockRejectedValue(new DomainProvisioningUnavailableError('not configured'));
+
+    await expect(verifyDomain(7, 'user-1')).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'DOMAIN_PROVISIONING_UNAVAILABLE',
+    });
+    expect(updateCalls).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

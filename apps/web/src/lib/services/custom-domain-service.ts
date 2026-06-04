@@ -164,7 +164,12 @@ export async function verifyDomain(communityId: number, userId: string): Promise
     throw new ValidationError('No custom domain is configured.');
   }
 
-  const result = await getDomainStatus(host);
+  let result;
+  try {
+    result = await getDomainStatus(host);
+  } catch (e) {
+    translateProviderError(e);
+  }
   const db = createUnscopedClient();
 
   let verifiedAt: Date | null = existing.customDomainVerifiedAt;
