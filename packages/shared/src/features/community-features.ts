@@ -49,7 +49,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteEditor: true,
     hasSitePolishBlocks: true,
     hasSiteCustomCss: true,
-    hasSiteCustomDomain: false,
+    hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: false,
   },
   hoa_720: {
@@ -80,7 +80,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteEditor: true,
     hasSitePolishBlocks: true,
     hasSiteCustomCss: true,
-    hasSiteCustomDomain: false,
+    hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: false,
   },
   apartment: {
@@ -111,7 +111,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteEditor: true,
     hasSitePolishBlocks: true,
     hasSiteCustomCss: true,
-    hasSiteCustomDomain: false,
+    hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: false,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;
