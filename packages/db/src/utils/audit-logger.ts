@@ -46,7 +46,9 @@ export type AuditAction =
   | 'support_consent_granted' | 'support_consent_revoked'
   // Compliance checklist audit actions
   | 'link_document' | 'unlink_document'                          // Document linking
-  | 'mark_not_applicable' | 'mark_applicable';                   // Applicability toggling
+  | 'mark_not_applicable' | 'mark_applicable'                    // Applicability toggling
+  // Custom domain audit actions
+  | 'custom_domain_set' | 'custom_domain_verified' | 'custom_domain_removed';
 
 export interface AuditEventParams {
   userId: string | null;
