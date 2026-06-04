@@ -20,6 +20,8 @@ import {
 } from '@/lib/api/branding';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { CustomStylingForm } from '@/components/pm/site-editor/CustomStylingForm';
+import { CustomDomainCard } from '@/components/pm/site-editor/CustomDomainCard';
+import { getDomain } from '@/lib/services/custom-domain-service';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
 import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
@@ -77,14 +79,16 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
     if (parsed.success) initial = parsed.data;
   }
 
-  const [communityInfo, onboardingCompletedAt, currentBranding, features] = await Promise.all([
-    getCommunityPublicInfo(communityId),
-    getSiteOnboardingCompletedAt(communityId),
-    getBrandingForCommunity(communityId),
-    // membership.communityType is the typed CommunityType source (same idiom as
-    // contracts/page.tsx); communityInfo.communityType is a plain DB string.
-    getEffectiveFeaturesForPage(communityId, membership.communityType),
-  ]);
+  const [communityInfo, onboardingCompletedAt, currentBranding, features, domainState] =
+    await Promise.all([
+      getCommunityPublicInfo(communityId),
+      getSiteOnboardingCompletedAt(communityId),
+      getBrandingForCommunity(communityId),
+      // membership.communityType is the typed CommunityType source (same idiom as
+      // contracts/page.tsx); communityInfo.communityType is a plain DB string.
+      getEffectiveFeaturesForPage(communityId, membership.communityType),
+      getDomain(communityId),
+    ]);
   const previewUrl = communityInfo
     ? buildCommunityUrl(communityInfo.slug, '/?preview=true')
     : null;
@@ -163,6 +167,20 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
           communityId={communityId}
           initial={customCssInitial}
           hasSiteCustomCss={hasSiteCustomCss}
+        />
+      </section>
+
+      <section
+        aria-labelledby="custom-domain-tab"
+        className="mt-8 rounded-md border border-default bg-surface-card p-6 shadow-e0"
+      >
+        <h2 id="custom-domain-tab" className="sr-only">
+          Custom Domain
+        </h2>
+        <CustomDomainCard
+          communityId={communityId}
+          hasSiteCustomDomain={features.hasSiteCustomDomain}
+          initial={domainState}
         />
       </section>
 
