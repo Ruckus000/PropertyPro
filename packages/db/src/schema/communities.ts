@@ -74,6 +74,10 @@ export const communities = pgTable('communities', {
   trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }),
   /** Phase 3: Optional custom domain for the community's public site. */
   customDomain: text('custom_domain'),
+  /** Phase 2: lifecycle of the custom domain — null | 'pending' | 'active' | 'error'. */
+  customDomainStatus: text('custom_domain_status'),
+  /** Phase 2: when the custom domain first became active. */
+  customDomainVerifiedAt: timestamp('custom_domain_verified_at', { withTimezone: true }),
   /** Phase 3: When the community's public site was last published. */
   sitePublishedAt: timestamp('site_published_at', { withTimezone: true }),
   /** Site onboarding wizard: when the PM finished the wizard (clicked Publish on
