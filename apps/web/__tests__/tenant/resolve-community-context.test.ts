@@ -14,6 +14,7 @@ describe('resolveCommunityContext', () => {
       communityId: 42,
       tenantSlug: null,
       isReservedSubdomain: false,
+      customDomainHost: null,
     });
   });
 
@@ -28,6 +29,7 @@ describe('resolveCommunityContext', () => {
       communityId: null,
       tenantSlug: 'fake',
       isReservedSubdomain: false,
+      customDomainHost: null,
     });
   });
 
@@ -69,6 +71,29 @@ describe('resolveCommunityContext', () => {
 
     expect(result.source).toBe('host_subdomain');
     expect(result.tenantSlug).toBe('sunset');
+  });
+
+  it('classifies a foreign host as a custom domain', () => {
+    const result = resolveCommunityContext({ host: 'www.sunsetcondos.com', rootDomain: 'getpropertypro.com' });
+    expect(result.source).toBe('custom_domain');
+    expect(result.customDomainHost).toBe('www.sunsetcondos.com');
+  });
+  it('keeps a root-domain subdomain on the existing path', () => {
+    const result = resolveCommunityContext({ host: 'sunset-condos.getpropertypro.com', rootDomain: 'getpropertypro.com' });
+    expect(result.source).toBe('host_subdomain');
+    expect(result.tenantSlug).toBe('sunset-condos');
+  });
+  it('does not treat the apex/root as a custom domain', () => {
+    const result = resolveCommunityContext({ host: 'getpropertypro.com', rootDomain: 'getpropertypro.com' });
+    expect(result.source).not.toBe('custom_domain');
+  });
+  it('lowercases the custom host', () => {
+    const result = resolveCommunityContext({ host: 'WWW.Foo.com', rootDomain: 'getpropertypro.com' });
+    expect(result.customDomainHost).toBe('www.foo.com');
+  });
+  it('returns null customDomainHost for a normal subdomain', () => {
+    const result = resolveCommunityContext({ host: 'fake.getpropertypro.com', rootDomain: 'getpropertypro.com' });
+    expect(result.customDomainHost).toBeNull();
   });
 
   it('returns none when no context exists', () => {

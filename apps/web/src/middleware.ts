@@ -312,6 +312,26 @@ async function findCommunityIdBySlug(
   return communityId;
 }
 
+async function findCommunityIdByCustomDomain(
+  supabase: Awaited<ReturnType<typeof createMiddlewareClient>>['supabase'],
+  host: string,
+): Promise<number | null> {
+  const key = `cd:${host}`;
+  const cached = readTenantCache(key);
+  if (cached !== undefined && cached !== null) return cached; // positive-only
+  const { data, error } = await supabase
+    .from('communities')
+    .select('id')
+    .eq('custom_domain', host)
+    .eq('custom_domain_status', 'active')
+    .is('deleted_at', null)
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const id = typeof data?.[0]?.id === 'number' && Number.isInteger(data[0].id) ? data[0].id : null;
+  if (id !== null) writeTenantCache(key, id);
+  return id;
+}
+
 function sanitizeForwardedHeaders(request: NextRequest, requestId: string): Headers {
   const headers = new Headers(request.headers);
   for (const header of FORWARDED_AUTH_HEADERS) {
@@ -624,10 +644,46 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const tenantContext = resolveCommunityContext({
       searchParams: request.nextUrl.searchParams,
       host: request.headers.get('host'),
+      rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
     });
 
+    if (tenantContext.source === 'custom_domain' && tenantContext.customDomainHost) {
+      try {
+        const communityId = await findCommunityIdByCustomDomain(supabase, tenantContext.customDomainHost);
+        if (communityId != null) {
+          forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+          forwardedHeaders.set(TENANT_SOURCE_HEADER, 'custom_domain');
+          const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
+          if (isPreviewRequest) {
+            forwardedHeaders.set('x-preview', 'true');
+          }
+          const siteUrl = request.nextUrl.clone();
+          siteUrl.pathname = '/public-site';
+          const publicSiteResponse = NextResponse.rewrite(siteUrl, { request: { headers: forwardedHeaders } });
+          return finaliseResponse(
+            response as unknown as NextResponse,
+            publicSiteResponse,
+            requestId,
+            origin,
+            isApi,
+            isPreviewRequest,
+          );
+        }
+        // communityId null (unverified/unknown custom host): fall through to default handling.
+      } catch {
+        // non-fatal — fall through
+      }
+    }
+
     const hasCommunityContext =
-      tenantContext.source !== 'none' && !tenantContext.isReservedSubdomain;
+      tenantContext.source !== 'none' &&
+      // A 'custom_domain' source is fully handled by the dedicated block above
+      // (resolved → already returned; unresolved/inactive → must fall through to
+      // default handling, NOT the subdomain auth-split, so an unknown foreign
+      // host neither renders a community-less public site nor redirects an
+      // authenticated user to /dashboard on the foreign host).
+      tenantContext.source !== 'custom_domain' &&
+      !tenantContext.isReservedSubdomain;
 
     if (hasCommunityContext) {
       const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';

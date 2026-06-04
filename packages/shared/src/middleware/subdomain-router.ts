@@ -4,6 +4,7 @@ export interface ResolveCommunityContextInput {
   searchParams?: URLSearchParams | ReadonlyURLSearchParams;
   host?: string | null;
   routeSubdomain?: string | null;
+  rootDomain?: string | null;
 }
 
 export type CommunityContextSource =
@@ -11,6 +12,7 @@ export type CommunityContextSource =
   | 'tenant_query'
   | 'route_subdomain'
   | 'host_subdomain'
+  | 'custom_domain'
   | 'none';
 
 export interface ResolvedCommunityContext {
@@ -18,6 +20,7 @@ export interface ResolvedCommunityContext {
   communityId: number | null;
   tenantSlug: string | null;
   isReservedSubdomain: boolean;
+  customDomainHost: string | null;
 }
 
 type ReadonlyURLSearchParams = Pick<URLSearchParams, 'get'>;
@@ -59,9 +62,32 @@ function parseHostSubdomain(host: string | null | undefined): string | null {
   return parts[0] ?? null;
 }
 
+function foreignHost(host: string | null | undefined, rootDomain: string | null | undefined): string | null {
+  if (!host || !rootDomain) return null;
+  const h = host.split(':')[0]?.trim().toLowerCase() ?? '';
+  const root = rootDomain.split(':')[0]?.trim().toLowerCase() ?? '';
+  if (!h || !root) return null;
+  if (h === 'localhost' || h.endsWith('.localhost')) return null;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return null;
+  if (h === root || h.endsWith(`.${root}`)) return null; // under our root → not custom
+  if (!h.includes('.')) return null;
+  return h;
+}
+
 export function resolveCommunityContext(
   input: ResolveCommunityContextInput,
 ): ResolvedCommunityContext {
+  const custom = foreignHost(input.host, input.rootDomain);
+  if (custom) {
+    return {
+      source: 'custom_domain',
+      communityId: null,
+      tenantSlug: null,
+      isReservedSubdomain: false,
+      customDomainHost: custom,
+    };
+  }
+
   const hostSubdomainRaw = normalizeTenantSlug(parseHostSubdomain(input.host));
 
   // Non-reserved tenant host (e.g. sunset-condos.getpropertypro.com) must win over
@@ -73,6 +99,7 @@ export function resolveCommunityContext(
       communityId: null,
       tenantSlug: hostSubdomainRaw,
       isReservedSubdomain: false,
+      customDomainHost: null,
     };
   }
 
@@ -83,6 +110,7 @@ export function resolveCommunityContext(
       communityId,
       tenantSlug: null,
       isReservedSubdomain: false,
+      customDomainHost: null,
     };
   }
 
@@ -94,6 +122,7 @@ export function resolveCommunityContext(
       communityId: null,
       tenantSlug: queryTenant,
       isReservedSubdomain: reserved,
+      customDomainHost: null,
     };
   }
 
@@ -105,6 +134,7 @@ export function resolveCommunityContext(
       communityId: null,
       tenantSlug: routeSubdomain,
       isReservedSubdomain: reserved,
+      customDomainHost: null,
     };
   }
 
@@ -115,6 +145,7 @@ export function resolveCommunityContext(
       communityId: null,
       tenantSlug: hostSubdomainRaw,
       isReservedSubdomain: reserved,
+      customDomainHost: null,
     };
   }
 
@@ -123,5 +154,6 @@ export function resolveCommunityContext(
     communityId: null,
     tenantSlug: null,
     isReservedSubdomain: false,
+    customDomainHost: null,
   };
 }
