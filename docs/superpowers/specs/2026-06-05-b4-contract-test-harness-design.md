@@ -30,10 +30,15 @@ finding. No per-route generated files.
 - **Check (c) happy-path response-shape validation is deferred.** It genuinely
   requires per-route DB/service mocks (the handler must run and return a payload),
   which a generic harness cannot synthesize without reinventing integration
-  tests. It is already enforced two ways: at runtime by `runRoute`'s
-  `buildResponse` (response-schema mismatch → `ContractValidationError(source:
-  'response')` → 500 "envelope drift canary" in `withErrorHandler`), and by
-  hand-written route tests. The harness does not touch it.
+  tests. It is *partially* covered at runtime by `runRoute`'s `buildResponse`
+  (response-schema mismatch → `ContractValidationError(source: 'response')` → 500
+  "envelope drift canary"), and by hand-written route tests. **Important caveat
+  (verification finding):** that canary is **blind for the 127 contracts whose
+  `response` is `z.unknown()`/`z.any()`** — `z.unknown().safeParse(x)` always
+  passes, so ~44% of routes have no response-shape enforcement at all. B4 does not
+  close that hole; it only makes it **visible** via the `unknown-response` counter
+  in the coverage report (Component 3). Tightening those 127 schemas is a separate
+  follow-up, out of B4 scope.
 - No codegen of `.test.ts` files. No OpenAPI work. No changes to route handlers,
   contracts, the RBAC matrix, or the runner.
 - The harness does **not** mutate GitHub branch-protection settings — see
@@ -108,24 +113,40 @@ script, no generated files.
 
 ### Component 2 — Malformed-input synthesis (`malformed-input.ts`)
 
-Pure helper, independently unit-tested. Given a Zod schema, return either a value
-the schema **provably rejects** or a signal that the schema is permissive.
+Pure helper, independently unit-tested. Given a Zod schema **and the input
+location**, return either a value the schema **provably rejects** *via a payload
+the runner can actually deliver*, or a signal that the schema is permissive.
 
 ```
-synthesizeRejected(schema): { ok: true; value: unknown } | { ok: false; reason: 'permissive' }
+synthesizeRejected(schema, location: 'params' | 'query' | 'body')
+  : { ok: true; value: unknown } | { ok: false; reason: 'permissive' }
 ```
 
-Algorithm:
-1. If the schema is not introspectable as an object (e.g. `z.unknown()`,
-   `z.any()`, or a bare scalar), try a small ordered candidate list
-   (`null`, `123`, `'∅invalid∅'`, `[]`, `{}`) and return the first that
-   `safeParse` rejects; if none reject → `permissive`.
-2. If it is a `ZodObject`, read `.shape`; for each field, probe the field schema
-   with the candidate list to find a per-field rejected value; assemble an object
-   that sets at least one required/constrained field to a rejected value (and
-   omits nothing else needed). Verify the **whole** schema rejects the assembled
-   object via `safeParse` before returning it. If no field can be broken (all
-   fields accept everything) → `permissive`.
+**Location-awareness is mandatory (verification finding 2026-06-05).** The runner
+builds `query` and `params` from `URLSearchParams` / path segments, so every value
+those schemas ever see is a **string** (or absent). A naive non-string probe
+produces a *false* result: e.g. for `z.string().min(1)`, `safeParse({ tag: 123 })`
+fails (probe "succeeds") but the reachable input `{ tag: '123' }` **passes** — so
+we'd assert a 400 on an input the route can never receive while the real input
+sails through. Empirically confirmed. Therefore:
+
+- **Candidate set is location-scoped.** `body`: `[null, 123, '∅invalid∅', [], {}]`
+  (JSON values — body is `req.json()`). `query` / `params`: **strings or
+  omitted only** — `['∅invalid∅', '', <omit the key>]` (never a non-string).
+- A field whose **string** candidates all pass (a plain `z.string()` query field
+  that accepts any non-empty string) makes that location **string-permissive** →
+  classified `permissive`, **not** "covered". This is the honest classification
+  the naive probe got wrong.
+
+Algorithm (per location):
+1. If the schema is not an introspectable object (`z.unknown()`, `z.any()`, bare
+   scalar), try the location-scoped candidate list; return the first the schema
+   rejects; if none reject → `permissive`.
+2. If it is a `ZodObject`, read `.shape`; for each field probe with the
+   location-scoped candidates to find a per-field rejected value; assemble an
+   object setting at least one required/constrained field to a rejected value.
+   Verify the **whole** schema rejects it via `safeParse` before returning. If no
+   field can be broken with location-legal values → `permissive`.
 
 The helper always self-verifies (`safeParse(result).success === false`) so check
 (a) never asserts on an unverified "bad" value.
@@ -138,10 +159,12 @@ The helper always self-verifies (`safeParse(result).success === false`) so check
 **Check (a) — malformed input → 400, end-to-end.** For each request location the
 runner validates *for that contract's method* (`params` if declared; `query` if
 declared; `body` only when method ≠ GET and body declared):
-- `synthesizeRejected(schema)`.
+- `synthesizeRejected(schema, location)` — **location passed** so query/params
+  get string-only candidates (Component 2).
 - If `permissive` or the contract declares no validated input for any location →
-  record the contract under `permissive`/`no-input` and skip the 400 assertion
-  for that location (no silent omission — counted in the coverage report).
+  record the contract under `input-permissive`/`no-input` and skip the 400
+  assertion for that location (no silent omission — counted in the coverage
+  report).
 - Else build a `NextRequest` carrying the malformed value (query → URL search
   params; body → JSON; params → `ctx.params` Promise per Next 15), wrap
   `withErrorHandler(runRoute(contract, spyHandler, options))`, invoke, and assert:
@@ -160,13 +183,40 @@ declared; `body` only when method ≠ GET and body declared):
   resources, with `move_checklists` allowing `update`). Otherwise **fail** with a
   message naming the contract, resource, and action.
 
-**Coverage report.** A final `afterAll`/summary `test` logs and asserts:
-`covered`, `permissive`, `no-input`, `rbac-checked`, `rbac-inapplicable` counts.
-Assert `covered ≥ a floor` and that `permissive` is on a small expected allowlist
-(or just logged) — so the proportion of genuinely-exercised routes is visible and
-can't silently erode to zero. **Spike-measured baseline (2026-06-05): 265
-coverable / 18 no-input / 2 input-permissive out of 285** — i.e. ~93% of contracts
-get a real end-to-end (a) assertion. Floor candidates: `covered ≥ 200`.
+> **What (b) is and is NOT (verification finding — do not over-sell this).** The
+> contract's `permission` is `{ resource: string; action: string }` *decorative
+> metadata*; the runner does not enforce it. The **actual** enforcement is
+> `requirePermission(membership, resource: RbacResource, action: RbacAction)`
+> (`apps/web/src/lib/db/access-control.ts:76`), whose parameters are already
+> typed to the matrix — so the compiler *already* guarantees matrix-validity at
+> the real enforcement site. Several out-of-matrix routes (`help/article`,
+> `communities/cancel`, …) don't call `requirePermission` at all. Therefore (b)
+> is a **metadata-integrity** check (keeps the label honest for future
+> OpenAPI/docs codegen; catches a brand-new resource forgotten in the matrix or a
+> typo'd `resource`) — **not** an authorization safeguard, and it covers ~34
+> contracts only by allowlist rubber-stamp. (b) **cannot** detect the
+> higher-value bug — the contract's label disagreeing with the handler's actual
+> `requirePermission(...)` call — because it never reads `route.ts`. That
+> label↔enforcement cross-check would need route-AST parsing and multi-method
+> disambiguation; **deferred as YAGNI**, explicitly out of B4 scope.
+
+**Coverage report.** A final `afterAll`/summary `test` logs and asserts these
+counts so coverage is visible and can't silently erode:
+- `covered` — got a real end-to-end (a) 400 assertion.
+- `input-permissive` — schema accepts all location-legal inputs (incl. the
+  string-permissive query/params case above).
+- `no-input` — contract declares no validated `params`/`query`/`body`.
+- `rbac-checked` / `rbac-inapplicable` (no `permission`) / `rbac-allowlisted`
+  (out-of-matrix, see check (b)).
+- `unknown-response` — contracts with `response: z.unknown()`/`z.any()`. Pure
+  tracked-debt signal (see (c) note); **logged, not asserted** — these are the
+  routes the runtime `buildResponse` canary is blind to.
+
+Assert `covered ≥ floor` (candidate `≥ 180`). **Honest-numbers caveat:** the only
+measured baseline so far (285 / 265-coverable) used a *non-location-aware* probe
+and is therefore **optimistic** — the string-aware synthesizer will reclassify
+some of the 75 query-bearing contracts as `input-permissive`. The real floor is
+set from the first run of the location-aware suite, not from 265.
 
 ### Component 4 — Branch-protection audit + ADR
 
@@ -191,6 +241,9 @@ get a real end-to-end (a) assertion. Floor candidates: `covered ≥ 200`.
 |---|---|
 | `import.meta.glob` doesn't resolve in this vitest setup | **RESOLVED by spike (2026-06-05): enumerated 285 contracts.** Fallback not needed. |
 | A `permissive` schema (e.g. `z.unknown()` request) makes (a) vacuous | Synthesizer reports `permissive`; coverage report counts it; not silently skipped. |
+| **Non-string probe gives false (a) coverage on query/params** (verified 2026-06-05) | Synthesizer is **location-aware** (Component 2): query/params get string-only candidates; string-permissive fields are classified `permissive`, not "covered". |
+| Check (b) over-sold as authz enforcement | Spec explicitly scopes (b) to metadata-integrity; label↔enforcement cross-check deferred as YAGNI. |
+| Response-shape unenforced for 127 `z.unknown()` contracts | Surfaced via `unknown-response` counter; tightening is a separate follow-up. |
 | Glob-importing a contract with hidden server import → suite-load crash | Verified: all 206 contract.ts import only pure-schema modules. Sanity floor assertion catches a future regression. |
 | Checks pass vacuously (registry empty, every contract permissive) | Registry-floor assertion + coverage-floor assertion + meta-tests (negative controls). |
 | Suite is green but doesn't gate merges | ADR-005 surfaces the branch-protection gap explicitly. |
