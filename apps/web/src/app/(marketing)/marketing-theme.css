@@ -5,6 +5,8 @@
   --mk-cream:#fdf6ee; --mk-cream-2:#fbeee1; --mk-card:#fffdfb; --mk-line:#efe2d4;
   --mk-ink:#241712; --mk-ink-soft:#6b574c;
   --mk-coral:#c2533a; --mk-coral-d:#a8412c; --mk-teal:#2f8f83; --mk-gold:#e3a93c;
+  /* AA-passing teal for TEXT (5.4:1 on cream); --mk-teal stays for graphics/fills */
+  --mk-teal-text:#237066;
   --mk-shadow:0 18px 40px -20px rgba(80,40,20,.35);
   --mk-shadow-sm:0 8px 24px -12px rgba(80,40,20,.28);
   --mk-maxw:1680px; --mk-gutter:56px;
@@ -53,7 +55,7 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 /* hero */
 .marketing-theme .mk-hero{padding:62px 0 40px;overflow:hidden}
 .marketing-theme .mk-hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:64px;align-items:center}
-.marketing-theme .mk-badge{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--mk-line);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--mk-teal)}
+.marketing-theme .mk-badge{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--mk-line);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--mk-teal-text)}
 .marketing-theme .mk-badge .mk-pulse{width:8px;height:8px;border-radius:50%;background:var(--mk-teal)}
 .marketing-theme .mk-h1{font-size:70px;margin:24px 0 20px}
 .marketing-theme .mk-h1 .mk-swash{font-style:italic;color:var(--mk-coral-d)}
@@ -62,7 +64,7 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 .marketing-theme .mk-hero-sub{font-size:14px;color:var(--mk-ink-soft);margin-bottom:14px}
 .marketing-theme .mk-trust{display:flex;gap:24px;font-size:14px;color:var(--mk-ink-soft);font-weight:500;flex-wrap:wrap}
 .marketing-theme .mk-trust span{display:flex;align-items:center;gap:7px}
-.marketing-theme .mk-check{color:var(--mk-teal);font-weight:800}
+.marketing-theme .mk-check{color:var(--mk-teal-text);font-weight:800}
 .marketing-theme .mk-sun{position:absolute;top:-160px;right:-160px;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(227,169,60,.20),rgba(194,83,58,.05) 55%,transparent 70%);pointer-events:none}
 
 /* device / portfolio + product panels */
@@ -71,7 +73,7 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 .marketing-theme .mk-device-top i{width:10px;height:10px;border-radius:50%;display:block}
 .marketing-theme .mk-device-body{padding:22px}
 .marketing-theme .mk-portfolio-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-.marketing-theme .mk-portfolio-score{font-family:var(--font-fraunces),serif;font-size:22px;font-weight:600;color:var(--mk-teal)}
+.marketing-theme .mk-portfolio-score{font-family:var(--font-fraunces),serif;font-size:22px;font-weight:600;color:var(--mk-teal-text)}
 .marketing-theme .mk-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--mk-line);border-radius:11px;padding:12px 14px;margin-bottom:9px}
 .marketing-theme .mk-row .mk-ic{width:30px;height:30px;border-radius:8px;background:#fbeee1;display:grid;place-items:center;font-size:14px;flex:0 0 auto}
 .marketing-theme .mk-row .mk-nm{font-size:14px;font-weight:600;flex:1}
@@ -108,7 +110,7 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 /* features */
 .marketing-theme .mk-feat-hero{display:grid;grid-template-columns:1fr 1fr;gap:0;overflow:hidden;margin-top:38px}
 .marketing-theme .mk-feat-hero .mk-copy{padding:48px}
-.marketing-theme .mk-feat-hero .mk-copy .mk-eyebrow{color:var(--mk-teal)}
+.marketing-theme .mk-feat-hero .mk-copy .mk-eyebrow{color:var(--mk-teal-text)}
 .marketing-theme .mk-feat-hero h3{font-size:32px;margin:12px 0}
 .marketing-theme .mk-feat-hero .mk-art{background:linear-gradient(140deg,#fef6ee,#fbeee1);padding:44px;display:grid;place-items:center}
 .marketing-theme .mk-feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:26px}
@@ -133,7 +135,7 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 .marketing-theme .mk-price .mk-amt span{font-size:15px;font-family:var(--font-sans),sans-serif;color:var(--mk-ink-soft);font-weight:500}
 .marketing-theme .mk-price ul{list-style:none;margin:22px 0;padding:0;display:flex;flex-direction:column;gap:12px}
 .marketing-theme .mk-price li{font-size:14px;display:flex;gap:9px}
-.marketing-theme .mk-price li::before{content:"✓";color:var(--mk-teal);font-weight:800}
+.marketing-theme .mk-price li::before{content:"✓";color:var(--mk-teal-text);font-weight:800}
 .marketing-theme .mk-price .mk-pill{width:100%;justify-content:center;margin-top:6px}
 
 /* faq */
