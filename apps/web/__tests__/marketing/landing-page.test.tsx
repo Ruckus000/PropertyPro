@@ -11,6 +11,7 @@ import { MarketingNav } from '../../src/components/marketing/marketing-nav';
 import { LogoProofSection } from '../../src/components/marketing/logo-proof-section';
 import { HowItWorksSection } from '../../src/components/marketing/how-it-works-section';
 import { TestimonialSection } from '../../src/components/marketing/testimonial-section';
+import { FaqSection } from '../../src/components/marketing/faq-section';
 
 describe('PortfolioCard', () => {
   it('renders an aggregate portfolio score and multiple communities', () => {
@@ -215,5 +216,15 @@ describe('TestimonialSection', () => {
     const html = renderToStaticMarkup(<TestimonialSection />);
     expect(html).toContain('buildings');
     expect(html).toContain('Property Manager');
+  });
+});
+
+describe('FaqSection', () => {
+  it('answers the core board/PM objections', () => {
+    const html = renderToStaticMarkup(<FaqSection />);
+    expect(html).toContain('required to have a website');
+    expect(html).toContain('technical');
+    expect(html).toContain('secure');
+    expect(html).toContain('already has a website');
   });
 });
