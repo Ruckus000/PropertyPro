@@ -1,15 +1,12 @@
 'use client';
 
 import { useCallback } from 'react';
+import { requestJson } from '@/lib/api/request-json';
 
 export interface UserSearchResult {
   id: string;
   title: string;
   subtitle?: string;
-}
-
-interface UserSearchResponse {
-  data?: { results?: UserSearchResult[] };
 }
 
 export const USER_SEARCH_FETCH_LIMIT = 10;
@@ -36,11 +33,11 @@ async function searchUsers(
     limit: String(USER_SEARCH_FETCH_LIMIT),
   });
 
-  const res = await fetch(`/api/v1/search/users?${params.toString()}`, { signal });
-  if (!res.ok) throw new Error('Search failed');
-
-  const json = (await res.json()) as UserSearchResponse;
-  return json.data?.results ?? [];
+  const { results } = await requestJson<{ results?: UserSearchResult[] }>(
+    `/api/v1/search/users?${params.toString()}`,
+    { signal },
+  );
+  return results ?? [];
 }
 
 export function useUserSearch(communityId: number) {

@@ -1,16 +1,13 @@
 'use client';
 
 import { useCallback } from 'react';
+import { requestJson } from '@/lib/api/request-json';
 
 export interface ResidentSearchResult {
   id: string;
   title: string;
   subtitle: string;
   unitNumber: string | null;
-}
-
-interface ResidentSearchResponse {
-  data?: { results?: ResidentSearchResult[] };
 }
 
 export const RESIDENT_SEARCH_FETCH_LIMIT = 10;
@@ -37,11 +34,11 @@ async function searchResidents(
     limit: String(RESIDENT_SEARCH_FETCH_LIMIT),
   });
 
-  const res = await fetch(`/api/v1/search/residents?${params.toString()}`, { signal });
-  if (!res.ok) throw new Error('Search failed');
-
-  const json = (await res.json()) as ResidentSearchResponse;
-  return json.data?.results ?? [];
+  const { results } = await requestJson<{ results?: ResidentSearchResult[] }>(
+    `/api/v1/search/residents?${params.toString()}`,
+    { signal },
+  );
+  return results ?? [];
 }
 
 export function useResidentSearch(communityId: number) {

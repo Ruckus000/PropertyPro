@@ -1,6 +1,7 @@
 'use client';
 
 import { queryOptions, useQuery } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -249,22 +250,9 @@ async function fetchPmReport<T extends ReportData>(
   const qs = params.toString();
   const url = `/api/v1/pm/reports/${reportType}${qs ? `?${qs}` : ''}`;
 
-  const res = await fetch(url);
-  const json = (await res.json()) as {
-    data?: Record<string, unknown>;
-    error?: { message?: string };
-  };
-
-  if (!res.ok) {
-    throw new Error(json.error?.message ?? `Failed to load ${reportType} report`);
-  }
-
-  if (!json.data) {
-    throw new Error('Missing response payload');
-  }
+  const raw = await requestJson<Record<string, unknown>>(url);
 
   // Transform raw KPIs into ReportKpi objects
-  const raw = json.data;
   if (raw.kpis && typeof raw.kpis === 'object') {
     raw.kpis = transformKpis(reportType, raw.kpis as Record<string, unknown>);
   }
