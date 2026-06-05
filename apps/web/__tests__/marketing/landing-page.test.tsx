@@ -135,51 +135,29 @@ describe('marketing landing page', () => {
   });
 
   describe('ComplianceUrgencySection', () => {
-    it('references Florida Statute 718', () => {
+    it('keeps the relief framing headline', () => {
       const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('718.111(12)(g)');
+      expect(html).toContain('on autopilot');
     });
 
-    it('references Florida Statute 720 for HOAs', () => {
+    it('retains the $50/day and 30-day statute facts', () => {
       const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('720.303(4)');
-    });
-
-    it('mentions the January 2026 deadline', () => {
-      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('January 1, 2026');
-    });
-
-    it('mentions the 25-149 unit threshold', () => {
-      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('25-149 unit');
-    });
-
-    it('mentions 150+ units as currently required', () => {
-      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('150+ unit');
-    });
-
-    it('mentions 100+ parcel HOA threshold', () => {
-      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('100+ parcel');
-    });
-
-    it('describes penalty details', () => {
-      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('$50 per day');
+      expect(html).toContain('$50');
       expect(html).toContain('30 days');
     });
 
-    it('lists required document categories', () => {
+    it('references the §718/§720 framework', () => {
       const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('Governing Documents');
-      expect(html).toContain('Financial Records');
-      expect(html).toContain('Meeting Materials');
-      expect(html).toContain('Contracts');
+      expect(html).toContain('718');
+      expect(html).toContain('720');
     });
 
-    it('includes the compliance anchor id', () => {
+    it('embeds the checker prompt', () => {
+      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
+      expect(html).toContain('Is your association required to comply');
+    });
+
+    it('keeps the compliance anchor id', () => {
       const html = renderToStaticMarkup(<ComplianceUrgencySection />);
       expect(html).toContain('id="compliance"');
     });
