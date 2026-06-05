@@ -170,6 +170,23 @@ describe('getVisibleItems', () => {
     expect(ids).not.toContain('packages');
     expect(ids).not.toContain('visitors');
   });
+
+  it('shows the Website (site editor) launcher only to cam + property_manager_admin', () => {
+    // The editor route allows only pm_admin/cam, so the community-sidebar
+    // launcher must be gated to exactly those roles — never a dead link.
+    const withEditor = { ...ALL_FEATURES, hasSiteEditor: true };
+    expect(getVisibleItems(NAV_ITEMS, 'cam', withEditor).map((i) => i.id)).toContain('website');
+    expect(getVisibleItems(NAV_ITEMS, 'property_manager_admin', withEditor).map((i) => i.id)).toContain('website');
+    for (const role of ['owner', 'tenant', 'board_member', 'board_president'] as const) {
+      // Excluded by ROLE even with the feature on.
+      expect(getVisibleItems(NAV_ITEMS, role, withEditor).map((i) => i.id)).not.toContain('website');
+    }
+  });
+
+  it('hides the Website launcher when the plan lacks the site editor', () => {
+    const noEditor = { ...ALL_FEATURES, hasSiteEditor: false };
+    expect(getVisibleItems(NAV_ITEMS, 'cam', noEditor).map((i) => i.id)).not.toContain('website');
+  });
 });
 
 describe('nav href generation', () => {
