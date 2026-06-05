@@ -519,6 +519,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   packages: { title: 'Packages', subtitle: 'Track package deliveries' },
   visitors: { title: 'Visitors', subtitle: 'Manage visitor access' },
   'move-in-out': { title: 'Move In/Out', subtitle: 'Move-in & move-out checklists' },
+  'portfolio-templates': { title: 'Portfolio Templates', subtitle: 'Reusable site-branding templates' },
   reports: { title: 'Reports', subtitle: 'Portfolio analytics & reports' },
   help: { title: 'Help Center', subtitle: 'Guides, FAQs, and support' },
 };
