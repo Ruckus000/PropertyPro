@@ -38,22 +38,7 @@ function objectFieldLevel(
     const obj: Record<string, unknown> = { [name]: bad };
     if (rejects(schema, obj)) return { ok: true, value: obj };
   }
-  // Only use {} (missing-required) as a fallback when no string-breakable field
-  // was found AND every required field truly cannot be broken by any string
-  // (including ''). A field that rejects '' is theoretically breakable but just
-  // not reachable through STRING_CANDIDATES, so it is still considered
-  // permissive-for-our-purposes.
-  if (rejects(schema, {})) {
-    // Check that at least one required field has NO string that breaks it
-    // (including empty string). If a required field rejects '', then it is
-    // breakable — just not via our candidate list — so we classify permissive.
-    const hasStringBreakableRequired = Object.values(shape).some(
-      (field) => rejects(field, ''),
-    );
-    if (!hasStringBreakableRequired) {
-      return { ok: true, value: {} };
-    }
-  }
+  if (rejects(schema, {})) return { ok: true, value: {} }; // a required field is missing
   return { ok: false, reason: 'permissive' };
 }
 

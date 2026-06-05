@@ -23,10 +23,11 @@ describe('synthesizeRejected', () => {
     }
   });
 
-  it('classifies a plain-string query field as PERMISSIVE (any non-empty string passes)', () => {
+  it('covers a required string field via missing-required {} (empty `?q=` is collapsed to undefined, so OMITTING q is the reachable malformation)', () => {
     const schema = z.object({ q: z.string().min(1) });
     const r = synthesizeRejected(schema, 'query');
-    expect(r).toEqual({ ok: false, reason: 'permissive' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value).toEqual({});
   });
 
   it('models missing-required via {} when no field value can be broken', () => {
