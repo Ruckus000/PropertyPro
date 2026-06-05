@@ -1556,7 +1556,8 @@ git commit -m "feat(marketing): property-manager testimonial"
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('$199');
       expect(html).toContain('$349');
-      expect(html).toContain("Let's talk");
+      // renderToStaticMarkup escapes the apostrophe (&#x27;); normalize before matching.
+      expect(html.replace(/&#x27;/g, "'")).toContain("Let's talk");
     });
 
     it('marks the Property Manager tier as the recommended path', () => {
