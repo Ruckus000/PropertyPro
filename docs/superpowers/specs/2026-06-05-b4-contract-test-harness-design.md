@@ -45,11 +45,12 @@ finding. No per-route generated files.
   tests. It is *partially* covered at runtime by `runRoute`'s `buildResponse`
   (response-schema mismatch → `ContractValidationError(source: 'response')` → 500
   "envelope drift canary"), and by hand-written route tests. **Important caveat
-  (verification finding):** that canary is **blind for the 127 contracts whose
-  `response` is `z.unknown()`/`z.any()`** — `z.unknown().safeParse(x)` always
-  passes, so ~44% of routes have no response-shape enforcement at all. B4 does not
+  (verification finding):** that canary is **blind for the 173 contracts whose
+  `response` is `z.unknown()`/`z.any()`** (measured by the implemented suite; the
+  design-time grep estimated 127) — `z.unknown().safeParse(x)` always passes, so
+  ~61% of contract exports have no response-shape enforcement at all. B4 does not
   close that hole; it only makes it **visible** via the `unknown-response` counter
-  in the coverage report (Component 3). Tightening those 127 schemas is a separate
+  in the coverage report (Component 3). Tightening those schemas is a separate
   follow-up, out of B4 scope.
 - No codegen of `.test.ts` files. No OpenAPI work. No changes to route handlers,
   contracts, the RBAC matrix, or the runner.
@@ -255,7 +256,7 @@ set from the first run of the location-aware suite, not from 265.
 | A `permissive` schema (e.g. `z.unknown()` request) makes (a) vacuous | Synthesizer reports `permissive`; coverage report counts it; not silently skipped. |
 | **Non-string probe gives false (a) coverage on query/params** (verified 2026-06-05) | Synthesizer is **location-aware** (Component 2): query/params get string-only candidates; string-permissive fields are classified `permissive`, not "covered". |
 | Check (b) over-sold as authz enforcement | Spec explicitly scopes (b) to metadata-integrity; label↔enforcement cross-check deferred as YAGNI. |
-| Response-shape unenforced for 127 `z.unknown()` contracts | Surfaced via `unknown-response` counter; tightening is a separate follow-up. |
+| Response-shape unenforced for 173 `z.unknown()`/`z.any()` contracts (measured) | Surfaced via `unknown-response` counter; tightening is a separate follow-up. |
 | Glob-importing a contract with hidden server import → suite-load crash | Verified: all 206 contract.ts import only pure-schema modules. Sanity floor assertion catches a future regression. |
 | Checks pass vacuously (registry empty, every contract permissive) | Registry-floor assertion + coverage-floor assertion + meta-tests (negative controls). |
 | Suite is green but doesn't gate merges | ADR-005 surfaces the branch-protection gap explicitly. |

@@ -1,3 +1,10 @@
+// Check (b) of the B4 harness. This validates the integrity of a contract's
+// DECORATIVE `permission` label — that it names a real matrix (resource, action)
+// or a documented out-of-matrix pair. It is NOT authorization enforcement: the
+// real gate is `requirePermission(membership, resource, action)` (already
+// RbacResource-typed at the call site). This check keeps the metadata honest for
+// future codegen/docs and catches a typo'd or forgotten resource; it cannot
+// detect a label disagreeing with the handler's actual requirePermission call.
 import { RBAC_RESOURCES, RBAC_ACTIONS } from '@propertypro/shared';
 import type { AnyRouteContract } from '@propertypro/api-contract';
 
