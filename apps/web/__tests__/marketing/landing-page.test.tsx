@@ -7,6 +7,7 @@ import { PricingSection } from '../../src/components/marketing/pricing-section';
 import { ComplianceUrgencySection } from '../../src/components/marketing/compliance-urgency-section';
 import { MarketingFooter } from '../../src/components/marketing/footer';
 import { PortfolioCard } from '../../src/components/marketing/portfolio-card';
+import { MarketingNav } from '../../src/components/marketing/marketing-nav';
 
 describe('PortfolioCard', () => {
   it('renders an aggregate portfolio score and multiple communities', () => {
@@ -14,6 +15,18 @@ describe('PortfolioCard', () => {
     expect(html).toContain('Portfolio compliance');
     expect(html).toContain('Sunset Condos');
     expect(html).toContain('Palm Shores');
+  });
+});
+
+describe('MarketingNav', () => {
+  it('renders in-page anchor links and CTAs', () => {
+    const html = renderToStaticMarkup(<MarketingNav />);
+    expect(html).toContain('href="#features"');
+    expect(html).toContain('href="#compliance"');
+    expect(html).toContain('href="#pricing"');
+    expect(html).toContain('For managers');
+    expect(html).toContain('href="/auth/login"');
+    expect(html).toContain('href="/signup"');
   });
 });
 
