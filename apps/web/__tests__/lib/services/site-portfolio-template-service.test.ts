@@ -9,6 +9,8 @@ const {
   deleteStorageObjectMock,
   copyStorageObjectMock,
   getBrandingForCommunityMock,
+  updateBrandingForCommunityMock,
+  findManagedMock,
   // shared state driving the chainable-db mock
   resultQueue,
   insertValues,
@@ -19,6 +21,8 @@ const {
   deleteStorageObjectMock: vi.fn(),
   copyStorageObjectMock: vi.fn(),
   getBrandingForCommunityMock: vi.fn(),
+  updateBrandingForCommunityMock: vi.fn(),
+  findManagedMock: vi.fn(),
   resultQueue: [] as unknown[][],
   insertValues: [] as Record<string, unknown>[],
   setArgs: [] as Record<string, unknown>[],
@@ -42,7 +46,10 @@ vi.mock('@propertypro/db', () => ({
   userRoles: { userId: 'ur.user_id', role: 'ur.role', communityId: 'ur.community_id' },
 }));
 
-vi.mock('@propertypro/db/unsafe', () => ({ createUnscopedClient: createUnscopedClientMock }));
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: createUnscopedClientMock,
+  findManagedCommunitiesPortfolioUnscoped: findManagedMock,
+}));
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
@@ -52,7 +59,10 @@ vi.mock('@propertypro/db/filters', () => ({
 }));
 
 vi.mock('@/lib/site-assets/copy-object', () => ({ copyStorageObject: copyStorageObjectMock }));
-vi.mock('@/lib/api/branding', () => ({ getBrandingForCommunity: getBrandingForCommunityMock }));
+vi.mock('@/lib/api/branding', () => ({
+  getBrandingForCommunity: getBrandingForCommunityMock,
+  updateBrandingForCommunity: updateBrandingForCommunityMock,
+}));
 
 // ---------------------------------------------------------------------------
 // Chainable-db mock: every builder method returns a thenable chain; awaiting it
@@ -83,6 +93,7 @@ import {
   createFromCommunity,
   deleteTemplate,
   userHasPortfolioTemplatesAccess,
+  applyTemplate,
 } from '@/lib/services/site-portfolio-template-service';
 import { NotFoundError } from '@/lib/api/errors';
 
@@ -95,6 +106,11 @@ beforeEach(() => {
   logAuditEventMock.mockResolvedValue(undefined);
   deleteStorageObjectMock.mockResolvedValue(undefined);
   copyStorageObjectMock.mockResolvedValue(1234);
+  updateBrandingForCommunityMock.mockResolvedValue(undefined);
+  findManagedMock.mockResolvedValue([
+    { communityId: 1, communityName: 'Sunset Condos', communityType: 'condo_718' },
+    { communityId: 2, communityName: 'Palm Shores', communityType: 'hoa_720' },
+  ]);
 });
 
 const NOW = new Date('2026-02-03T04:05:06.000Z');
@@ -228,5 +244,59 @@ describe('userHasPortfolioTemplatesAccess', () => {
       { communityType: 'hoa_720', subscriptionPlan: 'essentials' },
     ]);
     expect(await userHasPortfolioTemplatesAccess('user-1')).toBe(false);
+  });
+});
+
+describe('applyTemplate', () => {
+  it('throws NotFoundError when the template is absent or not owned', async () => {
+    resultQueue.push([]); // template load → empty
+    await expect(applyTemplate('user-1', 9, [1])).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('throws ForbiddenError when a target is not managed by the user', async () => {
+    resultQueue.push([{ id: 5, branding: { primaryColor: '#abc' }, siteLogoPath: null }]);
+    await expect(applyTemplate('user-1', 5, [1, 999])).rejects.toBeInstanceOf(Error); // ForbiddenError
+    expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('merges branding + copies the logo onto each managed target, auditing each', async () => {
+    resultQueue.push([
+      { id: 5, branding: { primaryColor: '#abc', layoutId: 'tidewater' }, siteLogoPath: 'portfolio-templates/5/site-logo.webp' },
+    ]);
+
+    const out = await applyTemplate('user-1', 5, [1, 2]);
+
+    expect(out.results).toEqual([
+      { communityId: 1, communityName: 'Sunset Condos', status: 'applied' },
+      { communityId: 2, communityName: 'Palm Shores', status: 'applied' },
+    ]);
+    // branding merged into each target (template tokens + the copied logo path)
+    expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
+      primaryColor: '#abc',
+      layoutId: 'tidewater',
+      siteLogoPath: 'communities/1/branding/site-logo.webp',
+    });
+    expect(copyStorageObjectMock).toHaveBeenCalledWith('documents', 'portfolio-templates/5/site-logo.webp', 'communities/2/branding/site-logo.webp');
+    expect(logAuditEventMock).toHaveBeenCalledTimes(2);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'portfolio_template_applied', communityId: 1 }),
+    );
+  });
+
+  it('skips the logo copy for a logo-less template', async () => {
+    resultQueue.push([{ id: 5, branding: { primaryColor: '#abc' }, siteLogoPath: null }]);
+    await applyTemplate('user-1', 5, [1]);
+    expect(copyStorageObjectMock).not.toHaveBeenCalled();
+    expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, { primaryColor: '#abc' });
+  });
+
+  it('reports per-community failure without aborting the others', async () => {
+    resultQueue.push([{ id: 5, branding: { primaryColor: '#abc' }, siteLogoPath: null }]);
+    updateBrandingForCommunityMock.mockRejectedValueOnce(new Error('db down')); // community 1 fails
+
+    const out = await applyTemplate('user-1', 5, [1, 2]);
+
+    expect(out.results[0]).toMatchObject({ communityId: 1, status: 'failed', reason: 'db down' });
+    expect(out.results[1]).toMatchObject({ communityId: 2, status: 'applied' });
   });
 });
