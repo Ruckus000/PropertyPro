@@ -4,6 +4,18 @@
 **Plan:** `~/.claude/plans/draft-a-plan-that-reflective-pie.md` § B4 (the last net-new lane; B6 + B2 merged 2026-06-05)
 **Status:** Design approved; ready for implementation plan.
 
+**Resolved design decisions (brainstorm + hostile-review pass):**
+1. **Parameterized harness**, not per-route codegen (no generated files / sync guard).
+2. **Defer check (c)** (happy-path response shape) — needs per-route mocks; ~44%
+   vacuous anyway (`z.unknown()` responses). Surface, don't enforce.
+3. **Malformed-input synthesis is location-aware** — query/params probed with
+   string-only candidates (they're always strings at the runner); string-permissive
+   fields are `input-permissive`, not "covered".
+4. **Placement = harness-only in the unit-test job** (Option A). Check (b) stays in
+   the harness despite being static; gating is handled by ADR-005's
+   branch-protection recommendation, not by splitting (b) into a guard (which would
+   gate only the weaker check, since (a) can never run as a static guard).
+
 ## Problem
 
 A1 shipped a route-contract registry (`@propertypro/api-contract`): ~206 `route.ts`
