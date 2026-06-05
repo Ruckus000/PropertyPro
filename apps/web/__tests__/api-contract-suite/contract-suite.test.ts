@@ -10,12 +10,12 @@ const analyzed: AnalyzedContract[] = registry.map((e) =>
 
 describe('contract suite — per-contract checks', () => {
   describe.each(analyzed)('$label', (a) => {
-    it('(a) malformed input is rejected with 400 before the handler runs', async () => {
-      if (a.input.kind !== 'covered') {
-        // input-permissive / no-input: (a) is inapplicable. Counted below.
-        return;
-      }
-      const r = await runInputCheck(a.contract, a.input.location, a.input.bad);
+    const covered = a.input.kind === 'covered' ? a.input : null;
+    const itA = covered ? it : it.skip;
+
+    itA('(a) malformed input is rejected with 400 before the handler runs', async () => {
+      // `covered` is non-null whenever this test actually runs (itA === it).
+      const r = await runInputCheck(a.contract, covered!.location, covered!.bad);
       expect(r.handlerCalled).toBe(false);
       expect(r.status).toBe(400);
       expect(r.code).toBe('VALIDATION_ERROR');
@@ -42,15 +42,18 @@ describe('contract suite — coverage report', () => {
     unknownResponse: analyzed.filter((a) => a.unknownResponse).length,
   };
 
-  it('logs the coverage table', () => {
+  it('logs the coverage table and partition identities hold', () => {
     // eslint-disable-next-line no-console
     console.table(counts);
-    expect(counts.total).toBe(analyzed.length);
+    expect(counts.total).toBeGreaterThanOrEqual(180);
+    expect(counts.covered + counts.inputPermissive + counts.noInput).toBe(counts.total);
+    expect(counts.rbacChecked + counts.rbacAllowlisted + counts.rbacInapplicable).toBe(counts.total);
   });
 
   it('floor: a strong majority of contracts get a real (a) assertion', () => {
-    // Set from the FIRST real run of this location-aware suite (Step 2). The
-    // value below is the floor, not the actual — it guards against erosion.
+    // First real run (2026-06-05): 264 of 285 contracts covered (~93%). Floor is
+    // 237 (≈0.9× that run) — it guards against erosion, not perfection. When new
+    // contracts are added and covered, raise this toward 0.9× the new actual.
     expect(counts.covered).toBeGreaterThanOrEqual(237);
   });
 
