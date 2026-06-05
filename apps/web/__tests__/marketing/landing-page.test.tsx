@@ -6,6 +6,16 @@ import { FeaturesSection } from '../../src/components/marketing/features-section
 import { PricingSection } from '../../src/components/marketing/pricing-section';
 import { ComplianceUrgencySection } from '../../src/components/marketing/compliance-urgency-section';
 import { MarketingFooter } from '../../src/components/marketing/footer';
+import { PortfolioCard } from '../../src/components/marketing/portfolio-card';
+
+describe('PortfolioCard', () => {
+  it('renders an aggregate portfolio score and multiple communities', () => {
+    const html = renderToStaticMarkup(<PortfolioCard />);
+    expect(html).toContain('Portfolio compliance');
+    expect(html).toContain('Sunset Condos');
+    expect(html).toContain('Palm Shores');
+  });
+});
 
 describe('marketing landing page', () => {
   describe('HeroSection', () => {
