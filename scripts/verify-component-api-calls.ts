@@ -130,7 +130,7 @@ function walkDirectory(dir: string, files: string[]): void {
 //
 // To migrate a file off the list:
 //   1. Move the fetch into a hook under apps/web/src/hooks/.
-//   2. Use `requestJson` from `apps/web/src/lib/request/`.
+//   2. Use `requestJson` from `apps/web/src/lib/api/request-json.ts`.
 //   3. Wire the component to the hook and remove from this set.
 // ---------------------------------------------------------------------------
 
@@ -211,7 +211,7 @@ function main(): void {
     console.error(
       '\nADR-003: components and pages must call /api/v1/* through hooks ' +
         '(apps/web/src/hooks/), not via direct fetch. Use `requestJson` from ' +
-        '`apps/web/src/lib/request/`. If the call is genuinely server-only ' +
+        '`apps/web/src/lib/api/request-json.ts`. If the call is genuinely server-only ' +
         '(server component or route handler), move it to that layer.',
     );
   }
