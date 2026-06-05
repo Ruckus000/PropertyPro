@@ -32,32 +32,36 @@ describe('MarketingNav', () => {
 
 describe('marketing landing page', () => {
   describe('HeroSection', () => {
-    it('renders the compliance headline', () => {
+    it('renders the portfolio-first headline', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('Required by Florida Law');
+      expect(html).toContain('portfolio');
     });
 
-    it('renders the $50/day penalty detail', () => {
+    it('welcomes self-managed boards as a secondary line', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('$50 per day');
+      // case-insensitive: rendered copy is "Self-managed boards…"
+      expect(html.toLowerCase()).toContain('self-managed board');
     });
 
     it('renders the primary CTA linking to signup', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('Get Compliant Now');
       expect(html).toContain('href="/signup"');
     });
 
     it('renders trust indicators', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('No setup fees');
       expect(html).toContain('14-day free trial');
-      expect(html).toContain('Cancel anytime');
+      expect(html).toContain('No setup fees');
     });
 
-    it('references Florida Statute section 718', () => {
+    it('embeds the portfolio product card', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('718.111(12)(g)');
+      expect(html).toContain('Portfolio compliance');
+    });
+
+    it('uses the #top anchor', () => {
+      const html = renderToStaticMarkup(<HeroSection />);
+      expect(html).toContain('id="top"');
     });
   });
 
