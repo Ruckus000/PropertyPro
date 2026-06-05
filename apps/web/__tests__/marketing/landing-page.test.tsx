@@ -100,40 +100,30 @@ describe('marketing landing page', () => {
   });
 
   describe('PricingSection', () => {
-    it('renders all three pricing tiers', () => {
+    it('renders all three tiers', () => {
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('Essentials');
       expect(html).toContain('Professional');
       expect(html).toContain('Property Manager');
     });
 
-    it('renders pricing amounts', () => {
+    it('renders amounts', () => {
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('$199');
       expect(html).toContain('$349');
-      expect(html).toContain('Contact Us');
+      // renderToStaticMarkup escapes the apostrophe (&#x27;); normalize before matching.
+      expect(html.replace(/&#x27;/g, "'")).toContain("Let's talk");
     });
 
-    it('renders Contact Us for property manager tier', () => {
+    it('marks the Property Manager tier as the recommended path', () => {
       const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('Contact Us');
-      expect(html).toContain('Contact Sales');
+      expect(html).toContain('Recommended for portfolios');
     });
 
-    it('renders CTA buttons linking to signup', () => {
-      const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('Start Free Trial');
-      expect(html).toContain('href="/signup"');
-    });
-
-    it('marks Compliance + Mobile as most popular', () => {
-      const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('Most Popular');
-    });
-
-    it('includes the pricing anchor id', () => {
+    it('includes the pricing anchor id and signup CTA', () => {
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('id="pricing"');
+      expect(html).toContain('href="/signup"');
     });
   });
 
