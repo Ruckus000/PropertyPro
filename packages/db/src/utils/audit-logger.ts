@@ -48,7 +48,9 @@ export type AuditAction =
   | 'link_document' | 'unlink_document'                          // Document linking
   | 'mark_not_applicable' | 'mark_applicable'                    // Applicability toggling
   // Custom domain audit actions
-  | 'custom_domain_set' | 'custom_domain_verified' | 'custom_domain_removed';
+  | 'custom_domain_set' | 'custom_domain_verified' | 'custom_domain_removed'
+  // Portfolio template audit actions
+  | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted';
 
 export interface AuditEventParams {
   userId: string | null;
