@@ -9,6 +9,7 @@ import { MarketingFooter } from '../../src/components/marketing/footer';
 import { PortfolioCard } from '../../src/components/marketing/portfolio-card';
 import { MarketingNav } from '../../src/components/marketing/marketing-nav';
 import { LogoProofSection } from '../../src/components/marketing/logo-proof-section';
+import { HowItWorksSection } from '../../src/components/marketing/how-it-works-section';
 
 describe('PortfolioCard', () => {
   it('renders an aggregate portfolio score and multiple communities', () => {
@@ -204,5 +205,15 @@ describe('marketing landing page', () => {
       expect(html).toContain('href="#pricing"');
       expect(html).toContain('href="#compliance"');
     });
+  });
+});
+
+describe('HowItWorksSection', () => {
+  it('renders three portfolio-scale steps with the #how anchor', () => {
+    const html = renderToStaticMarkup(<HowItWorksSection />);
+    expect(html).toContain('id="how"');
+    expect(html).toContain('Onboard a community');
+    expect(html).toContain('Bulk-load');
+    expect(html).toContain('Invite boards');
   });
 });
