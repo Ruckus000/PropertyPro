@@ -27,9 +27,8 @@ import {
 import { communityCancelPostContract } from './contract';
 
 export const POST = withErrorHandler(
-  runRoute(communityCancelPostContract, async ({ body, params }) => {
+  runRoute(communityCancelPostContract, async ({ body, communityId }) => {
     const userId = await requireAuthenticatedUserId();
-    const communityId = params.id;
     const { reason, note } = body;
 
     const community = await getCommunityForCancel(communityId);

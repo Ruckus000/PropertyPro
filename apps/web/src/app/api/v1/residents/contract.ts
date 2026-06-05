@@ -54,6 +54,7 @@ export const residentsListContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'residents', action: 'read' },
+  tenantScope: { in: 'query' },
 });
 
 export const residentsCreateContract = defineRoute({
@@ -64,6 +65,7 @@ export const residentsCreateContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'residents', action: 'write' },
+  tenantScope: { in: 'body' },
 });
 
 export const residentsUpdateContract = defineRoute({
@@ -74,6 +76,7 @@ export const residentsUpdateContract = defineRoute({
   },
   response: z.unknown(),
   permission: { resource: 'residents', action: 'write' },
+  tenantScope: { in: 'body' },
 });
 
 export const residentsDeleteContract = defineRoute({
@@ -86,4 +89,5 @@ export const residentsDeleteContract = defineRoute({
     success: z.literal(true),
   }),
   permission: { resource: 'residents', action: 'write' },
+  tenantScope: { in: 'body' },
 });
