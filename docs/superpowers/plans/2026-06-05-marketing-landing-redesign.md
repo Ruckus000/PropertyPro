@@ -527,7 +527,9 @@ describe('ComplianceChecker', () => {
       target: { value: '84' },
     });
     fireEvent.click(screen.getByRole('button', { name: /check/i }));
-    expect(screen.getByText(/January 1, 2026/)).toBeTruthy();
+    // The Jan 1 2026 date appears in BOTH the headline <b> and the detail text,
+    // so use getAllByText (getByText throws on multiple matches).
+    expect(screen.getAllByText(/January 1, 2026/).length).toBeGreaterThan(0);
   });
 
   it('shows a friendly message for empty/invalid input instead of crashing', () => {
