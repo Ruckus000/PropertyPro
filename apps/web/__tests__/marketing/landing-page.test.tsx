@@ -10,6 +10,7 @@ import { PortfolioCard } from '../../src/components/marketing/portfolio-card';
 import { MarketingNav } from '../../src/components/marketing/marketing-nav';
 import { LogoProofSection } from '../../src/components/marketing/logo-proof-section';
 import { HowItWorksSection } from '../../src/components/marketing/how-it-works-section';
+import { TestimonialSection } from '../../src/components/marketing/testimonial-section';
 
 describe('PortfolioCard', () => {
   it('renders an aggregate portfolio score and multiple communities', () => {
@@ -216,5 +217,13 @@ describe('HowItWorksSection', () => {
     expect(html).toContain('Onboard a community');
     expect(html).toContain('Bulk-load');
     expect(html).toContain('Invite boards');
+  });
+});
+
+describe('TestimonialSection', () => {
+  it('renders a property-manager quote and attribution', () => {
+    const html = renderToStaticMarkup(<TestimonialSection />);
+    expect(html).toContain('buildings');
+    expect(html).toContain('Property Manager');
   });
 });
