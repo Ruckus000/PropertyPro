@@ -12,9 +12,29 @@ Graduate the landing page from a competent-but-generic compliance scare-page int
 premium, product-forward page in the spirit of Stripe / Atlassian — while keeping the
 Florida-statute compliance angle as the strategic wedge.
 
-**Primary buyer (assumption):** self-managed condo/HOA boards (volunteer presidents and
-board members). Property managers are a secondary audience, surfaced via a dedicated
-"For managers" feature card and pricing tier. _Open to revisiting — see §9._
+**Primary buyer:** property managers — CAMs and management companies running **portfolios of
+multiple associations**. Self-managed condo/HOA boards are the secondary audience.
+
+This decision shifts copy and emphasis (the warm "Florida Modern" aesthetic from the approved
+mockup is unchanged):
+
+- **Hero** leads with the portfolio value prop — "Run your whole portfolio compliant" rather
+  than "Run your community" — and the hero product card shows a **multi-association portfolio
+  view** (a list of communities each with its own compliance score) instead of a single
+  building. Boards are still welcomed in a secondary line.
+- **Social proof / logo strip** features **management companies** (placeholder names), not
+  single associations.
+- **Testimonial** comes from a **CAM / property manager** ("…across 14 buildings"), not a
+  single board president.
+- **Features** elevates the portfolio/bulk/white-label/centralized-compliance capabilities to
+  the **hero feature**; per-association tools (owner portal, notices, documents) become the
+  supporting grid. The old "For managers" single card is no longer needed as a secondary
+  mention — managers are the spine of the page.
+- **Pricing** keeps all three tiers, but the **Property Manager** tier is positioned as the
+  primary/most-relevant path (the "Most popular" emphasis moves accordingly, with per-seat or
+  volume framing in the copy); Essentials/Professional remain for self-managed boards.
+- **How it works** frames the three steps at portfolio scale (onboard a community →
+  bulk-load documents → invite boards & owners).
 
 ---
 
@@ -80,13 +100,13 @@ In order, top to bottom. Each maps to a component under `components/marketing/`.
 | # | Section | Anchor | Notes |
 |---|---------|--------|-------|
 | 1 | **Nav** | — | Sticky, blur background. Logo (jumps to top) + in-page anchor links (Product, Compliance, How it works, For managers, Pricing) + Log in + "Get started" pill. Smooth-scroll, `scroll-margin-top` so sections clear the sticky bar. |
-| 2 | **Hero** | `#top` | Two columns: copy left (badge, serif headline "Run your community like it's *2026.*", relief-framed lede, dual CTA, trust micro-row) + **product card** right (browser frame, compliance score ring 86%, 3-row document list with status pills) + floating "+38 owners active" chip. Warm radial "sun" backdrop. |
-| 3 | **Logo proof** | — | "Trusted by associations across Florida" + 5 association names (placeholder, real ones TBD). |
+| 2 | **Hero** | `#top` | Two columns: copy left (badge, serif headline leading with the **portfolio** value prop, relief-framed lede, dual CTA, trust micro-row, secondary "self-managed board? you're covered too" line) + **portfolio product card** right (browser frame, a list of 3–4 communities each with its own compliance score + an aggregate portfolio score) + floating "managing N communities" chip. Warm radial "sun" backdrop. |
+| 3 | **Logo proof** | — | "Trusted by management companies across Florida" + 5 management-company names (placeholder). |
 | 4 | **Compliance / Relief** | `#compliance` | "The law changed. We handle it." Left: 3 statute obligations (30-day posting, notice timing, audit-ready). Right: dark **"Is your association required?" checker** (unit-count input → obligation + Jan 1 2026 deadline + $50/day penalty, framed as avoidable). |
 | 5 | **How it works** | `#how` | 3 steps (spin up site → drop in documents → invite owners), each with a mini-UI thumbnail. Fixes the dead "See How It Works" CTA. |
-| 6 | **Features** | `#features` | Hero feature (Compliance dashboard, with UI panel) + 6-card grid: Document management, Meeting notices, Owner portal, Mobile access, Announcements, For property managers (`#managers` anchor target). |
-| 7 | **Testimonial** | — | Board-president quote w/ highlight, avatar, attribution. |
-| 8 | **Pricing** | `#pricing` | 3 tiers (Essentials $199, Professional $349 featured, Property Manager "Let's talk"). Same plan content as today, restyled warm. |
+| 6 | **Features** | `#features` | Hero feature = **portfolio compliance dashboard** (multi-association view with bulk actions, white-label, centralized compliance), with UI panel. Supporting 6-card grid of per-association tools: Document management, Meeting notices, Owner portal, Mobile access, Announcements, Compliance dashboard (`#managers` anchor lands here). |
+| 7 | **Testimonial** | — | **CAM / property-manager** quote w/ highlight, avatar, attribution (e.g. "…across 14 buildings"). |
+| 8 | **Pricing** | `#pricing` | 3 tiers (Essentials $199, Professional $349, Property Manager "Let's talk"). **Property Manager tier positioned as the primary path** (emphasis/ribbon moves to it); Essentials/Professional retained for self-managed boards. Same plan content as today, restyled warm. |
 | 9 | **FAQ** | — | 4 objection-killers: required?, technical?, data secure?, already have a website? (Static accordion-style cards; expand interaction optional for v1.) |
 | 10 | **Final CTA** | — | Coral gradient band, "Beat the deadline this week," dual CTA. |
 | 11 | **Footer** | — | Warm dark (`--ink`). Product / Company / Legal columns + the existing legal disclaimer ("not a law firm…"). |
@@ -103,8 +123,9 @@ language changes wholesale. Keep them as small, single-purpose files under
   (→ relief framing + checker), `pricing-section.tsx`, `footer.tsx`, and the inline
   `MarketingNav` in `page.tsx` (extract to `marketing-nav.tsx`).
 - **New:** `how-it-works-section.tsx`, `logo-proof-section.tsx`, `testimonial-section.tsx`,
-  `faq-section.tsx`, `final-cta-section.tsx`. Small shared bits: `product-card.tsx`
-  (the hero score-ring + doc list, reused as the features-hero panel), `compliance-checker.tsx`.
+  `faq-section.tsx`, `final-cta-section.tsx`. Small shared bits: `portfolio-card.tsx` (the hero
+  multi-association portfolio view — list of communities each with a score + aggregate),
+  reused/adapted as the features-hero panel; `compliance-checker.tsx`.
 - **Tokens/fonts:** marketing-scoped token CSS + Fraunces font wiring in
   `app/(marketing)/layout.tsx` (which today is metadata-only).
 - **`page.tsx`:** composes the 11 sections in order.
@@ -157,10 +178,9 @@ logic should reference the same statute facts used elsewhere so the two never dr
 - **FAQ expand/collapse animation** — optional for v1; static cards acceptable.
 - **A/B testing infra, analytics events, SEO copy expansion** — out of scope here (the
   existing `(marketing)/layout.tsx` metadata is retained/updated, not rebuilt).
-- **Open question — primary buyer:** built board-first. If PMs are the priority, the hero
-  copy and the "For managers" emphasis shift. Flag before/at plan time.
-- **Open question — real association names** for the logo strip and a real (or clearly
-  representative) testimonial. Placeholder content used until provided.
+- **Resolved — primary buyer:** property managers (see §1). Page is PM-first; boards secondary.
+- **Resolved — proof content:** use **placeholder** management-company names and a
+  representative CAM testimonial for v1; swap in real names/quotes when provided.
 
 ---
 
