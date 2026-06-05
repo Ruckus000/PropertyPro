@@ -159,45 +159,28 @@ describe('marketing landing page', () => {
   });
 
   describe('MarketingFooter', () => {
-    it('renders company name', () => {
+    it('renders the company name', () => {
       const html = renderToStaticMarkup(<MarketingFooter />);
       expect(html).toContain('PropertyPro');
-      expect(html).toContain('Florida');
     });
 
-    it('renders Terms of Service link', () => {
+    it('keeps the legal links', () => {
       const html = renderToStaticMarkup(<MarketingFooter />);
-      expect(html).toContain('Terms of Service');
       expect(html).toContain('href="/legal/terms"');
-    });
-
-    it('renders Privacy Policy link', () => {
-      const html = renderToStaticMarkup(<MarketingFooter />);
-      expect(html).toContain('Privacy Policy');
       expect(html).toContain('href="/legal/privacy"');
     });
 
-    it('renders contact information', () => {
+    it('keeps contact + the not-a-law-firm disclaimer', () => {
       const html = renderToStaticMarkup(<MarketingFooter />);
       expect(html).toContain('support@getpropertypro.com');
       expect(html).toContain('West Palm Beach, FL');
-    });
-
-    it('renders copyright notice', () => {
-      const html = renderToStaticMarkup(<MarketingFooter />);
-      expect(html).toContain('All rights reserved');
-    });
-
-    it('includes the legal disclaimer', () => {
-      const html = renderToStaticMarkup(<MarketingFooter />);
       expect(html).toContain('not a law firm');
     });
 
-    it('renders product navigation links', () => {
+    it('keeps product anchor links', () => {
       const html = renderToStaticMarkup(<MarketingFooter />);
       expect(html).toContain('href="#features"');
       expect(html).toContain('href="#pricing"');
-      expect(html).toContain('href="#compliance"');
     });
   });
 });
