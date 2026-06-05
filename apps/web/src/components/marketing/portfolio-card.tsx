@@ -41,7 +41,7 @@ export function PortfolioCard() {
             style={{
               fontSize: 12,
               fontWeight: 700,
-              color: 'var(--mk-teal)',
+              color: 'var(--mk-teal-text)',
               background: '#e7f4f1',
               padding: '4px 10px',
               borderRadius: 999,
