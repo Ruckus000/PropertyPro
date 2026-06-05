@@ -51,10 +51,13 @@ export function synthesizeRejected(
     for (const c of JSON_CANDIDATES) {
       if (rejects(schema, c)) return { ok: true, value: c };
     }
-    // Rare: a body schema that accepts every scalar/array. Try field-level.
+    // Defensive / effectively unreachable for real routes: `null` (JSON_CANDIDATES[0])
+    // already rejects every z.object body. Kept for non-object body schemas
+    // (z.union/z.intersection) that might accept all scalars.
     return objectFieldLevel(schema, JSON_CANDIDATES);
   }
   // query / params: the schema always receives an object of strings. Only
-  // string-valued / missing fields are reachable.
+  // string-valued / missing fields are reachable. params behaves identically to
+  // query at the runner level (both deliver strings), so they share this path.
   return objectFieldLevel(schema, STRING_CANDIDATES);
 }
