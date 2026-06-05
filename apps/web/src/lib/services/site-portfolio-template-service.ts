@@ -187,13 +187,20 @@ export async function createFromCommunity(
   let siteLogoPath: string | null = null;
   const sourceLogoPath = branding?.siteLogoPath;
   if (sourceLogoPath) {
-    const destPath = `portfolio-templates/${row.id}/site-logo.webp`;
-    await copyStorageObject(ASSET_BUCKET, sourceLogoPath, destPath);
-    siteLogoPath = destPath;
-    await db
-      .update(sitePortfolioTemplates)
-      .set({ siteLogoPath })
-      .where(eq(sitePortfolioTemplates.id, row.id));
+    // Best-effort: the row is already committed, so a logo-copy failure must NOT
+    // leave an orphaned row behind. Swallow and keep the template logo-less
+    // (still usable) rather than 500-ing with a ghost row.
+    try {
+      const destPath = `portfolio-templates/${row.id}/site-logo.webp`;
+      await copyStorageObject(ASSET_BUCKET, sourceLogoPath, destPath);
+      siteLogoPath = destPath;
+      await db
+        .update(sitePortfolioTemplates)
+        .set({ siteLogoPath })
+        .where(eq(sitePortfolioTemplates.id, row.id));
+    } catch {
+      // logo unavailable — template is created without it.
+    }
   }
 
   await logAuditEvent({

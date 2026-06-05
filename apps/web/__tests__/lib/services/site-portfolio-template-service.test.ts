@@ -159,6 +159,25 @@ describe('createFromCommunity', () => {
     expect(copyStorageObjectMock).not.toHaveBeenCalled();
     expect(out.siteLogoPath).toBeNull();
   });
+
+  it('keeps the template logo-less (no throw, no orphan) when the logo copy fails', async () => {
+    getBrandingForCommunityMock.mockResolvedValue({
+      primaryColor: '#abc',
+      siteLogoPath: 'communities/7/branding/site-logo.webp',
+    });
+    resultQueue.push([templateRow({ id: 52, siteLogoPath: null })]); // insert ... returning
+    copyStorageObjectMock.mockRejectedValueOnce(new Error('storage down'));
+
+    const out = await createFromCommunity('user-1', 7, 'CopyFails');
+
+    expect(out.siteLogoPath).toBeNull();
+    // the row was created + audited despite the logo failure
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'portfolio_template_created' }),
+    );
+    // no site_logo_path update was attempted
+    expect(setArgs).toHaveLength(0);
+  });
 });
 
 describe('renameTemplate', () => {
