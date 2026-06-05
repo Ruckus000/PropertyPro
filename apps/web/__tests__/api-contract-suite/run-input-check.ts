@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { runRoute, type AnyRouteContract } from '@propertypro/api-contract';
+import { runRoute, type AnyRouteContract, type NextRouteContext } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import type { InputLocation } from './malformed-input';
 
@@ -33,9 +33,11 @@ export async function runInputCheck(
 
   const url = new URL(`http://localhost${concretePath(contract.path)}`);
   let req: NextRequest;
-  let ctx: { params?: Promise<Record<string, string | string[]>> } | undefined;
+  let ctx: NextRouteContext | undefined;
 
   if (location === 'query') {
+    // query bad values from synthesizeRejected are always strings (or omitted),
+    // so String(v) is a no-op identity here — never a non-string surprise.
     for (const [k, v] of Object.entries(bad as Record<string, unknown>)) {
       if (v === undefined) continue;
       url.searchParams.set(k, String(v));
@@ -58,6 +60,8 @@ export async function runInputCheck(
     const json = (await res.json()) as { error?: { code?: string } };
     code = json.error?.code;
   } catch {
+    // Only reachable if the response body is non-JSON — not possible in this
+    // stack (withErrorHandler always returns NextResponse.json(...)).
     code = undefined;
   }
   return { status: res.status, code, handlerCalled };
