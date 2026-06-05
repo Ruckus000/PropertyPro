@@ -46,6 +46,7 @@ export type {
 export { ContractValidationError, isContractValidationError } from './errors';
 
 export type {
+  AnyRouteContract,
   RouteHandlerInput,
   RouteHandlerOutput,
   RouteHandlerFn,
