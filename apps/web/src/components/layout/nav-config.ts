@@ -154,6 +154,20 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/payments'],
   },
   {
+    // Launcher into the public-site / landing-page editor (which lives under
+    // /pm/settings/website). Surfaced in the community sidebar so single-
+    // community admins (cam) and PM admins can reach it without first going to
+    // the PM portal. Gated to the same roles the editor route allows
+    // (property_manager_admin + cam) so the link never lands on a redirect.
+    id: 'website',
+    label: 'Website',
+    icon: Paintbrush,
+    href: (cid) => `/pm/settings/website?communityId=${cid}`,
+    roles: ['property_manager_admin', 'cam'],
+    featureKey: 'hasSiteEditor',
+    matchPrefixes: ['/pm/settings'],
+  },
+  {
     id: 'violations-report',
     label: 'Report Violation',
     icon: AlertTriangle,
@@ -268,7 +282,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
   navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations']),
-  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'violations-report']),
+  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
   navSection('Admin', [
     'compliance',
     'residents',
@@ -515,6 +529,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   units: { title: 'Units', subtitle: 'Manage community units' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Website', subtitle: 'Public site editor + branding' },
+  website: { title: 'Website', subtitle: 'Public site editor + branding' },
   leases: { title: 'Leases', subtitle: 'Manage unit leases' },
   packages: { title: 'Packages', subtitle: 'Track package deliveries' },
   visitors: { title: 'Visitors', subtitle: 'Manage visitor access' },
