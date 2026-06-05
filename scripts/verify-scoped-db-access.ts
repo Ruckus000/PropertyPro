@@ -78,6 +78,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Caller authorization (pm_admin/cam membership + hasSiteCustomDomain plan) is
   // verified upstream at the route layer.
   resolve(repoRoot, 'apps/web/src/lib/services/custom-domain-service.ts'),
+  // Portfolio templates — site_portfolio_templates is user-owned (no community_id
+  // column), keyed by owner_user_id with RLS via auth.uid(); the access-gate joins
+  // user_roles → communities (root tenant table). Caller authz (pm_admin +
+  // hasSitePortfolioTemplates plan) is verified upstream at the route layer.
+  resolve(repoRoot, 'apps/web/src/lib/services/site-portfolio-template-service.ts'),
   // JSX site template — public site queries published template by community_id (root tenant key)
   resolve(repoRoot, 'apps/web/src/lib/api/site-template.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
