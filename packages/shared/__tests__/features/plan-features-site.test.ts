@@ -28,8 +28,16 @@ describe('PLAN_FEATURES — site editor flags', () => {
     expect(PLAN_FEATURES.operations_plus.features.hasSiteCustomDomain).toBe(true);
   });
 
-  it('Professional does NOT have hasSitePortfolioTemplates (Phase 2, not yet enabled)', () => {
+  it('Operations Plus has hasSitePortfolioTemplates (Phase 2 — operations_plus only)', () => {
+    expect(PLAN_FEATURES.operations_plus.features.hasSitePortfolioTemplates).toBe(true);
+  });
+
+  it('Professional does NOT have hasSitePortfolioTemplates (operations_plus only)', () => {
     expect(PLAN_FEATURES.professional.features.hasSitePortfolioTemplates).toBeFalsy();
+  });
+
+  it('Essentials does NOT have hasSitePortfolioTemplates (operations_plus only)', () => {
+    expect(PLAN_FEATURES.essentials.features.hasSitePortfolioTemplates).toBeFalsy();
   });
 
   it('Essentials does NOT have hasSiteCustomDomain', () => {
