@@ -40,6 +40,6 @@ export function checkRbac(contract: AnyRouteContract): RbacCheckResult {
 
   return {
     status: 'fail',
-    message: `permission { resource: '${resource}', action: '${action}' } is not a matrix (resource, action) and not in KNOWN_NON_MATRIX_PERMISSIONS`,
+    message: `permission { resource: '${resource}', action: '${action}' } is not a valid matrix pair (RBAC_RESOURCES × RBAC_ACTIONS) and is not in KNOWN_NON_MATRIX_PERMISSIONS`,
   };
 }
