@@ -158,3 +158,4 @@ export * from './constants/cancellation-reasons';
 export * from './auth/password-policy';
 export * from './billing/permissions';
 export * from './site/custom-domain';
+export * from './site/portfolio-template-branding';
