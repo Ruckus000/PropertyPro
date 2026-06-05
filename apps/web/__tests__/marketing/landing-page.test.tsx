@@ -76,24 +76,25 @@ describe('marketing landing page', () => {
   });
 
   describe('FeaturesSection', () => {
-    it('renders all six features', () => {
+    it('leads with the portfolio compliance hero feature', () => {
       const html = renderToStaticMarkup(<FeaturesSection />);
-      expect(html).toContain('Document Management');
-      expect(html).toContain('Meeting Notices');
-      expect(html).toContain('Owner Portal');
-      expect(html).toContain('Mobile Access');
-      expect(html).toContain('Compliance Dashboard');
-      expect(html).toContain('Property Manager Tools');
+      expect(html).toContain('Portfolio compliance, one view');
     });
 
-    it('renders the section heading', () => {
+    it('renders the six supporting feature cards', () => {
       const html = renderToStaticMarkup(<FeaturesSection />);
-      expect(html).toContain('Everything Your Association Needs');
+      expect(html).toContain('Document management');
+      expect(html).toContain('Meeting notices');
+      expect(html).toContain('Owner portal');
+      expect(html).toContain('Mobile access');
+      expect(html).toContain('Announcements');
+      expect(html).toContain('Compliance dashboard');
     });
 
-    it('includes the features anchor id', () => {
+    it('includes the features and managers anchors', () => {
       const html = renderToStaticMarkup(<FeaturesSection />);
       expect(html).toContain('id="features"');
+      expect(html).toContain('id="managers"');
     });
   });
 
