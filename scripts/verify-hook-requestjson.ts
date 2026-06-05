@@ -61,11 +61,18 @@ const FILE_EXTENSIONS = new Set(['.ts', '.tsx']);
 
 /**
  * Match `fetch('/api/v1/...`, `fetch("/api/v1/...`, or `` fetch(`/api/v1/... ``.
- * Mirrors the proven detector in verify-component-api-calls.ts. Requiring a
- * string-literal `/api/v1/` opener means fetches to variable URLs (Supabase
- * Storage presigned PUTs, etc.) are not flagged — those are legitimately raw.
+ * Requiring a string-literal `/api/v1/` opener means fetches to variable URLs
+ * (Supabase Storage presigned PUTs, etc.) are not flagged — those are
+ * legitimately raw.
+ *
+ * Scans the whole file content (global, multiline) rather than line-by-line so
+ * a wrapped `fetch(\n  '/api/v1/...')` is still caught — e.g. the multipart
+ * image upload in `useDocumentDraft.ts`. (The sibling
+ * verify-component-api-calls.ts is still line-by-line; B5 drained it to 0 so it
+ * has no multiline survivors, but this guard's allowlist is large and a
+ * wrapped call would otherwise slip through silently.)
  */
-const DIRECT_API_FETCH_REGEX = /\bfetch\s*\(\s*[`'"]\/api\/v1\//;
+const DIRECT_API_FETCH_REGEX = /\bfetch\s*\(\s*[`'"]\/api\/v1\//g;
 
 interface Violation {
   file: string;
@@ -74,18 +81,16 @@ interface Violation {
 }
 
 function findViolations(content: string, filePath: string): Violation[] {
-  const lines = content.split('\n');
   const violations: Violation[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    if (DIRECT_API_FETCH_REGEX.test(line)) {
-      violations.push({
-        file: filePath,
-        line: i + 1,
-        excerpt: line.trim().slice(0, 200),
-      });
-    }
+  DIRECT_API_FETCH_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = DIRECT_API_FETCH_REGEX.exec(content)) !== null) {
+    const line = content.slice(0, match.index).split('\n').length;
+    violations.push({
+      file: filePath,
+      line,
+      excerpt: content.slice(match.index, match.index + 100).replace(/\s+/g, ' ').trim(),
+    });
   }
 
   return violations;
@@ -182,6 +187,7 @@ const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
   'apps/web/src/hooks/use-website-wizard.ts',
   'apps/web/src/hooks/useComplianceChecklist.ts',
   'apps/web/src/hooks/useComplianceMutations.ts',
+  'apps/web/src/hooks/useDocumentDraft.ts',
   'apps/web/src/hooks/useDocumentUpload.ts',
 ]);
 

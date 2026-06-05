@@ -7,22 +7,23 @@
  * response modeling, and the `leases` permission-placeholder note.
  *
  * Authorization invariants (preserved verbatim):
+ *   `communityId` is resolved + injected by the runner from the contract's
+ *   `tenantScope` (Plan B2): GET/DELETE → query, POST/PATCH → body. The
+ *   reconciliation against the `x-community-id` header is unchanged — it now
+ *   lives in the runner (`@/lib/api/run-route`) instead of an in-handler
+ *   `resolveEffectiveCommunityId` call. Per-method chain:
  *   GET    — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, query.communityId)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
  *   POST   — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, body.communityId)
  *          → assertNotDemoGrace (BEFORE membership — corpus rule 2)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
  *   PATCH  — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, body.communityId)
  *          → assertNotDemoGrace (BEFORE membership)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
  *   DELETE — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, query.communityId)
  *          → assertNotDemoGrace (BEFORE membership)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
