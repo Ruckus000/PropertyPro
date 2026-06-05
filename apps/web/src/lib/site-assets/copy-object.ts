@@ -4,7 +4,10 @@ const COPY_TTL_SECONDS = 60 * 5;
 
 function absolute(raw: string): string {
   if (raw.startsWith('http')) return raw;
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) {
+    throw new Error('copyStorageObject: NEXT_PUBLIC_SUPABASE_URL is not set');
+  }
   return new URL(raw, base).toString();
 }
 
