@@ -207,7 +207,12 @@ export async function createFromCommunity(
       await db
         .update(sitePortfolioTemplates)
         .set({ siteLogoPath })
-        .where(eq(sitePortfolioTemplates.id, row.id));
+        .where(
+          and(
+            eq(sitePortfolioTemplates.id, row.id),
+            eq(sitePortfolioTemplates.ownerUserId, ownerUserId),
+          ),
+        );
     } catch {
       // logo unavailable — template is created without it.
     }
