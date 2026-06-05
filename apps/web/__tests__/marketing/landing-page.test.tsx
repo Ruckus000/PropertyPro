@@ -8,6 +8,7 @@ import { ComplianceUrgencySection } from '../../src/components/marketing/complia
 import { MarketingFooter } from '../../src/components/marketing/footer';
 import { PortfolioCard } from '../../src/components/marketing/portfolio-card';
 import { MarketingNav } from '../../src/components/marketing/marketing-nav';
+import { LogoProofSection } from '../../src/components/marketing/logo-proof-section';
 
 describe('PortfolioCard', () => {
   it('renders an aggregate portfolio score and multiple communities', () => {
@@ -27,6 +28,14 @@ describe('MarketingNav', () => {
     expect(html).toContain('For managers');
     expect(html).toContain('href="/auth/login"');
     expect(html).toContain('href="/signup"');
+  });
+});
+
+describe('LogoProofSection', () => {
+  it('names management companies (placeholder)', () => {
+    const html = renderToStaticMarkup(<LogoProofSection />);
+    expect(html).toContain('management companies');
+    expect(html).toContain('Gulfstream Management');
   });
 });
 
