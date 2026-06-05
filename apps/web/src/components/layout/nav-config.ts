@@ -24,6 +24,7 @@ import {
   Users,
   ClipboardCheck,
   FileSignature,
+  LayoutTemplate,
 } from 'lucide-react';
 import {
   ADMIN_ROLES,
@@ -298,6 +299,13 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     // /pm/settings/branding is a permanent redirect to this destination.
     href: () => '/pm/settings/website',
     matchPrefixes: ['/pm/settings'],
+  },
+  {
+    id: 'portfolio-templates',
+    label: 'Templates',
+    icon: LayoutTemplate,
+    href: () => '/pm/portfolio/templates',
+    matchPrefixes: ['/pm/portfolio'],
   },
   {
     id: 'reports',
