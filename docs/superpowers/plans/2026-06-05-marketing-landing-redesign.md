@@ -1718,7 +1718,7 @@ describe('FaqSection', () => {
     expect(html).toContain('required to have a website');
     expect(html).toContain('technical');
     expect(html).toContain('secure');
-    expect(html).toContain('already have a website');
+    expect(html).toContain('already has a website');
   });
 });
 ```
