@@ -112,9 +112,11 @@ export function extractDefineRouteBlocks(content: string): string[] {
   return blocks;
 }
 
+// Accept both quote styles so a double-quoted `in: "query"` can't silently
+// skip the whole block (including the load-bearing bound-wrapper-import check).
 const TENANT_SCOPE_REGEX =
-  /tenantScope:\s*\{\s*in:\s*'([^']*)'(?:\s*,\s*field:\s*'([^']*)')?/;
-const METHOD_REGEX = /method:\s*'(GET|POST|PATCH|PUT|DELETE)'/;
+  /tenantScope:\s*\{\s*in:\s*['"]([^'"]*)['"](?:\s*,\s*field:\s*['"]([^'"]*)['"])?/;
+const METHOD_REGEX = /method:\s*['"](GET|POST|PATCH|PUT|DELETE)['"]/;
 
 function checkBlock(block: string, file: string, violations: Violation[]): void {
   const scopeMatch = block.match(TENANT_SCOPE_REGEX);

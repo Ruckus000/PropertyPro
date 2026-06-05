@@ -71,6 +71,14 @@ describe('validateRoute — bites on problems', () => {
     const v = validateRoute(route, '', 'route.ts');
     expect(v.some((x) => /no `query:` request schema/.test(x.message))).toBe(true);
   });
+
+  it("catches a DOUBLE-quoted scope (regex must not be single-quote-only)", () => {
+    // `in: "query"` without the bound wrapper import must still be flagged —
+    // otherwise a double-quoted scope silently skips the whole block.
+    const route = `${PKG_IMPORT}\n${contract('GET', '{ in: "query" }', 'query')}`;
+    const v = validateRoute(route, '', 'route.ts');
+    expect(v.some((x) => /@\/lib\/api\/run-route/.test(x.message))).toBe(true);
+  });
 });
 
 describe('extractDefineRouteBlocks', () => {
