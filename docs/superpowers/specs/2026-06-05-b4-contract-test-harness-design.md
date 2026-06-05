@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-05
 **Plan:** `~/.claude/plans/draft-a-plan-that-reflective-pie.md` § B4 (the last net-new lane; B6 + B2 merged 2026-06-05)
-**Status:** Design approved; ready for implementation plan.
+**Status:** Implemented 2026-06-05 (branch `b4/contract-test-harness`). Measured results updated two design-time estimates: response-permissive contracts are **173** (not the grep-estimated 127 — the harness counts `z.unknown()` *and* `z.any()` per contract export), and the branch-protection audit found **`main` has no protection at all** (no required checks, no rulesets, no required reviews) — stronger than the design-time "unit-test job not required." See `docs/adr/ADR-005-required-status-checks.md`. Coverage: 264/285 contracts get a real check-(a) assertion (3 input-permissive, 18 no-input); zero check-(b) RBAC failures.
 
 **Resolved design decisions (brainstorm + hostile-review pass):**
 1. **Parameterized harness**, not per-route codegen (no generated files / sync guard).
