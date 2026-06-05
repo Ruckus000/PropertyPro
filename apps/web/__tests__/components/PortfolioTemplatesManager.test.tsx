@@ -40,7 +40,7 @@ const TEMPLATE = {
 };
 
 function mutation(overrides: Record<string, unknown> = {}) {
-  return { mutate: vi.fn(), isPending: false, isError: false, error: null, ...overrides };
+  return { mutate: vi.fn(), reset: vi.fn(), isPending: false, isError: false, error: null, ...overrides };
 }
 
 beforeEach(() => {

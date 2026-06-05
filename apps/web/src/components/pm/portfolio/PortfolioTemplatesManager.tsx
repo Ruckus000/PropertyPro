@@ -109,6 +109,7 @@ function ManagerBody({ communities }: { communities: CommunityOption[] }) {
     setSelected(new Set());
     setConfirming(false);
     setResults(null);
+    apply.reset(); // clear stale error/data from a prior apply on another template
   }
 
   function onApply() {
