@@ -120,6 +120,7 @@ export const leasesGetContract = defineRoute({
   request: { query: getQuerySchema },
   response: z.unknown(),
   permission: { resource: 'leases', action: 'read' },
+  tenantScope: { in: 'query' },
 });
 
 export const leasesPostContract = defineRoute({
@@ -128,6 +129,7 @@ export const leasesPostContract = defineRoute({
   request: { body: createLeaseSchema },
   response: z.unknown(),
   permission: { resource: 'leases', action: 'write' },
+  tenantScope: { in: 'body' },
 });
 
 export const leasesPatchContract = defineRoute({
@@ -136,6 +138,7 @@ export const leasesPatchContract = defineRoute({
   request: { body: updateLeaseSchema },
   response: z.unknown(),
   permission: { resource: 'leases', action: 'write' },
+  tenantScope: { in: 'body' },
 });
 
 export const leasesDeleteContract = defineRoute({
@@ -144,4 +147,5 @@ export const leasesDeleteContract = defineRoute({
   request: { query: deleteQuerySchema },
   response: z.object({ deleted: z.literal(true), id: z.number() }),
   permission: { resource: 'leases', action: 'write' },
+  tenantScope: { in: 'query' },
 });

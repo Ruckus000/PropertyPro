@@ -28,4 +28,8 @@ export const communityCancelPostContract = defineRoute({
     communityId: z.number().int().positive(),
   }),
   permission: { resource: 'communities', action: 'write' },
+  // Nested resource: the `[id]` path segment is the authoritative tenant id
+  // (no header cross-check) — the package runner reads it directly, so this
+  // route keeps importing `runRoute` from `@propertypro/api-contract`.
+  tenantScope: { in: 'path', field: 'id' },
 });
