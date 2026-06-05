@@ -900,7 +900,8 @@ In `landing-page.test.tsx`, replace the entire existing `describe('HeroSection',
 
     it('welcomes self-managed boards as a secondary line', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('self-managed board');
+      // case-insensitive: rendered copy is "Self-managed boards…"
+      expect(html.toLowerCase()).toContain('self-managed board');
     });
 
     it('renders the primary CTA linking to signup', () => {
