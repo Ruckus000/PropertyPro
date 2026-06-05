@@ -63,12 +63,12 @@ describe('useResidentSearch', () => {
     );
   });
 
-  it('throws when the search route returns an error', async () => {
-    mockFetch.mockReturnValue(jsonResponse({ error: 'nope' }, 403));
+  it('throws the server error message when the search route returns an error', async () => {
+    mockFetch.mockReturnValue(jsonResponse({ error: { message: 'nope' } }, 403));
     const { result } = renderHook(() => useResidentSearch(99));
 
     await expect(result.current('ja', new AbortController().signal)).rejects.toThrow(
-      'Search failed',
+      'nope',
     );
   });
 });

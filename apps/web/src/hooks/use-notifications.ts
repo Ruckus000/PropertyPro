@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NotificationCategory } from '@propertypro/db';
+import { requestJson } from '@/lib/api/request-json';
 
 export const NOTIFICATION_KEYS = {
   all: (communityId: number) => ['notifications', communityId] as const,
@@ -58,12 +59,7 @@ function buildListUrl(communityId: number, filters: NotificationFilters): string
 export function useNotifications(communityId: number, filters: NotificationFilters = {}) {
   return useQuery<NotificationsPage>({
     queryKey: NOTIFICATION_KEYS.list(communityId, filters),
-    queryFn: async () => {
-      const res = await fetch(buildListUrl(communityId, filters));
-      if (!res.ok) throw new Error('Failed to fetch notifications');
-      const json = await res.json() as { data: NotificationsPage };
-      return json.data;
-    },
+    queryFn: () => requestJson<NotificationsPage>(buildListUrl(communityId, filters)),
     enabled: communityId > 0,
     staleTime: 30_000,
   });
@@ -72,12 +68,10 @@ export function useNotifications(communityId: number, filters: NotificationFilte
 export function useUnreadCount(communityId: number) {
   return useQuery<{ count: number }>({
     queryKey: NOTIFICATION_KEYS.unreadCount(communityId),
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/notifications/unread-count?communityId=${communityId}`);
-      if (!res.ok) throw new Error('Failed to fetch unread count');
-      const json = await res.json() as { data: { count: number } };
-      return json.data;
-    },
+    queryFn: () =>
+      requestJson<{ count: number }>(
+        `/api/v1/notifications/unread-count?communityId=${communityId}`,
+      ),
     enabled: communityId > 0,
     staleTime: 15_000,
     refetchInterval: 60_000,
@@ -89,12 +83,11 @@ export function useMarkRead() {
   return useMutation({
     mutationFn: async (payload: { communityId: number; ids?: number[]; all?: true }) => {
       const { communityId, ...rest } = payload;
-      const res = await fetch('/api/v1/notifications/read', {
+      await requestJson<{ ok: true }>('/api/v1/notifications/read', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ communityId, ...rest }),
       });
-      if (!res.ok) throw new Error('Failed to mark notifications as read');
     },
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({
@@ -149,15 +142,14 @@ export const CROSS_NOTIFICATION_KEYS = {
 export function useCrossNotifications(filters: CrossNotificationFilters = {}) {
   return useQuery<CrossListResponse>({
     queryKey: CROSS_NOTIFICATION_KEYS.list(filters),
-    queryFn: async () => {
+    queryFn: () => {
       const params = new URLSearchParams();
       if (filters.cursor != null) params.set('cursor', String(filters.cursor));
       if (filters.limit != null) params.set('limit', String(filters.limit));
       if (filters.unreadOnly) params.set('unreadOnly', 'true');
-      const res = await fetch(`/api/v1/notifications/all?${params.toString()}`);
-      if (!res.ok) throw new Error('Failed to fetch cross-community notifications');
-      const json = (await res.json()) as { data: CrossListResponse };
-      return json.data;
+      return requestJson<CrossListResponse>(
+        `/api/v1/notifications/all?${params.toString()}`,
+      );
     },
     staleTime: 30_000,
   });
@@ -167,12 +159,11 @@ export function useArchiveNotifications() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: { communityId: number; ids: number[] }) => {
-      const res = await fetch('/api/v1/notifications/archive', {
+      await requestJson<{ ok: true }>('/api/v1/notifications/archive', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Failed to archive notifications');
     },
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({

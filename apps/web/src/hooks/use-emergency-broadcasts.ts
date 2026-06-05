@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -108,14 +109,10 @@ export function useEmergencyBroadcasts(communityId: number) {
 export function useEmergencyBroadcast(communityId: number, broadcastId: number) {
   return useQuery({
     queryKey: KEYS.detail(communityId, broadcastId),
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      requestJson<BroadcastReport>(
         `/api/v1/emergency-broadcasts/${broadcastId}?communityId=${communityId}`,
-      );
-      if (!res.ok) throw new Error('Failed to load broadcast');
-      const json = await res.json();
-      return json.data as BroadcastReport;
-    },
+      ),
     enabled: communityId > 0 && broadcastId > 0,
     refetchInterval: (query) => {
       // Poll every 2s while broadcast is in-progress (not completed/canceled)
@@ -131,14 +128,10 @@ export function useEmergencyBroadcast(communityId: number, broadcastId: number) 
 export function useEmergencyTemplates(communityId: number) {
   return useQuery({
     queryKey: KEYS.templates(communityId),
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      requestJson<EmergencyTemplate[]>(
         `/api/v1/emergency-broadcasts/templates?communityId=${communityId}`,
-      );
-      if (!res.ok) throw new Error('Failed to load templates');
-      const json = await res.json();
-      return json.data as EmergencyTemplate[];
-    },
+      ),
     enabled: communityId > 0,
     staleTime: Infinity, // Templates are static
   });
@@ -149,16 +142,11 @@ export function useCreateBroadcast() {
 
   return useMutation({
     mutationFn: async (params: CreateBroadcastParams) => {
-      const res = await fetch('/api/v1/emergency-broadcasts', {
+      return requestJson<CreateBroadcastResult>('/api/v1/emergency-broadcasts', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(params),
       });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message ?? 'Failed to create broadcast');
-      }
-      return (await res.json()) as CreateBroadcastResult;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });
@@ -171,16 +159,11 @@ export function useSendBroadcast() {
 
   return useMutation({
     mutationFn: async ({ broadcastId, communityId }: { broadcastId: number; communityId: number }) => {
-      const res = await fetch(`/api/v1/emergency-broadcasts/${broadcastId}/send`, {
+      return requestJson(`/api/v1/emergency-broadcasts/${broadcastId}/send`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message ?? 'Failed to send broadcast');
-      }
-      return res.json();
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });
@@ -196,16 +179,11 @@ export function useCancelBroadcast() {
 
   return useMutation({
     mutationFn: async ({ broadcastId, communityId }: { broadcastId: number; communityId: number }) => {
-      const res = await fetch(`/api/v1/emergency-broadcasts/${broadcastId}/cancel`, {
+      return requestJson(`/api/v1/emergency-broadcasts/${broadcastId}/cancel`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.error ?? error.message ?? 'Failed to cancel');
-      }
-      return res.json();
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });

@@ -1,16 +1,13 @@
 'use client';
 
 import { useCallback } from 'react';
+import { requestJson } from '@/lib/api/request-json';
 
 export interface UnitSearchResult {
   id: number;
   label: string;
   building: string | null;
   floor: number | null;
-}
-
-interface UnitSearchResponse {
-  data?: { results?: UnitSearchResult[] };
 }
 
 export const UNIT_SEARCH_FETCH_LIMIT = 10;
@@ -34,11 +31,11 @@ async function searchUnits(
     limit: String(UNIT_SEARCH_FETCH_LIMIT),
   });
 
-  const res = await fetch(`/api/v1/search/units?${params.toString()}`, { signal });
-  if (!res.ok) throw new Error('Search failed');
-
-  const json = (await res.json()) as UnitSearchResponse;
-  return json.data?.results ?? [];
+  const { results } = await requestJson<{ results?: UnitSearchResult[] }>(
+    `/api/v1/search/units?${params.toString()}`,
+    { signal },
+  );
+  return results ?? [];
 }
 
 export function useUnitSearch(communityId: number) {
