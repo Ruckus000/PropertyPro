@@ -50,7 +50,8 @@ export type AuditAction =
   // Custom domain audit actions
   | 'custom_domain_set' | 'custom_domain_verified' | 'custom_domain_removed'
   // Portfolio template audit actions
-  | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted';
+  | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted'
+  | 'portfolio_template_applied';
 
 export interface AuditEventParams {
   userId: string | null;

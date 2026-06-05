@@ -15,7 +15,13 @@
  * NODE RUNTIME ONLY — depends on storage-copy helpers that use server-only
  * secrets. Must never be imported by edge middleware.
  */
-import { sitePortfolioTemplates, communities, userRoles, deleteStorageObject, logAuditEvent } from '@propertypro/db';
+import {
+  sitePortfolioTemplates,
+  communities,
+  userRoles,
+  deleteStorageObject,
+  logAuditEvent,
+} from '@propertypro/db';
 // site_portfolio_templates is a user-owned (NOT tenant-scoped) table — no
 // community_id column, so the scoped client cannot target it. The access-gate
 // helper additionally joins user_roles → communities (root tenant table) to
@@ -23,7 +29,7 @@ import { sitePortfolioTemplates, communities, userRoles, deleteStorageObject, lo
 // hasSitePortfolioTemplates) is enforced at the route layer
 // (apps/web/src/app/api/v1/pm/portfolio/templates/*).
 // AUTHZ: user-owned + root tenant tables — query/write by owner_user_id / primary key via the unsafe client.
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { createUnscopedClient, findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
 import { and, desc, eq, isNull } from '@propertypro/db/filters';
 import {
   extractTemplateBranding,
@@ -32,9 +38,13 @@ import {
   type CommunityType,
   type PortfolioTemplateBranding,
 } from '@propertypro/shared';
-import { getBrandingForCommunity } from '@/lib/api/branding';
+import {
+  getBrandingForCommunity,
+  updateBrandingForCommunity,
+  type BrandingPatch,
+} from '@/lib/api/branding';
 import { copyStorageObject } from '@/lib/site-assets/copy-object';
-import { NotFoundError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 
 const ASSET_BUCKET = 'documents';
 
@@ -259,4 +269,92 @@ export async function deleteTemplate(ownerUserId: string, id: number): Promise<v
         eq(sitePortfolioTemplates.ownerUserId, ownerUserId),
       ),
     );
+}
+
+export interface ApplyResult {
+  communityId: number;
+  communityName: string;
+  status: 'applied' | 'failed';
+  reason?: string;
+}
+
+/**
+ * Bulk-apply a template (branding tokens + wordmark logo) onto a chosen set of
+ * the caller's managed communities. One-time push: each target's branding is
+ * merged with the template's captured tokens (template wins) and, when the
+ * template carries a logo, the asset is copied into the target's branding path.
+ * Branding is live immediately. Per-community results: one failure does not
+ * abort the others (`Promise.allSettled`).
+ */
+export async function applyTemplate(
+  ownerUserId: string,
+  templateId: number,
+  communityIds: number[],
+): Promise<{ results: ApplyResult[] }> {
+  const db = createUnscopedClient();
+  const rows = (await db
+    .select({
+      id: sitePortfolioTemplates.id,
+      branding: sitePortfolioTemplates.branding,
+      siteLogoPath: sitePortfolioTemplates.siteLogoPath,
+    })
+    .from(sitePortfolioTemplates)
+    .where(
+      and(
+        eq(sitePortfolioTemplates.id, templateId),
+        eq(sitePortfolioTemplates.ownerUserId, ownerUserId),
+        isNull(sitePortfolioTemplates.deletedAt),
+      ),
+    )
+    .limit(1)) as Array<{ id: number; branding: unknown; siteLogoPath: string | null }>;
+
+  const template = rows[0];
+  if (!template) {
+    throw new NotFoundError('Template not found');
+  }
+
+  // Only the caller's own managed communities are valid targets.
+  const managed = await findManagedCommunitiesPortfolioUnscoped(ownerUserId);
+  const managedMap = new Map(managed.map((c) => [c.communityId, c.communityName]));
+  const invalid = communityIds.filter((id) => !managedMap.has(id));
+  if (invalid.length > 0) {
+    throw new ForbiddenError(`You do not manage communities: ${invalid.join(', ')}`);
+  }
+
+  const templateBranding = (template.branding ?? {}) as PortfolioTemplateBranding;
+
+  const settled = await Promise.allSettled(
+    communityIds.map(async (communityId): Promise<ApplyResult> => {
+      const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
+      const patch: BrandingPatch = { ...templateBranding };
+      if (template.siteLogoPath) {
+        const destPath = `communities/${communityId}/branding/site-logo.webp`;
+        await copyStorageObject(ASSET_BUCKET, template.siteLogoPath, destPath);
+        patch.siteLogoPath = destPath;
+      }
+      await updateBrandingForCommunity(communityId, patch);
+      await logAuditEvent({
+        userId: ownerUserId,
+        action: 'portfolio_template_applied',
+        resourceType: 'community',
+        resourceId: String(communityId),
+        communityId,
+        newValues: { templateId },
+      });
+      return { communityId, communityName, status: 'applied' };
+    }),
+  );
+
+  const results = settled.map((outcome, i): ApplyResult => {
+    if (outcome.status === 'fulfilled') return outcome.value;
+    const communityId = communityIds[i]!;
+    return {
+      communityId,
+      communityName: managedMap.get(communityId) ?? `Community ${communityId}`,
+      status: 'failed',
+      reason: outcome.reason instanceof Error ? outcome.reason.message : 'Apply failed',
+    };
+  });
+
+  return { results };
 }
