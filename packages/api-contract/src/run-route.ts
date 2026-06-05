@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ZodError, type z } from 'zod';
-import type { RouteContract, HttpMethod } from './define-route';
+import type { RouteContract, HttpMethod, RouteTenantScope } from './define-route';
 import type { PaginationResult } from './pagination';
 import { ContractValidationError } from './errors';
 
@@ -16,8 +16,20 @@ export type AnyRouteContract = RouteContract<
   z.ZodTypeAny | undefined,
   z.ZodTypeAny | undefined,
   z.ZodTypeAny,
-  boolean
+  boolean,
+  RouteTenantScope | undefined
 >;
+
+/**
+ * Adds `communityId: number` to the handler input ONLY when the contract
+ * declares a `tenantScope` (Plan B2). A contract without `tenantScope` has
+ * `tenantScope` typed as `undefined`, so this resolves to `{}` and the handler
+ * input is byte-identical to the pre-B2 shape. The tuple wrap defeats union
+ * distribution (an optional member reads as `TScope | undefined`).
+ */
+type CommunityIdOf<C extends AnyRouteContract> = [C['tenantScope']] extends [undefined]
+  ? {}
+  : { communityId: number };
 
 /**
  * Resolved + validated inputs passed to the user handler.
@@ -25,13 +37,15 @@ export type AnyRouteContract = RouteContract<
  * Each field's type comes from the contract:
  *   - undefined if the contract did not declare a schema for that input
  *   - z.infer<schema> if it did
+ *
+ * Plus `communityId: number` when the contract declares a `tenantScope`.
  */
-export interface RouteHandlerInput<C extends AnyRouteContract> {
+export type RouteHandlerInput<C extends AnyRouteContract> = {
   params: ParamsOf<C>;
   query: QueryOf<C>;
   body: BodyOf<C>;
   req: NextRequest;
-}
+} & CommunityIdOf<C>;
 
 /**
  * What the handler must return.
@@ -47,7 +61,8 @@ export type RouteHandlerOutput<C extends AnyRouteContract> =
     z.ZodTypeAny | undefined,
     z.ZodTypeAny | undefined,
     infer TResponse,
-    infer TPaginated
+    infer TPaginated,
+    RouteTenantScope | undefined
   >
     ? TPaginated extends true
       ? { data: z.infer<TResponse>[]; pagination: PaginationResult }
@@ -86,24 +101,107 @@ export type WrappedRouteHandler = (
  * The app's `withErrorHandler` recognizes `ContractValidationError` via
  * `isContractValidationError` and renders the correct 400 / 500 envelope.
  */
+/**
+ * Options for `runRoute`. `resolveCommunityId` is dependency-injected because
+ * `@propertypro/api-contract` must not import app code — the app supplies its
+ * `resolveEffectiveCommunityId` via the bound wrapper at
+ * `apps/web/src/lib/api/run-route.ts`. Only consulted when `tenantScope.in` is
+ * `'query'` / `'body'`; `'path'` reads the validated path param directly.
+ */
+export interface RunRouteOptions {
+  resolveCommunityId?: (
+    req: NextRequest,
+    explicit: number | null | undefined,
+  ) => number;
+}
+
 export function runRoute<C extends AnyRouteContract>(
   contract: C,
   handler: RouteHandlerFn<C>,
+  options?: RunRouteOptions,
 ): WrappedRouteHandler {
   return async (req, ctx) => {
     const params = await parseParams(contract, ctx);
     const query = parseQuery(contract, req);
     const body = await parseBody(contract, req);
 
-    const result = await handler({
+    // The cast is sound because `RouteHandlerInput<C>` only adds the optional
+    // `communityId` member (via `CommunityIdOf<C>`), which is assigned below
+    // exactly when the contract declares a `tenantScope`.
+    const input = {
       params: params as ParamsOf<C>,
       query: query as QueryOf<C>,
       body: body as BodyOf<C>,
       req,
-    });
+    } as RouteHandlerInput<C>;
+
+    if (contract.tenantScope) {
+      (input as { communityId: number }).communityId = resolveTenantId(
+        contract.tenantScope,
+        { params, query, body },
+        req,
+        options,
+      );
+    }
+
+    const result = await handler(input);
 
     return buildResponse(contract, result);
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tenant resolution (Plan B2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the effective `communityId` from the contract's declared
+ * `tenantScope`. Semantics mirror the app's prior in-handler pattern, only
+ * relocated here:
+ *   - `path` → the validated path segment is authoritative (no header
+ *     cross-check), matching how nested `/communities/[id]/…` routes resolve.
+ *   - `query` / `body` → the explicit value is handed to the injected
+ *     `resolveCommunityId`, which reconciles it against the middleware
+ *     `x-community-id` header (header authoritative).
+ */
+function resolveTenantId(
+  scope: RouteTenantScope,
+  parsed: { params: unknown; query: unknown; body: unknown },
+  req: NextRequest,
+  options: RunRouteOptions | undefined,
+): number {
+  if (scope.in === 'path') {
+    const field = scope.field ?? 'id';
+    const raw = (parsed.params as Record<string, unknown> | undefined)?.[field];
+    const value = typeof raw === 'string' ? Number(raw) : raw;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      throw new ContractValidationError(
+        'params',
+        makeStandaloneZodError(
+          `tenantScope path field '${field}' is missing or not a positive integer`,
+        ),
+      );
+    }
+    return value;
+  }
+
+  const field = scope.field ?? 'communityId';
+  const source = scope.in === 'query' ? parsed.query : parsed.body;
+  const explicit = (source as Record<string, unknown> | undefined)?.[field] as
+    | number
+    | null
+    | undefined;
+
+  if (!options?.resolveCommunityId) {
+    throw new Error(
+      `runRoute: contract declares tenantScope.in='${scope.in}' but no ` +
+        `resolveCommunityId was provided. Import runRoute from ` +
+        `'@/lib/api/run-route' (the app-bound wrapper), not directly from ` +
+        `'@propertypro/api-contract'.`,
+    );
+  }
+
+  return options.resolveCommunityId(req, explicit);
 }
 
 // ---------------------------------------------------------------------------

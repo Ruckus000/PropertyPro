@@ -26,6 +26,7 @@ export type {
   RouteContract,
   RoutePermission,
   RouteRequestSchemas,
+  RouteTenantScope,
 } from './define-route';
 export { defineRoute } from './define-route';
 
@@ -50,5 +51,6 @@ export type {
   RouteHandlerFn,
   WrappedRouteHandler,
   NextRouteContext,
+  RunRouteOptions,
 } from './run-route';
 export { runRoute } from './run-route';
