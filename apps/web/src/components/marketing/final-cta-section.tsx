@@ -1,0 +1,30 @@
+import React from 'react';
+
+/** Warm closing CTA band. */
+export function FinalCtaSection() {
+  return (
+    <section className="mk-band">
+      <div className="mk-wrap">
+        <div className="mk-final">
+          <h2 className="mk-display">Beat the deadline across every community.</h2>
+          <p>
+            Join the Florida management companies running compliant, modern,
+            transparent portfolios — without the stress.
+          </p>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a href="/signup" className="mk-pill mk-pill-primary">
+              Get your portfolio online →
+            </a>
+            <a
+              href="/signup"
+              className="mk-pill mk-pill-ghost"
+              style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,.5)' }}
+            >
+              Talk to us
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

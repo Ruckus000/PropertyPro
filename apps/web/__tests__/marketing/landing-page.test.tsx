@@ -12,6 +12,7 @@ import { LogoProofSection } from '../../src/components/marketing/logo-proof-sect
 import { HowItWorksSection } from '../../src/components/marketing/how-it-works-section';
 import { TestimonialSection } from '../../src/components/marketing/testimonial-section';
 import { FaqSection } from '../../src/components/marketing/faq-section';
+import { FinalCtaSection } from '../../src/components/marketing/final-cta-section';
 
 describe('PortfolioCard', () => {
   it('renders an aggregate portfolio score and multiple communities', () => {
@@ -226,5 +227,13 @@ describe('FaqSection', () => {
     expect(html).toContain('technical');
     expect(html).toContain('secure');
     expect(html).toContain('already has a website');
+  });
+});
+
+describe('FinalCtaSection', () => {
+  it('renders a closing CTA linking to signup', () => {
+    const html = renderToStaticMarkup(<FinalCtaSection />);
+    expect(html).toContain('Beat the deadline');
+    expect(html).toContain('href="/signup"');
   });
 });
