@@ -10,6 +10,7 @@ describe('contract registry', () => {
   });
 
   it('every entry is well-shaped', () => {
+    expect(registry.length).toBeGreaterThan(0);
     for (const entry of registry) {
       expect(typeof entry.file).toBe('string');
       expect(typeof entry.exportName).toBe('string');
@@ -21,6 +22,6 @@ describe('contract registry', () => {
 
   it('is sorted deterministically', () => {
     const keys = registry.map((e) => `${e.file}#${e.exportName}`);
-    expect([...keys].sort()).toEqual(keys);
+    expect([...keys].sort((a, b) => a.localeCompare(b))).toEqual(keys);
   });
 });
