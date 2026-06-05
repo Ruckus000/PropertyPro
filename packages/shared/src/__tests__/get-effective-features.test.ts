@@ -131,6 +131,12 @@ describe('getEffectiveFeatures', () => {
     });
   });
 
+  it('enables hasSitePortfolioTemplates only on operations_plus', () => {
+    expect(getEffectiveFeatures('condo_718', 'operations_plus').hasSitePortfolioTemplates).toBe(true);
+    expect(getEffectiveFeatures('condo_718', 'professional').hasSitePortfolioTemplates).toBe(false);
+    expect(getEffectiveFeatures('condo_718', 'essentials').hasSitePortfolioTemplates).toBe(false);
+  });
+
   it('result has all 29 CommunityFeatures keys', () => {
     const features = getEffectiveFeatures('condo_718', 'essentials');
     const resultKeys = Object.keys(features).sort();

@@ -7,6 +7,7 @@ export * from './enums';
 export * from './communities';
 export * from './users';
 export * from './user-preferences';
+export * from './site-portfolio-templates';
 export * from './user-roles';
 export * from './units';
 export * from './document-categories';

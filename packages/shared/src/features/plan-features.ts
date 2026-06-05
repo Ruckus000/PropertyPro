@@ -117,6 +117,7 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSitePolishBlocks: true,
       hasSiteCustomCss: true,
       hasSiteCustomDomain: true,
+      hasSitePortfolioTemplates: true,
     },
     maxAdmins: Infinity,
     displayName: 'Operations Plus',
