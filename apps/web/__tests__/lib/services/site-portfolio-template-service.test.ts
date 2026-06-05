@@ -95,7 +95,7 @@ import {
   userHasPortfolioTemplatesAccess,
   applyTemplate,
 } from '@/lib/services/site-portfolio-template-service';
-import { NotFoundError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -255,7 +255,7 @@ describe('applyTemplate', () => {
 
   it('throws ForbiddenError when a target is not managed by the user', async () => {
     resultQueue.push([{ id: 5, branding: { primaryColor: '#abc' }, siteLogoPath: null }]);
-    await expect(applyTemplate('user-1', 5, [1, 999])).rejects.toBeInstanceOf(Error); // ForbiddenError
+    await expect(applyTemplate('user-1', 5, [1, 999])).rejects.toBeInstanceOf(ForbiddenError);
     expect(updateBrandingForCommunityMock).not.toHaveBeenCalled();
   });
 
