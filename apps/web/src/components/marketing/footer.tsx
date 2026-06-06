@@ -1,122 +1,48 @@
 import React from 'react';
 
-/**
- * Marketing footer with company info, legal links, and contact details.
- */
+/** Warm marketing footer. Keeps legal links, contact, and the law-firm disclaimer. */
 export function MarketingFooter() {
+  const year = new Date().getFullYear();
   return (
-    <footer className="border-t border-edge bg-surface-inverse px-6 py-12">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Company info */}
-          <div className="lg:col-span-1">
-            <p className="text-lg font-semibold text-content-inverse">
-              PropertyPro<span className="text-content-link"> Florida</span>
+    <footer className="mk-footer">
+      <div className="mk-wrap">
+        <div className="mk-foot-grid">
+          <div>
+            <div className="mk-logo" style={{ color: '#fff' }}>
+              <span className="mk-logo-dot" aria-hidden="true">
+                ◐
+              </span>
+              PropertyPro
+            </div>
+            <p style={{ marginTop: 14, maxWidth: '24em', fontSize: 14 }}>
+              Compliance and community management for Florida condominium and HOA
+              associations — and the property managers who run them.
             </p>
-            <p className="mt-2 text-sm leading-relaxed text-content-disabled">
-              Compliance and community management platform for Florida
-              condominium and HOA associations.
-            </p>
           </div>
-
-          {/* Product links */}
           <div>
-            <h4 className="text-sm font-semibold text-content-inverse">Product</h4>
-            <ul className="mt-3 space-y-2">
-              <li>
-                <a
-                  href="#features"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Features
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#pricing"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Pricing
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#compliance"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Compliance Info
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/signup"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Get Started
-                </a>
-              </li>
-            </ul>
+            <h5>Product</h5>
+            <a href="/#features">Features</a>
+            <a href="/#compliance">Compliance</a>
+            <a href="/#pricing">Pricing</a>
+            <a href="/#managers">For managers</a>
           </div>
-
-          {/* Legal links */}
           <div>
-            <h4 className="text-sm font-semibold text-content-inverse">Legal</h4>
-            <ul className="mt-3 space-y-2">
-              <li>
-                <a
-                  href="/legal/terms"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Terms of Service
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/legal/privacy"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Privacy Policy
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/transparency"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  Community Transparency
-                </a>
-              </li>
-            </ul>
+            <h5>Company</h5>
+            <a href="/transparency">Community Transparency</a>
+            <a href="mailto:support@getpropertypro.com">Contact</a>
           </div>
-
-          {/* Contact */}
           <div>
-            <h4 className="text-sm font-semibold text-content-inverse">Contact</h4>
-            <ul className="mt-3 space-y-2">
-              <li>
-                <a
-                  href="mailto:support@getpropertypro.com"
-                  className="text-sm text-content-disabled transition-colors hover:text-content-inverse"
-                >
-                  support@getpropertypro.com
-                </a>
-              </li>
-              <li>
-                <span className="text-sm text-content-disabled">
-                  West Palm Beach, FL
-                </span>
-              </li>
-            </ul>
+            <h5>Legal</h5>
+            <a href="/legal/terms">Terms of Service</a>
+            <a href="/legal/privacy">Privacy Policy</a>
           </div>
         </div>
-
-        {/* Bottom bar */}
-        <div className="mt-10 border-t border-surface-inverse pt-6">
-          <p className="text-center text-xs text-content-tertiary">
-            &copy; {new Date().getFullYear()} PropertyPro Florida. All rights
-            reserved. PropertyPro is not a law firm and does not provide legal
-            advice.
-          </p>
+        <div className="mk-foot-bot">
+          <span>
+            © {year} PropertyPro Florida. PropertyPro is not a law firm and does
+            not provide legal advice.
+          </span>
+          <span>West Palm Beach, FL · support@getpropertypro.com</span>
         </div>
       </div>
     </footer>
