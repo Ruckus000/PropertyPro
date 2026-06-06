@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 
@@ -22,7 +22,7 @@ export interface FooterLegalLinksProps {
 
 export function FooterLegalLinks({ legalDocs }: FooterLegalLinksProps) {
   const [openDoc, setOpenDoc] = useState<DocKey | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
   function handleClick(event: React.MouseEvent<HTMLAnchorElement>, doc: DocKey) {
     // No content available (e.g. no-JS fallback / no props) → allow navigation.
@@ -38,7 +38,7 @@ export function FooterLegalLinks({ legalDocs }: FooterLegalLinksProps) {
   const bodyHtml = openDoc && legalDocs ? legalDocs[openDoc] : '';
 
   return (
-    <div ref={containerRef}>
+    <div ref={setContainer}>
       <a href={DOC_HREFS.terms} onClick={(e) => handleClick(e, 'terms')}>
         Terms of Service
       </a>
@@ -47,9 +47,9 @@ export function FooterLegalLinks({ legalDocs }: FooterLegalLinksProps) {
       </a>
 
       <Dialog.Root open={openDoc !== null} onOpenChange={(open) => !open && setOpenDoc(null)}>
-        <Dialog.Portal container={containerRef.current ?? undefined}>
+        <Dialog.Portal container={container ?? undefined}>
           <Dialog.Overlay className="mk-modal-overlay" />
-          <Dialog.Content className="mk-modal-content" aria-describedby={undefined}>
+          <Dialog.Content className="mk-modal-content">
             <div className="mk-modal-head">
               <Dialog.Title className="mk-modal-title">
                 {openDoc ? DOC_TITLES[openDoc] : ''}
@@ -58,6 +58,9 @@ export function FooterLegalLinks({ legalDocs }: FooterLegalLinksProps) {
                 <X aria-hidden="true" />
               </Dialog.Close>
             </div>
+            <Dialog.Description className="sr-only">
+              {openDoc ? `${DOC_TITLES[openDoc]} — scroll to read the full document.` : ''}
+            </Dialog.Description>
             <div
               className="mk-modal-body mk-prose"
               dangerouslySetInnerHTML={{ __html: bodyHtml }}
