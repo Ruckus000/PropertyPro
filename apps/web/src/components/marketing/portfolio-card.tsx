@@ -15,40 +15,18 @@ export function PortfolioCard() {
   return (
     <div className="mk-device">
       <div className="mk-device-top">
-        <i style={{ background: '#f6b4a4' }} />
-        <i style={{ background: '#f3d488' }} />
-        <i style={{ background: '#9fd8cf' }} />
-        <span
-          style={{
-            marginLeft: 10,
-            fontSize: 12,
-            color: 'var(--mk-ink-soft)',
-            fontWeight: 600,
-          }}
-        >
-          app.getpropertypro.com/portfolio
-        </span>
+        <i className="mk-tl-coral" />
+        <i className="mk-tl-gold" />
+        <i className="mk-tl-teal" />
+        <span className="mk-url">app.getpropertypro.com/portfolio</span>
       </div>
       <div className="mk-device-body">
         <div className="mk-portfolio-head">
           <div>
-            <div style={{ fontSize: 13, color: 'var(--mk-ink-soft)' }}>
-              Portfolio compliance
-            </div>
+            <div className="mk-portfolio-label">Portfolio compliance</div>
             <div className="mk-portfolio-score mk-display">86% on track</div>
           </div>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: 'var(--mk-teal-text)',
-              background: '#e7f4f1',
-              padding: '4px 10px',
-              borderRadius: 999,
-            }}
-          >
-            12 communities
-          </span>
+          <span className="mk-portfolio-pill">12 communities</span>
         </div>
         {COMMUNITIES.map((c) => (
           <div className="mk-row" key={c.name}>
@@ -62,18 +40,7 @@ export function PortfolioCard() {
                 background: `conic-gradient(${c.ring} 0 ${c.score}%, #ece1d4 ${c.score}% 100%)`,
               }}
             >
-              <span
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                {c.score}
-              </span>
+              <span className="mk-mini-dot">{c.score}</span>
             </span>
           </div>
         ))}

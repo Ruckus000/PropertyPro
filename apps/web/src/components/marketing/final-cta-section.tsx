@@ -11,14 +11,13 @@ export function FinalCtaSection() {
             Join the Florida management companies running compliant, modern,
             transparent portfolios — without the stress.
           </p>
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div className="mk-cta-row">
             <a href="/signup" className="mk-pill mk-pill-primary">
               Get your portfolio online →
             </a>
             <a
               href="mailto:support@getpropertypro.com?subject=Talk%20to%20PropertyPro"
-              className="mk-pill mk-pill-ghost"
-              style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,.5)' }}
+              className="mk-pill mk-pill-ghost mk-pill-ghost-inverse"
             >
               Talk to us
             </a>
