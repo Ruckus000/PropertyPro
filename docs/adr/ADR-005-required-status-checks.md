@@ -1,7 +1,7 @@
 # ADR-005: Required status checks for `main`
 
-- **Status:** Proposed
-- **Date:** 2026-06-05
+- **Status:** Accepted — applied 2026-06-06
+- **Date:** 2026-06-05 (applied 2026-06-06)
 - **Context tags:** CI, branch protection, Plan B4
 
 ## Context
@@ -105,3 +105,21 @@ CI-visible signal (`pnpm test`) but **not** a merge gate.
   individually in the protection config.
 - Adding required reviews closes the current gap where a single author can
   merge their own PRs without any approval.
+
+## Applied (2026-06-06)
+
+Branch protection was enabled on `main` via
+`PUT /repos/Ruckus000/PropertyPro/branches/main/protection`:
+
+- **Required status checks** (`strict: true` — up-to-date before merge):
+  `Lint`, `Typecheck`, `Unit Tests`, `no-mock-guard`, `migration-ordering`,
+  `Build`, `integration-tests`, `perf-check`.
+- `enforce_admins: false` (admins may bypass in emergencies).
+- `allow_force_pushes: false`, `allow_deletions: false` (came with protection).
+- **Required reviews: deferred** — `required_pull_request_reviews: null`. With a
+  single maintainer, requiring an approving review would block self-merge (an
+  author cannot approve their own PR). Enable
+  `{ required_approving_review_count: 1 }` once a second collaborator exists.
+
+Net effect: the B4 contract suite (in the `Unit Tests` job) and the full
+build/integration/perf suite now gate every merge to `main`.
