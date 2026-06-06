@@ -211,6 +211,26 @@ describe('FaqSection', () => {
     expect(html).toContain('secure');
     expect(html).toContain('already has a website');
   });
+
+  it('exposes the #faq deep-link anchor', () => {
+    const html = renderToStaticMarkup(<FaqSection />);
+    expect(html).toContain('id="faq"');
+  });
+
+  it('keeps answer text in the static markup for SEO (hidden, not removed)', () => {
+    const html = renderToStaticMarkup(<FaqSection />);
+    // Reframed present-tense answer #1 — not the old "must comply by Jan 1, 2026".
+    expect(html).toContain('required to maintain a compliant website');
+    expect(html).not.toContain('must comply by Jan 1, 2026');
+    // Answers ship hidden by default; the text stays crawlable.
+    expect(html).toContain('hidden');
+  });
+
+  it('renders questions as real accordion buttons', () => {
+    const html = renderToStaticMarkup(<FaqSection />);
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="faq-answer-0"');
+  });
 });
 
 describe('FinalCtaSection', () => {

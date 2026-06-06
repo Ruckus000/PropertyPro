@@ -1,9 +1,11 @@
-import React from 'react';
+'use client';
+
+import React, { useState } from 'react';
 
 const QA = [
   {
     q: 'Is my association actually required to have a website?',
-    a: 'Condos with 25+ units must comply by Jan 1, 2026; 150+ units already must. HOAs with 100+ parcels are required now. Run the 30-second checker above for the exact obligation per community.',
+    a: 'Condos with 25+ units are required to maintain a compliant website (150+ units already were); HOAs with 100+ parcels are required too. Run the 30-second checker above for the exact obligation per community.',
   },
   {
     q: 'Do I need to be technical to set this up?',
@@ -19,27 +21,43 @@ const QA = [
   },
 ];
 
-/** Objection-handling FAQ. Static cards (expand interaction deferred). */
+/** Objection-handling FAQ as an accessible single-open accordion. */
 export function FaqSection() {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
   return (
-    <section className="mk-band mk-band-alt">
+    <section id="faq" className="mk-band mk-band-alt">
       <div className="mk-wrap">
         <div className="mk-sec-head mk-center">
           <span className="mk-eyebrow">Questions, answered</span>
           <h2 className="mk-display">The things managers always ask.</h2>
         </div>
         <div className="mk-faq">
-          {QA.map((item) => (
-            <div className="mk-card mk-qa" key={item.q}>
-              <h4>
-                {item.q}
-                <span className="mk-muted" aria-hidden="true">
-                  ＋
-                </span>
-              </h4>
-              <p className="mk-muted">{item.a}</p>
-            </div>
-          ))}
+          {QA.map((item, index) => {
+            const isOpen = openIndex === index;
+            const answerId = `faq-answer-${index}`;
+            return (
+              <div className="mk-card mk-qa" key={item.q}>
+                <h4>
+                  <button
+                    type="button"
+                    className="mk-qa-toggle"
+                    aria-expanded={isOpen}
+                    aria-controls={answerId}
+                    onClick={() => setOpenIndex(isOpen ? null : index)}
+                  >
+                    <span>{item.q}</span>
+                    <span className="mk-muted mk-qa-glyph" aria-hidden="true">
+                      {isOpen ? '−' : '+'}
+                    </span>
+                  </button>
+                </h4>
+                <p id={answerId} className="mk-muted" hidden={!isOpen}>
+                  {item.a}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
