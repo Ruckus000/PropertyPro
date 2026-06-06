@@ -3,11 +3,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 const NAV_LINKS = [
-  { href: '#features', label: 'Product' },
-  { href: '#compliance', label: 'Compliance' },
-  { href: '#how', label: 'How it works' },
-  { href: '#managers', label: 'For managers' },
-  { href: '#pricing', label: 'Pricing' },
+  { href: '/#features', label: 'Product' },
+  { href: '/#compliance', label: 'Compliance' },
+  { href: '/#how', label: 'How it works' },
+  { href: '/#managers', label: 'For managers' },
+  { href: '/#pricing', label: 'Pricing' },
 ];
 
 /** Sticky marketing nav with in-page smooth-scroll anchors and a mobile menu. */
@@ -43,7 +43,7 @@ export function MarketingNav() {
   return (
     <nav className="mk-nav">
       <div className="mk-wrap mk-nav-in">
-        <a href="#top" className="mk-logo">
+        <a href="/" className="mk-logo">
           <span className="mk-logo-dot" aria-hidden="true">
             ◐
           </span>
@@ -76,7 +76,6 @@ export function MarketingNav() {
           onClick={() => setOpen((v) => !v)}
         >
           <span aria-hidden="true">{open ? '✕' : '☰'}</span>
-          <span className="mk-nav-toggle-text">Menu</span>
         </button>
       </div>
       {open && (

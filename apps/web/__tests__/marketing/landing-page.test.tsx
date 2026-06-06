@@ -24,11 +24,11 @@ describe('PortfolioCard', () => {
 });
 
 describe('MarketingNav', () => {
-  it('renders in-page anchor links and CTAs', () => {
+  it('renders absolute in-page anchor links and CTAs', () => {
     const html = renderToStaticMarkup(<MarketingNav />);
-    expect(html).toContain('href="#features"');
-    expect(html).toContain('href="#compliance"');
-    expect(html).toContain('href="#pricing"');
+    expect(html).toContain('href="/#features"');
+    expect(html).toContain('href="/#compliance"');
+    expect(html).toContain('href="/#pricing"');
     expect(html).toContain('For managers');
     expect(html).toContain('href="/auth/login"');
     expect(html).toContain('href="/signup"');
@@ -198,10 +198,10 @@ describe('marketing landing page', () => {
       expect(html).toContain('not a law firm');
     });
 
-    it('keeps product anchor links', () => {
+    it('keeps absolute product anchor links', () => {
       const html = renderToStaticMarkup(<MarketingFooter />);
-      expect(html).toContain('href="#features"');
-      expect(html).toContain('href="#pricing"');
+      expect(html).toContain('href="/#features"');
+      expect(html).toContain('href="/#pricing"');
     });
   });
 });

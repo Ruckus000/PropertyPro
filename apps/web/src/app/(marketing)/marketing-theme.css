@@ -42,7 +42,6 @@
 .marketing-theme .mk-card{background:var(--mk-card);border:1px solid var(--mk-line);border-radius:18px;box-shadow:var(--mk-shadow-sm)}
 
 /* nav */
-.marketing-theme.mk-has-nav{padding-top:0}
 .marketing-theme .mk-nav{position:sticky;top:0;z-index:50;background:rgba(253,246,238,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--mk-line)}
 .marketing-theme .mk-nav-in{display:flex;align-items:center;justify-content:space-between;height:70px}
 .marketing-theme .mk-logo{display:flex;align-items:center;gap:10px;font-family:var(--font-fraunces),serif;font-weight:600;font-size:21px;color:var(--mk-ink)}

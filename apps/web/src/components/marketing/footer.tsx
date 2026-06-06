@@ -21,10 +21,10 @@ export function MarketingFooter() {
           </div>
           <div>
             <h5>Product</h5>
-            <a href="#features">Features</a>
-            <a href="#compliance">Compliance</a>
-            <a href="#pricing">Pricing</a>
-            <a href="#managers">For managers</a>
+            <a href="/#features">Features</a>
+            <a href="/#compliance">Compliance</a>
+            <a href="/#pricing">Pricing</a>
+            <a href="/#managers">For managers</a>
           </div>
           <div>
             <h5>Company</h5>
