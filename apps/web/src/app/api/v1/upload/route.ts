@@ -1,25 +1,43 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
+/**
+ * Upload — mint a presigned Supabase Storage upload URL (direct browser upload).
+ *
+ * POST /api/v1/upload
+ * Body: { communityId, fileName, mimeType, fileSize }
+ *
+ * Plan A1 auto-drain. Migrated to `runRoute(contract, handler)`; see
+ * `./contract.ts` for the schema and rationale. Auth chain preserved verbatim:
+ *   requireAuthenticatedUserId
+ *     → resolveEffectiveCommunityId(req, body.communityId)
+ *     → assertNotDemoGrace        (async, awaited)
+ *     → requireCommunityMembership(async, awaited)
+ *     → validateFileSize(mimeType, fileSize)
+ *     → createPresignedUploadUrl('documents', storagePath, { upsert: false })
+ *
+ * This route is intentionally non-audited. It generates presigned URLs for
+ * direct upload to Supabase Storage but does not mutate app records. Document
+ * record creation (which IS audited) happens in POST /api/v1/documents.
+ *
+ * Body validation moves from the hand-rolled `presignSchema.safeParse` →
+ * `ValidationError('Invalid upload metadata')` to the contract's Zod schema,
+ * so validation failures now surface the canonical `VALIDATION_ERROR`
+ * envelope. The per-mimeType size cap stays in the handler (it depends on
+ * both `mimeType` and `fileSize`) and keeps its byte-identical message.
+ * Success wire shape `{ data: ... }` is byte-identical to pre-migration.
+ */
+import { runRoute } from '@propertypro/api-contract';
 import { createPresignedUploadUrl } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { sanitizeFilename } from '@/lib/utils/sanitize-filename';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { uploadPresignContract } from './contract';
 
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const PRESIGN_TTL_SECONDS = 15 * 60;
-
-const presignSchema = z.object({
-  communityId: z.number().int().positive(),
-  fileName: z.string().min(1).max(255),
-  mimeType: z.string().min(1),
-  fileSize: z.number().int().positive(),
-});
 
 function validateFileSize(mimeType: string, fileSize: number): void {
   const isImage = mimeType.startsWith('image/');
@@ -32,45 +50,35 @@ function validateFileSize(mimeType: string, fileSize: number): void {
   }
 }
 
-// Note: This route is intentionally non-audited. It generates presigned URLs
-// for direct upload to Supabase Storage but does not mutate app records.
-// Document record creation (which IS audited) happens in POST /api/v1/documents.
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  const userId = await requireAuthenticatedUserId();
+export const POST = withErrorHandler(
+  runRoute(uploadPresignContract, async ({ body, req }) => {
+    const userId = await requireAuthenticatedUserId();
 
-  const body: unknown = await req.json();
-  const parseResult = presignSchema.safeParse(body);
+    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+    await assertNotDemoGrace(communityId);
+    const { fileName, fileSize, mimeType } = body;
+    await requireCommunityMembership(communityId, userId);
+    validateFileSize(mimeType, fileSize);
 
-  if (!parseResult.success) {
-    throw new ValidationError('Invalid upload metadata', {
-      fields: formatZodErrors(parseResult.error),
+    const documentId = crypto.randomUUID();
+    const safeFileName = sanitizeFilename(fileName);
+    const storagePath = `communities/${communityId}/documents/${documentId}/${safeFileName}`;
+
+    const signedUpload = await createPresignedUploadUrl('documents', storagePath, {
+      upsert: false,
     });
-  }
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  const communityId = resolveEffectiveCommunityId(req, parseResult.data.communityId);
-  await assertNotDemoGrace(communityId);
-  const { fileName, fileSize, mimeType } = parseResult.data;
-  await requireCommunityMembership(communityId, userId);
-  validateFileSize(mimeType, fileSize);
+    const uploadUrl = signedUpload.signedUrl.startsWith('http')
+      ? signedUpload.signedUrl
+      : `${supabaseUrl ?? ''}${signedUpload.signedUrl}`;
 
-  const documentId = crypto.randomUUID();
-  const safeFileName = sanitizeFilename(fileName);
-  const storagePath = `communities/${communityId}/documents/${documentId}/${safeFileName}`;
-
-  const signedUpload = await createPresignedUploadUrl('documents', storagePath, { upsert: false });
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const uploadUrl = signedUpload.signedUrl.startsWith('http')
-    ? signedUpload.signedUrl
-    : `${supabaseUrl ?? ''}${signedUpload.signedUrl}`;
-
-  return NextResponse.json({
-    data: {
+    return {
       documentId,
       path: storagePath,
       token: signedUpload.token,
       uploadUrl,
       expiresIn: PRESIGN_TTL_SECONDS,
-    },
-  });
-});
+    };
+  }),
+);
