@@ -1,6 +1,21 @@
+/**
+ * Route unit tests — `GET /api/v1/calendar/google/callback`.
+ *
+ * Added alongside the Plan A1 drain to runRoute. Covers the contracted
+ * envelope: happy path, optional `syncedAt = null` coercion, 401 unauth,
+ * 400 missing/whitespace `code`, 400 invalid OAuth state, 403 per auth gate
+ * (membership / calendar-sync-disabled / write-permission), and x-request-id
+ * null forwarding.
+ *
+ * Tenancy is resolved via `parseCommunityIdFromQueryOrHeader` (query OR
+ * header), so that helper is mocked rather than `resolveEffectiveCommunityId`.
+ * The response fixture matches the real service return type
+ * `{ provider: 'google'; userId: string; syncedAt: string | null }`.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { BadRequestError } from '../../src/lib/api/errors/BadRequestError';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
@@ -21,10 +36,6 @@ const {
   parseCommunityIdFromQueryOrHeaderMock: vi.fn(),
 }));
 
-vi.mock('@propertypro/db', () => ({
-  createScopedClient: vi.fn(),
-}));
-
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));
@@ -38,105 +49,198 @@ vi.mock('@/lib/calendar/common', () => ({
   requireCalendarSyncWritePermission: requireCalendarSyncWritePermissionMock,
 }));
 
+vi.mock('@/lib/calendar/request', () => ({
+  parseCommunityIdFromQueryOrHeader: parseCommunityIdFromQueryOrHeaderMock,
+}));
+
 vi.mock('@/lib/services/calendar-sync-service', () => ({
   validateOAuthState: validateOAuthStateMock,
   completeGoogleCalendarConnect: completeGoogleCalendarConnectMock,
 }));
 
-vi.mock('@/lib/api/error-handler', () => ({
-  withErrorHandler: (fn: Function) =>
-    async (...args: unknown[]) => {
-      try {
-        return await fn(...args);
-      } catch (error: unknown) {
-        if (error && typeof error === 'object' && 'statusCode' in error && 'toJSON' in error) {
-          const { NextResponse } = await import('next/server');
-          return NextResponse.json((error as { toJSON: () => unknown }).toJSON(), {
-            status: (error as { statusCode: number }).statusCode,
-          });
-        }
-        throw error;
-      }
-    },
-}));
-
-vi.mock('@/lib/calendar/request', () => ({
-  parseCommunityIdFromQueryOrHeader: parseCommunityIdFromQueryOrHeaderMock,
-}));
-
 import { GET } from '../../src/app/api/v1/calendar/google/callback/route';
 
-describe('Google Calendar callback route', () => {
+const MEMBERSHIP = {
+  userId: 'session-user-1',
+  communityId: 42,
+  role: 'owner' as const,
+  isAdmin: false,
+  isUnitOwner: true,
+  displayTitle: 'Unit Owner',
+  communityType: 'condo_718' as const,
+};
+
+const CONNECT_RESULT = {
+  provider: 'google' as const,
+  userId: 'session-user-1',
+  syncedAt: '2026-01-01T00:00:00.000Z',
+};
+
+function callbackReq(
+  query: string,
+  headers?: Record<string, string>,
+): NextRequest {
+  return new NextRequest(
+    `http://localhost:3000/api/v1/calendar/google/callback${query}`,
+    { headers: { ...(headers ?? {}) } },
+  );
+}
+
+describe('GET /api/v1/calendar/google/callback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('session-user-1');
     parseCommunityIdFromQueryOrHeaderMock.mockReturnValue(42);
-    requireCommunityMembershipMock.mockResolvedValue({
-      userId: 'session-user-1',
-      communityId: 42,
-      communityType: 'condo_718',
-      permissions: { resources: { calendar_sync: { read: true, write: true } } },
-    });
+    requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
     requireCalendarSyncEnabledForMembershipMock.mockReturnValue(undefined);
     requireCalendarSyncWritePermissionMock.mockReturnValue(undefined);
     validateOAuthStateMock.mockReturnValue(undefined);
+    completeGoogleCalendarConnectMock.mockResolvedValue(CONNECT_RESULT);
   });
 
-  it('completes the OAuth flow and returns 200', async () => {
-    completeGoogleCalendarConnectMock.mockResolvedValue({ connected: true });
-
-    const response = await GET(
-      new NextRequest(
-        'http://localhost:3000/api/v1/calendar/google/callback?communityId=42&code=auth-code&state=valid-state',
-        { headers: { 'x-request-id': 'test-123' } },
-      ),
+  it('completes the OAuth flow and returns 200 (happy path)', async () => {
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state', {
+        'x-request-id': 'req-abc',
+      }),
     );
-    const json = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(json.data).toEqual({ connected: true });
-    expect(validateOAuthStateMock).toHaveBeenCalledWith('valid-state', 42, 'session-user-1');
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      data: { provider: string; userId: string; syncedAt: string | null };
+    };
+    expect(json.data).toEqual(CONNECT_RESULT);
+    expect(validateOAuthStateMock).toHaveBeenCalledWith(
+      'valid-state',
+      42,
+      'session-user-1',
+    );
+    expect(requireCommunityMembershipMock).toHaveBeenCalledWith(
+      42,
+      'session-user-1',
+    );
+    expect(requireCalendarSyncEnabledForMembershipMock).toHaveBeenCalledWith(
+      MEMBERSHIP,
+    );
+    expect(requireCalendarSyncWritePermissionMock).toHaveBeenCalledWith(
+      MEMBERSHIP,
+    );
     expect(completeGoogleCalendarConnectMock).toHaveBeenCalledWith(
       42,
       'session-user-1',
       'auth-code',
-      'test-123',
+      'req-abc',
     );
   });
 
-  it('returns 400 when code query parameter is missing', async () => {
-    const response = await GET(
-      new NextRequest(
-        'http://localhost:3000/api/v1/calendar/google/callback?communityId=42&state=valid-state',
-      ),
-    );
-
-    expect(response.status).toBe(400);
-  });
-
-  it('returns 400 when OAuth state is invalid', async () => {
-    validateOAuthStateMock.mockImplementation(() => {
-      throw new BadRequestError('Invalid OAuth state');
+  it('returns 200 with syncedAt = null when the service reports no prior sync', async () => {
+    completeGoogleCalendarConnectMock.mockResolvedValueOnce({
+      provider: 'google',
+      userId: 'session-user-1',
+      syncedAt: null,
     });
 
-    const response = await GET(
-      new NextRequest(
-        'http://localhost:3000/api/v1/calendar/google/callback?communityId=42&code=auth-code&state=bad-state',
-      ),
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state'),
     );
 
-    expect(response.status).toBe(400);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      data: { syncedAt: string | null };
+    };
+    expect(json.data.syncedAt).toBeNull();
   });
 
-  it('returns 401 when user is not authenticated', async () => {
+  it('returns 401 when the user is not authenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
-    const response = await GET(
-      new NextRequest(
-        'http://localhost:3000/api/v1/calendar/google/callback?communityId=42&code=auth-code&state=valid-state',
-      ),
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state'),
     );
 
-    expect(response.status).toBe(401);
+    expect(res.status).toBe(401);
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the code query parameter is missing', async () => {
+    const res = await GET(callbackReq('?communityId=42&state=valid-state'));
+
+    expect(res.status).toBe(400);
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the code query parameter is whitespace-only', async () => {
+    const res = await GET(
+      callbackReq('?communityId=42&code=%20%20&state=valid-state'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when OAuth state validation fails', async () => {
+    validateOAuthStateMock.mockImplementationOnce(() => {
+      throw new BadRequestError('Invalid OAuth state parameter');
+    });
+
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=bad-state'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when the caller is not a member of the resolved community', async () => {
+    requireCommunityMembershipMock.mockRejectedValueOnce(
+      new ForbiddenError('Not a member of this community'),
+    );
+
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state'),
+    );
+
+    expect(res.status).toBe(403);
+    expect(requireCalendarSyncEnabledForMembershipMock).not.toHaveBeenCalled();
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when calendar sync is disabled for the community type', async () => {
+    requireCalendarSyncEnabledForMembershipMock.mockImplementationOnce(() => {
+      throw new ForbiddenError('Calendar sync is not enabled for this community type');
+    });
+
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state'),
+    );
+
+    expect(res.status).toBe(403);
+    expect(requireCalendarSyncWritePermissionMock).not.toHaveBeenCalled();
+    expect(validateOAuthStateMock).not.toHaveBeenCalled();
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when calendar_sync.write permission is denied', async () => {
+    requireCalendarSyncWritePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError('Insufficient permissions');
+    });
+
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state'),
+    );
+
+    expect(res.status).toBe(403);
+    expect(validateOAuthStateMock).not.toHaveBeenCalled();
+    expect(completeGoogleCalendarConnectMock).not.toHaveBeenCalled();
+  });
+
+  it('forwards a null x-request-id when the header is absent', async () => {
+    const res = await GET(
+      callbackReq('?communityId=42&code=auth-code&state=valid-state'),
+    );
+
+    expect(res.status).toBe(200);
+    const call = completeGoogleCalendarConnectMock.mock.calls[0];
+    expect(call[3]).toBeNull();
   });
 });
