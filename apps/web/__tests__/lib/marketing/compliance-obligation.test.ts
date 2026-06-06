@@ -9,10 +9,14 @@ describe('getComplianceObligation', () => {
     expect(r.deadline).toBeNull();
   });
 
-  it('condo 25–149 units is required by Jan 1, 2026', () => {
+  it('condo 25–149 units is required now (deadline now in the past)', () => {
     const r = getComplianceObligation({ type: 'condo', count: 84 });
     expect(r.status).toBe('required-2026');
     expect(r.required).toBe(true);
+    expect(r.headline).toBe('Required now');
+    expect(r.detail).toBe(
+      'Condominium associations of 25–149 units are required — as of January 1, 2026 — to maintain a compliant website with document posting, meeting notices, and an owner portal.',
+    );
     expect(r.deadline).toBe('January 1, 2026');
   });
 

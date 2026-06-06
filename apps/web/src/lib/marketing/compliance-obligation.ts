@@ -3,7 +3,7 @@
  * Florida website-compliance obligation. General information for the landing
  * page checker — NOT legal advice (see .claude/rules/florida-compliance.md).
  * Thresholds mirror the facts used elsewhere in the app: condos §718.111(12)(g)
- * (150+ already required, 25–149 by Jan 1 2026, under 25 exempt); HOAs
+ * (150+ already required, 25–149 required as of Jan 1 2026, under 25 exempt); HOAs
  * §720.303 (100+ parcels required, under 100 exempt).
  */
 export type AssociationType = 'condo' | 'hoa';
@@ -49,9 +49,9 @@ export function getComplianceObligation({
       return {
         required: true,
         status: 'required-2026',
-        headline: 'Required by January 1, 2026',
+        headline: 'Required now',
         detail:
-          'Condominium associations of 25–149 units must have a compliant website — document posting, meeting notices, and an owner portal — by January 1, 2026.',
+          'Condominium associations of 25–149 units are required — as of January 1, 2026 — to maintain a compliant website with document posting, meeting notices, and an owner portal.',
         deadline: JAN_2026,
       };
     }
