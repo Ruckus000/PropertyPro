@@ -18,20 +18,17 @@ export function HeroSection() {
           <h1 className="mk-display mk-h1">
             Run your whole portfolio
             <br />
-            compliant by <span className="mk-swash">2026.</span>
+            compliant <span className="mk-swash">by default.</span>
           </h1>
           <p className="mk-lede mk-muted">
-            Florida law now requires every association you manage to post
-            records, notices, and budgets online. PropertyPro keeps your entire
-            book of business compliant by default — from one dashboard, across
-            every community.
+            Florida law requires every association you manage to post records,
+            notices, and budgets online. PropertyPro keeps your entire book of
+            business compliant by default — from one dashboard, across every
+            community.
           </p>
           <div className="mk-hero-cta">
             <a href="/signup" className="mk-pill mk-pill-primary">
               Get your portfolio online →
-            </a>
-            <a href="#how" className="mk-pill mk-pill-ghost">
-              ▶ See a 2-min tour
             </a>
           </div>
           <p className="mk-hero-sub">

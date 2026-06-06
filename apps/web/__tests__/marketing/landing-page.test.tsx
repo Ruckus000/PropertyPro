@@ -50,6 +50,20 @@ describe('marketing landing page', () => {
       expect(html).toContain('portfolio');
     });
 
+    it('frames the deadline copy in present tense', () => {
+      const html = renderToStaticMarkup(<HeroSection />);
+      expect(html).toContain('compliant by');
+      expect(html).toContain('default');
+      // Stale future-deadline framing should be gone.
+      expect(html).not.toContain('2026');
+    });
+
+    it('renders only the primary CTA (no 2-min tour button)', () => {
+      const html = renderToStaticMarkup(<HeroSection />);
+      expect(html).toContain('Get your portfolio online');
+      expect(html).not.toContain('2-min tour');
+    });
+
     it('welcomes self-managed boards as a secondary line', () => {
       const html = renderToStaticMarkup(<HeroSection />);
       // case-insensitive: rendered copy is "Self-managed boards…"
