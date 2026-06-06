@@ -51,7 +51,7 @@ const TIERS: Tier[] = [
       'Centralized compliance reporting',
       'Volume pricing & dedicated onboarding',
     ],
-    cta: { label: 'Talk to sales', href: '/signup' },
+    cta: { label: 'Talk to sales', href: 'mailto:support@getpropertypro.com?subject=Portfolio%20sales%20inquiry' },
     featured: true,
     ribbon: 'Recommended for portfolios',
   },

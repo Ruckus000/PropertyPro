@@ -139,7 +139,14 @@ describe('marketing landing page', () => {
     it('includes the pricing anchor id and signup CTA', () => {
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('id="pricing"');
+      // Essentials/Professional "Start free trial" CTAs still point to signup.
       expect(html).toContain('href="/signup"');
+    });
+
+    it('points the Property Manager "Talk to sales" CTA at a mailto', () => {
+      const html = renderToStaticMarkup(<PricingSection />);
+      expect(html).toContain('Talk to sales');
+      expect(html).toContain('mailto:support@getpropertypro.com');
     });
   });
 
@@ -251,6 +258,13 @@ describe('FinalCtaSection', () => {
   it('renders a closing CTA linking to signup', () => {
     const html = renderToStaticMarkup(<FinalCtaSection />);
     expect(html).toContain('Beat the deadline');
+    // "Get your portfolio online" still points to signup.
     expect(html).toContain('href="/signup"');
+  });
+
+  it('points the "Talk to us" CTA at a mailto', () => {
+    const html = renderToStaticMarkup(<FinalCtaSection />);
+    expect(html).toContain('Talk to us');
+    expect(html).toContain('mailto:support@getpropertypro.com');
   });
 });

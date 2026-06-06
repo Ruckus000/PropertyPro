@@ -16,7 +16,7 @@ export function FinalCtaSection() {
               Get your portfolio online →
             </a>
             <a
-              href="/signup"
+              href="mailto:support@getpropertypro.com?subject=Talk%20to%20PropertyPro"
               className="mk-pill mk-pill-ghost"
               style={{ background: 'transparent', color: '#fff', borderColor: 'rgba(255,255,255,.5)' }}
             >
