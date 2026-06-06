@@ -11,9 +11,9 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: 'PropertyPro Florida — Florida Condo & HOA Compliance for Property Managers',
+  title: 'PropertyPro Florida — Condo & HOA Compliance Software',
   description:
-    'Run a whole portfolio of Florida condo & HOA associations compliant by default. Meet §718 and §720 website requirements before the January 2026 deadline — document management, meeting notices, owner portals, and one centralized compliance view.',
+    'Run a portfolio of Florida condo & HOA associations compliant by default — document posting, meeting notices, owner portals, and one compliance view.',
   keywords: [
     'Florida property management software',
     'Florida condo compliance',
