@@ -18,14 +18,25 @@ export function ComplianceChecker() {
   const [error, setError] = useState<string | null>(null);
 
   function onCheck() {
-    const n = Number.parseInt(count, 10);
-    if (!Number.isInteger(n) || n < 1) {
+    const trimmed = count.trim();
+    if (!/^\d+$/.test(trimmed)) {
       setResult(null);
-      setError('Please enter a number of units or parcels.');
+      setError('Please enter a whole number of units or parcels.');
       return;
     }
-    setError(null);
-    setResult(getComplianceObligation({ type, count: n }));
+    const n = Number.parseInt(trimmed, 10);
+    if (n < 1) {
+      setResult(null);
+      setError('Please enter a whole number of units or parcels.');
+      return;
+    }
+    try {
+      setError(null);
+      setResult(getComplianceObligation({ type, count: n }));
+    } catch {
+      setResult(null);
+      setError('We couldn’t check that. Please try again.');
+    }
   }
 
   return (
@@ -44,7 +55,11 @@ export function ComplianceChecker() {
         <select
           id="mk-assoc-type"
           value={type}
-          onChange={(e) => setType(e.target.value as AssociationType)}
+          onChange={(e) => {
+            setType(e.target.value as AssociationType);
+            setResult(null);
+            setError(null);
+          }}
         >
           <option value="condo">Condo</option>
           <option value="hoa">HOA</option>
@@ -58,7 +73,11 @@ export function ComplianceChecker() {
           inputMode="numeric"
           placeholder="e.g. 84 units"
           value={count}
-          onChange={(e) => setCount(e.target.value)}
+          onChange={(e) => {
+            setCount(e.target.value);
+            setResult(null);
+            setError(null);
+          }}
         />
 
         <button type="button" className="mk-pill mk-pill-primary" onClick={onCheck}>
@@ -72,11 +91,20 @@ export function ComplianceChecker() {
         ) : result ? (
           <>
             <b>{result.headline}.</b> {result.detail}
+            {result.required ? (
+              <a
+                href="/signup"
+                className="mk-pill mk-pill-primary"
+                style={{ display: 'inline-block', marginTop: 16 }}
+              >
+                Get compliant →
+              </a>
+            ) : null}
           </>
         ) : (
           <>
-            Most <b>condos with 25+ units</b> must be fully compliant by{' '}
-            <b>January 1, 2026</b>. The penalty for falling behind:
+            Most <b>condos with 25+ units</b> are now required to maintain a
+            compliant website. The penalty for falling behind:
             <span className="mk-pen">
               <span className="mk-big">$50</span>
               <span style={{ opacity: 0.85 }}>per day, per association</span>
