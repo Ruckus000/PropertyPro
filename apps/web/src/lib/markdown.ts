@@ -67,11 +67,15 @@ function escapeHtml(text: string): string {
 }
 
 /** Allow root-relative, fragment, http(s), and mailto URLs only. Anything
- *  else (e.g. `javascript:`) collapses to `#`. The result is HTML-escaped. */
+ *  else (e.g. `javascript:`) collapses to `#`.
+ *
+ *  NOTE: the only caller (processInline) has ALREADY run escapeHtml over the
+ *  whole text, so `url` arrives HTML-escaped. We must NOT escape again or `&`
+ *  in query strings double-encodes to `&amp;amp;`. */
 function sanitizeHref(url: string): string {
   const trimmed = url.trim();
-  if (/^(\/|#)/.test(trimmed)) return escapeHtml(trimmed);
-  if (/^(https?:|mailto:)/i.test(trimmed)) return escapeHtml(trimmed);
+  if (/^(\/|#)/.test(trimmed)) return trimmed;
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
   return '#';
 }
 

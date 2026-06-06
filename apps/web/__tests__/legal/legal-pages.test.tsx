@@ -107,6 +107,12 @@ describe('renderMarkdown — href sanitization', () => {
       '<a href="https://example.com" class="text-content-link underline hover:text-interactive">our site</a>',
     );
   });
+
+  it('single-encodes & in URL query strings (no double-encoding)', () => {
+    const html = renderMarkdown('[x](https://e.com?a=1&b=2)');
+    expect(html).toContain('href="https://e.com?a=1&amp;b=2"');
+    expect(html).not.toContain('&amp;amp;');
+  });
 });
 
 // ---------------------------------------------------------------------------

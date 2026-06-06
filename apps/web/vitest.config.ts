@@ -10,6 +10,10 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      // `server-only` is provided by Next at build time and has no standalone
+      // module in node_modules; alias it to a no-op stub so files guarded with
+      // `import 'server-only'` remain importable under vitest.
+      'server-only': path.resolve(__dirname, '__tests__/stubs/server-only.ts'),
       '@': path.resolve(__dirname, 'src'),
       '@propertypro/db': path.resolve(__dirname, '../../packages/db/src'),
       '@propertypro/email': path.resolve(__dirname, '../../packages/email/src'),
