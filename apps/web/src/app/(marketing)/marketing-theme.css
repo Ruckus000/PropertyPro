@@ -14,13 +14,13 @@
   background:var(--mk-cream); color:var(--mk-ink);
   font-family:var(--font-sans),Inter,system-ui,sans-serif; line-height:1.55;
 }
-html:has(.marketing-theme){scroll-behavior:smooth}
+@media(prefers-reduced-motion:no-preference){html:has(.marketing-theme){scroll-behavior:smooth}}
 
 /* layout */
 .marketing-theme .mk-wrap{max-width:var(--mk-maxw);margin:0 auto;padding:0 var(--mk-gutter);width:100%}
 .marketing-theme .mk-band{padding:64px 0;position:relative}
 .marketing-theme .mk-band-alt{background:linear-gradient(180deg,var(--mk-cream),var(--mk-cream-2))}
-.marketing-theme section[id]{scroll-margin-top:80px}
+.marketing-theme [id]{scroll-margin-top:80px}
 .marketing-theme .mk-sec-head{max-width:40em}
 .marketing-theme .mk-sec-head h2{font-size:46px;margin:12px 0}
 .marketing-theme .mk-sec-head p{font-size:18px}
@@ -75,7 +75,7 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 .marketing-theme .mk-sun{position:absolute;top:-160px;right:-160px;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(227,169,60,.20),rgba(194,83,58,.05) 55%,transparent 70%);pointer-events:none}
 
 /* device / portfolio + product panels */
-.marketing-theme .mk-device{background:var(--mk-card);border:1px solid var(--mk-line);border-radius:22px;box-shadow:var(--mk-shadow);overflow:hidden;position:relative}
+.marketing-theme .mk-device{background:var(--mk-card);border:1px solid var(--mk-line);border-radius:22px;box-shadow:var(--mk-shadow);overflow:hidden;position:relative;max-width:100%}
 .marketing-theme .mk-device-top{height:44px;background:#fff;border-bottom:1px solid var(--mk-line);display:flex;align-items:center;gap:7px;padding:0 18px}
 .marketing-theme .mk-device-top i{width:10px;height:10px;border-radius:50%;display:block}
 .marketing-theme .mk-device-body{padding:22px}
@@ -186,4 +186,9 @@ html:has(.marketing-theme){scroll-behavior:smooth}
   .marketing-theme .mk-nav-links{display:none}
   .marketing-theme .mk-nav-right{display:none}
   .marketing-theme .mk-nav-toggle{display:inline-flex}
+}
+/* small-screen overflow safety — keep hero product card / device from forcing horizontal scroll at 320–480px */
+@media(max-width:480px){
+  .marketing-theme .mk-device,.marketing-theme .mk-card,.marketing-theme .mk-checker{max-width:100%}
+  .marketing-theme .mk-float{right:0;max-width:calc(100% - 14px)}
 }
