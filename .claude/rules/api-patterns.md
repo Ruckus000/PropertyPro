@@ -15,6 +15,29 @@ Every API route handler must:
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail
 
+## Tenant scoping — `tenantScope` (Plan B2)
+
+`communityId` is resolved from the middleware `x-community-id` header
+(authoritative); any `communityId` in the query/body is a cross-checked
+redundant value via `resolveEffectiveCommunityId(req, explicit)`.
+
+**Recommended for new single-tenant routes:** declare `tenantScope` on the
+contract and let the runner resolve + inject `communityId` instead of calling
+`resolveEffectiveCommunityId` by hand. Canonical location by intent:
+
+- `tenantScope: { in: 'query' }` — top-level reads (GET): `?communityId=…`
+- `tenantScope: { in: 'body' }` — top-level mutations carrying the id in the body
+  (POST/PATCH/PUT). `in: 'query'` is also valid for bodyless DELETE/PATCH.
+- `tenantScope: { in: 'path', field: 'id' }` — nested `/communities/[id]/…`
+  routes; the path segment is authoritative.
+
+When you declare a `query`/`body` `tenantScope`, the handler receives
+`communityId` in its input and you **must import `runRoute` from
+`@/lib/api/run-route`** (the app-bound wrapper that injects the resolver), not
+from `@propertypro/api-contract`. `guard:tenant-scope` enforces well-formedness
+and the import. Routes that resolve tenancy differently (PM cross-community,
+token-auth, header-only) should NOT declare `tenantScope`.
+
 ## List Endpoints — Pagination Contract (ADR-003 / Plan A2 / Plan B3)
 
 Any handler that returns an array of rows MUST paginate via the canonical

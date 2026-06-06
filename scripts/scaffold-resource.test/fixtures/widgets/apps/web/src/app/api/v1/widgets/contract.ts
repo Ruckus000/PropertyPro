@@ -40,4 +40,8 @@ export const widgetsListContract = defineRoute({
   response: widgetItemSchema,
   paginated: true,
   permission: { resource: 'documents', action: 'read' },
+  // Plan B2: the runner resolves + injects `communityId` from the query.
+  // Because this is a query/body scope, the route imports `runRoute` from
+  // the app-bound `@/lib/api/run-route` (see ./route.ts).
+  tenantScope: { in: 'query' },
 });

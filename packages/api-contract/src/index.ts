@@ -26,6 +26,7 @@ export type {
   RouteContract,
   RoutePermission,
   RouteRequestSchemas,
+  RouteTenantScope,
 } from './define-route';
 export { defineRoute } from './define-route';
 
@@ -45,10 +46,12 @@ export type {
 export { ContractValidationError, isContractValidationError } from './errors';
 
 export type {
+  AnyRouteContract,
   RouteHandlerInput,
   RouteHandlerOutput,
   RouteHandlerFn,
   WrappedRouteHandler,
   NextRouteContext,
+  RunRouteOptions,
 } from './run-route';
 export { runRoute } from './run-route';

@@ -6,6 +6,7 @@
  * { data: T } envelope.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
 
 const bannerKey = ['pm', 'site-setup-banner'] as const;
 
@@ -13,10 +14,11 @@ export function useSiteSetupBannerDismissed() {
   return useQuery<boolean>({
     queryKey: bannerKey,
     queryFn: async ({ signal }) => {
-      const res = await fetch('/api/v1/pm/site-setup-banner', { signal });
-      if (!res.ok) throw new Error(`Request failed (HTTP ${res.status})`);
-      const body = (await res.json()) as { data: { dismissed: boolean } };
-      return body.data.dismissed;
+      const { dismissed } = await requestJson<{ dismissed: boolean }>(
+        '/api/v1/pm/site-setup-banner',
+        { signal },
+      );
+      return dismissed;
     },
   });
 }
@@ -25,11 +27,10 @@ export function useDismissSiteSetupBanner() {
   const qc = useQueryClient();
   return useMutation<void, Error, void>({
     mutationFn: async () => {
-      const res = await fetch('/api/v1/pm/site-setup-banner', {
+      await requestJson<{ dismissed: true }>('/api/v1/pm/site-setup-banner', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
       });
-      if (!res.ok) throw new Error(`Request failed (HTTP ${res.status})`);
     },
     // Optimistically mark dismissed so the banner disappears immediately.
     onMutate: async () => {

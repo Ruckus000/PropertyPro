@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { RouteContract } from './define-route';
+import type { RouteContract, RouteTenantScope } from './define-route';
 import type { PaginationResult } from './pagination';
 
 /**
@@ -21,7 +21,8 @@ export type Infer<C> =
     z.ZodTypeAny | undefined,
     z.ZodTypeAny | undefined,
     infer TResponse,
-    infer TPaginated
+    infer TPaginated,
+    RouteTenantScope | undefined
   >
     ? TPaginated extends true
       ? { data: z.infer<TResponse>[]; pagination: PaginationResult }
@@ -35,7 +36,8 @@ export type InferQuery<C> =
     infer TQuery,
     z.ZodTypeAny | undefined,
     z.ZodTypeAny,
-    boolean
+    boolean,
+    RouteTenantScope | undefined
   >
     ? TQuery extends z.ZodTypeAny
       ? z.infer<TQuery>
@@ -49,7 +51,8 @@ export type InferBody<C> =
     z.ZodTypeAny | undefined,
     infer TBody,
     z.ZodTypeAny,
-    boolean
+    boolean,
+    RouteTenantScope | undefined
   >
     ? TBody extends z.ZodTypeAny
       ? z.infer<TBody>
@@ -63,7 +66,8 @@ export type InferParams<C> =
     z.ZodTypeAny | undefined,
     z.ZodTypeAny | undefined,
     z.ZodTypeAny,
-    boolean
+    boolean,
+    RouteTenantScope | undefined
   >
     ? TParams extends z.ZodTypeAny
       ? z.infer<TParams>

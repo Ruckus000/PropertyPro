@@ -57,7 +57,11 @@ describe('useDismissSiteSetupBanner', () => {
   });
 
   it('rolls back the optimistic dismissal on error', async () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: false, status: 500 });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { message: 'server error' } }),
+    });
     const { client, wrapper } = makeWrapper();
     client.setQueryData(['pm', 'site-setup-banner'], false);
 

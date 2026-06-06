@@ -5,7 +5,7 @@
  * `./contract.ts` for schemas and auth-chain rationale.
  */
 import crypto from 'node:crypto';
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
 import {
   NEW_COMMUNITY_ROLES,
@@ -19,7 +19,6 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
@@ -56,9 +55,8 @@ async function getCommunityType(communityId: number): Promise<CommunityType> {
 }
 
 export const GET = withErrorHandler(
-  runRoute(residentsListContract, async ({ query, req }) => {
+  runRoute(residentsListContract, async ({ req, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();
-    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'residents', 'read');
 
@@ -84,8 +82,7 @@ export const GET = withErrorHandler(
 );
 
 export const POST = withErrorHandler(
-  runRoute(residentsCreateContract, async ({ body, req }) => {
-    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+  runRoute(residentsCreateContract, async ({ body, communityId }) => {
     await assertNotDemoGrace(communityId);
     const { email, fullName, phone, role, unitId, isUnitOwner, presetKey } = body;
     const actorUserId = await requireAuthenticatedUserId();
@@ -179,8 +176,7 @@ export const POST = withErrorHandler(
 );
 
 export const PATCH = withErrorHandler(
-  runRoute(residentsUpdateContract, async ({ body, req }) => {
-    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+  runRoute(residentsUpdateContract, async ({ body, communityId }) => {
     await assertNotDemoGrace(communityId);
     const {
       userId,
@@ -319,8 +315,7 @@ export const PATCH = withErrorHandler(
 );
 
 export const DELETE = withErrorHandler(
-  runRoute(residentsDeleteContract, async ({ body, req }) => {
-    const communityId = resolveEffectiveCommunityId(req, body.communityId);
+  runRoute(residentsDeleteContract, async ({ body, communityId }) => {
     await assertNotDemoGrace(communityId);
     const { userId } = body;
     const actorUserId = await requireAuthenticatedUserId();

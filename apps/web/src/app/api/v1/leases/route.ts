@@ -7,22 +7,23 @@
  * response modeling, and the `leases` permission-placeholder note.
  *
  * Authorization invariants (preserved verbatim):
+ *   `communityId` is resolved + injected by the runner from the contract's
+ *   `tenantScope` (Plan B2): GET/DELETE → query, POST/PATCH → body. The
+ *   reconciliation against the `x-community-id` header is unchanged — it now
+ *   lives in the runner (`@/lib/api/run-route`) instead of an in-handler
+ *   `resolveEffectiveCommunityId` call. Per-method chain:
  *   GET    — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, query.communityId)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
  *   POST   — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, body.communityId)
  *          → assertNotDemoGrace (BEFORE membership — corpus rule 2)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
  *   PATCH  — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, body.communityId)
  *          → assertNotDemoGrace (BEFORE membership)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
  *   DELETE — requireAuthenticatedUserId
- *          → resolveEffectiveCommunityId(req, query.communityId)
  *          → assertNotDemoGrace (BEFORE membership)
  *          → requireCommunityMembership
  *          → requireApartmentCommunity
@@ -32,14 +33,13 @@
  * - logAuditEvent on every mutation
  * - Apartment-only feature gate (AGENTS #34)
  */
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   getExpiringLeases,
   getRenewalChain,
@@ -192,10 +192,9 @@ function ensureRenewalContinuity(
 // ---------------------------------------------------------------------------
 
 export const GET = withErrorHandler(
-  runRoute(leasesGetContract, async ({ query, req }) => {
+  runRoute(leasesGetContract, async ({ req, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();
 
-    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
 
@@ -251,10 +250,9 @@ export const GET = withErrorHandler(
 // ---------------------------------------------------------------------------
 
 export const POST = withErrorHandler(
-  runRoute(leasesPostContract, async ({ body: payload, req }) => {
+  runRoute(leasesPostContract, async ({ body: payload, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();
 
-    const communityId = resolveEffectiveCommunityId(req, payload.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
@@ -387,11 +385,10 @@ export const POST = withErrorHandler(
 // ---------------------------------------------------------------------------
 
 export const PATCH = withErrorHandler(
-  runRoute(leasesPatchContract, async ({ body, req }) => {
+  runRoute(leasesPatchContract, async ({ body, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();
 
-    const { id, communityId: rawCommunityId, ...fields } = body;
-    const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
+    const { id, communityId: _communityId, ...fields } = body;
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
@@ -511,10 +508,9 @@ export const PATCH = withErrorHandler(
 // ---------------------------------------------------------------------------
 
 export const DELETE = withErrorHandler(
-  runRoute(leasesDeleteContract, async ({ query, req }) => {
+  runRoute(leasesDeleteContract, async ({ query, communityId }) => {
     const actorUserId = await requireAuthenticatedUserId();
 
-    const communityId = resolveEffectiveCommunityId(req, query.communityId);
     await assertNotDemoGrace(communityId);
     const { id } = query;
     const membership = await requireCommunityMembership(communityId, actorUserId);

@@ -61,12 +61,12 @@ describe('useUnitSearch', () => {
     );
   });
 
-  it('throws when the search route returns an error', async () => {
-    mockFetch.mockReturnValue(jsonResponse({ error: 'nope' }, 403));
+  it('throws the server error message when the search route returns an error', async () => {
+    mockFetch.mockReturnValue(jsonResponse({ error: { message: 'nope' } }, 403));
     const { result } = renderHook(() => useUnitSearch(7));
 
     await expect(result.current('10', new AbortController().signal)).rejects.toThrow(
-      'Search failed',
+      'nope',
     );
   });
 });

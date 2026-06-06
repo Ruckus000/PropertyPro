@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { CommunityType } from '@propertypro/shared';
+import { requestJson } from '@/lib/api/request-json';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -121,21 +122,7 @@ async function fetchPortfolioDashboard(
   const qs = params.toString();
   const url = `/api/v1/pm/dashboard/summary${qs ? `?${qs}` : ''}`;
 
-  const res = await fetch(url);
-  const json = (await res.json()) as {
-    data?: RawDashboardResponse;
-    error?: { message?: string };
-  };
-
-  if (!res.ok) {
-    throw new Error(json.error?.message ?? 'Failed to load portfolio dashboard');
-  }
-
-  if (!json.data) {
-    throw new Error('Missing response payload');
-  }
-
-  const raw = json.data;
+  const raw = await requestJson<RawDashboardResponse>(url);
   return {
     kpis: transformKpis(raw.kpis),
     communities: raw.communities.map((c) => {

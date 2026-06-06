@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
 
 export interface MoveChecklistRow {
   id: number;
@@ -31,24 +32,16 @@ async function fetchChecklists(
   if (filters?.type) params.set('type', filters.type);
   if (filters?.completed !== undefined) params.set('completed', String(filters.completed));
 
-  const res = await fetch(`/api/v1/move-checklists?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch checklists');
-  const json = await res.json();
-  if (!json.data) throw new Error('Missing response data');
-  return json.data;
+  return requestJson<MoveChecklistRow[]>(`/api/v1/move-checklists?${params}`);
 }
 
 async function fetchChecklist(
   communityId: number,
   checklistId: number,
 ): Promise<MoveChecklistRow> {
-  const res = await fetch(
+  return requestJson<MoveChecklistRow>(
     `/api/v1/move-checklists/${checklistId}?communityId=${communityId}`,
   );
-  if (!res.ok) throw new Error('Failed to fetch checklist');
-  const json = await res.json();
-  if (!json.data) throw new Error('Missing response data');
-  return json.data;
 }
 
 export function useMoveChecklists(
@@ -84,7 +77,7 @@ export function useUpdateChecklistStep(communityId: number, checklistId: number)
       completed: boolean;
       notes?: string;
     }) => {
-      const res = await fetch(
+      return requestJson<MoveChecklistRow>(
         `/api/v1/move-checklists/${checklistId}/steps/${stepKey}`,
         {
           method: 'PATCH',
@@ -92,8 +85,6 @@ export function useUpdateChecklistStep(communityId: number, checklistId: number)
           body: JSON.stringify({ communityId, completed, notes }),
         },
       );
-      if (!res.ok) throw new Error('Failed to update step');
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -117,7 +108,7 @@ export function useTriggerStepAction(communityId: number, checklistId: number) {
       stepKey: string;
       action: string;
     }) => {
-      const res = await fetch(
+      return requestJson(
         `/api/v1/move-checklists/${checklistId}/steps/${stepKey}/action`,
         {
           method: 'POST',
@@ -125,8 +116,6 @@ export function useTriggerStepAction(communityId: number, checklistId: number) {
           body: JSON.stringify({ communityId, action }),
         },
       );
-      if (!res.ok) throw new Error('Failed to trigger action');
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
