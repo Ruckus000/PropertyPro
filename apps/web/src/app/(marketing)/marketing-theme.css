@@ -107,7 +107,7 @@
 .marketing-theme .mk-law{display:flex;gap:16px;padding:18px 0;border-bottom:1px solid var(--mk-line)}
 .marketing-theme .mk-law:last-child{border-bottom:none}
 .marketing-theme .mk-law .mk-n{width:36px;height:36px;border-radius:10px;background:#fbeee1;color:var(--mk-coral-d);display:grid;place-items:center;font-weight:800;flex:0 0 auto;font-family:var(--font-fraunces),serif}
-.marketing-theme .mk-law h4{font-size:17px;font-weight:700}
+.marketing-theme .mk-law h3{font-size:17px;font-weight:700}
 .marketing-theme .mk-checker{background:linear-gradient(140deg,var(--mk-ink),#3a2419);color:#fff;border-radius:20px;padding:34px}
 .marketing-theme .mk-checker .mk-eyebrow{color:var(--mk-gold)}
 .marketing-theme .mk-checker h3{color:#fff;font-size:27px;margin:10px 0 16px}
@@ -160,7 +160,7 @@
 /* faq */
 .marketing-theme .mk-faq{max-width:860px;margin:38px auto 0}
 .marketing-theme .mk-qa{padding:24px 26px;margin-bottom:13px}
-.marketing-theme .mk-qa h4{font-size:17px;font-weight:700;margin:0}
+.marketing-theme .mk-qa h3{font-size:17px;font-weight:700;margin:0}
 .marketing-theme .mk-qa-toggle{display:flex;width:100%;align-items:center;justify-content:space-between;gap:16px;min-height:44px;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .marketing-theme .mk-qa-glyph{flex:none;font-weight:700;font-size:20px;line-height:1}
 .marketing-theme .mk-qa p{font-size:15px;margin-top:9px}

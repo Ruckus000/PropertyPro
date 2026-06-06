@@ -46,7 +46,7 @@ export function ComplianceUrgencySection() {
                   {l.n}
                 </span>
                 <div>
-                  <h4>{l.title}</h4>
+                  <h3>{l.title}</h3>
                   <p className="mk-muted">{l.body}</p>
                 </div>
               </div>

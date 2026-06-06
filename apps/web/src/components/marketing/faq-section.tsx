@@ -38,7 +38,7 @@ export function FaqSection() {
             const answerId = `faq-answer-${index}`;
             return (
               <div className="mk-card mk-qa" key={item.q}>
-                <h4>
+                <h3>
                   <button
                     type="button"
                     className="mk-qa-toggle"
@@ -51,7 +51,7 @@ export function FaqSection() {
                       {isOpen ? '−' : '+'}
                     </span>
                   </button>
-                </h4>
+                </h3>
                 <p id={answerId} className="mk-muted" hidden={!isOpen}>
                   {item.a}
                 </p>
