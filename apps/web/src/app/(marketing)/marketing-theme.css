@@ -51,6 +51,13 @@ html:has(.marketing-theme){scroll-behavior:smooth}
 .marketing-theme .mk-nav-links a{position:relative;padding:4px 0;text-decoration:none;color:inherit}
 .marketing-theme .mk-nav-links a:hover{color:var(--mk-ink)}
 .marketing-theme .mk-nav-right{display:flex;align-items:center;gap:18px;font-weight:600;font-size:15px}
+.marketing-theme .mk-nav-toggle{display:none;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--mk-line);background:var(--mk-card);color:var(--mk-ink);font-weight:600;font-size:15px;cursor:pointer}
+.marketing-theme .mk-nav-toggle:hover{border-color:var(--mk-coral);color:var(--mk-coral-d)}
+.marketing-theme .mk-mobile-menu{border-bottom:1px solid var(--mk-line);background:var(--mk-card)}
+.marketing-theme .mk-mobile-menu-in{display:flex;flex-direction:column;gap:4px;padding:8px 0 16px}
+.marketing-theme .mk-mobile-menu-in a{display:flex;align-items:center;min-height:44px;padding:0 4px;text-decoration:none;color:var(--mk-ink-soft);font-weight:500;font-size:16px}
+.marketing-theme .mk-mobile-menu-in a:hover{color:var(--mk-ink)}
+.marketing-theme .mk-mobile-menu-in a.mk-pill-primary{justify-content:center;color:#fff;margin-top:8px}
 
 /* hero */
 .marketing-theme .mk-hero{padding:62px 0 40px;overflow:hidden}
@@ -163,7 +170,9 @@ html:has(.marketing-theme){scroll-behavior:smooth}
   .marketing-theme .mk-pulse{animation:mk-pulse 2s infinite}
   .marketing-theme .mk-nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:-2px;height:2px;background:var(--mk-coral);transition:right .2s}
   .marketing-theme .mk-nav-links a:hover::after{right:0}
+  .marketing-theme .mk-mobile-menu{animation:mk-menu-in .18s ease}
 }
+@keyframes mk-menu-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @keyframes mk-pulse{0%{box-shadow:0 0 0 0 rgba(47,143,131,.5)}70%{box-shadow:0 0 0 9px rgba(47,143,131,0)}100%{box-shadow:0 0 0 0 rgba(47,143,131,0)}}
 
 /* responsive */
@@ -173,4 +182,6 @@ html:has(.marketing-theme){scroll-behavior:smooth}
   .marketing-theme .mk-steps,.marketing-theme .mk-feat-grid,.marketing-theme .mk-price-grid{grid-template-columns:1fr}
   .marketing-theme .mk-h1{font-size:46px}
   .marketing-theme .mk-nav-links{display:none}
+  .marketing-theme .mk-nav-right{display:none}
+  .marketing-theme .mk-nav-toggle{display:inline-flex}
 }
