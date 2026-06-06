@@ -24,6 +24,20 @@ function rejects(schema: z.ZodTypeAny, value: unknown): boolean {
  * field values (so the result is reachable through the runner for that
  * location). Falls back to `{}` (missing-required). Returns permissive if the
  * schema accepts every location-legal shape.
+ *
+ * Two deliberate limitations of this generic approach (acceptable — the harness
+ * asserts a request is *rejected*, not which field caused it):
+ *   1. The probe sets one field to `bad` and omits the rest; if a *sibling*
+ *      required field is missing, `rejects(schema, obj)` may be true for that
+ *      reason rather than the target field's own constraint. The (a) test still
+ *      gets a real 400; it just doesn't attribute the failure to one field.
+ *   2. A `z.object(...).refine(...)` is a `ZodEffects`, not a `ZodObject`, so it
+ *      classifies as permissive here. No current query/params contract is a
+ *      refined object (refines live on bodies — covered by the whole-schema
+ *      JSON-candidate loop in `synthesizeRejected` — or on individual fields).
+ *      If a refined query/params contract is ever added it will show up as an
+ *      extra `input-permissive` in the coverage report; unwrap ZodEffects here
+ *      at that point.
  */
 function objectFieldLevel(
   schema: z.ZodTypeAny,
@@ -51,9 +65,11 @@ export function synthesizeRejected(
     for (const c of JSON_CANDIDATES) {
       if (rejects(schema, c)) return { ok: true, value: c };
     }
-    // Defensive / effectively unreachable for real routes: `null` (JSON_CANDIDATES[0])
-    // already rejects every z.object body. Kept for non-object body schemas
-    // (z.union/z.intersection) that might accept all scalars.
+    // Reached only for non-object body schemas that accept all of
+    // JSON_CANDIDATES (e.g. `z.unknown()`/`z.any()` bodies → classified
+    // permissive; or a hypothetical z.union/z.intersection). `null`
+    // (JSON_CANDIDATES[0]) already rejects every z.object body above, so the
+    // common path never reaches here.
     return objectFieldLevel(schema, JSON_CANDIDATES);
   }
   // query / params: the schema always receives an object of strings. Only
