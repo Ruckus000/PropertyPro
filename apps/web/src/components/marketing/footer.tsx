@@ -1,11 +1,21 @@
 import React from 'react';
+import type { LegalDocs } from '@/lib/legal-types';
 import { FooterLegalLinks } from './footer-legal-links';
 
 /** Warm marketing footer. Keeps legal links, contact, and the law-firm disclaimer. */
 export function MarketingFooter({
   legalDocs,
 }: {
-  legalDocs?: { terms: string; privacy: string };
+  /**
+   * Pre-rendered legal HTML for the in-page modal. Intentionally OPTIONAL and
+   * passed as a prop (rather than self-fetched) so `MarketingFooter` stays a
+   * pure, synchronous component renderable with no props under
+   * `renderToStaticMarkup` in tests. Marketing pages supply it via
+   * `getLegalDocs()`. When absent (e.g. a page that forgets to pass it, or a
+   * no-JS client), the legal links gracefully degrade to plain navigation to
+   * `/legal/*` — the modal is a progressive enhancement, never the only path.
+   */
+  legalDocs?: LegalDocs;
 } = {}) {
   const year = new Date().getFullYear();
   return (
