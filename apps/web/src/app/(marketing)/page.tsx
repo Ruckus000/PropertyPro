@@ -9,6 +9,7 @@ import { PricingSection } from '@/components/marketing/pricing-section';
 import { FaqSection } from '@/components/marketing/faq-section';
 import { FinalCtaSection } from '@/components/marketing/final-cta-section';
 import { MarketingFooter } from '@/components/marketing/footer';
+import { getLegalDocs } from '@/lib/legal-content';
 
 export default function MarketingLandingPage() {
   return (
@@ -25,7 +26,7 @@ export default function MarketingLandingPage() {
         <FaqSection />
         <FinalCtaSection />
       </main>
-      <MarketingFooter />
+      <MarketingFooter legalDocs={getLegalDocs()} />
     </>
   );
 }

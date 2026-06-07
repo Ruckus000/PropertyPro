@@ -63,6 +63,58 @@ describe('renderMarkdown', () => {
   });
 });
 
+describe('renderMarkdown — marketing variant', () => {
+  it('emits class-less semantic headings', () => {
+    const html = renderMarkdown('# H1\n\n## H2', { variant: 'marketing' });
+    expect(html).toContain('<h1>H1</h1>');
+    expect(html).toContain('<h2>H2</h2>');
+    expect(html).not.toContain('class=');
+  });
+
+  it('emits class-less paragraphs and links', () => {
+    const html = renderMarkdown('See [site](https://example.com).', { variant: 'marketing' });
+    expect(html).toContain('<a href="https://example.com">site</a>');
+    expect(html).toContain('<p>');
+    expect(html).not.toContain('text-content');
+  });
+
+  it('emits class-less lists and horizontal rules', () => {
+    const html = renderMarkdown('- a\n- b\n\n---', { variant: 'marketing' });
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<li>a</li>');
+    expect(html).toContain('<hr />');
+    expect(html).not.toContain('class=');
+  });
+});
+
+describe('renderMarkdown — href sanitization', () => {
+  it('passes through safe schemes and relative/fragment urls', () => {
+    expect(renderMarkdown('[a](https://x.com)')).toContain('href="https://x.com"');
+    expect(renderMarkdown('[a](/legal/privacy)')).toContain('href="/legal/privacy"');
+    expect(renderMarkdown('[a](mailto:x@y.com)')).toContain('href="mailto:x@y.com"');
+    expect(renderMarkdown('[a](#sec)')).toContain('href="#sec"');
+  });
+
+  it('neutralizes javascript: urls to #', () => {
+    const html = renderMarkdown('[a](javascript:alert(1))');
+    expect(html).toContain('href="#"');
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('leaves the documented app-variant link shape byte-identical', () => {
+    const html = renderMarkdown('Visit [our site](https://example.com) now.');
+    expect(html).toContain(
+      '<a href="https://example.com" class="text-content-link underline hover:text-interactive">our site</a>',
+    );
+  });
+
+  it('single-encodes & in URL query strings (no double-encoding)', () => {
+    const html = renderMarkdown('[x](https://e.com?a=1&b=2)');
+    expect(html).toContain('href="https://e.com?a=1&amp;b=2"');
+    expect(html).not.toContain('&amp;amp;');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Legal content file tests
 // ---------------------------------------------------------------------------

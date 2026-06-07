@@ -206,3 +206,36 @@
   .marketing-theme .mk-device,.marketing-theme .mk-card,.marketing-theme .mk-checker{max-width:100%}
   .marketing-theme .mk-float{right:0;max-width:calc(100% - 14px)}
 }
+
+/* legal prose — themed markdown for /legal pages and the footer modal */
+.marketing-theme .mk-prose{color:var(--mk-ink);font-size:16px;line-height:1.7;max-width:46em}
+.marketing-theme .mk-prose h1{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;font-size:40px;letter-spacing:-.01em;line-height:1.1;color:var(--mk-ink);margin:0 0 18px}
+.marketing-theme .mk-prose h2{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;font-size:27px;color:var(--mk-ink);margin:34px 0 12px}
+.marketing-theme .mk-prose h3{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;font-size:21px;color:var(--mk-ink);margin:26px 0 10px}
+.marketing-theme .mk-prose h4,.marketing-theme .mk-prose h5,.marketing-theme .mk-prose h6{font-weight:700;font-size:16px;color:var(--mk-ink);margin:20px 0 8px}
+.marketing-theme .mk-prose p{margin:0 0 16px;color:var(--mk-ink-soft)}
+.marketing-theme .mk-prose a{color:var(--mk-coral-d);text-decoration:underline;text-underline-offset:2px}
+.marketing-theme .mk-prose a:hover{color:var(--mk-coral)}
+.marketing-theme .mk-prose strong{color:var(--mk-ink);font-weight:700}
+.marketing-theme .mk-prose ul{margin:0 0 16px;padding-left:1.4em;list-style:disc;color:var(--mk-ink-soft)}
+.marketing-theme .mk-prose li{margin:6px 0}
+.marketing-theme .mk-prose hr{border:none;border-top:1px solid var(--mk-line);margin:32px 0}
+
+/* legal modal — Radix dialog styled to the marketing theme */
+.marketing-theme .mk-modal-overlay{position:fixed;inset:0;z-index:80;background:rgba(36,23,18,.55)}
+.marketing-theme .mk-modal-content{position:fixed;z-index:81;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,calc(100vw - 32px));max-height:85vh;display:flex;flex-direction:column;background:var(--mk-card);border:1px solid var(--mk-line);border-radius:16px;box-shadow:var(--mk-shadow);overflow:hidden}
+.marketing-theme .mk-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 24px;border-bottom:1px solid var(--mk-line)}
+.marketing-theme .mk-modal-title{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;font-size:22px;color:var(--mk-ink);margin:0}
+.marketing-theme .mk-modal-close{flex:0 0 auto;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;border:1px solid var(--mk-line);background:#fff;color:var(--mk-ink);cursor:pointer}
+.marketing-theme .mk-modal-close:hover{border-color:var(--mk-coral);color:var(--mk-coral-d)}
+.marketing-theme .mk-modal-close:focus-visible{outline:2px solid var(--mk-coral);outline-offset:2px}
+.marketing-theme .mk-modal-close svg{width:18px;height:18px}
+.marketing-theme .mk-modal-body{padding:22px 24px;overflow-y:auto}
+.marketing-theme .mk-modal-body.mk-prose h1{font-size:30px;margin-top:0}
+
+@media(prefers-reduced-motion:no-preference){
+  .marketing-theme .mk-modal-overlay[data-state=open]{animation:mk-fade-in .18s ease}
+  .marketing-theme .mk-modal-content[data-state=open]{animation:mk-modal-in .2s ease}
+}
+@keyframes mk-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes mk-modal-in{from{opacity:0;transform:translate(-50%,-48%) scale(.98)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { MarketingNav } from '@/components/marketing/marketing-nav';
 import { MarketingFooter } from '@/components/marketing/footer';
+import { getLegalDocs } from '@/lib/legal-content';
 
 export const metadata: Metadata = {
   title: 'Community Transparency | PropertyPro Florida',
@@ -98,7 +99,7 @@ export default function TransparencyPage() {
           </div>
         </section>
       </main>
-      <MarketingFooter />
+      <MarketingFooter legalDocs={getLegalDocs()} />
     </>
   );
 }

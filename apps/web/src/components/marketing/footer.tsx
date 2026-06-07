@@ -1,7 +1,12 @@
 import React from 'react';
+import { FooterLegalLinks } from './footer-legal-links';
 
 /** Warm marketing footer. Keeps legal links, contact, and the law-firm disclaimer. */
-export function MarketingFooter() {
+export function MarketingFooter({
+  legalDocs,
+}: {
+  legalDocs?: { terms: string; privacy: string };
+} = {}) {
   const year = new Date().getFullYear();
   return (
     <footer className="mk-footer">
@@ -33,8 +38,7 @@ export function MarketingFooter() {
           </div>
           <div>
             <h5>Legal</h5>
-            <a href="/legal/terms">Terms of Service</a>
-            <a href="/legal/privacy">Privacy Policy</a>
+            <FooterLegalLinks legalDocs={legalDocs} />
           </div>
         </div>
         <div className="mk-foot-bot">
