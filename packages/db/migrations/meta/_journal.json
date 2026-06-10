@@ -113,6 +113,13 @@
       "when": 1781093106119,
       "tag": "0015_role_v3_designation_and_root_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1781093135585,
+      "tag": "0016_role_v3_rls_bilingual",
+      "breakpoints": true
     }
   ]
 }
