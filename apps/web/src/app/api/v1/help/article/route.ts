@@ -19,9 +19,7 @@
  * payload after the outer `{ data }` is unwrapped.
  */
 import { unstable_cache } from 'next/cache';
-import { createElement } from 'react';
-import { MDXRemote } from 'next-mdx-remote';
-import { serialize } from 'next-mdx-remote/serialize';
+import { compileMDX } from 'next-mdx-remote/rsc';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -94,11 +92,20 @@ async function getCompiledArticle(article: HelpArticleSource): Promise<CompiledA
   );
   return unstable_cache(
     async (): Promise<CompiledArticle> => {
-      const source = await serialize(article.rawContent, { parseFrontmatter: true });
+      // Render with compileMDX from next-mdx-remote/rsc (the RSC-native path),
+      // NOT the client <MDXRemote/>. In an App Router route handler, React
+      // resolves under the `react-server` export condition, where the client
+      // hooks dispatcher is null — rendering <MDXRemote/> (which uses useState)
+      // through renderToStaticMarkup throws "Cannot read properties of null
+      // (reading 'useState')". compileMDX returns a hook-free element tree that
+      // renders to static markup safely. Mirrors /help/[category]/[slug]/page.tsx.
+      const { content } = await compileMDX({
+        source: article.rawContent,
+        components: helpMdxComponents,
+        options: { parseFrontmatter: true },
+      });
       const { renderToStaticMarkup } = await import('react-dom/server');
-      const html = renderToStaticMarkup(
-        createElement(MDXRemote, { ...source, components: helpMdxComponents }),
-      );
+      const html = renderToStaticMarkup(content);
 
       return {
         html: sanitizeHelpHtml(html),
