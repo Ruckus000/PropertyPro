@@ -92,6 +92,7 @@ export * from './esign-constants';
 export * from './manager-permissions';
 export * from './manager-presets';
 export * from './default-faqs';
+export * from './role-transition';
 
 // Hybrid 4-role model types
 export const NEW_COMMUNITY_ROLES = ['resident', 'manager', 'pm_admin'] as const;
