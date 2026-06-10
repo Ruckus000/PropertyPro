@@ -69,7 +69,7 @@ function mapLegacyRole(legacyRole: CommunityRole): MappedRole {
         displayTitle: PRESET_METADATA[legacyRole as PresetKey].displayTitle,
       };
     case "property_manager_admin":
-      return { role: "pm_admin", isUnitOwner: false, presetKey: null, displayTitle: "Property Manager Admin" };
+      return { role: "pm_admin", isUnitOwner: false, presetKey: null, displayTitle: "Administrator" };
     default:
       return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
   }

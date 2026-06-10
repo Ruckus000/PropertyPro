@@ -264,7 +264,7 @@ describe('createOnboardingResident', () => {
     );
   });
 
-  it('resolves displayTitle as "Property Manager Admin" for pm_admin role', async () => {
+  it('resolves displayTitle as "Administrator" for pm_admin role', async () => {
     setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
 
     await createOnboardingResident({
@@ -281,7 +281,7 @@ describe('createOnboardingResident', () => {
     expect(mockScopedInsert).toHaveBeenCalledWith(
       userRoles,
       expect.objectContaining({
-        displayTitle: 'Property Manager Admin',
+        displayTitle: 'Administrator',
       }),
     );
   });

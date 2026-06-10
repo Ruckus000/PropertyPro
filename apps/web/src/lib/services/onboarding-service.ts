@@ -244,5 +244,5 @@ function resolveDisplayTitle(
 ): string {
   if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
-  return 'Property Manager Admin';
+  return 'Administrator';
 }
