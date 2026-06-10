@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { RBAC_RESOURCES } from '@propertypro/shared';
-import { useFilteredRegistry } from '../../src/lib/constants/feature-registry';
+import {
+  roleMatchesRegistryItem,
+  useFilteredRegistry,
+} from '../../src/lib/constants/feature-registry';
 
 function buildAccess(overrides: Partial<Record<string, { read: boolean; write: boolean }>> = {}) {
   return Object.fromEntries(
@@ -11,6 +14,20 @@ function buildAccess(overrides: Partial<Record<string, { read: boolean; write: b
     ]),
   ) as never;
 }
+
+describe('roleMatchesRegistryItem', () => {
+  it('bridges transition admin roles to legacy admin-gated registry entries', () => {
+    expect(roleMatchesRegistryItem('manager', ['property_manager_admin'])).toBe(true);
+    expect(roleMatchesRegistryItem('pm_admin', ['cam'])).toBe(true);
+    expect(roleMatchesRegistryItem('property_manager', ['board_president'])).toBe(true);
+    expect(roleMatchesRegistryItem('root_manager', ['site_manager'])).toBe(true);
+  });
+
+  it('does not let legacy admin roles broad-match role-specific registry gates', () => {
+    expect(roleMatchesRegistryItem('board_member', ['property_manager_admin', 'cam'])).toBe(false);
+    expect(roleMatchesRegistryItem('cam', ['property_manager_admin', 'cam'])).toBe(true);
+  });
+});
 
 describe('useFilteredRegistry', () => {
   it('hides read-gated pages for managers without resource access', () => {
@@ -75,6 +92,71 @@ describe('useFilteredRegistry', () => {
 
     const postAnnouncement = result.current.find((item) => item.id === 'action-post-announcement');
     expect(postAnnouncement?.href).toBe('/announcements/new?communityId=42');
+  });
+
+  it('shows admin-gated nav entries to a manager membership (user_role_v2 value)', () => {
+    // Regression: ADMIN_ROLES holds legacy role names, but membership.role is
+    // the user_role_v2 enum value ('manager'). A bare includes() check treated
+    // every manager as a resident and hid admin entries.
+    const { result } = renderHook(() =>
+      useFilteredRegistry(
+        'manager',
+        {
+          hasCompliance: true,
+          hasViolations: true,
+          hasFinance: true,
+        } as never,
+        42,
+        buildAccess(),
+      ),
+    );
+
+    const ids = result.current.map((item) => item.id);
+    // admin-audience pages (roles: ADMIN_ROLES)
+    expect(ids).toContain('page-compliance');
+    expect(ids).toContain('page-violations-inbox');
+    // admin-audience quick action (roles: ADMIN_ROLES)
+    expect(ids).toContain('action-upload-document');
+    // finance read set (FINANCE_READ_REGISTRY_ROLES) — admin tier qualifies
+    expect(ids).toContain('page-payments');
+  });
+
+  it('shows admin-gated nav entries to a pm_admin membership (user_role_v2 value)', () => {
+    const { result } = renderHook(() =>
+      useFilteredRegistry(
+        'pm_admin',
+        {
+          hasCompliance: true,
+        } as never,
+        42,
+        buildAccess(),
+      ),
+    );
+
+    const ids = result.current.map((item) => item.id);
+    expect(ids).toContain('page-compliance');
+    expect(ids).toContain('action-upload-document');
+  });
+
+  it('still hides admin-gated nav entries from a resident membership', () => {
+    const { result } = renderHook(() =>
+      useFilteredRegistry(
+        'resident',
+        {
+          hasCompliance: true,
+          hasViolations: true,
+        } as never,
+        42,
+        buildAccess(),
+      ),
+    );
+
+    const ids = result.current.map((item) => item.id);
+    expect(ids).not.toContain('page-compliance');
+    expect(ids).not.toContain('page-violations-inbox');
+    expect(ids).not.toContain('action-upload-document');
+    // resident still sees audience: 'all' entries
+    expect(ids).toContain('page-dashboard');
   });
 
   it('resolves the announcements page entry to the scoped announcements list', () => {

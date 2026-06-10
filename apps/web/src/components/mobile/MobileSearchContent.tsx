@@ -11,7 +11,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Search } from 'lucide-react';
 import type { AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
-import { ADMIN_ROLES } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
@@ -25,11 +25,6 @@ const ADMIN_SUGGESTIONS = ['page-payments', 'page-compliance', 'action-post-anno
 const GETTING_STARTED_RESIDENT = ['page-payments', 'page-documents', 'action-submit-maintenance'] as const;
 const GETTING_STARTED_ADMIN = ['page-compliance', 'page-payments', 'action-schedule-meeting'] as const;
 const RECENT_THRESHOLD = 3;
-
-function isAdmin(role: AnyCommunityRole | TransitionRole | null): boolean {
-  if (!role) return false;
-  return (ADMIN_ROLES as readonly string[]).includes(role);
-}
 
 function matchesQuery(item: ResolvedRegistryItem, query: string): boolean {
   const q = query.toLowerCase();
@@ -85,7 +80,7 @@ export function MobileSearchContent({ communityId, role, features, resourceAcces
   }, [filtered]);
 
   // Empty-query state
-  const admin = isAdmin(role);
+  const admin = isAdminRole(role);
   const hasEnoughRecent = recentPages.length >= RECENT_THRESHOLD;
   const suggestedItems = useMemo(
     () => pickItems(registryItems, admin ? ADMIN_SUGGESTIONS : RESIDENT_SUGGESTIONS),
