@@ -177,6 +177,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/esign-service.ts'),
   // Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
   resolve(repoRoot, 'apps/web/src/lib/services/account-lifecycle-service.ts'),
+  // Root-offboarding: cross-community read of the caller's own root_manager memberships
+  // to flag rootless-on-deletion (role-v3 Phase 2a). Unscoped by nature — root_manager spans communities.
+  resolve(repoRoot, 'apps/web/src/lib/account-lifecycle/root-offboarding.ts'),
   // Platform admin auth guard — queries platform_admin_users (no community_id)
   resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
   // Admin access-plans routes — platform-level CRUD on access_plans table
