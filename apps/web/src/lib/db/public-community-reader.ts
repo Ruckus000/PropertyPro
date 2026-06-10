@@ -29,6 +29,7 @@ import { announcements, communities, documentCategories, documents, meetings, si
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
+import { MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
 
 export interface PublicAnnouncement {
   id: number;
@@ -349,7 +350,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             .where(
               and(
                 eq(userRoles.communityId, communityId),
-                eq(userRoles.role, 'manager'),
+                // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+                inArray(userRoles.role, [...MANAGER_TIER_DB_ROLES]),
                 inArray(userRoles.presetKey, ['board_president', 'board_member']),
                 isNull(users.deletedAt),
               ),

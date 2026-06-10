@@ -1,6 +1,7 @@
 import type { createScopedClient } from '@propertypro/db';
 import { userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 
 type ScopedClient = ReturnType<typeof createScopedClient>;
 
@@ -18,5 +19,6 @@ export async function isMaintenanceStaffAssignee(
     {},
     eq(userRoles.userId, userId),
   ) as unknown as Array<Record<string, unknown>>;
-  return roleRows.some((row) => row['role'] === 'manager' || row['role'] === 'pm_admin');
+  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+  return roleRows.some((row) => (ADMIN_TIER_DB_ROLES as readonly string[]).includes(row['role'] as string));
 }

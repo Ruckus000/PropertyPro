@@ -10,7 +10,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Search } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ const GETTING_STARTED_RESIDENT = ['page-payments', 'page-documents', 'action-sub
 const GETTING_STARTED_ADMIN = ['page-compliance', 'page-payments', 'action-schedule-meeting'] as const;
 const RECENT_THRESHOLD = 3;
 
-function isAdmin(role: AnyCommunityRole | null): boolean {
+function isAdmin(role: AnyCommunityRole | TransitionRole | null): boolean {
   if (!role) return false;
   return (ADMIN_ROLES as readonly string[]).includes(role);
 }
@@ -53,7 +53,7 @@ function categoryToBadge(category: 'page' | 'action' | 'setting'): string {
 // ---------------------------------------------------------------------------
 interface MobileSearchContentProps {
   communityId: number;
-  role: AnyCommunityRole;
+  role: AnyCommunityRole | TransitionRole;
   features: CommunityFeatures;
   resourceAccess: ResourceAccessMap;
 }

@@ -1,6 +1,7 @@
 import { createScopedClient } from '@propertypro/db';
 import { onboardingChecklistItems } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
+import { PM_SCOPE_DB_ROLES, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
 
 // ─── Item key definitions ────────────────────────────────────
 export const ADMIN_CONDO_ITEMS = [
@@ -65,13 +66,27 @@ export function getItemKeysForRole(
   role: Role,
   communityType: CommunityType,
 ): readonly ChecklistItemKey[] {
-  // PM admin roles get the base admin set plus customize_portal
-  if (role === 'pm_admin' || role === 'property_manager_admin') {
+  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+  // PM-scope roles (pm_admin / property_manager / root_manager) get the base admin set
+  // plus customize_portal. Also handles legacy display alias 'property_manager_admin'.
+  // Checked before manager-tier so property_manager/root_manager resolve to the more-privileged
+  // PM bucket (matching pre-backfill behavior where they were pm_admin rows).
+  if (
+    (PM_SCOPE_DB_ROLES as readonly string[]).includes(role) ||
+    role === 'property_manager_admin'
+  ) {
     const base = communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
     return [...base, ...PM_ADMIN_ITEMS];
   }
-  // Other admin roles (cam, board_president, manager) get just the base admin set
-  if (role === 'cam' || role === 'board_president' || role === 'manager') {
+  // Manager-tier roles (manager / property_manager / root_manager) and legacy display
+  // aliases (cam, board_president) get the base admin set only.
+  // Note: property_manager/root_manager are also in MANAGER_TIER_DB_ROLES but the
+  // PM_SCOPE branch above takes priority (checked first), so they never reach here.
+  if (
+    (MANAGER_TIER_DB_ROLES as readonly string[]).includes(role) ||
+    role === 'cam' ||
+    role === 'board_president'
+  ) {
     return communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
   }
   if (role === 'board_member') {

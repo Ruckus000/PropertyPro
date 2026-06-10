@@ -5,7 +5,8 @@
  * Unknown/unmapped categories remain visible only to elevated roles.
  */
 
-import type { CommunityRole, CommunityType, NewCommunityRole } from './index';
+import type { CommunityRole, CommunityType } from './index';
+import type { TransitionRole } from './role-transition';
 import type { ManagerPermissions } from './manager-permissions';
 import { COMMUNITY_ROLES } from './index';
 import {
@@ -209,22 +210,26 @@ export interface DocumentAccessOpts {
 
 /**
  * Resolve a role (old or new) to the legacy CommunityRole for policy lookup.
- * Returns null for 'manager' role (which uses JSONB permissions).
+ * Returns null for the manager-tier JSONB roles (manager / property_manager).
+ *
+ * v3 transition window: property_manager maps onto manager (JSONB → null) and
+ * root_manager maps onto pm_admin (→ property_manager_admin).
  */
 function resolveLegacyRole(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   opts?: DocumentAccessOpts,
 ): CommunityRole | null {
   if ((COMMUNITY_ROLES as readonly string[]).includes(role)) {
     return role as CommunityRole;
   }
-  if (role === 'pm_admin') return 'property_manager_admin';
+  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
+  if (role === 'pm_admin' || role === 'root_manager') return 'property_manager_admin';
   if (role === 'resident') return opts?.isUnitOwner ? 'owner' : 'tenant';
-  return null; // manager → uses JSONB
+  return null; // manager / property_manager → uses JSONB
 }
 
 export function isElevatedRole(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   opts?: DocumentAccessOpts,
 ): boolean {
   const legacy = resolveLegacyRole(role, opts);
@@ -234,14 +239,22 @@ export function isElevatedRole(
 }
 
 export function isAdminRole(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
 ): boolean {
-  if (role === 'manager' || role === 'pm_admin') return true;
+  // v3 transition values (property_manager/root_manager) map onto manager/pm_admin admin-tier.
+  if (
+    role === 'manager'
+    || role === 'pm_admin'
+    || role === 'property_manager'
+    || role === 'root_manager'
+  ) {
+    return true;
+  }
   return (ADMIN_ROLES as readonly string[]).includes(role);
 }
 
 export function isRestrictedRole(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   opts?: DocumentAccessOpts,
 ): boolean {
   const legacy = resolveLegacyRole(role, opts);
@@ -250,7 +263,7 @@ export function isRestrictedRole(
 }
 
 export function getCategoryAccessForRole(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
 ): CategoryAccess {
@@ -263,7 +276,7 @@ export function getCategoryAccessForRole(
 }
 
 export function getAccessibleKnownCategories(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
 ): KnownDocumentCategoryKey[] {
@@ -279,7 +292,7 @@ export function getAccessibleKnownCategories(
 }
 
 export function canAccessCategory(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
   categoryKey: DocumentCategoryKey,
   opts?: DocumentAccessOpts,
@@ -301,7 +314,7 @@ export function canAccessCategory(
 }
 
 export function canAccessDocument(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
   categoryName: string | null | undefined,
   opts?: DocumentAccessOpts,

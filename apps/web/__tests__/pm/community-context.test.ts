@@ -10,9 +10,13 @@ vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
 }));
 
-vi.mock('@propertypro/shared', () => ({
-  getFeaturesForCommunity: getFeaturesForCommunityMock,
-}));
+vi.mock('@propertypro/shared', async () => {
+  const actual = await vi.importActual<typeof import('@propertypro/shared')>('@propertypro/shared');
+  return {
+    ...actual,
+    getFeaturesForCommunity: getFeaturesForCommunityMock,
+  };
+});
 
 import { resolvePmDashboardTarget } from '../../src/lib/api/community-context';
 

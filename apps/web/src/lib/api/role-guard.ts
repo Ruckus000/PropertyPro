@@ -10,9 +10,12 @@
  */
 import { ForbiddenError } from '@/lib/api/errors';
 
+// BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
 const ROLE_ALIASES: Record<string, readonly string[]> = {
-  pm_admin: ['pm_admin', 'property_manager_admin'],
-  property_manager_admin: ['pm_admin', 'property_manager_admin'],
+  pm_admin: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
+  property_manager_admin: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
+  property_manager: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
+  root_manager: ['root_manager'],
 };
 
 export type Membership = { role: string; communityId: number; presetKey?: string | null };
@@ -33,7 +36,10 @@ export function hasRole(membership: Membership, allowed: readonly string[]): boo
   if (expanded.has(membership.role)) {
     return true;
   }
-  return membership.role === 'manager'
+  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
+  // Manager-generation rows (manager / property_manager / root_manager) match preset-name allowlists
+  // (backfill preserves presetKey). A root_manager carrying a presetKey is treated as a superset of that preset.
+  return (membership.role === 'manager' || membership.role === 'property_manager' || membership.role === 'root_manager')
     && typeof membership.presetKey === 'string'
     && expanded.has(membership.presetKey);
 }

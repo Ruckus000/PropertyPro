@@ -37,7 +37,7 @@ import {
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
-import { getComplianceTemplate, getDefaultDocumentCategories } from '@propertypro/shared';
+import { getComplianceTemplate, getDefaultDocumentCategories, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 import { resolvePendingSignupAddress } from './provisioning-address';
 
@@ -285,7 +285,8 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
   const [roleRow] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    .where(and(eq(userRoles.communityId, communityId), eq(userRoles.role, 'pm_admin')))
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    .where(and(eq(userRoles.communityId, communityId), inArray(userRoles.role, [...PM_SCOPE_DB_ROLES])))
     .limit(1);
 
   if (!roleRow) {
@@ -346,12 +347,13 @@ async function stepCompleted(ctx: JobContext): Promise<void> {
   const [adminRole] = await db
     .select({ userId: userRoles.userId })
     .from(userRoles)
-    .where(and(eq(userRoles.communityId, ctx.communityId), eq(userRoles.role, 'pm_admin')))
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    .where(and(eq(userRoles.communityId, ctx.communityId), inArray(userRoles.role, [...PM_SCOPE_DB_ROLES])))
     .limit(1);
 
   if (!adminRole) {
     throw new Error(
-      `[provisioning] completed: no pm_admin user_role found for community ${ctx.communityId} — `
+      `[provisioning] completed: no admin user_role found for community ${ctx.communityId} — `
         + 'refusing to mark signup terminal (would leave an orphaned community)',
     );
   }

@@ -30,10 +30,11 @@ import {
 // (apps/web/src/app/api/v1/pm/portfolio/templates/*).
 // AUTHZ: user-owned + root tenant tables — query/write by owner_user_id / primary key via the unsafe client.
 import { createUnscopedClient, findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
-import { and, desc, eq, isNull } from '@propertypro/db/filters';
+import { and, desc, eq, inArray, isNull } from '@propertypro/db/filters';
 import {
   extractTemplateBranding,
   getEffectiveFeatures,
+  PM_SCOPE_DB_ROLES,
   resolvePlanId,
   type CommunityType,
   type PortfolioTemplateBranding,
@@ -95,7 +96,8 @@ export async function userHasPortfolioTemplatesAccess(userId: string): Promise<b
     .where(
       and(
         eq(userRoles.userId, userId),
-        eq(userRoles.role, 'pm_admin'),
+        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
         isNull(communities.deletedAt),
       ),
     );

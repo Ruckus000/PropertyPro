@@ -2,6 +2,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, userRoles } from '@propertypro/db';
 import { eq, and, isNull, inArray } from '@propertypro/db/filters';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { createNotificationsForEvent } from '../services/notification-service';
 import { tierToPercentOff, type VolumeTier } from './tier-calculator';
 
@@ -32,7 +33,8 @@ export async function notifyDowngrade(input: {
     .where(
       and(
         inArray(userRoles.communityId, communityIds),
-        inArray(userRoles.role, ['manager', 'pm_admin'] as ('resident' | 'manager' | 'pm_admin')[]),
+        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        inArray(userRoles.role, [...ADMIN_TIER_DB_ROLES]),
       ),
     );
 

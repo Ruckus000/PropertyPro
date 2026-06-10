@@ -11,7 +11,7 @@ const metadata: HelpArticleMetadata = {
   description: 'd',
   category: 'compliance',
   slug: 'reviewing-the-compliance-dashboard',
-  roles: ['cam'],
+  roles: ['property_manager'],
   keywords: [],
   tags: [],
   relatedArticles: [],

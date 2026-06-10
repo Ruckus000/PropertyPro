@@ -10,7 +10,7 @@
  * - user must hold property_manager_admin role in that community
  * - returns null on any invalid/removed/non-PM access (no data leakage)
  */
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 
 /**
@@ -33,8 +33,8 @@ export async function resolvePmDashboardTarget(
   try {
     const membership = await requireCommunityMembership(communityId, userId);
 
-    // Require property_manager_admin role specifically
-    if (membership.role !== 'pm_admin') {
+    // Require PM-scope role (v2 pm_admin or v3 property_manager/root_manager)
+    if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       return null;
     }
 

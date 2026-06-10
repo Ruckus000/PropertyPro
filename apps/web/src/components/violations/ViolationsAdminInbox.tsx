@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { AnyCommunityRole } from '@propertypro/shared';
+import type { AnyCommunityRole, TransitionRole } from '@propertypro/shared';
 import { Button } from '@propertypro/ui';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
@@ -72,7 +72,7 @@ const LIMIT = 20;
 interface ViolationsAdminInboxProps {
   communityId: number;
   userId: string;
-  userRole: AnyCommunityRole;
+  userRole: AnyCommunityRole | TransitionRole;
 }
 
 export function ViolationsAdminInbox({ communityId, userId, userRole }: ViolationsAdminInboxProps) {

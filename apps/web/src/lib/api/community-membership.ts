@@ -1,15 +1,15 @@
 import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
-import type { CommunityType, NewCommunityRole, ManagerPermissions } from '@propertypro/shared';
-import { normalizeManagerPermissions, getPresetPermissions, isPresetKey } from '@propertypro/shared';
+import type { CommunityType, TransitionRole, ManagerPermissions } from '@propertypro/shared';
+import { normalizeManagerPermissions, getPresetPermissions, isPresetKey, ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
   userId: string;
   communityId: number;
   communityName: string;
-  role: NewCommunityRole;
+  role: TransitionRole;
   communityType: CommunityType;
   subscriptionPlan: string | null;
   subscriptionStatus: string | null;
@@ -87,7 +87,7 @@ export async function requireCommunityMembership(
   );
 
   const isUnitOwner = membership['isUnitOwner'] === true;
-  const isAdmin = role === 'manager' || role === 'pm_admin';
+  const isAdmin = (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
   const displayTitle = typeof membership['displayTitle'] === 'string'
     ? membership['displayTitle']
     : role;
@@ -109,7 +109,8 @@ export async function requireCommunityMembership(
   // For preset-based managers, fall back to RBAC matrix defaults for resources
   // missing from stored JSONB (e.g. newly-added resources like emergency_broadcasts).
   let permissions: ManagerPermissions | undefined;
-  if (role === 'manager') {
+  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
+  if (role === 'manager' || role === 'property_manager') {
     const fallback = presetKey && isPresetKey(presetKey)
       ? getPresetPermissions(presetKey, communityType).resources
       : undefined;
