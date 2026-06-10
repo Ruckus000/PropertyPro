@@ -1,23 +1,21 @@
 {
   "category": "finance",
   "slug": "paying-dues-and-assessments",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
   "shots": [
     {
       "name": "hero",
       "kind": "still",
-      "route": "/payments",
-      "role": "owner",
-      "actions": [{ "type": "waitFor", "selector": "main" }]
-    },
-    {
-      "name": "balance",
-      "kind": "still",
-      "route": "/payments",
+      "route": "/payments?communityId=2",
       "role": "owner",
       "actions": [
-        { "type": "waitFor", "selector": "main" },
-        { "type": "scrollTo", "selector": "[data-section='balance'], [data-testid='balance'], h2" }
+        {
+          "type": "wait",
+          "ms": 3000
+        }
       ]
     }
   ]

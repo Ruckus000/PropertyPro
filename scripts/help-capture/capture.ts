@@ -70,6 +70,20 @@ async function login(page: Page, role: string): Promise<void> {
   await page.waitForLoadState('networkidle');
 }
 
+/**
+ * Hide dev-only overlays (the Next.js dev-tools indicator / build-error
+ * badge) so they never bleed into production help media. No-op in a real
+ * production build where these elements don't exist.
+ */
+async function hideDevChrome(page: Page): Promise<void> {
+  await page
+    .addStyleTag({
+      content:
+        'nextjs-portal,[data-next-badge-root],[data-nextjs-toast],#__next-build-watcher,#__next-dev-tools-indicator{display:none !important}',
+    })
+    .catch(() => {});
+}
+
 async function runActions(page: Page, shot: CaptureShot): Promise<void> {
   for (const action of shot.actions) {
     if (action.type === 'click') await page.click(action.selector);
@@ -95,6 +109,7 @@ async function captureStill(
   await page.goto(`${BASE_URL}${shot.route}`);
   await page.waitForLoadState('networkidle');
   await runActions(page, shot);
+  await hideDevChrome(page);
 
   const pngPath = join(outDir, `${shot.name}.tmp.png`);
   if (shot.clipTo) await page.locator(shot.clipTo).screenshot({ path: pngPath });
@@ -181,6 +196,11 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
+  // Per-shot resilience: one bad shot (e.g. a stale action selector) must not
+  // abort the whole run. Failures are collected and reported at the end with a
+  // non-zero exit, so the operator sees exactly which shots need attention
+  // while still keeping every shot that captured cleanly.
+  const failures: Array<{ shot: string; error: string }> = [];
   for (const manifest of manifests) {
     const outDir = join(outputRoot, manifest.category, manifest.slug);
     mkdirSync(outDir, { recursive: true });
@@ -193,13 +213,26 @@ async function main(): Promise<void> {
       deviceScaleFactor: 2,
     });
     for (const shot of manifest.shots) {
-      if (shot.kind === 'still')
-        await captureStill(context, shot, outDir, manifest.viewport);
-      else await captureClip(shot, outDir, manifest.viewport);
-      console.log(`  ✓ ${shot.name}`);
+      const label = `${manifest.category}/${manifest.slug}:${shot.name}`;
+      try {
+        if (shot.kind === 'still')
+          await captureStill(context, shot, outDir, manifest.viewport);
+        else await captureClip(shot, outDir, manifest.viewport);
+        console.log(`  ✓ ${shot.name}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message.split('\n')[0]! : String(err);
+        console.warn(`  ✗ ${shot.name} — ${message}`);
+        failures.push({ shot: label, error: message });
+      }
     }
     await context.close();
     await browser.close();
+  }
+
+  if (failures.length > 0) {
+    console.error(`\n${failures.length} shot(s) failed:`);
+    for (const f of failures) console.error(`  • ${f.shot} — ${f.error}`);
+    process.exit(1);
   }
 }
 

@@ -1,25 +1,22 @@
 {
   "category": "getting-started",
   "slug": "understanding-your-dashboard",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
   "shots": [
     {
       "name": "hero",
-      "kind": "clip",
-      "route": "/dashboard",
+      "kind": "still",
+      "route": "/mobile?communityId=2",
       "role": "owner",
       "actions": [
-        { "type": "waitFor", "selector": "main" },
-        { "type": "scrollTo", "selector": "footer, [data-section='footer']" }
-      ],
-      "durationMs": 4000
-    },
-    {
-      "name": "dashboard",
-      "kind": "still",
-      "route": "/dashboard",
-      "role": "owner",
-      "actions": [{ "type": "waitFor", "selector": "main" }]
+        {
+          "type": "wait",
+          "ms": 3000
+        }
+      ]
     }
   ]
 }

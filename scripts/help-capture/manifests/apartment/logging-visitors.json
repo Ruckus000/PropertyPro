@@ -1,23 +1,21 @@
 {
   "category": "apartment",
   "slug": "logging-visitors",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
   "shots": [
     {
       "name": "hero",
       "kind": "still",
-      "route": "/dashboard/visitors",
-      "role": "site_manager",
-      "actions": [{ "type": "waitFor", "selector": "main" }]
-    },
-    {
-      "name": "log-visitor-form",
-      "kind": "still",
-      "route": "/dashboard/visitors",
+      "route": "/dashboard/visitors?communityId=3",
       "role": "site_manager",
       "actions": [
-        { "type": "waitFor", "selector": "main" },
-        { "type": "click", "selector": "[data-testid='log-visitor-btn'], button:has-text('Log'), button:has-text('Add Visitor')" }
+        {
+          "type": "wait",
+          "ms": 3000
+        }
       ]
     }
   ]

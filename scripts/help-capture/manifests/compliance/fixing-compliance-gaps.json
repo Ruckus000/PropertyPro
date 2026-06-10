@@ -1,23 +1,21 @@
 {
   "category": "compliance",
   "slug": "fixing-compliance-gaps",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
   "shots": [
     {
       "name": "hero",
       "kind": "still",
-      "route": "/compliance",
-      "role": "cam",
-      "actions": [{ "type": "waitFor", "selector": "main" }]
-    },
-    {
-      "name": "overdue-items",
-      "kind": "still",
-      "route": "/compliance",
+      "route": "/communities/2/compliance",
       "role": "cam",
       "actions": [
-        { "type": "waitFor", "selector": "main" },
-        { "type": "scrollTo", "selector": "[data-section='overdue'], [data-status='overdue']" }
+        {
+          "type": "wait",
+          "ms": 3000
+        }
       ]
     }
   ]

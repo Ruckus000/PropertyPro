@@ -1,23 +1,21 @@
 {
   "category": "maintenance",
   "slug": "submitting-a-maintenance-request",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
   "shots": [
     {
       "name": "hero",
       "kind": "still",
-      "route": "/maintenance",
-      "role": "owner",
-      "actions": [{ "type": "waitFor", "selector": "main" }]
-    },
-    {
-      "name": "new-request-form",
-      "kind": "still",
-      "route": "/maintenance",
+      "route": "/mobile/maintenance?communityId=2",
       "role": "owner",
       "actions": [
-        { "type": "waitFor", "selector": "main" },
-        { "type": "click", "selector": "[data-testid='new-request-btn'], a[href*='new'], button:has-text('New')" }
+        {
+          "type": "wait",
+          "ms": 3000
+        }
       ]
     }
   ]

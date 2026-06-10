@@ -1,23 +1,21 @@
 {
   "category": "meetings",
   "slug": "creating-meeting-notices",
-  "viewport": { "width": 1440, "height": 900 },
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
   "shots": [
     {
       "name": "hero",
       "kind": "still",
-      "route": "/meetings",
-      "role": "cam",
-      "actions": [{ "type": "waitFor", "selector": "main" }]
-    },
-    {
-      "name": "new-notice-form",
-      "kind": "still",
-      "route": "/meetings",
+      "route": "/communities/2/meetings",
       "role": "cam",
       "actions": [
-        { "type": "waitFor", "selector": "main" },
-        { "type": "click", "selector": "[data-testid='new-meeting-btn'], a[href*='new'], button:has-text('New')" }
+        {
+          "type": "wait",
+          "ms": 3000
+        }
       ]
     }
   ]
