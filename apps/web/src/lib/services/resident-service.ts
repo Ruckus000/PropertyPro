@@ -12,6 +12,7 @@ import {
   users,
 } from '@propertypro/db';
 import { eq, inArray, sql } from '@propertypro/db/filters';
+import { expandTransitionRoleFilter } from '@propertypro/shared';
 
 type RoleFilter = {
   role?: string;
@@ -79,17 +80,27 @@ export async function listResidentsForCommunity(
   const scoped = createScopedClient(communityId);
 
   let roleRows: Array<Record<string, unknown>>;
+  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
   if (filter.roles && filter.roles.length > 0) {
+    const expanded = [...new Set(filter.roles.flatMap((r) => expandTransitionRoleFilter(r)))];
+    if (expanded.length === 0) {
+      return [];
+    }
     roleRows = await scoped.selectFrom(
       userRoles,
       {},
-      inArray(userRoles.role, filter.roles as ('resident' | 'manager' | 'pm_admin')[]),
+      inArray(userRoles.role, expanded),
     ) as Array<Record<string, unknown>>;
+  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
   } else if (filter.role) {
+    const expanded = [...expandTransitionRoleFilter(filter.role)];
+    if (expanded.length === 0) {
+      return [];
+    }
     roleRows = await scoped.selectFrom(
       userRoles,
       {},
-      eq(userRoles.role, filter.role as 'resident' | 'manager' | 'pm_admin'),
+      inArray(userRoles.role, expanded),
     ) as Array<Record<string, unknown>>;
   } else {
     roleRows = await scoped.query(userRoles) as Array<Record<string, unknown>>;

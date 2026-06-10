@@ -23,7 +23,7 @@ import {
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getPresetPermissions } from '@propertypro/shared';
+import { getPresetPermissions, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
 
@@ -234,7 +234,8 @@ async function ensureFoundingUser(
     .where(
       and(
         eq(userRoles.communityId, communityId),
-        eq(userRoles.role, 'manager'),
+        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        inArray(userRoles.role, [...MANAGER_TIER_DB_ROLES]),
         eq(userRoles.presetKey, 'board_president'),
       ),
     )

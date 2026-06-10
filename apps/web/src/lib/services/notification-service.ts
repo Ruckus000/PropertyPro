@@ -26,8 +26,10 @@ import {
   sendEmail,
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
+import { ADMIN_TIER_DB_ROLES, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
 // Note: ADMIN_ROLES and BOARD_ROLES from shared still use legacy role names.
-// The isRoleMatch function below uses new role names + presetKey directly.
+// isRoleMatch below matches user_roles.role against the bilingual tier
+// constants (both role generations) during the role-v3 transition window.
 import {
   getDefaultPreferences,
   isDigestFrequency,
@@ -191,15 +193,17 @@ function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts
   if (filter === 'all') return true;
   if (filter === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
   if (filter === 'board_only') {
-    // Board roles: manager with board preset (board_member or board_president)
-    if (role === 'manager') {
+    // Board roles: manager-tier with board preset (board_member or board_president)
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
       return opts?.presetKey === 'board_member' || opts?.presetKey === 'board_president';
     }
     return false;
   }
   if (filter === 'community_admins') {
-    // Admin roles: manager + pm_admin
-    return role === 'manager' || role === 'pm_admin';
+    // Admin roles: manager + pm_admin (and their v3 generations)
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    return (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
   }
   if (typeof filter === 'object' && filter.type === 'specific_user') return userId === filter.userId;
   return false;

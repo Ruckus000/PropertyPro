@@ -9,8 +9,10 @@ import {
 } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
+import { MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
 // Note: BOARD_ROLES from shared still use legacy role names.
-// The isAudienceMatch function below uses new role names + presetKey directly.
+// isAudienceMatch below matches user_roles.role against the bilingual
+// manager-tier constant (both role generations) during the role-v3 window.
 import {
   isDigestFrequency,
   isNeverFrequency,
@@ -51,7 +53,8 @@ function isAudienceMatch(role: string, audience: AnnouncementAudience, opts?: { 
   if (audience === 'all') return true;
   if (audience === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
   if (audience === 'board_only') {
-    if (role === 'manager') {
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
       return opts?.presetKey === 'board_member' || opts?.presetKey === 'board_president';
     }
     return false;

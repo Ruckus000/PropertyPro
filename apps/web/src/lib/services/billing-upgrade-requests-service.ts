@@ -9,6 +9,7 @@
  *   - apps/web/src/app/api/v1/billing/upgrade-requests/route.ts
  */
 import { createScopedClient, userRoles } from '@propertypro/db';
+import { MANAGER_TIER_DB_ROLES, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 
 /** Manager presets that get treated as billing admins. Mirrors `canManageBilling()`. */
 const BILLING_ADMIN_PRESETS = new Set(['board_president', 'cam']);
@@ -16,8 +17,8 @@ const BILLING_ADMIN_PRESETS = new Set(['board_president', 'cam']);
 /**
  * Return the set of user ids in this community who are authorized to act on
  * a plan-upgrade request:
- *   - role = 'pm_admin'                                                    → always
- *   - role = 'manager' AND presetKey IN ('board_president', 'cam')         → yes
+ *   - PM-scope role (pm_admin / property_manager / root_manager)           → always
+ *   - manager-tier role (manager / property_manager / root_manager) AND presetKey IN ('board_president', 'cam') → yes
  *
  * Excludes `excludeUserId` (the requester) so they don't get notified about
  * their own request. Returns a plain array for ergonomic callers.
@@ -41,9 +42,10 @@ export async function listBillingCapableUserIds(
     const recipientId = typeof row['userId'] === 'string' ? row['userId'] : null;
     if (!recipientId) continue;
     if (recipientId === excludeUserId) continue;
-    if (role === 'pm_admin') {
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
       recipientIds.add(recipientId);
-    } else if (role === 'manager' && BILLING_ADMIN_PRESETS.has(presetKey)) {
+    } else if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role) && BILLING_ADMIN_PRESETS.has(presetKey)) {
       recipientIds.add(recipientId);
     }
   }

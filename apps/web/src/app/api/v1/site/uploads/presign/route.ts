@@ -7,6 +7,7 @@
  * finalize endpoint then runs sharp transformations.
  */
 import { runRoute } from '@propertypro/api-contract';
+import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -25,7 +26,8 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
-    if (membership.role !== 'pm_admin') {
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can upload site assets');
     }
     await requirePlanFeature(communityId, 'hasSiteEditor');

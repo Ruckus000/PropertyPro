@@ -7,6 +7,7 @@ import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
 import type { CommunityType } from '@propertypro/shared';
+import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 
 export interface RecalculateResult {
   billingGroupId: number;
@@ -408,7 +409,8 @@ export async function getOrCreateBillingGroupForPm(
     .where(
       and(
         eq(userRoles.userId, userId),
-        eq(userRoles.role, 'pm_admin'),
+        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
         isNull(communities.deletedAt),
         // Only consider communities that aren't already in a billing group —
         // we never want to silently yank a community out of an existing

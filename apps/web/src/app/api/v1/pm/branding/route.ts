@@ -16,6 +16,7 @@
  *   to the canonical path communities/{id}/branding/logo.webp before persisting.
  */
 import { runRoute } from '@propertypro/api-contract';
+import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { createPresignedDownloadUrl, createPresignedUploadUrl, logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
@@ -84,7 +85,8 @@ export const GET = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
-    if (membership.role !== 'pm_admin') {
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can access branding settings');
     }
 
@@ -99,7 +101,8 @@ export const PATCH = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
-    if (membership.role !== 'pm_admin') {
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can update branding settings');
     }
 

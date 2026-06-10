@@ -25,8 +25,7 @@ import {
   SubscriptionExpiryWarningEmail,
   sendEmail,
 } from '@propertypro/email';
-
-type UserRoleV2Value = 'resident' | 'manager' | 'pm_admin';
+import { ADMIN_TIER_DB_ROLES, MANAGER_TIER_DB_ROLES, type TransitionRole } from '@propertypro/shared';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -34,10 +33,12 @@ const MS_PER_DAY = 86_400_000;
 const CONDO_HOA_TYPES = new Set(['condo_718', 'hoa_720']);
 
 /** Roles that receive billing alerts for condo/HOA communities. */
-const CONDO_HOA_ADMIN_ROLES: UserRoleV2Value[] = ['manager'];
+// BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+const CONDO_HOA_ADMIN_ROLES: readonly TransitionRole[] = MANAGER_TIER_DB_ROLES;
 
 /** Roles that receive billing alerts for apartment communities. */
-const APARTMENT_ADMIN_ROLES: UserRoleV2Value[] = ['manager', 'pm_admin'];
+// BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+const APARTMENT_ADMIN_ROLES: readonly TransitionRole[] = ADMIN_TIER_DB_ROLES;
 
 function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
@@ -71,7 +72,7 @@ async function lookupAdminRecipients(
   communityType: string,
 ): Promise<AdminRecipient[]> {
   const db = createUnscopedClient();
-  const adminRoles: UserRoleV2Value[] = CONDO_HOA_TYPES.has(communityType)
+  const adminRoles: readonly TransitionRole[] = CONDO_HOA_TYPES.has(communityType)
     ? CONDO_HOA_ADMIN_ROLES
     : APARTMENT_ADMIN_ROLES;
 
@@ -82,7 +83,7 @@ async function lookupAdminRecipients(
     .where(
       and(
         eq(userRoles.communityId, communityId),
-        inArray(userRoles.role, adminRoles),
+        inArray(userRoles.role, [...adminRoles]),
       ),
     );
 
