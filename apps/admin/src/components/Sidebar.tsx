@@ -13,6 +13,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Trash2,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface NavItem {
@@ -25,6 +26,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { href: '/clients', label: 'Clients', icon: LayoutGrid },
+  { href: '/communities/rootless', label: 'Rootless Communities', icon: ShieldAlert },
   { href: '/deletion-requests', label: 'Deletion Requests', icon: Trash2, badge: true },
   { href: '/demo', label: 'Demos', icon: MonitorPlay },
   { href: '/site-templates', label: 'Site Templates', icon: Palette },
