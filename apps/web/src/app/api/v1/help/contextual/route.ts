@@ -1,7 +1,7 @@
 /**
  * GET /api/v1/help/contextual?path=/compliance&communityId=N
  *
- * Returns up to 3 platform articles relevant to the given UI route path,
+ * Returns up to 8 platform articles relevant to the given UI route path,
  * filtered by the user's effective role (preset override fallback to base
  * role).
  *
@@ -23,6 +23,8 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { getContextualArticles } from '@/lib/services/help-article-service';
 import { helpContextualGetContract } from './contract';
 
+const CONTEXTUAL_MATCH_CAP = 8;
+
 export const GET = withErrorHandler(
   runRoute(helpContextualGetContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
@@ -30,7 +32,10 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     const effectiveRole = membership.presetKey ?? membership.role;
 
-    const articles = getContextualArticles(query.path, effectiveRole, 3);
+    // All contextual matches, capped defensively. The modal's search panel
+    // lists everything (with show-more); 3 was an arbitrary truncation that
+    // silently hid articles on over-matched routes (/documents matches 6).
+    const articles = getContextualArticles(query.path, effectiveRole, CONTEXTUAL_MATCH_CAP);
     return articles.map((a) => ({
       title: a.title,
       description: a.description,

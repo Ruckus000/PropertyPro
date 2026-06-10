@@ -1,0 +1,22 @@
+{
+  "category": "getting-started",
+  "slug": "joining-your-community",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "hero",
+      "kind": "still",
+      "route": "/select-community",
+      "role": "owner",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 3000
+        }
+      ]
+    }
+  ]
+}

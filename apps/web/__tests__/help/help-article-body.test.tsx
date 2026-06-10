@@ -38,55 +38,51 @@ function withQueryClient(children: React.ReactNode) {
 }
 
 describe('<HelpArticleBody/>', () => {
-  it('renders precompiled article HTML and TOC in modal mode', () => {
+  it('renders precompiled article HTML and title', () => {
     render(
       withQueryClient(
         <HelpArticleBody
           html='<h2 id="heading">Heading</h2><p>Compiled HTML</p>'
-          toc={[{ depth: 2, label: 'Heading', anchor: 'heading' }]}
           metadata={baseMetadata}
           related={[]}
           communityId={1}
-          displayMode="modal"
+          onOpenArticle={vi.fn()}
         />,
       ),
     );
     expect(screen.getByText('Compiled HTML')).toBeInTheDocument();
-    // TOC renders in both mobile (details) and desktop (aside) — at least one match is sufficient
-    expect(screen.getAllByText('Heading').length).toBeGreaterThan(0);
     expect(screen.getByTestId('view-tracker')).toBeInTheDocument();
     expect(screen.getByTestId('feedback')).toBeInTheDocument();
   });
 
-  it('does not render the page-level chrome in modal mode', () => {
+  it('renders the article title as h1', () => {
     render(
       withQueryClient(
         <HelpArticleBody
           html='<p>x</p>'
-          toc={[]}
           metadata={baseMetadata}
           related={[]}
           communityId={1}
-          displayMode="modal"
+          onOpenArticle={vi.fn()}
         />,
       ),
     );
-    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Fixing compliance gaps');
   });
 
-  it('renders related articles when present', () => {
+  it('renders related articles as buttons when present', () => {
     render(
       withQueryClient(
         <HelpArticleBody
           html='<p>x</p>'
-          toc={[]}
           metadata={baseMetadata}
           related={[{ ...baseMetadata, slug: 'related-slug', title: 'Related Article' }]}
           communityId={1}
-          displayMode="modal"
+          onOpenArticle={vi.fn()}
         />,
       ),
     );
-    expect(screen.getByRole('link', { name: /Related Article/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Related Article/ })).toBeInTheDocument();
   });
 });

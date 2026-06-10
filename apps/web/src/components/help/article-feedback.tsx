@@ -166,13 +166,13 @@ export function ArticleFeedback({
       )}
 
       {state === 'submitted' && (
-        <p className={cn('mt-3 text-xs font-medium text-emerald-700')} role="status">
+        <p className={cn('mt-3 text-xs font-medium text-status-success')} role="status">
           Thanks — feedback saved.
         </p>
       )}
 
       {state === 'error' && errorMessage && (
-        <p className="mt-3 text-xs font-medium text-red-700" role="alert">
+        <p className="mt-3 text-xs font-medium text-status-danger" role="alert">
           {errorMessage}
         </p>
       )}

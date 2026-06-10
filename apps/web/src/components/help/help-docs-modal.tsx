@@ -1,26 +1,25 @@
 'use client';
 
 /**
- * <HelpDocsModal/> — shadcn-docs-style modal that opens the contextual help
- * article in place, replacing the old drawer. Reads selectedArticle from
- * HelpWidgetProvider; falls back to the first contextual article for the
- * current pathname. When no article matches, renders a search-and-browse
- * panel inside the same modal shell.
+ * <HelpDocsModal/> — "Showcase" help modal. Single-pane reader with an
+ * in-modal navigation stack (HelpWidgetProvider), persistent header search,
+ * and a slim Up-next footer. Nothing in here navigates the app away except
+ * the two explicit affordances (open-full-page, browse-all) — both of which
+ * call markCloseAsNavigation() to keep the ?help= deep-link strip race-free.
  *
- * Render gating:
- * - flagEnabled=false → renders null (Phase A safety; flag flips in Phase B)
- *
- * Mobile: same component renders as a bottom Sheet under 768px; Dialog
- * above. Width on desktop is xl modal token (960px).
+ * While the media lightbox is open (nested dialog), outside-pointer and
+ * escape dismissal of THIS dialog are suppressed: lightbox overlay clicks
+ * land outside our DialogContent and would otherwise close everything.
  */
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ChevronLeft, ExternalLink, Search } from 'lucide-react';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
-import { useContextualHelp, useHelpArticle } from '@/hooks/use-help';
+import { useContextualHelp, useHelpArticle, useReadArticles } from '@/hooks/use-help';
 import { HelpArticleBody } from '@/components/help/help-article-body';
 import { HelpDocsModalSearchPanel } from '@/components/help/help-docs-modal-search-panel';
+import { getHelpCategoryMeta } from '@/lib/help/category-meta';
 import {
   Dialog,
   DialogContent,
@@ -37,219 +36,215 @@ interface HelpDocsModalProps {
   flagEnabled: boolean;
 }
 
-export function HelpDocsModal({
-  communityId,
-  flagEnabled,
-}: HelpDocsModalProps) {
-  const { isOpen, close, selectedArticle, openArticle, markCloseAsNavigation } =
-    useHelpWidget();
+export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) {
+  const {
+    isOpen,
+    close,
+    selectedArticle,
+    stackDepth,
+    openArticle,
+    back,
+    markCloseAsNavigation,
+  } = useHelpWidget();
   const pathname = usePathname();
 
-  const { data: contextualArticles, isFetching: isFetchingContextual } =
-    useContextualHelp(pathname, communityId, flagEnabled);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
-  const targetArticle = useMemo<{ category: string; slug: string } | null>(() => {
-    if (selectedArticle) return selectedArticle;
-    if (contextualArticles && contextualArticles.length > 0) {
-      const first = contextualArticles[0]!;
-      return { category: first.category, slug: first.slug };
-    }
-    return null;
-  }, [selectedArticle, contextualArticles]);
+  // Reset search when article changes.
+  useEffect(() => {
+    setShowSearch(false);
+    setSearchQuery('');
+  }, [selectedArticle]);
 
+  const { data: contextual } = useContextualHelp(pathname, communityId, flagEnabled && isOpen);
+  const { data: readArticles } = useReadArticles(communityId);
   const articleQuery = useHelpArticle(
-    targetArticle?.category ?? null,
-    targetArticle?.slug ?? null,
+    selectedArticle?.category ?? null,
+    selectedArticle?.slug ?? null,
     communityId,
-    flagEnabled,
+    flagEnabled && isOpen && selectedArticle !== null,
   );
+
+  const categoryMeta = useMemo(
+    () => (selectedArticle ? getHelpCategoryMeta(selectedArticle.category) : null),
+    [selectedArticle],
+  );
+
+  const upNextArticle = articleQuery.data?.upNext ?? null;
 
   const isMobile = useIsMobile();
 
   if (!flagEnabled) return null;
 
-  const articleTitle = articleQuery.data?.metadata.title ?? 'Help';
-  const showSearchPanel = !targetArticle;
-
-  const content = (
-    <ModalContent
-      showSearchPanel={showSearchPanel}
-      isLoading={Boolean(targetArticle) && articleQuery.isLoading}
-      isError={Boolean(articleQuery.isError)}
-      onRetry={() => articleQuery.refetch?.()}
-      articleData={articleQuery.data ?? null}
-      communityId={communityId}
-      contextualArticles={contextualArticles ?? []}
-      isFetchingContextual={isFetchingContextual}
-      onPickArticle={openArticle}
-      onClose={close}
-    />
+  const header = (
+    <div className="flex items-center gap-2 border-b border-edge px-4 py-3">
+      {stackDepth > 0 && (
+        <button
+          type="button"
+          onClick={back}
+          aria-label="Go back"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <ChevronLeft size={18} aria-hidden="true" />
+        </button>
+      )}
+      <div className="min-w-0 flex-1">
+        {categoryMeta && !showSearch ? (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium',
+              categoryMeta.chipClass,
+            )}
+          >
+            <categoryMeta.icon size={11} aria-hidden="true" />
+            {categoryMeta.label}
+          </span>
+        ) : (
+          <div className="relative">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-content-tertiary"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              placeholder="Search help…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 w-full rounded-[var(--radius-sm)] border border-edge bg-surface-input pl-8 pr-3 text-sm text-content placeholder:text-content-tertiary focus:border-interactive-primary focus:outline-none focus:ring-1 focus:ring-interactive-primary"
+              aria-label="Search help articles"
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus={showSearch}
+            />
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowSearch((s) => !s)}
+        aria-label={showSearch ? 'Close search' : 'Search help'}
+        aria-pressed={showSearch}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <Search size={16} aria-hidden="true" />
+      </button>
+      {selectedArticle && articleQuery.data && (
+        <Link
+          href={`/help/${selectedArticle.category}/${selectedArticle.slug}`}
+          target="_blank"
+          rel="noopener"
+          onClick={markCloseAsNavigation}
+          aria-label="Open full help page"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <ExternalLink size={16} aria-hidden="true" />
+        </Link>
+      )}
+    </div>
   );
 
+  const body =
+    showSearch || !selectedArticle ? (
+      <HelpDocsModalSearchPanel
+        communityId={communityId}
+        query={searchQuery}
+        contextualArticles={contextual ?? []}
+        readSlugs={readArticles?.slugs ?? null}
+        onPickArticle={(category, slug) => {
+          setShowSearch(false);
+          setSearchQuery('');
+          openArticle(category, slug);
+        }}
+      />
+    ) : (
+      <>
+        {articleQuery.isPending && (
+          <div className="space-y-4 p-6">
+            <Skeleton className="h-6 w-2/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        )}
+        {articleQuery.isError && (
+          <div className="p-6">
+            <AlertBanner
+              status="danger"
+              title="Couldn't load this article"
+              description="We hit an error loading this help article. Please try again."
+            />
+          </div>
+        )}
+        {articleQuery.data && (
+          <HelpArticleBody
+            html={articleQuery.data.html}
+            metadata={articleQuery.data.metadata}
+            related={articleQuery.data.related}
+            communityId={communityId}
+            onOpenArticle={openArticle}
+            onLightboxOpenChange={setLightboxOpen}
+          />
+        )}
+      </>
+    );
+
+  const footer =
+    upNextArticle && !showSearch ? (
+      <div className="border-t border-edge px-4 py-3">
+        <button
+          type="button"
+          onClick={() => openArticle(upNextArticle.category, upNextArticle.slug)}
+          className="flex w-full items-start gap-3 rounded-[var(--radius-md)] p-2 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-content-tertiary">Up next</p>
+            <p className="truncate text-sm font-medium text-content">{upNextArticle.title}</p>
+          </div>
+          <ChevronLeft
+            size={16}
+            className="mt-0.5 shrink-0 rotate-180 text-content-tertiary"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+    ) : null;
+
+  // Mobile: Sheet from bottom. Desktop: Dialog from side.
   if (isMobile) {
     return (
-      <Sheet open={isOpen} onOpenChange={(o) => (o ? null : close())}>
-        <SheetContent side="bottom" className="h-[92vh] overflow-y-auto p-6">
-          <SheetTitle className="text-xl font-semibold text-content">
-            {articleTitle}
-          </SheetTitle>
-          <SheetDescription className="sr-only">
-            Help article viewer
-          </SheetDescription>
-          <div className="mt-4">{content}</div>
+      <Sheet open={isOpen} onOpenChange={(o) => !o && close()}>
+        <SheetContent
+          side="bottom"
+          className="flex h-[85vh] flex-col p-0"
+          onPointerDownOutside={lightboxOpen ? (e) => e.preventDefault() : undefined}
+          onEscapeKeyDown={lightboxOpen ? (e) => e.preventDefault() : undefined}
+        >
+          <SheetTitle className="sr-only">Help</SheetTitle>
+          <SheetDescription className="sr-only">Help documentation panel</SheetDescription>
+          {header}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{body}</div>
+          {footer}
         </SheetContent>
       </Sheet>
     );
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(o) => (o ? null : close())}>
+    <Dialog open={isOpen} onOpenChange={(o) => !o && close()}>
       <DialogContent
-        className={cn(
-          // Cap the dialog at 90vh so it never overflows the viewport, then
-          // give it a flex column so the article body becomes the only
-          // scrollable region (header + footer stay pinned). Without the
-          // max-h here, a long article + related guides + feedback could
-          // grow taller than the viewport — and because Radix centers via
-          // translate-50/50, the dialog's top would drift above the
-          // viewport (Codex caught y=-169px on /dashboard).
-          'flex max-h-[90vh] w-[95vw] max-w-[960px] flex-col p-0',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-        )}
+        className="flex h-[85vh] w-[440px] flex-col p-0 sm:max-w-[440px]"
+        onPointerDownOutside={lightboxOpen ? (e) => e.preventDefault() : undefined}
+        onEscapeKeyDown={lightboxOpen ? (e) => e.preventDefault() : undefined}
       >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-edge px-6 py-4">
-          <div className="min-w-0 flex-1">
-            <DialogTitle className="truncate text-xl font-semibold text-content">
-              {articleTitle}
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Help article viewer
-            </DialogDescription>
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">{content}</div>
-        <footer className="flex shrink-0 items-center justify-end border-t border-edge px-6 py-3">
-          <Link
-            href={`/help?communityId=${communityId}`}
-            onClick={() => {
-              // Mark this close as a navigation-related close so the deep-link
-              // handler skips its router.replace — Next's <Link> is about to
-              // navigate; firing a strip-replace simultaneously creates a race.
-              markCloseAsNavigation();
-              close();
-            }}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--interactive-primary)] hover:underline"
-          >
-            Browse all help articles
-            <ExternalLink size={14} aria-hidden="true" />
-          </Link>
-        </footer>
+        <DialogTitle className="sr-only">Help</DialogTitle>
+        <DialogDescription className="sr-only">Help documentation panel</DialogDescription>
+        {header}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{body}</div>
+        {footer}
       </DialogContent>
     </Dialog>
-  );
-}
-
-interface ModalContentProps {
-  showSearchPanel: boolean;
-  isLoading: boolean;
-  isError: boolean;
-  onRetry: () => void;
-  articleData: NonNullable<ReturnType<typeof useHelpArticle>['data']> | null;
-  communityId: number;
-  contextualArticles: Array<{ category: string; slug: string; title: string }>;
-  isFetchingContextual: boolean;
-  onPickArticle: (category: string, slug: string) => void;
-  onClose: () => void;
-}
-
-function ModalContent({
-  showSearchPanel,
-  isLoading,
-  isError,
-  onRetry,
-  articleData,
-  communityId,
-  contextualArticles,
-  isFetchingContextual,
-  onPickArticle,
-}: ModalContentProps) {
-  if (showSearchPanel) {
-    return (
-      <HelpDocsModalSearchPanel
-        communityId={communityId}
-        onPickArticle={onPickArticle}
-      />
-    );
-  }
-
-  if (isLoading || isFetchingContextual) {
-    return (
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]" aria-label="Loading article">
-        <div className="space-y-3">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-5 w-full" />
-          ))}
-        </div>
-        <div className="hidden lg:block">
-          <Skeleton className="h-4 w-32" />
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="mt-2 h-3 w-full" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <AlertBanner
-        status="danger"
-        title="We couldn't load this article."
-        description={
-          <button
-            type="button"
-            onClick={onRetry}
-            className="text-sm font-medium underline underline-offset-2"
-          >
-            Retry
-          </button>
-        }
-      />
-    );
-  }
-
-  if (!articleData) return null;
-
-  return (
-    <div className="space-y-6">
-      <HelpArticleBody
-        html={articleData.html}
-        toc={articleData.toc}
-        metadata={articleData.metadata}
-        related={articleData.related}
-        communityId={communityId}
-        displayMode="modal"
-      />
-
-      {contextualArticles.length > 1 && (
-        <section className="rounded-[var(--radius-md)] border border-edge bg-surface-muted p-4">
-          <h3 className="text-sm font-semibold text-content">More for this page</h3>
-          <ul className="mt-2 space-y-1">
-            {contextualArticles.slice(1).map((article) => (
-              <li key={`${article.category}/${article.slug}`}>
-                <button
-                  type="button"
-                  onClick={() => onPickArticle(article.category, article.slug)}
-                  className="text-sm text-[var(--interactive-primary)] hover:underline"
-                >
-                  {article.title}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
   );
 }
 

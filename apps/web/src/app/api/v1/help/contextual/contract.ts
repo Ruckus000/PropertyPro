@@ -1,11 +1,11 @@
 /**
- * GET /api/v1/help/contextual — up to 3 help articles relevant to a UI path,
+ * GET /api/v1/help/contextual — up to 8 help articles relevant to a UI path,
  * filtered by the caller's effective role in the community.
  *
  * Query: { path, communityId }. No body. No params.
  *
  * Auth chain (3 gates): requireAuthenticatedUserId → resolveEffectiveCommunityId
- * → requireCommunityMembership → getContextualArticles(path, role, 3).
+ * → requireCommunityMembership → getContextualArticles(path, role, 8).
  *
  * Response modeling: loose z.unknown() — the route maps article objects to
  * a projection `{ title, description, category, slug }`. Loose modeling

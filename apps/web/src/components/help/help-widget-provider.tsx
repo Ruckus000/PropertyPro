@@ -19,6 +19,10 @@ interface HelpWidgetContextValue {
   toggle: () => void;
   selectedArticle: SelectedArticle | null;
   openArticle: (category: string, slug: string) => void;
+  /** Number of articles in the navigation stack. */
+  stackDepth: number;
+  /** Pop the top article off the stack (returns to previous article, or to default view when stack empties). */
+  back: () => void;
   /**
    * Set by callers that will close the modal as part of a navigation
    * (e.g. a footer Link click). Consumed by HelpDeepLinkHandler to skip
@@ -35,18 +39,27 @@ const HelpWidgetContext = createContext<HelpWidgetContextValue | null>(null);
 
 export function HelpWidgetProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<SelectedArticle | null>(null);
+  const [articleStack, setArticleStack] = useState<SelectedArticle[]>([]);
   const navigationCloseRef = useRef(false);
+
+  const selectedArticle = articleStack.length > 0 ? articleStack[articleStack.length - 1]! : null;
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => {
     setIsOpen(false);
-    setSelectedArticle(null);
+    setArticleStack([]);
   }, []);
   const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
   const openArticle = useCallback((category: string, slug: string) => {
-    setSelectedArticle({ category, slug });
+    setArticleStack((prev) => {
+      const top = prev[prev.length - 1];
+      if (top && top.category === category && top.slug === slug) return prev;
+      return [...prev, { category, slug }];
+    });
     setIsOpen(true);
+  }, []);
+  const back = useCallback(() => {
+    setArticleStack((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev));
   }, []);
   const markCloseAsNavigation = useCallback(() => {
     navigationCloseRef.current = true;
@@ -83,6 +96,8 @@ export function HelpWidgetProvider({ children }: { children: ReactNode }) {
         toggle,
         selectedArticle,
         openArticle,
+        stackDepth: articleStack.length,
+        back,
         markCloseAsNavigation,
         consumeNavigationCloseFlag,
       }}

@@ -17,18 +17,23 @@ function withQuery(children: React.ReactNode) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
+const defaultProps = {
+  communityId: 1,
+  query: '',
+  contextualArticles: [],
+  readSlugs: null,
+  onPickArticle: vi.fn(),
+};
+
 describe('<HelpDocsModalSearchPanel/>', () => {
-  it('renders the search input and featured articles', () => {
+  it('renders featured articles when no contextual articles and no query', () => {
     useHelpSearchMock.mockReturnValue({ data: null });
     useFeaturedArticlesMock.mockReturnValue({
       data: [
         { title: 'Welcome', description: 'Get started', category: 'getting-started', slug: 'welcome' },
       ],
     });
-    render(
-      withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={() => {}} />),
-    );
-    expect(screen.getByPlaceholderText(/Search help articles/i)).toBeInTheDocument();
+    render(withQuery(<HelpDocsModalSearchPanel {...defaultProps} />));
     expect(screen.getByRole('button', { name: /Welcome/ })).toBeInTheDocument();
   });
 
@@ -40,20 +45,15 @@ describe('<HelpDocsModalSearchPanel/>', () => {
       ],
     });
     const onPick = vi.fn();
-    render(
-      withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={onPick} />),
-    );
+    render(withQuery(<HelpDocsModalSearchPanel {...defaultProps} onPickArticle={onPick} />));
     screen.getByRole('button', { name: /Welcome/ }).click();
     expect(onPick).toHaveBeenCalledWith('getting-started', 'welcome');
   });
 
-  it('renders the empty state (not the Featured heading) when the hook returns an empty list', () => {
+  it('does not render the Featured heading when the hook returns an empty list', () => {
     useHelpSearchMock.mockReturnValue({ data: null });
     useFeaturedArticlesMock.mockReturnValue({ data: [] });
-    render(
-      withQuery(<HelpDocsModalSearchPanel communityId={1} onPickArticle={() => {}} />),
-    );
+    render(withQuery(<HelpDocsModalSearchPanel {...defaultProps} />));
     expect(screen.queryByRole('heading', { name: /Featured for you/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/haven't been written yet/i)).toBeInTheDocument();
   });
 });

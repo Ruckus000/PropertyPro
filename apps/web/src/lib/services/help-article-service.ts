@@ -74,6 +74,15 @@ export interface HelpArticleMetadata {
   featureGates?: string[];
   updatedAt?: string;
   readTimeMinutes?: number;
+  heroMedia?: {
+    src: string;
+    alt: string;
+    caption?: string;
+    width: number;
+    height: number;
+    poster?: string;
+  };
+  upNext?: string;
   contentHash: string;
 }
 
@@ -157,6 +166,8 @@ export function parseArticleFrontmatter(
     featureGates: valid.featureGates ?? [],
     updatedAt: valid.updatedAt,
     readTimeMinutes: Math.max(1, Math.ceil(wordCount / WORDS_PER_MINUTE)),
+    heroMedia: valid.heroMedia,
+    upNext: valid.upNext,
     contentHash: crypto.createHash('sha256').update(rawContent).digest('hex').slice(0, 16),
   };
 

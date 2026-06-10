@@ -29,6 +29,7 @@ import {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
 const helpRoot = join(repoRoot, 'apps', 'web', 'src', 'content', 'help');
+const publicHelpRoot = join(repoRoot, 'apps', 'web', 'public');
 const featureTypesPath = join(
   repoRoot,
   'packages',
@@ -245,6 +246,87 @@ function checkFeatureKeysMatchSource(): Problem[] {
   return problems;
 }
 
+const MEDIA_BUDGETS: Array<{ pattern: RegExp; maxBytes: number; label: string }> = [
+  { pattern: /\.(webp|png|jpg|jpeg)$/i, maxBytes: 250 * 1024, label: 'image ≤ 250KB' },
+  { pattern: /\.(mp4|webm)$/i, maxBytes: 1.5 * 1024 * 1024, label: 'clip ≤ 1.5MB' },
+];
+
+/** Collect every media path referenced by an article (frontmatter + body). */
+function collectMediaPaths(frontmatter: Record<string, unknown>, body: string): string[] {
+  const paths: string[] = [];
+  const hero = frontmatter.heroMedia as { src?: string; poster?: string } | undefined;
+  if (hero?.src) paths.push(hero.src);
+  if (hero?.poster) paths.push(hero.poster);
+  const attrRegex = /<(?:MediaFrame|Step)\b[^>]*?\b(?:src|image|poster|src2x)="([^"]+)"/g;
+  for (const match of body.matchAll(attrRegex)) {
+    paths.push(match[1]!);
+  }
+  const mdImgRegex = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+  for (const match of body.matchAll(mdImgRegex)) {
+    paths.push(match[1]!);
+  }
+  return paths;
+}
+
+function checkMediaIntegrity(article: Article): Problem[] {
+  const { data: frontmatter, rawContent, relativePath } = article;
+  const body = matter(rawContent).content;
+  const problems: Problem[] = [];
+
+  for (const mediaPath of collectMediaPaths(frontmatter, body)) {
+    if (!mediaPath.startsWith('/help/')) {
+      problems.push({
+        severity: 'error',
+        file: relativePath,
+        message: `media path "${mediaPath}" must start with /help/ (repo-hosted under apps/web/public/help)`,
+      });
+      continue;
+    }
+    const abs = join(publicHelpRoot, mediaPath);
+    let size: number;
+    try {
+      size = statSync(abs).size;
+    } catch {
+      problems.push({
+        severity: 'error',
+        file: relativePath,
+        message: `media file missing: ${mediaPath} (expected at apps/web/public${mediaPath})`,
+      });
+      continue;
+    }
+    const budget = MEDIA_BUDGETS.find((b) => b.pattern.test(mediaPath));
+    if (budget && size > budget.maxBytes) {
+      problems.push({
+        severity: 'error',
+        file: relativePath,
+        message: `media over budget: ${mediaPath} is ${(size / 1024).toFixed(0)}KB (budget: ${budget.label}). Re-export smaller or split the clip.`,
+      });
+    }
+  }
+  return problems;
+}
+
+function checkUpNextIntegrity(articles: Article[]): Problem[] {
+  const slugs = new Set(
+    articles
+      .map((a) => a.data.slug)
+      .filter((s): s is string => typeof s === 'string'),
+  );
+  const problems: Problem[] = [];
+  for (const article of articles) {
+    const upNext = article.data.upNext;
+    if (typeof upNext !== 'string') continue;
+    if (!slugs.has(upNext)) {
+      problems.push({
+        severity: 'error',
+        file: article.relativePath,
+        message: `upNext "${upNext}" does not match any article slug in the help tree`,
+      });
+    }
+  }
+  return problems;
+}
+
 function main(): void {
   console.log('🔍 Help Content Guard');
   console.log('='.repeat(60));
@@ -270,12 +352,16 @@ function main(): void {
   console.log('Checking relatedArticles integrity...');
   problems.push(...checkRelatedArticlesIntegrity(articles));
 
-  console.log('Checking per-article schema, category, slug-filename match, staleness...');
+  console.log('Checking upNext integrity...');
+  problems.push(...checkUpNextIntegrity(articles));
+
+  console.log('Checking per-article schema, category, slug-filename match, staleness, media integrity...');
   for (const article of articles) {
     problems.push(...checkSchema(article));
     problems.push(...checkCategoryMatchesDirectory(article));
     problems.push(...checkSlugMatchesFilename(article));
     problems.push(...checkStaleness(article));
+    problems.push(...checkMediaIntegrity(article));
   }
 
   const errors = problems.filter((p) => p.severity === 'error');

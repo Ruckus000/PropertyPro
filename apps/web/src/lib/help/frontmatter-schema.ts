@@ -96,6 +96,27 @@ export const helpFrontmatterSchema = z
       .string()
       .regex(ISO_DATE_REGEX, 'lastReviewedAt must be ISO date (YYYY-MM-DD)')
       .optional(),
+    heroMedia: z
+      .object({
+        src: z
+          .string()
+          .min(1)
+          .regex(/^\/help\//, 'heroMedia.src must be a repo asset path starting with /help/'),
+        alt: z.string().min(1, 'heroMedia.alt is required'),
+        caption: z.string().optional(),
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+        /** Required in practice for .mp4/.webm heroes; enforced by guard. */
+        poster: z
+          .string()
+          .regex(/^\/help\//, 'heroMedia.poster must start with /help/')
+          .optional(),
+      })
+      .optional(),
+    upNext: z
+      .string()
+      .regex(SLUG_REGEX, 'upNext must be an article slug (lowercase kebab-case)')
+      .optional(),
   })
   .passthrough();
 

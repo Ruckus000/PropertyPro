@@ -54,6 +54,14 @@ vi.mock('../../src/components/help/help-docs-modal-search-panel', () => ({
   HelpDocsModalSearchPanel: () => <div data-testid="search-panel" />,
 }));
 
+vi.mock('../../src/lib/help/category-meta', () => ({
+  getHelpCategoryMeta: () => ({
+    label: 'Test Category',
+    icon: () => null,
+    chipClass: 'test-chip',
+  }),
+}));
+
 function withProviders(children: React.ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -68,54 +76,26 @@ function Opener() {
   return <button onClick={open}>open help</button>;
 }
 
+function ArticleOpener({ category, slug }: { category: string; slug: string }) {
+  const { openArticle } = useHelpWidget();
+  return <button onClick={() => openArticle(category, slug)}>open article</button>;
+}
+
 describe('<HelpDocsModal/>', () => {
-  it('renders nothing when flag is off', () => {
+  beforeEach(() => {
     usePathnameMock.mockReturnValue('/compliance');
     useContextualHelpMock.mockReturnValue({ data: [], isFetching: false });
-    useHelpArticleMock.mockReturnValue({ data: null, isLoading: false });
+    useHelpArticleMock.mockReturnValue({ data: null, isPending: false, isError: false });
+  });
+
+  it('renders nothing when flag is off', () => {
     render(
       withProviders(<HelpDocsModal communityId={1} flagEnabled={false} />),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('opens to the contextual article when one matches', async () => {
-    usePathnameMock.mockReturnValue('/compliance');
-    useContextualHelpMock.mockReturnValue({
-      data: [{ title: 'Fixing gaps', category: 'compliance', slug: 'fixing-gaps', description: '' }],
-      isFetching: false,
-    });
-    useHelpArticleMock.mockReturnValue({
-      data: {
-        source: { compiledSource: 'x', frontmatter: {}, scope: {} },
-        toc: [],
-        metadata: { title: 'Fixing gaps', slug: 'fixing-gaps', category: 'compliance' },
-        related: [],
-      },
-      isLoading: false,
-      isError: false,
-    });
-
-    render(
-      withProviders(
-        <>
-          <Opener />
-          <HelpDocsModal communityId={1} flagEnabled />
-        </>,
-      ),
-    );
-
-    screen.getByText('open help').click();
-
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-    expect(screen.getByTestId('article-body')).toHaveTextContent('Fixing gaps');
-  });
-
-  it('falls back to search panel when no contextual match', async () => {
-    usePathnameMock.mockReturnValue('/dashboard');
-    useContextualHelpMock.mockReturnValue({ data: [], isFetching: false });
-    useHelpArticleMock.mockReturnValue({ data: null, isLoading: false, isError: false });
-
+  it('shows search panel when no article is selected', async () => {
     render(
       withProviders(
         <>
@@ -131,15 +111,38 @@ describe('<HelpDocsModal/>', () => {
     expect(screen.getByTestId('search-panel')).toBeInTheDocument();
   });
 
-  it('shows an error banner when article fetch fails', async () => {
-    usePathnameMock.mockReturnValue('/compliance');
-    useContextualHelpMock.mockReturnValue({
-      data: [{ title: 'X', category: 'c', slug: 's', description: '' }],
-      isFetching: false,
+  it('renders the article body when an article is selected via openArticle', async () => {
+    useHelpArticleMock.mockReturnValue({
+      data: {
+        html: '<p>content</p>',
+        toc: [],
+        metadata: { title: 'Fixing gaps', slug: 'fixing-gaps', category: 'compliance' },
+        related: [],
+        upNext: null,
+      },
+      isPending: false,
+      isError: false,
     });
+
+    render(
+      withProviders(
+        <>
+          <ArticleOpener category="compliance" slug="fixing-gaps" />
+          <HelpDocsModal communityId={1} flagEnabled />
+        </>,
+      ),
+    );
+
+    screen.getByText('open article').click();
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    expect(screen.getByTestId('article-body')).toHaveTextContent('Fixing gaps');
+  });
+
+  it('shows an error banner when article fetch fails', async () => {
     useHelpArticleMock.mockReturnValue({
       data: null,
-      isLoading: false,
+      isPending: false,
       isError: true,
       refetch: vi.fn(),
     });
@@ -147,13 +150,13 @@ describe('<HelpDocsModal/>', () => {
     render(
       withProviders(
         <>
-          <Opener />
+          <ArticleOpener category="c" slug="s" />
           <HelpDocsModal communityId={1} flagEnabled />
         </>,
       ),
     );
 
-    screen.getByText('open help').click();
+    screen.getByText('open article').click();
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByText(/couldn't load this article/i)).toBeInTheDocument();

@@ -1,0 +1,22 @@
+{
+  "category": "finance",
+  "slug": "paying-dues-and-assessments",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "hero",
+      "kind": "still",
+      "route": "/payments?communityId=2",
+      "role": "owner",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 3000
+        }
+      ]
+    }
+  ]
+}

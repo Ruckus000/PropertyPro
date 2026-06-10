@@ -1,0 +1,22 @@
+{
+  "category": "maintenance",
+  "slug": "submitting-a-maintenance-request",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "hero",
+      "kind": "still",
+      "route": "/mobile/maintenance?communityId=2",
+      "role": "owner",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 3000
+        }
+      ]
+    }
+  ]
+}

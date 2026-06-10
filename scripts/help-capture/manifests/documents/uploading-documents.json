@@ -1,0 +1,22 @@
+{
+  "category": "documents",
+  "slug": "uploading-documents",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "shots": [
+    {
+      "name": "hero",
+      "kind": "still",
+      "route": "/communities/2/documents",
+      "role": "cam",
+      "actions": [
+        {
+          "type": "wait",
+          "ms": 3000
+        }
+      ]
+    }
+  ]
+}

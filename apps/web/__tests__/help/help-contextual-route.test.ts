@@ -88,7 +88,7 @@ describe('GET /api/v1/help/contextual', () => {
         slug: 'compliance-basics',
       },
     ]);
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'resident', 3);
+    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'resident', 8);
   });
 
   it('prefers membership.presetKey over base role for effectiveRole', async () => {
@@ -102,7 +102,7 @@ describe('GET /api/v1/help/contextual', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'board_member', 3);
+    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'board_member', 8);
   });
 
   it('returns 401 when unauthenticated', async () => {

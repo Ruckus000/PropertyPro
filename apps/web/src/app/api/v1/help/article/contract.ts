@@ -44,6 +44,17 @@ const helpArticleMetadataSchema = z.object({
   featureGates: z.array(z.string()).optional(),
   updatedAt: z.string().optional(),
   readTimeMinutes: z.number().optional(),
+  heroMedia: z
+    .object({
+      src: z.string(),
+      alt: z.string(),
+      caption: z.string().optional(),
+      width: z.number(),
+      height: z.number(),
+      poster: z.string().optional(),
+    })
+    .optional(),
+  upNext: z.string().optional(),
   contentHash: z.string(),
 });
 
@@ -55,6 +66,7 @@ export const helpArticleResponseSchema = z.object({
   toc: z.array(tocItemSchema),
   metadata: helpArticleMetadataSchema,
   related: z.array(helpArticleMetadataSchema),
+  upNext: helpArticleMetadataSchema.nullable(),
 });
 
 export const helpArticleContract = defineRoute({

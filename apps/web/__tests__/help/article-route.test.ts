@@ -10,7 +10,7 @@
  * - Feature-gated article → 404
  *
  * Mocks the service boundary (getArticle, isArticleVisibleToRole,
- * filterArticlesByFeatures), the next-mdx-remote/serialize call, and the
+ * filterArticlesByFeatures), the next-mdx-remote/rsc compileMDX call, and the
  * static React render step.
  *
  * withErrorHandler is NOT mocked — we use the real implementation so that
@@ -37,7 +37,7 @@ const {
   isArticleVisibleToRoleMock,
   filterArticlesByFeaturesMock,
   getAllArticlesMock,
-  serializeMock,
+  compileMDXMock,
   extractTableOfContentsMock,
   unstableCacheMock,
   requireAuthenticatedUserIdMock,
@@ -50,7 +50,7 @@ const {
   isArticleVisibleToRoleMock: vi.fn(),
   filterArticlesByFeaturesMock: vi.fn(),
   getAllArticlesMock: vi.fn(),
-  serializeMock: vi.fn(),
+  compileMDXMock: vi.fn(),
   extractTableOfContentsMock: vi.fn(),
   unstableCacheMock: vi.fn((fn: () => unknown) => fn),
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -70,8 +70,8 @@ vi.mock('@/lib/services/help-article-service', () => ({
   getAllArticles: getAllArticlesMock,
 }));
 
-vi.mock('next-mdx-remote/serialize', () => ({
-  serialize: serializeMock,
+vi.mock('next-mdx-remote/rsc', () => ({
+  compileMDX: compileMDXMock,
 }));
 
 vi.mock('react-dom/server', () => ({
@@ -131,7 +131,7 @@ const sampleArticle = {
   rawContent: '## Heading\n\nBody text.',
 };
 
-const serializedResult = { compiledSource: 'compiled', frontmatter: {}, scope: {} };
+const compiledResult = { content: 'mdx-content-element', frontmatter: {} };
 
 describe('GET /api/v1/help/article', () => {
   beforeEach(() => {
@@ -147,7 +147,7 @@ describe('GET /api/v1/help/article', () => {
     isArticleVisibleToRoleMock.mockReturnValue(true);
     filterArticlesByFeaturesMock.mockReturnValue([sampleArticle.metadata]);
     getAllArticlesMock.mockReturnValue([]);
-    serializeMock.mockResolvedValue(serializedResult);
+    compileMDXMock.mockResolvedValue(compiledResult);
     extractTableOfContentsMock.mockReturnValue([
       { depth: 2, label: 'Heading', anchor: 'heading' },
     ]);
@@ -168,9 +168,12 @@ describe('GET /api/v1/help/article', () => {
     expect(body.data.toc).toEqual([{ depth: 2, label: 'Heading', anchor: 'heading' }]);
     expect(body.data.metadata.slug).toBe('fixing-compliance-gaps');
     expect(body.data.related).toEqual([]);
-    expect(serializeMock).toHaveBeenCalledWith(sampleArticle.rawContent, {
-      parseFrontmatter: true,
-    });
+    expect(compileMDXMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: sampleArticle.rawContent,
+        options: { parseFrontmatter: true },
+      }),
+    );
   });
 
   it('returns 400 on invalid params (empty category/slug)', async () => {
