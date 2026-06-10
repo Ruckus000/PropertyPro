@@ -23,7 +23,7 @@ import {
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getPresetPermissions, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
+import { getPresetPermissions } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
 
@@ -212,11 +212,13 @@ async function banDemoUsers(demoId: number): Promise<void> {
 
 /**
  * Creates the founding user for a converted community.
- * Assigns board_president + pm_admin roles (community + platform access).
+ * Assigns root_manager (board_president designation, the single community ROOT)
+ * + property_manager roles (community + platform access). Exactly one
+ * root_manager exists per community (partial unique index). Spec §3.5(a).
  *
- * Idempotency: checks if a board_president role row already exists for this
- * community before creating anything. If the auth user already exists (e.g.,
- * from a previous partial run), reuses it.
+ * Idempotency: checks if this community already has its root_manager before
+ * creating anything (a community has at most one root — partial unique index).
+ * If the auth user already exists (e.g. from a previous partial run), reuses it.
  */
 async function ensureFoundingUser(
   demoId: number,
@@ -227,23 +229,23 @@ async function ensureFoundingUser(
 ): Promise<void> {
   const db = createUnscopedClient();
 
-  // Check if a board_president (manager) role already exists for this community
+  // Check if this community already has its root_manager (at most one per community
+  // enforced by the partial unique index on user_roles). This is the precise
+  // idempotency key: if a root exists, the founding run already completed.
   const [existingRole] = await db
     .select({ id: userRoles.id })
     .from(userRoles)
     .where(
       and(
         eq(userRoles.communityId, communityId),
-        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-        inArray(userRoles.role, [...MANAGER_TIER_DB_ROLES]),
-        eq(userRoles.presetKey, 'board_president'),
+        eq(userRoles.role, 'root_manager'),
       ),
     )
     .limit(1);
 
   if (existingRole) {
     console.info(
-      `[demo-conversion] founding user already exists for community ${communityId}`,
+      `[demo-conversion] root_manager already exists for community ${communityId} — skipping founding user creation`,
     );
     return;
   }
@@ -289,9 +291,13 @@ async function ensureFoundingUser(
       .onConflictDoNothing();
   }
 
-  // Create board_president (manager) + pm_admin roles for the founding user.
-  // manager+board_president: community management authority (V2 role model)
-  // pm_admin: PM portfolio dashboard access (fixes PM-03 audit gap)
+  // Create the founding user's two memberships for this community.
+  // creator-is-root (v3), Spec §3.5(a): the founding board_president is the
+  // single ROOT for the community (role='root_manager'). The companion
+  // PM-portfolio row stays a non-root admin (role='property_manager') so there
+  // is exactly ONE root_manager per community (partial unique index).
+  // - root_manager + board_president designation: community management authority
+  // - property_manager: PM portfolio dashboard access (fixes PM-03 audit gap)
   const permissions = getPresetPermissions('board_president', communityType);
   await db
     .insert(userRoles)
@@ -299,8 +305,9 @@ async function ensureFoundingUser(
       {
         userId,
         communityId,
-        role: 'manager',
-        presetKey: 'board_president',
+        role: 'root_manager',
+        designation: 'board_president',
+        presetKey: 'board_president', // preserved for the bilingual window
         displayTitle: 'Board President',
         isUnitOwner: false,
         permissions,
@@ -308,7 +315,7 @@ async function ensureFoundingUser(
       {
         userId,
         communityId,
-        role: 'pm_admin',
+        role: 'property_manager',
         displayTitle: 'Administrator',
         isUnitOwner: false,
       },

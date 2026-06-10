@@ -60,11 +60,11 @@ export async function createCommunityForPm(
 
     const cId = Number(community.id);
 
-    // 2. Link PM as admin
+    // 2. Link the creator as root_manager (creator-is-root, v3). Spec §3.5(a).
     await tx.insert(userRoles).values({
       userId: input.userId,
       communityId: cId,
-      role: 'pm_admin',
+      role: 'root_manager',
       displayTitle: 'Administrator',
     });
 

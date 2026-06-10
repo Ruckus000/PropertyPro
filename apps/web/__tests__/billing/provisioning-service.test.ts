@@ -231,12 +231,16 @@ function buildDb(opts: {
     then: (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve),
   }));
 
-  const valuesMock = opts.insertError
-    ? vi.fn(() => { throw opts.insertError; })
-    : vi.fn(() => ({ onConflictDoNothing: onConflictDoNothingMock }));
-
   const insertMock = vi.fn((table: unknown) => {
-    calls.push({ op: 'insert', table });
+    const valuesMock = opts.insertError
+      ? vi.fn(() => { throw opts.insertError; })
+      : vi.fn((values: unknown) => {
+          calls.push({ op: 'insert', table, values });
+          return { onConflictDoNothing: onConflictDoNothingMock };
+        });
+    if (opts.insertError) {
+      calls.push({ op: 'insert', table });
+    }
     return { values: valuesMock };
   });
 
@@ -281,13 +285,13 @@ describe('runProvisioning', () => {
   it('runs all 7 steps for a condo_718 signup and ends completed', async () => {
     const job = makeJob({});
 
-    buildDb({
+    const { calls } = buildDb({
       selectSequence: [
         [job],                               // load job
         [CONDO_SIGNUP],                      // load pending signup
         // community_created uses .returning() on insert, not a select
         [{ userId: 'auth-uuid-001' }],       // preferences_set: lookup user_role by communityId + role
-        [{ userId: 'auth-uuid-001' }],       // completed: assert pm_admin user_role exists before terminal
+        [{ userId: 'auth-uuid-001' }],       // completed: assert admin user_role exists before terminal
       ],
     });
 
@@ -295,6 +299,13 @@ describe('runProvisioning', () => {
 
     expect(sendEmailMock).toHaveBeenCalledOnce();
     expect(createUnscopedClientMock).toHaveBeenCalled();
+
+    // creator-is-root (v3): the founding membership is root_manager. Spec §3.5(a).
+    const userRoleInsert = calls.find(
+      (c) => c.op === 'insert' && c.table === userRolesTable,
+    );
+    expect(userRoleInsert).toBeDefined();
+    expect((userRoleInsert?.values as { role?: string }).role).toBe('root_manager');
   });
 
   // 2. Full happy path — apartment (checklist is a no-op)

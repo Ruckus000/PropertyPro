@@ -64,6 +64,17 @@ export {
 } from './queries/user-communities';
 
 /**
+ * Rootless-communities report — cross-community by design.
+ *
+ * **Authorization contract:** callers MUST verify a platform-admin session
+ * (apps/admin `requirePlatformAdmin`) before invoking `findRootlessCommunities`.
+ */
+export {
+  findRootlessCommunities,
+  type RootlessCommunityRow,
+} from './queries/rootless-communities';
+
+/**
  * Returns the raw Drizzle client without tenant scoping.
  * Use only for deliberate, reviewed escape-hatch flows.
  */
