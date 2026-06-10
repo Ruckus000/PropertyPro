@@ -111,10 +111,22 @@ export async function requireCommunityMembership(
   let permissions: ManagerPermissions | undefined;
   // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
   if (role === 'manager' || role === 'property_manager') {
+    const rawPerms = membership['permissions'];
     const fallback = presetKey && isPresetKey(presetKey)
       ? getPresetPermissions(presetKey, communityType).resources
       : undefined;
-    permissions = normalizeManagerPermissions(membership['permissions'], fallback);
+    // BILINGUAL (role-v3): an ex-pm_admin backfilled to property_manager has neither
+    // stored JSONB nor a usable preset. Leave permissions undefined so checkPermissionV2
+    // resolves it to the uniform full-operational set (property_manager_admin matrix)
+    // rather than normalizeManagerPermissions' all-DENY default — otherwise the defined
+    // all-DENY object would skip checkPermissionV2's `if (!opts?.permissions)` fallback
+    // and lock the user out. manager always carries stored perms
+    // (chk_manager_has_permissions); board/cam property_managers keep their JSONB.
+    if (rawPerms == null && fallback === undefined && role === 'property_manager') {
+      permissions = undefined;
+    } else {
+      permissions = normalizeManagerPermissions(rawPerms, fallback);
+    }
   }
 
   return {
