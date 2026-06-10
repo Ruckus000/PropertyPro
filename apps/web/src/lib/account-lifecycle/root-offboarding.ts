@@ -18,6 +18,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 /** Community ids where `userId` currently holds the `root_manager` role. */
 export async function findCommunitiesUserIsRootOf(userId: string): Promise<number[]> {
   const db = createUnscopedClient();
+  // user_roles uses hard deletes; the cascade from communities.id removes rows on community deletion, so no deletedAt filter is needed here.
   const rows = await db
     .select({ communityId: userRoles.communityId })
     .from(userRoles)

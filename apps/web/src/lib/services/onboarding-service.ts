@@ -244,5 +244,5 @@ function resolveDisplayTitle(
 ): string {
   if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
-  return 'Administrator'; // pm_admin (legacy) + root_manager + property_manager
+  return 'Administrator'; // pm_admin — the only non-manager, non-resident NewCommunityRole
 }

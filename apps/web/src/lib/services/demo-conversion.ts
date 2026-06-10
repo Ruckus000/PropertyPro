@@ -23,7 +23,7 @@ import {
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getPresetPermissions, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
+import { getPresetPermissions } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
 
@@ -216,9 +216,9 @@ async function banDemoUsers(demoId: number): Promise<void> {
  * + property_manager roles (community + platform access). Exactly one
  * root_manager exists per community (partial unique index). Spec §3.5(a).
  *
- * Idempotency: checks if a board_president role row already exists for this
- * community before creating anything. If the auth user already exists (e.g.,
- * from a previous partial run), reuses it.
+ * Idempotency: checks if this community already has its root_manager before
+ * creating anything (a community has at most one root — partial unique index).
+ * If the auth user already exists (e.g. from a previous partial run), reuses it.
  */
 async function ensureFoundingUser(
   demoId: number,
@@ -229,23 +229,23 @@ async function ensureFoundingUser(
 ): Promise<void> {
   const db = createUnscopedClient();
 
-  // Check if a board_president (manager) role already exists for this community
+  // Check if this community already has its root_manager (at most one per community
+  // enforced by the partial unique index on user_roles). This is the precise
+  // idempotency key: if a root exists, the founding run already completed.
   const [existingRole] = await db
     .select({ id: userRoles.id })
     .from(userRoles)
     .where(
       and(
         eq(userRoles.communityId, communityId),
-        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-        inArray(userRoles.role, [...MANAGER_TIER_DB_ROLES]),
-        eq(userRoles.presetKey, 'board_president'),
+        eq(userRoles.role, 'root_manager'),
       ),
     )
     .limit(1);
 
   if (existingRole) {
     console.info(
-      `[demo-conversion] founding user already exists for community ${communityId}`,
+      `[demo-conversion] root_manager already exists for community ${communityId} — skipping founding user creation`,
     );
     return;
   }

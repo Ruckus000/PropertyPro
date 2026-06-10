@@ -520,6 +520,8 @@ export async function requestUserDeletion(userId: string) {
     })
     .returning();
 
+  if (!request) throw new Error(`Failed to create deletion request for user ${userId}`);
+
   // Role-offboarding flag (role-v3 Phase 2a): if this user holds root_manager
   // in any community, flag those communities as pending-rootless so the
   // platform-admin surface (rootless-communities report) and audit trail have
@@ -530,13 +532,13 @@ export async function requestUserDeletion(userId: string) {
     for (const communityId of rootCommunityIds) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[root-offboarding] user ${userId} (deletion request ${request!.id}) is root_manager of community ${communityId}; community will be rootless after purge`,
+        `[root-offboarding] user ${userId} (deletion request ${request.id}) is root_manager of community ${communityId}; community will be rootless after purge`,
       );
       await logAuditEvent({
         userId,
         action: 'root_pending_deletion',
         resourceType: 'account_deletion_request',
-        resourceId: String(request!.id),
+        resourceId: String(request.id),
         communityId,
         metadata: {
           reason: 'root_manager_requested_account_deletion',
@@ -551,7 +553,7 @@ export async function requestUserDeletion(userId: string) {
     console.error('[root-offboarding] failed to flag rootless-on-deletion', err);
   }
 
-  return request!;
+  return request;
 }
 
 /** Cancels a deletion request during the cooling period. */

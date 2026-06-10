@@ -19,6 +19,7 @@ export interface RootlessCommunityRow {
  * community is rootless; this report is how platform admins track convergence.
  */
 export async function findRootlessCommunities(): Promise<RootlessCommunityRow[]> {
+  // No pagination: expected O(hundreds) of communities; an unbounded select is acceptable for this platform-admin report.
   return db
     .select({ id: communities.id, name: communities.name, slug: communities.slug })
     .from(communities)

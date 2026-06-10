@@ -69,7 +69,7 @@ type Recorded = { table: unknown; values: unknown };
  * Select call order across handleDemoConversion:
  *   1. banDemoUsers: select demo instance        → limit → [demo]
  *   2. fetchCommunityType: select community type  → limit → [{communityType}]
- *   3. ensureFoundingUser: existing board role    → limit → []   (none yet)
+ *   3. ensureFoundingUser: existing root_manager   → limit → []   (none yet)
  *   4. ensureFoundingUser: existing user by email → limit → []   (none yet)
  */
 function buildDb(): { inserts: Recorded[] } {
@@ -77,7 +77,7 @@ function buildDb(): { inserts: Recorded[] } {
   const selectQueue: unknown[][] = [
     [{ demoResidentUserId: 'res-1', demoBoardUserId: 'board-1' }], // banDemoUsers
     [{ communityType: 'condo_718' }],                              // fetchCommunityType
-    [],                                                            // existing board role → none
+    [],                                                            // existing root_manager → none
     [],                                                            // existing user → none
   ];
 
