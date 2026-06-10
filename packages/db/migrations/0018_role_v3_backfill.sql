@@ -34,7 +34,11 @@ SET role = 'property_manager', updated_at = now()
 WHERE role = 'manager' AND (preset_key IN ('cam', 'site_manager') OR preset_key IS NULL);
 --> statement-breakpoint
 
--- 4. pm_admin → property_manager (no designation).
+-- 4. pm_admin → property_manager (no designation). COALESCE preserves any already-set
+--    legacy_role (39 rows) while stamping the 172 NULL rows so ex-pm_admin rows remain
+--    distinguishable from ex-manager/null-preset rows post-backfill (recoverability).
 UPDATE user_roles
-SET role = 'property_manager', updated_at = now()
+SET role = 'property_manager',
+    legacy_role = COALESCE(legacy_role, 'property_manager_admin'),
+    updated_at = now()
 WHERE role = 'pm_admin';

@@ -3,6 +3,11 @@
 -- from 0006_site_assets_storage.sql except the role predicate. Spec audit Finding 5.
 DO $$
 BEGIN
+  IF to_regclass('storage.buckets') IS NULL THEN
+    RAISE NOTICE 'storage.buckets not present (non-Supabase environment); skipping migration 0017';
+    RETURN;
+  END IF;
+
   EXECUTE $POL$DROP POLICY IF EXISTS "site_assets_pm_insert" ON storage.objects$POL$;
   EXECUTE $POL$
     CREATE POLICY "site_assets_pm_insert" ON storage.objects
@@ -14,7 +19,7 @@ BEGIN
            WHERE user_id = auth.uid()
              AND (
                role IN ('pm_admin', 'property_manager', 'root_manager')
-               OR (role IN ('manager', 'property_manager', 'root_manager') AND preset_key = 'cam')
+               OR (role = 'manager' AND preset_key = 'cam')
              )
         )
       )
@@ -31,7 +36,7 @@ BEGIN
            WHERE user_id = auth.uid()
              AND (
                role IN ('pm_admin', 'property_manager', 'root_manager')
-               OR (role IN ('manager', 'property_manager', 'root_manager') AND preset_key = 'cam')
+               OR (role = 'manager' AND preset_key = 'cam')
              )
         )
       )
