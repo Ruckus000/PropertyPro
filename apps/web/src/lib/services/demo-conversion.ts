@@ -212,7 +212,9 @@ async function banDemoUsers(demoId: number): Promise<void> {
 
 /**
  * Creates the founding user for a converted community.
- * Assigns board_president + pm_admin roles (community + platform access).
+ * Assigns root_manager (board_president designation, the single community ROOT)
+ * + property_manager roles (community + platform access). Exactly one
+ * root_manager exists per community (partial unique index). Spec §3.5(a).
  *
  * Idempotency: checks if a board_president role row already exists for this
  * community before creating anything. If the auth user already exists (e.g.,
@@ -289,9 +291,13 @@ async function ensureFoundingUser(
       .onConflictDoNothing();
   }
 
-  // Create board_president (manager) + pm_admin roles for the founding user.
-  // manager+board_president: community management authority (V2 role model)
-  // pm_admin: PM portfolio dashboard access (fixes PM-03 audit gap)
+  // Create the founding user's two memberships for this community.
+  // creator-is-root (v3), Spec §3.5(a): the founding board_president is the
+  // single ROOT for the community (role='root_manager'). The companion
+  // PM-portfolio row stays a non-root admin (role='property_manager') so there
+  // is exactly ONE root_manager per community (partial unique index).
+  // - root_manager + board_president designation: community management authority
+  // - property_manager: PM portfolio dashboard access (fixes PM-03 audit gap)
   const permissions = getPresetPermissions('board_president', communityType);
   await db
     .insert(userRoles)
@@ -299,8 +305,9 @@ async function ensureFoundingUser(
       {
         userId,
         communityId,
-        role: 'manager',
-        presetKey: 'board_president',
+        role: 'root_manager',
+        designation: 'board_president',
+        presetKey: 'board_president', // preserved for the bilingual window
         displayTitle: 'Board President',
         isUnitOwner: false,
         permissions,
@@ -308,7 +315,7 @@ async function ensureFoundingUser(
       {
         userId,
         communityId,
-        role: 'pm_admin',
+        role: 'property_manager',
         displayTitle: 'Administrator',
         isUnitOwner: false,
       },
