@@ -106,6 +106,13 @@
       "when": 1781092235397,
       "tag": "0014_role_v3_enum_values",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1781093106119,
+      "tag": "0015_role_v3_designation_and_root_indexes",
+      "breakpoints": true
     }
   ]
 }
