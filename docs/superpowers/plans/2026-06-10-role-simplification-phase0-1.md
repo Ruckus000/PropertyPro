@@ -831,7 +831,7 @@ grep -rln "pm-portfolio\|lookupLifecycleAdminRecipients\|listResidentsForCommuni
 grep -rn "vi.mock('@propertypro/shared'" apps/web/__tests__ | head
 ```
 
-For each test asserting an `eq(role, 'pm_admin')`-shaped clause (the mock-operator stubs record `{ __eq: ... }` / `{ __inArray: ... }` shapes per the api-patterns rule), update the expectation to the `__inArray` shape with the matching constant's values. If any `vi.mock('@propertypro/shared')` factory exists, add the new exports (`TRANSITION_ROLES`, `ADMIN_TIER_DB_ROLES`, `PM_SCOPE_DB_ROLES`, `MANAGER_TIER_DB_ROLES`, `expandTransitionRoleFilter`, `resolveLegacyRole`) to EVERY factory — a missing export 500s every test in the file (known trap).
+For each test asserting an `eq(role, 'pm_admin')`-shaped clause (the mock-operator stubs record `{ __eq: ... }` / `{ __inArray: ... }` shapes per the api-patterns rule), update the expectation to the `__inArray` shape with the matching constant's values. If any `vi.mock('@propertypro/shared')` factory exists, add the new exports (`TRANSITION_ROLES`, `ADMIN_TIER_DB_ROLES`, `PM_SCOPE_DB_ROLES`, `MANAGER_TIER_DB_ROLES`, `expandTransitionRoleFilter`, `inferCanonicalRoleFromMembership`) to EVERY factory — a missing export 500s every test in the file (known trap).
 
 - [ ] **Step 2: Build packages, then run the affected suites**
 

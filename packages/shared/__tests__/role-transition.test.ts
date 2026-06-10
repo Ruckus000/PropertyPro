@@ -8,6 +8,7 @@ import {
 } from '../src/role-transition';
 
 describe('role-transition constants', () => {
+  // Contract-pin tests: they catch accidental constant mutation across the bilingual window, not logic.
   it('TRANSITION_ROLES carries both generations', () => {
     expect(TRANSITION_ROLES).toEqual(['resident', 'manager', 'pm_admin', 'property_manager', 'root_manager']);
   });

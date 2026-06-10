@@ -7,7 +7,9 @@
  * root_manager). Every DB-level role predicate AND every app-layer branch on a
  * raw membership.role value must match both generations, via these constants.
  * Phase 4 cleanup shrinks them to v3-only and deletes the expander.
+ * The _DB_ infix means "raw user_role_v2 enum values" — as opposed to the legacy-NAME arrays in access-policies.ts (ADMIN_ROLES etc.), which hold 7-role vocabulary strings.
  */
+// resident appears in no tier array below — it is the non-admin base role, not an omission.
 export const TRANSITION_ROLES = ['resident', 'manager', 'pm_admin', 'property_manager', 'root_manager'] as const;
 export type TransitionRole = (typeof TRANSITION_ROLES)[number];
 
@@ -24,6 +26,7 @@ export const MANAGER_TIER_DB_ROLES = ['manager', 'property_manager', 'root_manag
  * Expand a v2 role-filter value so list filters match rows of both
  * generations. Returns [] for unknown input — callers MUST short-circuit
  * (drizzle forbids inArray(col, [])).
+ * Legacy 7-role NAMES (cam, board_member, …) are not valid inputs here — those filters belong to the legacy-name path until their Phase 3 drain.
  */
 export function expandTransitionRoleFilter(role: string): readonly TransitionRole[] {
   switch (role) {
