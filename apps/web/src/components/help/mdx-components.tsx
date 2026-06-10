@@ -1,8 +1,9 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import { isValidElement } from 'react';
+import { Children, cloneElement, isValidElement } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { slugifyHeading } from '@/lib/help/anchors';
+import { MediaFrame } from '@/components/help/media-frame';
 
 function linkClasses() {
   return 'font-medium text-[var(--interactive-primary)] underline underline-offset-2';
@@ -90,33 +91,47 @@ interface StepProps {
   title: string;
   image?: string;
   imageAlt?: string;
+  /** Step screenshot dimensions; default matches the 1440×900 capture viewport. */
+  imageWidth?: number;
+  imageHeight?: number;
   children: ReactNode;
+  /** Injected by <StepByStep/> — do not set in MDX. */
+  index?: number;
+  /** Injected by <StepByStep/> — do not set in MDX. */
+  isLast?: boolean;
 }
 
-export function Step({ title, image, imageAlt, children }: StepProps) {
+export function Step({
+  title,
+  image,
+  imageAlt,
+  imageWidth = 1440,
+  imageHeight = 900,
+  children,
+  index,
+  isLast = false,
+}: StepProps) {
   return (
-    <div className="relative pb-8 pl-8 last:pb-0">
-      <div
-        className="absolute bottom-0 left-3 top-8 w-px bg-border-default last:hidden"
-        aria-hidden="true"
-      />
+    <div className="relative pb-8 pl-9 last:pb-0" role="listitem">
+      {!isLast && (
+        <div className="absolute bottom-0 left-3 top-8 w-px bg-edge" aria-hidden="true" />
+      )}
       <div
         className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-[var(--interactive-primary)] text-xs font-semibold text-white"
         aria-hidden="true"
-      />
+      >
+        {index}
+      </div>
       <div>
         <h4 className="mb-1 text-sm font-semibold text-content">{title}</h4>
         <div className="text-sm leading-relaxed text-content-secondary">{children}</div>
         {image && (
-          <div className="mt-3 overflow-hidden rounded-[var(--radius-md)] border border-edge">
-            <Image
-              src={image}
-              alt={imageAlt ?? title}
-              width={800}
-              height={450}
-              className="w-full"
-            />
-          </div>
+          <MediaFrame
+            src={image}
+            alt={imageAlt ?? title}
+            width={imageWidth}
+            height={imageHeight}
+          />
         )}
       </div>
     </div>
@@ -128,9 +143,17 @@ interface StepByStepProps {
 }
 
 export function StepByStep({ children }: StepByStepProps) {
+  // MDX may interleave whitespace text nodes between <Step> elements —
+  // filter to elements before computing indices.
+  const steps = Children.toArray(children).filter(isValidElement);
   return (
     <div className="my-6" role="list" aria-label="Step-by-step guide">
-      {children}
+      {steps.map((child, i) =>
+        cloneElement(child as React.ReactElement<StepProps>, {
+          index: i + 1,
+          isLast: i === steps.length - 1,
+        }),
+      )}
     </div>
   );
 }
