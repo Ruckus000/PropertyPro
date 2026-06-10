@@ -4,10 +4,11 @@
 
 ## Current State
 
-- Last migration file on main: `0036_add_is_applicable.sql`
-- Migration journal has 28 entries (idx 0-27)
-- Migration journal drift: files 0030-0036 exist but journal only goes to idx 27
-- Phase 2 migrations use the 0090-0106 range (on the phase-2A branch)
+- Migrations were squashed to a new baseline: live ledger is `0000`–`0013` (`packages/db/migrations/`), journal has 14 entries (idx 0–13)
+- Next migration number: **0014** (role-simplification Phase 1 reserves 0014–0016; Phase 2 backfill = 0017)
+- Pre-squash history (incl. the 0090–0106 phase-2 range) lives in `packages/db/migrations/_archive/`
+- The deploy pipeline does NOT run `db:migrate` — every migration needs a manual prod apply (see `docs/audits/phase0-role-simplification-prod-verify-2026-06-10.md`)
+- Prod `user_role_v2` enum carries an undeclared extra value `super_admin` (no rows) — account for it in any enum rebuild
 
 ## Rules
 
