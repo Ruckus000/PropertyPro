@@ -2,7 +2,21 @@
 -- property_manager, attaches board designations, and leaves root_manager VACANT
 -- (claimed later via the claim-root flow). presetKey is intentionally preserved
 -- (the Phase-1 compat shim still reads it; dropped in Phase 4). resident rows
--- are untouched. Spec §4 Phase 2.
+-- are untouched. Also widens the two manager-only CHECK constraints to the
+-- manager-generation so backfilled property_manager rows may carry permissions
+-- + preset_key during the bilingual window. Spec §4 Phase 2.
+
+-- Phase-2 prerequisite (completes the Phase-1 bilingual widening Phase-0 missed):
+-- widen the two manager-only CHECK constraints to the manager-generation
+-- (manager | property_manager | root_manager) so backfilled property_manager rows
+-- may carry permissions + preset_key during the bilingual window. resident/pm_admin
+-- still must have NULL permissions + preset_key. Drops are IF EXISTS for re-runnability.
+ALTER TABLE "user_roles" DROP CONSTRAINT IF EXISTS "chk_non_manager_no_permissions";--> statement-breakpoint
+ALTER TABLE "user_roles" ADD CONSTRAINT "chk_non_manager_no_permissions"
+  CHECK (role IN ('manager', 'property_manager', 'root_manager') OR permissions IS NULL);--> statement-breakpoint
+ALTER TABLE "user_roles" DROP CONSTRAINT IF EXISTS "chk_preset_key_manager_only";--> statement-breakpoint
+ALTER TABLE "user_roles" ADD CONSTRAINT "chk_preset_key_manager_only"
+  CHECK (role IN ('manager', 'property_manager', 'root_manager') OR preset_key IS NULL);--> statement-breakpoint
 
 -- 1. board_president preset → property_manager + designation.
 --    Deterministic dedup (defensive; prod has zero collisions): the earliest

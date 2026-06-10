@@ -169,6 +169,33 @@ via `site_assets_service_role_all`, and the route-level `requireRole` gate is al
 before the backfill runs** (it is the first migration of Phase 2, ahead of the backfill itself).
 See the spec's Phase 1 §"Migration 0016" note.
 
+**Finding 6 — undeclared manager-keyed CHECK constraints on `user_roles` (drift)**
+
+A later cross-cutting review (during Phase-2a backfill prep) found four CHECK
+constraints on prod `user_roles` that are present in production but absent from
+every reviewed migration in the live ledger (likely originating from the
+pre-squash archived range, e.g. `0091`–`0095`):
+
+- `chk_manager_has_permissions` — `CHECK (role <> 'manager' OR permissions IS NOT NULL)` (manager-only; harmless — every manager already carries permissions, and it disappears after the backfill drains the `manager` rows)
+- `chk_non_manager_no_permissions` — `CHECK ((role <> 'manager' AND permissions IS NULL) OR role = 'manager')` (BLOCKING — rejects a `property_manager` row that carries permissions)
+- `chk_preset_key_manager_only` — `CHECK (role = 'manager' OR preset_key IS NULL)` (BLOCKING — rejects a `property_manager` row that carries `preset_key`)
+- `chk_owner_flag_resident_only` — owner-flag guard scoped to `resident` (unaffected by the backfill)
+
+The two BLOCKING constraints would reject the Phase-2 backfill, which converts
+`manager`/`pm_admin` rows to `property_manager` while preserving `permissions`
+and `preset_key`. **Migration 0018 now widens both `chk_non_manager_no_permissions`
+and `chk_preset_key_manager_only` to the manager-generation
+(`manager | property_manager | root_manager`)**, prepended atomically ahead of
+the backfill UPDATEs. `chk_manager_has_permissions` is left untouched (manager-only,
+harmless), and `chk_owner_flag_resident_only` is out of scope.
+
+Lesson: Phase-0's introspection (Q2) enumerated only `information_schema.columns`
+and the enum/index/RLS-function surface — it did NOT enumerate table CHECK
+constraints (or triggers/policies generally), so this drift was missed until the
+backfill failed on prod. Future schema-drift audits must enumerate constraints,
+triggers, and policies — not just columns. (Query: `SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint WHERE conrelid = 'user_roles'::regclass AND contype = 'c';`)
+
 ---
 
 ## Verdict
