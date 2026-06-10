@@ -97,7 +97,7 @@ export function HelpArticleBody({
         e.preventDefault();
         const id = decodeURIComponent(anchor.getAttribute('href')!.slice(1));
         if (!id) return;
-        root.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' });
+        root!.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' });
       }
     }
 
