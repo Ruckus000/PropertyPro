@@ -94,6 +94,35 @@ describe('HelpDocsModalSearchPanel', () => {
     expect(screen.queryByText('Featured for you')).toBeNull();
   });
 
+  it('clicking a contextual row calls onPickArticle (in-modal open, never navigation)', () => {
+    const { onPickArticle } = setup();
+    fireEvent.click(screen.getByRole('button', { name: /Doc article 1/ }));
+    expect(onPickArticle).toHaveBeenCalledWith('documents', 'doc-article-1');
+  });
+
+  it('clicking a search-result row calls onPickArticle with its category and slug', () => {
+    searchMock.mockReturnValue({
+      data: {
+        articles: [{ category: 'documents', slug: 'uploading-documents', title: 'Uploading documents', description: 'How to upload' }],
+        faqs: [],
+      },
+      isFetching: false,
+    });
+    featuredMock.mockReturnValue({ data: [] });
+    const onPickArticle = vi.fn();
+    render(
+      <HelpDocsModalSearchPanel
+        communityId={1}
+        query="upload"
+        contextualArticles={[]}
+        readSlugs={null}
+        onPickArticle={onPickArticle}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Uploading documents/ }));
+    expect(onPickArticle).toHaveBeenCalledWith('documents', 'uploading-documents');
+  });
+
   it('shows article search results with read checkmark', () => {
     searchMock.mockReturnValue({
       data: {
