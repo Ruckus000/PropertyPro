@@ -222,7 +222,8 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   // Insert role — onConflictDoNothing satisfies ADR-001 one-role-per-community on retry.
   await db
     .insert(userRoles)
-    .values({ userId, communityId, role: 'pm_admin', presetKey: null, displayTitle, permissions: null })
+    // creator-is-root (v3). Spec §3.5(a).
+    .values({ userId, communityId, role: 'root_manager', presetKey: null, displayTitle, permissions: null })
     .onConflictDoNothing();
 }
 
