@@ -40,6 +40,7 @@ import {
 import { extractTableOfContents } from '@/lib/help/toc';
 import { helpMdxComponents, type TocItem } from '@/components/help/mdx-components';
 import { sanitizeHelpHtml } from '@/lib/help/sanitize-help-html';
+import { helpArticleCacheKey } from '@/lib/help/render-version';
 import { helpArticleContract } from './contract';
 
 interface CompiledArticle {
@@ -79,12 +80,16 @@ export const GET = withErrorHandler(
 
 /**
  * Wraps MDX compile/render + extractTableOfContents in unstable_cache, keyed
- * on (category, slug, contentHash). Rendering MDX to sanitized HTML on the
- * server keeps the modal compatible with production CSP: the browser no longer
- * needs `new Function()` / `'unsafe-eval'` to open contextual help.
+ * on (category, slug, contentHash, renderVersion). Rendering MDX to sanitized
+ * HTML on the server keeps the modal compatible with production CSP: the browser
+ * no longer needs `new Function()` / `'unsafe-eval'` to open contextual help.
  */
 async function getCompiledArticle(article: HelpArticleSource): Promise<CompiledArticle> {
-  const key = `${article.metadata.category}:${article.metadata.slug}:${article.metadata.contentHash}`;
+  const key = helpArticleCacheKey(
+    article.metadata.category,
+    article.metadata.slug,
+    article.metadata.contentHash,
+  );
   return unstable_cache(
     async (): Promise<CompiledArticle> => {
       const source = await serialize(article.rawContent, { parseFrontmatter: true });
