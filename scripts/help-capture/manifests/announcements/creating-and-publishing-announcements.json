@@ -1,0 +1,24 @@
+{
+  "category": "announcements",
+  "slug": "creating-and-publishing-announcements",
+  "viewport": { "width": 1440, "height": 900 },
+  "shots": [
+    {
+      "name": "hero",
+      "kind": "still",
+      "route": "/announcements",
+      "role": "cam",
+      "actions": [{ "type": "waitFor", "selector": "main" }]
+    },
+    {
+      "name": "compose-form",
+      "kind": "still",
+      "route": "/announcements",
+      "role": "cam",
+      "actions": [
+        { "type": "waitFor", "selector": "main" },
+        { "type": "click", "selector": "[data-testid='new-announcement-btn'], a[href*='new'], button:has-text('New'), button:has-text('Compose')" }
+      ]
+    }
+  ]
+}

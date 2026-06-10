@@ -1,0 +1,24 @@
+{
+  "category": "documents",
+  "slug": "uploading-documents",
+  "viewport": { "width": 1440, "height": 900 },
+  "shots": [
+    {
+      "name": "hero",
+      "kind": "still",
+      "route": "/documents",
+      "role": "cam",
+      "actions": [{ "type": "waitFor", "selector": "main" }]
+    },
+    {
+      "name": "upload-dialog",
+      "kind": "still",
+      "route": "/documents",
+      "role": "cam",
+      "actions": [
+        { "type": "waitFor", "selector": "main" },
+        { "type": "click", "selector": "[data-testid='upload-btn'], button:has-text('Upload')" }
+      ]
+    }
+  ]
+}
