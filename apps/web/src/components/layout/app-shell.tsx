@@ -213,7 +213,8 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
         />
-        {(role === 'pm_admin' || role === 'property_manager_admin') && community && (
+        {/* BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup */}
+        {(role === 'pm_admin' || role === 'property_manager_admin' || (role as string) === 'property_manager' || (role as string) === 'root_manager') && community && (
           <div className="flex items-center gap-1.5 border-b border-edge bg-surface-page px-6 py-2 lg:px-8">
             <Link
               href="/pm/dashboard/communities"

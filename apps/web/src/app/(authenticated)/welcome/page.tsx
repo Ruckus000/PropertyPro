@@ -67,14 +67,20 @@ function computeComplianceScore(
  *
  * The v2 role model uses 'resident' | 'manager' | 'pm_admin'. We map back
  * to more descriptive strings using presetKey and isUnitOwner.
+ *
+ * BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup.
+ * v3 values root_manager and property_manager are accepted alongside their
+ * v2 equivalents — ALL existing v2 return values are preserved byte-identically,
+ * including the bare-manager → cam default which property_manager shares.
  */
+// BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup
 function resolveEffectiveDisplayRole(
   role: string,
   presetKey: string | undefined,
   isUnitOwner: boolean,
 ): string {
-  if (role === 'pm_admin') return 'property_manager_admin';
-  if (role === 'manager') {
+  if (role === 'pm_admin' || role === 'root_manager') return 'property_manager_admin';
+  if (role === 'manager' || role === 'property_manager') {
     // Use presetKey if available for specific manager types
     if (presetKey === 'board_president') return 'board_president';
     if (presetKey === 'board_member') return 'board_member';

@@ -601,7 +601,7 @@ describe('runProvisioning', () => {
     expect(sendEmailMock).toHaveBeenCalledOnce();
   });
 
-  it('refuses to mark signup completed when no pm_admin user_role exists', async () => {
+  it('refuses to mark signup completed when no admin user_role exists', async () => {
     // Regression guard: stepCompleted must throw if user_linked silently no-op'd,
     // so the job stays in a recoverable state instead of going terminal as an orphan.
     const job = makeJob({
@@ -614,12 +614,12 @@ describe('runProvisioning', () => {
       selectSequence: [
         [job],
         [CONDO_SIGNUP],
-        [], // completed assertion: NO pm_admin role row → must throw
+        [], // completed assertion: NO PM-scope role row → must throw
       ],
     });
 
     await expect(runProvisioning(1)).rejects.toThrow(
-      /no pm_admin user_role found for community 10/,
+      /no admin user_role found for community 10/,
     );
   });
 });

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import { unionAll } from 'drizzle-orm/pg-core';
+import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { db } from '../drizzle';
 import { assessmentLineItems } from '../schema/assessment-line-items';
 import { communities } from '../schema/communities';
@@ -44,7 +45,8 @@ function toCountMap<T extends { communityId: number; count: number }>(
 }
 
 /**
- * Returns true when the given user holds `pm_admin` in at
+ * Returns true when the given user holds a PM-scope role (pm_admin /
+ * property_manager / root_manager) in at
  * least one non-deleted community.  Intentionally unscoped — callers must
  * only expose this through `@propertypro/db/unsafe`.
  */
@@ -58,7 +60,8 @@ export async function isPmAdminInAnyCommunity(
     .where(
       and(
         eq(userRoles.userId, userId),
-        eq(userRoles.role, 'pm_admin'),
+        // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+        inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
         isNull(communities.deletedAt),
       ),
     )
@@ -79,7 +82,8 @@ export async function findManagedCommunitiesPortfolioUnscoped(
 ): Promise<ManagedCommunityPortfolioRow[]> {
   const conditions: SQL[] = [
     eq(userRoles.userId, pmUserId),
-    eq(userRoles.role, 'pm_admin'),
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
     isNull(communities.deletedAt),
   ];
 

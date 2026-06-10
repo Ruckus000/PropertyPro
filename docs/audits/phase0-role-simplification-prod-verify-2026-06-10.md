@@ -156,6 +156,19 @@ actual conflicts to resolve in prod today.
 The squashed Drizzle baseline file references a legacy `user_role` type, but Q5b confirms
 it does not exist in prod. Phase 4 must not attempt to drop it in prod.
 
+**Finding 5 — `pp_rls_can_read_audit_log` is the only role-branching RLS *function*, but NOT the only role-branching RLS *policy* (correction)**
+
+Migration 0016 widens `pp_rls_can_read_audit_log()` (the role-branching RLS function that
+gates the tenant_admin_write table class). A later cross-cutting review found two additional
+role-branching RLS *policies* that 0016 does not touch: `site_assets_pm_insert` and
+`site_assets_pm_delete` on `storage.objects` (migration `0006_site_assets_storage.sql:69,92`),
+both branching on `role = 'pm_admin' OR (role = 'manager' AND preset_key = 'cam')`. They are
+currently **inert** — real bucket access uses `createAdminClient()` (service_role bypasses RLS)
+via `site_assets_service_role_all`, and the route-level `requireRole` gate is already bilingual
+— so Phase 1 is unaffected. **Phase 2 must widen both policies to accept the v3 role generations
+before the backfill runs** (it is the first migration of Phase 2, ahead of the backfill itself).
+See the spec's Phase 1 §"Migration 0016" note.
+
 ---
 
 ## Verdict
@@ -172,4 +185,19 @@ prod apply (see Task 5 of the implementation plan).
 
 ## Prod Apply Evidence (Task 5)
 
-_To be appended when migrations 0014–0016 are applied to prod._
+Applied to prod (project `vbqobyagjzvlfpfozvmx`) on 2026-06-10, after [#714](https://github.com/Ruckus000/PropertyPro/pull/714) merged to `main`, in order via Supabase MCP `apply_migration`: `0014_role_v3_enum_values` → `0015_role_v3_designation_and_root_indexes` → `0016_role_v3_rls_bilingual`. Each returned `{success:true}`.
+
+Operational note: the `0015` apply call hit a transient MCP connector timeout (ambiguous result). Rather than blind-retry, prod state was re-queried read-only and confirmed `0015` had **not** partially applied (designation column / both indexes / CHECK all absent); it was then cleanly re-applied. No partial/duplicate state.
+
+Post-apply verification (read-only, one query):
+
+| Check | Expected | Actual |
+|---|---|---|
+| `user_role_v2` enum values | resident, manager, pm_admin, super_admin, **property_manager, root_manager** | `{resident,manager,pm_admin,super_admin,property_manager,root_manager}` ✓ |
+| `user_roles.designation` column | present | 1 ✓ |
+| partial unique indexes | one_root_per_community + one_board_president_per_community | both present ✓ |
+| `user_roles_designation_check` | `designation IS NULL OR designation IN ('board_president','board_member')` | present, correct ✓ |
+| `pp_rls_can_read_audit_log` widened | contains property_manager + root_manager | true ✓ |
+| rows with role IN (property_manager, root_manager) | 0 (zero behavior change) | 0 ✓ |
+
+Prod is now bilingual-ready. The Phase-1 application-layer code (PR for branch `feat/role-v3-bilingual`) is safe to deploy: its `inArray(role, [...])` queries reference enum literals that now exist in prod, and no row carries the new values yet.

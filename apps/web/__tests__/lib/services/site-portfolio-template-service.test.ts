@@ -53,6 +53,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+  inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
   and: (...c: unknown[]) => ({ __and: c }),
   isNull: (col: unknown) => ({ __isNull: col }),
   desc: (col: unknown) => ({ __desc: col }),

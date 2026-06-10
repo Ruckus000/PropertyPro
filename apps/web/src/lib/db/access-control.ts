@@ -12,7 +12,7 @@
  * authorization layer. The path apps/web/src/lib/db/ is the spec-required
  * location; the file itself has no database access.
  */
-import type { NewCommunityRole, CommunityType, ManagerPermissions } from '@propertypro/shared';
+import type { TransitionRole, CommunityType, ManagerPermissions } from '@propertypro/shared';
 import { RBAC_RESOURCES, type RbacResource, type RbacAction } from '@propertypro/shared';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityMembership } from '@/lib/api/community-membership';
@@ -35,28 +35,32 @@ export {
 import { RBAC_MATRIX } from '@propertypro/shared';
 
 /**
- * Check permission for the hybrid 4-role model.
+ * Check permission for the hybrid role model (v2 + v3 transition window).
  *
- * - pm_admin: uses the property_manager_admin row from the static RBAC matrix
+ * - pm_admin / root_manager: uses the property_manager_admin row from the
+ *   static RBAC matrix (the two v3 PM-tier values map onto pm_admin behavior)
  * - resident + isUnitOwner: uses the owner row from the static RBAC matrix
  * - resident + !isUnitOwner: uses the tenant row from the static RBAC matrix
- * - manager: uses the JSONB permissions
+ * - manager / property_manager: uses the JSONB permissions (the v3
+ *   property_manager value maps onto manager behavior)
  */
 export function checkPermissionV2(
-  role: NewCommunityRole,
+  role: TransitionRole,
   communityType: CommunityType,
   resource: RbacResource,
   action: RbacAction,
   opts?: { isUnitOwner?: boolean; permissions?: ManagerPermissions },
 ): boolean {
-  if (role === 'pm_admin') {
+  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
+  if (role === 'pm_admin' || role === 'root_manager') {
     return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
   }
   if (role === 'resident') {
     const legacyRole = opts?.isUnitOwner ? 'owner' : 'tenant';
     return RBAC_MATRIX[communityType][legacyRole][resource][action];
   }
-  if (role === 'manager') {
+  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
+  if (role === 'manager' || role === 'property_manager') {
     if (!opts?.permissions) return false;
     const perm = opts.permissions.resources[resource];
     return action === 'read' ? perm.read : perm.write;

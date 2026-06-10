@@ -19,6 +19,7 @@
  */
 import { addDays, addMonths } from 'date-fns';
 import { eq, and, desc, inArray, isNull, isNotNull, lt, ne } from '@propertypro/db/filters';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
   accessPlans,
   communities,
@@ -912,11 +913,12 @@ export interface LifecycleAdminRecipient {
   fullName: string;
 }
 
-const LIFECYCLE_ADMIN_ROLES = ['manager', 'pm_admin'] as const;
+// BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+const LIFECYCLE_ADMIN_ROLES = ADMIN_TIER_DB_ROLES;
 
 /**
  * Resolve the recipient list for lifecycle email notifications: every
- * `manager` or `pm_admin` in the community.
+ * admin-tier member (both role generations) in the community.
  */
 export async function lookupLifecycleAdminRecipients(
   communityId: number,

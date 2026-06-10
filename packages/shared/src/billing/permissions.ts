@@ -28,24 +28,28 @@ export type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
 /**
  * Resolve the canonical CommunityRole from the new-model membership shape.
  *
- * The runtime stores `role` as `resident | manager | pm_admin`, and the
- * preset key + isUnitOwner discriminate further. We derive the legacy
- * canonical role string here so plan-gate logic and copy can branch on it
- * without each call site re-deriving the mapping.
+ * The runtime stores `role` as resident | manager | pm_admin — plus, during
+ * the v3 transition window, property_manager | root_manager. This is THE
+ * single legacy-role resolver (spec Phase 1); preset fidelity is preserved
+ * for backfilled property_managers so legacy permission semantics survive
+ * the window. Phase 4 deletes this function.
+ * (NB: distinct from the private `resolveLegacyRole` helper in
+ * `access-policies.ts`, which serves document-access policies.)
  */
 export function inferCanonicalRoleFromMembership(input: {
   role: string;
   isUnitOwner?: boolean;
   presetKey?: string | null;
 }): AnyCommunityRole {
-  if (input.role === 'pm_admin') return 'property_manager_admin';
-  if (input.role === 'manager') {
+  if (input.role === 'pm_admin' || input.role === 'root_manager') return 'property_manager_admin';
+  if (input.role === 'manager' || input.role === 'property_manager') {
     switch (input.presetKey) {
       case 'board_president': return 'board_president';
       case 'cam': return 'cam';
       case 'site_manager': return 'site_manager';
       case 'board_member': return 'board_member';
-      default: return 'board_member';
+      // property_manager rows without a presetKey are root-minted operational managers (Phase 2+); cam is the correct legacy analog — do not "symmetrize" this to board_member.
+      default: return input.role === 'property_manager' ? 'cam' : 'board_member';
     }
   }
   return input.isUnitOwner ? 'owner' : 'tenant';

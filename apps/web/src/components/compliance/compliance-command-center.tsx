@@ -15,25 +15,26 @@ import { matchesFilter } from './compliance-pill-mapping';
 import type { FilterKey } from './compliance-pill-mapping';
 import { UploadDocumentModal } from './upload-document-modal';
 import { LinkDocumentModal } from './link-document-modal';
-import type { CommunityRole, NewCommunityRole } from '@propertypro/shared';
+import type { CommunityRole, TransitionRole } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
 
 type ViewMode = 'cam' | 'board';
 
 export interface ComplianceCommandCenterProps {
   communityId: number;
-  role: CommunityRole | NewCommunityRole;
+  role: CommunityRole | TransitionRole;
   canWrite: boolean;
 }
 
 // CAM-class roles. Includes legacy CommunityRole strings (`cam`,
-// `property_manager_admin`, `site_manager`) and the new NewCommunityRole
-// migration strings (`manager`, `pm_admin`) so the toggle renders on
+// `property_manager_admin`, `site_manager`), the v2 NewCommunityRole
+// migration strings (`manager`, `pm_admin`), and the v3 transition-window
+// strings (`property_manager`, `root_manager`) so the toggle renders on
 // whichever side of the in-progress role migration the user lands on.
 // Live preview verified `membership.role === 'manager'` for CAM users
 // under the new manager-permissions system; without that entry the
 // toggle silently hides for every CAM in production.
-const CAM_LIKE_ROLES = new Set<string>(['cam', 'manager', 'pm_admin', 'property_manager_admin', 'site_manager']);
+const CAM_LIKE_ROLES = new Set<string>(['cam', 'manager', 'pm_admin', 'property_manager_admin', 'site_manager', 'property_manager', 'root_manager']);
 const BOARD_LIKE_ROLES = new Set<string>(['board_president', 'board_member']);
 
 function defaultViewForRole(role: string): ViewMode {

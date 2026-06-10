@@ -83,18 +83,24 @@ Invariants every path must enforce (app-layer; RLS + partial index as backstop):
 
 ### Phase 1 — Additive foundations + bilingual window (zero behavior change)
 
-- **Migration 0014a:** `ALTER TYPE user_role_v2 ADD VALUE 'root_manager';` and `ALTER TYPE user_role_v2 ADD VALUE 'property_manager';` (one value per statement — PG syntax; separate file because new enum values are unusable in the transaction that adds them; runner is `drizzle-kit migrate`, transactional per file).
-- **Migration 0014b:** `designation` column + CHECK; both partial unique indexes (§3.1, §3.2 — no `deleted_at` predicate). Indexes must also appear in the Drizzle table callback (custom-domain lesson).
-- **Migration 0014c — RLS bilingual:** update `pp_rls_can_read_audit_log()` (baseline `0000_nappy_guardian.sql:1756`) and any other role-branching RLS function to `role IN ('manager','pm_admin','root_manager','property_manager')`. RLS changes live in migration SQL, never applied manually.
+- **Migration 0014:** `ALTER TYPE user_role_v2 ADD VALUE 'root_manager';` and `ALTER TYPE user_role_v2 ADD VALUE 'property_manager';` (one value per statement — PG syntax; separate file because new enum values are unusable in the transaction that adds them; runner is `drizzle-kit migrate`, transactional per file).
+- **Migration 0015:** `designation` column + CHECK; both partial unique indexes (§3.1, §3.2 — no `deleted_at` predicate). Indexes must also appear in the Drizzle table callback (custom-domain lesson).
+- **Migration 0016 — RLS bilingual:** update `pp_rls_can_read_audit_log()` (baseline `0000_nappy_guardian.sql:1756`) — the one role-branching RLS *function* that gates the tenant_admin_write table class — to `role IN ('manager','pm_admin','root_manager','property_manager')`. RLS changes live in migration SQL, never applied manually.
+  - **Known additional role-branching RLS, NOT widened by 0016 (deferred to Phase 2's first migration, before the backfill):** the two `storage.objects` policies `site_assets_pm_insert` / `site_assets_pm_delete` in migration `0006_site_assets_storage.sql:69,92` branch on `role = 'pm_admin' OR (role = 'manager' AND preset_key = 'cam')`. These are currently **inert** — all real bucket access goes through `createAdminClient()` (service_role, which bypasses RLS) governed by `site_assets_service_role_all`, and the route-level `requireRole` gate is already bilingual — so leaving them un-widened does not break Phase 1. But they ARE role-branching policies, so Phase 2 MUST widen both to `role IN (…PM_SCOPE) OR (role IN (…MANAGER_TIER) AND preset_key = 'cam')` *before* the backfill flips any `pm_admin`/`manager` row, or a future direct-user-auth path to that bucket would deny backfilled managers. (Corrects the earlier Phase-0 "only role-branching RLS function" finding: it is the only *function*, not the only role-branching *policy*.)
 - **Bilingual sweep PR (code):** every DB-level role predicate accepts old AND new values. Verified inventory (13 sites): `pm-portfolio.ts:61,82`; `provisioning-service.ts:288,349`; `site-portfolio-template-service.ts:98`; `billing-group-service.ts:411`; `account-lifecycle-service.ts:915/932` (`LIFECYCLE_ADMIN_ROLES`); `downgrade-notifications.ts:35`; `demo-conversion.ts:237`; `public-community-reader.ts:352`; `payment-alert-scheduler.ts:85`; `resident-service.ts:86,92`. This sweep also removes the hardcoded `as ('resident'|'manager'|'pm_admin')[]` casts, which would otherwise keep compiling while silently excluding new values.
-- **Compat shim:** extend `inferCanonicalRoleFromMembership()` (promoted to `resolveLegacyRole()`) to map new values — `root_manager → property_manager_admin`, `property_manager → cam` — BEFORE any backfill. As written today the function falls through to `'tenant'` for unknown role values; shipping the backfill first would demote every admin to tenant in billing/plan-gate logic.
+  The sweep equally covers the app-layer raw-value branches (same backfill sensitivity):
+  `community-validators.ts` (`requireNewCommunityRole`), `access-control.ts`
+  (`checkPermissionV2`), `community-membership.ts` (isAdmin + permissions
+  normalization), `role-guard.ts` (aliases + preset matching), and
+  `community-context.ts` (PM-dashboard gate).
+- **Compat shim:** designate `inferCanonicalRoleFromMembership()` as THE single legacy-role resolver, extended to map new values — `root_manager → property_manager_admin`, `property_manager → cam` — BEFORE any backfill. As written today the function falls through to `'tenant'` for unknown role values; shipping the backfill first would demote every admin to tenant in billing/plan-gate logic.
 - **CI guard `guard:legacy-roles`:** counts legacy role literals AND legacy union-type casts outside the shim + allowlist; floor = current count; ratchets down per drain PR. Help MDX excluded until its drain step.
 
 **Phase 2 is gated on all of Phase 1 being deployed to prod** (enum values present, RLS bilingual, code bilingual, shim extended). This ordering is what makes "no flag day" true — the original draft of this spec had the backfill before the query updates, which would have broken the PM dashboard and admin-tier RLS in a single deploy.
 
 ### Phase 2 — Data migration + new UX
 
-- **Migration 0015 (backfill):**
+- **Migration 0017 (backfill):**
 
 | Current | Becomes |
 |---|---|
@@ -106,7 +112,7 @@ Invariants every path must enforce (app-layer; RLS + partial index as backstop):
 | — | root vacant everywhere |
 
 - **Claim-root flow:** property_managers in rootless communities see a claim prompt on next authenticated load. **Multi-community admins get ONE aggregated screen** ("you manage N rootless communities — claim all / choose"), backed by a single grouped query; the rootless check piggybacks on the existing membership/community fetch (no per-community N+1 on PM dashboards). First claim wins — the partial unique index makes a concurrent double-claim a clean transactional loser. Every claim immediately notifies all other admins of that community (Resend) with a one-click **dispute** link that flags the community in the apps/admin intervention queue; platform admin can reassign. Root-initiated transfer flow included.
-- **Billing groups during transition:** the end-state rule "billing-group `ownerUserId` must be root of member communities" is **root-candidacy only** until Phase 4 (the backfill leaves root vacant, so strict enforcement at 0015 time would invalidate every billing group instantly). The aggregated claim screen is how group owners converge to compliance.
+- **Billing groups during transition:** the end-state rule "billing-group `ownerUserId` must be root of member communities" is **root-candidacy only** until Phase 4 (the backfill leaves root vacant, so strict enforcement at 0017 time would invalidate every billing group instantly). The aggregated claim screen is how group owners converge to compliance.
 - **Root offboarding:** an account-deletion request (`/api/v1/account/delete` — verified to have no role-awareness today) by a community's root requires root transfer first, or auto-flags the community in the existing admin deletion-requests intervention queue. A standing admin-app report lists rootless communities (covers the zero-admin case where nobody can ever claim).
 - **Creation:** community creator is auto-assigned `root_manager` across the admin-minting paths (§3.5).
 - **Role management UI:** root-only screen to assign/revoke `property_manager`, set designations, transfer root. Property managers may still invite residents (role implicit); only root mints property managers.
@@ -117,7 +123,7 @@ Order: ① RBAC matrix + access-control core (3×3 + `requireBoardDesignation()`
 
 ### Phase 4 — Cleanup
 
-- **Migration 0016+:** rebuild `user_role_v2` without `manager`/`pm_admin`; drop `presetKey`, `permissions` JSONB, `legacyRole`; drop orphaned legacy `user_role` type; RLS functions go new-values-only; billing-group root-ownership rule becomes enforced.
+- **Migration 0018+:** rebuild `user_role_v2` without `manager`/`pm_admin`; drop `presetKey`, `permissions` JSONB, `legacyRole`; drop orphaned legacy `user_role` type; RLS functions go new-values-only; billing-group root-ownership rule becomes enforced.
 - Delete the compat shim; `guard:legacy-roles` flips from floor to forbid (agent-login alias map is the one permanent allowlist entry).
 
 ## 5. Testing & CI
@@ -129,7 +135,7 @@ Order: ① RBAC matrix + access-control core (3×3 + `requireBoardDesignation()`
 
 ## 6. Accepted consequences & risks
 
-- **Board backfill gains write powers** — including, during the transition window, **plan purchase** (shim maps `property_manager → cam`, and cam is in `BILLING_ADMIN_ROLES`; the subscribe route gates `settings:write`). Root-only billing is enforced from Phase 3 ① onward. Root can demote ex-board members to `resident` + designation at any time after claim. Accepted, stated loudly.
+- **Board backfill gains write powers** during the transition window (the shim is preset-aware, so backfilled board members keep board-level legacy semantics through the window; only presetKey-less property_managers — minted deliberately by a root in Phase 2+ — map to `cam`, which is in `BILLING_ADMIN_ROLES`, and gain plan-purchase rights before Phase 3 ①; the subscribe route gates `settings:write`). Root-only billing is enforced from Phase 3 ① onward. Root can demote ex-board members to `resident` + designation at any time after claim. Accepted, stated loudly.
 - **Rootless lockout:** until claimed, billing/role-assignment/deletion are unavailable in that community. Accepted; admin-app rootless report provides visibility.
 - **Granularity loss:** no per-manager permission overrides post-cleanup. Accepted (simplification mandate).
 - **First-claim governance:** any backfilled admin can claim before the "right" person; mitigated by immediate notification + dispute flag + platform-admin reversal (not prevented — accepted per product decision).

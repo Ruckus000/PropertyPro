@@ -64,6 +64,27 @@ describe('getLockedFeatureBehavior', () => {
   });
 });
 
+describe('inferCanonicalRoleFromMembership — v3 transition values', () => {
+  it('maps root_manager to property_manager_admin', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'root_manager' })).toBe('property_manager_admin');
+  });
+  it('maps presetKey-less property_manager to cam', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
+  });
+  it('keeps preset fidelity for backfilled property_managers', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: 'board_member' })).toBe('board_member');
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: 'board_president' })).toBe('board_president');
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: 'site_manager' })).toBe('site_manager');
+  });
+  it('does NOT regress v2 behavior', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'pm_admin' })).toBe('property_manager_admin');
+    expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey: 'cam' })).toBe('cam');
+    expect(inferCanonicalRoleFromMembership({ role: 'manager' })).toBe('board_member');
+    expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true })).toBe('owner');
+    expect(inferCanonicalRoleFromMembership({ role: 'resident' })).toBe('tenant');
+  });
+});
+
 describe('inferCanonicalRoleFromMembership', () => {
   describe('pm_admin role', () => {
     it('always maps to property_manager_admin (presetKey ignored)', () => {
