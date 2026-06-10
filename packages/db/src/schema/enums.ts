@@ -102,15 +102,20 @@ export const emailFrequencyEnum = pgEnum('email_frequency', [
 ]);
 
 /**
- * Simplified community-scoped roles (hybrid 4-role model).
+ * Simplified community-scoped roles (v3 transition window).
  * - resident: owner or tenant (distinguished by is_unit_owner flag)
- * - manager: configurable permissions via JSONB (replaces board_member, board_president, cam, site_manager)
- * - pm_admin: property manager admin (full access)
+ * - manager: v2 manager (presets) — retired by the v3 cleanup migration
+ * - pm_admin: v2 PM admin — retired by the v3 cleanup migration
+ * - property_manager: v3 operational manager (assigned by root)
+ * - root_manager: v3 root (≤1 per community, partial unique index)
+ * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
  */
 export const userRoleV2Enum = pgEnum('user_role_v2', [
   'resident',
   'manager',
   'pm_admin',
+  'property_manager',
+  'root_manager',
 ]);
 
 /** Platform admin role. Only 'super_admin' exists today; enum enforces type safety and makes future roles explicit. */
