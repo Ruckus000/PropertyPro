@@ -185,4 +185,19 @@ prod apply (see Task 5 of the implementation plan).
 
 ## Prod Apply Evidence (Task 5)
 
-_To be appended when migrations 0014–0016 are applied to prod._
+Applied to prod (project `vbqobyagjzvlfpfozvmx`) on 2026-06-10, after [#714](https://github.com/Ruckus000/PropertyPro/pull/714) merged to `main`, in order via Supabase MCP `apply_migration`: `0014_role_v3_enum_values` → `0015_role_v3_designation_and_root_indexes` → `0016_role_v3_rls_bilingual`. Each returned `{success:true}`.
+
+Operational note: the `0015` apply call hit a transient MCP connector timeout (ambiguous result). Rather than blind-retry, prod state was re-queried read-only and confirmed `0015` had **not** partially applied (designation column / both indexes / CHECK all absent); it was then cleanly re-applied. No partial/duplicate state.
+
+Post-apply verification (read-only, one query):
+
+| Check | Expected | Actual |
+|---|---|---|
+| `user_role_v2` enum values | resident, manager, pm_admin, super_admin, **property_manager, root_manager** | `{resident,manager,pm_admin,super_admin,property_manager,root_manager}` ✓ |
+| `user_roles.designation` column | present | 1 ✓ |
+| partial unique indexes | one_root_per_community + one_board_president_per_community | both present ✓ |
+| `user_roles_designation_check` | `designation IS NULL OR designation IN ('board_president','board_member')` | present, correct ✓ |
+| `pp_rls_can_read_audit_log` widened | contains property_manager + root_manager | true ✓ |
+| rows with role IN (property_manager, root_manager) | 0 (zero behavior change) | 0 ✓ |
+
+Prod is now bilingual-ready. The Phase-1 application-layer code (PR for branch `feat/role-v3-bilingual`) is safe to deploy: its `inArray(role, [...])` queries reference enum literals that now exist in prod, and no row carries the new values yet.
