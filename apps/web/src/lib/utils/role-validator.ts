@@ -11,14 +11,14 @@
  */
 import {
   ROLE_COMMUNITY_CONSTRAINTS,
-  NEW_COMMUNITY_ROLES,
+  TRANSITION_ROLES,
   type CommunityRole,
   type CommunityType,
-  type NewCommunityRole,
+  type TransitionRole,
 } from '@propertypro/shared';
 
 /** Roles that require a unit assignment (new model). */
-const UNIT_REQUIRED_ROLES_V2: ReadonlySet<NewCommunityRole> = new Set([
+const UNIT_REQUIRED_ROLES_V2: ReadonlySet<TransitionRole> = new Set([
   'resident',
 ]);
 
@@ -35,14 +35,14 @@ export interface RoleValidationResult {
 
 /**
  * Check whether a role is allowed for the given community type.
- * Accepts both old CommunityRole and new NewCommunityRole.
+ * Accepts both old CommunityRole and v2/v3 TransitionRole.
  */
 export function isRoleAllowedForCommunityType(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
 ): boolean {
-  // New roles are allowed in all community types
-  if ((NEW_COMMUNITY_ROLES as readonly string[]).includes(role)) {
+  // New roles (v2 + v3 transition window) are allowed in all community types
+  if ((TRANSITION_ROLES as readonly string[]).includes(role)) {
     return true;
   }
   // Legacy role: check constraints
@@ -53,20 +53,20 @@ export function isRoleAllowedForCommunityType(
 /**
  * Check whether unit_id is required for the given role.
  */
-export function isUnitRequiredForRole(role: CommunityRole | NewCommunityRole): boolean {
-  if (UNIT_REQUIRED_ROLES_V2.has(role as NewCommunityRole)) return true;
+export function isUnitRequiredForRole(role: CommunityRole | TransitionRole): boolean {
+  if (UNIT_REQUIRED_ROLES_V2.has(role as TransitionRole)) return true;
   return UNIT_REQUIRED_ROLES.has(role as CommunityRole);
 }
 
 /**
  * Validate a role assignment against constraints.
- * Accepts both old CommunityRole and new NewCommunityRole.
+ * Accepts both old CommunityRole and v2/v3 TransitionRole.
  *
  * Returns { valid: true } if the assignment is valid, or
  * { valid: false, error: "..." } describing the violation.
  */
 export function validateRoleAssignment(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
   unitId: number | null | undefined,
 ): RoleValidationResult {

@@ -20,8 +20,9 @@
  * until the matrix is updated.
  */
 
-import type { CommunityRole, CommunityType, NewCommunityRole } from './index';
+import type { CommunityRole, CommunityType } from './index';
 import type { ManagerPermissions } from './manager-permissions';
+import type { TransitionRole } from './role-transition';
 
 // ---------------------------------------------------------------------------
 // Resource and action enumerations
@@ -553,21 +554,23 @@ export const RBAC_MATRIX: RbacMatrix = {
  * This is a pure function — no I/O, no side effects.
  */
 export function checkPermission(
-  role: CommunityRole | NewCommunityRole,
+  role: CommunityRole | TransitionRole,
   communityType: CommunityType,
   resource: RbacResource,
   action: RbacAction,
   opts?: { isUnitOwner?: boolean; permissions?: ManagerPermissions },
 ): boolean {
-  // Handle new roles
-  if (role === 'pm_admin') {
+  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
+  // Handle new roles (v2 + v3 transition window).
+  // root_manager maps onto pm_admin; property_manager maps onto manager.
+  if (role === 'pm_admin' || role === 'root_manager') {
     return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
   }
   if (role === 'resident') {
     const legacyRole = opts?.isUnitOwner ? 'owner' : 'tenant';
     return RBAC_MATRIX[communityType][legacyRole][resource][action];
   }
-  if (role === 'manager') {
+  if (role === 'manager' || role === 'property_manager') {
     if (!opts?.permissions) return false;
     const perm = opts.permissions.resources[resource];
     return action === 'read' ? perm.read : perm.write;

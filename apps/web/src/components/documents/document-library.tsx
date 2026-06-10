@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
-import { isElevatedRole, type CommunityRole, type NewCommunityRole, type ManagerPermissions } from '@propertypro/shared';
+import { isElevatedRole, type CommunityRole, type TransitionRole, type ManagerPermissions } from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { type DocumentListItem } from './document-list';
 import { DocumentListContainer, useDocumentsInvalidator } from './document-list-container';
@@ -16,7 +16,7 @@ import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
 interface DocumentLibraryProps {
   communityId: number;
   userId: string;
-  userRole: CommunityRole | NewCommunityRole;
+  userRole: CommunityRole | TransitionRole;
   isUnitOwner?: boolean;
   permissions?: ManagerPermissions;
   /** Effective community feature — hide E‑Sign when the plan/type does not include it. */

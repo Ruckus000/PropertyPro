@@ -3,8 +3,9 @@ import { addDays } from 'date-fns';
 import type {
   CommunityType,
   ManagerPermissions,
-  NewCommunityRole,
+  TransitionRole,
 } from '@propertypro/shared';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
   assessmentLineItems,
   assessments,
@@ -73,7 +74,7 @@ interface ActiveCommunity {
 interface CommunityRoleRow {
   [key: string]: unknown;
   userId: string;
-  role: NewCommunityRole;
+  role: TransitionRole;
   isUnitOwner: boolean;
   permissions: ManagerPermissions | null;
   unitId: number | null;
@@ -110,7 +111,7 @@ export interface CommunityRecipient {
   userId: string;
   email: string;
   fullName: string;
-  role: NewCommunityRole;
+  role: TransitionRole;
   isUnitOwner: boolean;
   isAdmin: boolean;
   unitId: number | null;
@@ -410,7 +411,7 @@ async function loadCommunityRecipients(
       fullName: user.fullName,
       role,
       isUnitOwner,
-      isAdmin: role === 'manager' || role === 'pm_admin',
+      isAdmin: (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role),
       unitId: row.unitId,
       permissions,
       preferences,

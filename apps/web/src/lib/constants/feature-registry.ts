@@ -39,7 +39,7 @@ import {
   Landmark,
   ClipboardCheck,
 } from 'lucide-react';
-import type { CommunityRole, AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityRole, AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
 import { ADMIN_ROLES } from '@propertypro/shared';
 import type { RbacAction, RbacResource } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
@@ -768,7 +768,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
  * with all `href` functions resolved to concrete strings.
  */
 export function useFilteredRegistry(
-  role: AnyCommunityRole | null,
+  role: AnyCommunityRole | TransitionRole | null,
   features: CommunityFeatures | null,
   communityId: number | null,
   resourceAccess: ResourceAccessMap | null = null,

@@ -1,4 +1,4 @@
-import type { NewCommunityRole } from '@propertypro/shared';
+import type { TransitionRole } from '@propertypro/shared';
 import { getEffectiveFeatures } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
@@ -67,7 +67,7 @@ export function requireReservationPermission(_membership: CommunityMembership): 
   // This guard is retained for call-site compatibility.
 }
 
-export function isResidentRole(role: NewCommunityRole): boolean {
+export function isResidentRole(role: TransitionRole): boolean {
   return role === 'resident';
 }
 

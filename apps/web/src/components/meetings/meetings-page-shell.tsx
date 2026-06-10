@@ -10,12 +10,12 @@ import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
 import { MeetingForm } from '@/components/meetings/meeting-form';
 import { useCalendarEvents } from '@/hooks/use-meetings';
 import { getCalendarEventDateKey } from '@/lib/calendar/event-types';
-import type { NewCommunityRole } from '@propertypro/shared';
+import type { TransitionRole } from '@propertypro/shared';
 
 interface MeetingsPageShellProps {
   communityId: number;
   userId: string;
-  role: NewCommunityRole;
+  role: TransitionRole;
   timezone: string;
   canWrite: boolean;
 }

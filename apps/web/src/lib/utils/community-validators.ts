@@ -1,12 +1,16 @@
 import {
   isCommunityRole,
   isCommunityType,
-  isNewCommunityRole,
+  TRANSITION_ROLES,
   type CommunityRole,
   type CommunityType,
-  type NewCommunityRole,
+  type TransitionRole,
 } from '@propertypro/shared';
 import { DataIntegrityError } from '@/lib/api/errors';
+
+function isTransitionRole(value: unknown): value is TransitionRole {
+  return typeof value === 'string' && (TRANSITION_ROLES as readonly string[]).includes(value);
+}
 
 export function requireCommunityType(
   value: unknown,
@@ -36,12 +40,17 @@ export function requireCommunityRole(
   return value;
 }
 
+/**
+ * v3 transition window: accepts both role generations
+ * (resident|manager|pm_admin|property_manager|root_manager).
+ * Phase 4 narrows this back to the v3-only set.
+ */
 export function requireNewCommunityRole(
   value: unknown,
   context: string,
-): NewCommunityRole {
-  if (!isNewCommunityRole(value)) {
-    throw new DataIntegrityError(`Invalid community role (v2) in ${context}`, {
+): TransitionRole {
+  if (!isTransitionRole(value)) {
+    throw new DataIntegrityError(`Invalid community role (transition window: v2+v3) in ${context}`, {
       context,
       value,
     });
