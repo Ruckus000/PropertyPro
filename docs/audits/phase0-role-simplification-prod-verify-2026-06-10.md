@@ -156,6 +156,19 @@ actual conflicts to resolve in prod today.
 The squashed Drizzle baseline file references a legacy `user_role` type, but Q5b confirms
 it does not exist in prod. Phase 4 must not attempt to drop it in prod.
 
+**Finding 5 — `pp_rls_can_read_audit_log` is the only role-branching RLS *function*, but NOT the only role-branching RLS *policy* (correction)**
+
+Migration 0016 widens `pp_rls_can_read_audit_log()` (the role-branching RLS function that
+gates the tenant_admin_write table class). A later cross-cutting review found two additional
+role-branching RLS *policies* that 0016 does not touch: `site_assets_pm_insert` and
+`site_assets_pm_delete` on `storage.objects` (migration `0006_site_assets_storage.sql:69,92`),
+both branching on `role = 'pm_admin' OR (role = 'manager' AND preset_key = 'cam')`. They are
+currently **inert** — real bucket access uses `createAdminClient()` (service_role bypasses RLS)
+via `site_assets_service_role_all`, and the route-level `requireRole` gate is already bilingual
+— so Phase 1 is unaffected. **Phase 2 must widen both policies to accept the v3 role generations
+before the backfill runs** (it is the first migration of Phase 2, ahead of the backfill itself).
+See the spec's Phase 1 §"Migration 0016" note.
+
 ---
 
 ## Verdict
