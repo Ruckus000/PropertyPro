@@ -1,25 +1,24 @@
 'use client';
 
 /**
- * <HelpArticleBody/> — shared article-rendering component used by both
- * /help/[category]/[slug]/page.tsx (route mode) and HelpDocsModal (modal mode).
+ * <HelpArticleBody/> — article renderer for the help docs modal (sole
+ * consumer; the /help route pages render their own JSX via compileMDX).
  *
- * Extracted from the inline JSX previously at
- * apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx lines 91–186.
- *
- * Mode tweaks chrome only:
- * - route: outer wrapper preserves PageHeader spacing
- * - modal: outer wrapper applies scroll boundary for the article column
+ * The html prop is server-rendered, sanitized static markup. React event
+ * handlers inside it do not exist — ALL interactivity is provided here by
+ * delegation on the content container:
+ *   - [data-zoomable] click  → lightbox
+ *   - [data-media-play]      → toggle clip playback (reduced-motion path)
+ *   - a[href^="#"]           → scroll within the modal, never mutate the URL
+ *   - clips autoplay via IntersectionObserver unless prefers-reduced-motion
  */
-import Link from 'next/link';
-import {
-  TableOfContents,
-  type TocItem,
-} from '@/components/help/mdx-components';
+import { useEffect, useRef, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
+import { MediaFrame } from '@/components/help/media-frame';
+import { HelpMediaLightbox, type LightboxMedia } from '@/components/help/help-media-lightbox';
 import { ArticleFeedback } from '@/components/help/article-feedback';
 import { ArticleViewTracker } from '@/components/help/article-view-tracker';
 import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
-import { cn } from '@/lib/utils';
 
 function formatUpdatedAt(value: string | undefined): string | null {
   if (!value) return null;
@@ -30,103 +29,173 @@ function formatUpdatedAt(value: string | undefined): string | null {
 
 export interface HelpArticleBodyProps {
   html: string;
-  toc: TocItem[];
   metadata: HelpArticleMetadata;
   related: HelpArticleMetadata[];
   communityId: number;
-  displayMode: 'route' | 'modal';
+  onOpenArticle: (category: string, slug: string) => void;
+  onLightboxOpenChange?: (open: boolean) => void;
 }
+
+const CHIP_CLASS =
+  'inline-flex items-center gap-1 rounded-full border border-edge px-2.5 py-0.5 text-xs text-content-secondary';
 
 export function HelpArticleBody({
   html,
-  toc,
   metadata,
   related,
   communityId,
-  displayMode,
+  onOpenArticle,
+  onLightboxOpenChange,
 }: HelpArticleBodyProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [lightbox, setLightbox] = useState<LightboxMedia | null>(null);
   const formattedUpdatedAt = formatUpdatedAt(metadata.updatedAt);
-  const isModal = displayMode === 'modal';
+
+  useEffect(() => {
+    onLightboxOpenChange?.(lightbox !== null);
+  }, [lightbox, onLightboxOpenChange]);
+
+  // Delegated interactivity over the injected static HTML.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+
+    function onClick(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+
+      const playButton = target.closest<HTMLElement>('[data-media-play]');
+      if (playButton) {
+        e.preventDefault();
+        const video = playButton.parentElement?.querySelector('video');
+        if (video) {
+          if (video.paused) void video.play().catch(() => {});
+          else video.pause();
+        }
+        return;
+      }
+
+      const zoomable = target.closest<HTMLElement>('[data-zoomable]');
+      if (zoomable) {
+        e.preventDefault();
+        const kind = zoomable.dataset.mediaKind === 'clip' ? 'clip' : 'image';
+        const src =
+          kind === 'clip'
+            ? zoomable.querySelector('source')?.getAttribute('src')
+            : zoomable.getAttribute('src');
+        if (src) {
+          setLightbox({
+            src,
+            alt: zoomable.dataset.mediaAlt ?? zoomable.getAttribute('alt') ?? '',
+            kind,
+          });
+        }
+        return;
+      }
+
+      const anchor = target.closest<HTMLAnchorElement>('a[href^="#"]');
+      if (anchor) {
+        e.preventDefault();
+        const id = decodeURIComponent(anchor.getAttribute('href')!.slice(1));
+        if (!id) return;
+        root.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' });
+      }
+    }
+
+    root.addEventListener('click', onClick);
+    return () => root.removeEventListener('click', onClick);
+  }, [html]);
+
+  // Clip playback: autoplay in-viewport unless reduced motion; sync the
+  // play-button overlay to playback state either way.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    const videos = Array.from(root.querySelectorAll<HTMLVideoElement>('video[data-media-kind="clip"]'));
+    if (videos.length === 0) return;
+
+    const cleanups: Array<() => void> = [];
+    for (const video of videos) {
+      const button = video.parentElement?.querySelector<HTMLElement>('[data-media-play]');
+      if (button) {
+        const sync = () => {
+          button.toggleAttribute('hidden', !video.paused);
+        };
+        video.addEventListener('play', sync);
+        video.addEventListener('pause', sync);
+        cleanups.push(() => {
+          video.removeEventListener('play', sync);
+          video.removeEventListener('pause', sync);
+        });
+      }
+    }
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reducedMotion && typeof IntersectionObserver !== 'undefined') {
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const video = entry.target as HTMLVideoElement;
+            if (entry.isIntersecting) void video.play().catch(() => {});
+            else video.pause();
+          }
+        },
+        { threshold: 0.4 },
+      );
+      videos.forEach((v) => io.observe(v));
+      cleanups.push(() => io.disconnect());
+    }
+
+    return () => cleanups.forEach((fn) => fn());
+  }, [html]);
 
   return (
-    <div className={cn('space-y-8', isModal && 'pb-4')}>
+    <div className="space-y-6 pb-4">
       <ArticleViewTracker
         communityId={communityId}
         articleSlug={metadata.slug}
         articleCategory={metadata.category}
       />
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-content-tertiary">
-        {typeof metadata.readTimeMinutes === 'number' && (
-          <span>{metadata.readTimeMinutes} min read</span>
-        )}
-        {formattedUpdatedAt && (
-          <>
-            <span aria-hidden="true">/</span>
-            <span>Updated {formattedUpdatedAt}</span>
-          </>
-        )}
-        {metadata.roles.length > 0 && (
-          <>
-            <span aria-hidden="true">/</span>
-            <div className="flex flex-wrap gap-2">
-              {metadata.roles.map((role) => (
-                <span
-                  key={role}
-                  className="rounded-full bg-surface-muted px-2 py-0.5 capitalize"
-                >
-                  {role.replace(/_/g, ' ')}
-                </span>
-              ))}
-            </div>
-          </>
-        )}
-        {(metadata.statutes ?? []).length > 0 && (
-          <>
-            <span aria-hidden="true">/</span>
-            <div className="flex flex-wrap gap-2">
-              {(metadata.statutes ?? []).map((statute) => (
-                <Link
-                  key={statute}
-                  href={`/help/statutes/${encodeURIComponent(statute)}?communityId=${communityId}`}
-                  className="rounded-full bg-purple-50 px-2 py-0.5 text-purple-900 transition-colors hover:bg-purple-100"
-                  aria-label={`See all articles tagged with ${statute}`}
-                >
-                  {statute}
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      <header className="space-y-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-content">{metadata.title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {typeof metadata.readTimeMinutes === 'number' && (
+            <span className={CHIP_CLASS}>{metadata.readTimeMinutes} min read</span>
+          )}
+          {formattedUpdatedAt && <span className={CHIP_CLASS}>Updated {formattedUpdatedAt}</span>}
+          {metadata.roles.length > 0 && (
+            <span className={CHIP_CLASS}>
+              {metadata.roles.map((r) => r.replace(/_/g, ' ')).join(' · ')}
+            </span>
+          )}
+          {(metadata.statutes ?? []).map((statute) => (
+            <a
+              key={statute}
+              href={`/help/statutes/${encodeURIComponent(statute)}?communityId=${communityId}`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 rounded-full border border-status-brand-border bg-status-brand-subtle px-2.5 py-0.5 text-xs text-status-brand hover:underline"
+              aria-label={`See all articles tagged with ${statute} (opens in a new tab)`}
+            >
+              {statute}
+              <ExternalLink size={11} aria-hidden="true" />
+            </a>
+          ))}
+        </div>
+      </header>
 
-      {toc.length > 0 && (
-        <details className="rounded-2xl border border-edge bg-surface-card lg:hidden">
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-content [&::-webkit-details-marker]:hidden">
-            On this page
-          </summary>
-          <div className="border-t border-edge-subtle px-4 py-3">
-            <TableOfContents items={toc} />
-          </div>
-        </details>
+      {metadata.heroMedia && (
+        <MediaFrame
+          src={metadata.heroMedia.src}
+          alt={metadata.heroMedia.alt}
+          caption={metadata.heroMedia.caption}
+          width={metadata.heroMedia.width}
+          height={metadata.heroMedia.height}
+          poster={metadata.heroMedia.poster}
+        />
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
-        {/* Scrolling is handled by the outer DialogContent body wrapper in
-            modal mode (single scroll source). No max-h here — nested
-            scrollers fight each other for the user's wheel events. */}
-        <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
-          <div dangerouslySetInnerHTML={{ __html: html }} />
-        </article>
-
-        {toc.length > 0 && (
-          <aside className="hidden lg:block">
-            <div className="sticky top-24">
-              <TableOfContents items={toc} />
-            </div>
-          </aside>
-        )}
-      </div>
+      <div ref={contentRef} dangerouslySetInnerHTML={{ __html: html }} />
 
       <ArticleFeedback
         communityId={communityId}
@@ -135,24 +204,27 @@ export function HelpArticleBody({
       />
 
       {related.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-content">Related guides</h2>
-          <div className="grid gap-4 lg:grid-cols-2">
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold text-content">Related guides</h2>
+          <div className="grid gap-3 lg:grid-cols-2">
             {related.map((candidate) => (
-              <Link
+              <button
                 key={candidate.slug}
-                href={`/help/${candidate.category}/${candidate.slug}?communityId=${communityId}`}
-                className="rounded-2xl border border-edge bg-surface-card p-5 shadow-sm transition-colors hover:border-edge-strong hover:bg-surface-hover"
+                type="button"
+                onClick={() => onOpenArticle(candidate.category, candidate.slug)}
+                className="rounded-[var(--radius-md)] border border-edge bg-surface-card p-4 text-left transition-colors hover:border-edge-strong hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
-                <h3 className="text-base font-semibold text-content">{candidate.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-content-secondary">
+                <h3 className="text-sm font-semibold text-content">{candidate.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-content-secondary">
                   {candidate.description}
                 </p>
-              </Link>
+              </button>
             ))}
           </div>
         </section>
       )}
+
+      <HelpMediaLightbox media={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }
