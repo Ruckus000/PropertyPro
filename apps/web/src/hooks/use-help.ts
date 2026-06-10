@@ -319,6 +319,7 @@ export interface HelpArticleResponse {
   toc: TocItem[];
   metadata: HelpArticleMetadata;
   related: HelpArticleMetadata[];
+  upNext: HelpArticleMetadata | null;
 }
 
 /**

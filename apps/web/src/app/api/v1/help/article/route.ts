@@ -68,12 +68,14 @@ export const GET = withErrorHandler(
 
     const compiled = await getCompiledArticle(article);
     const related = getRelatedArticles(article, effectiveRole, features);
+    const upNext = resolveUpNext(article, effectiveRole, features);
 
     return {
       html: compiled.html,
       toc: compiled.toc,
       metadata: article.metadata,
       related,
+      upNext,
     };
   }),
 );
@@ -127,4 +129,27 @@ function getRelatedArticles(
         isArticleVisibleToRole(a, effectiveRole) &&
         filterArticlesByFeatures([a], features).length > 0,
     );
+}
+
+/**
+ * Resolves the optional frontmatter `upNext` slug to full metadata with the
+ * same role/feature visibility rules as related articles. Null when unset,
+ * unresolvable, or not visible to this viewer.
+ */
+function resolveUpNext(
+  article: HelpArticleSource,
+  effectiveRole: string,
+  features: ReturnType<typeof getFeaturesForCommunity>,
+): HelpArticleMetadata | null {
+  const slug = article.metadata.upNext;
+  if (!slug) return null;
+  const target = getAllArticles().find((a) => a.slug === slug);
+  if (
+    !target ||
+    !isArticleVisibleToRole(target, effectiveRole) ||
+    filterArticlesByFeatures([target], features).length === 0
+  ) {
+    return null;
+  }
+  return target;
 }
