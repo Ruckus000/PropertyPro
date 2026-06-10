@@ -16,7 +16,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ExternalLink, Search } from 'lucide-react';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
-import { useContextualHelp, useHelpArticle } from '@/hooks/use-help';
+import { useContextualHelp, useHelpArticle, useReadArticles } from '@/hooks/use-help';
 import { HelpArticleBody } from '@/components/help/help-article-body';
 import { HelpDocsModalSearchPanel } from '@/components/help/help-docs-modal-search-panel';
 import { getHelpCategoryMeta } from '@/lib/help/category-meta';
@@ -59,6 +59,7 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
   }, [selectedArticle]);
 
   const { data: contextual } = useContextualHelp(pathname, communityId, flagEnabled && isOpen);
+  const { data: readArticles } = useReadArticles(communityId);
   const articleQuery = useHelpArticle(
     selectedArticle?.category ?? null,
     selectedArticle?.slug ?? null,
@@ -148,6 +149,9 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
     showSearch || !selectedArticle ? (
       <HelpDocsModalSearchPanel
         communityId={communityId}
+        query={searchQuery}
+        contextualArticles={contextual ?? []}
+        readSlugs={readArticles?.slugs ?? null}
         onPickArticle={(category, slug) => {
           setShowSearch(false);
           setSearchQuery('');
