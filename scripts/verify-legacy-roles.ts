@@ -15,7 +15,9 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FLOOR = 250; // captured 2026-06-10 from --report; ratchet DOWN with every Phase 3 drain PR
+const FLOOR = 251; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
+                   // reference in access-control.ts checkPermissionV2 (ex-pm_admin null-perms fallback).
+                   // Ratchet DOWN with every Phase 3 drain PR.
 const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'packages/db/src', 'packages/ui/src', 'packages/email/src'];
 const LITERAL = /'(board_member|board_president|cam|site_manager|property_manager_admin)'/g;
 const V2_CAST = /'resident'\s*\|\s*'manager'\s*\|\s*'pm_admin'/g;

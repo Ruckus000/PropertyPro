@@ -14,8 +14,17 @@ describe('checkPermissionV2 — v3 transition roles', () => {
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read', { permissions })).toBe(true);
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write', { permissions })).toBe(false);
   });
-  it('property_manager without permissions is denied (matches manager behavior)', () => {
-    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read')).toBe(false);
+  it('property_manager without permissions resolves the property_manager_admin matrix (ex-pm_admin backfill fallback)', () => {
+    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write')).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
+    );
+    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read')).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'read'),
+    );
+  });
+  it('manager without permissions is still denied (regression guard — manager always carries permissions)', () => {
+    expect(checkPermissionV2('manager', 'condo_718', 'documents', 'read')).toBe(false);
+    expect(checkPermissionV2('manager', 'condo_718', 'documents', 'write')).toBe(false);
   });
 });
 

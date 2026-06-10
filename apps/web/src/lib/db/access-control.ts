@@ -61,7 +61,15 @@ export function checkPermissionV2(
   }
   // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
   if (role === 'manager' || role === 'property_manager') {
-    if (!opts?.permissions) return false;
+    if (!opts?.permissions) {
+      // ex-pm_admin rows backfilled to property_manager carry no JSONB permissions;
+      // resolve them to the uniform full-operational set (property_manager_admin matrix).
+      // manager always carries permissions (chk_manager_has_permissions), so this
+      // fallback only affects property_manager. Phase 4 makes this the sole path.
+      return role === 'property_manager'
+        ? RBAC_MATRIX[communityType]['property_manager_admin'][resource][action]
+        : false;
+    }
     const perm = opts.permissions.resources[resource];
     return action === 'read' ? perm.read : perm.write;
   }
