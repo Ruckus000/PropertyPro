@@ -30,6 +30,7 @@ const {
   createAdminClientMock,
   purgeCommunitySiteAssetsMock,
   logAuditEventMock,
+  findCommunitiesUserIsRootOfMock,
   eqMock,
   andMock,
   isNullMock,
@@ -45,6 +46,7 @@ const {
     createAdminClientMock: vi.fn(),
     purgeCommunitySiteAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     logAuditEventMock: vi.fn().mockResolvedValue(undefined),
+    findCommunitiesUserIsRootOfMock: vi.fn().mockResolvedValue([]),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
@@ -124,6 +126,10 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 
 vi.mock('@/lib/site-assets/cleanup', () => ({
   purgeCommunitySiteAssets: purgeCommunitySiteAssetsMock,
+}));
+
+vi.mock('@/lib/account-lifecycle/root-offboarding', () => ({
+  findCommunitiesUserIsRootOf: findCommunitiesUserIsRootOfMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -504,6 +510,8 @@ describe('extendFreeAccess', () => {
 describe('requestUserDeletion', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: user is root of no community (clearAllMocks wiped the resolved value).
+    findCommunitiesUserIsRootOfMock.mockResolvedValue([]);
   });
 
   it('creates a deletion request with 30-day cooling period', async () => {
@@ -523,6 +531,45 @@ describe('requestUserDeletion', () => {
     const insertCall = dbMock._calls.find((c) => c.op === 'insert');
     expect((insertCall?.values as Record<string, unknown>)?.requestType).toBe('user');
     expect((insertCall?.values as Record<string, unknown>)?.status).toBe('cooling');
+  });
+
+  it('does not emit a root_pending_deletion audit event when the user is root of no community', async () => {
+    const fakeRequest = { id: 5, requestType: 'user', userId: 'user-uuid-002', status: 'cooling', coolingEndsAt: new Date() };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
+    findCommunitiesUserIsRootOfMock.mockResolvedValue([]);
+
+    await requestUserDeletion('user-uuid-002');
+
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('flags each community the deleting user is root_manager of (audit event per community)', async () => {
+    const fakeRequest = { id: 9, requestType: 'user', userId: 'root-user', status: 'cooling', coolingEndsAt: new Date() };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
+    findCommunitiesUserIsRootOfMock.mockResolvedValue([42, 99]);
+
+    const result = await requestUserDeletion('root-user');
+
+    // The deletion request is still created (no hard-block in Phase 2a).
+    expect(result).toEqual(fakeRequest);
+    expect(findCommunitiesUserIsRootOfMock).toHaveBeenCalledWith('root-user');
+    // One audit flag per affected community.
+    expect(logAuditEventMock).toHaveBeenCalledTimes(2);
+    const calls = logAuditEventMock.mock.calls.map((c) => c[0]);
+    expect(calls.every((p: Record<string, unknown>) => p.action === 'root_pending_deletion')).toBe(true);
+    expect(calls.map((p: Record<string, unknown>) => p.communityId).sort()).toEqual([42, 99]);
+    expect(calls.every((p: Record<string, unknown>) => p.resourceId === '9')).toBe(true);
+  });
+
+  it('still returns the deletion request when flagging fails (best-effort)', async () => {
+    const fakeRequest = { id: 11, requestType: 'user', userId: 'root-user-2', status: 'cooling', coolingEndsAt: new Date() };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
+    findCommunitiesUserIsRootOfMock.mockRejectedValue(new Error('db down'));
+
+    const result = await requestUserDeletion('root-user-2');
+
+    expect(result).toEqual(fakeRequest);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 });
 

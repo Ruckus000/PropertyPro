@@ -33,6 +33,7 @@ import type { AccessPlan } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
+import { findCommunitiesUserIsRootOf } from '@/lib/account-lifecycle/root-offboarding';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -518,6 +519,37 @@ export async function requestUserDeletion(userId: string) {
       coolingEndsAt,
     })
     .returning();
+
+  // Role-offboarding flag (role-v3 Phase 2a): if this user holds root_manager
+  // in any community, flag those communities as pending-rootless so the
+  // platform-admin surface (rootless-communities report) and audit trail have
+  // visibility. We do NOT hard-block here — Phase 3 will, once the
+  // claim/transfer UX (2b) exists.
+  try {
+    const rootCommunityIds = await findCommunitiesUserIsRootOf(userId);
+    for (const communityId of rootCommunityIds) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[root-offboarding] user ${userId} (deletion request ${request!.id}) is root_manager of community ${communityId}; community will be rootless after purge`,
+      );
+      await logAuditEvent({
+        userId,
+        action: 'root_pending_deletion',
+        resourceType: 'account_deletion_request',
+        resourceId: String(request!.id),
+        communityId,
+        metadata: {
+          reason: 'root_manager_requested_account_deletion',
+          coolingEndsAt: coolingEndsAt.toISOString(),
+        },
+      });
+    }
+  } catch (err) {
+    // Flagging is best-effort and must never block the deletion request the
+    // user explicitly asked for. Surface the failure in logs only.
+    // eslint-disable-next-line no-console
+    console.error('[root-offboarding] failed to flag rootless-on-deletion', err);
+  }
 
   return request!;
 }

@@ -51,7 +51,9 @@ export type AuditAction =
   | 'custom_domain_set' | 'custom_domain_verified' | 'custom_domain_removed'
   // Portfolio template audit actions
   | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted'
-  | 'portfolio_template_applied';
+  | 'portfolio_template_applied'
+  // Role-simplification (v3): root-offboarding flag (Phase 2a)
+  | 'root_pending_deletion';
 
 export interface AuditEventParams {
   userId: string | null;
