@@ -68,10 +68,10 @@ describe('notifyRootClaimed', () => {
       { userId: 'other-1', email: 'a@example.com', fullName: 'Alice' },
       { userId: 'other-2', email: 'b@example.com', fullName: 'Bob' },
     ]);
-    // 2nd where(): claimant name lookup
-    whereMock.mockResolvedValueOnce([{ fullName: 'Claire Claimant' }]);
-    // 3rd where(): community name lookup
-    whereMock.mockResolvedValueOnce([{ name: 'Sunset Condos' }]);
+    // 2nd where().limit(1): claimant name point read
+    whereMock.mockReturnValueOnce({ limit: () => Promise.resolve([{ fullName: 'Claire Claimant' }]) });
+    // 3rd where().limit(1): community name point read
+    whereMock.mockReturnValueOnce({ limit: () => Promise.resolve([{ name: 'Sunset Condos' }]) });
 
     await notifyRootClaimed(42, 'claimant-user');
 
@@ -100,9 +100,9 @@ describe('notifyRootClaimed', () => {
   });
 
   it('does nothing (no email) when there are no other admins', async () => {
-    whereMock.mockResolvedValueOnce([]); // no other admins
-    whereMock.mockResolvedValueOnce([{ fullName: 'Claire Claimant' }]);
-    whereMock.mockResolvedValueOnce([{ name: 'Sunset Condos' }]);
+    whereMock.mockResolvedValueOnce([]); // no other admins (recipient where() awaited directly)
+    whereMock.mockReturnValueOnce({ limit: () => Promise.resolve([{ fullName: 'Claire Claimant' }]) });
+    whereMock.mockReturnValueOnce({ limit: () => Promise.resolve([{ name: 'Sunset Condos' }]) });
 
     await notifyRootClaimed(42, 'claimant-user');
 

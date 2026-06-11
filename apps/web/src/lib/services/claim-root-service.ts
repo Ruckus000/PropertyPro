@@ -55,7 +55,8 @@ export async function claimRoot(
   try {
     await scoped.update(
       userRoles,
-      { role: 'root_manager', updatedAt: new Date() },
+      // scoped-client auto-stamps updatedAt for tables that have the column.
+      { role: 'root_manager' },
       and(eq(userRoles.userId, userId), eq(userRoles.role, 'property_manager')),
     );
   } catch (err: unknown) {

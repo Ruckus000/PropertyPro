@@ -54,13 +54,15 @@ export async function notifyRootClaimed(
   const [claimantRow] = (await db
     .select({ fullName: users.fullName })
     .from(users)
-    .where(eq(users.id, claimantUserId))) as Array<{ fullName: string | null }>;
+    .where(eq(users.id, claimantUserId))
+    .limit(1)) as Array<{ fullName: string | null }>;
   const claimantName = claimantRow?.fullName ?? 'A property manager';
 
   const [communityRow] = (await db
     .select({ name: communities.name })
     .from(communities)
-    .where(eq(communities.id, communityId))) as Array<{ name: string | null }>;
+    .where(eq(communities.id, communityId))
+    .limit(1)) as Array<{ name: string | null }>;
   const communityName = communityRow?.name ?? 'your community';
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
