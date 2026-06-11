@@ -71,7 +71,9 @@ export {
  */
 export {
   findRootlessCommunities,
+  findMyRootlessCommunities,
   type RootlessCommunityRow,
+  type MyRootlessCommunityRow,
 } from './queries/rootless-communities';
 
 /**

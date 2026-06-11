@@ -8,9 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * that the resolved rows are returned as-is.
  */
 
-const { selectMock, fromMock, whereMock, orderByMock } = vi.hoisted(() => ({
+const { selectMock, fromMock, innerJoinMock, whereMock, orderByMock } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   fromMock: vi.fn(),
+  innerJoinMock: vi.fn(),
   whereMock: vi.fn(),
   orderByMock: vi.fn(),
 }));
@@ -19,7 +20,10 @@ vi.mock('../src/drizzle', () => ({
   db: { select: selectMock },
 }));
 
-import { findRootlessCommunities } from '../src/queries/rootless-communities';
+import {
+  findMyRootlessCommunities,
+  findRootlessCommunities,
+} from '../src/queries/rootless-communities';
 
 describe('findRootlessCommunities', () => {
   beforeEach(() => {
@@ -51,6 +55,39 @@ describe('findRootlessCommunities', () => {
     orderByMock.mockResolvedValue([]);
 
     const result = await findRootlessCommunities();
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('findMyRootlessCommunities', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // db.select(...).from(...).innerJoin(...).where(...).orderBy(...) → rows.
+    // The inner notExists subquery calls db.select(...).from(...).where(...),
+    // so .where must be chainable into .orderBy (outer) and resolve (inner).
+    selectMock.mockReturnValue({ from: fromMock });
+    fromMock.mockReturnValue({ innerJoin: innerJoinMock, where: whereMock });
+    innerJoinMock.mockReturnValue({ where: whereMock });
+    whereMock.mockReturnValue({ orderBy: orderByMock });
+  });
+
+  it('returns only communities where the user is property_manager and no root exists', async () => {
+    const rows = [{ id: 1, name: 'Alpha HOA', slug: 'alpha-hoa' }];
+    orderByMock.mockResolvedValue(rows);
+
+    const result = await findMyRootlessCommunities('user-1');
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toEqual(rows);
+    expect(innerJoinMock).toHaveBeenCalled();
+    expect(orderByMock).toHaveBeenCalled();
+  });
+
+  it('returns an empty array when the caller has no rootless communities', async () => {
+    orderByMock.mockResolvedValue([]);
+
+    const result = await findMyRootlessCommunities('user-1');
 
     expect(result).toEqual([]);
   });
