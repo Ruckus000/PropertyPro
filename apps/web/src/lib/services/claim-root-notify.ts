@@ -7,8 +7,9 @@
 // apply — the AUTHZ comment alone is insufficient). The recipient set explicitly
 // EXCLUDES the claimant; the caller has already authorized the claim.
 import { createElement } from 'react';
-import { communities, users, userRoles } from '@propertypro/db';
+// AUTHZ: cross-community unscoped read of the community's admin-tier recipients to notify on a root claim (see the file-level rationale above); excludes the claimant.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { communities, users, userRoles } from '@propertypro/db';
 import { and, eq, inArray, ne } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { RootClaimedEmail, sendEmail } from '@propertypro/email';

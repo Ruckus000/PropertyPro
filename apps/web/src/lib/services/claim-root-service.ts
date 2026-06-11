@@ -4,8 +4,9 @@
 // @propertypro/db/unsafe. This file MUST be added to WEB_UNSAFE_IMPORT_ALLOWLIST
 // in scripts/verify-scoped-db-access.ts (the // AUTHZ comment alone is insufficient
 // — both guards apply; this is the #718 two-guard lesson).
-import { createScopedClient, logAuditEvent, userRoles } from '@propertypro/db';
+// AUTHZ: findMyRootlessCommunities (cross-community) resolves the caller's own rootless property_manager memberships; self-scoped to the session user (see the file-level rationale above).
 import { findMyRootlessCommunities } from '@propertypro/db/unsafe';
+import { createScopedClient, logAuditEvent, userRoles } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
 import { notifyRootClaimed } from '@/lib/services/claim-root-notify';

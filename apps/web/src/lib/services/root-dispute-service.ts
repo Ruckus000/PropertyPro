@@ -8,13 +8,14 @@
 // atomically under the one-root partial unique index. This file MUST be added to
 // WEB_UNSAFE_IMPORT_ALLOWLIST in scripts/verify-scoped-db-access.ts (both guards
 // apply — the #718 two-guard lesson).
+// AUTHZ: transferRoot/reassignRoot swap two userRoles rows atomically via the unscoped transaction client under the one-root partial unique index; self-authorized by their route handlers (root-identity / platform-admin gates).
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   createScopedClient,
   logAuditEvent,
   rootClaimDisputes,
   userRoles,
 } from '@propertypro/db';
-import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
 
