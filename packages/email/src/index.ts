@@ -66,6 +66,9 @@ export type { AssessmentDueReminderEmailProps } from "./templates/assessment-due
 export { CalendarEventReminderEmail } from "./templates/calendar-event-reminder-email";
 export type { CalendarEventReminderEmailProps } from "./templates/calendar-event-reminder-email";
 
+export { RootClaimedEmail } from "./templates/root-claimed-email";
+export type { RootClaimedEmailProps } from "./templates/root-claimed-email";
+
 export { EsignInvitationEmail } from "./templates/esign-invitation-email";
 export type { EsignInvitationEmailProps } from "./templates/esign-invitation-email";
 
