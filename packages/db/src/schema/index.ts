@@ -9,6 +9,7 @@ export * from './users';
 export * from './user-preferences';
 export * from './site-portfolio-templates';
 export * from './user-roles';
+export * from './root-claim-disputes';
 export * from './units';
 export * from './document-categories';
 export * from './documents';

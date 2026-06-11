@@ -53,7 +53,9 @@ export type AuditAction =
   | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted'
   | 'portfolio_template_applied'
   // Role-simplification (v3): root-offboarding flag (Phase 2a)
-  | 'root_pending_deletion';
+  | 'root_pending_deletion'
+  // Role-simplification (v3): claim-root flow (Phase 2b)
+  | 'root_claimed' | 'root_claim_disputed' | 'root_reassigned' | 'root_transferred';
 
 export interface AuditEventParams {
   userId: string | null;
