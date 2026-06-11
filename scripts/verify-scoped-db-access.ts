@@ -187,6 +187,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Claim-root notify: cross-community lookup of the other PM/root recipients to
   // notify on a root claim (role-v3 Phase 2b). Self-excludes the claimant.
   resolve(repoRoot, 'apps/web/src/lib/services/claim-root-notify.ts'),
+  // Root-dispute service: transferRoot/reassignRoot swap two userRoles rows
+  // atomically via the unscoped transaction client (createUnscopedClient) under
+  // the one-root partial unique index (role-v3 Phase 2b). Self-authorized by the
+  // route handlers (root-identity / platform-admin gates).
+  resolve(repoRoot, 'apps/web/src/lib/services/root-dispute-service.ts'),
   // Platform admin auth guard — queries platform_admin_users (no community_id)
   resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
   // Admin access-plans routes — platform-level CRUD on access_plans table
