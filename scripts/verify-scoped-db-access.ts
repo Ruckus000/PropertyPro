@@ -180,6 +180,13 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Root-offboarding: cross-community read of the caller's own root_manager memberships
   // to flag rootless-on-deletion (role-v3 Phase 2a). Unscoped by nature — root_manager spans communities.
   resolve(repoRoot, 'apps/web/src/lib/account-lifecycle/root-offboarding.ts'),
+  // Claim-root service: resolves the caller's own rootless property_manager
+  // memberships (findMyRootlessCommunities) to drive the claim/claim-all flow
+  // (role-v3 Phase 2b). Cross-community by nature — self-scoped to the session user.
+  resolve(repoRoot, 'apps/web/src/lib/services/claim-root-service.ts'),
+  // Claim-root notify: cross-community lookup of the other PM/root recipients to
+  // notify on a root claim (role-v3 Phase 2b). Self-excludes the claimant.
+  resolve(repoRoot, 'apps/web/src/lib/services/claim-root-notify.ts'),
   // Platform admin auth guard — queries platform_admin_users (no community_id)
   resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
   // Admin access-plans routes — platform-level CRUD on access_plans table
