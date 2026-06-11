@@ -508,6 +508,31 @@ describe('maintenance requests [id] route', () => {
       expect('internalNotes' in notifPayload).toBe(false);
     });
 
+    it('status change creates in-app notification linking to the Operations hub', async () => {
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/maintenance-requests/1?communityId=42',
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ communityId: 42, status: 'acknowledged' }),
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+      const res = await PATCH(req, { params: Promise.resolve({ id: '1' }) });
+      expect(res.status).toBe(200);
+
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(createNotificationsForEventMock).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({
+          category: 'maintenance',
+          actionUrl: '/communities/42/operations?tab=requests',
+        }),
+        expect.objectContaining({ type: 'specific_user' }),
+        'session-user-1',
+      );
+    });
+
     it('admin can update internalNotes and audit log captures old/new values', async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/v1/maintenance-requests/1?communityId=42',

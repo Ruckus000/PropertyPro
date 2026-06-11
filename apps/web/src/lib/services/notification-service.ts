@@ -26,6 +26,7 @@ import {
   sendEmail,
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
+import { operationsHubHref } from '@/lib/operations/routes';
 import { ADMIN_TIER_DB_ROLES, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
 // Note: ADMIN_ROLES and BOARD_ROLES from shared still use legacy role names.
 // isRoleMatch below matches user_roles.role against the bilingual tier
@@ -285,7 +286,7 @@ function buildDigestPayload(
       eventType: event.type,
       eventTitle: event.requestTitle,
       eventSummary: `${event.previousStatus} -> ${event.newStatus}`,
-      actionUrl: `${baseUrl}/maintenance/${event.requestId}?communityId=${communityId}`,
+      actionUrl: `${baseUrl}${operationsHubHref(communityId, 'requests')}`,
     };
   }
 
@@ -502,7 +503,7 @@ function renderEmailForEvent(
           previousStatus: event.previousStatus,
           newStatus: event.newStatus,
           notes: event.notes,
-          portalUrl: `${baseUrl}/maintenance/${event.requestId}?communityId=${communityId}`,
+          portalUrl: `${baseUrl}${operationsHubHref(communityId, 'requests')}`,
         }),
       };
     }
