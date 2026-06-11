@@ -40,6 +40,24 @@ vi.mock('@/hooks/useComplianceMutations', () => ({
   }),
 }));
 
+vi.mock('@/hooks/useDocumentCategories', () => ({
+  useDocumentCategories: () => ({
+    categories: [{ id: 10, name: 'Insurance' }],
+    isLoading: false,
+    error: null,
+    resolveCategoryId: () => 10,
+  }),
+}));
+
+vi.mock('@/hooks/useDocumentUpload', () => ({
+  useDocumentUpload: () => ({
+    isUploading: false,
+    progress: 0,
+    error: null,
+    uploadDocument: vi.fn(),
+  }),
+}));
+
 vi.mock('@/hooks/use-compliance-activity', () => ({
   useComplianceActivityFeed: () => ({
     data: { data: [], pagination: { nextCursor: null, hasMore: false }, users: {} },
@@ -187,6 +205,34 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.getByText('Selected record')).toBeInTheDocument();
     // First selected item is the overdue "Insurance" record.
     expect(screen.getAllByText('Insurance').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('opens the upload modal for the selected item when "Upload record" is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    // Auto-selected item is the overdue "Insurance" record (id=2).
+    await user.click(screen.getByRole('button', { name: 'Upload record' }));
+    expect(screen.getByRole('heading', { name: 'Upload Document' })).toBeInTheDocument();
+    // Modal title input defaults to the selected item's title.
+    expect(screen.getByLabelText('Title')).toHaveValue('Insurance');
+  });
+
+  it('hides the "Upload record" button when canWrite is false', () => {
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
+    );
+    expect(screen.queryByRole('button', { name: 'Upload record' })).not.toBeInTheDocument();
+  });
+
+  it('does not render the unimplemented "Export readiness PDF" button', () => {
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+    );
+    expect(
+      screen.queryByRole('button', { name: /Export readiness PDF/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows the hidden-by-filter notice when the active filter excludes the selected item', () => {
