@@ -77,6 +77,21 @@ export {
 } from './queries/rootless-communities';
 
 /**
+ * Root-manager write-ops — cross-community by design.
+ *
+ * **Authorization contract:** `reassignRootOp` is a platform-admin-only
+ * operation; callers MUST verify a platform-admin session (apps/admin
+ * `requirePlatformAdmin`) before invoking it. The op enforces the
+ * property_manager-only target guard internally and throws
+ * `RoleOpForbiddenError` (map to 403) for an ineligible target.
+ */
+export {
+  reassignRootOp,
+  RoleOpForbiddenError,
+  type ReassignRootOpParams,
+} from './ops/root-ops';
+
+/**
  * Returns the raw Drizzle client without tenant scoping.
  * Use only for deliberate, reviewed escape-hatch flows.
  */

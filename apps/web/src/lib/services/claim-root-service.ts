@@ -14,7 +14,7 @@ import { notifyRootClaimed } from '@/lib/services/claim-root-notify';
 export interface ClaimResult {
   communityId: number;
   claimed: boolean;
-  reason?: 'already_claimed';
+  reason?: 'already_claimed' | 'error';
 }
 
 /**
@@ -92,9 +92,11 @@ export async function claimRoot(
 
 /**
  * Claim root for every community where the caller is a rootless property_manager.
- * Each claim is isolated in its own try/catch so one failure never aborts the
- * batch (mirrors the `pm/bulk/*` allSettled posture). A failed claim is reported
- * as `already_claimed` — the safe, idempotent default for a re-run.
+ * Runs serially (not parallel) so two claims can't race each other, and isolates
+ * each in its own try/catch so one failure never aborts the batch. An unexpected
+ * failure is reported as `reason: 'error'` (NOT `already_claimed`, which is
+ * reserved for the genuine race/already-rooted outcome) so the caller can tell a
+ * real failure apart from a benign contention result.
  */
 export async function claimAllRoots(userId: string): Promise<ClaimResult[]> {
   const communities = await findMyRootlessCommunities(userId);
@@ -110,7 +112,7 @@ export async function claimAllRoots(userId: string): Promise<ClaimResult[]> {
       results.push({
         communityId: community.id,
         claimed: false,
-        reason: 'already_claimed',
+        reason: 'error',
       });
     }
   }

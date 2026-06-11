@@ -163,7 +163,7 @@ describe('claimAllRoots', () => {
     const results = await claimAllRoots('user-1');
 
     expect(results).toEqual([
-      { communityId: 1, claimed: false, reason: 'already_claimed' },
+      { communityId: 1, claimed: false, reason: 'error' },
       { communityId: 2, claimed: true },
     ]);
   });

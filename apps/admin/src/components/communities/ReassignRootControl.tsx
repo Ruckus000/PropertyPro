@@ -36,7 +36,9 @@ export function ReassignRootControl({ communityId }: ReassignRootControlProps) {
         return;
       }
       setStatus('done');
-      setMessage('Root reassigned.');
+      setMessage('Root reassigned. Refreshing…');
+      // Reload so the now-resolved dispute row drops out of the open-disputes list.
+      setTimeout(() => window.location.reload(), 800);
     } catch {
       setStatus('error');
       setMessage('Network error.');

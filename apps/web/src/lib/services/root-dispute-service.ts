@@ -21,8 +21,7 @@ import { ForbiddenError } from '@/lib/api/errors';
 
 export type OpenDisputeResult =
   | { disputed: false; reason: 'no_current_root' }
-  | { disputed: true; alreadyOpen: true }
-  | { disputed: true };
+  | { disputed: true; alreadyOpen: boolean };
 
 /**
  * Open a root-claim dispute for `communityId`, raised by `disputedByUserId` (a
@@ -79,7 +78,7 @@ export async function openDispute(
     newValues: { claimedUserId: currentRoot, status: 'open' },
   });
 
-  return { disputed: true };
+  return { disputed: true, alreadyOpen: false };
 }
 
 /**
@@ -138,69 +137,7 @@ export async function transferRoot(
     newValues: { root: toUserId },
   });
 }
-
-/**
- * Platform-admin reassignment of root to `newUserId`, who MUST already hold a
- * `property_manager` row in the community (NEVER promote a resident or insert a
- * new row — a resident promotion would trip the prod `chk_owner_flag_resident_only`
- * CHECK and reassign is for managers only). Single transaction: demote the
- * current root (if any) → property_manager, promote `newUserId` → root_manager,
- * resolve any open disputes for the community, audit `root_reassigned`.
- */
-export async function reassignRoot(
-  communityId: number,
-  newUserId: string,
-  platformAdminUserId: string,
-): Promise<void> {
-  const db = createUnscopedClient();
-
-  await db.transaction(async (tx) => {
-    const scoped = createScopedClient(
-      communityId,
-      tx as unknown as Parameters<typeof createScopedClient>[1],
-    );
-
-    // `newUserId` must already be a property_manager here.
-    const target = (await scoped.selectFrom(
-      userRoles,
-      {},
-      and(eq(userRoles.userId, newUserId), eq(userRoles.role, 'property_manager')),
-    )) as unknown[];
-    if (target.length === 0) {
-      throw new ForbiddenError(
-        'No eligible property_manager to promote: the user must already be a property manager of this community.',
-      );
-    }
-
-    // Demote the current root (if any) FIRST so the one-root index never sees
-    // two roots mid-statement.
-    await scoped.update(
-      userRoles,
-      { role: 'property_manager' },
-      eq(userRoles.role, 'root_manager'),
-    );
-
-    // Promote the new user.
-    await scoped.update(
-      userRoles,
-      { role: 'root_manager' },
-      and(eq(userRoles.userId, newUserId), eq(userRoles.role, 'property_manager')),
-    );
-
-    // Resolve any open disputes for this community.
-    await scoped.update(
-      rootClaimDisputes,
-      { status: 'resolved', resolvedAt: new Date(), resolvedBy: platformAdminUserId },
-      eq(rootClaimDisputes.status, 'open'),
-    );
-  });
-
-  await logAuditEvent({
-    userId: platformAdminUserId,
-    action: 'root_reassigned',
-    resourceType: 'community',
-    resourceId: String(communityId),
-    communityId,
-    newValues: { root: newUserId },
-  });
-}
+// Root reassignment (platform-admin) lives in @propertypro/db as `reassignRootOp`
+// — the single source of truth shared by the admin route. It is NOT re-exported
+// here because the only consumer (the apps/admin reassign-root route) imports it
+// directly from @propertypro/db/unsafe.

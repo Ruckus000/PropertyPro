@@ -39,7 +39,6 @@ vi.mock('@propertypro/db/filters', () => ({
 
 import {
   openDispute,
-  reassignRoot,
   transferRoot,
 } from '../../../src/lib/services/root-dispute-service';
 
@@ -71,7 +70,7 @@ describe('root-dispute-service', () => {
 
       const result = await openDispute(7, 'pm-disputer');
 
-      expect(result).toEqual({ disputed: true });
+      expect(result).toEqual({ disputed: true, alreadyOpen: false });
       expect(scopedInsertMock).toHaveBeenCalledWith(rootClaimDisputesTable, {
         claimedUserId: 'root-1',
         disputedByUserId: 'pm-disputer',
@@ -128,27 +127,6 @@ describe('root-dispute-service', () => {
     });
   });
 
-  describe('reassignRoot', () => {
-    it('happy path: swaps both rows + resolves open disputes + audits', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([{ userId: 'new-1', role: 'property_manager' }]);
-
-      await reassignRoot(7, 'new-1', 'admin-1');
-
-      // demote root, promote new, resolve disputes = 3 updates
-      expect(scopedUpdateMock).toHaveBeenCalledTimes(3);
-      const resolveCall = scopedUpdateMock.mock.calls[2];
-      expect(resolveCall?.[0]).toBe(rootClaimDisputesTable);
-      expect(resolveCall?.[1]).toMatchObject({ status: 'resolved', resolvedBy: 'admin-1' });
-      expect(logAuditEventMock).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'root_reassigned', communityId: 7 }),
-      );
-    });
-
-    it('throws ForbiddenError when newUser has no property_manager row (never promote a resident)', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([]); // no property_manager membership
-
-      await expect(reassignRoot(7, 'resident-1', 'admin-1')).rejects.toBeInstanceOf(ForbiddenError);
-      expect(scopedUpdateMock).not.toHaveBeenCalled();
-    });
-  });
+  // reassignRoot moved to @propertypro/db `reassignRootOp` (single source of
+  // truth shared with the admin route) — covered by packages/db/__tests__/root-ops.test.ts.
 });
