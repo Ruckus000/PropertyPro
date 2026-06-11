@@ -192,6 +192,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // the one-root partial unique index (role-v3 Phase 2b). Self-authorized by the
   // route handlers (root-identity / platform-admin gates).
   resolve(repoRoot, 'apps/web/src/lib/services/root-dispute-service.ts'),
+  // my-rootless route: GET read source for the claim banner/screen. Calls
+  // findMyRootlessCommunities (cross-community) self-scoped to the authenticated
+  // session user (role-v3 Phase 2b).
+  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/my-rootless/route.ts'),
   // Platform admin auth guard — queries platform_admin_users (no community_id)
   resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
   // Admin access-plans routes — platform-level CRUD on access_plans table

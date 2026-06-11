@@ -18,6 +18,7 @@ import { DashboardAnnouncements } from '@/components/dashboard/dashboard-announc
 import { DashboardMeetings } from '@/components/dashboard/dashboard-meetings';
 import { DashboardViolations } from '@/components/dashboard/dashboard-violations';
 import { DashboardEsignPending } from '@/components/dashboard/dashboard-esign-pending';
+import { ClaimRootBanner } from '@/components/dashboard/ClaimRootBanner';
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -88,6 +89,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     <ErrorBoundary>
       <Suspense fallback={<DashboardSkeleton />}>
         <div className="space-y-6">
+          <ClaimRootBanner isAdmin={membership.isAdmin} />
           <OnboardingChecklist
             communityId={context.communityId}
             communityName={data.communityName}
