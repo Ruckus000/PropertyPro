@@ -30,8 +30,8 @@ tags:
   - elections
   - admin
   - florida
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 statutes:
   - "§718.112(2)(d)"
   - "§718.128"
@@ -47,7 +47,7 @@ contextPaths:
 A board election in PropertyPro follows the statutory process for Florida condos (§718.112(2)(d), §718.128 for e-voting) and HOAs (§720.306(9)). Every step has timing rules — this guide walks the full flow.
 
 <Callout type="florida-statute" title="Two-step notice">
-Condo elections require a two-step notice: first notice goes out 60 days before the election (soliciting candidates); second notice goes out 14 days before with the final ballot. PropertyPro prompts for both notices automatically.
+Condo elections require a two-step notice: first notice goes out 60 days before the election (soliciting candidates); second notice goes out 14 days before with the final ballot. Prepare and send both notices outside PropertyPro (for example, via Announcements or Documents). PropertyPro does not generate, draft, or send election notices, and notice deadlines are not tracked in the app.
 </Callout>
 
 ## Before you start
@@ -62,16 +62,16 @@ Have these ready:
 ## Phase 1 — First notice (60 days before)
 
 <StepByStep>
-<Step title="Create the election">
-Open Elections and click **New election**. Enter the election date, seats open, and the notice templates.
+<Step title="Open the election">
+Open **Board → Elections**. Elections appear in the list once set up — there is no **New election** button in PropertyPro. From the election detail, admins can use **Snapshot Eligibility**, **Open Election**, **Close Election**, **Certify Results**, and **Cancel Election**.
 </Step>
 
 <Step title="Send the candidate-solicitation notice">
-PropertyPro generates a first-notice draft. Review, edit as needed, and send. Candidates have 40 days from the first-notice date to submit their intent.
+Prepare and send the first notice outside PropertyPro. Candidates must submit written intent at least 40 days before the election — about 20 days after the first notice goes out.
 </Step>
 
 <Step title="Prepare candidate materials">
-Candidates can upload a bio (limit varies by statute/bylaws). PropertyPro keeps them in order of submission.
+Add each candidate's name and a short description. Control display order yourself — candidates cannot upload bios in PropertyPro.
 </Step>
 </StepByStep>
 
@@ -79,7 +79,7 @@ Candidates can upload a bio (limit varies by statute/bylaws). PropertyPro keeps 
 
 <StepByStep>
 <Step title="Close candidacy">
-At the 40-day mark (20 days before election), candidate intake closes automatically. Review the final slate.
+Candidacy closes 40 days before the election per statute. Maintain the slate manually — PropertyPro does not auto-close candidate intake.
 </Step>
 
 <Step title="Snapshot eligibility">
@@ -100,18 +100,18 @@ Under §718.128, each unit owner must opt in to electronic voting separately —
 During the voting window, owners can:
 
 - Submit an e-ballot through their PropertyPro account (one ballot per unit, not per user)
-- Request or submit a paper ballot (manually logged by staff)
+- Request or submit a paper ballot (handled entirely offline — counts are not entered into PropertyPro)
 - Designate a proxy per the bylaws' proxy rules
 
 ## Phase 4 — Counting and certification
 
 <StepByStep>
 <Step title="Close the polls at the scheduled time">
-PropertyPro locks voting automatically at the meeting's start.
+Voting stops automatically after the election's close time if one was set. An authorized admin must still click **Close Election** to finalize the election status.
 </Step>
 
 <Step title="Count ballots">
-E-ballots tally automatically. Paper ballots must be entered manually by the designated inspector.
+E-ballots tally automatically in PropertyPro. Paper ballots are counted offline and are not entered into PropertyPro.
 </Step>
 
 <Step title="Quorum check">
@@ -119,11 +119,11 @@ The election is valid only if your quorum threshold is met. If not, the election
 </Step>
 
 <Step title="Certify results">
-Two committee members sign the result certification, which is saved to the election record.
+An authorized admin clicks **Certify Results** in PropertyPro. Collect committee signatures separately (you can attach a results document when certifying).
 </Step>
 
 <Step title="Post results">
-Official results post to the community's meeting minutes and the compliance dashboard reflects the completed filing.
+Record results in meeting minutes manually. Optionally link a results document — PropertyPro does not post results to minutes or update the compliance dashboard.
 </Step>
 </StepByStep>
 
