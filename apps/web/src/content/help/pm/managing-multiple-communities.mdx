@@ -20,14 +20,13 @@ keywords:
 tags:
   - pm
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - running-portfolio-reports
   - sending-bulk-announcements-and-documents
 featured: false
 contextPaths:
-  - /pm
   - /pm/dashboard
   - /pm/dashboard/communities
   - /pm/dashboard/*
@@ -38,16 +37,18 @@ Property managers often oversee a dozen or more communities at once. PropertyPro
 
 ## The PM dashboard
 
-Open `/pm/dashboard/communities` to see every community in your portfolio:
+Open `/pm/dashboard/communities` to see every community in your portfolio. The table shows:
 
-- Name and subdomain
-- Type (condo, HOA, apartment)
-- Current compliance score
-- Number of open maintenance requests
-- Pending join requests awaiting review
-- Last admin action (who, when)
+- **Community** — name with type badge (Condo, HOA, or Apartment)
+- **Units**
+- **Residents**
+- **Occupancy**
+- **Open Maintenance**
+- **Compliance %**
+- **Outstanding Balance**
+- **Site** — public-site status (Customized, Draft saved, or Default)
 
-Sort by compliance score to prioritize communities that need attention, or by last activity to find the quiet ones that may be drifting.
+Sort any column to prioritize communities that need attention.
 
 ## Switching into a community
 
@@ -57,11 +58,11 @@ From the PM dashboard, clicking any community drops you into that community's fu
 </Step>
 
 <Step title="Work in context">
-Every page you visit is now scoped to that community. URLs include the community subdomain; data (documents, residents, meetings) is that community's data.
+Every page you visit is now scoped to that community. URLs use `/dashboard?communityId=N` on the same host; data (documents, residents, meetings) is that community's data.
 </Step>
 
 <Step title="Return to the portfolio">
-Click PM Dashboard in the top bar to return to the multi-community view. Your session remains authenticated across the portfolio.
+Click the **Portfolio** breadcrumb link to return to the multi-community view. Your session remains authenticated across the portfolio.
 </Step>
 </StepByStep>
 
@@ -69,8 +70,8 @@ Click PM Dashboard in the top bar to return to the multi-community view. Your se
 
 When you're working at the portfolio level:
 
-- The top bar shows **PM Dashboard** as the current context.
-- Navigation shows portfolio tools (communities list, bulk operations, reports, branding).
+- The breadcrumb shows **Portfolio** linking back to the communities list.
+- Navigation shows **Communities**, **Website**, **Templates**, and **Reports**.
 
 When you're inside a specific community:
 
@@ -80,15 +81,17 @@ When you're inside a specific community:
 
 ## Adding a community
 
-To add a new community to your portfolio, click **Add community** on the dashboard. The flow:
+To add a new community to your portfolio, click **Add Community** on the dashboard. The modal collects:
 
-1. Community name and subdomain
-2. Community type (condo / HOA / apartment)
-3. Plan selection
-4. Initial admin (usually the CAM or board president)
-5. Billing setup
+1. Community name
+2. Plan (Essentials, Professional, or Operations Plus)
+3. Community type (condo / HOA / apartment)
+4. Address (line, city, state, zip)
+5. Subdomain
+6. Unit count
+7. Timezone
 
-The new community is spun up within a few minutes. You can then invite board members and start loading records.
+After you submit, embedded Stripe checkout completes payment. The new community is provisioned within a few minutes. Invite board members and CAMs via **Residents → Add Resident**.
 
 ## Search scope
 

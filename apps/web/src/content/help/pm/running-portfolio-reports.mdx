@@ -20,47 +20,46 @@ keywords:
 tags:
   - pm
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - managing-multiple-communities
 featured: false
 contextPaths:
   - /pm/reports
-  - /pm/reports/*
 ---
 
 Portfolio reports aggregate data across the communities you manage. They're the fastest way to prepare for a monthly owner review, a quarterly management committee, or your own performance tracking.
 
 ## Available reports
 
-Open `/pm/reports` to see the available report types:
+Open `/pm/reports` to see five auto-loading tabs:
 
-- **Compliance** — compliance status and score per community, with the gaps that need attention.
 - **Maintenance** — maintenance request and work-order volume across your communities.
+- **Compliance** — compliance status and score per community, with the gaps that need attention.
 - **Occupancy** — occupancy trends over the selected date range.
 - **Violations** — a summary of violations per community.
 - **Delinquency** — delinquency aging: who's behind on assessments, and by how long.
 
-Each report type has the same shape: you pick the date range and the communities to include.
+Each tab loads data automatically when you open it.
 
-## Generating a report
+## Running a report
 
 <StepByStep>
-<Step title="Pick a report type">
-Click the report type on the Reports index.
+<Step title="Pick a tab">
+Click **Maintenance**, **Compliance**, **Occupancy**, **Violations**, or **Delinquency**.
 </Step>
 
-<Step title="Configure">
-Choose the date range and which communities to include. By default, all of your communities are selected.
+<Step title="Set filters">
+Choose which communities to include (all selected by default). Pick a date preset: **Last 30 days**, **Last 90 days**, **Last 6 months**, or **Last 12 months**. Compliance and Delinquency are point-in-time snapshots — the date preset does not filter those tabs.
 </Step>
 
-<Step title="Generate">
-Click Generate. Most reports render in a few seconds. Very large portfolios or long date ranges may take longer.
+<Step title="Apply">
+Click **Apply** to refresh the report with your filter choices.
 </Step>
 
-<Step title="Export">
-Each generated report has a download button — usually PDF and CSV. The CSV is handy for further analysis in Excel; the PDF is ready to share.
+<Step title="Export CSV">
+Click **Export CSV** to download the current view for further analysis in Excel. There is no PDF export.
 </Step>
 </StepByStep>
 
@@ -77,11 +76,11 @@ When a report row surfaces something worth investigating, open the community dir
 
 ## Re-running with the same settings
 
-For frequently-used configurations (monthly compliance review, quarterly delinquency recap), bookmark the URL after you generate the report — PropertyPro encodes the filters in the URL so the bookmark reproduces the same view next time.
+For frequently-used configurations (monthly compliance review, quarterly delinquency recap), bookmark the URL after you apply filters — PropertyPro encodes the filters in the URL so the bookmark reproduces the same view next time.
 
 ## Limits
 
-- **Data freshness**: reports reflect the state when you generated them. Re-run for fresh data; PropertyPro does not live-refresh a rendered report.
+- **Data freshness**: reports reflect the state when you applied filters. Re-run for fresh data; PropertyPro does not live-refresh a rendered report.
 - **Historic reach**: reports go back as far as PropertyPro has data for each community, which is usually the community's onboarding date.
 - **Custom fields**: if your portfolio tracks data beyond PropertyPro's schema, export the CSV and add context manually.
 

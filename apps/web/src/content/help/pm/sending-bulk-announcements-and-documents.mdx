@@ -20,8 +20,8 @@ keywords:
 tags:
   - pm
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - managing-multiple-communities
   - creating-and-publishing-announcements
@@ -31,29 +31,27 @@ contextPaths:
   - /pm/dashboard/*
 ---
 
-When the same thing needs to happen in many communities — a management-company-wide announcement, a new insurance certificate, a policy update — the bulk operations save hours of clicking.
+When the same thing needs to happen in many communities — a management-company-wide announcement, a new insurance certificate, a policy update — bulk operations save hours of clicking.
 
-## Bulk announcements
+<Callout type="info" title="Not available in the UI yet">
+Bulk announcements and bulk document uploads are not reachable from the PM dashboard today. Until the feature is wired in, post announcements and upload documents per community using the standard community tools.
+</Callout>
+
+## Bulk announcements (planned)
+
+When bulk announcements ship, the flow will work like this:
 
 <StepByStep>
-<Step title="Open the PM dashboard → Bulk announcements">
-Available only to property-manager-admin roles.
-</Step>
-
 <Step title="Compose the announcement">
-Write the headline and body as you would for a single community. You can include placeholders — `{{community.name}}`, `{{community.manager}}` — that expand per community.
+Enter a **Title** and **Body**. Choose an **Audience** (All Members, Owners Only, Board Only, or Tenants Only). Optionally pin the announcement. The same literal text goes to every selected community — there are no per-community placeholders.
 </Step>
 
 <Step title="Select communities">
-Check each community that should receive the announcement. For "all of them," click the Select all toggle.
+Check each community that should receive the announcement.
 </Step>
 
-<Step title="Preview one">
-Click Preview to see the announcement as it will appear in the first selected community. Confirm placeholders resolved correctly.
-</Step>
-
-<Step title="Publish">
-PropertyPro creates one announcement in each selected community with the right context. Residents see their community's version on their dashboards and in email.
+<Step title="Review and send">
+Click **Review & Send**, confirm the target community list, then click **Confirm & Send**. PropertyPro creates one announcement in each selected community.
 </Step>
 </StepByStep>
 
@@ -61,29 +59,25 @@ PropertyPro creates one announcement in each selected community with the right c
 There's no scheduled send for bulk operations today. Double-check the content before publishing — editing a single community's copy is possible, but undoing a multi-community publish takes coordinated effort.
 </Callout>
 
-## Bulk document uploads
+## Bulk document uploads (planned)
 
-For documents that apply across the portfolio — your management company's service agreement, shared insurance certificate, policies — upload once to multiple communities:
+For documents that apply across the portfolio — your management company's service agreement, shared insurance certificate, policies:
 
 <StepByStep>
-<Step title="Bulk documents tool">
-From the PM dashboard, open Bulk documents.
+<Step title="Select files">
+Choose one or more files to upload.
 </Step>
 
-<Step title="Upload the file">
-Pick the PDF. The file uploads once; PropertyPro replicates the reference across communities.
-</Step>
-
-<Step title="Set category and date">
-The category (e.g., Contracts, Insurance) and finalization date apply to every copy.
+<Step title="Add an optional description">
+Enter a **Description (optional)** if you want a note on the upload.
 </Step>
 
 <Step title="Select target communities">
-Same picker as bulk announcements. Choose the communities that should have this document.
+Choose the communities that should receive the document.
 </Step>
 
-<Step title="Publish">
-Each community's document library gets the new record; residents see it in their library.
+<Step title="Confirm and upload">
+Click **Confirm & Upload**. Each community's document library gets the new record. Set the document category per community afterward — bulk upload does not assign a category.
 </Step>
 </StepByStep>
 
@@ -91,22 +85,18 @@ Each community's document library gets the new record; residents see it in their
 
 - **Community-specific content** — if the message only applies to one community, post it there natively. Bulk announcements should be genuinely portfolio-wide.
 - **Private records** — don't bulk-upload a single community's meeting minutes; keep those in that community's library.
-- **Anything requiring customization beyond placeholders** — some communications need hand-crafted language per community (disputes, sensitive topics). Write those individually.
+- **Anything requiring per-community wording** — some communications need hand-crafted language per community (disputes, sensitive topics). Write those individually.
 
 ## Cadence
 
 Most PM teams use bulk operations monthly or quarterly — for a company-wide policy update, an annual insurance refresh, a seasonal reminder (hurricane prep, winter maintenance). Use sparingly; residents can tell when a message is templated and may disengage if every communication feels impersonal.
-
-## Tracking
-
-The PM dashboard keeps a log of every bulk operation — who sent it, when, which communities were targeted, how many messages were sent per community. Use this for your own records and for any management committee reporting.
 
 ## Undoing a bulk send
 
 You can't undo a bulk announcement in one click. To retract:
 
 1. Open the community list you targeted.
-2. Unpublish the announcement in each community.
+2. Archive or delete the announcement in each community.
 3. Send a follow-up explaining the retraction.
 
-Because retractions are painful, pause and preview twice before every bulk publish.
+Because retractions are painful, double-check content carefully before every bulk publish.
