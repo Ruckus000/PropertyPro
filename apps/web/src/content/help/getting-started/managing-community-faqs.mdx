@@ -9,8 +9,6 @@ roles:
   - cam
   - site_manager
   - property_manager_admin
-  - manager
-  - pm_admin
 keywords:
   - faq
   - faqs
@@ -25,8 +23,8 @@ keywords:
 tags:
   - getting-started
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - welcome-to-propertypro
   - reading-and-managing-announcements
@@ -36,7 +34,7 @@ contextPaths:
   - /help
 ---
 
-PropertyPro's library of help articles covers the platform itself. **Community FAQs** are the short, community-specific quick answers — pool hours, trash pickup days, who to call for what. Every community admin can author and curate them; residents see them in the help center and inline on relevant pages.
+PropertyPro's library of help articles covers the platform itself. **Community FAQs** are the short, community-specific quick answers — pool hours, trash pickup days, who to call for what. Every community admin can author and curate them; residents find them through help-center search and the help panel's search.
 
 ## What an FAQ is for
 
@@ -55,15 +53,15 @@ From the help center, admins see a **Manage FAQs** link. Click it (or visit `/he
 </Step>
 
 <Step title="Review existing FAQs">
-The editor shows every FAQ currently published for this community, in the order residents see them.
+The editor shows every FAQ currently published for this community. Click a row to open it in the side panel.
 </Step>
 </StepByStep>
 
 ## Authoring an FAQ
 
 <StepByStep>
-<Step title="Click New FAQ">
-A row appears with empty Question and Answer fields.
+<Step title="Add or edit in the side panel">
+Click an existing FAQ row to open **Edit FAQ**, or start a new one with **Add FAQ** in the side panel. Enter the Question and Answer fields.
 </Step>
 
 <Step title="Write the question">
@@ -75,22 +73,22 @@ Keep it short — 2-4 sentences usually. If the answer is long, write a brief su
 </Step>
 
 <Step title="Save">
-Changes save inline. The FAQ is immediately visible to residents on the help center.
+Click **Save changes** (or **Add FAQ** for a new entry). Click **Delete FAQ** to remove one. The FAQ is immediately visible to residents via help search.
 </Step>
 </StepByStep>
 
 ## Ordering FAQs
 
-The sortOrder field controls display order. To rearrange:
+On desktop (`/help/manage`), FAQs display in their current order — there is no drag-and-drop reordering in the editor.
 
-- **Drag and drop** the FAQ row in the editor. PropertyPro recomputes the order automatically.
+On mobile (`/mobile/help/manage`), use the up and down arrow buttons next to each FAQ to change display order.
+
 - **Group related FAQs** together so residents reading one finds the next naturally.
 - **Put the most-asked questions at the top** — most residents bounce after reading the first few items.
 
 ## Editing or removing FAQs
 
-- **Edit**: click any field in an existing row, make the change, click outside the field to save.
-- **Delete**: click the trash icon next to the row. Deletion is immediate. The audit trail captures the deletion event.
+Click any FAQ row to open it in the side panel. Make your changes and click **Save changes**, or click **Delete FAQ** to remove it. Deletion is immediate. The audit trail captures the deletion event.
 
 <Callout type="warning" title="Outdated FAQs erode trust">
 A FAQ saying "pool opens May 1" that's still up in October hurts more than no FAQ. Schedule a quarterly review to walk every FAQ for accuracy. Better to delete a stale one than leave it published.
@@ -112,19 +110,15 @@ A FAQ saying "pool opens May 1" that's still up in October hurts more than no FA
 
 ## What residents see
 
-Residents browsing the help center see FAQs grouped at the top, before platform articles. The contextual help drawer (the `?` button) also surfaces relevant FAQs based on the page the resident is on.
-
-Each FAQ has a thumbs-up / thumbs-down feedback button. Use that signal to identify FAQs that aren't working — low ratings often mean the question is being misread or the answer is too short.
+Residents find FAQs via help-center search and the `?` panel's search — FAQs appear in search results alongside help articles. The contextual help drawer lists articles for the current page; FAQs surface when residents search within the panel.
 
 ## Bulk operations
 
 There's no CSV import for FAQs today — they're a low-volume content type. For initial bulk-load when onboarding a community, copy-paste each question and answer from your existing source (a Google Doc, an old website).
 
-If you manage many communities and have FAQs that should apply everywhere ("Our property management company can be reached at..."), set those at the PM-branding level rather than per-community. They'll fan out automatically.
-
 ## Cadence
 
-- **Weekly**: clear any FAQ flagged as outdated.
+- **Weekly**: review FAQs that may be out of date.
 - **Quarterly**: walk every FAQ for accuracy.
 - **After policy changes**: update relevant FAQs the same day the policy changes go live.
 - **After resident escalations**: when a resident asks something that should have been findable, add the FAQ that day.
@@ -137,4 +131,4 @@ Every FAQ create, edit, and delete is captured in the compliance audit log with 
 
 - **"Can FAQs link to PropertyPro help articles?"** Yes — paste the article URL into the answer and it renders as a link.
 - **"Are FAQs visible publicly?"** No, they're behind authentication. Public-facing answers belong on the [transparency page](/help/transparency/configuring-the-transparency-page).
-- **"Can different roles see different FAQs?"** Not today. Every FAQ is visible to every resident in the community. Role-specific guidance belongs in announcements or direct messages.
+- **"Can different roles see different FAQs?"** Yes — PropertyPro enforces role visibility on FAQs server-side. Every resident sees only the FAQs allowed for their role. You cannot edit role visibility in the FAQ editor today.

@@ -9,8 +9,6 @@ roles:
   - cam
   - site_manager
   - property_manager_admin
-  - manager
-  - pm_admin
 keywords:
   - residents
   - invite
@@ -25,8 +23,8 @@ keywords:
 tags:
   - residents
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - approving-join-requests
 featured: false
@@ -54,16 +52,16 @@ Invitations are faster and ensure unit numbers are correct from the start. Self-
 From the sidebar, click Residents (or `/dashboard/residents`).
 </Step>
 
-<Step title="Click Invite resident">
-Enter the resident's email, unit number, and role (Owner, Tenant, Staff, Board Member, etc.).
+<Step title="Click Add Resident">
+Enter the resident's email, unit number, and role. Keep **Send invitation email** checked to email them a sign-up link pre-filled with their unit and role.
 </Step>
 
 <Step title="Review and send">
-The resident receives an email invitation with a direct sign-up link pre-filled with their unit and role.
+The resident receives an email invitation with a direct sign-up link.
 </Step>
 
-<Step title="Track the invitation">
-Pending invitations show in the Residents list with their status — Sent, Accepted, Expired.
+<Step title="Resend if needed">
+Each resident row has a **Send Invite** button to resend the invitation. There is no Sent/Accepted/Expired status tracking in the list.
 </Step>
 </StepByStep>
 
@@ -71,40 +69,20 @@ Pending invitations show in the Residents list with their status — Sent, Accep
 
 For onboarding at scale (new communities, quarterly new-owner intake):
 
-1. Download the CSV template from the Residents page.
-2. Fill in email, unit, first name, last name, role for each resident.
-3. Upload. PropertyPro validates and sends invitations in bulk.
+1. Download the CSV template from the Import page (`name`, `email`, `role`, `unit_number` columns).
+2. Fill in each row.
+3. Upload. PropertyPro validates the file and creates resident records.
 4. Review the summary — any rows that failed validation show the reason.
+5. Send invitations afterward using **Send Invite** on each resident row — import does not bulk-email invitations.
 
-## Updating roles
+## Role changes and offboarding
 
-As ownership, leases, and staff assignments change, update the roster:
-
-- **Owner moves out / sells** — change the unit's owner to the new party; the prior owner loses access.
-- **Tenant moves in** — add as Tenant linked to the unit.
-- **Board election** — promote an owner to Board Member; demote at end of term.
-- **Staff turnover** — remove departing staff and invite replacements.
-
-Role changes take effect immediately. The resident sees their view adjust on next page load.
-
-## Offboarding
-
-<Callout type="warning" title="Don't just delete">
-If an owner sells, the record of their tenure (payments, maintenance history, violations) belongs in the community archive. Deactivate their access rather than deleting the resident — otherwise the audit history loses continuity.
-</Callout>
-
-Use the **Remove from community** action on the resident's profile. Their account stays intact (they can still sign in to any other communities they belong to), but their access to this community is revoked and they drop off the roster.
+Changing a resident's role or removing them from the community is not available in the UI today. Contact PropertyPro support if you need to update roles or revoke access.
 
 ## Merging duplicate residents
 
-Occasionally a resident has two accounts (old email, new email). To merge:
+If a resident has two accounts (old email, new email), contact PropertyPro support. There is no automatic merge and no self-service email-change or removal flow in the UI.
 
-1. Pick the account you want to keep.
-2. On the duplicate, change the email to a placeholder and remove them from the community.
-3. Invite them back if needed using the correct email.
+## Audit trail
 
-There's no automatic merge — the two accounts remain distinct in PropertyPro. If history (payments, maintenance) is attached to the old account, it stays with that account.
-
-## Viewing the directory as a resident
-
-Residents see a simpler directory — name and unit for most, contact info only where the resident opts in. Admins see more (email, phone, role). Use this to help residents network without forcing their details public.
+Resident invitations and roster changes are captured in the compliance audit log. If a resident later disputes access or role assignment, you have a timestamped record.
