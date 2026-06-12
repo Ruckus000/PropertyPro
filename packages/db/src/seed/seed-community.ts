@@ -20,6 +20,7 @@ import {
   getComplianceTemplate,
   getDefaultDocumentCategories,
   getPresetPermissions,
+  hasBoardDesignation,
   isPresetKey,
   type CommunityBranding,
   type CommunityType,
@@ -792,7 +793,9 @@ export async function seedRoles(
         m.presetKey && isPresetKey(m.presetKey)
           ? JSON.stringify(getPresetPermissions(m.presetKey, communityType))
           : null;
-      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, ${perms}::jsonb, ${m.presetKey}, ${m.displayTitle})`;
+      // Phase 3.2 writer lockstep: a board presetKey always carries the identical designation.
+      const designation = m.presetKey && hasBoardDesignation(m.presetKey) ? m.presetKey : null;
+      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, ${perms}::jsonb, ${m.presetKey}, ${designation}, ${m.displayTitle})`;
     }),
     sql`, `,
   );
@@ -805,6 +808,7 @@ export async function seedRoles(
       is_unit_owner,
       permissions,
       preset_key,
+      designation,
       display_title
     )
     values ${values}
@@ -814,6 +818,7 @@ export async function seedRoles(
         is_unit_owner = excluded.is_unit_owner,
         permissions = excluded.permissions,
         preset_key = excluded.preset_key,
+        designation = excluded.designation,
         display_title = excluded.display_title,
         updated_at = now()
   `);
