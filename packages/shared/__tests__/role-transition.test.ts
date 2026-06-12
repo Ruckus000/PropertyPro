@@ -5,6 +5,8 @@ import {
   PM_SCOPE_DB_ROLES,
   TRANSITION_ROLES,
   expandTransitionRoleFilter,
+  hasBoardDesignation,
+  isBoardPresident,
 } from '../src/role-transition';
 
 describe('role-transition constants', () => {
@@ -35,5 +37,29 @@ describe('expandTransitionRoleFilter', () => {
   });
   it('returns [] for unknown values (callers must short-circuit before inArray)', () => {
     expect(expandTransitionRoleFilter('owner')).toEqual([]);
+  });
+});
+
+describe('hasBoardDesignation', () => {
+  it('accepts both board designations', () => {
+    expect(hasBoardDesignation('board_president')).toBe(true);
+    expect(hasBoardDesignation('board_member')).toBe(true);
+  });
+  it('rejects null, undefined, and non-board strings', () => {
+    expect(hasBoardDesignation(null)).toBe(false);
+    expect(hasBoardDesignation(undefined)).toBe(false);
+    expect(hasBoardDesignation('')).toBe(false);
+    expect(hasBoardDesignation('cam')).toBe(false);
+    expect(hasBoardDesignation('president')).toBe(false);
+    expect(hasBoardDesignation(7)).toBe(false);
+  });
+});
+
+describe('isBoardPresident', () => {
+  it('is true only for board_president', () => {
+    expect(isBoardPresident('board_president')).toBe(true);
+    expect(isBoardPresident('board_member')).toBe(false);
+    expect(isBoardPresident(null)).toBe(false);
+    expect(isBoardPresident(undefined)).toBe(false);
   });
 });
