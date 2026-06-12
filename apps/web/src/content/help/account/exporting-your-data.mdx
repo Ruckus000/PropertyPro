@@ -1,24 +1,28 @@
 ---
 title: "Exporting your data"
-description: "Download a copy of your PropertyPro data — payments, maintenance history, documents, and more."
+description: "Download a ZIP of CSV exports for your community's residents, documents, maintenance requests, and announcements."
 category: "account"
 slug: "exporting-your-data"
-roles: []
+roles:
+  - owner
+  - board_member
+  - board_president
+  - cam
+  - property_manager_admin
 keywords:
   - export
   - data
   - download
   - copy
   - backup
-  - gdpr
   - data export
   - privacy
   - take out
 tags:
   - account
   - residents
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - requesting-account-deletion
   - updating-your-profile
@@ -28,64 +32,57 @@ contextPaths:
   - /settings/export
 ---
 
-You can request a copy of the data PropertyPro holds about you. The export is a ZIP file containing CSVs and PDFs covering your account.
+You can download a ZIP file of CSV exports for your community's data from Settings → Export. The export is a point-in-time snapshot of community records, not a personal account download.
 
 ## What's included
 
-- **Account profile** — name, email, phone, and any profile fields.
-- **Community memberships** — communities you belong to and your role in each.
-- **Payment history** — every payment, with dates, amounts, and methods (tokenized, no raw card numbers).
-- **Maintenance requests** — every request you've submitted, with comments and attachments.
-- **Violations involving you** — any notices, hearings, and resolutions on your unit.
-- **Documents you've signed** — countersigned PDFs from the e-sign flow.
-- **Comments** — comments you've posted on announcements, meetings, or violations.
+The ZIP contains four CSV files:
+
+- **Residents** — community member records.
+- **Documents** — document metadata (titles, categories, dates).
+- **Maintenance requests** — maintenance request records.
+- **Announcements** — announcement records.
+
+Very large communities may receive truncated CSVs. If truncation occurs, the download response indicates it.
 
 ## What's not included
 
-- Payment card numbers (we never stored them).
-- Other residents' data (even if you shared a thread).
-- Documents your association owns (bylaws, minutes, etc.) — those belong to the community, not you.
+- File contents for documents (metadata only).
+- Payment or violation records.
+- Other communities' data.
 
 ## Requesting an export
 
 <StepByStep>
 <Step title="Open Settings → Export">
-From the profile menu, pick Settings, then Export your data.
+From the profile menu, pick Settings, then open the Data Export page.
 </Step>
 
-<Step title="Confirm the request">
-PropertyPro asks you to confirm via email. This prevents someone with temporary access to your account from silently exporting.
+<Step title="Download Community Data">
+Click **Download Community Data**.
 </Step>
 
-<Step title="Wait for the email">
-Most exports are ready within a few minutes. Very large accounts (many years of history, lots of attachments) can take up to 24 hours.
+<Step title="Confirm your password">
+Enter your password in the reauthentication dialog to confirm the request.
 </Step>
 
 <Step title="Download">
-The email includes a download link that's valid for 7 days. The download is encrypted at rest until you click.
+The ZIP file downloads immediately. The filename is `community-export-{communityId}.zip`.
 </Step>
 </StepByStep>
 
 ## How the export is formatted
 
-- **CSVs** — tabular data (payments, maintenance, memberships) that opens in Excel / Google Sheets.
-- **PDFs** — any signed documents, violation notices, receipts.
-- **README.txt** — a summary of what's in the ZIP.
-
-Filenames are predictable (for example, `payments-sunset-condos-2026.csv`) so you can script around them if needed.
+Each CSV opens in Excel or Google Sheets. The ZIP contains CSV files only — no PDFs or README.
 
 ## Using the export
 
 Common uses:
 
-- **Moving** — keep a copy of your maintenance and payment history before leaving the community.
-- **Taxes** — the payments CSV gives an audit-ready year of dues.
-- **Record-keeping** — for your own archive, especially before a long vacation or leave of absence.
+- **Record-keeping** — archive a snapshot of community data before a staff change or audit.
+- **Offline review** — open maintenance or announcement records in a spreadsheet.
+- **Backup reference** — keep a local copy alongside your association's primary records.
 
 <Callout type="tip" title="Not a backup replacement">
-The export is a point-in-time copy. It doesn't sync going forward, and your association's records keep updating even after you download. If you need recent data, request a fresh export.
+The export is a point-in-time copy. It doesn't sync going forward, and your association's records keep updating even after you download. If you need recent data, download a fresh export.
 </Callout>
-
-## Legal basis
-
-The export satisfies typical data-portability requests under privacy laws. PropertyPro does not charge for this — you can request as often as you like within reason.
