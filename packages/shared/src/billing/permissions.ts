@@ -40,9 +40,15 @@ export function inferCanonicalRoleFromMembership(input: {
   role: string;
   isUnitOwner?: boolean;
   presetKey?: string | null;
+  designation?: string | null;
 }): AnyCommunityRole {
   if (input.role === 'pm_admin' || input.role === 'root_manager') return 'property_manager_admin';
   if (input.role === 'manager' || input.role === 'property_manager') {
+    // Phase 3.2: designation is the source of truth for board membership;
+    // the presetKey board cases below are the bilingual fallback for callers
+    // not yet passing designation, and die with this whole function in Phase 4.
+    if (input.designation === 'board_president') return 'board_president';
+    if (input.designation === 'board_member') return 'board_member';
     switch (input.presetKey) {
       case 'board_president': return 'board_president';
       case 'cam': return 'cam';
