@@ -107,6 +107,24 @@ export function requirePermission(
   }
 }
 
+/**
+ * Statutory board-action gate (role-v3 §3.2). Passes for management-tier callers
+ * (property_manager / root_manager == membership.isAdmin) OR any holder of a board
+ * designation. Apply as a SECOND gate AFTER requirePermission(resource, action) on
+ * statutory routes only — general permissions still come from the role.
+ *
+ * NOTE: the designation arm is currently unreachable on the statutory routes,
+ * because requirePermission(..., 'write') already filters to management-tier
+ * (residents lack write on meetings/elections/violations). It is intentional
+ * forward-looking scaffolding for a future resident-held board seat; today this
+ * helper is equivalent to the isAdmin check it replaces (behavior-neutral).
+ */
+export function requireBoardDesignation(membership: CommunityMembership): void {
+  if (!(membership.isAdmin || membership.designation != null)) {
+    throw new ForbiddenError('This action is restricted to the board.');
+  }
+}
+
 export type ResourceAccessMap = Record<RbacResource, Record<RbacAction, boolean>>;
 
 export function getMembershipResourceAccess(
