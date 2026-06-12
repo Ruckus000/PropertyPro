@@ -61,6 +61,7 @@ describe('requireCommunityMembership', () => {
       timezone: 'America/New_York',
       permissions: undefined,
       presetKey: undefined,
+      designation: null,
       city: null,
       state: null,
       isDemo: false,
@@ -68,6 +69,30 @@ describe('requireCommunityMembership', () => {
       demoExpiresAt: null,
       electionsAttorneyReviewed: false,
     });
+  });
+
+  it('surfaces designation for a board-designated row', async () => {
+    scopedSelectFromMock.mockImplementation(async (table: unknown) => {
+      if (table === userRolesTable) {
+        return [{
+          userId: 'user-1',
+          role: 'property_manager',
+          isUnitOwner: false,
+          displayTitle: 'Board President',
+          presetKey: 'board_president',
+          designation: 'board_president',
+        }];
+      }
+      if (table === communitiesTable) {
+        return [{ id: 42, communityType: 'condo_718', timezone: 'America/New_York', isDemo: false }];
+      }
+      return [];
+    });
+
+    const membership = await requireCommunityMembership(42, 'user-1');
+
+    expect(membership.designation).toBe('board_president');
+    expect(membership.isAdmin).toBe(true);
   });
 
   // BILINGUAL (role-v3): ex-pm_admin backfilled to property_manager.

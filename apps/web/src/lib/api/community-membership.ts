@@ -25,6 +25,8 @@ export interface CommunityMembership {
   displayTitle: string;
   /** Preset key for managers (e.g. 'board_president', 'cam'). */
   presetKey?: string;
+  /** Board designation (role-v3 §3.2) — statutory marker, independent of role. Null when not a board member. */
+  designation: 'board_president' | 'board_member' | null;
   /** Community city for location display. */
   city: string | null;
   /** Community state abbreviation for location display. */
@@ -95,6 +97,12 @@ export async function requireCommunityMembership(
     ? membership['presetKey']
     : undefined;
 
+  const rawDesignation = membership['designation'];
+  const designation =
+    rawDesignation === 'board_president' || rawDesignation === 'board_member'
+      ? rawDesignation
+      : null;
+
   const communityType = requireCommunityType(
     community['communityType'],
     `requireCommunityMembership(communityId=${communityId}) community`,
@@ -149,6 +157,7 @@ export async function requireCommunityMembership(
     permissions,
     displayTitle,
     presetKey,
+    designation,
     city: typeof community['city'] === 'string' ? community['city'] : null,
     state: typeof community['state'] === 'string' ? community['state'] : null,
     isDemo: community['isDemo'] === true,
