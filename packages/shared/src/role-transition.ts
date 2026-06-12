@@ -54,7 +54,11 @@ export function hasBoardDesignation(value: unknown): value is BoardDesignation {
   return typeof value === 'string' && (BOARD_DESIGNATIONS as readonly string[]).includes(value);
 }
 
-/** President-only arms (access-request notify, billing president check). */
+/**
+ * President-only arms (access-request notify, billing president check).
+ * Accepts `unknown` — safe to call directly on a nullable designation column.
+ * Returns a plain boolean (not a type guard).
+ */
 export function isBoardPresident(value: unknown): boolean {
   return value === 'board_president';
 }

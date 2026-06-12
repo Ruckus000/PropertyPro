@@ -61,5 +61,7 @@ describe('isBoardPresident', () => {
     expect(isBoardPresident('board_member')).toBe(false);
     expect(isBoardPresident(null)).toBe(false);
     expect(isBoardPresident(undefined)).toBe(false);
+    expect(isBoardPresident(['board_president'])).toBe(false);
+    expect(isBoardPresident({})).toBe(false);
   });
 });
