@@ -11,6 +11,7 @@ import type { CommunityMembership } from '@/lib/api/community-membership';
 import { formatAnnouncementAudienceLabel, searchVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { getMembershipResourceAccess } from '@/lib/db/access-control';
 import { escapeLikePattern } from '@/lib/utils/escape-like';
+import { operationsHubHref } from '@/lib/operations/routes';
 import { SEARCH_GROUPS, type SearchGroupConfig } from './group-config';
 import type { SearchGroupResponse, SearchResultItem } from './data-search-types';
 
@@ -113,7 +114,7 @@ async function executeSearchGroup(
           id: row.id,
           title: row.title,
           subtitle: `${row.priority} · ${row.status}`,
-          href: `/maintenance/${row.id}`,
+          href: operationsHubHref(communityId, 'requests'),
           entityType: 'maintenance',
           status: row.status,
           priority: row.priority,
