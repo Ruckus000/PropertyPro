@@ -268,6 +268,115 @@ describe('access-request-service', () => {
       expect(sendEmailMock).toHaveBeenCalled();
     });
 
+    describe('admin notification recipients', () => {
+      const pendingRequestRow = {
+        id: 10,
+        email: 'user@example.com',
+        fullName: 'Test User',
+        status: 'pending_verification',
+        otpHash: TEST_OTP_HASH,
+        otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        otpAttempts: 0,
+        claimedUnitNumber: '101',
+      };
+
+      async function notifiedEmails(
+        roleRows: Record<string, unknown>[],
+        userRows: Record<string, unknown>[],
+      ): Promise<string[]> {
+        setupScopedMock({
+          accessRequestRows: [pendingRequestRow],
+          roleRows,
+          userRows,
+        });
+
+        await verifyOtp({ requestId: 10, otp: TEST_OTP, communityId: COMMUNITY_ID });
+
+        return sendEmailMock.mock.calls
+          .map((call) => call[0] as { to: string; subject: string })
+          .filter((args) => args.subject.startsWith('New resident access request'))
+          .map((args) => args.to);
+      }
+
+      it('notifies all PM-scope role holders', async () => {
+        const emails = await notifiedEmails(
+          [
+            { userId: 'admin-1', role: 'property_manager', presetKey: null, designation: null },
+            { userId: 'admin-2', role: 'root_manager', presetKey: null, designation: null },
+            { userId: 'admin-3', role: 'pm_admin', presetKey: null, designation: null },
+          ],
+          [
+            { id: 'admin-1', email: 'pm@example.com', fullName: 'PM' },
+            { id: 'admin-2', email: 'root@example.com', fullName: 'Root' },
+            { id: 'admin-3', email: 'pmadmin@example.com', fullName: 'PM Admin' },
+          ],
+        );
+
+        expect(emails).toEqual([
+          'pm@example.com',
+          'root@example.com',
+          'pmadmin@example.com',
+        ]);
+      });
+
+      it('notifies a resident-role row designated board_president', async () => {
+        const emails = await notifiedEmails(
+          [
+            {
+              userId: 'pres-1',
+              role: 'resident',
+              presetKey: null,
+              designation: 'board_president',
+            },
+          ],
+          [{ id: 'pres-1', email: 'president@example.com', fullName: 'President' }],
+        );
+
+        expect(emails).toEqual(['president@example.com']);
+      });
+
+      it('does NOT notify a board_president presetKey row without designation (preset arm removed)', async () => {
+        const emails = await notifiedEmails(
+          [
+            {
+              userId: 'legacy-1',
+              role: 'manager',
+              presetKey: 'board_president',
+              designation: null,
+            },
+          ],
+          [{ id: 'legacy-1', email: 'legacy-pres@example.com', fullName: 'Legacy Pres' }],
+        );
+
+        expect(emails).toEqual([]);
+      });
+
+      it('does NOT notify a cam presetKey row without PM-scope role (cam arm removed)', async () => {
+        const emails = await notifiedEmails(
+          [{ userId: 'cam-1', role: 'manager', presetKey: 'cam', designation: null }],
+          [{ id: 'cam-1', email: 'cam@example.com', fullName: 'Cam User' }],
+        );
+
+        expect(emails).toEqual([]);
+      });
+
+      it('does NOT notify a board_member designation on a non-PM-scope role', async () => {
+        const emails = await notifiedEmails(
+          [
+            {
+              userId: 'member-1',
+              role: 'resident',
+              presetKey: null,
+              designation: 'board_member',
+            },
+          ],
+          [{ id: 'member-1', email: 'member@example.com', fullName: 'Board Member' }],
+        );
+
+        expect(emails).toEqual([]);
+      });
+    });
+
     it('rejects after 5 failed attempts', async () => {
       setupScopedMock({
         accessRequestRows: [
