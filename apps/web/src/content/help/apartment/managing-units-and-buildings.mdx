@@ -1,6 +1,6 @@
 ---
 title: "Managing units and buildings"
-description: "Maintain the unit roster for an apartment community — add units, edit details, group by building or floor, and handle vacancies."
+description: "Maintain the unit roster for an apartment community — add units and group by building or floor."
 category: "apartment"
 slug: "managing-units-and-buildings"
 roles:
@@ -23,8 +23,8 @@ keywords:
 tags:
   - apartment
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - managing-leases
   - inviting-and-managing-residents
@@ -32,7 +32,6 @@ relatedArticles:
 featured: false
 contextPaths:
   - /dashboard/units
-  - /dashboard/units/*
 ---
 
 The unit roster is the structural backbone of an apartment community in PropertyPro. Every lease, work order, package, and assessment ties back to a unit. Keep the roster clean and every downstream workflow becomes easier.
@@ -40,28 +39,20 @@ The unit roster is the structural backbone of an apartment community in Property
 ## What a unit record holds
 
 - **Unit number** — the canonical identifier residents and staff use
-- **Building** — for multi-building communities, the building this unit belongs to
-- **Floor** — useful for sorting and filtering
-- **Unit type** — studio / 1BR / 2BR / 3BR / townhome
-- **Square footage**
-- **Bedrooms and bathrooms**
-- **Status** — occupied / vacant / off-market / model
-- **Current lease** — when applicable, linked to the lease record
-- **Notes** — staff-visible notes about quirks, recent renovations, accessibility features
+- **Building** — optional free text for multi-building communities (e.g. "Tower A")
+- **Floor** — optional, useful for sorting and grouping
+
+There is no unit status field in the app. Whether a unit is vacant is derived from lease state on the Leases page (**Vacant Units** filter).
 
 ## Adding units
 
 <StepByStep>
-<Step title="Open Units → New unit">
-Click the Units link in the sidebar, then **New unit**.
+<Step title="Open Units → Add unit">
+Click the Units link in the sidebar, then **Add unit**.
 </Step>
 
 <Step title="Enter the unit details">
-Unit number is required and must be unique in the community. Building, floor, type, and square footage are recommended but not required.
-</Step>
-
-<Step title="Mark initial status">
-For a newly-built unit not yet rented, mark Vacant. For an existing tenant being added to PropertyPro, mark Occupied and create a lease record next.
+Unit number is required and must be unique in the community. Building and floor are optional.
 </Step>
 
 <Step title="Save">
@@ -72,18 +63,12 @@ The unit appears in the roster immediately. You can now attach a lease, log work
 ## Bulk import
 
 <Callout type="info" title="Coming soon">
-CSV bulk import for units isn't available yet. For now, add units one at a time with **New unit** (above). When bulk import ships, you'll be able to download a Units CSV template, fill in one row per unit (unit number, building, floor, type, square footage, status), and upload the whole roster at once — useful for initial setup, a major roster sync, or renumbering during a renovation or new-building addition.
+CSV bulk import for units isn't available yet. For now, add units one at a time with **Add unit** (above). When bulk import ships, you'll be able to download a Units CSV template, fill in one row per unit (unit number, building, floor), and upload the whole roster at once — useful for initial setup, a major roster sync, or renumbering during a renovation or new-building addition.
 </Callout>
 
 ## Buildings and groupings
 
-For multi-building communities, define each building as its own grouping:
-
-- **Building name** — what residents and staff call it ("Tower A", "Garden Building", "117 Main St").
-- **Address** — useful when buildings have separate mail addresses.
-- **Floor count** — enables floor-based filtering across the community.
-
-Buildings let you target announcements, maintenance routing, and visitor logging at the right population — a flood on the 3rd floor of Tower A only concerns those residents.
+PropertyPro does not have a separate building entity. Each unit has an optional **Building** text field — use the same value on multiple units to group them (for example, "Tower A" or "Garden Building"). This helps staff sort and identify units but does not enable building-targeted announcements, maintenance routing, or visitor routing.
 
 ## Handling vacancies
 
@@ -91,69 +76,37 @@ When a unit goes vacant:
 
 <StepByStep>
 <Step title="Close out the move-out">
-Complete the [move-out checklist](/help/apartment/move-in-move-out-checklists). Mark the lease terminated and the unit as Vacant.
+Complete the [move-out checklist](/help/apartment/move-in-move-out-checklists). Terminate the lease on the Leases page.
 </Step>
 
 <Step title="Schedule turnover work">
 Create work orders for any cleaning, paint, repair, or carpet replacement needed before re-renting.
 </Step>
 
-<Step title="Update photos and listing">
-If your community uses the unit details for a public listing, update photos and floor-plan info.
-</Step>
-
-<Step title="When re-rented, set Occupied">
-Create the new lease record; the unit auto-flips to Occupied when the new lease activates.
+<Step title="When re-rented, create a new lease">
+Create a new lease record on the Leases page for the next tenant.
 </Step>
 </StepByStep>
 
 ## Renumbering and renaming
 
-If you renumber units (for example, post-renovation):
+If you renumber units (for example, post-renovation), unit edits are not available in the UI yet — the Units page is read-only after creation. Contact your platform administrator or use the API if renumbering is required.
 
-1. Open each affected unit and update the unit number.
-2. PropertyPro preserves the historical numbering — old work orders, leases, and packages still attach to the same physical unit.
-3. Communicate to residents about the change so they update mail, deliveries, and emergency contacts.
+## Lease expirations
 
-<Callout type="warning" title="Don't delete units">
-Even if a unit is removed from rent rolls (combined with a neighbor, converted to amenity space), keep the record marked as Off-market or Decommissioned rather than deleting. The historical data — past tenants, payments, maintenance — is part of the community's record.
-</Callout>
-
-## Filtering and search
-
-The Units page supports filtering by:
-
-- Building
-- Floor
-- Type
-- Occupancy status
-- Lease status (expiring soon, expired)
-
-Use filters during turnover season to find every unit reaching the end of its lease, or to plan capital projects by building.
-
-## Reports
-
-The Units module surfaces:
-
-- Occupancy rate (overall and by building)
-- Average days vacant per unit
-- Lease expirations by month (drives renewal outreach)
-- Unit-mix analysis (how many of each type)
-
-These metrics inform capital planning, staffing, and marketing efforts.
+The dashboard shows a lease-expirations card to help you plan renewals and turnover. There is no occupancy-rate or unit-mix report on the Units page.
 
 ## Common patterns
 
-- **Adding a new building** — create the building first, then bulk-import the units within it.
-- **Combining units** — mark one of the original units as Off-market with a note pointing to the combined unit's number. Keep the historical record intact.
-- **Off-market vs. vacant** — Vacant means available to rent. Off-market means temporarily unavailable (under renovation, model unit, amenity space). The distinction matters for occupancy reporting.
+- **Adding units in a new building** — add units one at a time with **Add unit**, using the same **Building** value on each row.
+- **Combining units** — keep historical unit records intact; note the combined unit in lease or work-order records as needed.
 
 ## Tenant linkage
 
 Each tenant on a lease is linked to a unit. When you offboard a tenant:
 
 - Their access to the unit ends with the lease termination.
-- The unit reverts to Vacant if no other lease is active.
+- Vacancy is visible on the Leases page when no active lease exists on the unit.
 - The tenant's PropertyPro account stays (they can keep using it for other communities).
 
 This separation — units are owned by the community, accounts are owned by individuals — keeps the audit trail correct as residents move in and out.

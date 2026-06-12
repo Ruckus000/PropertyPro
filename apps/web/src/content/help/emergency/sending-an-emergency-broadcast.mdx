@@ -1,6 +1,6 @@
 ---
 title: "Sending an emergency broadcast"
-description: "When to use emergency broadcasts, how to compose one, and how to follow up on acknowledgements."
+description: "When to use emergency broadcasts, how to compose one, and how to follow up on delivery."
 category: "emergency"
 slug: "sending-an-emergency-broadcast"
 roles:
@@ -26,8 +26,8 @@ keywords:
 tags:
   - emergency
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - creating-and-publishing-announcements
 featured: false
@@ -36,7 +36,7 @@ contextPaths:
   - /emergency/*
 ---
 
-Emergency broadcasts fan out community-wide via SMS and email. They ignore quiet hours and notification preferences. Use them for real emergencies only.
+Emergency broadcasts fan out community-wide via SMS and email. Use them for real emergencies only.
 
 <Callout type="warning" title="Real emergencies only">
 Emergency broadcasts disrupt residents at any time of day. Using them for non-emergencies (social events, policy reminders) damages trust and leads residents to ignore future alerts. Keep them reserved for life-safety, property-damage, or other genuinely urgent situations.
@@ -61,30 +61,26 @@ Use a pinned announcement for those.
 ## Composing a broadcast
 
 <StepByStep>
-<Step title="Open Emergency">
-From the sidebar (admin only), click Emergency, then **New broadcast**.
+<Step title="Open Emergency Alerts">
+Go to **Emergency Alerts**, then click **Send Emergency Alert** to start the four-step wizard: Template → Compose → Recipients → Confirm.
 </Step>
 
-<Step title="State the situation">
-Keep the subject concise — "Tornado warning: take shelter now." The body should answer: what's happening, what should residents do right now, and where to find updates.
+<Step title="Choose a template or start from scratch">
+Pick a built-in template or click **Start from scratch**, then enter severity, title, email body, and SMS body on the Compose step.
 </Step>
 
-<Step title="Include any safety instructions">
-Shelter locations, evacuation routes, emergency-contact numbers — anything that helps residents act.
-</Step>
-
-<Step title="Choose the audience">
-Pick **All members** (default) or **Owners only**. Narrower building or floor targeting is planned for a future release.
+<Step title="Select recipients and channels">
+On the Recipients step, choose **All residents** or **Owners only**. Check **SMS** and/or **Email** under Channels.
 </Step>
 
 <Step title="Confirm and send">
-Review once and click Send. PropertyPro gives you a short undo window (about 10 seconds) to cancel if you realize something is wrong. After that, the broadcast goes out across the chosen channels and cannot be recalled — any correction must be a follow-up broadcast or announcement.
+On the Confirm step, check **I understand this will immediately alert…** then click **Send Emergency Alert**. A 10-second countdown starts — click **UNDO - Cancel Broadcast** if you need to stop it.
 </Step>
 </StepByStep>
 
 ## Tracking delivery
 
-The broadcast page shows aggregate delivery telemetry — how many recipients were targeted, how many messages were sent, delivered, or failed. Updates flow in from the SMS and email providers as they confirm delivery.
+The broadcast page shows aggregate delivery telemetry — targeted, sent, delivered, and failed counts. Updates flow in from the SMS and email providers as they confirm delivery.
 
 If a high number of failures appears, staff may need to follow up on those residents through another channel (phone, in-person) to make sure they got the information.
 
@@ -93,16 +89,15 @@ If a high number of failures appears, staff may need to follow up on those resid
 After the emergency is over:
 
 1. Send a follow-up broadcast **or** a pinned announcement (depending on severity) with the all-clear, what happened, and any damage/impact report.
-2. Archive the emergency broadcast (closed events stay in the audit log but drop off the active list).
-3. Review what worked: did the message reach everyone? Were acknowledgements fast?
+2. Review what worked: did the message reach everyone? Check delivery counts for failed sends.
 
 ## Pre-positioned templates
 
-Before a stressful moment, create draft broadcasts for your most likely emergencies (hurricane, power outage, water main break). You can copy and adapt when the situation arises — much faster than writing from scratch while panicking.
+Before a stressful moment, review the built-in template picker on the first wizard step — hurricane, power outage, water main break, and others. Pick a template and adapt the compose step when the situation arises — much faster than writing from scratch while panicking.
 
 ## Audit trail
 
-Every broadcast is captured in the compliance audit log. For claims or insurance purposes later, the sent broadcast, the recipient list, and the acknowledgement count are all timestamped evidence.
+Every broadcast is captured in the compliance audit log. For claims or insurance purposes later, the sent broadcast, recipient counts, and delivery telemetry are timestamped evidence.
 
 ## Who should have the Emergency role
 

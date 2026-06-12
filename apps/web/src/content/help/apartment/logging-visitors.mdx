@@ -23,8 +23,8 @@ keywords:
 tags:
   - apartment
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 featureGates:
   - hasVisitorLogging
 relatedArticles:
@@ -42,61 +42,56 @@ contextPaths:
 
 Visitor logging keeps an auditable record of who entered the community — useful for security investigations, insurance claims, and resolving disputes between residents and their guests.
 
-<FeatureGate feature="apartment communities only">
-Visitor logging is part of the apartment concierge toolkit. Condos and HOAs typically don't run centralized guest logs.
+<FeatureGate feature="apartment and condo communities">
+Visitor logging is part of the apartment and condo concierge toolkit. HOAs typically don't run centralized guest logs.
 </FeatureGate>
 
 ## Who gets logged
 
 Every non-resident entering the community:
 
-- **Pre-authorized guests** — residents added them to their guest list in advance
-- **Walk-in visitors** — show up unannounced; staff contacts the resident
+- **Pre-registered passes** — residents or staff create a pass with guest type, host unit, and a passcode or QR code
 - **Service personnel** — contractors, delivery beyond packages, cleaning services
-- **Denied entry** — visitors who couldn't reach the resident or weren't authorized
+- **Revoked passes** — use **Revoke Pass** with a required reason instead of checking someone in
+
+Pass statuses include expected, checked in, checked out, expired, overstayed, revoked, and revoked on site.
 
 ## Checking in a visitor
 
 <StepByStep>
-<Step title="Open Visitors → New entry">
-From the Visitors page, click New entry.
+<Step title="Open Visitors → Register Visitor">
+From the Visitors page, click **Register Visitor** (or use a pass a resident already created).
 </Step>
 
-<Step title="Search for the resident">
-Enter the resident's name or unit. Their pre-authorized guest list (if any) appears.
+<Step title="Set guest type and host unit">
+Choose guest type (One-Time, Recurring, Vendor, or Permanent), enter visitor name, purpose, and host unit.
 </Step>
 
-<Step title="Match or add the visitor">
-If the visitor is on the resident's list, select them. If not, enter name and optionally ID. Take a photo if community policy requires.
+<Step title="Check In">
+For an expected pass, click **Check In**. If the visitor matches the denied-visitor list, PropertyPro shows a warning before you proceed.
 </Step>
 
-<Step title="Contact the resident (for walk-ins)">
-For walk-ins, call or message the resident to confirm they're expecting the visitor. Record the resident's response.
-</Step>
-
-<Step title="Grant or deny entry">
-If confirmed, mark as admitted and note the destination (unit number). If denied, record the reason briefly.
+<Step title="Check Out or Revoke Pass">
+When the visit ends, **Check Out** the pass. To deny entry or cancel a pass, use **Revoke Pass** and enter a required reason.
 </Step>
 </StepByStep>
 
-## Pre-authorized guests
+## Resident self-registration
 
-Recurring guests — family members, regular friends, caregivers — can be pre-authorized so check-in is a formality rather than a call. Where this is supported in your community, staff can add the guest to the resident's authorized list during a prior visit, or the resident can ask staff to pre-authorize by name.
-
-Pre-authorization speeds up check-in dramatically, especially for residents with frequent visitors like home health aides or grandparents.
+Residents can register their own visitors — including recurring and permanent passes — and share a passcode or QR code. Staff can also register visitors with **Register Visitor** when a guest arrives without a pre-created pass.
 
 ## Denied entry
 
 <Callout type="warning" title="Document every denial">
-If you deny entry, log the specific reason — "resident unreachable," "visitor declined to wait," "resident denied authorization." Denials without documentation can look arbitrary later if the visitor complains.
+If you deny entry, add notes on the visitor record and **Revoke Pass** with a specific reason. Denials without documentation can look arbitrary later if the visitor complains.
 </Callout>
 
 ## Denied-visitor list
 
 Communities can maintain a denied-visitor list — individuals who are never to be admitted (domestic incidents, prior trespass, court order):
 
-- Added by admin only
-- Checked automatically against every incoming visitor
+- Added by staff only
+- Checked automatically against every incoming visitor at check-in
 - Entries are private to staff, not visible to other residents
 
 ## Resident view
@@ -105,7 +100,7 @@ Residents see their own visitor history:
 
 - Who visited (name)
 - When
-- Whether they were admitted or denied
+- Pass status
 
 They don't see visitors who came for other residents.
 
@@ -122,11 +117,11 @@ Visitor data is sensitive. Policy guidelines:
 If a visitor becomes threatening or refuses to leave:
 
 1. Call 911 if there's any safety concern.
-2. Log the visitor's details in the Incidents section (not just Visitors) for follow-up.
+2. Add notes on the visitor record and **Revoke Pass** for follow-up.
 3. Consider adding them to the denied-visitor list after the fact.
 
 ## Staffing patterns
 
 - **Peak hours** — weekends, evenings, holiday periods. Staff accordingly.
 - **Off-hours** — if the front desk is unstaffed, consider a keypad or intercom system that logs entry even without staff on site.
-- **Events** — for large resident gatherings (holiday parties), pre-authorize en masse or use a temporary guest list tied to the event.
+- **Events** — for large resident gatherings (holiday parties), have residents pre-register guests or create recurring passes in advance.
