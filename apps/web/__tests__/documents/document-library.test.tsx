@@ -107,6 +107,7 @@ describe('DocumentLibrary', () => {
       <QueryClientProvider client={qc}>
         <DocumentLibrary
           communityId={9}
+          communityType="condo_718"
           userId="user-1"
           userRole="board_president"
           hasEsign

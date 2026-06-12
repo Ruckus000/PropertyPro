@@ -41,6 +41,7 @@ export function PortfolioTable({
       onSortingChange={onSortingChange}
       rowSelection={rowSelection}
       onRowSelectionChange={onRowSelectionChange}
+      getRowId={(row) => String(row.communityId)}
       isLoading={isLoading}
       emptyMessage="No communities found."
     />

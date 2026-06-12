@@ -34,6 +34,9 @@ export function PmDashboardClient() {
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [selectedCommunityMeta, setSelectedCommunityMeta] = useState<
+    Record<string, { id: number; name: string }>
+  >({});
   const [bulkAnnouncementOpen, setBulkAnnouncementOpen] = useState(false);
   const [bulkDocumentOpen, setBulkDocumentOpen] = useState(false);
 
@@ -64,6 +67,26 @@ export function PmDashboardClient() {
     offset: pagination.pageIndex * pagination.pageSize,
   });
 
+  // Keep stable community id/name for bulk actions across pagination and sort.
+  useEffect(() => {
+    const communities = data?.communities ?? [];
+    setSelectedCommunityMeta((prev) => {
+      const next = { ...prev };
+      for (const community of communities) {
+        const key = String(community.communityId);
+        if (rowSelection[key]) {
+          next[key] = { id: community.communityId, name: community.communityName };
+        }
+      }
+      for (const key of Object.keys(next)) {
+        if (!rowSelection[key]) {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+  }, [data?.communities, rowSelection]);
+
   // Soft nudge when any loaded community hasn't completed its public site.
   // (Scoped to the current page of results — acceptable for a dismissible
   // nudge; the vast majority of portfolios fit on one page.)
@@ -71,16 +94,10 @@ export function PmDashboardClient() {
     (c) => c.siteOnboardingCompletedAt === null,
   );
 
-  const selectedCommunities = useMemo(() => {
-    const communities = data?.communities ?? [];
-    return Object.keys(rowSelection)
-      .map((rowIndex) => communities[Number(rowIndex)])
-      .filter((community): community is NonNullable<typeof community> => !!community)
-      .map((community) => ({
-        id: community.communityId,
-        name: community.communityName,
-      }));
-  }, [data?.communities, rowSelection]);
+  const selectedCommunities = useMemo(
+    () => Object.values(selectedCommunityMeta),
+    [selectedCommunityMeta],
+  );
 
   return (
     <div className="space-y-6">
@@ -171,6 +188,7 @@ export function PmDashboardClient() {
         onClose={() => {
           setBulkAnnouncementOpen(false);
           setRowSelection({});
+          setSelectedCommunityMeta({});
         }}
       />
       <BulkDocumentDialog
@@ -179,6 +197,7 @@ export function PmDashboardClient() {
         onClose={() => {
           setBulkDocumentOpen(false);
           setRowSelection({});
+          setSelectedCommunityMeta({});
         }}
       />
     </div>
