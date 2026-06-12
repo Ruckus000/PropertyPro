@@ -44,6 +44,8 @@ interface AppSidebarProps {
   isUnitOwner?: boolean;
   /** Manager preset (e.g. 'board_president', 'cam'); null/undefined for non-managers. */
   presetKey?: string | null;
+  /** Board designation ('board_president' | 'board_member'); null when not on the board. */
+  designation?: string | null;
   features: CommunityFeatures | null;
   userName: string | null;
   plan: string | null;
@@ -62,6 +64,7 @@ export function AppSidebar({
   role,
   isUnitOwner = false,
   presetKey = null,
+  designation = null,
   features,
   userName,
   plan,
@@ -86,7 +89,7 @@ export function AppSidebar({
   // Plan-gate logic operates on the canonical role (owner, tenant, board_president, ...)
   // so we resolve once here using isUnitOwner + presetKey.
   const canonicalRole: AnyCommunityRole | null = role
-    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, presetKey: presetKey ?? null })
+    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, presetKey: presetKey ?? null, designation: designation ?? null })
     : null;
 
   const allVisible: NavItemWithGateStatus[] = isPmContext

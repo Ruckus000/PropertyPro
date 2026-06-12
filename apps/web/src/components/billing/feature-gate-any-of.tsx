@@ -39,6 +39,7 @@ export async function FeatureGateAnyOf({
     role: membership.role,
     isUnitOwner: membership.isUnitOwner,
     presetKey: membership.presetKey ?? null,
+    designation: membership.designation ?? null,
   });
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
   const planConfig = planId ? PLAN_FEATURES[planId] : null;

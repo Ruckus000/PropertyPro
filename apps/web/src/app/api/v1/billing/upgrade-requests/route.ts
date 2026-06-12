@@ -45,6 +45,7 @@ export const POST = withErrorHandler(
       role: membership.role,
       isUnitOwner: membership.isUnitOwner,
       presetKey: membership.presetKey ?? null,
+      designation: membership.designation ?? null,
     });
     if (!canRequestUpgrade(inferredCanonicalRole)) {
       throw new ForbiddenError('Tenants cannot request plan upgrades.');

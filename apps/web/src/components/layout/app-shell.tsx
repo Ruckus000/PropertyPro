@@ -91,6 +91,7 @@ interface AppShellProps {
   role: AnyCommunityRole | null;
   isUnitOwner?: boolean;
   presetKey?: string | null;
+  designation?: string | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   subscriptionStatus?: string | null;
@@ -98,7 +99,7 @@ interface AppShellProps {
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, isUnitOwner, presetKey, features, resourceAccess, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ children, user, community, role, isUnitOwner, presetKey, designation, features, resourceAccess, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -172,6 +173,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
           role={role}
           isUnitOwner={isUnitOwner ?? false}
           presetKey={presetKey ?? null}
+          designation={designation ?? null}
           features={features}
           userName={user?.fullName ?? null}
           plan={community?.plan ?? null}
@@ -196,6 +198,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, f
               role={role}
               isUnitOwner={isUnitOwner ?? false}
               presetKey={presetKey ?? null}
+              designation={designation ?? null}
               features={features}
               userName={user?.fullName ?? null}
               plan={community?.plan ?? null}
