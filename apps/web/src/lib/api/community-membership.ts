@@ -1,8 +1,8 @@
 import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
-import type { CommunityType, TransitionRole, ManagerPermissions } from '@propertypro/shared';
-import { normalizeManagerPermissions, getPresetPermissions, isPresetKey, ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
+import type { CommunityType, TransitionRole, ManagerPermissions, BoardDesignation } from '@propertypro/shared';
+import { normalizeManagerPermissions, getPresetPermissions, isPresetKey, ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
@@ -26,7 +26,7 @@ export interface CommunityMembership {
   /** Preset key for managers (e.g. 'board_president', 'cam'). */
   presetKey?: string;
   /** Board designation (role-v3 §3.2) — statutory marker, independent of role. Null when not a board member. */
-  designation: 'board_president' | 'board_member' | null;
+  designation: BoardDesignation | null;
   /** Community city for location display. */
   city: string | null;
   /** Community state abbreviation for location display. */
@@ -98,10 +98,9 @@ export async function requireCommunityMembership(
     : undefined;
 
   const rawDesignation = membership['designation'];
-  const designation =
-    rawDesignation === 'board_president' || rawDesignation === 'board_member'
-      ? rawDesignation
-      : null;
+  const designation = (BOARD_DESIGNATIONS as readonly string[]).includes(rawDesignation as string)
+    ? (rawDesignation as BoardDesignation)
+    : null;
 
   const communityType = requireCommunityType(
     community['communityType'],

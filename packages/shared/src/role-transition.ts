@@ -38,3 +38,7 @@ export function expandTransitionRoleFilter(role: string): readonly TransitionRol
     default: return [];
   }
 }
+
+/** Board designations (role-v3 §3.2) — statutory markers, valid on any role. */
+export const BOARD_DESIGNATIONS = ['board_president', 'board_member'] as const;
+export type BoardDesignation = (typeof BOARD_DESIGNATIONS)[number];
