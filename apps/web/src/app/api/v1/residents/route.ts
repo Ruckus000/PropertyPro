@@ -44,6 +44,9 @@ import {
   residentsUpdateContract,
 } from './contract';
 
+const MANAGER_TIER_VIA_RESIDENTS_MSG =
+  'Manager roles are assigned from Roles & Access (root only).';
+
 async function getCommunityType(communityId: number): Promise<CommunityType> {
   const communityType = await getResidentCommunityTypeValue(communityId);
 
@@ -90,7 +93,7 @@ export const POST = withErrorHandler(
     requirePermission(actorMembership, 'residents', 'write');
 
     if (!isResidentTierRole(role)) {
-      throw new ForbiddenError('Manager roles are assigned from Roles & Access (root only).');
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
     }
 
     const communityType = await getCommunityType(communityId);
@@ -200,7 +203,7 @@ export const PATCH = withErrorHandler(
     }
 
     if (role !== undefined && !isResidentTierRole(role)) {
-      throw new ForbiddenError('Manager roles are assigned from Roles & Access (root only).');
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
     }
 
     const existingRole = await getResidentRoleByUserId(communityId, userId);
@@ -366,5 +369,7 @@ function resolveDisplayTitle(
 ): string {
   if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
+  // Unreachable from the residents path post-2c: manager/pm_admin roles are
+  // rejected by the isResidentTierRole guard before this runs.
   return 'Property Manager Admin';
 }
