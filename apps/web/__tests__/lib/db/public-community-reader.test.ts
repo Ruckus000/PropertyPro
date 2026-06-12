@@ -69,6 +69,7 @@ vi.mock('@propertypro/db', () => ({
     role: 'userRoles.role',
     displayTitle: 'userRoles.displayTitle',
     presetKey: 'userRoles.presetKey',
+    designation: 'userRoles.designation',
   },
 }));
 
@@ -112,6 +113,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => mockDb,
 }));
 
+import { BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '../../../src/lib/db/public-community-reader';
 
 describe('getPublicCommunityScopedReader', () => {
@@ -624,8 +626,8 @@ describe('getPublicCommunityScopedReader', () => {
     queueQueryResults(
       [{ contactName: 'Harbor Management', contactEmail: 'desk@example.com', contactPhone: '555-0100' }],
       [
-        { fullName: 'Ava Nguyen', displayTitle: 'Board President', presetKey: 'board_president' },
-        { fullName: 'Miles Carter', displayTitle: null, presetKey: 'board_member' },
+        { fullName: 'Ava Nguyen', displayTitle: 'Board President', designation: 'board_president' },
+        { fullName: 'Miles Carter', displayTitle: null, designation: 'board_member' },
       ],
     );
 
@@ -658,6 +660,58 @@ describe('getPublicCommunityScopedReader', () => {
     const result = await reader.getContactInfo({ showBoard: true, showManagement: true });
 
     expect(result).toEqual({ management: null, board: [] });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 3.2 (§3.2) — board roster sources from designation, not presetKey/role
+  // ---------------------------------------------------------------------------
+
+  it('getContactInfo board WHERE filters on designation ∈ BOARD_DESIGNATIONS and NOT on role or presetKey', async () => {
+    queueQueryResults([], []);
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.getContactInfo({ showBoard: true, showManagement: false });
+
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    expect(whereCall).toHaveProperty('__and');
+    // designation inArray predicate present with BOARD_DESIGNATIONS values
+    const designationClause = whereCall.__and.find(
+      (c: unknown) =>
+        (c as { __inArray?: { col: string } }).__inArray?.col === 'userRoles.designation',
+    );
+    expect(designationClause).toBeDefined();
+    expect((designationClause as { __inArray: { vals: string[] } }).__inArray.vals).toEqual([
+      ...BOARD_DESIGNATIONS,
+    ]);
+    // No predicate targets role or presetKey (statutory board is the set of
+    // designation holders regardless of role)
+    const targetsRoleOrPreset = whereCall.__and.some((c: unknown) => {
+      const clause = c as {
+        __inArray?: { col: string };
+        __eq?: { col: string };
+      };
+      const col = clause.__inArray?.col ?? clause.__eq?.col;
+      return col === 'userRoles.role' || col === 'userRoles.presetKey';
+    });
+    expect(targetsRoleOrPreset).toBe(false);
+  });
+
+  it('getContactInfo title falls back from designation when displayTitle is null (no presetKey)', async () => {
+    // showManagement=false → the board query is the only query issued,
+    // so its rows are the FIRST queued result.
+    queueQueryResults([
+      { fullName: 'Pat Prez', displayTitle: null, designation: 'board_president' },
+      { fullName: 'Mel Member', displayTitle: null, designation: 'board_member' },
+      { fullName: 'Tia Treasurer', displayTitle: 'Treasurer', designation: 'board_member' },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.getContactInfo({ showBoard: true, showManagement: false });
+
+    expect(result.board).toEqual([
+      { name: 'Pat Prez', title: 'Board President' },
+      { name: 'Mel Member', title: 'Board Member' },
+      // displayTitle wins when present
+      { name: 'Tia Treasurer', title: 'Treasurer' },
+    ]);
   });
 
   it('getContactInfo skips disabled sections without issuing their queries', async () => {
