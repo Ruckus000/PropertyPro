@@ -61,7 +61,7 @@ describe('role-management-service', () => {
       expect(result).toEqual({ assigned: true, alreadyAssigned: false });
       expect(scopedUpdateMock).toHaveBeenCalledWith(
         userRolesTable,
-        { role: 'property_manager', isUnitOwner: false, presetKey: null },
+        { role: 'property_manager', isUnitOwner: false, presetKey: null, designation: null },
         expect.objectContaining({ __eq: expect.objectContaining({ val: 'target-user' }) }),
       );
       expect(logAuditEventMock).toHaveBeenCalledWith(
@@ -70,6 +70,20 @@ describe('role-management-service', () => {
           communityId: 7,
           newValues: expect.objectContaining({ userId: 'target-user', role: 'property_manager' }),
         }),
+      );
+    });
+
+    it('clears any board designation when promoting (board_member → property_manager)', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([
+        { role: 'resident', isUnitOwner: true, designation: 'board_member' },
+      ]);
+
+      await assignPropertyManager(7, 'target-user', 'actor-user');
+
+      expect(scopedUpdateMock).toHaveBeenCalledWith(
+        userRolesTable,
+        expect.objectContaining({ role: 'property_manager', designation: null }),
+        expect.objectContaining({ __eq: expect.objectContaining({ val: 'target-user' }) }),
       );
     });
 

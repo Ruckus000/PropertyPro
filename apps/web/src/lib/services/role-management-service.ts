@@ -90,7 +90,10 @@ export async function assignPropertyManager(
 
   await scoped.update(
     userRoles,
-    { role: 'property_manager', isUnitOwner: false, presetKey: null },
+    // Clear any board designation on promotion: property managers are
+    // administrative staff and cannot hold a governance board seat, so a member
+    // promoted from a board_president/board_member resident must not retain it.
+    { role: 'property_manager', isUnitOwner: false, presetKey: null, designation: null },
     eq(userRoles.userId, targetUserId),
   );
 

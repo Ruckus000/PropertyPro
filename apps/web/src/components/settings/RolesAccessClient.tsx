@@ -336,6 +336,9 @@ function PropertyManagersSection({
 }) {
   const revoke = useRevokePropertyManager(communityId);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Track which row's revoke is in flight so only that row shows a spinner /
+  // disables, instead of every row reacting to the shared mutation state.
+  const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null);
 
   return (
     <Section
@@ -374,7 +377,11 @@ function PropertyManagersSection({
                       size="sm"
                       disabled={revoke.isPending}
                       onClick={() => {
-                        revoke.mutate({ userId: pm.userId });
+                        setPendingRevokeId(pm.userId);
+                        revoke.mutate(
+                          { userId: pm.userId },
+                          { onSettled: () => setPendingRevokeId(null) },
+                        );
                         setConfirmingId(null);
                       }}
                       data-testid={`pm-revoke-confirm-${pm.userId}`}
@@ -395,9 +402,13 @@ function PropertyManagersSection({
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={revoke.isPending && pendingRevokeId === pm.userId}
                     onClick={() => setConfirmingId(pm.userId)}
                     data-testid={`pm-revoke-${pm.userId}`}
                   >
+                    {revoke.isPending && pendingRevokeId === pm.userId && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    )}
                     Revoke
                   </Button>
                 )}
