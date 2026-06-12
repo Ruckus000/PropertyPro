@@ -242,4 +242,28 @@ describe('POST /api/v1/meetings — board-designation gate', () => {
     expect(res.status).toBe(200);
     expect(requireBoardDesignationMock).not.toHaveBeenCalled();
   });
+
+  it('requires board designation when updating a meeting to type board', async () => {
+    requireBoardDesignationMock.mockImplementation(() => {
+      throw new ForbiddenError('no board designation');
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/meetings', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-community-id': String(COMMUNITY_ID),
+      },
+      body: JSON.stringify({
+        action: 'update',
+        id: 99,
+        communityId: COMMUNITY_ID,
+        meetingType: 'board',
+      }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(requireBoardDesignationMock).toHaveBeenCalled();
+  });
 });
