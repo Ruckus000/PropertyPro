@@ -95,6 +95,52 @@ describe('requireCommunityMembership', () => {
     expect(membership.isAdmin).toBe(true);
   });
 
+  it('surfaces designation for a board_member-designated row', async () => {
+    scopedSelectFromMock.mockImplementation(async (table: unknown) => {
+      if (table === userRolesTable) {
+        return [{
+          userId: 'user-1',
+          role: 'property_manager',
+          isUnitOwner: false,
+          displayTitle: 'Board Member',
+          presetKey: 'board_member',
+          designation: 'board_member',
+        }];
+      }
+      if (table === communitiesTable) {
+        return [{ id: 42, communityType: 'condo_718', timezone: 'America/New_York', isDemo: false }];
+      }
+      return [];
+    });
+
+    const membership = await requireCommunityMembership(42, 'user-1');
+
+    expect(membership.designation).toBe('board_member');
+    expect(membership.isAdmin).toBe(true);
+  });
+
+  it('coerces an invalid designation value to null (whitelist fallback)', async () => {
+    scopedSelectFromMock.mockImplementation(async (table: unknown) => {
+      if (table === userRolesTable) {
+        return [{
+          userId: 'user-1',
+          role: 'property_manager',
+          isUnitOwner: false,
+          displayTitle: 'Treasurer',
+          designation: 'treasurer',
+        }];
+      }
+      if (table === communitiesTable) {
+        return [{ id: 42, communityType: 'condo_718', timezone: 'America/New_York', isDemo: false }];
+      }
+      return [];
+    });
+
+    const membership = await requireCommunityMembership(42, 'user-1');
+
+    expect(membership.designation).toBeNull();
+  });
+
   // BILINGUAL (role-v3): ex-pm_admin backfilled to property_manager.
   // Real-path regression guard for the bug where normalizeManagerPermissions(null, undefined)
   // returned a DEFINED all-DENY object, which skipped checkPermissionV2's fallback and locked
