@@ -73,6 +73,12 @@ describe('POST /api/v1/communities/role-assignments', () => {
     const res = await POST(makeReq('POST', { communityId: COMMUNITY_ID, userId: TARGET_USER }));
     expect(res.status).toBe(403);
   });
+
+  it('malformed body (non-UUID userId) → 400, service not called', async () => {
+    const res = await POST(makeReq('POST', { communityId: COMMUNITY_ID, userId: 'not-a-uuid' }));
+    expect(res.status).toBe(400);
+    expect(assignPropertyManagerMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('DELETE /api/v1/communities/role-assignments', () => {

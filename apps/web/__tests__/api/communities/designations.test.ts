@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { ForbiddenError } from '../../../src/lib/api/errors/ForbiddenError';
 import { ValidationError } from '../../../src/lib/api/errors/ValidationError';
 
 // NonOwnerAckRequiredError is defined in the mock factory so that the route's
@@ -120,6 +119,7 @@ describe('POST /api/v1/communities/designations', () => {
       makeReq({ communityId: COMMUNITY_ID, userId: TARGET_USER, designation: 'board_member' }),
     );
     expect(res.status).toBe(400);
+    expect(setDesignationMock).toHaveBeenCalled();
   });
 
   it('non-root caller → 403, service not called', async () => {

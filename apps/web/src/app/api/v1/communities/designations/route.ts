@@ -42,7 +42,7 @@ export const POST = withErrorHandler(
     } catch (err) {
       if (err instanceof NonOwnerAckRequiredError) {
         throw new AppError(
-          'non_owner_requires_ack',
+          'Board eligibility acknowledgement required for a non-owner.',
           409,
           'NON_OWNER_ACK_REQUIRED',
         );
