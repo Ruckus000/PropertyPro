@@ -78,12 +78,20 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
 }));
 
 vi.mock('@/lib/utils/csv-validator', () => ({
+  RESIDENT_IMPORT_ROLES: ['owner', 'tenant'] as const,
   validateResidentCsv: validateResidentCsvMock,
 }));
 
-vi.mock('@/lib/utils/role-validator', () => ({
-  validateRoleAssignment: validateRoleAssignmentMock,
-}));
+vi.mock('@/lib/utils/role-validator', async () => {
+  const actual = await vi.importActual<typeof import('../../src/lib/utils/role-validator')>(
+    '../../src/lib/utils/role-validator',
+  );
+  return {
+    // Real tier check — the lockdown tests exercise the actual guard.
+    isResidentTierRole: actual.isResidentTierRole,
+    validateRoleAssignment: validateRoleAssignmentMock,
+  };
+});
 
 vi.mock('@/lib/api/user-communities', () => ({
   listCommunitiesForUser: listCommunitiesForUserMock,
@@ -203,56 +211,17 @@ describe('POST /api/v1/import-residents', () => {
       isUnitOwner: true,
       permissions: null,
       presetKey: null,
-      designation: null,
       displayTitle: 'Owner',
     });
     expect(insertNotificationPreferencesForImportMock).toHaveBeenCalledWith(42, 'new-user-1');
     expect(logAuditEventMock).toHaveBeenCalledTimes(1);
   });
 
-  it('writes designation in lockstep for a board_member CSV row', async () => {
-    validateResidentCsvMock.mockReturnValueOnce({
-      header: ['name', 'email', 'role', 'unit_number'],
-      rows: [
-        { rowNumber: 2, data: { name: 'Bea', email: 'bea@x.com', role: 'board_member', unit_number: '' } },
-      ],
-      errors: [],
-    });
-
-    const res = await POST(jsonPost({ communityId: 42, csv: 'header\nrow', dryRun: false }));
-
-    expect(res.status).toBe(200);
-    expect(insertUserRoleForImportMock).toHaveBeenCalledWith(
-      42,
-      expect.objectContaining({
-        role: 'manager',
-        presetKey: 'board_member',
-        designation: 'board_member',
-      }),
-    );
-  });
-
-  it('writes designation null for a cam CSV row', async () => {
-    validateResidentCsvMock.mockReturnValueOnce({
-      header: ['name', 'email', 'role', 'unit_number'],
-      rows: [
-        { rowNumber: 2, data: { name: 'Cal', email: 'cal@x.com', role: 'cam', unit_number: '' } },
-      ],
-      errors: [],
-    });
-
-    const res = await POST(jsonPost({ communityId: 42, csv: 'header\nrow', dryRun: false }));
-
-    expect(res.status).toBe(200);
-    expect(insertUserRoleForImportMock).toHaveBeenCalledWith(
-      42,
-      expect.objectContaining({
-        role: 'manager',
-        presetKey: 'cam',
-        designation: null,
-      }),
-    );
-  });
+  // Note: pre-lockdown this suite had "writes designation in lockstep" tests for
+  // board_member/cam CSV rows (Phase 3.2, #730). Role-v3 invariant 3 removes the
+  // import path's ability to mint manager-tier rows entirely, so those rows are
+  // now rejected — see the "manager-tier lockdown" describe block below, which
+  // asserts board_member/cam/etc. are skipped with a role error and never inserted.
 
   it('defaults dryRun to false when omitted (runs the real import path)', async () => {
     const res = await POST(jsonPost({ communityId: 42, csv: 'header-only' }));
@@ -264,6 +233,42 @@ describe('POST /api/v1/import-residents', () => {
     expect(json.data.importedCount).toBe(0);
     // Real-import path loads community type (dryRun short-circuits before this).
     expect(getCommunityTypeForOnboardingMock).toHaveBeenCalledWith(42);
+  });
+
+  // -------------------------------------------------------------------------
+  // Security regression — manager-tier lockdown (role-v3 invariant 3).
+  // The CSV validator is MOCKED here, simulating a validator bypass/drift that
+  // lets a manager-tier legacy role through. The route-level guard must still
+  // reject the row before any user/role insert — only root mints
+  // property_manager; the import path can never write a manager-tier role.
+  // -------------------------------------------------------------------------
+  describe('manager-tier lockdown (route-level guard, validator bypassed)', () => {
+    it.each(['board_president', 'board_member', 'cam', 'site_manager', 'property_manager_admin', 'manager', 'pm_admin'])(
+      'skips a %s row with a role error and writes nothing',
+      async (role) => {
+        validateResidentCsvMock.mockReturnValueOnce({
+          header: ['name', 'email', 'role', 'unit_number'],
+          rows: [
+            { rowNumber: 2, data: { name: 'Eve', email: 'eve@x.com', role, unit_number: '' } },
+          ],
+          errors: [],
+        });
+
+        const res = await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+
+        expect(res.status).toBe(200);
+        const json = (await res.json()) as {
+          data: { importedCount: number; skippedCount: number; errors: Array<{ column: string | null; message: string }> };
+        };
+        expect(json.data.importedCount).toBe(0);
+        expect(json.data.skippedCount).toBe(1);
+        expect(json.data.errors[0]?.column).toBe('role');
+        expect(json.data.errors[0]?.message).toContain('cannot be imported');
+        // No user row and — critically — no role row with a permissions JSONB.
+        expect(insertUserForImportMock).not.toHaveBeenCalled();
+        expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it('skips a row whose unit_number is not found (counts toward skippedCount)', async () => {

@@ -19,12 +19,29 @@ describe('csv-validator (P1-19)', () => {
   });
 
   it('handles Windows CRLF line endings', () => {
-    const csv = 'name,email,role\r\nBoard,board@example.com,board_member\r\n';
+    const csv = 'name,email,role\r\nTenant,tenant@example.com,tenant\r\n';
     const result = validateResidentCsv(csv);
     expect(result.errors).toHaveLength(0);
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.data.role).toBe('board_member');
+    expect(result.rows[0]?.data.role).toBe('tenant');
   });
+
+  // Role-v3 invariant 3: only resident-tier roles (owner/tenant) are importable.
+  it.each(['board_member', 'board_president', 'cam', 'site_manager', 'property_manager_admin', 'manager', 'pm_admin'])(
+    'rejects non-resident-tier role %s',
+    (role) => {
+      const csv = `name,email,role\nSomeone,someone@example.com,${role}`;
+      const result = validateResidentCsv(csv);
+      expect(result.rows).toHaveLength(0);
+      expect(result.errors).toEqual([
+        {
+          rowNumber: 2,
+          column: 'role',
+          message: expect.stringContaining(`Invalid role '${role}'`),
+        },
+      ]);
+    },
+  );
 
   it('ignores empty rows and trailing commas', () => {
     const csv = 'name,email,role,unit_number,\n\nA,a@example.com,owner,1,\n\nB,b@example.com,tenant,2';

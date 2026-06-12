@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type FormEvent } from 'react';
-import type { CommunityType, NewCommunityRole, PresetKey } from '@propertypro/shared';
+import type { CommunityType, NewCommunityRole } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 
 // ---------------------------------------------------------------------------
@@ -17,8 +17,6 @@ interface RoleOption {
   apiRole: NewCommunityRole;
   /** v2 API isUnitOwner field */
   isUnitOwner: boolean;
-  /** v2 API presetKey field (managers only) */
-  presetKey: PresetKey | null;
   /** Whether unit selection is required for this role */
   unitRequired: boolean;
   /** Which community types this role is available for */
@@ -34,7 +32,6 @@ const ROLE_OPTIONS: readonly RoleOption[] = [
     key: 'owner',
     apiRole: 'resident',
     isUnitOwner: true,
-    presetKey: null,
     unitRequired: true,
     communityTypes: ['condo_718', 'hoa_720'],
   },
@@ -43,7 +40,6 @@ const ROLE_OPTIONS: readonly RoleOption[] = [
     key: 'tenant',
     apiRole: 'resident',
     isUnitOwner: false,
-    presetKey: null,
     unitRequired: true,
     communityTypes: ['condo_718', 'hoa_720', 'apartment'],
   },
@@ -58,7 +54,7 @@ interface FormValues {
   fullName: string;
   email: string;
   phone: string;
-  /** Key into ROLE_OPTIONS (e.g. 'owner', 'tenant', 'board_president') */
+  /** Key into ROLE_OPTIONS ('owner' or 'tenant') */
   roleKey: string;
   unitId: number | null;
 }
@@ -71,7 +67,6 @@ export interface ResidentFormSubmitValues {
   role: NewCommunityRole;
   unitId: number | null;
   isUnitOwner: boolean;
-  presetKey: PresetKey | null;
 }
 
 interface ResidentFormProps {
@@ -150,7 +145,6 @@ export function ResidentForm({
       role: selectedRole.apiRole,
       unitId: values.unitId,
       isUnitOwner: selectedRole.isUnitOwner,
-      presetKey: selectedRole.presetKey,
     };
 
     await onSubmit(submitValues);

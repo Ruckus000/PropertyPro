@@ -507,7 +507,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const appRoutes = requireRoutes();
     const communityA = requireCommunity(kit, 'communityA');
 
-    const csv = 'name,email,role\nTest User,test-dryrun@example.com,board_member';
+    const csv = 'name,email,role\nTest User,test-dryrun@example.com,tenant';
     const response = await appRoutes.importResidents.POST(
       jsonRequest(apiUrl('/api/v1/import-residents'), 'POST', {
         communityId: communityA.id,
@@ -525,7 +525,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const appRoutes = requireRoutes();
     const communityB = requireCommunity(kit, 'communityB');
 
-    const csv = 'name,email,role\nTest User,test-cross@example.com,board_member';
+    const csv = 'name,email,role\nTest User,test-cross@example.com,tenant';
     const response = await appRoutes.importResidents.POST(
       jsonRequest(apiUrl('/api/v1/import-residents'), 'POST', {
         communityId: communityB.id,
@@ -542,7 +542,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const communityA = requireCommunity(kit, 'communityA');
     const communityB = requireCommunity(kit, 'communityB');
 
-    const csv = 'name,email,role\nTest User,test-mismatch@example.com,board_member';
+    const csv = 'name,email,role\nTest User,test-mismatch@example.com,tenant';
     const response = await appRoutes.importResidents.POST(
       jsonRequest(
         apiUrl('/api/v1/import-residents'),
@@ -560,8 +560,18 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const communityA = requireCommunity(kit, 'communityA');
     const communityB = requireCommunity(kit, 'communityB');
 
+    // Role-v3 invariant 3: the import path only mints resident-tier rows, and
+    // resident roles require a unit — seed one in communityA for the CSV row.
+    const scopedAForUnit = kit.dbModule.createScopedClient(communityA.id);
+    const unitNumberA = `P243R-A-${kit.runSuffix}`;
+    await scopedAForUnit.insert(kit.dbModule.units, {
+      unitNumber: unitNumberA,
+      building: null,
+      floor: null,
+    });
+
     const importEmail = `import-real-${kit.runSuffix}@example.com`;
-    const csv = `name,email,role\nImported User,${importEmail},board_member`;
+    const csv = `name,email,role,unit_number\nImported User,${importEmail},tenant,${unitNumberA}`;
 
     const response = await appRoutes.importResidents.POST(
       jsonRequest(apiUrl('/api/v1/import-residents'), 'POST', {
@@ -597,7 +607,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       eq(kit.dbModule.userRoles.userId, importedUserId),
     );
     expect(rolesA).toHaveLength(1);
-    expect(rolesA[0]?.['role']).toBe('manager');
+    expect(rolesA[0]?.['role']).toBe('resident');
 
     // Verify imported user has no roles in communityB.
     const scopedB = kit.dbModule.createScopedClient(communityB.id);

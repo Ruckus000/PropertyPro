@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { COMMUNITY_ROLES, type CommunityRole } from '@propertypro/shared';
+
+/**
+ * Roles importable via CSV — resident tier ONLY (role-v3 invariant 3:
+ * resident-minting paths can never write a manager-tier role). Board and
+ * manager access is assigned from the root-only Roles & Access screen.
+ */
+export const RESIDENT_IMPORT_ROLES = ['owner', 'tenant'] as const;
+export type ResidentImportRole = (typeof RESIDENT_IMPORT_ROLES)[number];
 
 export interface CsvParseResult<T> {
   header: string[];
@@ -17,7 +24,7 @@ export interface ResidentCsvRowRaw {
 export interface ResidentCsvRow {
   name: string;
   email: string;
-  role: CommunityRole;
+  role: ResidentImportRole;
   unit_number: string | null; // null allowed for roles that don't require unit
 }
 
@@ -131,13 +138,16 @@ export function validateResidentCsv(input: string): CsvParseResult<ResidentCsvRo
       if (!emailOk) rowErrors.push({ column: 'email', message: 'Invalid email address' });
     }
 
-    let role: CommunityRole | null = null;
+    let role: ResidentImportRole | null = null;
     if (!roleRaw) {
       rowErrors.push({ column: 'role', message: 'Role is required' });
-    } else if (!COMMUNITY_ROLES.includes(roleRaw as CommunityRole)) {
-      rowErrors.push({ column: 'role', message: `Invalid role '${roleRaw}'` });
+    } else if (!RESIDENT_IMPORT_ROLES.includes(roleRaw as ResidentImportRole)) {
+      rowErrors.push({
+        column: 'role',
+        message: `Invalid role '${roleRaw}'. Importable roles: owner, tenant. Board and manager access is assigned from Roles & Access.`,
+      });
     } else {
-      role = roleRaw as CommunityRole;
+      role = roleRaw as ResidentImportRole;
     }
 
     const normalizedEmail = (emailRaw || '').toLowerCase();
