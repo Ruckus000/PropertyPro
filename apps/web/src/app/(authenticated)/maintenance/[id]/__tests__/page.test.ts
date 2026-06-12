@@ -30,6 +30,24 @@ describe('maintenance/[id] (redirect-only page)', () => {
     expect(url).toContain('from=maintenance');
   });
 
+  it('preserves Operations-supported filter params on redirect', async () => {
+    await expect(
+      LegacyMaintenanceRequestPage({
+        params: Promise.resolve({ id: '600' }),
+        searchParams: Promise.resolve({
+          communityId: '42', status: 'open', priority: 'urgent', unitId: '7', q: 'leak',
+        }),
+      } as never),
+    ).rejects.toThrow();
+    const url = redirectMock.mock.calls[0]?.[0] as string;
+    expect(url).toContain('status=open');
+    expect(url).toContain('priority=urgent');
+    expect(url).toContain('unitId=7');
+    expect(url).toContain('q=leak');
+    expect(url).toContain('tab=requests');
+    expect(url).toContain('from=maintenance');
+  });
+
   it('redirects to /dashboard on missing or invalid communityId', async () => {
     for (const bad of ['abc', '0', '-1', undefined]) {
       redirectMock.mockClear();

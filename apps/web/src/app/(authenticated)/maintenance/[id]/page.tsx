@@ -7,7 +7,7 @@
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { operationsHubHref } from '@/lib/operations/routes';
+import { buildLegacyRedirectParams } from '@/lib/operations/routes';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -22,5 +22,11 @@ export default async function LegacyMaintenanceRequestPage({ searchParams }: Pag
     redirect('/dashboard?reason=invalid-selection');
   }
 
-  redirect(operationsHubHref(communityId, 'requests', { from: 'maintenance' }));
+  // Mirror the sibling inbox/page.tsx shim: preserve any Operations-supported
+  // filter params (status, priority, unitId, q) that ride along on the link.
+  const passthrough = buildLegacyRedirectParams(query as Record<string, string | string[] | undefined>);
+  passthrough.set('tab', 'requests');
+  passthrough.set('from', 'maintenance');
+
+  redirect(`/communities/${communityId}/operations?${passthrough.toString()}`);
 }
