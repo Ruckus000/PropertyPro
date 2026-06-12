@@ -189,6 +189,67 @@ describe('residents manager-tier lockdown', () => {
   });
 
   // -----------------------------------------------------------------------
+  // PATCH on an EXISTING manager-tier row with NO `role` (the escalation vector)
+  // A non-root admin must not be able to mutate a property_manager row's preset/
+  // unit/owner via the residents path — doing so would recompute & NULL its
+  // permissions (legacy-'manager'-keyed branch), which checkPermissionV2 resolves
+  // to FULL property_manager_admin access. Guard must fire on the EXISTING role.
+  // -----------------------------------------------------------------------
+  describe('PATCH preset/unit on an existing property_manager (escalation vector)', () => {
+    it('returns 403 and does NOT call updateResidentRole when role is omitted', async () => {
+      // Existing manager-tier row (post-2a backfill: board/CAM members are
+      // property_manager with a restricted JSONB preset).
+      getResidentRoleByUserIdMock.mockResolvedValue({
+        role: 'property_manager',
+        unitId: null,
+        isUnitOwner: false,
+        presetKey: 'cam',
+      });
+
+      const res = await PATCH(
+        patchReq({
+          communityId: COMMUNITY_ID,
+          userId: 'b0476f53-6f95-4493-b329-13ff1a2334e6',
+          // No `role` — only a preset change. Pre-fix this slipped past the
+          // role-gated guards and nulled permissions.
+          presetKey: 'cam',
+        }),
+      );
+
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.error.message).toMatch(/Manager roles/i);
+
+      // The permission-nulling write must NOT have happened.
+      expect(updateResidentRoleMock).not.toHaveBeenCalled();
+    });
+
+    it('still allows contact-only (fullName/phone) edits on a manager-tier row', async () => {
+      getResidentRoleByUserIdMock.mockResolvedValue({
+        role: 'property_manager',
+        unitId: null,
+        isUnitOwner: false,
+        presetKey: 'cam',
+      });
+      getResidentUserByIdMock.mockResolvedValue({ fullName: 'Old', phone: null });
+      updateResidentUserMock.mockResolvedValue(undefined);
+
+      const res = await PATCH(
+        patchReq({
+          communityId: COMMUNITY_ID,
+          userId: 'b0476f53-6f95-4493-b329-13ff1a2334e6',
+          fullName: 'New Name',
+        }),
+      );
+
+      // Contact-only edit has no access impact → not blocked by the guard.
+      expect(res.status).not.toBe(403);
+      // The role-config write must NOT have run; only the user (contact) update.
+      expect(updateResidentRoleMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // POST: manager-tier role → 403
   // role='manager' passes Zod (NEW_COMMUNITY_ROLES includes it) but must be
   // blocked by the isResidentTierRole guard before any DB write.

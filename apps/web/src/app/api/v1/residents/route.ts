@@ -215,6 +215,24 @@ export const PATCH = withErrorHandler(
     const oldRole = requireNewCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
     const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
 
+    // A manager-tier member's role configuration (role / unit / owner flag /
+    // preset / permissions) is managed exclusively from the root-only Roles &
+    // Access screen. The residents path must not mutate it even when `role` is
+    // omitted — otherwise a preset/unit edit on a property_manager row would
+    // recompute (and, via the legacy-'manager'-keyed branch below, NULL) its
+    // permissions, which checkPermissionV2 resolves to the FULL
+    // property_manager_admin matrix: a self-serve privilege escalation. Only
+    // contact fields (fullName / phone) remain editable here for these rows.
+    if (
+      !isResidentTierRole(oldRole) &&
+      (role !== undefined ||
+        unitId !== undefined ||
+        patchIsUnitOwner !== undefined ||
+        patchPresetKey !== undefined)
+    ) {
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
+    }
+
     const newRole = role ?? oldRole;
     const newUnitId = unitId !== undefined ? (unitId ?? null) : oldUnitId;
 
