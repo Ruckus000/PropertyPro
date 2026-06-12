@@ -14,6 +14,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Loader2,
   ShieldCheck,
@@ -52,7 +53,7 @@ function Section({
   description,
   children,
 }: {
-  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
+  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: true }>;
   title: string;
   description?: string;
   children: React.ReactNode;
@@ -158,6 +159,7 @@ function RootSection({
   propertyManagers: RosterMember[];
   communityName?: string;
 }) {
+  const router = useRouter();
   const transfer = useTransferRoot(communityId);
   const [open, setOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -292,7 +294,20 @@ function RootSection({
               type="button"
               variant="destructive"
               disabled={!canConfirm}
-              onClick={() => transfer.mutate({ toUserId: selectedUserId })}
+              onClick={() =>
+                transfer.mutate(
+                  { toUserId: selectedUserId },
+                  {
+                    onSuccess: () => {
+                      // The caller is now a plain property_manager — close the
+                      // modal and send them to the dashboard (the server page
+                      // would redirect them there on reload anyway).
+                      reset();
+                      router.push(`/dashboard?communityId=${communityId}`);
+                    },
+                  },
+                )
+              }
               data-testid="transfer-root-confirm"
             >
               {transfer.isPending && (
@@ -390,6 +405,17 @@ function PropertyManagersSection({
             );
           })}
         </ul>
+      )}
+
+      {revoke.isError && (
+        <div className="mt-3">
+          <AlertBanner
+            status="danger"
+            variant="subtle"
+            title="We couldn’t update that property manager. Please try again."
+            description={revoke.error?.message ?? undefined}
+          />
+        </div>
       )}
     </Section>
   );

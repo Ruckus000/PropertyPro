@@ -64,11 +64,13 @@ export function useCommunityRoster(communityId: number, enabled = true) {
     queryKey: COMMUNITY_ROSTER_KEY(communityId),
     queryFn: async ({ signal }) => {
       const rows = await requestJson<
-        Array<{ userId: string; fullName: string; role: string }>
+        Array<{ userId: string; fullName: string | null; role: string }>
       >(`/api/v1/residents?communityId=${communityId}`, { signal });
       return rows.map((row) => ({
         userId: row.userId,
-        fullName: row.fullName,
+        // The residents service can return `fullName: null`; coerce to a
+        // human-readable fallback so names never render blank.
+        fullName: (row.fullName as string | null) ?? 'Unknown user',
         role: row.role,
       }));
     },

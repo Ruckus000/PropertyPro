@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
@@ -16,6 +16,14 @@ const {
   useRevokePropertyManagerMock: vi.fn(),
   useTransferRootMock: vi.fn(),
   useSetDesignationMock: vi.fn(),
+}));
+
+const { routerPushMock } = vi.hoisted(() => ({
+  routerPushMock: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPushMock }),
 }));
 
 vi.mock('@/hooks/use-role-management', () => ({
@@ -119,6 +127,44 @@ describe('RolesAccessClient', () => {
     });
     renderClient('condo_718');
     expect(screen.getByTestId('roles-access-loading')).toBeInTheDocument();
+  });
+
+  it('shows the eligibility ack checkbox on a 409 and re-submits with acknowledgeNonOwner', async () => {
+    // First attempt resolves to the ack-required 409 result; the re-submit
+    // (with the box checked) resolves ok.
+    const mutateAsync = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, reason: 'non_owner_requires_ack' })
+      .mockResolvedValueOnce({ ok: true });
+    useSetDesignationMock.mockReturnValue(mutationStub({ mutateAsync }));
+
+    renderClient('condo_718');
+
+    // Attempt to set the resident as a board member.
+    fireEvent.click(screen.getByTestId('board-member-res1'));
+
+    // The eligibility checkbox should appear after the 409.
+    const checkbox = await screen.findByTestId('board-ack-res1');
+    expect(
+      screen.getByText(/I confirm this person is eligible per our bylaws/i),
+    ).toBeInTheDocument();
+    expect(mutateAsync).toHaveBeenNthCalledWith(1, {
+      userId: 'res1',
+      designation: 'board_member',
+      acknowledgeNonOwner: false,
+    });
+
+    // Check the box and re-submit.
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByTestId('board-ack-submit-res1'));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    // Re-submit must carry acknowledgeNonOwner:true AND the SAME designation.
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      userId: 'res1',
+      designation: 'board_member',
+      acknowledgeNonOwner: true,
+    });
   });
 
   it('renders an error banner', () => {
