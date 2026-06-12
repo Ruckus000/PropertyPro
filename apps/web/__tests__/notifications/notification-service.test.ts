@@ -70,8 +70,8 @@ const COMMUNITY_ID = 5;
 
 const baseRoleRows = [
   { userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' },
-  { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
-  { userId: 'u-president', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+  { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', designation: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+  { userId: 'u-president', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', designation: 'board_president', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
   { userId: 'u-cam', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
   { userId: 'u-tenant', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant' },
   { userId: 'u-site-mgr', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
@@ -142,6 +142,43 @@ describe('notification-service', () => {
       expect(recipients).toHaveLength(2);
       const emails = recipients.map((r) => r.email).sort();
       expect(emails).toEqual(['board@example.com', 'president@example.com']);
+    });
+
+    // Phase 3.2: board_only sources from designation (role-independent).
+    it('board_only matches a property_manager with a board designation and no preset', async () => {
+      setupMock(
+        [{ userId: 'u-pm-board', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: null, designation: 'board_president' }],
+        [{ id: 'u-pm-board', email: 'pmboard@example.com', fullName: 'PM Board', deletedAt: null }],
+      );
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'board_only', 'meeting');
+      expect(recipients.map((r) => r.email)).toEqual(['pmboard@example.com']);
+    });
+
+    it('board_only matches a resident with a board designation (role-independent)', async () => {
+      setupMock(
+        [{ userId: 'u-res-board', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner', designation: 'board_member' }],
+        [{ id: 'u-res-board', email: 'resboard@example.com', fullName: 'Resident Board', deletedAt: null }],
+      );
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'board_only', 'meeting');
+      expect(recipients.map((r) => r.email)).toEqual(['resboard@example.com']);
+    });
+
+    it('board_only does NOT match a board preset without a designation', async () => {
+      setupMock(
+        [{ userId: 'u-preset-only', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', designation: null }],
+        [{ id: 'u-preset-only', email: 'presetonly@example.com', fullName: 'Preset Only', deletedAt: null }],
+      );
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'board_only', 'meeting');
+      expect(recipients).toHaveLength(0);
+    });
+
+    it('board_only does NOT match a plain property_manager', async () => {
+      setupMock(
+        [{ userId: 'u-plain-pm', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager' }],
+        [{ id: 'u-plain-pm', email: 'plainpm@example.com', fullName: 'Plain PM', deletedAt: null }],
+      );
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'board_only', 'meeting');
+      expect(recipients).toHaveLength(0);
     });
 
     it('returns admin roles for filter "community_admins"', async () => {
@@ -557,7 +594,7 @@ describe('notification-service', () => {
       setupMock(
         [
           { userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' },
-          { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+          { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', designation: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
         ],
         [
           { id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null },
