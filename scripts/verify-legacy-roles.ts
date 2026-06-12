@@ -15,8 +15,12 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FLOOR = 251; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
+const FLOOR = 254; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
                    // reference in access-control.ts checkPermissionV2 (ex-pm_admin null-perms fallback).
+                   // 2026-06-11 (Phase 2c): +3 for the irreducible board-designation literals in the
+                   // /settings/roles UI — `'board_president'`/`'board_member'` are the designations API
+                   // contract values (BoardDesignation union in use-role-management + the two named
+                   // constants in RolesAccessClient), NOT legacy admin-role literals to drain.
                    // Ratchet DOWN with every Phase 3 drain PR.
 const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'packages/db/src', 'packages/ui/src', 'packages/email/src'];
 const LITERAL = /'(board_member|board_president|cam|site_manager|property_manager_admin)'/g;

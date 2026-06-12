@@ -25,6 +25,9 @@ interface RoleOption {
   communityTypes: readonly CommunityType[];
 }
 
+// Board designations (board_president, board_member, cam, site_manager) and
+// manager assignment now live exclusively on the Roles & Access screen (root-only).
+// This form only creates resident-tier users (owner / tenant).
 const ROLE_OPTIONS: readonly RoleOption[] = [
   {
     label: 'Owner',
@@ -43,42 +46,6 @@ const ROLE_OPTIONS: readonly RoleOption[] = [
     presetKey: null,
     unitRequired: true,
     communityTypes: ['condo_718', 'hoa_720', 'apartment'],
-  },
-  {
-    label: 'Board President',
-    key: 'board_president',
-    apiRole: 'manager',
-    isUnitOwner: false,
-    presetKey: 'board_president',
-    unitRequired: false,
-    communityTypes: ['condo_718', 'hoa_720'],
-  },
-  {
-    label: 'Board Member',
-    key: 'board_member',
-    apiRole: 'manager',
-    isUnitOwner: false,
-    presetKey: 'board_member',
-    unitRequired: false,
-    communityTypes: ['condo_718', 'hoa_720'],
-  },
-  {
-    label: 'Community Association Manager',
-    key: 'cam',
-    apiRole: 'manager',
-    isUnitOwner: false,
-    presetKey: 'cam',
-    unitRequired: false,
-    communityTypes: ['condo_718', 'hoa_720'],
-  },
-  {
-    label: 'Site Manager',
-    key: 'site_manager',
-    apiRole: 'manager',
-    isUnitOwner: false,
-    presetKey: 'site_manager',
-    unitRequired: false,
-    communityTypes: ['apartment'],
   },
 ] as const;
 

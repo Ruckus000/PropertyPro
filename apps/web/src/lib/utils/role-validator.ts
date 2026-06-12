@@ -10,12 +10,26 @@
  * Legacy validator kept for backward compatibility during migration.
  */
 import {
+  ADMIN_TIER_DB_ROLES,
   ROLE_COMMUNITY_CONSTRAINTS,
   TRANSITION_ROLES,
   type CommunityRole,
   type CommunityType,
   type TransitionRole,
 } from '@propertypro/shared';
+
+/**
+ * Manager-tier roles — assignable ONLY via the root-only Roles & Access
+ * endpoints, never the residents path. Reuses the canonical
+ * `ADMIN_TIER_DB_ROLES` set so this list never drifts from the rest of the
+ * role-v3 vocabulary.
+ */
+const MANAGER_TIER_ROLES: ReadonlySet<string> = new Set(ADMIN_TIER_DB_ROLES);
+
+/** True if the role is resident-tier (the only tier the residents create/update path may set). */
+export function isResidentTierRole(role: string): boolean {
+  return !MANAGER_TIER_ROLES.has(role);
+}
 
 /** Roles that require a unit assignment (new model). */
 const UNIT_REQUIRED_ROLES_V2: ReadonlySet<TransitionRole> = new Set([

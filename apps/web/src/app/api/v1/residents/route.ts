@@ -21,7 +21,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
-import { validateRoleAssignment } from '@/lib/utils/role-validator';
+import { isResidentTierRole, validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -43,6 +43,9 @@ import {
   residentsListContract,
   residentsUpdateContract,
 } from './contract';
+
+const MANAGER_TIER_VIA_RESIDENTS_MSG =
+  'Manager roles are assigned from Roles & Access (root only).';
 
 async function getCommunityType(communityId: number): Promise<CommunityType> {
   const communityType = await getResidentCommunityTypeValue(communityId);
@@ -88,6 +91,10 @@ export const POST = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const actorMembership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(actorMembership, 'residents', 'write');
+
+    if (!isResidentTierRole(role)) {
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
+    }
 
     const communityType = await getCommunityType(communityId);
 
@@ -195,6 +202,10 @@ export const PATCH = withErrorHandler(
       throw new ForbiddenError('Cannot modify your own role');
     }
 
+    if (role !== undefined && !isResidentTierRole(role)) {
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
+    }
+
     const existingRole = await getResidentRoleByUserId(communityId, userId);
 
     if (!existingRole) {
@@ -203,6 +214,24 @@ export const PATCH = withErrorHandler(
 
     const oldRole = requireNewCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
     const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
+
+    // A manager-tier member's role configuration (role / unit / owner flag /
+    // preset / permissions) is managed exclusively from the root-only Roles &
+    // Access screen. The residents path must not mutate it even when `role` is
+    // omitted — otherwise a preset/unit edit on a property_manager row would
+    // recompute (and, via the legacy-'manager'-keyed branch below, NULL) its
+    // permissions, which checkPermissionV2 resolves to the FULL
+    // property_manager_admin matrix: a self-serve privilege escalation. Only
+    // contact fields (fullName / phone) remain editable here for these rows.
+    if (
+      !isResidentTierRole(oldRole) &&
+      (role !== undefined ||
+        unitId !== undefined ||
+        patchIsUnitOwner !== undefined ||
+        patchPresetKey !== undefined)
+    ) {
+      throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
+    }
 
     const newRole = role ?? oldRole;
     const newUnitId = unitId !== undefined ? (unitId ?? null) : oldUnitId;
@@ -358,5 +387,7 @@ function resolveDisplayTitle(
 ): string {
   if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
+  // Unreachable from the residents path post-2c: manager/pm_admin roles are
+  // rejected by the isResidentTierRole guard before this runs.
   return 'Property Manager Admin';
 }

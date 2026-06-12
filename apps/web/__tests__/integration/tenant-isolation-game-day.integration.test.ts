@@ -47,6 +47,10 @@ let documentsRoute: DocumentsRouteModule | null = null;
 let residentsRoute: ResidentsRouteModule | null = null;
 let communityACategoryId: number | null = null;
 let communityBCategoryId: number | null = null;
+// A real unit in communityA so the writer can create resident-tier members
+// (resident requires a unit assignment; manager-tier roles can no longer be
+// assigned via the residents path as of role-v3 Phase 2c).
+let communityAUnitId: number | null = null;
 
 function requireState(): TestKitState {
   if (!state) throw new Error('Test state not initialized');
@@ -71,6 +75,11 @@ function routes(): {
 function requireCategoryId(value: number | null, label: string): number {
   if (!value) throw new Error(`${label} category not initialized`);
   return value;
+}
+
+function requireUnitId(): number {
+  if (!communityAUnitId) throw new Error('communityA unit not initialized');
+  return communityAUnitId;
 }
 
 function assertTenantRows(
@@ -154,9 +163,11 @@ async function runSunsetWriter(): Promise<void> {
           communityId: communityA.id,
           email: `${sentinel.toLowerCase()}@example.com`,
           fullName: `Sunset Writer ${i}`,
-          role: 'manager',
+          // Resident-tier (tenant): manager-tier roles are no longer assignable
+          // via the residents path as of role-v3 Phase 2c. Tenant requires a unit.
+          role: 'resident',
           isUnitOwner: false,
-          presetKey: 'board_member',
+          unitId: requireUnitId(),
         }),
       );
       expect(residentResponse.status).toBe(200);
@@ -275,6 +286,18 @@ describeDb('Phase 0.5: tenant-isolation game day (db-backed integration)', () =>
 
     communityACategoryId = await seedDocumentCategory(state, 'communityA');
     communityBCategoryId = await seedDocumentCategory(state, 'communityB');
+
+    // Seed one unit in communityA for the writer's resident-tier member creates.
+    const scopedA = state.dbModule.createScopedClient(
+      requireCommunity(state, 'communityA').id,
+    );
+    const [unitRow] = await scopedA.insert(state.dbModule.units, {
+      unitNumber: `GAME_DAY_A_UNIT_${state.runSuffix}`,
+    });
+    communityAUnitId = readNumberField(
+      requireInsertedRow(unitRow, 'communityA unit'),
+      'id',
+    );
     await insertDocumentFixture(
       state,
       'communityB',

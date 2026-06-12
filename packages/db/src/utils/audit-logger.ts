@@ -55,7 +55,9 @@ export type AuditAction =
   // Role-simplification (v3): root-offboarding flag (Phase 2a)
   | 'root_pending_deletion'
   // Role-simplification (v3): claim-root flow (Phase 2b)
-  | 'root_claimed' | 'root_claim_disputed' | 'root_reassigned' | 'root_transferred';
+  | 'root_claimed' | 'root_claim_disputed' | 'root_reassigned' | 'root_transferred'
+  // Role-simplification (v3): role-management actions (Phase 2c)
+  | 'role_assigned' | 'role_revoked' | 'designation_set' | 'designation_cleared';
 
 export interface AuditEventParams {
   userId: string | null;
