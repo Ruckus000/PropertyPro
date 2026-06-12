@@ -32,6 +32,7 @@ import {
   type Announcement,
 } from '@propertypro/db';
 import { eq, isNull } from '@propertypro/db/filters';
+import { hasBoardDesignation } from '@propertypro/shared';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import {
   filterVisibleAnnouncements,
@@ -78,9 +79,13 @@ function resolveEffectiveDisplayRole(
   role: string,
   presetKey: string | undefined,
   isUnitOwner: boolean,
+  designation?: string | null,
 ): string {
   if (role === 'pm_admin' || role === 'root_manager') return 'property_manager_admin';
   if (role === 'manager' || role === 'property_manager') {
+    // Phase 3.2: designation is the source of truth for the board distinction;
+    // the presetKey lines below are the bilingual fallback (die in Phase 4).
+    if (hasBoardDesignation(designation)) return designation;
     // Use presetKey if available for specific manager types
     if (presetKey === 'board_president') return 'board_president';
     if (presetKey === 'board_member') return 'board_member';
@@ -191,6 +196,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
     membership.role,
     membership.presetKey,
     membership.isUnitOwner,
+    membership.designation ?? null,
   );
 
   // Resolve checklist display items for the role (server-side, avoiding client import of service)
