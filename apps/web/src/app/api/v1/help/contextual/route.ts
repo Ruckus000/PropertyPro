@@ -20,6 +20,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { getContextualArticles } from '@/lib/services/help-article-service';
 import { helpContextualGetContract } from './contract';
 
@@ -30,7 +31,7 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const userId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, userId);
-    const effectiveRole = membership.presetKey ?? membership.role;
+    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
 
     // All contextual matches, capped defensively. The modal's search panel
     // lists everything (with show-more); 3 was an arbitrary truncation that

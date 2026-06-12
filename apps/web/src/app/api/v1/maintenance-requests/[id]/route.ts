@@ -190,7 +190,7 @@ export const PATCH = withErrorHandler(
           category: 'maintenance',
           title: `Maintenance Update: ${existing['title'] as string}`,
           body: `Status changed to ${newStatus}`,
-          actionUrl: `/maintenance/${params.id}`,
+          actionUrl: `/communities/${communityId}/operations?tab=requests&from=maintenance`,
           sourceType: 'maintenance',
           sourceId: `maintenance:${params.id}:status:${newStatus}`,
         },

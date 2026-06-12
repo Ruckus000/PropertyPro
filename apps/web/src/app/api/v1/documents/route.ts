@@ -31,7 +31,6 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { validateUploadFilePath } from '@/lib/api/upload-path';
-import { isElevatedRole } from '@propertypro/shared';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
@@ -138,13 +137,10 @@ export const DELETE = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const { id } = query;
     const membership = await requireCommunityMembership(communityId, userId);
-    if (
-      !isElevatedRole(membership.role, {
-        isUnitOwner: membership.isUnitOwner,
-        permissions: membership.permissions,
-      })
-    ) {
-      throw new ForbiddenError('Only elevated roles can delete documents');
+    try {
+      requirePermission(membership, 'documents', 'write');
+    } catch {
+      throw new ForbiddenError('Only roles with document write access can delete documents');
     }
     await requireActiveSubscriptionForMutation(communityId);
 

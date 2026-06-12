@@ -7,6 +7,7 @@ import { ArticleViewTracker } from '@/components/help/article-view-tracker';
 import { TableOfContents, helpMdxComponents } from '@/components/help/mdx-components';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { extractTableOfContents } from '@/lib/help/toc';
 import {
   getAllArticles,
@@ -38,7 +39,7 @@ export default async function HelpArticlePage({
     resolvedSearchParams,
     `/help/${category}/${slug}`,
   );
-  const effectiveRole = context.membership.presetKey ?? context.membership.role;
+  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
   const article = getArticle(category, slug);
 
   if (!article || !isArticleVisibleToRole(article.metadata, effectiveRole)) {

@@ -27,6 +27,7 @@ import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import {
   getAllArticles,
   getArticle,
@@ -52,7 +53,7 @@ export const GET = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, userId);
     const features = getFeaturesForCommunity(membership.communityType);
-    const effectiveRole = membership.presetKey ?? membership.role;
+    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
 
     const article = getArticle(query.category, query.slug);
     if (

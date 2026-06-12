@@ -144,7 +144,6 @@ export function ComplianceCommandCenter({
         </div>
       )}
       {canWrite && <Button variant="secondary">Upload record</Button>}
-      <Button variant="primary">Export readiness PDF</Button>
     </div>
   );
 

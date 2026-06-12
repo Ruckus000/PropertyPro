@@ -33,6 +33,7 @@ export default async function DocumentsPage({ params, searchParams }: PageProps)
   return (
     <DocumentLibrary
       communityId={communityId}
+      communityType={membership.communityType}
       userId={userId}
       userRole={membership.role}
       isUnitOwner={membership.isUnitOwner}

@@ -25,6 +25,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import {
   getFeaturedForRole,
   filterArticlesByFeatures,
@@ -36,7 +37,7 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const userId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, userId);
-    const effectiveRole = membership.presetKey ?? membership.role;
+    const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
 
     const features = getFeaturesForCommunity(membership.communityType);
     const articles = filterArticlesByFeatures(

@@ -30,10 +30,8 @@
  *     pre-migration handler exactly — no change.
  *
  * Consumer impact:
- *   - `apps/web/src/hooks/use-notifications.ts` `useArchiveNotifications`
- *     only checks `res.ok` on the response; it does not parse the body.
- *     The response shape change (still `{ data: { ok: true } }`) is
- *     therefore consumer-safe and the hook is unchanged.
+ *   - No client hook currently calls this route; reserved for a future
+ *     archive UX. Response shape is `{ data: { ok: true } }`.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { archiveNotifications } from '@propertypro/db';

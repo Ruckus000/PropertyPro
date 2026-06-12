@@ -3,7 +3,13 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
-import { isElevatedRole, type CommunityRole, type TransitionRole, type ManagerPermissions } from '@propertypro/shared';
+import {
+  checkPermission,
+  type CommunityRole,
+  type CommunityType,
+  type TransitionRole,
+  type ManagerPermissions,
+} from '@propertypro/shared';
 import { DocumentUploadArea } from './document-upload-area';
 import { type DocumentListItem } from './document-list';
 import { DocumentListContainer, useDocumentsInvalidator } from './document-list-container';
@@ -15,6 +21,7 @@ import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
 
 interface DocumentLibraryProps {
   communityId: number;
+  communityType: CommunityType;
   userId: string;
   userRole: CommunityRole | TransitionRole;
   isUnitOwner?: boolean;
@@ -29,6 +36,7 @@ type ViewMode = 'list' | 'viewer' | 'versions';
 
 export function DocumentLibrary({
   communityId,
+  communityType,
   userId,
   userRole,
   isUnitOwner,
@@ -43,7 +51,10 @@ export function DocumentLibrary({
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
 
-  const canUpload = isElevatedRole(userRole, { isUnitOwner, permissions });
+  const canUpload = checkPermission(userRole, communityType, 'documents', 'write', {
+    isUnitOwner,
+    permissions,
+  });
   const invalidateDocuments = useDocumentsInvalidator(communityId);
 
   const openUploadPanel = useCallback(() => {

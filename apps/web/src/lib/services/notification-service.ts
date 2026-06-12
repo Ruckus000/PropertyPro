@@ -285,7 +285,7 @@ function buildDigestPayload(
       eventType: event.type,
       eventTitle: event.requestTitle,
       eventSummary: `${event.previousStatus} -> ${event.newStatus}`,
-      actionUrl: `${baseUrl}/maintenance/${event.requestId}?communityId=${communityId}`,
+      actionUrl: `${baseUrl}/communities/${communityId}/operations?tab=requests&from=maintenance`,
     };
   }
 
@@ -502,7 +502,7 @@ function renderEmailForEvent(
           previousStatus: event.previousStatus,
           newStatus: event.newStatus,
           notes: event.notes,
-          portalUrl: `${baseUrl}/maintenance/${event.requestId}?communityId=${communityId}`,
+          portalUrl: `${baseUrl}/communities/${communityId}/operations?tab=requests&from=maintenance`,
         }),
       };
     }

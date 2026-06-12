@@ -43,7 +43,7 @@ export const GET = withErrorHandler(
         id: r.id,
         title: r.title,
         subtitle: `${r.priority} · ${r.status}`,
-        href: `/maintenance/${r.id}`,
+        href: `/communities/${communityId}/operations?tab=requests&from=maintenance`,
         entityType: 'maintenance' as const,
         status: r.status,
         priority: r.priority,

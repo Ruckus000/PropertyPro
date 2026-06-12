@@ -212,6 +212,27 @@ export function useGenerateAssessmentLineItems(communityId: number, assessmentId
   });
 }
 
+export function useWaiveLateFees(communityId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (unitId: number) =>
+      requestJson<unknown>(
+        `/api/v1/delinquency/${unitId}/waive`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ communityId }),
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.delinquency(communityId) });
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.ledger(communityId) });
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.payments(communityId) });
+    },
+  });
+}
+
 export function useDelinquency(
   communityId: number,
   options?: FinanceQueryOptions,

@@ -38,6 +38,7 @@ import {
   getAnnouncementCommunityContext,
 } from '@/lib/announcements/read-visibility';
 import { WelcomeScreen } from '@/components/onboarding/welcome-screen';
+import { resolveHelpViewerRole } from '@/lib/help/viewer-role';
 
 interface WelcomePageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -59,39 +60,6 @@ function computeComplianceScore(
     totalItems: total,
     satisfiedItems: satisfied,
   };
-}
-
-/**
- * Resolve the effective display role string used by the welcome screen
- * for card selection and greeting text.
- *
- * The v2 role model uses 'resident' | 'manager' | 'pm_admin'. We map back
- * to more descriptive strings using presetKey and isUnitOwner.
- *
- * BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup.
- * v3 values root_manager and property_manager are accepted alongside their
- * v2 equivalents — ALL existing v2 return values are preserved byte-identically,
- * including the bare-manager → cam default which property_manager shares.
- */
-// BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup
-function resolveEffectiveDisplayRole(
-  role: string,
-  presetKey: string | undefined,
-  isUnitOwner: boolean,
-): string {
-  if (role === 'pm_admin' || role === 'root_manager') return 'property_manager_admin';
-  if (role === 'manager' || role === 'property_manager') {
-    // Use presetKey if available for specific manager types
-    if (presetKey === 'board_president') return 'board_president';
-    if (presetKey === 'board_member') return 'board_member';
-    if (presetKey === 'cam') return 'cam';
-    if (presetKey === 'site_manager') return 'site_manager';
-    return 'cam'; // Default manager display
-  }
-  if (role === 'resident') {
-    return isUnitOwner ? 'owner' : 'tenant';
-  }
-  return role;
 }
 
 function resolveLogoUrl(logoPath: string | undefined): string | null {
@@ -187,7 +155,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
     : null;
 
   // Resolve effective display role
-  const effectiveRole = resolveEffectiveDisplayRole(
+  const effectiveRole = resolveHelpViewerRole(
     membership.role,
     membership.presetKey,
     membership.isUnitOwner,

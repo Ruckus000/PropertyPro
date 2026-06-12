@@ -154,21 +154,3 @@ export function useCrossNotifications(filters: CrossNotificationFilters = {}) {
     staleTime: 30_000,
   });
 }
-
-export function useArchiveNotifications() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: { communityId: number; ids: number[] }) => {
-      await requestJson<{ ok: true }>('/api/v1/notifications/archive', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    },
-    onSuccess: (_data, variables) => {
-      void queryClient.invalidateQueries({
-        queryKey: NOTIFICATION_KEYS.all(variables.communityId),
-      });
-    },
-  });
-}

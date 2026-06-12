@@ -30,13 +30,29 @@ relatedArticles:
 featured: false
 contextPaths:
   - /admin/join-requests
+  - /communities/*/residents
 ---
 
-When residents use the self-service **Join community** flow, they land in the join-requests queue. Admins review and act.
+When residents use the self-service **Join community** flow, their request lands in one of two admin queues. Both need a human review — approve to grant access, or deny with a reason.
 
-## The queue
+## Which queue applies?
 
-Open `/admin/join-requests` to see every pending request with:
+PropertyPro maintains two separate review surfaces. Most communities use one or both depending on onboarding path:
+
+| Queue | Where admins act | What you see |
+| ----- | ---------------- | ------------ |
+| **Join requests** | `/admin/join-requests` | Unit identifier, declared role (Owner or Tenant), submission date |
+| **Access requests** | **Residents** → scroll to **Access Requests** (`/communities/[id]/residents`) | Full name, email, claimed unit (with match indicator), declared role, submission date |
+
+**Join requests** come from the self-service `/account/join-community` flow and are stored as `community_join_requests`.
+
+**Access requests** appear on the Residents page when someone requests access through that path (for example, after an invite or a community-specific access link). They carry richer identity fields and show whether the claimed unit matches your roster.
+
+If you're unsure which queue a resident used, search both surfaces — the same person should not appear in both, but during onboarding you may see traffic in each.
+
+## The join-requests queue
+
+Open `/admin/join-requests` to see every pending join request with:
 
 - The unit identifier the resident entered
 - Their declared role (Owner or Tenant)
@@ -44,11 +60,24 @@ Open `/admin/join-requests` to see every pending request with:
 
 There are no sort controls — work through requests in the order shown.
 
-## Reviewing a request
+## The access-requests queue
+
+Open **Residents** for the community and scroll to **Access Requests**. Each card shows:
+
+- Requester's name and email
+- Claimed unit (with a match indicator when the unit exists on your roster)
+- Declared role (Owner or Tenant)
+- Submission date
+
+Use **Approve** or **Deny** on each card. Denials prompt for a short reason the requester sees in an in-app notification.
+
+## Reviewing a request (either queue)
+
+The verification steps are the same whether the request appears under **Join requests** or **Access requests**:
 
 <StepByStep>
 <Step title="Verify the unit claim">
-Cross-check the claimed unit number against your ownership and tenant records. Most disputes boil down to a unit that doesn't match records.
+Cross-check the claimed unit number against your ownership and tenant records. On the access-requests queue, use the unit match indicator as a hint — but still confirm against your source records. Most disputes boil down to a unit that doesn't match records.
 </Step>
 
 <Step title="Verify role">
@@ -60,7 +89,7 @@ Click **Approve** on the request card. The resident receives an in-app notificat
 </Step>
 
 <Step title="Or deny with a reason">
-Click **Deny**, enter a short reason (e.g., "Unit number doesn't match our records. Please confirm with your closing paperwork and resubmit."), and confirm. The resident sees the reason in an in-app notification. They cannot re-apply for 30 days after a denial.
+Click **Deny**, enter a short reason (e.g., "Unit number doesn't match our records. Please confirm with your closing paperwork and resubmit."), and confirm. The resident sees the reason in an in-app notification.
 </Step>
 </StepByStep>
 
