@@ -48,15 +48,11 @@ async function roleOf(
   scoped: ReturnType<typeof createScopedClient>,
   userId: string,
 ): Promise<{ role: string; isUnitOwner: boolean } | null> {
-  const rows = (await scoped.selectFrom(
-    userRoles,
-    {},
-    eq(userRoles.userId, userId),
-  )) as Array<Record<string, unknown>>;
+  const rows = await scoped.queryWhere(userRoles, eq(userRoles.userId, userId)) as Array<Record<string, unknown>>;
   const row = rows[0];
   if (!row) return null;
   return {
-    role: String(row['role']),
+    role: row['role'] as string,
     isUnitOwner: row['isUnitOwner'] === true,
   };
 }
@@ -140,6 +136,9 @@ export async function revokePropertyManager(
     return { revoked: false, reason: 'not_a_property_manager' };
   }
 
+  // isUnitOwner: false is intentional and spec-mandated. The prior owner/tenant status was
+  // overwritten when the user was promoted to property_manager; 2c does not guess it back.
+  // The root_manager corrects ownership afterward via the residents page if needed.
   await scoped.update(
     userRoles,
     { role: 'resident', isUnitOwner: false },

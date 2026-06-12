@@ -5,13 +5,13 @@ import { ValidationError } from '../../../src/lib/api/errors/ValidationError';
 const {
   createScopedClientMock,
   logAuditEventMock,
-  scopedSelectFromMock,
+  scopedQueryWhereMock,
   scopedUpdateMock,
   userRolesTable,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  scopedSelectFromMock: vi.fn(),
+  scopedQueryWhereMock: vi.fn(),
   scopedUpdateMock: vi.fn().mockResolvedValue(undefined),
   userRolesTable: Symbol('user_roles'),
 }));
@@ -35,7 +35,7 @@ import {
 
 function scopedClient() {
   return {
-    selectFrom: scopedSelectFromMock,
+    queryWhere: scopedQueryWhereMock,
     update: scopedUpdateMock,
   };
 }
@@ -52,7 +52,7 @@ describe('role-management-service', () => {
   // ---------------------------------------------------------------------------
   describe('assignPropertyManager', () => {
     it('promotes a resident to property_manager + audits role_assigned', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: false },
       ]);
 
@@ -74,7 +74,7 @@ describe('role-management-service', () => {
     });
 
     it('is idempotent — already property_manager returns alreadyAssigned', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'property_manager', isUnitOwner: false },
       ]);
 
@@ -86,7 +86,7 @@ describe('role-management-service', () => {
     });
 
     it('rejects targeting the current root (ForbiddenError)', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'root_manager', isUnitOwner: false },
       ]);
 
@@ -95,6 +95,16 @@ describe('role-management-service', () => {
       ).rejects.toBeInstanceOf(ForbiddenError);
       expect(scopedUpdateMock).not.toHaveBeenCalled();
     });
+
+    it('rejects a non-member target (ValidationError) + no update/audit', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([]);
+
+      await expect(
+        assignPropertyManager(7, 'non-member', 'actor-user'),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(scopedUpdateMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -102,7 +112,7 @@ describe('role-management-service', () => {
   // ---------------------------------------------------------------------------
   describe('revokePropertyManager', () => {
     it('demotes a property_manager to resident (isUnitOwner false) + audits role_revoked', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'property_manager', isUnitOwner: false },
       ]);
 
@@ -124,7 +134,7 @@ describe('role-management-service', () => {
     });
 
     it('no-ops when target is not a property_manager', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: true },
       ]);
 
@@ -135,7 +145,7 @@ describe('role-management-service', () => {
     });
 
     it('rejects revoking the root (ForbiddenError)', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'root_manager', isUnitOwner: false },
       ]);
 
@@ -144,6 +154,16 @@ describe('role-management-service', () => {
       ).rejects.toBeInstanceOf(ForbiddenError);
       expect(scopedUpdateMock).not.toHaveBeenCalled();
     });
+
+    it('resolves { revoked: false, reason } for a non-member target + no update/audit', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([]);
+
+      const result = await revokePropertyManager(7, 'non-member', 'actor-user');
+
+      expect(result).toEqual({ revoked: false, reason: 'not_a_property_manager' });
+      expect(scopedUpdateMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -151,7 +171,7 @@ describe('role-management-service', () => {
   // ---------------------------------------------------------------------------
   describe('setDesignation', () => {
     it('sets board_member on an owner-resident + audits designation_set', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: true },
       ]);
 
@@ -173,7 +193,7 @@ describe('role-management-service', () => {
     });
 
     it('clears designation (null) + audits designation_cleared', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: true },
       ]);
 
@@ -191,7 +211,7 @@ describe('role-management-service', () => {
     });
 
     it('requires ack for a tenant target (NonOwnerAckRequiredError)', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: false },
       ]);
 
@@ -202,7 +222,7 @@ describe('role-management-service', () => {
     });
 
     it('allows a tenant target when acknowledgeNonOwner=true', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: false },
       ]);
 
@@ -213,7 +233,7 @@ describe('role-management-service', () => {
     });
 
     it('reassigns board_president (clears prior president then sets)', async () => {
-      scopedSelectFromMock.mockResolvedValueOnce([
+      scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: true },
       ]);
 
@@ -231,7 +251,17 @@ describe('role-management-service', () => {
       await expect(
         setDesignation(7, 'apartment', 'target-user', 'board_member', false, 'actor-user'),
       ).rejects.toBeInstanceOf(ValidationError);
-      expect(scopedSelectFromMock).not.toHaveBeenCalled();
+      expect(scopedQueryWhereMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-member target on condo (ValidationError) + no update/audit', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([]);
+
+      await expect(
+        setDesignation(7, 'condo_718', 'non-member', 'board_member', false, 'actor-user'),
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(scopedUpdateMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
     });
   });
 });
