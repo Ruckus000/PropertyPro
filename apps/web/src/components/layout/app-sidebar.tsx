@@ -44,7 +44,7 @@ interface AppSidebarProps {
   isUnitOwner?: boolean;
   /** Manager preset (e.g. 'board_president', 'cam'); null/undefined for non-managers. */
   presetKey?: string | null;
-  /** Board designation (BoardDesignation value); null when not on the board. */| 'board_member'); null when not on the board. */
+  /** Board designation (BoardDesignation value); null when not on the board. */
   designation?: string | null;
   features: CommunityFeatures | null;
   userName: string | null;
