@@ -104,6 +104,8 @@ export interface InsertUserRoleForImportInput {
   isUnitOwner: boolean;
   permissions: unknown;
   presetKey: string | null;
+  /** Phase 3.2 writer lockstep: identical to presetKey when it is a board preset, else null. */
+  designation?: string | null;
   displayTitle: string;
 }
 

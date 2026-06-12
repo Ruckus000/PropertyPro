@@ -27,7 +27,7 @@ import { withErrorHandler } from "@/lib/api/error-handler";
 import { validateResidentCsv } from "@/lib/utils/csv-validator";
 import { validateRoleAssignment } from "@/lib/utils/role-validator";
 import type { CommunityRole, NewCommunityRole, PresetKey } from "@propertypro/shared";
-import { getPresetPermissions, PRESET_METADATA } from "@propertypro/shared";
+import { getPresetPermissions, hasBoardDesignation, PRESET_METADATA } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
@@ -197,6 +197,8 @@ export const POST = withErrorHandler(
         isUnitOwner: mapped.isUnitOwner,
         permissions,
         presetKey: mapped.presetKey,
+        // Phase 3.2 writer lockstep: a board presetKey always carries the identical designation.
+        designation: mapped.presetKey && hasBoardDesignation(mapped.presetKey) ? mapped.presetKey : null,
         displayTitle: mapped.displayTitle,
       });
 
