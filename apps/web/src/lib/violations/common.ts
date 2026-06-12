@@ -3,6 +3,7 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { requireBoardDesignation } from '@/lib/db/access-control';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
@@ -30,9 +31,7 @@ export async function requireArcEnabled(membership: CommunityMembership): Promis
 }
 
 export function requireViolationAdminWrite(membership: CommunityMembership): void {
-  if (!membership.isAdmin) {
-    throw new ForbiddenError('Only violation administrators can perform this action');
-  }
+  requireBoardDesignation(membership);
 }
 
 export function requireArcReviewPermission(membership: CommunityMembership): void {
