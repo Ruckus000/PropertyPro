@@ -11,7 +11,7 @@ import {
 } from '@/lib/finance/request';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseOptionalCalendarDateRange } from '@/lib/calendar/date-range';
-import { requirePermission } from '@/lib/db/access-control';
+import { requirePermission, requireBoardDesignation } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
@@ -135,6 +135,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'meetings', 'write');
+  // Statutory board-meeting calls require a board designation (role-v3 §3.2).
+  // Behaviour-neutral today: any caller past the meetings:write gate is
+  // management-tier and passes; residents are already blocked above.
+  if (body.meetingType === 'board') {
+    requireBoardDesignation(membership);
+  }
   await requireActiveSubscriptionForMutation(communityId);
 
   if (action === 'update') {
