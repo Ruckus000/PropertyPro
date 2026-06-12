@@ -28,8 +28,8 @@ tags:
   - transparency
   - admin
   - florida
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 statutes:
   - "§718.111(12)(g)"
   - "§720.303"
@@ -51,17 +51,14 @@ The transparency page is the community-facing website your association publishes
 
 ## What shows on the page
 
-By default, the transparency page includes:
+The transparency page has four sections. Each shows posting **status** — not the documents themselves:
 
-- Association name and contact information
-- Current fiscal year's budget
-- Approved meeting minutes for the last 12 months
-- Current insurance certificates
-- Governing documents (declaration, bylaws, rules)
-- SIRS milestone inspection status and summary
-- Compliance score summary (optional)
+- **Document Posting Status** — checklist rows with Posted, Not yet posted, or Not required labels and dates.
+- **Meeting Compliance Records** — meeting notice compliance records.
+- **Minutes Tracking** — a grid showing which months have minutes on file.
+- **Access Controls** — portal password protection, individual credentials, and public notices page status.
 
-Every item on the page corresponds to a document you've posted in the document library. The page refreshes automatically when you upload new documents under the relevant categories.
+The page refreshes automatically as compliance checklist rows are linked or unlinked.
 
 ## Initial setup
 
@@ -74,16 +71,8 @@ Visit `/settings/transparency` (admin-only).
 The transparency page publishes at your community's public subdomain. Verify that it resolves.
 </Step>
 
-<Step title="Review what's shown">
-Preview the page as a non-logged-in visitor. What you see is what a prospective buyer, a member of the press, or a regulator would see.
-</Step>
-
-<Step title="Toggle optional sections">
-Some sections (compliance score, resident demographics) are optional. Turn on only what your board wants public.
-</Step>
-
-<Step title="Publish">
-Once happy, mark the page Public. Before publishing, it's in preview mode accessible only to admins.
+<Step title="Acknowledge and enable">
+Check the acknowledgment box, then click **Save Settings** to enable the page. It goes live immediately at `/<subdomain>/transparency`. Disabling the toggle and saving takes the page down.
 </Step>
 </StepByStep>
 
@@ -108,22 +97,14 @@ The transparency page is public. Do not include:
 - Attorney-client privileged communications
 - Information on open violations affecting specific units
 
-PropertyPro's filters for the transparency page intentionally exclude these, but double-check during your initial review.
+The page is public and never renders owner-level data such as these — there is no exclusion filter to configure.
 
 ## Updating
 
-Most updates happen automatically as you post new documents. Manual updates:
-
-- **Contact info** — Edit on the Settings → Transparency page.
-- **Descriptions** — Edit each document's description in the library; it appears on the transparency page.
-- **Section visibility** — Toggle on the Transparency settings page.
-
-## Audit
-
-On the compliance dashboard, you'll see a row for "Transparency page published." If your community is subject to the requirement and the page isn't published (or a required section is empty), the row will flag.
+The page updates automatically as compliance checklist rows are linked or unlinked.
 
 ## Frequently asked questions
 
-- **"Can we password-protect it?"** The statute expects the records to be available to members without undue burden. A password gate works for members-only views; the transparency page itself must remain public.
+- **"Can we password-protect it?"** The transparency page is an opt-in feature your association controls; consult your attorney about what your community must make available (§718.111(12)(g) / §720.303).
 - **"Can we restrict who sees historical meeting minutes?"** The statute governs what must be posted; historical minutes are generally included. Check with your attorney if you're unsure about a specific period.
 - **"Does this replace individual owner access?"** No — owners retain their individual access to the full records under separate provisions of Florida statute.
