@@ -87,7 +87,7 @@ export function AppSidebar({
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
   // The runtime role is on the new 4-role model (resident | manager | pm_admin).
   // Plan-gate logic operates on the canonical role (owner, tenant, board_president, ...)
-  // so we resolve once here using isUnitOwner + presetKey.
+  // so we resolve once here using isUnitOwner + designation (presetKey is the bilingual fallback).
   const canonicalRole: AnyCommunityRole | null = role
     ? inferCanonicalRoleFromMembership({ role, isUnitOwner, presetKey: presetKey ?? null, designation: designation ?? null })
     : null;
