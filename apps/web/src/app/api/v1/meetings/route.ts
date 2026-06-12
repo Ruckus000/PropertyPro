@@ -135,9 +135,16 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const actorUserId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'meetings', 'write');
-  // Statutory board-meeting calls require a board designation (role-v3 §3.2).
-  // Behaviour-neutral today: any caller past the meetings:write gate is
-  // management-tier and passes; residents are already blocked above.
+  // Statutory board-meeting *calls* require a board designation (role-v3 §3.2):
+  // gate creating — or updating a meeting to — meetingType 'board'. Delete /
+  // attach / detach are general `meetings:write` powers (general permissions come
+  // from the role, never the designation) and are intentionally NOT gated here.
+  // No bypass: requirePermission(meetings,'write') above already limits ALL of
+  // these actions to management-tier callers, every one of whom is `isAdmin` (no
+  // resident role holds meetings:write — see RBAC matrix), so they pass this gate
+  // regardless. It is therefore behaviour-neutral today; the designation arm only
+  // becomes load-bearing once a resident can hold a board seat, which a later
+  // Phase-3 sub-project will enforce holistically across the meeting actions.
   if (body.meetingType === 'board') {
     requireBoardDesignation(membership);
   }
