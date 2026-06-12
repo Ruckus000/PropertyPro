@@ -20,8 +20,8 @@ featureGates:
 tags:
   - finance
   - residents
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - paying-dues-and-assessments
   - understanding-your-assessment-balance
@@ -36,45 +36,35 @@ Online payments speed up dues collection and give you a digital receipt automati
 
 ## Is online payment enabled for my community?
 
-Open Payments. If you see a **Pay now** button, your community has it enabled. If you don't, your association is collecting payments through another channel — usually mailed check or bank bill-pay.
+Open **Payments**. Unpaid charges show a **Pay Now** button next to each line item. If everything is paid up, you'll see **All caught up!** and **You have no outstanding assessments.** — no Pay Now button.
 
-## Adding a payment method
+If your community hasn't connected Stripe, you'll still see your balance but won't have online payment options. Follow the traditional payment instructions your manager provides.
+
+## Paying online
 
 <StepByStep>
-<Step title="Open your Payments settings">
-From the profile menu, pick Settings and open the Payments area (or visit `/settings/payments/connected`).
+<Step title="Open Payments">
+Click **Payments** in the sidebar.
 </Step>
 
-<Step title="Add a method">
-Choose **Add payment method**. You'll see options for card or bank account (ACH) where both are supported.
+<Step title="Pay Now">
+Click **Pay Now** next to the charge you want to pay.
 </Step>
 
-<Step title="Enter details">
-Card numbers and bank details go directly to Stripe — PropertyPro never stores them. You'll only ever see the last 4 digits and expiration.
+<Step title="Enter payment details">
+The Stripe payment form opens with **Card** and **US bank account** tabs. Enter your details each time you pay — PropertyPro does not store saved payment methods.
 </Step>
 
-<Step title="Optionally set as default">
-If a default toggle is available, enabling it uses this method automatically the next time you tap Pay now. You can change the default any time.
-</Step>
-
-<Step title="Verify">
-For ACH, Stripe may send two small test deposits that you confirm. Cards are usable immediately.
+<Step title="Confirm">
+Submit the payment. The line item shows as paid and a receipt is emailed to you.
 </Step>
 </StepByStep>
-
-## Paying with a saved method
-
-Open Payments, tap **Pay now**, and pick a saved method. The payment goes through in a few seconds; you'll get a confirmation screen and an emailed receipt.
 
 ## Security
 
 <Callout type="tip" title="Your numbers don't live on PropertyPro">
-Card and bank details are tokenized by Stripe. We store a token, not the actual card number. If our database were compromised, your payment details would not be exposed because they aren't there to begin with.
+Card and bank details go directly to Stripe. PropertyPro never stores card numbers — only Stripe processes the payment. If our database were compromised, your payment details would not be exposed because they aren't stored here.
 </Callout>
-
-## Removing a method
-
-Open the Payments settings page, click the row for the method you want to remove, and pick **Remove**. If it was your default, set a new default so nothing interrupts future payments.
 
 ## Refunds
 
