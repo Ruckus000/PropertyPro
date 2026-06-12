@@ -16,6 +16,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { searchMaintenanceByTrigram } from '@propertypro/db';
+import { operationsHubHref } from '@/lib/operations/routes';
 import { searchMaintenanceContract } from './contract';
 
 export const GET = withErrorHandler(
@@ -43,7 +44,7 @@ export const GET = withErrorHandler(
         id: r.id,
         title: r.title,
         subtitle: `${r.priority} · ${r.status}`,
-        href: `/maintenance/${r.id}`,
+        href: operationsHubHref(communityId, 'requests'),
         entityType: 'maintenance' as const,
         status: r.status,
         priority: r.priority,

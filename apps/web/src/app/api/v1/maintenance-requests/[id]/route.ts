@@ -17,6 +17,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
+import { operationsHubHref } from '@/lib/operations/routes';
 import { formatRequest } from '../_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -190,7 +191,7 @@ export const PATCH = withErrorHandler(
           category: 'maintenance',
           title: `Maintenance Update: ${existing['title'] as string}`,
           body: `Status changed to ${newStatus}`,
-          actionUrl: `/maintenance/${params.id}`,
+          actionUrl: operationsHubHref(communityId, 'requests'),
           sourceType: 'maintenance',
           sourceId: `maintenance:${params.id}:status:${newStatus}`,
         },

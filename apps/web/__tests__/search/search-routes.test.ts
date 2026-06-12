@@ -174,6 +174,23 @@ describe('command palette search routes', () => {
     expect(json.data.totalCount).toBe(1);
   });
 
+  it('maintenance search links results to the Operations hub, not the removed /maintenance/[id] route', async () => {
+    searchMaintenanceByTrigramMock.mockResolvedValueOnce({
+      results: [{ id: 5, title: 'Leaky faucet', priority: 'high', status: 'open', relevance: 0.8 }],
+      totalCount: 1,
+    });
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/search/maintenance?communityId=42&q=leak',
+    );
+
+    const res = await getMaintenance(req);
+    const json = (await res.json()) as { data: { results: Array<{ href: string }> } };
+
+    expect(res.status).toBe(200);
+    expect(json.data.results[0]?.href).toBe('/communities/42/operations?tab=requests');
+  });
+
   it('announcements search blocks managers without announcement read access', async () => {
     requirePermissionMock.mockImplementationOnce(() => {
       throw new ForbiddenError('forbidden');

@@ -298,6 +298,15 @@ describe('notification-service', () => {
           subject: expect.stringContaining('Update on your maintenance request'),
         }),
       );
+
+      // Deep-link must target the Operations hub — the legacy /maintenance/[id]
+      // detail route no longer exists.
+      const emailArgs = sendEmailMock.mock.calls[0]![0] as {
+        react: { props: { portalUrl: string } };
+      };
+      expect(emailArgs.react.props.portalUrl).toContain(
+        `/communities/${COMMUNITY_ID}/operations?tab=requests`,
+      );
     });
 
     it('sends compliance alert emails', async () => {
