@@ -27,7 +27,7 @@ import {
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
 import { operationsHubHref } from '@/lib/operations/routes';
-import { ADMIN_TIER_DB_ROLES, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
+import { ADMIN_TIER_DB_ROLES, hasBoardDesignation } from '@propertypro/shared';
 // Note: ADMIN_ROLES and BOARD_ROLES from shared still use legacy role names.
 // isRoleMatch below matches user_roles.role against the bilingual tier
 // constants (both role generations) during the role-v3 transition window.
@@ -190,16 +190,12 @@ function getBaseUrl(): string {
   return 'http://localhost:3000';
 }
 
-function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts?: { isUnitOwner?: boolean; presetKey?: string }): boolean {
+function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts?: { isUnitOwner?: boolean; designation?: string | null }): boolean {
   if (filter === 'all') return true;
   if (filter === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
   if (filter === 'board_only') {
-    // Board roles: manager-tier with board preset (board_member or board_president)
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-    if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
-      return opts?.presetKey === 'board_member' || opts?.presetKey === 'board_president';
-    }
-    return false;
+    // Phase 3.2: board targeting sources from designation (role-independent, §3.2).
+    return hasBoardDesignation(opts?.designation);
   }
   if (filter === 'community_admins') {
     // Admin roles: manager + pm_admin (and their v3 generations)
@@ -403,9 +399,9 @@ async function resolveRecipientDeliveries(
     const userId = row['userId'];
     const role = row['role'];
     const isUnitOwner = row['isUnitOwner'] === true;
-    const presetKey = row['presetKey'] as string | undefined;
+    const designation = row['designation'] as string | null | undefined;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isRoleMatch(role, filter, userId, { isUnitOwner, presetKey })) continue;
+    if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation })) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();
 
@@ -801,9 +797,9 @@ async function resolveInAppRecipients(
     const userId = row['userId'];
     const role = row['role'];
     const isUnitOwner = row['isUnitOwner'] === true;
-    const presetKey = row['presetKey'] as string | undefined;
+    const designation = row['designation'] as string | null | undefined;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isRoleMatch(role, filter, userId, { isUnitOwner, presetKey })) continue;
+    if (!isRoleMatch(role, filter, userId, { isUnitOwner, designation })) continue;
     if (!usersById.has(userId)) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? getDefaultPreferences();

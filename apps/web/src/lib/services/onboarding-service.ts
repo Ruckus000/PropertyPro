@@ -18,7 +18,7 @@ import { eq } from '@propertypro/db/filters';
 import { createElement } from 'react';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import type { CommunityType, NewCommunityRole, PresetKey } from '@propertypro/shared';
-import { getPresetPermissions, PRESET_METADATA } from '@propertypro/shared';
+import { getPresetPermissions, hasBoardDesignation, PRESET_METADATA } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -119,6 +119,8 @@ export async function createOnboardingResident(params: {
       ? getPresetPermissions(params.presetKey, communityType)
       : null;
   const presetKey = role === 'manager' ? (params.presetKey ?? null) : null;
+  // Phase 3.2 writer lockstep: a board presetKey always carries the identical designation.
+  const designation = presetKey && hasBoardDesignation(presetKey) ? presetKey : null;
   const displayTitle = resolveDisplayTitle(role, params.isUnitOwner, params.presetKey);
 
   await scoped.insert(userRoles, {
@@ -128,6 +130,7 @@ export async function createOnboardingResident(params: {
     isUnitOwner,
     permissions,
     presetKey,
+    designation,
     displayTitle,
   });
 

@@ -141,3 +141,38 @@ describe('inferCanonicalRoleFromMembership', () => {
     });
   });
 });
+
+describe('inferCanonicalRoleFromMembership — designation precedence (3.2)', () => {
+  it('designation wins over presetKey for manager-tier rows', () => {
+    expect(inferCanonicalRoleFromMembership({
+      role: 'property_manager', presetKey: null, designation: 'board_president',
+    })).toBe('board_president');
+    expect(inferCanonicalRoleFromMembership({
+      role: 'property_manager', presetKey: 'cam', designation: 'board_member',
+    })).toBe('board_member');
+    expect(inferCanonicalRoleFromMembership({
+      role: 'manager', presetKey: null, designation: 'board_president',
+    })).toBe('board_president');
+    expect(inferCanonicalRoleFromMembership({
+      role: 'manager', presetKey: 'cam', designation: 'board_member',
+    })).toBe('board_member');
+    // Redundant with the manager default, but pins that it's the designation deciding.
+    expect(inferCanonicalRoleFromMembership({
+      role: 'manager', presetKey: null, designation: 'board_member',
+    })).toBe('board_member');
+  });
+  it('falls back to presetKey when designation is absent (bilingual window)', () => {
+    expect(inferCanonicalRoleFromMembership({
+      role: 'manager', presetKey: 'board_president',
+    })).toBe('board_president');
+    expect(inferCanonicalRoleFromMembership({
+      role: 'property_manager', presetKey: 'board_member', designation: null,
+    })).toBe('board_member');
+  });
+  it('default branches are untouched (LOAD-BEARING: 10 prod null-preset rows)', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: null })).toBe('cam');
+    expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey: null })).toBe('board_member');
+    expect(inferCanonicalRoleFromMembership({ role: 'root_manager', designation: 'board_president' })).toBe('property_manager_admin');
+    expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true, designation: 'board_member' })).toBe('owner');
+  });
+});

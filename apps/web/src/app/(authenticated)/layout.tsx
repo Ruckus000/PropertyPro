@@ -25,6 +25,7 @@ export default async function AuthenticatedLayout({
   const role = shellContext.role;
   const isUnitOwner = shellContext.isUnitOwner;
   const presetKey = shellContext.presetKey;
+  const designation = shellContext.designation;
   const subscriptionStatus = shellContext.subscriptionStatus;
   const freeAccessExpiresAt = shellContext.freeAccessExpiresAt;
   const resourceAccess = shellContext.resourceAccess;
@@ -63,7 +64,7 @@ export default async function AuthenticatedLayout({
         <IdleSessionManager role={role} />
         <AppQueryProvider>
           <MotionProvider>
-            <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} presetKey={presetKey} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
+            <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} presetKey={presetKey} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
               {children}
             </AppShell>
           </MotionProvider>

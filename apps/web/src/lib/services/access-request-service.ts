@@ -26,7 +26,7 @@ import {
   AccessRequestDeniedEmail,
   sendEmail,
 } from '@propertypro/email';
-import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
+import { PM_SCOPE_DB_ROLES, isBoardPresident } from '@propertypro/shared';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 
@@ -233,13 +233,12 @@ export async function verifyOtp(params: {
 
   // Find admin users to notify
   const roleRows = await scoped.query(userRoles);
-  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+  // Phase 3.2 (§3.2): the president arm sources from designation; the dead
+  // cam-preset arm is dropped (those rows are property_manager → role arm).
   const adminRoles = roleRows.filter((r) => {
-    const presetKey = r['presetKey'] as string | null;
     return (
-      presetKey === 'board_president' ||
-      presetKey === 'cam' ||
-      (PM_SCOPE_DB_ROLES as readonly string[]).includes(r['role'] as string)
+      (PM_SCOPE_DB_ROLES as readonly string[]).includes(r['role'] as string) ||
+      isBoardPresident(r['designation'])
     );
   });
 

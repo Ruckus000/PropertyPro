@@ -15,12 +15,14 @@ const {
   resolveCommunityContextMock,
   hasChecklistItemsMock,
   redirectMock,
+  welcomeScreenMock,
 } = vi.hoisted(() => ({
   requirePageAuthenticatedUserMock: vi.fn(),
   requirePageCommunityMembershipMock: vi.fn(),
   resolveCommunityContextMock: vi.fn(),
   hasChecklistItemsMock: vi.fn(),
   redirectMock: vi.fn(),
+  welcomeScreenMock: vi.fn(() => null),
 }));
 
 class RedirectError extends Error {
@@ -87,7 +89,7 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
 }));
 
 vi.mock('@/components/onboarding/welcome-screen', () => ({
-  WelcomeScreen: () => null,
+  WelcomeScreen: welcomeScreenMock,
 }));
 
 import WelcomePage from '../../../src/app/(authenticated)/welcome/page';
@@ -126,5 +128,81 @@ describe('WelcomePage redirect behavior', () => {
     ).rejects.toThrow('NEXT_REDIRECT');
 
     expect(redirectMock).toHaveBeenCalledWith('/dashboard?communityId=42');
+  });
+});
+
+describe('WelcomePage display role resolution', () => {
+  const baseManagerMembership = {
+    userId: 'user-1',
+    communityId: 42,
+    role: 'property_manager',
+    isAdmin: true,
+    isUnitOwner: false,
+    displayTitle: 'Manager',
+    communityType: 'condo_718',
+    communityName: 'Sunset Condos',
+    city: 'Miami',
+    state: 'FL',
+    presetKey: undefined as string | undefined,
+    designation: null as string | null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveCommunityContextMock.mockReturnValue({ communityId: 42 });
+    requirePageAuthenticatedUserMock.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      phone: null,
+      fullName: 'Test User',
+      user_metadata: { full_name: 'Test User' },
+    });
+    hasChecklistItemsMock.mockResolvedValue(false);
+  });
+
+  async function renderWithMembership(
+    overrides: Partial<typeof baseManagerMembership>,
+  ): Promise<string> {
+    requirePageCommunityMembershipMock.mockResolvedValue({
+      ...baseManagerMembership,
+      ...overrides,
+    });
+    const element = (await WelcomePage({
+      searchParams: Promise.resolve({ communityId: '42' }),
+    })) as unknown as { type: unknown; props: { role: string } };
+    expect(element.type).toBe(welcomeScreenMock);
+    return element.props.role;
+  }
+
+  it('resolves board_president from designation when presetKey is absent', async () => {
+    const role = await renderWithMembership({
+      designation: 'board_president',
+      presetKey: undefined,
+    });
+    expect(role).toBe('board_president');
+  });
+
+  it('prefers designation board_member over a conflicting presetKey', async () => {
+    const role = await renderWithMembership({
+      designation: 'board_member',
+      presetKey: 'cam',
+    });
+    expect(role).toBe('board_member');
+  });
+
+  it('falls back to presetKey board_member when designation is absent', async () => {
+    const role = await renderWithMembership({
+      designation: null,
+      presetKey: 'board_member',
+    });
+    expect(role).toBe('board_member');
+  });
+
+  it('defaults property_manager with neither designation nor presetKey to cam', async () => {
+    const role = await renderWithMembership({
+      designation: null,
+      presetKey: undefined,
+    });
+    expect(role).toBe('cam');
   });
 });

@@ -32,6 +32,8 @@ export interface PageShellContext {
   isUnitOwner: boolean;
   /** Manager preset (e.g. 'board_president', 'cam'); null for non-managers. */
   presetKey: string | null;
+  /** Board designation (BoardDesignation value); null when not on the board. */
+  designation: string | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   subscriptionStatus: string | null;
@@ -47,6 +49,7 @@ const EMPTY_PAGE_SHELL_CONTEXT: PageShellContext = {
   role: null,
   isUnitOwner: false,
   presetKey: null,
+  designation: null,
   features: null,
   resourceAccess: null,
   subscriptionStatus: null,
@@ -74,6 +77,7 @@ const getPageActiveCommunityShellContextCached = cache(
         role: membership.role as AnyCommunityRole,
         isUnitOwner: membership.isUnitOwner,
         presetKey: membership.presetKey ?? null,
+        designation: membership.designation ?? null,
         features: getEffectiveFeatures(
           membership.communityType,
           resolvePlanId(membership.subscriptionPlan),

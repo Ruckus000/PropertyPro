@@ -9,16 +9,14 @@
  *   - apps/web/src/app/api/v1/billing/upgrade-requests/route.ts
  */
 import { createScopedClient, userRoles } from '@propertypro/db';
-import { MANAGER_TIER_DB_ROLES, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
-
-/** Manager presets that get treated as billing admins. Mirrors `canManageBilling()`. */
-const BILLING_ADMIN_PRESETS = new Set(['board_president', 'cam']);
+import { MANAGER_TIER_DB_ROLES, PM_SCOPE_DB_ROLES, isBoardPresident } from '@propertypro/shared';
 
 /**
  * Return the set of user ids in this community who are authorized to act on
  * a plan-upgrade request:
  *   - PM-scope role (pm_admin / property_manager / root_manager)           → always
- *   - manager-tier role (manager / property_manager / root_manager) AND presetKey IN ('board_president', 'cam') → yes
+ *   - manager-tier role (manager / property_manager / root_manager) AND
+ *     (board-president designation OR legacy cam preset)                   → yes
  *
  * Excludes `excludeUserId` (the requester) so they don't get notified about
  * their own request. Returns a plain array for ergonomic callers.
@@ -42,10 +40,15 @@ export async function listBillingCapableUserIds(
     const recipientId = typeof row['userId'] === 'string' ? row['userId'] : null;
     if (!recipientId) continue;
     if (recipientId === excludeUserId) continue;
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
+    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup.
+    // Phase 3.2: the president arm sources from designation; the cam-preset
+    // arm survives only for hypothetical legacy manager rows and dies in 3.3.
     if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
       recipientIds.add(recipientId);
-    } else if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role) && BILLING_ADMIN_PRESETS.has(presetKey)) {
+    } else if (
+      (MANAGER_TIER_DB_ROLES as readonly string[]).includes(role) &&
+      (isBoardPresident(row['designation']) || presetKey === 'cam')
+    ) {
       recipientIds.add(recipientId);
     }
   }

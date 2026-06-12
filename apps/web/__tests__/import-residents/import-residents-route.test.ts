@@ -203,10 +203,55 @@ describe('POST /api/v1/import-residents', () => {
       isUnitOwner: true,
       permissions: null,
       presetKey: null,
+      designation: null,
       displayTitle: 'Owner',
     });
     expect(insertNotificationPreferencesForImportMock).toHaveBeenCalledWith(42, 'new-user-1');
     expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes designation in lockstep for a board_member CSV row', async () => {
+    validateResidentCsvMock.mockReturnValueOnce({
+      header: ['name', 'email', 'role', 'unit_number'],
+      rows: [
+        { rowNumber: 2, data: { name: 'Bea', email: 'bea@x.com', role: 'board_member', unit_number: '' } },
+      ],
+      errors: [],
+    });
+
+    const res = await POST(jsonPost({ communityId: 42, csv: 'header\nrow', dryRun: false }));
+
+    expect(res.status).toBe(200);
+    expect(insertUserRoleForImportMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        role: 'manager',
+        presetKey: 'board_member',
+        designation: 'board_member',
+      }),
+    );
+  });
+
+  it('writes designation null for a cam CSV row', async () => {
+    validateResidentCsvMock.mockReturnValueOnce({
+      header: ['name', 'email', 'role', 'unit_number'],
+      rows: [
+        { rowNumber: 2, data: { name: 'Cal', email: 'cal@x.com', role: 'cam', unit_number: '' } },
+      ],
+      errors: [],
+    });
+
+    const res = await POST(jsonPost({ communityId: 42, csv: 'header\nrow', dryRun: false }));
+
+    expect(res.status).toBe(200);
+    expect(insertUserRoleForImportMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({
+        role: 'manager',
+        presetKey: 'cam',
+        designation: null,
+      }),
+    );
   });
 
   it('defaults dryRun to false when omitted (runs the real import path)', async () => {

@@ -29,7 +29,7 @@ import { announcements, communities, documentCategories, documents, meetings, si
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
-import { MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
+import { BOARD_DESIGNATIONS, isBoardPresident } from '@propertypro/shared';
 
 export interface PublicAnnouncement {
   id: number;
@@ -343,16 +343,16 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             .select({
               fullName: users.fullName,
               displayTitle: userRoles.displayTitle,
-              presetKey: userRoles.presetKey,
+              designation: userRoles.designation,
             })
             .from(userRoles)
             .innerJoin(users, eq(users.id, userRoles.userId))
             .where(
               and(
                 eq(userRoles.communityId, communityId),
-                // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-                inArray(userRoles.role, [...MANAGER_TIER_DB_ROLES]),
-                inArray(userRoles.presetKey, ['board_president', 'board_member']),
+                // Phase 3.2 (§3.2): the statutory board IS the set of designation
+                // holders, regardless of role. presetKey is no longer consulted.
+                inArray(userRoles.designation, [...BOARD_DESIGNATIONS]),
                 isNull(users.deletedAt),
               ),
             )
@@ -374,7 +374,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         management,
         board: boardRows.map((row) => ({
           name: row.fullName,
-          title: row.displayTitle ?? (row.presetKey === 'board_president' ? 'Board President' : 'Board Member'),
+          title: row.displayTitle ?? (isBoardPresident(row.designation) ? 'Board President' : 'Board Member'),
         })),
       };
     },

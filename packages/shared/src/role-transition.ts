@@ -42,3 +42,23 @@ export function expandTransitionRoleFilter(role: string): readonly TransitionRol
 /** Board designations (role-v3 §3.2) — statutory markers, valid on any role. */
 export const BOARD_DESIGNATIONS = ['board_president', 'board_member'] as const;
 export type BoardDesignation = (typeof BOARD_DESIGNATIONS)[number];
+
+/**
+ * Canonical "is a board member" predicate (role-v3 §3.2, Phase 3.2).
+ * From 3.2 on, ALL board targeting (board_only audiences, the public §718
+ * roster, president-notify arms) sources from `designation` via this helper —
+ * never from presetKey. Lives in this guard-exempt file so consumers in
+ * guard-scanned files never inline the designation literals.
+ */
+export function hasBoardDesignation(value: unknown): value is BoardDesignation {
+  return typeof value === 'string' && (BOARD_DESIGNATIONS as readonly string[]).includes(value);
+}
+
+/**
+ * President-only arms (access-request notify, billing president check).
+ * Accepts `unknown` — safe to call directly on a nullable designation column.
+ * Returns a plain boolean (not a type guard).
+ */
+export function isBoardPresident(value: unknown): boolean {
+  return value === 'board_president';
+}

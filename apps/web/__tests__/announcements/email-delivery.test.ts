@@ -50,8 +50,8 @@ describe('announcement email delivery', () => {
     const query = vi.fn(async (table: unknown) => {
       if (table === tables.userRoles) {
         return [
-          { userId: 'u-owner', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
-          { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+          { userId: 'u-owner', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', designation: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
+          { userId: 'u-board', role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', designation: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } } },
           { userId: 'u-tenant', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant' },
         ];
       }
@@ -199,5 +199,67 @@ describe('announcement email delivery', () => {
     expect(count).toBe(recipientCount);
     expect(sendEmailMock).toHaveBeenCalledTimes(recipientCount);
     expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
+  });
+
+  it('board_only targets designation, not presetKey (role-independent)', async () => {
+    const roleRows = [
+      // (a) canonical post-backfill shape: designation present, presetKey null
+      { userId: 'u-pres', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: null, designation: 'board_president' },
+      // (b) forward-looking: resident carrying a board designation must match
+      { userId: 'u-res-board', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner', designation: 'board_member' },
+      // (c) presetKey WITHOUT designation no longer matches
+      { userId: 'u-preset-only', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', designation: null },
+      // (d) plain manager: no designation, no preset
+      { userId: 'u-plain-pm', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager' },
+    ];
+    const userRows = [
+      { id: 'u-pres', email: 'pres@example.com', fullName: 'Pres' },
+      { id: 'u-res-board', email: 'resboard@example.com', fullName: 'Res Board' },
+      { id: 'u-preset-only', email: 'preset@example.com', fullName: 'Preset Only' },
+      { id: 'u-plain-pm', email: 'pm@example.com', fullName: 'Plain PM' },
+    ];
+
+    const deliveryRows: Array<Record<string, unknown>> = [];
+    const query = vi.fn(async (table: unknown) => {
+      if (table === tables.userRoles) return roleRows;
+      if (table === tables.users) return userRows;
+      if (table === tables.notificationPreferences) return [];
+      if (table === tables.communities) return [{ id: 5, name: 'Sunset Condos' }];
+      if (table === tables.announcementDeliveryLog) return deliveryRows;
+      return [];
+    });
+    const insert = vi.fn(async (table: unknown, data: Record<string, unknown>) => {
+      if (table === tables.announcementDeliveryLog) {
+        const row = { id: deliveryRows.length + 1, attemptCount: 0, ...data };
+        deliveryRows.push(row);
+        return [row];
+      }
+      return [];
+    });
+
+    createScopedClientMock.mockReturnValue({
+      query,
+      queryWhere: vi.fn().mockResolvedValue([]),
+      insert,
+      update: vi.fn().mockResolvedValue([]),
+    });
+
+    const count = await queueAnnouncementDelivery({
+      communityId: 5,
+      announcementId: 12,
+      audience: 'board_only',
+      title: 'Board Update',
+      body: 'Body',
+      isPinned: false,
+      authorName: 'Admin',
+    });
+
+    expect(count).toBe(2);
+    const sentTo = sendEmailMock.mock.calls.map(
+      (call) => (call[0] as { to: string }).to,
+    );
+    expect(sentTo.sort()).toEqual(['pres@example.com', 'resboard@example.com']);
+    expect(sentTo).not.toContain('preset@example.com');
+    expect(sentTo).not.toContain('pm@example.com');
   });
 });
