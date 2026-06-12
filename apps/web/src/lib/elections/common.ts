@@ -1,6 +1,7 @@
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
+import { requireBoardDesignation } from '@/lib/db/access-control';
 
 // RBAC permission checks ('elections' resource, read/write) are performed via
 // requirePermission() from @/lib/db/access-control directly at call sites.
@@ -19,7 +20,5 @@ export function requireElectionsEnabled(membership: CommunityMembership): void {
 }
 
 export function requireElectionsAdminRole(membership: CommunityMembership): void {
-  if (!membership.isAdmin) {
-    throw new ForbiddenError('Only community leaders can manage elections');
-  }
+  requireBoardDesignation(membership);
 }

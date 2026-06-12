@@ -1,8 +1,8 @@
 import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
-import type { CommunityType, TransitionRole, ManagerPermissions } from '@propertypro/shared';
-import { normalizeManagerPermissions, getPresetPermissions, isPresetKey, ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
+import type { CommunityType, TransitionRole, ManagerPermissions, BoardDesignation } from '@propertypro/shared';
+import { normalizeManagerPermissions, getPresetPermissions, isPresetKey, ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
@@ -25,6 +25,8 @@ export interface CommunityMembership {
   displayTitle: string;
   /** Preset key for managers (e.g. 'board_president', 'cam'). */
   presetKey?: string;
+  /** Board designation (role-v3 §3.2) — statutory marker, independent of role. Null when not a board member. */
+  designation: BoardDesignation | null;
   /** Community city for location display. */
   city: string | null;
   /** Community state abbreviation for location display. */
@@ -95,6 +97,11 @@ export async function requireCommunityMembership(
     ? membership['presetKey']
     : undefined;
 
+  const rawDesignation = membership['designation'];
+  const designation = (BOARD_DESIGNATIONS as readonly string[]).includes(rawDesignation as string)
+    ? (rawDesignation as BoardDesignation)
+    : null;
+
   const communityType = requireCommunityType(
     community['communityType'],
     `requireCommunityMembership(communityId=${communityId}) community`,
@@ -149,6 +156,7 @@ export async function requireCommunityMembership(
     permissions,
     displayTitle,
     presetKey,
+    designation,
     city: typeof community['city'] === 'string' ? community['city'] : null,
     state: typeof community['state'] === 'string' ? community['state'] : null,
     isDemo: community['isDemo'] === true,
