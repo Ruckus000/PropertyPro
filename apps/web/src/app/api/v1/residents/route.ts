@@ -21,7 +21,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
-import { validateRoleAssignment } from '@/lib/utils/role-validator';
+import { isResidentTierRole, validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -88,6 +88,10 @@ export const POST = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const actorMembership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(actorMembership, 'residents', 'write');
+
+    if (!isResidentTierRole(role)) {
+      throw new ForbiddenError('Manager roles are assigned from Roles & Access (root only).');
+    }
 
     const communityType = await getCommunityType(communityId);
 
@@ -193,6 +197,10 @@ export const PATCH = withErrorHandler(
 
     if (userId === actorUserId && role !== undefined) {
       throw new ForbiddenError('Cannot modify your own role');
+    }
+
+    if (role !== undefined && !isResidentTierRole(role)) {
+      throw new ForbiddenError('Manager roles are assigned from Roles & Access (root only).');
     }
 
     const existingRole = await getResidentRoleByUserId(communityId, userId);

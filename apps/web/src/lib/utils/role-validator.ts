@@ -17,6 +17,14 @@ import {
   type TransitionRole,
 } from '@propertypro/shared';
 
+/** Manager-tier roles — assignable ONLY via the root-only Roles & Access endpoints, never the residents path. */
+const MANAGER_TIER_ROLES: ReadonlySet<string> = new Set(['manager', 'pm_admin', 'property_manager', 'root_manager']);
+
+/** True if the role is resident-tier (the only tier the residents create/update path may set). */
+export function isResidentTierRole(role: string): boolean {
+  return !MANAGER_TIER_ROLES.has(role);
+}
+
 /** Roles that require a unit assignment (new model). */
 const UNIT_REQUIRED_ROLES_V2: ReadonlySet<TransitionRole> = new Set([
   'resident',

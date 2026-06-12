@@ -169,29 +169,9 @@ describe('p1-18 residents route', () => {
     );
   });
 
-  it('POST keeps tenant context scoped by request communityId', async () => {
-    scopedSelectFromMock
-      .mockResolvedValueOnce([
-        {
-          id: 777,
-          communityType: 'hoa_720',
-        },
-      ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
-
-    scopedInsertMock
-      .mockResolvedValueOnce([
-        {
-          id: 'b0476f53-6f95-4493-b329-13ff1a2334e6',
-          email: 'board@example.com',
-          fullName: 'Board One',
-          phone: null,
-        },
-      ])
-      .mockResolvedValueOnce([{ id: 901 }])
-      .mockResolvedValueOnce([{ id: 902 }]);
-
+  it('POST returns 403 when role is manager (manager-tier lockdown)', async () => {
+    // Manager roles must be assigned via the root-only Roles & Access endpoints.
+    // The residents POST path is locked to resident-tier roles only.
     const req = new NextRequest('http://localhost:3000/api/v1/residents', {
       method: 'POST',
       headers: {
@@ -208,9 +188,9 @@ describe('p1-18 residents route', () => {
       }),
     });
 
-    await POST(req);
-
-    expect(createScopedClientMock).toHaveBeenCalledWith(777);
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    expect(scopedInsertMock).not.toHaveBeenCalled();
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
