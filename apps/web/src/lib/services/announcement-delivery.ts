@@ -9,10 +9,7 @@ import {
 } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { AnnouncementEmail, sendEmail } from '@propertypro/email';
-import { MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
-// Note: BOARD_ROLES from shared still use legacy role names.
-// isAudienceMatch below matches user_roles.role against the bilingual
-// manager-tier constant (both role generations) during the role-v3 window.
+import { hasBoardDesignation } from '@propertypro/shared';
 import {
   isDigestFrequency,
   isNeverFrequency,
@@ -49,15 +46,12 @@ function getBaseUrl(): string {
   return 'http://localhost:3000';
 }
 
-function isAudienceMatch(role: string, audience: AnnouncementAudience, opts?: { isUnitOwner?: boolean; presetKey?: string }): boolean {
+function isAudienceMatch(role: string, audience: AnnouncementAudience, opts?: { isUnitOwner?: boolean; designation?: string | null }): boolean {
   if (audience === 'all') return true;
   if (audience === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
   if (audience === 'board_only') {
-    // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-    if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
-      return opts?.presetKey === 'board_member' || opts?.presetKey === 'board_president';
-    }
-    return false;
+    // Phase 3.2: board targeting sources from designation (role-independent, §3.2).
+    return hasBoardDesignation(opts?.designation);
   }
   if (audience === 'tenants_only') return role === 'resident' && opts?.isUnitOwner !== true;
   return false;
@@ -118,9 +112,9 @@ async function resolveRecipients(
     const userId = row['userId'];
     const role = row['role'];
     const isUnitOwner = row['isUnitOwner'] === true;
-    const presetKey = row['presetKey'] as string | undefined;
+    const designation = row['designation'] as string | null | undefined;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isAudienceMatch(role, audience, { isUnitOwner, presetKey })) continue;
+    if (!isAudienceMatch(role, audience, { isUnitOwner, designation })) continue;
 
     const prefs = preferencesByUserId.get(userId) ?? {
       emailAnnouncements: true,
