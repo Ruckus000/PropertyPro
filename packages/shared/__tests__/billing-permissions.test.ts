@@ -153,6 +153,13 @@ describe('inferCanonicalRoleFromMembership — designation precedence (3.2)', ()
     expect(inferCanonicalRoleFromMembership({
       role: 'manager', presetKey: null, designation: 'board_president',
     })).toBe('board_president');
+    expect(inferCanonicalRoleFromMembership({
+      role: 'manager', presetKey: 'cam', designation: 'board_member',
+    })).toBe('board_member');
+    // Redundant with the manager default, but pins that it's the designation deciding.
+    expect(inferCanonicalRoleFromMembership({
+      role: 'manager', presetKey: null, designation: 'board_member',
+    })).toBe('board_member');
   });
   it('falls back to presetKey when designation is absent (bilingual window)', () => {
     expect(inferCanonicalRoleFromMembership({
