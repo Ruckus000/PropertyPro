@@ -15,7 +15,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FLOOR = 242; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
+const FLOOR = 241; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
                    // reference in access-control.ts checkPermissionV2 (ex-pm_admin null-perms fallback).
                    // 2026-06-11 (Phase 2c): +3 for the irreducible board-designation literals in the
                    // /settings/roles UI — `'board_president'`/`'board_member'` are the designations API
@@ -24,6 +24,8 @@ const FLOOR = 242; // 2026-06-10: 250 baseline +1 for the intentional property_m
                    // 2026-06-12 (Phase 3.2): 254 → 242 — board-targeting repoint drained the presetKey
                    // board literals (announcement/notification board_only, §718 roster, access-request
                    // notify, billing presets) to the designation helpers in role-transition.ts.
+                   // 2026-06-13 (invariant 3 lockdown): 242 → 241 — dropped a stale `'board_president'`
+                   // example from the resident-form roleKey JSDoc (the picker is owner/tenant-only).
                    // Ratchet DOWN with every Phase 3 drain PR.
 const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'packages/db/src', 'packages/ui/src', 'packages/email/src'];
 const LITERAL = /'(board_member|board_president|cam|site_manager|property_manager_admin)'/g;

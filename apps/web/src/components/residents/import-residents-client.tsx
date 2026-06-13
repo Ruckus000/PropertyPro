@@ -245,8 +245,8 @@ function UploadStep({
               Upload a CSV with columns: name, email, role, unit_number
             </p>
             <p className="text-sm text-content-secondary">
-              Valid roles: owner, tenant, board_member, board_president, cam, site_manager, property_manager_admin.
-              The unit_number column is optional for roles that do not require a unit.
+              Valid roles: owner, tenant. Every row needs a unit_number.
+              Board and manager access is assigned from Roles &amp; Access after import.
             </p>
             <button
               type="button"

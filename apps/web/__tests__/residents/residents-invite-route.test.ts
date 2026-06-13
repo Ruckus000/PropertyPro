@@ -155,19 +155,52 @@ describe('POST /api/v1/residents/invite', () => {
     expect(createOnboardingResidentMock).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when manager role lacks presetKey', async () => {
-    const res = await POST(
-      inviteRequest({
-        ...BASE_BODY,
-        role: 'manager',
-        presetKey: undefined,
-      }),
+  // -------------------------------------------------------------------------
+  // Security regression — manager-tier lockdown (role-v3 invariant 3).
+  // `requirePermission` is mocked to PASS, so the actor IS a fully-permitted
+  // admin with residents:write. Manager-tier roles must still be rejected:
+  // the contract narrows `role` to 'resident', and the handler carries an
+  // isResidentTierRole guard behind it. Only root mints property_manager.
+  // -------------------------------------------------------------------------
+  describe('manager-tier lockdown', () => {
+    it.each(['manager', 'pm_admin'])(
+      'rejects role=%s and never creates the resident, even with a presetKey',
+      async (role) => {
+        const res = await POST(
+          inviteRequest({
+            ...BASE_BODY,
+            role,
+            presetKey: 'cam',
+          }),
+        );
+
+        expect(res.status).toBe(400);
+        const json = await res.json();
+        expect(json.error.code).toBe('VALIDATION_ERROR');
+        // No user row, no role row, no invitation — escalation blocked.
+        expect(createOnboardingResidentMock).not.toHaveBeenCalled();
+        expect(createOnboardingInvitationMock).not.toHaveBeenCalled();
+      },
     );
 
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error.code).toBe('VALIDATION_ERROR');
-    expect(createOnboardingResidentMock).not.toHaveBeenCalled();
+    it.each(['board_president', 'board_member', 'cam', 'site_manager', 'property_manager_admin'])(
+      'rejects legacy admin role=%s',
+      async (role) => {
+        const res = await POST(inviteRequest({ ...BASE_BODY, role }));
+
+        expect(res.status).toBe(400);
+        expect(createOnboardingResidentMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it('ignores a stray presetKey on a resident invite (stripped by the contract)', async () => {
+      const res = await POST(inviteRequest({ ...BASE_BODY, presetKey: 'cam' }));
+
+      expect(res.status).toBe(200);
+      // presetKey must not reach the service — resident rows never carry presets.
+      const callArgs = createOnboardingResidentMock.mock.calls[0]![0];
+      expect(callArgs).not.toHaveProperty('presetKey');
+    });
   });
 
   it('returns 400 for unit owner in apartment community', async () => {

@@ -140,10 +140,9 @@ describe('useInviteResident', () => {
     email: 'new@x.com',
     fullName: 'New Person',
     phone: '555-1212',
-    role: 'owner',
+    role: 'resident',
     unitId: 101,
     isUnitOwner: true,
-    presetKey: 'owner_only',
   } as unknown as ResidentFormSubmitValues;
 
   it('POSTs /api/v1/residents/invite with exact body and returns body.data', async () => {
@@ -170,10 +169,9 @@ describe('useInviteResident', () => {
       email: 'new@x.com',
       fullName: 'New Person',
       phone: '555-1212',
-      role: 'owner',
+      role: 'resident',
       unitId: 101,
       isUnitOwner: true,
-      presetKey: 'owner_only',
       sendInvitation: true,
     });
     expect(result.current.data).toEqual(payload.data);

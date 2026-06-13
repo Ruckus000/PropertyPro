@@ -14,7 +14,8 @@
 import { runRoute } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { isResidentTierRole } from '@/lib/utils/role-validator';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -41,7 +42,6 @@ export const POST = withErrorHandler(
       role,
       unitId,
       isUnitOwner,
-      presetKey,
       ttlDays,
       sendInvitation,
     } = body;
@@ -52,8 +52,11 @@ export const POST = withErrorHandler(
 
     await requireActiveSubscriptionForMutation(communityId);
 
-    if (role === 'manager' && !presetKey) {
-      throw new ValidationError('presetKey is required when role is "manager"');
+    // Role-v3 invariant 3: this path may only mint resident-tier roles. The
+    // contract already narrows `role` to 'resident'; this guard keeps the
+    // invariant even if the contract enum is ever widened again.
+    if (!isResidentTierRole(role)) {
+      throw new ForbiddenError('Manager roles are assigned from Roles & Access (root only).');
     }
 
     const communityType = await getCommunityTypeForOnboarding(communityId);
@@ -72,7 +75,6 @@ export const POST = withErrorHandler(
       actorUserId,
       communityType,
       isUnitOwner,
-      presetKey,
     });
 
     let invitationToken: string | null = null;

@@ -24,10 +24,13 @@
 import { runRoute } from "@propertypro/api-contract";
 import { logAuditEvent } from "@propertypro/db";
 import { withErrorHandler } from "@/lib/api/error-handler";
-import { validateResidentCsv } from "@/lib/utils/csv-validator";
-import { validateRoleAssignment } from "@/lib/utils/role-validator";
-import type { CommunityRole, NewCommunityRole, PresetKey } from "@propertypro/shared";
-import { getPresetPermissions, hasBoardDesignation, PRESET_METADATA } from "@propertypro/shared";
+import {
+  RESIDENT_IMPORT_ROLES,
+  validateResidentCsv,
+  type ResidentImportRole,
+} from "@/lib/utils/csv-validator";
+import { isResidentTierRole, validateRoleAssignment } from "@/lib/utils/role-validator";
+import type { NewCommunityRole, PresetKey } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
@@ -52,27 +55,16 @@ interface MappedRole {
   displayTitle: string;
 }
 
-function mapLegacyRole(legacyRole: CommunityRole): MappedRole {
-  switch (legacyRole) {
-    case "owner":
-      return { role: "resident", isUnitOwner: true, presetKey: null, displayTitle: "Owner" };
-    case "tenant":
-      return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
-    case "board_president":
-    case "board_member":
-    case "cam":
-    case "site_manager":
-      return {
-        role: "manager",
-        isUnitOwner: false,
-        presetKey: legacyRole as PresetKey,
-        displayTitle: PRESET_METADATA[legacyRole as PresetKey].displayTitle,
-      };
-    case "property_manager_admin":
-      return { role: "pm_admin", isUnitOwner: false, presetKey: null, displayTitle: "Property Manager Admin" };
-    default:
-      return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
+/**
+ * Role-v3 invariant 3: the import path may only mint resident-tier rows.
+ * Manager/board CSV roles were removed from the import vocabulary — board and
+ * manager access is assigned from the root-only Roles & Access screen.
+ */
+function mapImportRole(csvRole: ResidentImportRole): MappedRole {
+  if (csvRole === "owner") {
+    return { role: "resident", isUnitOwner: true, presetKey: null, displayTitle: "Owner" };
   }
+  return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
 }
 
 export const POST = withErrorHandler(
@@ -105,12 +97,30 @@ export const POST = withErrorHandler(
     const userHasRole = await loadUsersWithExistingRoleForImport(communityId);
 
     const errors = [...parsedCsv.errors];
-    const createdUsers: Array<{ userId: string; email: string; role: NewCommunityRole; legacyRole: CommunityRole }> = [];
+    const createdUsers: Array<{ userId: string; email: string; role: NewCommunityRole; legacyRole: ResidentImportRole }> = [];
     let importedCount = 0;
     let skippedCount = invalidCsvRowNumbers.size; // rows with parse-level errors already skipped
 
     for (const row of parsedCsv.rows) {
       const { name, email, role, unit_number } = row.data;
+
+      // Role-v3 invariant 3 (mirrors residents POST): only resident-tier rows
+      // may be minted here. The CSV validator already rejects manager/board
+      // vocabulary; this re-check keeps the invariant even if the validator
+      // drifts or is bypassed.
+      const mapped = mapImportRole(role);
+      if (
+        !(RESIDENT_IMPORT_ROLES as readonly string[]).includes(role) ||
+        !isResidentTierRole(mapped.role)
+      ) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          column: "role",
+          message: `Role '${role}' cannot be imported. Manager roles are assigned from Roles & Access (root only).`,
+        });
+        skippedCount++;
+        continue;
+      }
 
       // Resolve unitId if provided
       let unitId: number | null = null;
@@ -163,12 +173,9 @@ export const POST = withErrorHandler(
         continue;
       }
 
-      // Map legacy CSV role to new hybrid model
-      const mapped = mapLegacyRole(role);
-
       // Tenants belong to exactly one community. Block if this user already
       // has a tenant role in any other community.
-      if (role === "tenant" || (mapped.role === "resident" && !mapped.isUnitOwner)) {
+      if (!mapped.isUnitOwner) {
         const existingCommunities = await listCommunitiesForUser(userId);
         const hasTenantElsewhere = existingCommunities.some(
           (c) => c.role === "resident" && !c.isUnitOwner && c.communityId !== communityId,
@@ -184,21 +191,16 @@ export const POST = withErrorHandler(
         }
       }
 
-      // Derive permissions for manager roles
-      const permissions =
-        mapped.role === "manager" && mapped.presetKey
-          ? getPresetPermissions(mapped.presetKey, communityType)
-          : null;
-
+      // Resident-tier rows never carry a permissions JSONB or preset.
       await insertUserRoleForImport(communityId, {
         userId,
         role: mapped.role,
         unitId,
         isUnitOwner: mapped.isUnitOwner,
-        permissions,
+        permissions: null,
         presetKey: mapped.presetKey,
-        // Phase 3.2 writer lockstep: a board presetKey always carries the identical designation.
-        designation: mapped.presetKey && hasBoardDesignation(mapped.presetKey) ? mapped.presetKey : null,
+        // Resident-tier rows never carry a board designation (role-v3 invariant 3);
+        // the designation column stays null and is set only via the root-only path.
         displayTitle: mapped.displayTitle,
       });
 

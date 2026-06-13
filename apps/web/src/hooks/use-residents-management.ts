@@ -91,7 +91,6 @@ export function useInviteResident(
           role: values.role,
           unitId: values.unitId,
           isUnitOwner: values.isUnitOwner,
-          presetKey: values.presetKey,
           sendInvitation,
         }),
       });

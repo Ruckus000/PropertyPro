@@ -103,7 +103,10 @@ describe('p1-19 import-residents route', () => {
     // Community type
     scopedQueryMock
       .mockResolvedValueOnce([{ id: 42, communityType: 'hoa_720' }]) // communities
-      .mockResolvedValueOnce([{ id: 100, unitNumber: '12A' }]) // units
+      .mockResolvedValueOnce([
+        { id: 100, unitNumber: '12A' },
+        { id: 101, unitNumber: '12B' },
+      ]) // units
       .mockResolvedValueOnce([]) // users
       .mockResolvedValueOnce([]); // user_roles
 
@@ -112,11 +115,11 @@ describe('p1-19 import-residents route', () => {
       .mockResolvedValueOnce([{ id: 'u1', email: 'owner1@example.com' }]) // users
       .mockResolvedValueOnce([{ id: 900 }]) // user_roles
       .mockResolvedValueOnce([{ id: 901 }]) // notification_preferences
-      .mockResolvedValueOnce([{ id: 'u2', email: 'board@example.com' }]) // users
+      .mockResolvedValueOnce([{ id: 'u2', email: 'tenant1@example.com' }]) // users
       .mockResolvedValueOnce([{ id: 902 }]) // user_roles
       .mockResolvedValueOnce([{ id: 903 }]); // notification_preferences
 
-    const csv = 'name,email,role,unit_number\nOwner One,owner1@example.com,owner,12A\nBoard One,board@example.com,board_member,';
+    const csv = 'name,email,role,unit_number\nOwner One,owner1@example.com,owner,12A\nTenant One,tenant1@example.com,tenant,12B';
     const req = new NextRequest('http://localhost:3000/api/v1/import-residents', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -165,6 +168,41 @@ describe('p1-19 import-residents route', () => {
     expect(json.data.errors).toEqual([
       { rowNumber: 2, column: 'unit_number', message: "Unit '99' not found" },
     ]);
+  });
+
+  it('rejects manager/board CSV roles at validation — no users or roles are created (role-v3 invariant 3)', async () => {
+    scopedQueryMock
+      .mockResolvedValueOnce([{ id: 42, communityType: 'hoa_720' }]) // communities
+      .mockResolvedValueOnce([]) // units
+      .mockResolvedValueOnce([]) // users
+      .mockResolvedValueOnce([]); // user_roles
+
+    const csv = [
+      'name,email,role,unit_number',
+      'Board One,board@example.com,board_member,',
+      'Prez,prez@example.com,board_president,',
+      'Cam,cam@example.com,cam,',
+      'Site,site@example.com,site_manager,',
+      'PM,pm@example.com,property_manager_admin,',
+    ].join('\n');
+    const req = new NextRequest('http://localhost:3000/api/v1/import-residents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ communityId: 42, csv }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      data: { importedCount: number; skippedCount: number; errors: Array<{ column: string | null; message: string }> };
+    };
+    expect(json.data.importedCount).toBe(0);
+    expect(json.data.skippedCount).toBe(5);
+    for (const err of json.data.errors) {
+      expect(err.column).toBe('role');
+      expect(err.message).toContain('Invalid role');
+    }
+    expect(scopedInsertMock).not.toHaveBeenCalled();
   });
 
   it('returns 403 for authenticated non-member', async () => {
