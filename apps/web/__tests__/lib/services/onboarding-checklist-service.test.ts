@@ -12,31 +12,68 @@ vi.mock('@propertypro/db/filters', () => ({
   isNull: vi.fn(),
 }));
 
-import { getItemKeysForRole } from '../../../src/lib/services/onboarding-checklist-service';
+import {
+  getItemKeysForRole,
+  PM_ADMIN_ITEMS,
+  BOARD_MEMBER_ITEMS,
+  OWNER_TENANT_ITEMS,
+  ADMIN_CONDO_ITEMS,
+  ADMIN_APARTMENT_ITEMS,
+} from '../../../src/lib/services/onboarding-checklist-service';
 
-describe('getItemKeysForRole — customize_portal scoping', () => {
-  it('includes customize_portal for pm_admin on a condo community', () => {
-    const keys = getItemKeysForRole('pm_admin', 'condo_718');
+describe('getItemKeysForRole — v3 role + designation resolution', () => {
+  it('board_member designation → BOARD_MEMBER_ITEMS', () => {
+    const keys = getItemKeysForRole('resident', 'board_member', 'condo_718');
+    expect(keys).toEqual([...BOARD_MEMBER_ITEMS]);
+  });
+
+  it('board_president designation → admin base (condo)', () => {
+    const keys = getItemKeysForRole('resident', 'board_president', 'condo_718');
+    expect(keys).toEqual([...ADMIN_CONDO_ITEMS]);
+    expect(keys).not.toContain('customize_portal');
+  });
+
+  it('board_president designation → admin base (apartment)', () => {
+    const keys = getItemKeysForRole('resident', 'board_president', 'apartment');
+    expect(keys).toEqual([...ADMIN_APARTMENT_ITEMS]);
+  });
+
+  it('root_manager (no designation) → admin base + PM_ADMIN_ITEMS', () => {
+    const keys = getItemKeysForRole('root_manager', null, 'condo_718');
+    expect(keys).toEqual([...ADMIN_CONDO_ITEMS, ...PM_ADMIN_ITEMS]);
     expect(keys).toContain('customize_portal');
   });
 
-  it('includes customize_portal for property_manager_admin on an apartment community', () => {
-    const keys = getItemKeysForRole('property_manager_admin', 'apartment');
+  it('pm_admin (no designation) → admin base + PM_ADMIN_ITEMS', () => {
+    const keys = getItemKeysForRole('pm_admin', null, 'apartment');
+    expect(keys).toEqual([...ADMIN_APARTMENT_ITEMS, ...PM_ADMIN_ITEMS]);
     expect(keys).toContain('customize_portal');
   });
 
-  it('does NOT include customize_portal for cam', () => {
-    const keys = getItemKeysForRole('cam', 'condo_718');
+  it('property_manager (no designation, PM scope) → admin base + PM_ADMIN_ITEMS', () => {
+    const keys = getItemKeysForRole('property_manager', null, 'condo_718');
+    expect(keys).toEqual([...ADMIN_CONDO_ITEMS, ...PM_ADMIN_ITEMS]);
+    expect(keys).toContain('customize_portal');
+  });
+
+  // DOCUMENTED behavior change (role-v3 Phase 3.3): the legacy site_manager —
+  // a manager-tier v3 role with no board designation — previously resolved to
+  // the display string 'site_manager' and fell through to the owner/tenant
+  // checklist. Keyed on the v3 role, a bare manager now receives the admin base
+  // set. Onboarding-only; no permission or data change.
+  it('manager (no designation, ex-site_manager) → admin base, no customize_portal', () => {
+    const keys = getItemKeysForRole('manager', null, 'condo_718');
+    expect(keys).toEqual([...ADMIN_CONDO_ITEMS]);
     expect(keys).not.toContain('customize_portal');
   });
 
-  it('does NOT include customize_portal for board_president', () => {
-    const keys = getItemKeysForRole('board_president', 'condo_718');
-    expect(keys).not.toContain('customize_portal');
+  it('resident (no designation) → OWNER_TENANT_ITEMS', () => {
+    const keys = getItemKeysForRole('resident', null, 'condo_718');
+    expect(keys).toEqual([...OWNER_TENANT_ITEMS]);
   });
 
-  it('does NOT include customize_portal for manager', () => {
-    const keys = getItemKeysForRole('manager', 'apartment');
-    expect(keys).not.toContain('customize_portal');
+  it('resident (no designation) → OWNER_TENANT_ITEMS regardless of community type', () => {
+    const keys = getItemKeysForRole('resident', null, 'apartment');
+    expect(keys).toEqual([...OWNER_TENANT_ITEMS]);
   });
 });

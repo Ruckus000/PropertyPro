@@ -1,7 +1,12 @@
 import { createScopedClient } from '@propertypro/db';
 import { onboardingChecklistItems } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
-import { PM_SCOPE_DB_ROLES, MANAGER_TIER_DB_ROLES } from '@propertypro/shared';
+import {
+  PM_SCOPE_DB_ROLES,
+  MANAGER_TIER_DB_ROLES,
+  BOARD_DESIGNATIONS,
+  type BoardDesignation,
+} from '@propertypro/shared';
 
 // ─── Item key definitions ────────────────────────────────────
 export const ADMIN_CONDO_ITEMS = [
@@ -64,35 +69,37 @@ type Role = string;
 
 export function getItemKeysForRole(
   role: Role,
+  designation: BoardDesignation | null,
   communityType: CommunityType,
 ): readonly ChecklistItemKey[] {
-  // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-  // PM-scope roles (pm_admin / property_manager / root_manager) get the base admin set
-  // plus customize_portal. Also handles legacy display alias 'property_manager_admin'.
-  // Checked before manager-tier so property_manager/root_manager resolve to the more-privileged
-  // PM bucket (matching pre-backfill behavior where they were pm_admin rows).
-  if (
-    (PM_SCOPE_DB_ROLES as readonly string[]).includes(role) ||
-    role === 'property_manager_admin'
-  ) {
-    const base = communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
-    return [...base, ...PM_ADMIN_ITEMS];
-  }
-  // Manager-tier roles (manager / property_manager / root_manager) and legacy display
-  // aliases (cam, board_president) get the base admin set only.
-  // Note: property_manager/root_manager are also in MANAGER_TIER_DB_ROLES but the
-  // PM_SCOPE branch above takes priority (checked first), so they never reach here.
-  if (
-    (MANAGER_TIER_DB_ROLES as readonly string[]).includes(role) ||
-    role === 'cam' ||
-    role === 'board_president'
-  ) {
-    return communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
-  }
-  if (role === 'board_member') {
+  // role-v3 (Phase 3.3): keyed on the v3 DB role + nullable board designation.
+  // Board membership is the designation column, independent of the base role.
+  const adminBase =
+    communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
+
+  // board_member designation → board-member checklist (regardless of base role).
+  if (designation === BOARD_DESIGNATIONS[1]) {
     return BOARD_MEMBER_ITEMS;
   }
-  // owner, tenant, site_manager, resident
+  // board_president designation → admin base set.
+  if (designation === BOARD_DESIGNATIONS[0]) {
+    return adminBase;
+  }
+  // PM-scope roles (pm_admin / property_manager / root_manager) get the admin
+  // base set plus customize_portal — parity with the pre-3.3 PM_SCOPE branch.
+  if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
+    return [...adminBase, ...PM_ADMIN_ITEMS];
+  }
+  // Manager-tier roles (bare manager) get the admin base set only.
+  // DOCUMENTED behavior change (role-v3 Phase 3.3): the legacy site_manager —
+  // now folded into property_manager with no designation — previously fell
+  // through to the owner/tenant set; it now receives the admin base set,
+  // matching its end-state property_manager role. Onboarding-only; no
+  // permission or data change.
+  if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
+    return adminBase;
+  }
+  // resident (no board designation) → owner/tenant checklist.
   return OWNER_TENANT_ITEMS;
 }
 
@@ -101,9 +108,10 @@ export async function createChecklistItems(
   communityId: number,
   userId: string,
   role: Role,
+  designation: BoardDesignation | null,
   communityType: CommunityType,
 ): Promise<void> {
-  const itemKeys = getItemKeysForRole(role, communityType);
+  const itemKeys = getItemKeysForRole(role, designation, communityType);
   const scoped = createScopedClient(communityId);
 
   // Insert each item; the unique constraint on (communityId, userId, itemKey) acts as the

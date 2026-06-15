@@ -89,7 +89,7 @@ export async function createCommunityForPm(
   });
 
   // 5. Generate onboarding checklist (outside transaction — uses scoped client, is idempotent)
-  await createChecklistItems(communityId, input.userId, 'pm_admin', input.communityType);
+  await createChecklistItems(communityId, input.userId, 'pm_admin', null, input.communityType);
 
   // 5b. Apply starter pack (outside transaction — best-effort, idempotent)
   // PR #5: §4.0 "site is always live" guarantee — pre-populate published site_blocks so

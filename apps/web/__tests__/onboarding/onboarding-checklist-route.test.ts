@@ -55,6 +55,7 @@ const MEMBERSHIP = {
   isUnitOwner: false,
   displayTitle: 'CAM',
   communityType: 'condo_718' as const,
+  designation: null as string | null,
 };
 
 const CHECKLIST_ITEM = {
@@ -154,6 +155,6 @@ describe('POST /api/v1/onboarding/checklist', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { created: boolean } };
     expect(json.data.created).toBe(true);
-    expect(createChecklistItemsMock).toHaveBeenCalledWith(42, 'user-1', 'cam', 'condo_718');
+    expect(createChecklistItemsMock).toHaveBeenCalledWith(42, 'user-1', 'cam', null, 'condo_718');
   });
 });

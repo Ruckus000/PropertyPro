@@ -32,7 +32,6 @@ import {
   type Announcement,
 } from '@propertypro/db';
 import { eq, isNull } from '@propertypro/db/filters';
-import { hasBoardDesignation } from '@propertypro/shared';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import {
   filterVisibleAnnouncements,
@@ -60,43 +59,6 @@ function computeComplianceScore(
     totalItems: total,
     satisfiedItems: satisfied,
   };
-}
-
-/**
- * Resolve the effective display role string used by the welcome screen
- * for card selection and greeting text.
- *
- * The v2 role model uses 'resident' | 'manager' | 'pm_admin'. We map back
- * to more descriptive strings using presetKey and isUnitOwner.
- *
- * BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup.
- * v3 values root_manager and property_manager are accepted alongside their
- * v2 equivalents — ALL existing v2 return values are preserved byte-identically,
- * including the bare-manager → cam default which property_manager shares.
- */
-// BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup
-function resolveEffectiveDisplayRole(
-  role: string,
-  presetKey: string | undefined,
-  isUnitOwner: boolean,
-  designation?: string | null,
-): string {
-  if (role === 'pm_admin' || role === 'root_manager') return 'property_manager_admin';
-  if (role === 'manager' || role === 'property_manager') {
-    // Phase 3.2: designation is the source of truth for the board distinction;
-    // the presetKey lines below are the bilingual fallback (die in Phase 4).
-    if (hasBoardDesignation(designation)) return designation;
-    // Use presetKey if available for specific manager types
-    if (presetKey === 'board_president') return 'board_president';
-    if (presetKey === 'board_member') return 'board_member';
-    if (presetKey === 'cam') return 'cam';
-    if (presetKey === 'site_manager') return 'site_manager';
-    return 'cam'; // Default manager display
-  }
-  if (role === 'resident') {
-    return isUnitOwner ? 'owner' : 'tenant';
-  }
-  return role;
 }
 
 function resolveLogoUrl(logoPath: string | undefined): string | null {
@@ -191,16 +153,12 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
       }
     : null;
 
-  // Resolve effective display role
-  const effectiveRole = resolveEffectiveDisplayRole(
-    membership.role,
-    membership.presetKey,
-    membership.isUnitOwner,
-    membership.designation ?? null,
-  );
-
   // Resolve checklist display items for the role (server-side, avoiding client import of service)
-  const itemKeys = getItemKeysForRole(effectiveRole, membership.communityType);
+  const itemKeys = getItemKeysForRole(
+    membership.role,
+    membership.designation,
+    membership.communityType,
+  );
   const checklistDisplayItems = itemKeys.map((key) => ({
     key,
     displayText: CHECKLIST_DISPLAY[key as ChecklistItemKey] ?? key,
@@ -220,7 +178,9 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
   return (
     <WelcomeScreen
       firstName={firstName}
-      role={effectiveRole}
+      role={membership.role}
+      designation={membership.designation}
+      isUnitOwner={membership.isUnitOwner}
       communityId={communityId}
       community={{
         name: membership.communityName,
