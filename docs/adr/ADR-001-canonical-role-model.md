@@ -1,7 +1,13 @@
 # ADR-001: Canonical Role Model for Community RBAC
 
-- Status: Proposed
+- Status: Superseded by [ADR-006](./ADR-006-root-manager-role-model.md) (June 15, 2026)
 - Date: February 10, 2026
+
+> **Superseded.** This ADR proposed a seven-value domain-role enum. The storage
+> layer had already collapsed to three roles, and the product owner subsequently
+> approved the three-role + board-designation model recorded in
+> [ADR-006](./ADR-006-root-manager-role-model.md). This document is retained as a
+> historical record; do not treat its seven-role decisions as current policy.
 - Deciders: Principal Architect, Engineering Lead, Product Lead, Compliance/Legal Lead
 - Scope: Role semantics, authorization model, provisioning constraints, audit requirements
 

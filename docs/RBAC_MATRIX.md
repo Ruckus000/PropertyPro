@@ -3,26 +3,46 @@
 **Canonical source of truth:** [`packages/shared/src/rbac-matrix.ts`](../packages/shared/src/rbac-matrix.ts)
 **Route-level guard:** [`apps/web/src/lib/db/access-control.ts`](../apps/web/src/lib/db/access-control.ts)
 **Tests (378 cells + invariants):** [`apps/web/__tests__/rbac.test.ts`](../apps/web/__tests__/rbac.test.ts)
-**ADR:** [ADR-001 Canonical Role Model](./adr/ADR-001-canonical-role-model.md)
+**ADR:** [ADR-006 Root-Manager Role Model](./adr/ADR-006-root-manager-role-model.md) (supersedes ADR-001)
 
 ---
 
-## Role Definitions
+## Role Model (v3 — canonical)
+
+Per [ADR-006](./adr/ADR-006-root-manager-role-model.md), a community membership is one of **three roles** plus an optional, orthogonal **board designation**:
 
 | Role | Description | Valid Community Types |
 |---|---|---|
-| `owner` | Unit owner with portal access | condo_718, hoa_720 |
-| `tenant` | Resident renter | condo_718, hoa_720, apartment |
-| `board_member` | Board member with admin access | condo_718, hoa_720 |
-| `board_president` | Board president | condo_718, hoa_720 |
-| `cam` | Community Association Manager | condo_718, hoa_720 |
-| `site_manager` | Apartment on-site manager | apartment only |
-| `property_manager_admin` | PM company admin | condo_718, hoa_720, apartment |
+| `resident` | Community member; `isUnitOwner` distinguishes **owner** (condo/HOA only) from **tenant** | condo_718, hoa_720, apartment |
+| `property_manager` | Uniform operational manager; minted only by the root | condo_718, hoa_720, apartment |
+| `root_manager` | ≤ 1 per community (vacancy allowed); everything, incl. the four root-exclusive powers (roles, billing, deletion, transfer) | condo_718, hoa_720, apartment |
 
-**Rules per ADR-001:**
-- One active canonical role per `(user_id, community_id)`
-- If user qualifies as both board member and owner, board role takes precedence
-- `platform_admin` is a system-scoped role — not stored in `user_roles` table
+| Designation (any role) | Statutory marker |
+|---|---|
+| `board_president` | ≤ 1 per community |
+| `board_member` | unbounded |
+
+**Rules:**
+- One active role per `(user_id, community_id)`.
+- **General permissions come from the role and never read `designation`.** Only statutory features (board-meeting calls / 48-hour notices, election certification, violation hearings) consult `designation` via `requireBoardDesignation()`.
+- `roles:write` (role assignment + designation management) is root-only.
+- `platform_admin` is system-scoped — not stored in `user_roles`.
+- Apartments have no designations and no `isUnitOwner=true` residents.
+
+## Permission resolution & the underlying matrix
+
+`checkPermissionV2()` routes the v3 role to the policy table below, which is **still keyed on the legacy role names** during the bilingual transition (collapsed to three columns in the Phase 4 cleanup):
+
+- `resident` → `owner` or `tenant` column (by `isUnitOwner`).
+- `property_manager` / `root_manager` / `pm_admin` → `property_manager_admin` column (the uniform full-operational policy). *(Transitional exception: a `property_manager` row that still carries a per-membership `permissions` JSONB resolves from that JSONB until the product-signed-off uniform-permissions step ships with the Phase 4 migration.)*
+
+**Deferred:** making `property_manager` permissions uniform in `checkPermissionV2` (a widening for the minority of rows with restricted preset-derived permissions); moving billing / community-deletion to root-only (Phase 3.4, gated on claim-root adoption). See ADR-006 → Transition status.
+
+---
+
+## Legacy policy table (bilingual transition — keyed on legacy role names)
+
+> These tables are the underlying `RBAC_MATRIX` policy source during the transition. Read them through the routing above: `property_manager`/`root_manager` use the `property_manager_admin` row; `resident` uses `owner`/`tenant`.
 
 ---
 
