@@ -148,7 +148,7 @@ export function ComplianceCommandCenter({
           variant="secondary"
           disabled={selectedItem === null}
           onClick={() => {
-            if (selectedItem) setUploadItem(selectedItem as ChecklistItemData);
+            if (selectedItem) setUploadItem(selectedItem);
           }}
         >
           Upload record
