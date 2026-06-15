@@ -1,6 +1,6 @@
 ---
 title: "Using PropertyPro on mobile"
-description: "How to get a native-feeling experience on your phone, including installing the app from the browser."
+description: "How to get a native-feeling experience on your phone, including adding a home-screen shortcut."
 category: "getting-started"
 slug: "using-the-mobile-app"
 roles: []
@@ -9,16 +9,14 @@ keywords:
   - phone
   - app
   - install
-  - pwa
   - responsive
   - home screen
   - add to home screen
-  - bottom nav
 tags:
   - mobile
   - onboarding
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - welcome-to-propertypro
   - managing-notifications
@@ -29,38 +27,38 @@ contextPaths:
   - /mobile/*/*
 ---
 
-PropertyPro's web app is fully responsive. On mobile, routes under `/mobile/*` give you a touch-first layout with a bottom nav and streamlined forms.
+PropertyPro's web app is fully responsive. On mobile, routes under `/mobile/*` give you a touch-first layout with hub-and-spoke navigation and streamlined forms.
 
-## Installing to your home screen
+## Adding a home-screen shortcut
 
-PropertyPro works as a Progressive Web App — you can install it like a native app without the App Store.
+You can bookmark PropertyPro or add it to your home screen as a browser shortcut.
 
 <StepByStep>
 <Step title="iPhone / iPad (Safari)">
-Open your community URL in Safari. Tap the **Share** icon, then **Add to Home Screen**. Tap Add. The icon appears on your home screen and opens full-screen.
+Open your community URL in Safari. Tap the **Share** icon, then **Add to Home Screen**. Tap Add. The icon opens the site in Safari.
 </Step>
 
 <Step title="Android (Chrome)">
-Open the URL in Chrome. Tap the three-dot menu, then **Add to Home screen** or **Install app**. Confirm. The app icon appears with the rest.
+Open the URL in Chrome. Tap the three-dot menu, then **Add to Home screen**. Confirm. The shortcut opens the site in your browser.
 </Step>
 </StepByStep>
 
-## Bottom navigation
+## Navigation
 
-The mobile bottom nav shows the most-used features for your role — Dashboard, Documents, Meetings, and Help at a minimum. Admins may see additional tabs.
+The mobile home screen shows navigation rows for your role — Documents, Announcements, Meetings, Maintenance, Payments, and Compliance where enabled. Tap a row to open that section.
 
-Tapping your avatar in the top right opens the profile menu with account settings, community switcher, and sign out.
+Tap your initials in the top right to open the **More** page with account settings and **Sign out**.
 
 ## What works differently on mobile
 
 - **Forms** are laid out for thumb reach; long labels wrap.
-- **Documents** preview inline when the file is small; larger files open in your phone's default reader.
-- **Payments** use Apple Pay / Google Pay when your community has Stripe enabled and your device supports it.
+- **Documents** — every document has **Open** (in-app viewer) and **Download** buttons.
+- **Payments** depend on your community's payment setup — check the Payments page or ask your manager which methods are available.
 - **Push notifications** aren't enabled yet — you still get email and in-app notifications.
 
 ## Offline behavior
 
-The app requires an internet connection for most actions. Reading an already-opened document or announcement works offline briefly, but new actions (submitting maintenance, paying dues) need connectivity.
+PropertyPro requires an internet connection. Submitting maintenance requests, paying dues, and loading new content all need connectivity.
 
 <Callout type="tip" title="If the mobile layout seems wrong">
 The `/mobile/*` routes are the intentional mobile surface. If you land on the desktop layout on a phone, it's usually because a link sent you to a desktop-only path — the app still works, just with more horizontal scrolling. The help center itself uses the same layout for both.
@@ -68,7 +66,7 @@ The `/mobile/*` routes are the intentional mobile surface. If you land on the de
 
 ## Signing out
 
-Profile menu → **Sign out**. If you share a device, sign out between uses so another resident doesn't see your dashboard.
+On the **More** page, tap **Sign out**. If you share a device, sign out between uses so another resident doesn't see your dashboard.
 
 ## What's next
 

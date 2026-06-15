@@ -29,8 +29,8 @@ tags:
   - compliance
   - documents
   - florida
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 statutes:
   - "§718.111(12)(g)"
   - "§720.303"
@@ -45,7 +45,7 @@ contextPaths:
   - /communities/*/compliance
 ---
 
-Florida statute specifies both **which** records associations must make available and **when** — usually within 30 days of the record being finalized. PropertyPro tracks each obligation as a requirement on the Compliance dashboard, where you link the document that satisfies it.
+Florida statute specifies both **which** records associations must make available and **when** — usually within 30 days of creation. PropertyPro tracks each obligation as a requirement on the Compliance dashboard, where you link the document that satisfies it.
 
 <Callout type="florida-statute" title="Condo: § 718.111(12)(g)">
 Condo associations with 25 or more units must post certain records on an association-managed website. The statute calls out bylaws, articles, rules, financial records, contracts over a threshold, meeting materials, and more.
@@ -64,8 +64,13 @@ The Compliance dashboard tracks one requirement per statutory record type. The c
 - **Meeting materials** — agendas, notices, minutes.
 - **Contracts** — any vendor or service contract above the statutory threshold.
 - **Insurance** — current certificates of coverage.
-- **Elections** — candidate bios, ballots, voting outcomes.
-- **Official records summary** — a current index of what records are available.
+- **Question & Answer sheet** — required Q&A sheet for prospective purchasers (condos).
+- **Video recordings** — virtual meeting recordings on a rolling 12-month basis (condos, when applicable).
+- **Affidavits** — affidavits required by Chapter 718 (condos).
+- **Conflict-of-interest contracts** — contracts involving a director or officer financial interest (when applicable).
+- **Bids** — bids received after bidding closes (when applicable).
+- **Inspection reports** — structural / milestone inspection reports (when applicable).
+- **SIRS** — structural integrity reserve study (when applicable).
 
 These are compliance **requirements**, not document-library categories. You satisfy each one by linking a document to it on the Compliance dashboard, whatever category that document lives under in the library.
 
@@ -77,11 +82,11 @@ A document is approved, signed, or adopted — for example, meeting minutes are 
 </Step>
 
 <Step title="Upload it and link it">
-Upload the file in Documents, then link it to the matching requirement on the Compliance dashboard. The 30-day clock starts from the finalization date, not the upload date.
+Use **Upload** or **Link Existing** on the matching requirement row on the Compliance dashboard. PropertyPro records the posted date when you link or upload through that row.
 </Step>
 
 <Step title="PropertyPro tracks the clock">
-Each posted document is checked against the statutory window. Items approaching 7 days flip the compliance row to Urgent.
+Each requirement has a deadline from the checklist item (creation date plus 30 days, or a rolling window). Items due inside 7 days show as **Action needed** and count toward the **Due inside 7 days** KPI.
 </Step>
 
 <Step title="Audit trail is preserved">
@@ -91,7 +96,7 @@ Even if you post early, the posting time is saved in the audit log. Late posting
 
 ## What counts as "posted"
 
-In PropertyPro, a requirement counts as satisfied once you **link a document to it** on the Compliance dashboard and that document's finalization date is set. Uploading a file to the library alone doesn't satisfy a requirement — you have to link it.
+In PropertyPro, a requirement counts as satisfied once you **link a document to it** on the Compliance dashboard (or upload through the row's **Upload** button). Uploading a file to the library alone doesn't satisfy a requirement — you have to link it through the checklist row.
 
 <Callout type="warning" title="Link the document, don't just upload it">
 A budget sitting in the library won't satisfy the "Annual Budget" requirement until you link it on the Compliance dashboard. After uploading, open Compliance and attach the document to the requirement it covers.
@@ -99,7 +104,6 @@ A budget sitting in the library won't satisfy the "Annual Budget" requirement un
 
 ## Common pitfalls
 
-- **Undated documents**: if no finalization date is set, the engine treats the upload date as the clock start. That can artificially mark an on-time record as late.
 - **Superseded records**: replacing an old file keeps the statutory obligation satisfied as long as the current version is available.
 - **Unit-count changes**: crossing the 25-unit (condo) or 100-parcel (HOA) threshold flips new requirements from Not Applicable to required.
 
@@ -107,4 +111,4 @@ A budget sitting in the library won't satisfy the "Annual Budget" requirement un
 
 - Open **Documents** to review what's posted today.
 - Open **Compliance** to see what's missing or overdue.
-- Export the compliance report before each board meeting to keep the board oriented.
+- Screenshot the compliance dashboard before each board meeting to keep the board oriented.

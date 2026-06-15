@@ -1,6 +1,6 @@
 ---
 title: "Paying dues and assessments"
-description: "Review your balance, save a payment method, and pay online when your community has payments enabled."
+description: "Review your balance and pay online when your community has payments enabled."
 category: "finance"
 slug: "paying-dues-and-assessments"
 roles: []
@@ -11,7 +11,6 @@ keywords:
   - stripe
   - balance
   - pay online
-  - autopay
   - special assessment
   - late fee
   - receipt
@@ -20,8 +19,8 @@ featureGates:
 tags:
   - finance
   - residents
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - welcome-to-propertypro
   - understanding-your-dashboard
@@ -48,12 +47,16 @@ Online payments are only available if your community has connected Stripe. If yo
 
 ## What you see on the Payments page
 
-- **Current balance** — what's due right now, if anything.
-- **Upcoming assessments** — scheduled charges with their due dates.
-- **Payment history** — past payments with timestamps and confirmation numbers.
-- **Payment methods** — any cards or bank accounts you've saved.
+At the top, three summary cards show your balance label, **Total Due**, and **Overdue Items**.
 
-If your community is on a recurring assessment schedule (monthly, quarterly, annual), you'll see the next charge clearly labeled.
+Below that, two tabs:
+
+- **Upcoming** — unpaid assessments with due dates, amounts, and a **Pay Now** button on each line item
+- **Payment History** — past payments with due date, paid-on date, amount, and status
+
+Use **Download PDF** to get an account statement. Enter payment details in Stripe each time — nothing is stored on this page.
+
+If your community is on a recurring assessment schedule (monthly, quarterly, annual), you'll see the next charge in the Upcoming tab.
 
 ## Paying online
 
@@ -66,24 +69,14 @@ Click Payments in the sidebar, or use the Pay Dues task card from the help cente
 Check the amount due and the assessment breakdown. If anything looks wrong — a charge you don't recognize, a credit not applied — reach out to your community contact before paying.
 </Step>
 
-<Step title="Choose a payment method">
-Pick a saved method or click **Add payment method** to enter a new one. Cards and ACH (bank transfer) are both supported where enabled.
+<Step title="Pay a line item">
+Click **Pay Now** next to the charge you want to pay. A payment dialog opens with the Stripe form.
 </Step>
 
-<Step title="Submit the payment">
-Click **Pay now**. You'll see a confirmation screen with a reference number; a receipt is emailed within a few minutes.
+<Step title="Complete payment">
+Enter your card or US bank account details in the Stripe form (card and US bank account tabs). After payment succeeds, the line item shows as paid and a receipt is emailed to you.
 </Step>
 </StepByStep>
-
-## Saving a payment method
-
-Saved methods speed up future payments and are required for autopay.
-
-1. Go to **Settings → Payment methods** (or click **Add payment method** from the Payments page).
-2. Enter card or bank details. PropertyPro does not store card numbers — only the Stripe tokens that let you pay.
-3. Optionally mark the method as your default.
-
-You can delete a saved method at any time. If it's the method used for autopay, autopay will pause until you set a new default.
 
 ## Assessment vs. ad-hoc charges
 
@@ -98,5 +91,5 @@ If you believe a charge is wrong — wrong amount, charged twice, already paid o
 ## Receipts and taxes
 
 - Each online payment generates an emailed receipt.
-- Download a full year of receipts from the Payments page (use the **Export** button) if you need it for records or taxes.
-- Association assessments are generally not tax-deductible for primary residences; consult a tax professional about your situation.
+- Use **Download PDF** on the Payments page if you need a full account statement for your records.
+- For questions about tax treatment of assessments, consult a tax professional.

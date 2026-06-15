@@ -6,6 +6,8 @@ slug: "onboarding-a-new-community"
 roles:
   - property_manager_admin
   - pm_admin
+  - property_manager
+  - root_manager
 keywords:
   - onboarding
   - new community
@@ -20,8 +22,8 @@ keywords:
 tags:
   - pm
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - managing-multiple-communities
   - adding-cams-and-board-admins
@@ -52,24 +54,24 @@ If anything's missing, you can still create the community and fill in later — 
 ## Day 1 — Create the community
 
 <StepByStep>
-<Step title="Open PM Dashboard → Add community">
-From `/pm/dashboard/communities`, click **Add community** (or visit `/pm/dashboard/communities/new`).
+<Step title="Open PM Dashboard → Add Community">
+From `/pm/dashboard/communities`, click **Add Community**.
 </Step>
 
 <Step title="Enter the basics">
-Community name, the subdomain residents will visit (e.g., `sunset-condos.getpropertypro.com`), community type, and unit count.
+Community name, community type, address, subdomain (e.g., `sunset-condos.getpropertypro.com`), unit count, and timezone.
 </Step>
 
 <Step title="Pick the plan">
-Choose the plan tier that matches the community's needs and budget. Plan choice drives which features are enabled — `hasCompliance`, `hasMeetings`, `hasFinance`, etc. You can change later, but downgrades restrict feature visibility.
+Choose **Essentials**, **Professional**, or **Operations Plus**. Plan choice drives which features are enabled. You can upgrade later in-app; downgrades go through the Stripe billing portal.
 </Step>
 
-<Step title="Set the initial admin">
-The first admin is usually the board president or the lead CAM. Enter their email and PropertyPro sends an invitation.
+<Step title="Complete Stripe checkout">
+After you submit the form, embedded Stripe checkout collects payment. The community provisions once payment succeeds.
 </Step>
 
-<Step title="Submit">
-PropertyPro provisions the community within a few minutes — database setup, subdomain DNS, default email templates, FAQ scaffolding. You'll get a confirmation email when ready.
+<Step title="Set up the public site">
+Open the **Site** pill on the portfolio table (or visit `/pm/onboarding/website`) to launch the public-site wizard. Complete the site setup banner if one appears on the dashboard.
 </Step>
 </StepByStep>
 
@@ -83,7 +85,7 @@ Open the community's Settings page. Verify the address, contact info, fiscal yea
 </Step>
 
 <Step title="Upload governing documents">
-Bylaws, declaration, rules, articles. Use [Documents → Upload](/help/documents/uploading-documents) and pick the **Governing Documents** category for each. Set the finalization date to when each document was last adopted.
+Bylaws, declaration, rules, articles. Use [Documents → Upload](/help/documents/uploading-documents) and pick the **Governing Documents** category for each.
 </Step>
 
 <Step title="Bulk-import units">
@@ -91,11 +93,11 @@ For apartment communities, import the unit roster via CSV (see [Managing units a
 </Step>
 
 <Step title="Add the board roster">
-Promote board members from the resident list with their correct role (board_president, board_member). Their access takes effect immediately.
+Use **Residents → Add Resident** for each board member with the correct role — **Board President** or **Board Member**. Keep **Send invitation email** checked.
 </Step>
 
 <Step title="Configure branding">
-Apply PM-level branding ([Customizing PM branding](/help/pm/customizing-pm-branding)) or community-specific branding if the board prefers their own look.
+Open the community's **Website** editor and set colors, logos, and fonts per community ([Customizing PM branding](/help/pm/customizing-pm-branding)). Use **Templates** at `/pm/portfolio/templates` to push branding across multiple communities.
 </Step>
 </StepByStep>
 

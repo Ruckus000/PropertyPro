@@ -1,11 +1,13 @@
 ---
 title: "Customizing PM branding"
-description: "Apply your management company's branding — logo, colors, contact details — to every community you manage."
+description: "Apply your management company's branding — logo, colors, fonts — to each community's public site."
 category: "pm"
 slug: "customizing-pm-branding"
 roles:
   - property_manager_admin
   - pm_admin
+  - property_manager
+  - root_manager
 keywords:
   - branding
   - white label
@@ -20,68 +22,74 @@ keywords:
 tags:
   - pm
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - managing-multiple-communities
 featured: false
 contextPaths:
-  - /pm/settings
-  - /pm/settings/branding
+  - /pm/settings/website
 ---
 
-PropertyPro's PM tier supports white-label branding — when residents see the app, they see your management company's look and contact details, not the generic PropertyPro chrome.
+PropertyPro's PM tier supports per-community branding — when residents see the public site and app, they see your management company's look, not generic PropertyPro chrome.
 
 ## What you can customize
 
-- **Logo** — appears in the top bar, login screen, and email templates.
-- **Primary color** — drives buttons, links, and accent elements.
-- **Contact details** — your management company's email and phone appear on the Help → Contact Management page for every community you manage.
-- **Email sender name** — outgoing emails come from your company name, not generic PropertyPro.
-- **Custom domain** (if enabled on your plan) — residents access the app at your company's domain instead of the shared PropertyPro domain.
+Per community, in the site editor's Branding controls:
+
+- **Primary, secondary, and accent colors** — drive buttons, links, and accent elements.
+- **Heading and body fonts** — Google Font family names.
+- **Logo** — square logo for the app avatar and auth screens.
+- **Site logo** — horizontal wordmark for the public-site header.
+- **Custom email footer** — plain-text footer appended to outbound emails.
+
+Management contact details (name, email, phone) are configured per community on the **Management Contact** help page — not in the branding editor.
 
 ## Setting up branding
 
 <StepByStep>
-<Step title="Open PM Settings → Branding">
-Visit `/pm/settings/branding` from the PM dashboard.
+<Step title="Open the site editor">
+From the PM dashboard, open a community and go to **Website** (or visit `/pm/settings/website`).
 </Step>
 
-<Step title="Upload your logo">
-Use a transparent-background PNG at least 256 pixels wide. PropertyPro resizes automatically for different placements.
+<Step title="Open Branding controls">
+In the site editor, open the **Branding** tab.
 </Step>
 
-<Step title="Pick your primary color">
-Enter a hex code. PropertyPro generates hover and active states automatically from the primary color. Pick something with enough contrast against white backgrounds.
+<Step title="Upload your logos">
+Upload a square logo and a horizontal site logo. PropertyPro processes and resizes them for different placements.
 </Step>
 
-<Step title="Enter contact info">
-Your management company's phone and email. This appears on every community's Help contact page.
+<Step title="Pick colors and fonts">
+Enter hex codes for primary, secondary, and accent colors. Choose heading and body font families.
 </Step>
 
-<Step title="Save and preview">
-Changes apply to every community in your portfolio immediately. Navigate to a community to verify the branding applied cleanly.
+<Step title="Save per community">
+Branding saves for that community only. Navigate to the community to verify it applied cleanly.
 </Step>
 </StepByStep>
 
+To push branding across multiple communities at once, use **Templates** at `/pm/portfolio/templates`.
+
 ## Per-community overrides
 
-Individual communities can override the PM brand with their own logo and colors if their board prefers. When that happens:
+Individual communities can have their own logo and colors if their board prefers. When that happens:
 
-- The community's branding takes precedence inside that community's pages.
-- Your PM branding applies at the portfolio level (PM dashboard, cross-community reports).
-- Contact info defaults to your PM-level contact unless the community overrides.
+- The community's branding takes precedence on that community's public site and app pages.
+- Your PM-level templates can still seed defaults for new communities.
+- Management contact info is set per community on the **Management Contact** page.
 
 This lets large associations maintain their identity while your company still manages the portfolio.
 
 ## Custom domain
 
-If custom domain is on your plan:
+Each community can have a custom public-site domain via the **Custom Domain** card in the site editor:
 
-1. Configure DNS at your registrar — add a CNAME pointing your subdomain (e.g., `residents.acmemgmt.com`) to the value PropertyPro provides.
-2. Wait for DNS to propagate (up to 24 hours).
-3. Enable the domain in PM Settings → Branding → Custom domain.
-4. Test by visiting the new URL — you should see your branded login screen.
+1. Enter your hostname and click **Add domain**.
+2. Add the DNS records PropertyPro shows at your registrar.
+3. Click **Check status** to verify propagation.
+
+This configures the community's public website domain — not a separate app login domain.
 
 <Callout type="tip" title="Test email deliverability after a domain change">
 Changing the sender domain can affect email deliverability temporarily. Send a test announcement to yourself after the change to confirm emails aren't being filtered. If they are, check SPF / DKIM / DMARC records with our support team.
@@ -89,7 +97,7 @@ Changing the sender domain can affect email deliverability temporarily. Send a t
 
 ## Brand consistency
 
-When onboarding new communities to your portfolio, the PM branding applies automatically — the community sees your logo and colors from day one. Existing communities keep their current branding unless you override.
+When onboarding new communities to your portfolio, apply branding per community in the site editor — or use portfolio templates to seed defaults. Existing communities keep their current branding until you update them.
 
 ## Removing PM branding
 

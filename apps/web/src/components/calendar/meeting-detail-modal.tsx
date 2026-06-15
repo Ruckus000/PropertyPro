@@ -160,8 +160,13 @@ export function MeetingDetailModal({
                   {[
                     { label: 'Notice post by', value: meeting.deadlines.noticePostBy },
                     { label: 'Vote docs by', value: meeting.deadlines.ownerVoteDocsBy },
-                    { label: 'Minutes post by', value: meeting.deadlines.minutesPostBy },
-                  ].map(({ label, value }) => {
+                    {
+                      label: 'Target post by',
+                      value: meeting.deadlines.minutesPostBy,
+                      title:
+                        'Conservative internal reminder based on meeting date; statutory website-posting deadlines may depend on when approved minutes are created or received. Confirm with counsel.',
+                    },
+                  ].map(({ label, value, title }) => {
                     const badge = getDeadlineBadge(value);
                     return (
                       <div
@@ -169,7 +174,12 @@ export function MeetingDetailModal({
                         className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3"
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">{label}</div>
+                          <div
+                            className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]"
+                            title={title}
+                          >
+                            {label}
+                          </div>
                           <Badge variant={badge.variant}>{badge.label}</Badge>
                         </div>
                         <div className="mt-2 text-sm text-[var(--text-primary)]">

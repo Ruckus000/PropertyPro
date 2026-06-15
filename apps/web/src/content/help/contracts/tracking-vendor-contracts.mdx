@@ -1,13 +1,12 @@
 ---
 title: "Tracking vendor contracts"
-description: "Use the contracts module to log every vendor agreement, surface upcoming expirations, and keep statutorily required disclosures current."
+description: "Use the contracts module to log every vendor agreement and surface upcoming expirations."
 category: "contracts"
 slug: "tracking-vendor-contracts"
 roles:
   - board_member
   - board_president
   - cam
-  - site_manager
   - property_manager_admin
   - manager
   - pm_admin
@@ -31,8 +30,8 @@ tags:
 statutes:
   - "§718.111(12)(g)"
   - "§720.303"
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - assigning-vendors-to-work-orders
   - document-posting-requirements
@@ -40,7 +39,6 @@ relatedArticles:
 featured: false
 contextPaths:
   - /contracts
-  - /contracts/*
 ---
 
 The contracts module is where every active and historical vendor agreement lives — landscaping, security, elevator service, insurance, management. Florida statute requires associations to post material vendor contracts; PropertyPro keeps them indexed and surfaces expirations before they bite.
@@ -66,76 +64,43 @@ Anything time-bounded with payment terms belongs here. One-off purchases (a sing
 Click Contracts in the sidebar. The list shows every contract sorted by next-action date.
 </Step>
 
-<Step title="New contract">
-Click **New contract**. Pick the vendor from your directory or add a new one inline.
+<Step title="Add Contract">
+Click **Add Contract** to open the **New Contract** form. Type the vendor name — there is no vendor directory.
 </Step>
 
 <Step title="Enter the terms">
-- **Effective date** — when the contract starts.
-- **Expiration date** — end of the current term.
-- **Renewal type** — auto-renew, manual renewal, or fixed.
-- **Notice period** — how many days before expiration you must give notice to non-renew. This drives the alert window.
-- **Amount** — total contract value or recurring amount.
+Fill in Title*, Vendor Name*, Description, Contract Value, Start Date*, End Date, Bidding Closes At, Linked Document ID, Compliance Checklist Item ID, and the conflict-of-interest checkbox as applicable.
 </Step>
 
-<Step title="Upload the signed PDF">
-Attach the executed contract. PropertyPro stores it under Documents → Contracts automatically.
-</Step>
-
-<Step title="Mark statutorily public if applicable">
-If the contract exceeds your statutory threshold, mark it for the transparency page so it auto-publishes to the public records section.
+<Step title="Link the signed document">
+Upload the signed PDF via Documents first, then enter its numeric ID in **Linked Document ID**. The form does not accept file uploads directly.
 </Step>
 </StepByStep>
 
 ## Expiration alerts
 
-PropertyPro flags contracts as they approach their notice period:
+PropertyPro flags contracts approaching their end date in fixed windows:
 
-- **Calm** — more than 90 days to expiration
-- **Aware** — within the notice period but not yet inside the no-go window
-- **Urgent** — past the notice period; renewal or non-renewal needs an immediate decision
-- **Expired** — past expiration without recorded renewal
+- **90 days** — expires within 90 days
+- **60 days** — expires within 60 days
+- **30 days** — expires within 30 days
+- **Expired** — past the end date
 
-Work the Aware bucket every month. Once a contract goes Urgent, your options narrow — the contract may auto-renew at unfavorable terms if no action is taken.
+Alerts appear in the Expiration Alerts summary and on each contract row. Work the 90/60/30-day buckets regularly so renewals don't slip past expiration.
 
 ## Renewal workflow
 
-<StepByStep>
-<Step title="Open the expiring contract">
-The Contracts dashboard surfaces upcoming expirations.
-</Step>
-
-<Step title="Choose renew or non-renew">
-- **Renew**: enter the renewed terms (often a price change) and upload the renewal addendum.
-- **Non-renew**: send the non-renewal notice within the notice window. PropertyPro records the notice date.
-</Step>
-
-<Step title="If non-renewing, plan the transition">
-Start an RFP for replacement vendors well before expiration. Use the bulk-document feature to circulate the RFP to candidates.
-</Step>
-</StepByStep>
+To renew, edit the contract and extend the **End Date**. Link the renewal addendum via **Linked Document ID** after uploading it to Documents. For non-renewal, record the decision in board minutes — there is no separate non-renewal workflow in the app.
 
 ## RFPs and bid comparison
 
-For large contracts (management, insurance, elevator service), document the RFP process:
+For large contracts (management, insurance, elevator service), use the bid tracker on each contract record:
 
-1. Upload the RFP document.
-2. Track which vendors received it.
-3. Attach each vendor's response.
-4. Record the board's selection rationale in a meeting minute.
+1. Set **Bidding Closes At** on the contract — bid details stay hidden until that date passes (embargo).
+2. Open the contract and use the **BidTracker** panel to record vendor bids.
+3. Record the board's selection rationale in meeting minutes.
 
 This creates an audit trail satisfying both transparency requirements and any future challenge to the board's selection.
-
-## Insurance certificates
-
-A common pattern: a vendor's main contract is multi-year, but their insurance certificate renews annually. Track them separately:
-
-- **Contract record** — the underlying multi-year agreement.
-- **Insurance attachment** — replaced each year. The contract page shows the certificate's expiration so a lapsed cert is visible at a glance.
-
-<Callout type="warning" title="Lapsed insurance is high-risk">
-A vendor working on association property without current insurance leaves the association exposed. PropertyPro flags lapsed insurance prominently in the vendor directory and on the contract record — don't dismiss those alerts.
-</Callout>
 
 ## Public posting on the transparency page
 
@@ -154,6 +119,6 @@ Contracts are retained as long as the relationship is active and for the retenti
 
 ## Common pitfalls
 
-- **Auto-renewal without notice review** — many vendors set aggressive auto-renew terms. Set the notice period correctly in PropertyPro so you get the alert in time.
-- **Missing signatures** — if the signed copy isn't uploaded, the contract is unenforceable. Track the signature status on every record.
+- **Auto-renewal without notice review** — many vendors set aggressive auto-renew terms. Track end dates in PropertyPro so you get alerts in time.
+- **Missing signed copy** — link the executed document via **Linked Document ID** so the signed copy is on record.
 - **Verbal modifications** — any change to a contract must be in writing. Verbal agreements with vendors are not enforceable; route changes through a contract amendment.
