@@ -198,7 +198,7 @@ export function ComplianceCommandCenter({
           <ComplianceQueue
             items={items as ChecklistItemData[]}
             canWrite={canWrite}
-            role={designation ?? undefined}
+            designation={designation}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onUpload={(item) => setUploadItem(item)}
@@ -216,7 +216,7 @@ export function ComplianceCommandCenter({
             item={selectedItem}
             communityId={communityId}
             canWrite={canWrite}
-            role={designation ?? undefined}
+            designation={designation}
             onUpload={(item) => setUploadItem(item)}
             onLink={(item) => setLinkItem(item)}
             onView={(item) => {

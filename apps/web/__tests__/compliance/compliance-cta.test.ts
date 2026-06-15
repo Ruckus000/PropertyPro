@@ -47,14 +47,14 @@ describe('resolveComplianceCta', () => {
     });
   });
 
-  it('returns Link existing document for board users with no document', () => {
+  it('returns Link existing document for board designations with no document', () => {
     expect(resolveComplianceCta(makeItem(), true, 'board_president')).toEqual({
       label: 'Link existing document', handler: 'link',
     });
   });
 
-  it('returns Upload document for everyone else with no document', () => {
-    expect(resolveComplianceCta(makeItem(), true, 'cam')).toEqual({
+  it('returns Upload document for non-board designation (null) with no document', () => {
+    expect(resolveComplianceCta(makeItem(), true, null)).toEqual({
       label: 'Upload document', handler: 'upload',
     });
   });

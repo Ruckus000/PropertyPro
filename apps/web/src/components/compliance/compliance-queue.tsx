@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Badge } from '@propertypro/ui';
+import type { BoardDesignation } from '@propertypro/shared';
 import { sortByPriority, needsAttention, SEVEN_DAYS_MS } from '@/lib/utils/compliance-calculator';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import type { ChecklistItemData } from './compliance-checklist-item';
@@ -15,7 +16,7 @@ type SortDir = 'asc' | 'desc';
 export interface ComplianceQueueProps {
   items: ChecklistItemData[];
   canWrite: boolean;
-  role?: string;
+  designation?: BoardDesignation | null;
   selectedId: number | null;
   onSelect: (id: number) => void;
   onUpload: (item: ChecklistItemData) => void;
@@ -82,7 +83,7 @@ function FilterChip({
 }
 
 export function ComplianceQueue({
-  items, canWrite, role, selectedId, onSelect,
+  items, canWrite, designation, selectedId, onSelect,
   onUpload, onLink, onView, onMarkApplicable,
   filter, onFilterChange,
 }: ComplianceQueueProps) {
@@ -208,7 +209,7 @@ export function ComplianceQueue({
           </thead>
           <tbody>
             {filtered.map((item) => {
-              const cta = resolveComplianceCta(item, canWrite, role);
+              const cta = resolveComplianceCta(item, canWrite, designation);
               const vis = getTemplateDefaultVisibility(item.templateKey);
               return (
                 <tr
