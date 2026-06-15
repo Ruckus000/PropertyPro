@@ -7,6 +7,7 @@ import {
 } from '@propertypro/db';
 import { and, asc, eq, gt, isNull, or, sql } from '@propertypro/db/filters';
 import { DEFAULT_FAQS } from '@propertypro/shared';
+import { expandHelpViewerRoleAliases } from '@/lib/help/viewer-role';
 
 export interface VisibleFaq {
   id: number;
@@ -45,7 +46,12 @@ export function isFaqVisibleToRole(
     return false;
   }
 
-  return allowedRoles.includes(role);
+  // Match on the resolved viewer role AND its frontmatter aliases, so a FAQ
+  // tagged with a v2 alias (e.g. `pm_admin`, `manager`) stays visible to the
+  // canonical viewer role (`property_manager_admin`, `cam`). Callers pass the
+  // already-resolved viewer role (see resolveHelpViewerRoleFromMembership).
+  const viewerAliases = expandHelpViewerRoleAliases(role);
+  return viewerAliases.some((alias) => allowedRoles.includes(alias));
 }
 
 export function sortFaqs<T extends FaqLike>(items: readonly T[]): T[] {
@@ -118,9 +124,13 @@ function buildFaqRoleVisibilityWhere(role: string | null | undefined) {
     return globallyVisible;
   }
 
+  // Match the resolved viewer role AND its v2 frontmatter aliases, so this SQL
+  // path agrees with the in-memory `isFaqVisibleToRole` path. Callers pass the
+  // already-resolved viewer role (see resolveHelpViewerRoleFromMembership).
+  const aliases = expandHelpViewerRoleAliases(role);
   return or(
     globallyVisible,
-    sql`${role} = ANY(${faqs.roleVisibility})`,
+    ...aliases.map((alias) => sql`${alias} = ANY(${faqs.roleVisibility})`),
   );
 }
 

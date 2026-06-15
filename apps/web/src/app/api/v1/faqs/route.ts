@@ -25,6 +25,7 @@ import {
   listVisibleFaqsPage,
 } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { faqsCreateContract, faqsListContract } from './contract';
 
 export const GET = withErrorHandler(
@@ -35,7 +36,8 @@ export const GET = withErrorHandler(
 
     await ensureFaqsExist(communityId);
 
-    const result = await listVisibleFaqsPage(communityId, membership.role, {
+    const viewerRole = resolveHelpViewerRoleFromMembership(membership);
+    const result = await listVisibleFaqsPage(communityId, viewerRole, {
       cursor: query.cursor,
       pageSize: query.pageSize,
     });

@@ -84,6 +84,22 @@ describe('faq service helpers', () => {
     expect(visible.map((faq) => faq.id)).toEqual([1]);
   });
 
+  it('matches v2 frontmatter aliases against the resolved viewer role', () => {
+    // A FAQ tagged with the legacy alias stays visible to the canonical
+    // resolved viewer role (regression: help/search now passes the resolved
+    // role to filterFaqsForRole).
+    expect(
+      isFaqVisibleToRole({ roleVisibility: ['pm_admin'] }, 'property_manager_admin'),
+    ).toBe(true);
+    expect(
+      isFaqVisibleToRole({ roleVisibility: ['manager'] }, 'cam'),
+    ).toBe(true);
+    // Aliases do not leak across unrelated roles.
+    expect(
+      isFaqVisibleToRole({ roleVisibility: ['property_manager_admin'] }, 'tenant'),
+    ).toBe(false);
+  });
+
   it('seeds defaults when a community has no FAQs yet', async () => {
     const query = vi.fn().mockResolvedValue([]);
     const insert = vi.fn().mockResolvedValue([]);
@@ -203,6 +219,12 @@ describe('faq service helpers', () => {
                 __sql: {
                   strings: ['', ' = ANY(', ')'],
                   values: ['cam', faqsTableMock.roleVisibility],
+                },
+              },
+              {
+                __sql: {
+                  strings: ['', ' = ANY(', ')'],
+                  values: ['manager', faqsTableMock.roleVisibility],
                 },
               },
             ],

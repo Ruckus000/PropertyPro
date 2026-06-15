@@ -4,6 +4,7 @@ import { HelpSearchInput } from '@/components/help/help-search-input';
 import { HelpSearchResults } from '@/components/help/help-search-results';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { ensureFaqsExist, filterFaqsForRole } from '@/lib/services/faq-service';
 import { searchArticles } from '@/lib/services/help-article-service';
 
@@ -24,7 +25,7 @@ export default async function HelpSearchPage({
 }: HelpSearchPageProps) {
   const resolvedSearchParams = await searchParams;
   const context = await requireHelpPageContext(resolvedSearchParams, '/help/search');
-  const effectiveRole = context.membership.presetKey ?? context.membership.role;
+  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
   const query = toSearchValue(resolvedSearchParams.q).trim();
 
   if (!query) {

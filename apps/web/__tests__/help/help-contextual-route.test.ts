@@ -73,7 +73,7 @@ describe('GET /api/v1/help/contextual', () => {
     getContextualArticlesMock.mockReturnValue([ARTICLE]);
   });
 
-  it('returns contextual articles — happy path uses membership.role when no preset', async () => {
+  it('returns contextual articles — resolves a resident owner to the owner viewer role', async () => {
     const res = await GET(
       buildReq('http://localhost/api/v1/help/contextual?path=/compliance&communityId=42'),
     );
@@ -88,12 +88,14 @@ describe('GET /api/v1/help/contextual', () => {
         slug: 'compliance-basics',
       },
     ]);
-    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'resident', 8);
+    // MEMBERSHIP is role 'resident' + isUnitOwner, which resolves to 'owner'.
+    expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'owner', 8);
   });
 
-  it('prefers membership.presetKey over base role for effectiveRole', async () => {
+  it('honors a board preset on a manager-tier membership for the viewer role', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       ...MEMBERSHIP,
+      role: 'manager',
       presetKey: 'board_member',
     });
 

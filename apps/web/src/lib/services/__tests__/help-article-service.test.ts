@@ -132,4 +132,28 @@ describe('help-article-service', () => {
       expect(results).toEqual([]);
     });
   });
+
+  describe('isArticleVisibleToRole', () => {
+    it('allows public articles for any role', async () => {
+      const { isArticleVisibleToRole } = await import('../help-article-service');
+      expect(isArticleVisibleToRole({ roles: [] }, 'tenant')).toBe(true);
+    });
+
+    it('matches property_manager_admin viewers against pm_admin frontmatter', async () => {
+      const { isArticleVisibleToRole } = await import('../help-article-service');
+      expect(
+        isArticleVisibleToRole(
+          { roles: ['pm_admin'] },
+          'property_manager_admin',
+        ),
+      ).toBe(true);
+    });
+
+    it('denies when no alias matches', async () => {
+      const { isArticleVisibleToRole } = await import('../help-article-service');
+      expect(
+        isArticleVisibleToRole({ roles: ['board_member'] }, 'tenant'),
+      ).toBe(false);
+    });
+  });
 });

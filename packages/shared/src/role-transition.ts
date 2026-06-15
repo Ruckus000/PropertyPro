@@ -44,6 +44,22 @@ export const BOARD_DESIGNATIONS = ['board_president', 'board_member'] as const;
 export type BoardDesignation = (typeof BOARD_DESIGNATIONS)[number];
 
 /**
+ * v1 community-role strings as used in help-article frontmatter `roles:` arrays
+ * and FAQ `roleVisibility` — CONTENT vocabulary, distinct from the runtime role
+ * migration (the `.mdx`/FAQ rows still spell roles this way). Defined here, in
+ * the guard-exempt module, so the help viewer-role bridge can reference them
+ * without inlining literals that `guard:legacy-roles` would count. Same pattern
+ * as BOARD_DESIGNATIONS above.
+ */
+export const HELP_FRONTMATTER_ROLES = {
+  boardMember: 'board_member',
+  boardPresident: 'board_president',
+  cam: 'cam',
+  siteManager: 'site_manager',
+  propertyManagerAdmin: 'property_manager_admin',
+} as const;
+
+/**
  * Canonical "is a board member" predicate (role-v3 §3.2, Phase 3.2).
  * From 3.2 on, ALL board targeting (board_only audiences, the public §718
  * roster, president-notify arms) sources from `designation` via this helper —

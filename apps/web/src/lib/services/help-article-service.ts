@@ -5,6 +5,7 @@ import matter from 'gray-matter';
 import type { CommunityFeatures } from '@propertypro/shared';
 import { validateFrontmatter } from '@/lib/help/frontmatter-schema';
 import { expandQuery, type ExpandedQuery } from '@/lib/help/aliases';
+import { expandHelpViewerRoleAliases } from '@/lib/help/viewer-role';
 
 /**
  * Maximum article results returned by searchArticles. Help search runs in
@@ -225,7 +226,11 @@ export function isArticleVisibleToRole(
     return false;
   }
 
-  return article.roles.includes(role);
+  // Lazy import avoided — expandHelpViewerRoleAliases is re-exported from viewer-role
+  // and tested independently; help-article-service imports it at module scope.
+  return article.roles.some((articleRole) =>
+    expandHelpViewerRoleAliases(role).includes(articleRole),
+  );
 }
 
 export function isArticleAvailableForFeatures(
