@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
-import { ADMIN_ROLES } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
 import { useRecentPages } from '@/hooks/useRecentPages';
@@ -83,11 +83,6 @@ const ENTITY_ICONS: Record<string, LucideIcon> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function isAdminRole(role: AnyCommunityRole | null): boolean {
-  if (!role) return false;
-  return (ADMIN_ROLES as readonly string[]).includes(role);
-}
-
 function matchesQuery(item: ResolvedRegistryItem, query: string): boolean {
   const q = query.toLowerCase();
   if (item.label.toLowerCase().includes(q)) return true;
@@ -148,7 +143,7 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const admin = isAdminRole(role);
+  const admin = role ? isAdminRole(role) : false;
   const searchGroups = useMemo(
     () => getEnabledSearchGroups(admin, features, resourceAccess),
     [admin, features, resourceAccess],

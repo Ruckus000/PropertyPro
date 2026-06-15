@@ -40,7 +40,7 @@ import {
   ClipboardCheck,
 } from 'lucide-react';
 import type { CommunityRole, AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
-import { ADMIN_ROLES } from '@propertypro/shared';
+import { ADMIN_ROLES, ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import type { RbacAction, RbacResource } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 
@@ -52,6 +52,8 @@ const FINANCE_READ_REGISTRY_ROLES: readonly CommunityRole[] = [
   'site_manager',
   'property_manager_admin',
 ];
+
+const ADMIN_TIER_REGISTRY_BRIDGE_ROLES = new Set<string>(ADMIN_TIER_DB_ROLES);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -760,6 +762,37 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
 ] satisfies FeatureRegistryItem[];
 
 // ---------------------------------------------------------------------------
+// Role matching
+// ---------------------------------------------------------------------------
+
+/**
+ * Decide whether a membership role satisfies a registry item's `roles` gate.
+ *
+ * `item.roles` arrays hold **legacy** `CommunityRole` names (e.g.
+ * `property_manager_admin`), but the membership role passed in is an
+ * `AnyCommunityRole` — which during the hybrid period is the `user_role_v2`
+ * enum value (`resident` | `manager` | `pm_admin`). Those v2 values are NOT
+ * legacy names, so a bare `includes()` misses them and every manager/pm_admin
+ * would be treated as a resident. Bridge the two role vocabularies here:
+ *
+ * - Exact legacy match still wins (unchanged behavior for legacy memberships).
+ * - Transition admin-tier memberships (`manager`/`pm_admin` and role-v3
+ *   manager roots) satisfy admin-gated legacy entries whose `roles` include at
+ *   least one `ADMIN_ROLES` member. Legacy admin roles still require exact
+ *   membership so future role-specific gates stay deny-by-default.
+ */
+export function roleMatchesRegistryItem(
+  role: AnyCommunityRole | TransitionRole,
+  itemRoles: 'all' | readonly CommunityRole[],
+): boolean {
+  if (itemRoles === 'all') return true;
+  const names = itemRoles as readonly string[];
+  if (names.includes(role)) return true;
+  if (!ADMIN_TIER_REGISTRY_BRIDGE_ROLES.has(role)) return false;
+  return names.some((r) => (ADMIN_ROLES as readonly string[]).includes(r));
+}
+
+// ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
@@ -779,7 +812,7 @@ export function useFilteredRegistry(
         // Role check
         if (item.roles !== 'all') {
           if (!role) return false;
-          if (!(item.roles as readonly string[]).includes(role)) return false;
+          if (!roleMatchesRegistryItem(role, item.roles)) return false;
         }
         // Feature flag check
         if (item.featureFlag && features) {
