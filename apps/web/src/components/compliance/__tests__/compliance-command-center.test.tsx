@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { ComplianceCommandCenter } from '../compliance-command-center';
 
 // Mutable return value so individual tests can override it.
@@ -95,7 +96,7 @@ beforeEach(() => {
 describe('ComplianceCommandCenter', () => {
   it('renders the page header with breadcrumb and title', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Compliance' })).toBeInTheDocument();
     expect(screen.getByLabelText('Breadcrumb')).toBeInTheDocument();
@@ -103,7 +104,7 @@ describe('ComplianceCommandCenter', () => {
 
   it('shows all four KPI labels', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     // Use getAllByText since KPI label text may also appear in the attention banner copy
     expect(screen.getAllByText(/readiness/i).length).toBeGreaterThanOrEqual(1);
@@ -114,7 +115,7 @@ describe('ComplianceCommandCenter', () => {
 
   it('shows the CAM/Board view toggle for cam role', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'false');
@@ -122,17 +123,45 @@ describe('ComplianceCommandCenter', () => {
 
   it('hides the view toggle for owner role', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="owner" canWrite={false} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={false} designation={null} canWrite={false} />,
     );
     expect(screen.queryByRole('button', { name: 'CAM view' })).not.toBeInTheDocument();
   });
 
   it('shows the view toggle for the new manager role', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="manager" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('defaults to board view and shows the toggle for a board president', () => {
+    window.localStorage.clear();
+    renderWithProviders(
+      <ComplianceCommandCenter
+        communityId={1}
+        isAdmin={true}
+        designation={BOARD_DESIGNATIONS[0]}
+        canWrite={true}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('defaults to board view and shows the toggle for a board member', () => {
+    window.localStorage.clear();
+    renderWithProviders(
+      <ComplianceCommandCenter
+        communityId={1}
+        isAdmin={false}
+        designation={BOARD_DESIGNATIONS[1]}
+        canWrite={true}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'CAM view' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('hides the attention banner when no items need attention', () => {
@@ -149,7 +178,7 @@ describe('ComplianceCommandCenter', () => {
       error: null,
     };
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
     );
     expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
   });
@@ -157,7 +186,7 @@ describe('ComplianceCommandCenter', () => {
   it('renders the loading indicator when data is loading', () => {
     mockChecklistReturn = { data: undefined, isLoading: true, error: null };
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
     );
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
@@ -165,7 +194,7 @@ describe('ComplianceCommandCenter', () => {
   it('renders the error message when the checklist fails to load', () => {
     mockChecklistReturn = { data: undefined, isLoading: false, error: new Error('boom') };
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
     );
     expect(
       screen.getByText("We couldn't load compliance records. Please try again."),
@@ -176,7 +205,7 @@ describe('ComplianceCommandCenter', () => {
   it('auto-selects the highest-priority item on initial render', () => {
     // sortByPriority puts overdue (id=2, "Insurance") before satisfied (id=1, "Declaration").
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     // The detail panel should show the selected item's title.
     // "Insurance" appears multiple times (table row + panel header), so use getAllByText.
@@ -186,7 +215,7 @@ describe('ComplianceCommandCenter', () => {
   it('updates the detail panel when a row CTA is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     // "Declaration" (satisfied, id=1) has a "View document" CTA in the queue row.
     // Clicking it should select that item and show its title in the detail panel.
@@ -199,7 +228,7 @@ describe('ComplianceCommandCenter', () => {
 
   it('renders the detail panel with the selected item title', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     // The detail panel's "Selected record" heading and the item title are both visible.
     expect(screen.getByText('Selected record')).toBeInTheDocument();
@@ -210,7 +239,7 @@ describe('ComplianceCommandCenter', () => {
   it('opens the upload modal for the selected item when "Upload record" is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     // Auto-selected item is the overdue "Insurance" record (id=2).
     await user.click(screen.getByRole('button', { name: 'Upload record' }));
@@ -221,14 +250,14 @@ describe('ComplianceCommandCenter', () => {
 
   it('hides the "Upload record" button when canWrite is false', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={false} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
     );
     expect(screen.queryByRole('button', { name: 'Upload record' })).not.toBeInTheDocument();
   });
 
   it('does not render the unimplemented "Export readiness PDF" button', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(
       screen.queryByRole('button', { name: /Export readiness PDF/i }),
@@ -239,7 +268,7 @@ describe('ComplianceCommandCenter', () => {
     // Default fixture: "Insurance" (overdue, id=2) is auto-selected as the top-priority item.
     // Clicking the "Satisfied" filter chip excludes it (it is 'overdue', not 'satisfied').
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     // Activate the "Satisfied" filter — hides the auto-selected "Insurance" item.
     fireEvent.click(screen.getByRole('button', { name: /Satisfied/i }));
@@ -257,14 +286,14 @@ describe('ComplianceCommandCenter — view persistence', () => {
   it('reads view preference from localStorage on mount', () => {
     window.localStorage.setItem('compliance.audienceView.1', 'board');
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(screen.getByRole('button', { name: 'Board view' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('writes view preference to localStorage on toggle', () => {
     renderWithProviders(
-      <ComplianceCommandCenter communityId={1} role="cam" canWrite={true} />,
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Board view' }));
     expect(window.localStorage.getItem('compliance.audienceView.1')).toBe('board');
