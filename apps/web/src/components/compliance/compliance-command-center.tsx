@@ -143,8 +143,17 @@ export function ComplianceCommandCenter({
           >Board view</button>
         </div>
       )}
-      {canWrite && <Button variant="secondary">Upload record</Button>}
-      <Button variant="primary">Export readiness PDF</Button>
+      {canWrite && (
+        <Button
+          variant="secondary"
+          disabled={selectedItem === null}
+          onClick={() => {
+            if (selectedItem) setUploadItem(selectedItem);
+          }}
+        >
+          Upload record
+        </Button>
+      )}
     </div>
   );
 
