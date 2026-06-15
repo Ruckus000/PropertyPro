@@ -35,7 +35,7 @@ import {
 } from '@propertypro/db/seed/seed-community';
 // AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
-import { getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
+import { BOARD_DESIGNATIONS, getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
 import { runSeedSafetyChecks } from './lib/seed-safety';
@@ -51,31 +51,36 @@ interface DemoSeedOptions {
   syncAuthUsers?: boolean;
 }
 
-type CanonicalRole = SeedUserConfig['role'];
+type SeedRole = SeedUserConfig['role'];
+type SeedDesignation = SeedUserConfig['designation'];
 type DemoCommunitySlug = (typeof DEMO_COMMUNITIES)[number]['slug'];
 
 interface CommunityRoleAssignment {
   email: string;
-  role: CanonicalRole;
+  role: SeedRole;
+  designation?: SeedDesignation;
 }
 
 const DEBUG_DEMO_SEED = process.env.DEBUG_DEMO_SEED === '1';
 
+// v3 end-state demo vocabulary: board members + cam + site_manager + pm_admin
+// all collapse to the uniform `property_manager` role; board members carry a
+// `designation` marker. Same PEOPLE as before so demos look identical.
 const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> = {
   'sunset-condos': [
-    { email: 'board.president@sunset.local', role: 'board_president' },
-    { email: 'board.member@sunset.local', role: 'board_member' },
+    { email: 'board.president@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[0] },
+    { email: 'board.member@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[1] },
     { email: 'owner.one@sunset.local', role: 'owner' },
     { email: 'tenant.one@sunset.local', role: 'tenant' },
-    { email: 'cam.one@sunset.local', role: 'cam' },
-    { email: 'pm.admin@sunset.local', role: 'property_manager_admin' },
+    { email: 'cam.one@sunset.local', role: 'property_manager' },
+    { email: 'pm.admin@sunset.local', role: 'property_manager' },
   ],
   'palm-shores-hoa': [
-    { email: 'board.president@sunset.local', role: 'board_president' },
+    { email: 'board.president@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[0] },
   ],
   'sunset-ridge-apartments': [
-    { email: 'site.manager@sunsetridge.local', role: 'site_manager' },
-    { email: 'pm.admin@sunset.local', role: 'property_manager_admin' },
+    { email: 'site.manager@sunsetridge.local', role: 'property_manager' },
+    { email: 'pm.admin@sunset.local', role: 'property_manager' },
     { email: 'tenant.apt101@sunsetridge.local', role: 'tenant' },
     { email: 'tenant.apt102@sunsetridge.local', role: 'tenant' },
     { email: 'tenant.apt201@sunsetridge.local', role: 'tenant' },
@@ -94,11 +99,11 @@ const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> 
   ],
 };
 
-const CROSS_COMMUNITY_ASSIGNMENTS: Array<{ slug: DemoCommunitySlug; email: string; role: CanonicalRole }> = [
+const CROSS_COMMUNITY_ASSIGNMENTS: Array<{ slug: DemoCommunitySlug; email: string; role: SeedRole; designation?: SeedDesignation }> = [
   { slug: 'palm-shores-hoa', email: 'owner.one@sunset.local', role: 'owner' },
   // Tenants are excluded: a tenant belongs to exactly one community.
-  { slug: 'palm-shores-hoa', email: 'cam.one@sunset.local', role: 'cam' },
-  { slug: 'palm-shores-hoa', email: 'pm.admin@sunset.local', role: 'property_manager_admin' },
+  { slug: 'palm-shores-hoa', email: 'cam.one@sunset.local', role: 'property_manager' },
+  { slug: 'palm-shores-hoa', email: 'pm.admin@sunset.local', role: 'property_manager' },
 ];
 
 const GLOBAL_PREF_USER_EMAILS = [
@@ -223,6 +228,7 @@ function buildSeedUsers(assignments: CommunityRoleAssignment[]): SeedUserConfig[
       fullName: demoUser.fullName,
       phone: demoUser.phone,
       role: assignment.role,
+      designation: assignment.designation,
     };
   });
 }
@@ -1627,12 +1633,13 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     DEMO_COMMUNITIES.map((c) => [c.slug, c.communityType]),
   ) as Record<DemoCommunitySlug, CommunityType>;
 
-  const crossBySlug = new Map<DemoCommunitySlug, Array<{ communityId: number; userId: string; role: CanonicalRole }>>();
+  const crossBySlug = new Map<DemoCommunitySlug, Array<{ communityId: number; userId: string; role: SeedRole; designation?: SeedDesignation }>>();
   for (const assignment of CROSS_COMMUNITY_ASSIGNMENTS) {
     const entry = {
       communityId: communityIdsBySlug[assignment.slug]!,
       userId: resolveUserId(userIdsByEmail, assignment.email),
       role: assignment.role,
+      designation: assignment.designation,
     };
     const existing = crossBySlug.get(assignment.slug) ?? [];
     existing.push(entry);

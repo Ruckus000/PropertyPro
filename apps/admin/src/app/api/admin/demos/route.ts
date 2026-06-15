@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { captureException, captureMessage } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { ALLOWED_FONTS } from '@propertypro/theme';
-import { isValidHexColor, type CommunityBranding, isDemoTemplateId, getStrategyById, getTemplateById } from '@propertypro/shared';
+import { BOARD_DESIGNATIONS, isValidHexColor, type CommunityBranding, isDemoTemplateId, getStrategyById, getTemplateById } from '@propertypro/shared';
 import {
   generateDemoToken,
   encryptDemoTokenSecret,
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       seedConfig,
       [
         { email: residentEmail, fullName: 'Demo Resident', role: 'owner' },
-        { email: boardEmail, fullName: 'Demo Board Member', role: 'board_member' },
+        { email: boardEmail, fullName: 'Demo Board Member', role: 'property_manager', designation: BOARD_DESIGNATIONS[1] },
       ],
     );
   } catch (err) {

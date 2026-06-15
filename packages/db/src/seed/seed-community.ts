@@ -17,14 +17,13 @@ import {
 import { createAdminClient } from '../supabase/admin';
 import { createUnscopedClient } from '../unsafe';
 import {
+  BOARD_DESIGNATIONS,
   getComplianceTemplate,
   getDefaultDocumentCategories,
-  getPresetPermissions,
-  hasBoardDesignation,
-  isPresetKey,
+  isBoardPresident,
+  type BoardDesignation,
   type CommunityBranding,
   type CommunityType,
-  type PresetKey,
   type SeedHints,
 } from '@propertypro/shared';
 
@@ -50,7 +49,10 @@ export interface SeedUserConfig {
   email: string;
   fullName: string;
   phone?: string;
-  role: 'owner' | 'tenant' | 'board_member' | 'board_president' | 'cam' | 'site_manager' | 'property_manager_admin';
+  /** v3 seed input vocabulary — 'owner'/'tenant' resolve to resident; 'property_manager' is the uniform manager role. */
+  role: 'owner' | 'tenant' | 'property_manager';
+  /** Optional board marker (role-v3 §3.2). BOARD_DESIGNATIONS[0]=president, [1]=member. */
+  designation?: BoardDesignation;
 }
 
 export interface SeedCommunityResult {
@@ -58,7 +60,7 @@ export interface SeedCommunityResult {
   users: Array<{ email: string; userId: string; role: string }>;
 }
 
-type CanonicalRole = SeedUserConfig['role'];
+type SeedRole = SeedUserConfig['role'];
 
 type WizardType = 'condo' | 'apartment';
 
@@ -241,39 +243,45 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DEMO_TRIAL_DURATION_MS = 14 * DAY_MS;
 const DEMO_GRACE_DURATION_MS = 7 * DAY_MS;
 
-interface V2RoleMapping {
-  role: 'resident' | 'manager' | 'pm_admin';
+/**
+ * v3 end-state storage mapping (role-simplification §3.4).
+ *
+ * Seeds emit the END-STATE shape: `property_manager` (uniform) + `designation`
+ * (board marker) + `resident` (isUnitOwner). No `presetKey`, no stored
+ * permissions — seeded managers resolve perms via checkPermissionV2's
+ * matrix-fallback (full operational). This INTENTIONALLY diverges from prod,
+ * where board members retain preset-restricted perms until a later widening
+ * migration. Divergence accepted per spec §3.4.
+ */
+interface SeedStorageMapping {
+  role: 'resident' | 'property_manager';
   isUnitOwner: boolean;
-  presetKey: PresetKey | null;
+  designation: BoardDesignation | null;
   displayTitle: string;
 }
 
-function mapCanonicalToV2(canonical: CanonicalRole): V2RoleMapping {
-  switch (canonical) {
-    case 'owner':
-      return { role: 'resident', isUnitOwner: true, presetKey: null, displayTitle: 'Owner' };
-    case 'tenant':
-      return { role: 'resident', isUnitOwner: false, presetKey: null, displayTitle: 'Tenant' };
-    case 'board_president':
-      return { role: 'manager', isUnitOwner: false, presetKey: 'board_president', displayTitle: 'Board President' };
-    case 'board_member':
-      return { role: 'manager', isUnitOwner: false, presetKey: 'board_member', displayTitle: 'Board Member' };
-    case 'cam':
-      return { role: 'manager', isUnitOwner: false, presetKey: 'cam', displayTitle: 'Community Association Manager' };
-    case 'site_manager':
-      return { role: 'manager', isUnitOwner: false, presetKey: 'site_manager', displayTitle: 'Site Manager' };
-    case 'property_manager_admin':
-      return { role: 'pm_admin', isUnitOwner: false, presetKey: null, displayTitle: 'Property Manager Admin' };
+function mapSeedRoleToStorage(cfg: {
+  role: SeedRole;
+  designation?: BoardDesignation;
+}): SeedStorageMapping {
+  if (cfg.role === 'owner') {
+    return { role: 'resident', isUnitOwner: true, designation: null, displayTitle: 'Owner' };
   }
+  if (cfg.role === 'tenant') {
+    return { role: 'resident', isUnitOwner: false, designation: null, displayTitle: 'Tenant' };
+  }
+  // role === 'property_manager'
+  const designation = cfg.designation ?? null;
+  const displayTitle = designation
+    ? (isBoardPresident(designation) ? 'Board President' : 'Board Member')
+    : 'Property Manager';
+  return { role: 'property_manager', isUnitOwner: false, designation, displayTitle };
 }
 
-const ANNOUNCEMENT_AUTHOR_ROLES = new Set<CanonicalRole>([
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-]);
+/** Announcement authors are the seeded managers (property_manager rows). */
+function isAnnouncementAuthorRole(role: SeedRole): boolean {
+  return role === 'property_manager';
+}
 
 const maxStepsByWizardType: Record<WizardType, number> = {
   condo: 2,
@@ -779,8 +787,13 @@ async function findExistingAuthUserByEmail(email: string): Promise<ExistingAuthU
 }
 
 export async function seedRoles(
-  assignments: Array<{ communityId: number; userId: string; role: CanonicalRole }>,
-  communityType: CommunityType,
+  assignments: Array<{
+    communityId: number;
+    userId: string;
+    role: SeedRole;
+    designation?: BoardDesignation;
+  }>,
+  _communityType: CommunityType,
 ): Promise<void> {
   if (assignments.length === 0) {
     return;
@@ -788,14 +801,10 @@ export async function seedRoles(
 
   const values = sql.join(
     assignments.map((a) => {
-      const m = mapCanonicalToV2(a.role);
-      const perms =
-        m.presetKey && isPresetKey(m.presetKey)
-          ? JSON.stringify(getPresetPermissions(m.presetKey, communityType))
-          : null;
-      // Phase 3.2 writer lockstep: a board presetKey always carries the identical designation.
-      const designation = m.presetKey && hasBoardDesignation(m.presetKey) ? m.presetKey : null;
-      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, ${perms}::jsonb, ${m.presetKey}, ${designation}, ${m.displayTitle})`;
+      const m = mapSeedRoleToStorage({ role: a.role, designation: a.designation });
+      // v3 end-state: no preset_key, no stored permissions — seeded managers
+      // resolve perms via checkPermissionV2's matrix-fallback (spec §3.4).
+      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, NULL::jsonb, NULL, ${m.designation}, ${m.displayTitle})`;
     }),
     sql`, `,
   );
@@ -1690,11 +1699,15 @@ export async function seedCommunity(
     seededUsers.push(seededUser);
   }
 
+  const designationByEmail = new Map(
+    usersToSeed.map((user) => [user.email, user.designation]),
+  );
   await seedRoles(
     seededUsers.map((entry) => ({
       communityId,
       userId: entry.userId,
-      role: entry.role as CanonicalRole,
+      role: entry.role as SeedRole,
+      designation: designationByEmail.get(entry.email),
     })),
     config.communityType,
   );
@@ -1947,7 +1960,7 @@ export async function seedCommunity(
     }
   }
 
-  const announcementAuthor = usersToSeed.find((user) => ANNOUNCEMENT_AUTHOR_ROLES.has(user.role)) ?? usersToSeed[0];
+  const announcementAuthor = usersToSeed.find((user) => isAnnouncementAuthorRole(user.role)) ?? usersToSeed[0];
   if (!announcementAuthor) {
     throw new Error(`Unable to resolve announcement author for ${config.slug}`);
   }
