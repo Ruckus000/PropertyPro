@@ -4,8 +4,6 @@ description: "Track lease agreements for apartment communities — start, renewa
 category: "apartment"
 slug: "managing-leases"
 roles:
-  - board_member
-  - cam
   - site_manager
   - property_manager_admin
   - manager
@@ -27,8 +25,8 @@ tags:
   - apartment
   - admin
   - florida
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 featureGates:
   - hasLeaseTracking
 relatedArticles:
@@ -36,7 +34,6 @@ relatedArticles:
 featured: false
 contextPaths:
   - /dashboard/leases
-  - /dashboard/leases/*
 ---
 
 Lease management is an apartment-specific feature. Condos and HOAs don't typically track leases at the association level.
@@ -49,12 +46,10 @@ Lease tracking is available in communities configured as apartments. Condos and 
 
 For each unit that's under a lease:
 
-- **Current tenant(s)** — who signed the lease
-- **Lease term** — start date, end date, current phase (active / expiring / expired)
-- **Rent** — monthly amount, due date
-- **Security deposit** — amount held, date received
-- **Signed lease PDF** — the actual agreement
-- **Status** — active / pending / terminated / renewal-pending
+- **Current tenant** — one resident per lease record
+- **Lease term** — start date, end date (optional for month-to-month)
+- **Rent** — monthly amount
+- **Status** — Active, Expiring Soon (within 60 days), Expired, Renewed, Terminated, or Vacant (no active lease on the unit)
 
 ## Creating a lease record
 
@@ -64,49 +59,50 @@ Click Leases in the sidebar, then **New lease**.
 </Step>
 
 <Step title="Pick the unit">
-Search for the unit by number. Units already under lease will show a warning — ending the prior lease first keeps history clean.
+Select the unit from the dropdown.
 </Step>
 
-<Step title="Add tenant(s)">
-Add every person signing the lease. If they already have a PropertyPro account, search by name. If not, invite them first.
+<Step title="Select the resident">
+Select the resident (one per lease record). If they aren't listed, add them on the Residents page first.
 </Step>
 
 <Step title="Enter lease details">
-Start date, end date, monthly rent, deposit amount. Attach the signed lease PDF.
+Fill in Start Date, End Date (optional — leave blank for month-to-month), Monthly Rent, and Notes.
 </Step>
 
 <Step title="Save">
-The lease becomes active as of the start date. Tenants see it on their dashboard.
+The lease becomes active as of the start date.
 </Step>
 </StepByStep>
 
 ## Lease lifecycle
 
-Leases move through these phases automatically:
+Leases use these statuses:
 
-- **Pending** — signed but start date is in the future.
-- **Active** — currently in term.
-- **Expiring** — within 60 days of the end date (triggers renewal reminders).
-- **Expired** — past end date; manually confirm the renewal or termination.
-- **Terminated** — early termination recorded.
+- **Active** — currently in term
+- **Expiring Soon** — within 60 days of the end date
+- **Expired** — past end date
+- **Renewed** — replaced by a renewal lease
+- **Terminated** — early termination recorded
+- **Vacant** — unit has no active lease (shown on the Leases list)
 
 ## Renewals
 
 <StepByStep>
 <Step title="Open the expiring lease">
-Leases entering the expiring phase appear in a dashboard card.
+Leases entering the expiring phase appear in a dashboard card or the Expiring Soon filter.
 </Step>
 
-<Step title="Start the renewal">
-Click **Start renewal**. The new lease inherits tenant, unit, and prior terms. Adjust dates, rent, and deposit as agreed.
+<Step title="Click Renew">
+Click **Renew** on the lease row to open the **Renew Lease** dialog.
 </Step>
 
-<Step title="Send for signature">
-Use the e-sign flow to send the renewed lease to tenants. Once signed, the new lease becomes pending and the old one marks renewed.
+<Step title="Enter new terms">
+Set New Start Date, New End Date (optional — leave blank for month-to-month), and Monthly Rent.
 </Step>
 
-<Step title="Verify the handoff">
-On the start date of the new lease, it auto-activates and the old one marks closed.
+<Step title="Confirm">
+Click **Renew Lease**. The current lease is marked **Renewed** immediately and a new lease record is created.
 </Step>
 </StepByStep>
 
@@ -116,17 +112,13 @@ Terminations can happen mid-lease for various reasons (mutual agreement, breach,
 
 1. Open the active lease.
 2. Click **Terminate**.
-3. Enter the termination date, reason, and any remaining charges or refunds.
-4. Attach any termination agreement.
+3. Enter the termination date and notes.
 
 The tenant's access to the community ends on the termination date (or the move-out date, whichever you prefer).
 
-## Staff vs. resident views
+## Staff view
 
-- **Staff** see every lease for the community in the Leases list.
-- **Residents** see only their own lease on their dashboard.
-
-Lease data is sensitive — rent amounts, deposit holdings, and legal agreements — and access is gated accordingly.
+Staff see every lease for the community in the Leases list. Lease data is sensitive — rent amounts and legal agreements — and access is gated accordingly.
 
 ## Compliance
 
@@ -136,6 +128,5 @@ Florida Statutes Chapter 83 governs residential leases. PropertyPro records the 
 
 ## Common patterns
 
-- **Month-to-month after expiration** — record by setting a specific end date or mark as month-to-month in the status notes.
-- **Multi-tenant leases** — every signer is listed. Which tenant pays which part of the rent depends on how your community bills; confirm billing assignment with the lease's rent breakdown.
+- **Month-to-month after expiration** — leave End Date blank; the lease appears in the Month-to-Month filter.
 - **Rent escalations** — record the new rent on renewal. Until the renewed lease is active, the prior rent applies.

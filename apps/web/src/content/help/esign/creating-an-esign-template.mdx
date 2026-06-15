@@ -27,8 +27,8 @@ featureGates:
 tags:
   - esign
   - admin
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - sending-an-esign-submission
   - signing-documents-electronically
@@ -57,20 +57,16 @@ If you're only sending a document once, skip the template and go straight to a o
 Click E-Sign in the sidebar, then Templates.
 </Step>
 
-<Step title="New template">
-Click **New template**. Give it a clear name ("Annual Insurance Disclosure 2026") and upload the base PDF.
+<Step title="Create Template">
+Click **Create Template**. Give it a clear name ("Annual Insurance Disclosure 2026") and upload the base PDF.
 </Step>
 
 <Step title="Place fields">
-For each place the signer needs to act, drop a field: **Signature**, **Initials**, **Date**, **Name**, or **Custom text**. Drag to position.
+For each place the signer needs to act, drop a field: **Signature**, **Initials**, **Date**, **Text**, or **Checkbox**. Drag to position.
 </Step>
 
 <Step title="Assign fields to signers">
 Each field belongs to a specific signer role — "Owner", "Tenant", "Board President." When you send a submission, each role gets mapped to a real person.
-</Step>
-
-<Step title="Set signing order">
-If signers must go in a specific order (tenant then owner, for example), enable sequential mode. Otherwise everyone signs in parallel.
 </Step>
 
 <Step title="Save and test">
@@ -82,14 +78,14 @@ Save the template, then send a test submission to yourself to verify the layout 
 
 - **Size fields generously** — signers draw on touch screens; too-small fields are frustrating.
 - **Use typed names for readability** — a Name field beside a Signature field makes the final document easier to read.
-- **Date fields auto-fill** — use Today's date type to avoid confusion.
-- **Attach supporting docs** — if the signer needs to read an appendix before signing, include it in the template.
+- **Date fields auto-fill** — when a signer taps a Date field, today's date fills in automatically.
+- **One PDF per template** — merge appendices into the base PDF before uploading; templates don't support separate supporting-doc attachments.
 
 ## Updating a template
 
-When you update a template, prior submissions that used the old version are unaffected — they keep the document as signed. New submissions use the new version automatically.
+Templates can't be edited after creation. The **Edit Fields** button on a template opens a blank new-template builder, not the existing layout.
 
-If the template changes materially (not a typo), rename the new version (e.g., "Annual Insurance Disclosure 2027") and archive the old one rather than editing in place. That way historical submissions are clearly tied to the version they referenced.
+To change a template, clone it, adjust the copy, and archive the original. Prior submissions that used the old version are unaffected — they keep the document as signed.
 
 ## Cloning
 

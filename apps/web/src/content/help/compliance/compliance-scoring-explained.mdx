@@ -28,8 +28,8 @@ tags:
   - compliance
   - admin
   - florida
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 statutes:
   - "§718.111(12)(g)"
   - "§720.303"
@@ -53,7 +53,7 @@ Every applicable statutory requirement counts equally:
 
 - **Satisfied** = full credit.
 - **Unsatisfied** = no credit (but no penalty beyond that).
-- **Overdue** = no credit **and** contributes to the urgency meter at the top of the dashboard.
+- **Overdue** = no credit **and** counts toward the **Overdue** KPI card at the top of the dashboard.
 - **Not applicable** = excluded from the score entirely.
 
 The score is `satisfied ÷ (satisfied + unsatisfied + overdue)`, displayed as a whole-number percentage. Posting late still counts as Satisfied, but the record's timing shows in the audit history so late posting patterns are visible to the board.
@@ -66,7 +66,7 @@ The fastest score improvement comes from clearing Overdue rows. Each one flips t
 </Step>
 
 <Step title="Link a document to each requirement">
-Each requirement names the record it needs (e.g. "Annual Budget" or meeting minutes). Open the requirement on the Compliance dashboard and use **Link document** (or **Upload**) to attach the matching file — that link, not the document's library category, is what satisfies the requirement.
+Each requirement names the record it needs (e.g. "Annual Budget" or meeting minutes). Open the requirement on the Compliance dashboard and use **Link Existing** (or **Upload**) to attach the matching file — that link, not the document's library category, is what satisfies the requirement.
 </Step>
 
 <Step title="Mark applicability correctly">
@@ -74,22 +74,20 @@ If your community truly doesn't meet the threshold for a requirement, mark it No
 </Step>
 
 <Step title="Keep meeting records current">
-Meeting notices and minutes have tight windows (14 days before, 30 days after). Posting them on time prevents the drift that slowly pulls the score down.
+Owner meeting notices must be posted 14 days before the meeting; board meeting notices require 48 hours. Approved meeting minutes are tracked on a rolling 12-month retention window. Keeping these current prevents the drift that slowly pulls the score down.
 </Step>
 </StepByStep>
 
 ## Timing thresholds
 
-The urgency meter on the dashboard escalates color based on the time until the deadline:
+When items need attention, a warning banner appears at the top of the dashboard. Below it, four KPI cards summarize status:
 
-- **Calm** (more than 30 days out)
-- **Aware** (8 – 30 days)
-- **Urgent** (1 – 7 days)
-- **Critical** (overdue)
+- **Readiness** — your compliance percentage and how many items are satisfied.
+- **Posting windows** — count of items due inside 7 days.
+- **Overdue** — items past their deadline.
+- **Needs board action** — items waiting on board approval or review.
 
-<Callout type="tip" title="Aim for Calm">
-If every open requirement is Calm, your posting cadence is healthy. Ambers and reds mean you're working against the clock — shift them earlier in your weekly review.
-</Callout>
+Use the **Action needed** filter on the requirements queue to focus on rows that need work soon. Items with more than 7 days of runway are in the comfort zone; once a deadline falls inside 7 days, the row appears under **Action needed** and increments the **Posting windows** KPI.
 
 ## What the score does not cover
 
@@ -97,7 +95,7 @@ If every open requirement is Calm, your posting cadence is healthy. Ambers and r
 - Architectural review outcomes (tracked separately in Violations/ARC).
 - Member communication frequency.
 
-The score is narrow by design. A 100% score means you're posting required records on time — which is necessary but not sufficient for a well-run association.
+The score is narrow by design. A 100% score means every applicable requirement has a record linked — late postings still earn credit. That is necessary but not sufficient for a well-run association.
 
 ## Sharing with the board
 

@@ -1,6 +1,6 @@
 ---
 title: "Reporting and managing violations"
-description: "Log a new violation, triage the inbox, and move notices through cure windows to resolution."
+description: "Log a new violation, triage the inbox, and move notices through to resolution."
 category: "violations"
 slug: "reporting-and-managing-violations"
 roles:
@@ -9,8 +9,6 @@ roles:
   - cam
   - site_manager
   - property_manager_admin
-  - manager
-  - pm_admin
 keywords:
   - violation
   - notice
@@ -20,7 +18,6 @@ keywords:
   - enforcement
   - report
   - inbox
-  - cure window
   - nuisance
   - rule violation
 featureGates:
@@ -29,8 +26,8 @@ tags:
   - violations
   - admin
   - florida
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 statutes:
   - "HB 1203"
 relatedArticles:
@@ -42,23 +39,23 @@ contextPaths:
   - /violations/*
 ---
 
-The violations workflow in PropertyPro is the record-keeping surface for rule enforcement: log the issue, notice the resident, track the cure window, and capture the outcome.
+The violations workflow in PropertyPro is the record-keeping surface for rule enforcement: log the issue, notice the resident, and capture the outcome.
 
 <Callout type="florida-statute" title="HB 1203 requires specific written reasons">
-Florida's HB 1203 (2024) tightened the content of violation notices. Every notice must cite the specific rule and reason. PropertyPro prompts you for these fields when you create the notice.
+Florida's HB 1203 (2024) tightened the content of violation notices. Every notice must cite the specific rule and reason. When you create a violation, choose a category and write a description that cites the specific rule — PropertyPro does not enforce this automatically.
 </Callout>
 
 ## The inbox
 
-Open `/violations` to see every open violation for your community. Columns cover:
+Open `/violations` to see violations for your community. Filter by status and severity, or by date range. Each card shows:
 
-- Unit and resident
-- Alleged violation (summary)
-- Status — Open / Cure Period / Fined / Hearing / Closed
-- Cure date
-- Who's handling it
+- Unit
+- Category
+- Severity
+- Status
+- Date
 
-Sort by cure date to see what's coming up this week.
+Status values are **Reported**, **Noticed**, **Hearing Scheduled**, **Fined**, **Resolved**, and **Dismissed**.
 
 ## Creating a new violation
 
@@ -68,37 +65,34 @@ Click Report Violation from the sidebar, or open the Violations page and click *
 </Step>
 
 <Step title="Identify the unit">
-Search by unit number or resident name. The selected unit populates ownership and contact info automatically.
+Search by unit number. The selected unit populates ownership info automatically.
 </Step>
 
-<Step title="Cite the rule">
-Pick the specific rule or covenant violated from the dropdown, or describe it in free text. This is required per HB 1203.
+<Step title="Choose category and describe the violation">
+Pick a category from the dropdown (Noise, Parking, Unauthorized Modification, etc.) and write a description of what happened, when, and where. Cite the specific rule or covenant in the description — this is your responsibility per HB 1203. Attach photos — they're your best evidence if the resident contests.
 </Step>
 
-<Step title="Describe the violation">
-What happened, when, and where. Attach photos — they're your best evidence if the resident contests.
-</Step>
-
-<Step title="Set the cure window">
-Per your bylaws (usually 14 days). The clock starts when the notice is delivered.
+<Step title="Submit the record">
+Creating the violation sets its status to **Reported**. The resident is not notified yet.
 </Step>
 
 <Step title="Send the notice">
-The resident receives an email and an in-app notification. The notice and its evidence are saved to the violation record.
+Open the violation from the inbox and click **Send Violation Notice**. The resident receives an in-app notification. The notice and its evidence are saved to the violation record.
 </Step>
 </StepByStep>
 
-## Tracking the cure window
+## Tracking progress
 
-Each violation shows its deadline prominently. Before the window closes:
+Each violation shows key dates on its Timeline — Reported, Notice Sent, Hearing Date (if scheduled). Correction deadlines are not tracked in PropertyPro — manage those per your bylaws and paper notices.
 
-- **Resident cures** → mark as Cured and close the record.
-- **Resident comments** → respond on the timeline; the window can be extended if you agree.
-- **Resident ignores** → at the deadline, decide: fine, schedule hearing, or escalate.
+Before deciding next steps:
+
+- **Resident cures** → mark as **Resolved**.
+- **Resident ignores** → at your deadline, decide: fine, schedule hearing, or dismiss.
 
 ## Fining
 
-Fines are applied via a separate notice on the same violation record. Enter the amount (per your bylaws — flat or per-day) and the start date. The fine appears on the resident's Payments page at the next billing cycle.
+From the violation detail view, click **Impose Fine**. Enter the amount and due date. The fine posts a ledger entry immediately and appears on the resident's unit ledger in Payments. Status changes to **Fined**.
 
 <Callout type="warning" title="Stick to the bylaws">
 PropertyPro does not enforce fine caps or cooldowns automatically. Your bylaws are the authoritative source for how much, how often, and under what procedure you may fine. If you're unsure, consult your association attorney before sending.
@@ -106,17 +100,15 @@ PropertyPro does not enforce fine caps or cooldowns automatically. Your bylaws a
 
 ## Hearings
 
-For contested violations, schedule a hearing from the violation record. A hearing notice goes to the resident (typically 14 days in advance per bylaws) and is added as a calendar event. After the hearing, record the outcome on the same record — Affirmed / Dismissed / Modified.
+For contested violations, click **Schedule Hearing** on the violation record. Enter the hearing date and location. A hearing-notice PDF is available. PropertyPro does not create a calendar event. After the hearing, mark the violation **Resolved** or **Dismissed**.
 
 ## Closing a violation
 
-- **Cured**: issue resolved, no fine.
-- **Paid**: fine collected; no further action.
-- **Appealed**: outcome under review; leave open until resolved.
-- **Withdrawn**: notice was issued in error; include a note explaining.
+- **Resolved**: issue resolved.
+- **Dismissed**: notice was issued in error or the board withdrew enforcement; include a note explaining.
 
 Closing a violation keeps the record in the system for audit but removes it from the open inbox.
 
 ## Audit trail
 
-Every action on a violation — notice sent, comment added, status change, fine applied — is timestamped and captured in the compliance audit log. That trail is your defense if a resident later challenges a decision.
+Every action on a violation — notice sent, status change, fine applied — is timestamped and captured in the compliance audit log. That trail is your defense if a resident later challenges a decision.

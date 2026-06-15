@@ -1,0 +1,86 @@
+# Help-Fix Batch B — categories: apartment, contracts, emergency
+
+Articles directory scope: `apps/web/src/content/help/apartment/`, `apps/web/src/content/help/contracts/`, `apps/web/src/content/help/emergency/`
+
+Item counts: 1 Critical / 30 High / 23 Medium / 6 Low — 60 total.
+
+Work article-by-article: apply every item that targets the same .mdx file in one editing pass, then tick its boxes here.
+
+
+## Critical
+
+- [x] **[Critical]** `apartment/move-in-move-out-checklists.mdx:64` — "Open Move in/out → New move-in. Pick the unit and the tenant" cannot be done; there is no creation button — checklists auto-create when leases are created/terminated. → **Fix:** "checklists are created automatically when a lease is created (move-in) or terminated (move-out); open the card from the Move In/Out page." *Evidence:* `apps/web/src/components/move-checklists/ChecklistListPage.tsx:117-118` (empty-state copy; no create button).
+
+## High
+
+- [x] **[High]** `apartment/logging-packages.mdx:57` — Button "New package" doesn't exist; it's "Log Package". → **Fix:** "Open Packages → Log Package." *Evidence:* `PackageStaffView.tsx:83-86`; `PackageLogForm.tsx:76`.
+- [x] **[High]** `apartment/logging-packages.mdx:91` — Release flow wrong — action is "Mark Picked Up" → dialog requires the picker-up's name ("Picked Up By") → "Confirm Pickup". → **Fix:** rewrite the step accordingly. *Evidence:* `package-columns.tsx:110`; `PackageStaffView.tsx:116-143`.
+- [x] **[High]** `apartment/logging-packages.mdx:95` — On-screen pickup signature does not exist. → **Fix:** delete the step. *Evidence:* `components/packages/` — no signature capture.
+- [x] **[High]** `apartment/logging-visitors.mdx:61` — Button "New entry" doesn't exist; it's "Register Visitor". → **Fix:** "Open Visitors → Register Visitor." *Evidence:* `VisitorStaffView.tsx:183-186`; `VisitorRegistrationForm.tsx:128`.
+- [x] **[High]** `apartment/logging-visitors.mdx:60` — Check-in flow misdescribed — real model is pre-registered passes (guest type, host unit, passcode/QR) with Check In/Check Out/Revoke and an automatic denied-list warning; no resident-search desk flow or "record the denial reason" step. → **Fix:** rewrite the StepByStep around Register Visitor → Check In with the denied-match warning. *Evidence:* `VisitorRegistrationForm.tsx:34-265`; `VisitorStaffView.tsx:97-135,242-277`.
+- [x] **[High]** `apartment/logging-visitors.mdx:125` — "Log the visitor's details in the Incidents section" — no Incidents feature exists. → **Fix:** log in visitor notes + revoke the pass. *Evidence:* grep "incident" — only help-search/marketing strings.
+- [x] **[High]** `apartment/managing-leases.mdx:57` — Status vocab "active/pending/terminated/renewal-pending" wrong — enum is active/expired/renewed/terminated; UI adds derived "Expiring Soon"/"Vacant". → **Fix:** list Active, Expiring Soon (within 60 days), Expired, Renewed, Terminated. *Evidence:* `enums.ts:49-53`; `lease-columns.tsx:38-45`.
+- [x] **[High]** `apartment/managing-leases.mdx:74` — Create form has no deposit field or lease-PDF attachment; fields are Unit, Resident, Start/End, Monthly Rent, Notes (also fix bullets at 55-56). → **Fix:** rewrite step 4 to the real fields. *Evidence:* `LeaseCreateModal.tsx:43-76`.
+- [x] **[High]** `apartment/managing-leases.mdx:100` — Renewal flow wrong — action is "Renew" → "Renew Lease" dialog; no e-sign step; old lease marked Renewed immediately. → **Fix:** rewrite steps; note immediate Renewed status. *Evidence:* `LeaseRenewalDialog.tsx:78-81,142`.
+- [x] **[High]** `apartment/managing-units-and-buildings.mdx:55` — Button is "Add unit" (dialog "Add a unit"), not "New unit". → **Fix:** correct the label. *Evidence:* `units-page-client.tsx:47-52`.
+- [x] **[High]** `apartment/managing-units-and-buildings.mdx:48` — Unit status (occupied/vacant/off-market/model/decommissioned) doesn't exist — no status column or UI; invalidates lines 63-64, 92-108, 118-120, 148-149. → **Fix:** remove all status references; vacancy is derived from lease state on the Leases page ("Vacant Units" filter). *Evidence:* `units.ts:9-28`; `LeaseListPage.tsx:61-72`.
+- [x] **[High]** `apartment/managing-units-and-buildings.mdx:80` — Buildings are not an entity — "building" is optional free text per unit; no building-targeted announcements/maintenance/visitor routing. → **Fix:** describe the per-unit Building text field used for grouping. *Evidence:* `units.ts:15`; `units-page-client.tsx:66-72`.
+- [x] **[High]** `apartment/managing-units-and-buildings.mdx:114` — "Open each affected unit and update the unit number" can't be done — read-only table, no edit UI (PATCH is API-only). → **Fix:** note unit edits aren't available in the UI yet. *Evidence:* `units-page-client.tsx:145-168`; `api/v1/units/route.ts:140`.
+- [x] **[High]** `apartment/managing-units-and-buildings.mdx:124` — Units page has no filtering or search at all. → **Fix:** delete the "Filtering and search" section. *Evidence:* `units-page-client.tsx` (no filter controls).
+- [x] **[High]** `apartment/move-in-move-out-checklists.mdx:50` — Checklist model wrong — real checklists are 8 fixed task steps (lease_signed … utilities_confirmed / notice_received … deposit_refund) with completed flag + notes, not room-by-room condition categories. → **Fix:** rewrite "What a checklist captures" around the real step lists + progress bar. *Evidence:* `packages/db/src/constants/move-checklists.ts:20-40`.
+- [x] **[High]** `apartment/move-in-move-out-checklists.mdx:52` — Condition ratings (excellent/good/fair/damaged) don't exist. → **Fix:** remove. *Evidence:* `move-checklists.ts` (completed + notes only).
+- [x] **[High]** `apartment/move-in-move-out-checklists.mdx:53` — Photo attachments + automatic timestamps (also 120-124) don't exist in checklists. → **Fix:** delete photo claims (or label as off-platform practice). *Evidence:* `ChecklistDetailView.tsx` (no upload code).
+- [x] **[High]** `apartment/move-in-move-out-checklists.mdx:72` — Electronic sign-off by tenant and staff doesn't exist (also lines 56, 138). → **Fix:** completion = marking all steps complete. *Evidence:* no signature capture; `ChecklistListPage.tsx:41-44`.
+- [x] **[High]** `apartment/move-in-move-out-checklists.mdx:90` — Move-in/out comparison ("pulls move-in condition", "highlights drops") doesn't exist. → **Fix:** remove; move-out checklist is independent. *Evidence:* `ChecklistDetailView.tsx` + API (PATCH only).
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:70` — Button is "Add Contract" (heading "New Contract"); no vendor directory — Vendor Name is free text. → **Fix:** correct label; "type the vendor name." *Evidence:* `ContractTable.tsx:95`; `ContractForm.tsx:124-135`.
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:74` — Form fields wrong — no Effective/Expiration date, Renewal type, Notice period, Amount; actual: Title*, Vendor Name*, Description, Contract Value, Start Date*, End Date, Bidding Closes At, Linked Document ID, Checklist Item ID, conflict-of-interest checkbox. → **Fix:** rewrite step 3. *Evidence:* `ContractForm.tsx:108-257`.
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:81` — No PDF upload on the form; nothing auto-stores "under Documents → Contracts" — only links an already-uploaded document by numeric ID. → **Fix:** "upload the signed PDF via Documents first, then enter its ID in Linked Document ID." *Evidence:* `ContractForm.tsx:210-222`.
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:85` — "Mark statutorily public… auto-publishes to the public records section" — no such toggle exists. → **Fix:** delete step 5. *Evidence:* `ContractForm.tsx` + contracts API (no transparency fields).
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:92` — Alert vocab calm/aware/urgent via notice period wrong — alerts classify by fixed windows expired/30/60/90 days from end date. → **Fix:** describe the 90/60/30-day and Expired windows. *Evidence:* `contract-renewal-alerts.ts:47-56`; `ContractTable.tsx:71-151`.
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:103` — Renewal workflow (Renew/Non-renew choice, addendum upload, notice date) doesn't exist — only edit + bid tracking. → **Fix:** "edit the contract to extend the End Date and link the renewal addendum; record non-renewal in minutes." *Evidence:* `components/contracts/` (form + BidTracker only).
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:129` — Insurance-certificate tracking / lapsed-insurance flags / vendor directory all nonexistent. → **Fix:** delete the section or reframe as manual practice via linked documents. *Evidence:* `components/contracts/types.ts` (no insurance fields).
+- [x] **[High]** `contracts/tracking-vendor-contracts.mdx:10` — roles[] lists site_manager, but Contracts requires hasCompliance (condo/HOA only); site_manager exists only in apartments. → **Fix:** remove site_manager from roles. *Evidence:* `contracts/page.tsx:42-46`; `enums.ts:26-28`.
+- [x] **[High]** `emergency/sending-an-emergency-broadcast.mdx:64` — No "Emergency" sidebar entry or "New broadcast" button — page is "Emergency Alerts" with "Send Emergency Alert" → 4-step wizard (Template → Compose → Recipients → Confirm). → **Fix:** rewrite step 1 accordingly. *Evidence:* `nav-config.ts` (no emergency item); `emergency/page.tsx:79-87`; `BroadcastComposer.tsx:141`.
+- [x] **[High]** `emergency/sending-an-emergency-broadcast.mdx:77` — Audience label is "All residents", not "All members"; step omits the SMS/Email channel checkboxes. → **Fix:** quote real labels and mention channels. *Evidence:* `BroadcastComposer.tsx:269-300`.
+- [x] **[High]** `emergency/sending-an-emergency-broadcast.mdx:96` — "Archive the emergency broadcast" — no archive action exists. → **Fix:** delete the step. *Evidence:* `components/emergency/` + API (no [id] sub-route).
+
+## Medium
+
+- [x] **[Medium]** `apartment/logging-packages.mdx:47` — No Package description/Location/Photos fields — form is Unit, Recipient, Carrier, Tracking #, Notes. → **Fix:** replace the field list. *Evidence:* `PackageLogForm.tsx:84-168`.
+- [x] **[Medium]** `apartment/logging-packages.mdx:100` — Resident view is a flat "My Packages" list with status badges — no Open/Recent/History sections or sender/time filters. → **Fix:** rewrite. *Evidence:* `PackageResidentView.tsx:89-111`.
+- [x] **[Medium]** `apartment/logging-packages.mdx:113` — No aging highlight for unclaimed packages — only Pending/Picked Up filter tabs. → **Fix:** point at the Pending tab. *Evidence:* `PackageStaffView.tsx:26-30`.
+- [x] **[Medium]** `apartment/logging-packages.mdx:117` — Reporting section (carrier reports, avg pickup time) doesn't exist. → **Fix:** delete or reframe as manual review. *Evidence:* `dashboard/packages/` (page only).
+- [x] **[Medium]** `apartment/logging-packages.mdx:39` — Gate text "apartment communities only" wrong — condos also have package logging (HOAs don't). → **Fix:** "apartment and condo communities." *Evidence:* `community-features.ts:43,74,105`.
+- [x] **[Medium]** `apartment/logging-visitors.mdx:56` — "Denied entry" isn't a status; real statuses: expected/checked_in/checked_out/expired/overstayed/revoked/revoked_on_site. → **Fix:** replace with don't-check-in or Revoke Pass (required reason). *Evidence:* `VisitorResidentView.tsx:42-50`; `VisitorStaffView.tsx:242-251`.
+- [x] **[Medium]** `apartment/logging-visitors.mdx:70` — No photo capture in the registration form. → **Fix:** remove. *Evidence:* `VisitorRegistrationForm.tsx`.
+- [x] **[Medium]** `apartment/logging-visitors.mdx:45` — Gate text "condos don't run guest logs" wrong — condos have visitor logging. → **Fix:** "apartment and condo communities." *Evidence:* `community-features.ts:44,75,106`.
+- [x] **[Medium]** `apartment/logging-visitors.mdx:84` — Omits resident self-registration (recurring/permanent passes, shareable passcode/QR). → **Fix:** describe self-registration with staff registration as alternative. *Evidence:* `VisitorResidentView.tsx` (+VisitorQRCode/shareVisitorPass).
+- [x] **[Medium]** `apartment/managing-leases.mdx:70` — Multi-tenant leases unsupported — exactly one resident per lease (also drop line-140 bullet). → **Fix:** "select the resident (one per lease record)." *Evidence:* `LeaseCreateModal.tsx:44,64`.
+- [x] **[Medium]** `apartment/managing-leases.mdx:67` — "Units already under lease will show a warning" — no conflict warning exists. → **Fix:** delete. *Evidence:* `LeaseCreateModal.tsx:105-118`; `lease-service.ts`.
+- [x] **[Medium]** `apartment/managing-leases.mdx:119` — Termination dialog captures only date + notes — no reason picker, charges/refunds, or attachment. → **Fix:** rewrite step 3; delete step 4. *Evidence:* `LeaseTerminationDialog.tsx:35-47`.
+- [x] **[Medium]** `apartment/managing-leases.mdx:127` — "Residents see only their own lease on their dashboard" (and line 79) — no resident-facing lease view exists. → **Fix:** remove. *Evidence:* `dashboard/leases/page.tsx:39` (admin redirect); no /my route.
+- [x] **[Medium]** `apartment/managing-leases.mdx:139` — Month-to-month = empty end date (matches the Month-to-Month filter), not "status notes". → **Fix:** correct. *Evidence:* `LeaseListPage.tsx:56-59`.
+- [x] **[Medium]** `apartment/managing-leases.mdx:7` — roles[] lists board_member and cam, but lease tracking is apartment-only (no board/cam roles there). → **Fix:** remove both. *Evidence:* `enums.ts:26-28`; `leases/page.tsx:6`.
+- [x] **[Medium]** `apartment/managing-units-and-buildings.mdx:42` — Field list overstates the record — no Unit type/Status/Notes/lease link; add form = unit number, building, floor. → **Fix:** trim. *Evidence:* `units.ts:9-28`; `units-page-client.tsx:54-83,149-163`.
+- [x] **[Medium]** `apartment/managing-units-and-buildings.mdx:136` — Reports (occupancy rate, days vacant, unit mix) don't exist; only a lease-expirations dashboard card. → **Fix:** delete or reference that card. *Evidence:* `apartment-metrics.tsx:53-67`.
+- [x] **[Medium]** `apartment/move-in-move-out-checklists.mdx:7` — roles[] lists cam, but feature is hasLeaseTracking (apartment-only) where cam isn't valid. → **Fix:** remove cam. *Evidence:* `move-in-out/page.tsx:33`; `enums.ts:28`.
+- [x] **[Medium]** `contracts/tracking-vendor-contracts.mdx:120` — RFP steps ("Upload the RFP / track which vendors received it") aren't features — real mechanism is the bid tracker + Bidding Closes At embargo. → **Fix:** rewrite around BidTracker. *Evidence:* `contracts/types.ts:6-19`; `ContractForm.tsx:193-205`.
+- [x] **[Medium]** `contracts/tracking-vendor-contracts.mdx:158` — "Track the signature status on every record" — contracts have no signature field. → **Fix:** "link the executed document so the signed copy is on record." *Evidence:* `contracts/types.ts`.
+- [x] **[Medium]** `emergency/sending-an-emergency-broadcast.mdx:81` — Undersells the real send flow: required "I understand…" checkbox → "Send Emergency Alert" → 10-second countdown with "UNDO - Cancel Broadcast". → **Fix:** name the checkbox and buttons. *Evidence:* `BroadcastComposer.tsx:350-401`.
+- [x] **[Medium]** `emergency/sending-an-emergency-broadcast.mdx:97` — Acknowledgements (also line 105) aren't tracked — telemetry is targeted/sent/delivered/failed. → **Fix:** cite delivery counts. *Evidence:* grep "acknowledg" — nothing; `DeliveryReport.tsx`.
+- [x] **[Medium]** `emergency/sending-an-emergency-broadcast.mdx:99` — "Create draft broadcasts" impossible — composer offers built-in static templates only. → **Fix:** point at the template picker. *Evidence:* `emergency-templates.ts:1-9`; `BroadcastComposer.tsx:153-176`.
+
+## Low
+
+- [x] **[Low]** `apartment/logging-visitors.mdx:98` — "Added by admin only" — denied-visitor entries can be created by any staff operator. → **Fix:** "Added by staff only." *Evidence:* `api/v1/visitors/denied/route.ts` (requireStaffOperator).
+- [x] **[Low]** `apartment/managing-leases.mdx:39` — contextPath `/dashboard/leases/*` matches no subroutes. → **Fix:** drop the wildcard. *Evidence:* directory contains only page.tsx.
+- [x] **[Low]** `apartment/managing-units-and-buildings.mdx:147` — "create the building first, then bulk-import the units" contradicts the article's own coming-soon callout and the nonexistent building entity. → **Fix:** "add units one at a time with Add unit, using the same Building value." *Evidence:* same article line 75; no bulk import.
+- [x] **[Low]** `apartment/managing-units-and-buildings.mdx:35` — contextPath `/dashboard/units/*` matches no subroutes. → **Fix:** drop. *Evidence:* directory contains only page.tsx.
+- [x] **[Low]** `apartment/move-in-move-out-checklists.mdx:39` — contextPath `/dashboard/move-in-out/*` matches no subroutes. → **Fix:** drop. *Evidence:* directory contains only page.tsx.
+- [x] **[Low]** `contracts/tracking-vendor-contracts.mdx:43` — contextPath `/contracts/*` matches no subroutes. → **Fix:** drop. *Evidence:* directory contains only page.tsx.
+
+## Report
+
+- Articles edited: apartment/move-in-move-out-checklists, apartment/logging-packages, apartment/logging-visitors, apartment/managing-leases, apartment/managing-units-and-buildings, contracts/tracking-vendor-contracts, emergency/sending-an-emergency-broadcast
+- Items fixed: 60 / Skipped: 0
+- guard:help-content: PASS

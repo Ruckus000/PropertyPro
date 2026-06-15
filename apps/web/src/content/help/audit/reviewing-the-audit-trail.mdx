@@ -28,8 +28,8 @@ tags:
 statutes:
   - "§718.111(12)(g)"
   - "§720.303"
-updatedAt: "2026-05-26"
-lastReviewedAt: "2026-05-26"
+updatedAt: "2026-06-11"
+lastReviewedAt: "2026-06-11"
 relatedArticles:
   - reviewing-the-compliance-dashboard
   - document-posting-requirements
@@ -49,7 +49,6 @@ Every action with compliance or security relevance:
 - Violations issued, updated, resolved
 - Elections created, opened, closed, certified
 - Ballot submissions (without revealing ballots)
-- Admin logins and password resets
 - Access-plan grants and revocations
 - FAQ edits
 - Emergency broadcasts sent
@@ -64,11 +63,11 @@ Admin-only route in the sidebar. The most recent actions appear first.
 </Step>
 
 <Step title="Filter">
-Narrow by actor (which admin), resource type (documents, meetings, violations), date range, or action type (create, update, delete).
+Narrow by Action (dropdown), date range (Start Date and End Date), or search by name or unit in the User field.
 </Step>
 
 <Step title="Inspect an entry">
-Click any row to see the full record — before/after values (where applicable), metadata, and IP/user-agent if available.
+Expand **Metadata** to see the metadata recorded with the event.
 </Step>
 </StepByStep>
 
@@ -90,13 +89,13 @@ Audit-log entries cannot be edited or deleted. Florida statute expects associati
 For official records, annual reviews, or turning over records to a new board:
 
 1. On the audit trail page, set your filters.
-2. Click **Export** (if available for your community) or screenshot paginated views for smaller scopes.
-3. The export contains the same fields as the on-screen view in a standard format (CSV or JSON).
+2. Click **Export CSV**.
+3. The export contains the same fields as the on-screen view in CSV format.
 
 ## Limits
 
-- Reads from the audit log are metered; a year of everything is a lot of rows.
-- The trail does not capture read-only views (who looked at a document). If that level of detail is needed, compliance considerations usually require a separate tool.
+- Large date ranges can return many rows — narrow your filters before exporting.
+- Document downloads ARE logged; other page views are not.
 - PII is captured where necessary — treat the export as sensitive.
 
 ## What you shouldn't do
