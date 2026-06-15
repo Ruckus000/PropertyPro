@@ -6,8 +6,7 @@ import { cn } from '@/lib/utils';
 import {
   hasBoardDesignation,
   isBoardPresident,
-  MANAGER_TIER_DB_ROLES,
-  PM_SCOPE_DB_ROLES,
+  ADMIN_TIER_DB_ROLES,
   type BoardDesignation,
 } from '@propertypro/shared';
 import { useBootstrapOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
@@ -52,10 +51,7 @@ export interface WelcomeScreenProps {
  * single "Property Manager" label — onboarding-only, no permission change.
  */
 function isManagerTier(role: string): boolean {
-  return (
-    (MANAGER_TIER_DB_ROLES as readonly string[]).includes(role) ||
-    (PM_SCOPE_DB_ROLES as readonly string[]).includes(role)
-  );
+  return (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
 }
 
 function getRoleGreeting(

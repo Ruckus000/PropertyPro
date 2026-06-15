@@ -1629,10 +1629,6 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     throw new Error('Missing seeded community IDs');
   }
 
-  const communityTypeBySlug = Object.fromEntries(
-    DEMO_COMMUNITIES.map((c) => [c.slug, c.communityType]),
-  ) as Record<DemoCommunitySlug, CommunityType>;
-
   const crossBySlug = new Map<DemoCommunitySlug, Array<{ communityId: number; userId: string; role: SeedRole; designation?: SeedDesignation }>>();
   for (const assignment of CROSS_COMMUNITY_ASSIGNMENTS) {
     const entry = {
@@ -1646,8 +1642,8 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     crossBySlug.set(assignment.slug, existing);
   }
 
-  for (const [slug, assignments] of crossBySlug) {
-    await seedRoles(assignments, communityTypeBySlug[slug]);
+  for (const [, assignments] of crossBySlug) {
+    await seedRoles(assignments);
   }
 
   const crossAssignments = CROSS_COMMUNITY_ASSIGNMENTS.map((assignment) => ({

@@ -793,7 +793,6 @@ export async function seedRoles(
     role: SeedRole;
     designation?: BoardDesignation;
   }>,
-  _communityType: CommunityType,
 ): Promise<void> {
   if (assignments.length === 0) {
     return;
@@ -1709,7 +1708,6 @@ export async function seedCommunity(
       role: entry.role as SeedRole,
       designation: designationByEmail.get(entry.email),
     })),
-    config.communityType,
   );
 
   await Promise.all(seededUsers.map((entry) => ensureNotificationPreference(communityId, entry.userId)));

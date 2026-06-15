@@ -75,6 +75,11 @@ export function getItemKeysForRole(
 ): readonly ChecklistItemKey[] {
   // role-v3 (Phase 3.3): keyed on the v3 DB role + nullable board designation.
   // Board membership is the designation column, independent of the base role.
+  // CORNER (0 prod rows today — root is vacant): a PM-scope role that ALSO holds a
+  // board designation (e.g. the model's self-managed root_manager + board_president)
+  // resolves designation-FIRST here, so it gets the board onboarding set rather than
+  // adminBase+customize_portal. Onboarding-only, no permission impact; revisit at
+  // Phase 4 if self-managed roots should keep the PM-admin onboarding nudge.
   const adminBase =
     communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
 
