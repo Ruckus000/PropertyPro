@@ -36,6 +36,7 @@ interface DataTableProps<TData, TValue> {
   emptyAction?: React.ReactNode;
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: OnChangeFn<RowSelectionState>;
+  getRowId?: (originalRow: TData, index: number) => string;
 }
 
 function getSelectColumn<TData>(): ColumnDef<TData, unknown> {
@@ -77,6 +78,7 @@ export function DataTable<TData, TValue>({
   emptyAction,
   rowSelection,
   onRowSelectionChange,
+  getRowId,
 }: DataTableProps<TData, TValue>) {
   const enableSelection = rowSelection !== undefined && onRowSelectionChange !== undefined;
 
@@ -87,6 +89,7 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns: allColumns,
+    ...(getRowId && { getRowId }),
     pageCount,
     state: {
       ...(pagination && { pagination }),

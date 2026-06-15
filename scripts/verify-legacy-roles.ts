@@ -15,7 +15,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FLOOR = 241; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
+const FLOOR = 252; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
                    // reference in access-control.ts checkPermissionV2 (ex-pm_admin null-perms fallback).
                    // 2026-06-11 (Phase 2c): +3 for the irreducible board-designation literals in the
                    // /settings/roles UI — `'board_president'`/`'board_member'` are the designations API
@@ -26,7 +26,12 @@ const FLOOR = 241; // 2026-06-10: 250 baseline +1 for the intentional property_m
                    // notify, billing presets) to the designation helpers in role-transition.ts.
                    // 2026-06-13 (invariant 3 lockdown): 242 → 241 — dropped a stale `'board_president'`
                    // example from the resident-form roleKey JSDoc (the picker is owner/tenant-only).
-                   // Ratchet DOWN with every Phase 3 drain PR.
+                   // 2026-06-15 (help v3 visibility): 241 → 252 — +11 for IRREDUCIBLE TEST FIXTURES in
+                   // the help viewer-role bridge (viewer-role.test +9, help-article-service.test +2) that
+                   // assert the v3→v1 help-frontmatter mapping. Production literals live in the guard-
+                   // exempt HELP_FRONTMATTER_ROLES (role-transition.ts); only the test fixtures spell the
+                   // frontmatter roles inline. Help-content vocabulary, NOT runtime role literals to drain.
+                   // Resume ratcheting DOWN on Phase 3 drains.
 const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'packages/db/src', 'packages/ui/src', 'packages/email/src'];
 const LITERAL = /'(board_member|board_president|cam|site_manager|property_manager_admin)'/g;
 const V2_CAST = /'resident'\s*\|\s*'manager'\s*\|\s*'pm_admin'/g;

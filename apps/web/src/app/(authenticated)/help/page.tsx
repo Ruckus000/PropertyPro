@@ -4,6 +4,7 @@ import { HelpHubContent } from '@/components/help/help-hub-content';
 import { StartHereHero } from '@/components/help/start-here-hero';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
+import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { getReadArticleSlugs } from '@/lib/help/read-state';
 import { buildHelpTaskCardsFromFeatures } from '@/lib/help/task-cards';
 import {
@@ -22,7 +23,7 @@ interface HelpPageProps {
 export default async function HelpPage({ searchParams }: HelpPageProps) {
   const resolvedSearchParams = await searchParams;
   const context = await requireHelpPageContext(resolvedSearchParams, '/help');
-  const effectiveRole = context.membership.presetKey ?? context.membership.role;
+  const effectiveRole = resolveHelpViewerRoleFromMembership(context.membership);
 
   const scoped = createScopedClient(context.communityId);
   const [communityRows, readSlugs] = await Promise.all([
