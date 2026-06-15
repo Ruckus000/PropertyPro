@@ -15,40 +15,30 @@ import { matchesFilter } from './compliance-pill-mapping';
 import type { FilterKey } from './compliance-pill-mapping';
 import { UploadDocumentModal } from './upload-document-modal';
 import { LinkDocumentModal } from './link-document-modal';
-import type { CommunityRole, TransitionRole } from '@propertypro/shared';
+import { hasBoardDesignation, type BoardDesignation } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
 
 type ViewMode = 'cam' | 'board';
 
 export interface ComplianceCommandCenterProps {
   communityId: number;
-  role: CommunityRole | TransitionRole;
+  isAdmin: boolean;
+  designation: BoardDesignation | null;
   canWrite: boolean;
 }
 
-// CAM-class roles. Includes legacy CommunityRole strings (`cam`,
-// `property_manager_admin`, `site_manager`), the v2 NewCommunityRole
-// migration strings (`manager`, `pm_admin`), and the v3 transition-window
-// strings (`property_manager`, `root_manager`) so the toggle renders on
-// whichever side of the in-progress role migration the user lands on.
-// Live preview verified `membership.role === 'manager'` for CAM users
-// under the new manager-permissions system; without that entry the
-// toggle silently hides for every CAM in production.
-const CAM_LIKE_ROLES = new Set<string>(['cam', 'manager', 'pm_admin', 'property_manager_admin', 'site_manager', 'property_manager', 'root_manager']);
-const BOARD_LIKE_ROLES = new Set<string>(['board_president', 'board_member']);
-
-function defaultViewForRole(role: string): ViewMode {
-  if (BOARD_LIKE_ROLES.has(role)) return 'board';
-  return 'cam';
+function defaultView(designation: BoardDesignation | null): ViewMode {
+  return hasBoardDesignation(designation) ? 'board' : 'cam';
 }
 
-function showToggle(role: string): boolean {
-  return CAM_LIKE_ROLES.has(role) || BOARD_LIKE_ROLES.has(role);
+function showToggle(isAdmin: boolean, designation: BoardDesignation | null): boolean {
+  return isAdmin || hasBoardDesignation(designation);
 }
 
 export function ComplianceCommandCenter({
   communityId,
-  role,
+  isAdmin,
+  designation,
   canWrite,
 }: ComplianceCommandCenterProps) {
   const storageKey = `compliance.audienceView.${communityId}`;
@@ -56,7 +46,7 @@ export function ComplianceCommandCenter({
   const [view, setView] = useState<ViewMode>(() => {
     const stored = window.localStorage.getItem(storageKey);
     if (stored === 'cam' || stored === 'board') return stored;
-    return defaultViewForRole(role);
+    return defaultView(designation);
   });
 
   useEffect(() => {
@@ -127,7 +117,7 @@ export function ComplianceCommandCenter({
 
   const actions = (
     <div className="flex items-center gap-2">
-      {showToggle(role) && (
+      {showToggle(isAdmin, designation) && (
         <div role="group" aria-label="Audience view" className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border-default)] p-0.5">
           <button
             type="button"
@@ -208,7 +198,7 @@ export function ComplianceCommandCenter({
           <ComplianceQueue
             items={items as ChecklistItemData[]}
             canWrite={canWrite}
-            role={role}
+            designation={designation}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onUpload={(item) => setUploadItem(item)}
@@ -226,7 +216,7 @@ export function ComplianceCommandCenter({
             item={selectedItem}
             communityId={communityId}
             canWrite={canWrite}
-            role={role}
+            designation={designation}
             onUpload={(item) => setUploadItem(item)}
             onLink={(item) => setLinkItem(item)}
             onView={(item) => {

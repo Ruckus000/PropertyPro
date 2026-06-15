@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Badge } from '@propertypro/ui';
+import type { BoardDesignation } from '@propertypro/shared';
 import { useComplianceActivityFeed, type AuditEntry } from '@/hooks/use-compliance-activity';
 import type { ChecklistItemData } from './compliance-checklist-item';
 import { getTemplateDefaultVisibility } from './compliance-visibility';
@@ -12,7 +13,7 @@ export interface ComplianceDetailPanelProps {
   item: ChecklistItemData | null;
   communityId: number;
   canWrite: boolean;
-  role?: string;
+  designation?: BoardDesignation | null;
   onUpload: (item: ChecklistItemData) => void;
   onLink: (item: ChecklistItemData) => void;
   onView: (item: ChecklistItemData) => void;
@@ -25,7 +26,7 @@ export function ComplianceDetailPanel({
   item,
   communityId,
   canWrite,
-  role,
+  designation,
   onUpload,
   onLink,
   onView,
@@ -50,7 +51,7 @@ export function ComplianceDetailPanel({
   const selectedItem = item;
 
   // Use the shared CTA resolver so queue rows and the detail panel can never drift.
-  const cta = resolveComplianceCta(selectedItem, canWrite, role);
+  const cta = resolveComplianceCta(selectedItem, canWrite, designation);
   const vis = getTemplateDefaultVisibility(selectedItem.templateKey);
   const activityHidden = (activity.error as { status?: number } | null)?.status === 403;
   const recentEvents: AuditEntry[] = activity.data?.data?.slice(0, 3) ?? [];

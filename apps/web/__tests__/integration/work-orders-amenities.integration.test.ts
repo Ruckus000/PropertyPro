@@ -210,8 +210,16 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
     const createAmenityJson = await parseJson<{ data: Record<string, unknown> }>(createAmenityResponse);
     const amenityId = readNumberField(createAmenityJson.data, 'id');
 
-    const startTime = '2026-06-15T14:00:00.000Z';
-    const endTime = '2026-06-15T16:00:00.000Z';
+    // Relative-future window (anchored ~30 days out) so the reservation is never
+    // in the past. Previously hardcoded to 2026-06-15, which began failing once
+    // that wall-clock date arrived (amenity reservations must start in the future).
+    const reservationDay = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    reservationDay.setUTCHours(14, 0, 0, 0);
+    const startTime = reservationDay.toISOString(); // T14:00
+    const endTime = new Date(reservationDay.getTime() + 2 * 60 * 60 * 1000).toISOString(); // T16:00
+    // Conflicting window overlaps the base reservation (15:00–17:00 vs 14:00–16:00).
+    const conflictStartTime = new Date(reservationDay.getTime() + 1 * 60 * 60 * 1000).toISOString(); // T15:00
+    const conflictEndTime = new Date(reservationDay.getTime() + 3 * 60 * 60 * 1000).toISOString(); // T17:00
 
     setActor(kit, 'tenantA');
     const reserveResponse = await routeModules.amenityReserve.POST(
@@ -231,8 +239,8 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
       jsonRequest(apiUrl(`/api/v1/amenities/${amenityId}/reserve`), 'POST', {
         communityId: communityA.id,
         unitId: unitAId,
-        startTime: '2026-06-15T15:00:00.000Z',
-        endTime: '2026-06-15T17:00:00.000Z',
+        startTime: conflictStartTime,
+        endTime: conflictEndTime,
       }),
       { params: Promise.resolve({ id: String(amenityId) }) },
     );

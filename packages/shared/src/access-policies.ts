@@ -134,20 +134,6 @@ export const BOARD_ROLES: readonly CommunityRole[] = [
   'board_president',
 ] as const;
 
-/** Non-admin resident roles. */
-export const RESIDENT_ROLES: readonly CommunityRole[] = [
-  'owner',
-  'tenant',
-] as const;
-
-/** Staff/management roles (board_president, cam, site_manager, property_manager_admin). */
-export const STAFF_ROLES: readonly CommunityRole[] = [
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-] as const;
-
 const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<CommunityRole, CategoryAccess>> = {
   condo_718: {
     owner: 'all',

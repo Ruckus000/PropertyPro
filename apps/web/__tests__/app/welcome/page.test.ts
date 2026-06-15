@@ -116,7 +116,7 @@ describe('WelcomePage redirect behavior', () => {
       communityName: 'Sunset Condos',
       city: 'Miami',
       state: 'FL',
-      presetKey: 'owner',
+      designation: null,
     });
   });
 
@@ -131,7 +131,7 @@ describe('WelcomePage redirect behavior', () => {
   });
 });
 
-describe('WelcomePage display role resolution', () => {
+describe('WelcomePage role/designation prop passing', () => {
   const baseManagerMembership = {
     userId: 'user-1',
     communityId: 42,
@@ -162,47 +162,60 @@ describe('WelcomePage display role resolution', () => {
 
   async function renderWithMembership(
     overrides: Partial<typeof baseManagerMembership>,
-  ): Promise<string> {
+  ): Promise<{ role: string; designation: string | null; isUnitOwner: boolean }> {
     requirePageCommunityMembershipMock.mockResolvedValue({
       ...baseManagerMembership,
       ...overrides,
     });
     const element = (await WelcomePage({
       searchParams: Promise.resolve({ communityId: '42' }),
-    })) as unknown as { type: unknown; props: { role: string } };
+    })) as unknown as {
+      type: unknown;
+      props: { role: string; designation: string | null; isUnitOwner: boolean };
+    };
     expect(element.type).toBe(welcomeScreenMock);
-    return element.props.role;
+    return {
+      role: element.props.role,
+      designation: element.props.designation,
+      isUnitOwner: element.props.isUnitOwner,
+    };
   }
 
-  it('resolves board_president from designation when presetKey is absent', async () => {
-    const role = await renderWithMembership({
+  it('passes the v3 role and designation straight through (board_president)', async () => {
+    const props = await renderWithMembership({
+      role: 'manager',
       designation: 'board_president',
-      presetKey: undefined,
     });
-    expect(role).toBe('board_president');
+    expect(props.role).toBe('manager');
+    expect(props.designation).toBe('board_president');
   });
 
-  it('prefers designation board_member over a conflicting presetKey', async () => {
-    const role = await renderWithMembership({
+  it('passes the board_member designation straight through', async () => {
+    const props = await renderWithMembership({
+      role: 'manager',
       designation: 'board_member',
-      presetKey: 'cam',
     });
-    expect(role).toBe('board_member');
+    expect(props.role).toBe('manager');
+    expect(props.designation).toBe('board_member');
   });
 
-  it('falls back to presetKey board_member when designation is absent', async () => {
-    const role = await renderWithMembership({
+  it('passes a property_manager with no designation through unchanged', async () => {
+    const props = await renderWithMembership({
+      role: 'property_manager',
       designation: null,
-      presetKey: 'board_member',
     });
-    expect(role).toBe('board_member');
+    expect(props.role).toBe('property_manager');
+    expect(props.designation).toBeNull();
   });
 
-  it('defaults property_manager with neither designation nor presetKey to cam', async () => {
-    const role = await renderWithMembership({
+  it('passes resident role + isUnitOwner through unchanged', async () => {
+    const props = await renderWithMembership({
+      role: 'resident',
       designation: null,
-      presetKey: undefined,
+      isUnitOwner: true,
     });
-    expect(role).toBe('cam');
+    expect(props.role).toBe('resident');
+    expect(props.designation).toBeNull();
+    expect(props.isUnitOwner).toBe(true);
   });
 });

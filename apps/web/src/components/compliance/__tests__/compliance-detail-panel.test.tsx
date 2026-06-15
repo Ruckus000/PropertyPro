@@ -81,7 +81,7 @@ describe('ComplianceDetailPanel', () => {
         item={ITEM}
         communityId={1}
         canWrite
-        role="cam"
+        designation={null}
         onUpload={vi.fn()}
         onLink={vi.fn()}
         onView={vi.fn()}
@@ -98,7 +98,7 @@ describe('ComplianceDetailPanel', () => {
         item={ITEM}
         communityId={1}
         canWrite
-        role="cam"
+        designation={null}
         onUpload={vi.fn()}
         onLink={vi.fn()}
         onView={vi.fn()}
@@ -114,7 +114,7 @@ describe('ComplianceDetailPanel', () => {
         item={null}
         communityId={1}
         canWrite
-        role="cam"
+        designation={null}
         onUpload={vi.fn()}
         onLink={vi.fn()}
         onView={vi.fn()}
@@ -138,7 +138,7 @@ describe('ComplianceDetailPanel', () => {
         item={ITEM}
         communityId={1}
         canWrite
-        role="cam"
+        designation={null}
         onUpload={vi.fn()}
         onLink={vi.fn()}
         onView={vi.fn()}
@@ -154,7 +154,7 @@ describe('ComplianceDetailPanel', () => {
         item={ITEM}
         communityId={1}
         canWrite
-        role="cam"
+        designation={null}
         onUpload={vi.fn()}
         onLink={vi.fn()}
         onView={vi.fn()}
@@ -175,7 +175,7 @@ describe('ComplianceDetailPanel', () => {
         item={ITEM}
         communityId={1}
         canWrite
-        role="cam"
+        designation={null}
         onUpload={vi.fn()}
         onLink={vi.fn()}
         onView={vi.fn()}

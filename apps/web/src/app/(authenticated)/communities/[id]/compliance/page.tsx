@@ -49,7 +49,8 @@ export default async function CompliancePage({ params }: PageProps) {
   return (
     <ComplianceCommandCenter
       communityId={communityId}
-      role={membership.role}
+      isAdmin={membership.isAdmin}
+      designation={membership.designation}
       canWrite={canWrite}
     />
   );

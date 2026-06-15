@@ -21,7 +21,9 @@ function Wrapper({ children }: PropsWithChildren) {
 
 const baseProps = {
   firstName: 'Alex',
-  role: 'owner',
+  role: 'resident',
+  designation: null as 'board_president' | 'board_member' | null,
+  isUnitOwner: true,
   communityId: 42,
   community: {
     name: 'Sunset Condos', slug: 'sunset-condos',
@@ -36,6 +38,51 @@ const baseProps = {
   primaryColor: null,
   checklistDisplayItems: [],
 };
+
+describe('WelcomeScreen — role display', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn(() => Promise.resolve(new Response(null))) as unknown as typeof fetch;
+  });
+
+  function renderScreen(overrides: Partial<typeof baseProps>) {
+    render(
+      <Wrapper>
+        <WelcomeScreen {...baseProps} {...overrides} />
+      </Wrapper>,
+    );
+  }
+
+  it('board_president designation → "Board President" greeting + board cards', () => {
+    renderScreen({ role: 'manager', designation: 'board_president', isUnitOwner: false });
+    expect(screen.getByText(/Board President at Sunset Condos/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Community snapshot' })).toBeInTheDocument();
+    expect(screen.getByText(/snapshot of Sunset Condos to get you started/)).toBeInTheDocument();
+  });
+
+  it('board_member designation → "Board Member" greeting', () => {
+    renderScreen({ role: 'manager', designation: 'board_member', isUnitOwner: false });
+    expect(screen.getByText(/Board Member at Sunset Condos/)).toBeInTheDocument();
+  });
+
+  it('manager-tier (no designation) → "Property Manager" greeting + overview subtext', () => {
+    renderScreen({ role: 'property_manager', designation: null, isUnitOwner: false });
+    expect(screen.getByText(/Property Manager at Sunset Condos/)).toBeInTheDocument();
+    expect(screen.getByText(/overview of Sunset Condos for your review/)).toBeInTheDocument();
+  });
+
+  it('resident unit owner → "Owner" greeting', () => {
+    renderScreen({ role: 'resident', designation: null, isUnitOwner: true });
+    expect(screen.getByText(/Owner at Sunset Condos/)).toBeInTheDocument();
+    expect(screen.getByText(/what is happening at Sunset Condos/)).toBeInTheDocument();
+  });
+
+  it('resident non-owner → "Tenant" greeting', () => {
+    renderScreen({ role: 'resident', designation: null, isUnitOwner: false });
+    expect(screen.getByText(/Tenant at Sunset Condos/)).toBeInTheDocument();
+    expect(screen.getByText(/helpful resources for living at Sunset Condos/)).toBeInTheDocument();
+  });
+});
 
 describe('WelcomeScreen — dashboard CTA', () => {
   beforeEach(() => {

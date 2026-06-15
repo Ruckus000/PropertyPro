@@ -3,6 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import {
+  hasBoardDesignation,
+  isBoardPresident,
+  ADMIN_TIER_DB_ROLES,
+  type BoardDesignation,
+} from '@propertypro/shared';
 import { useBootstrapOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
 import {
   OwnerCards,
@@ -18,8 +24,12 @@ import {
 
 export interface WelcomeScreenProps {
   firstName: string;
-  /** The effective display role (e.g. 'owner', 'board_member', 'cam', 'tenant', 'resident'). */
+  /** The v3 DB role (e.g. 'resident', 'manager', 'property_manager', 'root_manager', 'pm_admin'). */
   role: string;
+  /** Nullable board designation — the source of truth for the board distinction. */
+  designation: BoardDesignation | null;
+  /** Whether the member owns a unit (only meaningful for residents). */
+  isUnitOwner: boolean;
   communityId: number;
   community: CommunityData;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
@@ -35,66 +45,53 @@ export interface WelcomeScreenProps {
 
 // ─── Role display helpers ─────────────────────────────────────
 
-function getRoleGreeting(role: string): string {
-  switch (role) {
-    case 'board_president':
-      return 'Board President';
-    case 'board_member':
-      return 'Board Member';
-    case 'cam':
-      return 'Community Association Manager';
-    case 'site_manager':
-      return 'Site Manager';
-    case 'property_manager_admin':
-    case 'pm_admin':
-      return 'Property Manager';
-    case 'owner':
-      return 'Owner';
-    case 'tenant':
-      return 'Tenant';
-    default:
-      return 'Member';
-  }
+/**
+ * True for any manager-tier or PM-scope v3 role. The legacy cam/site_manager
+ * distinction required a presetKey; role-v3 (Phase 3.3) collapses both into the
+ * single "Property Manager" label — onboarding-only, no permission change.
+ */
+function isManagerTier(role: string): boolean {
+  return (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role);
 }
 
-function getRoleSubtext(role: string, communityName: string): string {
-  switch (role) {
-    case 'board_president':
-    case 'board_member':
-      return `Here is a snapshot of ${communityName} to get you started.`;
-    case 'cam':
-    case 'site_manager':
-    case 'property_manager_admin':
-    case 'pm_admin':
-      return `Here is an overview of ${communityName} for your review.`;
-    case 'owner':
-      return `Here is what is happening at ${communityName}.`;
-    case 'tenant':
-      return `Here are some helpful resources for living at ${communityName}.`;
-    default:
-      return `Here is your community at a glance.`;
-  }
+function getRoleGreeting(
+  role: string,
+  designation: BoardDesignation | null,
+  isUnitOwner: boolean,
+): string {
+  if (isBoardPresident(designation)) return 'Board President';
+  if (hasBoardDesignation(designation)) return 'Board Member';
+  if (isManagerTier(role)) return 'Property Manager';
+  if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
+  return 'Member';
 }
 
-/** Determines which card set to render based on role. */
-function getCardCategory(role: string): 'owner' | 'board' | 'tenant' {
-  switch (role) {
-    case 'board_president':
-    case 'board_member':
-    case 'cam':
-    case 'site_manager':
-    case 'property_manager_admin':
-    case 'pm_admin':
-    case 'manager':
-      return 'board';
-    case 'owner':
-      return 'owner';
-    case 'tenant':
-      return 'tenant';
-    default:
-      // Residents default to owner view
-      return 'owner';
-  }
+function getRoleSubtext(
+  role: string,
+  designation: BoardDesignation | null,
+  isUnitOwner: boolean,
+  communityName: string,
+): string {
+  if (hasBoardDesignation(designation))
+    return `Here is a snapshot of ${communityName} to get you started.`;
+  if (isManagerTier(role))
+    return `Here is an overview of ${communityName} for your review.`;
+  if (role === 'resident' && isUnitOwner)
+    return `Here is what is happening at ${communityName}.`;
+  if (role === 'resident')
+    return `Here are some helpful resources for living at ${communityName}.`;
+  return `Here is your community at a glance.`;
+}
+
+/** Determines which card set to render based on the v3 role + designation. */
+function getCardCategory(
+  role: string,
+  designation: BoardDesignation | null,
+  isUnitOwner: boolean,
+): 'owner' | 'board' | 'tenant' {
+  if (hasBoardDesignation(designation) || isManagerTier(role)) return 'board';
+  if (role === 'resident') return isUnitOwner ? 'owner' : 'tenant';
+  return 'owner';
 }
 
 // ─── Component ────────────────────────────────────────────────
@@ -102,6 +99,8 @@ function getCardCategory(role: string): 'owner' | 'board' | 'tenant' {
 export function WelcomeScreen({
   firstName,
   role,
+  designation,
+  isUnitOwner,
   communityId,
   community,
   communityType,
@@ -117,9 +116,9 @@ export function WelcomeScreen({
   const [isNavigating, setIsNavigating] = useState(false);
   const bootstrapChecklist = useBootstrapOnboardingChecklist();
 
-  const roleLabel = getRoleGreeting(role);
-  const subtext = getRoleSubtext(role, community.name);
-  const cardCategory = getCardCategory(role);
+  const roleLabel = getRoleGreeting(role, designation, isUnitOwner);
+  const subtext = getRoleSubtext(role, designation, isUnitOwner, community.name);
+  const cardCategory = getCardCategory(role, designation, isUnitOwner);
 
   async function handleGoToDashboard() {
     setIsNavigating(true);

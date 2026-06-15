@@ -232,6 +232,7 @@ export const POST = withErrorHandler(
       communityId,
       actorUserId,
       membership.role,
+      membership.designation,
       membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
     );
 
