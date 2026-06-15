@@ -116,7 +116,7 @@ describe('WelcomePage redirect behavior', () => {
       communityName: 'Sunset Condos',
       city: 'Miami',
       state: 'FL',
-      presetKey: 'owner',
+      designation: null,
     });
   });
 

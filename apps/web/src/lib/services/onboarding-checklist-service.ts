@@ -4,7 +4,8 @@ import { eq, and, isNull } from '@propertypro/db/filters';
 import {
   PM_SCOPE_DB_ROLES,
   MANAGER_TIER_DB_ROLES,
-  BOARD_DESIGNATIONS,
+  isBoardPresident,
+  hasBoardDesignation,
   type BoardDesignation,
 } from '@propertypro/shared';
 
@@ -77,25 +78,24 @@ export function getItemKeysForRole(
   const adminBase =
     communityType === 'apartment' ? ADMIN_APARTMENT_ITEMS : ADMIN_CONDO_ITEMS;
 
-  // board_member designation → board-member checklist (regardless of base role).
-  if (designation === BOARD_DESIGNATIONS[1]) {
-    return BOARD_MEMBER_ITEMS;
-  }
   // board_president designation → admin base set.
-  if (designation === BOARD_DESIGNATIONS[0]) {
+  if (isBoardPresident(designation)) {
     return adminBase;
+  }
+  // board_member designation → board-member checklist (regardless of base role).
+  if (hasBoardDesignation(designation)) {
+    return BOARD_MEMBER_ITEMS;
   }
   // PM-scope roles (pm_admin / property_manager / root_manager) get the admin
   // base set plus customize_portal — parity with the pre-3.3 PM_SCOPE branch.
   if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
     return [...adminBase, ...PM_ADMIN_ITEMS];
   }
-  // Manager-tier roles (bare manager) get the admin base set only.
-  // DOCUMENTED behavior change (role-v3 Phase 3.3): the legacy site_manager —
-  // now folded into property_manager with no designation — previously fell
-  // through to the owner/tenant set; it now receives the admin base set,
-  // matching its end-state property_manager role. Onboarding-only; no
-  // permission or data change.
+  // MANAGER_TIER but NOT PM-scope: in practice only the v2 'manager' role during the
+  // bilingual window (property_manager/root_manager are captured by the PM_SCOPE branch
+  // above). DOCUMENTED 3.3 change: the legacy site_manager preset previously keyed on the
+  // display string and its welcome PREVIEW fell through to OWNER_TENANT_ITEMS; under v3 role
+  // keys it now shows the admin base set. Onboarding-only; no permission or data change.
   if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
     return adminBase;
   }
