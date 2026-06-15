@@ -210,8 +210,17 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
     const createAmenityJson = await parseJson<{ data: Record<string, unknown> }>(createAmenityResponse);
     const amenityId = readNumberField(createAmenityJson.data, 'id');
 
-    const startTime = '2026-06-15T14:00:00.000Z';
-    const endTime = '2026-06-15T16:00:00.000Z';
+    // Derive the reservation window from the current time so the slots are
+    // always in the future. The reserve route rejects start times in the past
+    // (422), so a fixed timestamp turns flaky once the wall clock passes it.
+    // Anchor a day ahead and build an overlapping pair to exercise the 409
+    // conflict path: [base+2h, base+4h] overlaps [base+3h, base+5h].
+    const HOUR_MS = 60 * 60 * 1000;
+    const baseMs = Date.now() + 24 * HOUR_MS;
+    const startTime = new Date(baseMs + 2 * HOUR_MS).toISOString();
+    const endTime = new Date(baseMs + 4 * HOUR_MS).toISOString();
+    const conflictStartTime = new Date(baseMs + 3 * HOUR_MS).toISOString();
+    const conflictEndTime = new Date(baseMs + 5 * HOUR_MS).toISOString();
 
     setActor(kit, 'tenantA');
     const reserveResponse = await routeModules.amenityReserve.POST(
@@ -231,8 +240,8 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
       jsonRequest(apiUrl(`/api/v1/amenities/${amenityId}/reserve`), 'POST', {
         communityId: communityA.id,
         unitId: unitAId,
-        startTime: '2026-06-15T15:00:00.000Z',
-        endTime: '2026-06-15T17:00:00.000Z',
+        startTime: conflictStartTime,
+        endTime: conflictEndTime,
       }),
       { params: Promise.resolve({ id: String(amenityId) }) },
     );
