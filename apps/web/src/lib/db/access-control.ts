@@ -30,8 +30,6 @@ export {
 // Static policies (extracted from RBAC_MATRIX for resident + pm_admin)
 // ---------------------------------------------------------------------------
 
-// For residents and pm_admin, we use the static RBAC matrix.
-// For managers, we use the JSONB permissions.
 import { RBAC_MATRIX } from '@propertypro/shared';
 
 /**
@@ -41,8 +39,10 @@ import { RBAC_MATRIX } from '@propertypro/shared';
  *   static RBAC matrix (the two v3 PM-tier values map onto pm_admin behavior)
  * - resident + isUnitOwner: uses the owner row from the static RBAC matrix
  * - resident + !isUnitOwner: uses the tenant row from the static RBAC matrix
- * - manager / property_manager: uses the JSONB permissions (the v3
- *   property_manager value maps onto manager behavior)
+ * - property_manager: uses the property_manager_admin matrix row
+ *   (uniform full-operational; the per-row JSONB permissions are ignored —
+ *   dropped at the Phase 4 cleanup migration)
+ * - manager (legacy, dies at Phase 4): uses the JSONB permissions
  */
 export function checkPermissionV2(
   role: TransitionRole,
@@ -59,17 +59,16 @@ export function checkPermissionV2(
     const legacyRole = opts?.isUnitOwner ? 'owner' : 'tenant';
     return RBAC_MATRIX[communityType][legacyRole][resource][action];
   }
-  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
-  if (role === 'manager' || role === 'property_manager') {
-    if (!opts?.permissions) {
-      // ex-pm_admin rows backfilled to property_manager carry no JSONB permissions;
-      // resolve them to the uniform full-operational set (property_manager_admin matrix).
-      // manager always carries permissions (chk_manager_has_permissions), so this
-      // fallback only affects property_manager. Phase 4 makes this the sole path.
-      return role === 'property_manager'
-        ? RBAC_MATRIX[communityType]['property_manager_admin'][resource][action]
-        : false;
-    }
+  // BILINGUAL (role-v3): drop the `manager` arm at Phase 4 cleanup.
+  // property_manager is now UNIFORM full-operational — it always resolves the
+  // property_manager_admin matrix row and IGNORES the per-row JSONB permissions
+  // (read-only legacy that the Phase 4 cleanup migration drops). The legacy
+  // `manager` role (dies in Phase 4) still reads its JSONB.
+  if (role === 'property_manager') {
+    return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
+  }
+  if (role === 'manager') {
+    if (!opts?.permissions) return false;
     const perm = opts.permissions.resources[resource];
     return action === 'read' ? perm.read : perm.write;
   }

@@ -16,10 +16,27 @@ describe('checkPermissionV2 — v3 transition roles', () => {
     expect(checkPermissionV2('resident', 'condo_718', 'documents', 'write', { isUnitOwner: false })).toBe(false);
     expect(checkPermissionV2('resident', 'condo_718', 'documents', 'read', { isUnitOwner: true })).toBe(true);
   });
-  it('property_manager uses JSONB permissions like manager', () => {
-    const permissions = { resources: { documents: { read: true, write: false } } } as never;
+  it('property_manager IGNORES JSONB permissions — always resolves the property_manager_admin matrix (uniform widening)', () => {
+    // A restricted JSONB that denies documents:read, documents:write and finances:write.
+    const permissions = {
+      resources: {
+        documents: { read: false, write: false },
+        finances: { read: true, write: false },
+      },
+    } as never;
+    // Reads AND writes resolve from the matrix, not the JSONB.
+    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read', { permissions })).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'read'),
+    );
+    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write', { permissions })).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
+    );
+    expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write', { permissions })).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'finances', 'write'),
+    );
+    // The matrix grants these — the JSONB's false values are ignored.
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read', { permissions })).toBe(true);
-    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write', { permissions })).toBe(false);
+    expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write', { permissions })).toBe(true);
   });
   it('property_manager without permissions resolves the property_manager_admin matrix (ex-pm_admin backfill fallback)', () => {
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write')).toBe(

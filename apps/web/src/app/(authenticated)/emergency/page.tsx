@@ -11,7 +11,7 @@ import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context'
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { checkPermission } from '@propertypro/shared';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { BroadcastHistoryTable } from '@/components/emergency/BroadcastHistoryTable';
 
 interface PageProps {
@@ -43,7 +43,7 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
 
-  const canWrite = checkPermission(
+  const canWrite = checkPermissionV2(
     membership.role,
     membership.communityType,
     'emergency_broadcasts',

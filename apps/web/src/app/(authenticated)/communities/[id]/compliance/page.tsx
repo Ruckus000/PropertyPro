@@ -10,7 +10,8 @@
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { checkPermission, getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity } from '@propertypro/shared';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import ComplianceCommandCenter from '@/components/compliance/compliance-command-center';
 
 interface PageProps {
@@ -39,11 +40,11 @@ export default async function CompliancePage({ params }: PageProps) {
   }
 
   const opts = { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions };
-  if (!checkPermission(membership.role, membership.communityType, 'compliance', 'read', opts)) {
+  if (!checkPermissionV2(membership.role, membership.communityType, 'compliance', 'read', opts)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
 
-  const canWrite = checkPermission(
+  const canWrite = checkPermissionV2(
     membership.role, membership.communityType, 'compliance', 'write', opts,
   );
   return (

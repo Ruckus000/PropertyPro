@@ -4,12 +4,11 @@ import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
 import {
-  checkPermission,
-  type CommunityRole,
   type CommunityType,
   type TransitionRole,
   type ManagerPermissions,
 } from '@propertypro/shared';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { DocumentUploadArea } from './document-upload-area';
 import { type DocumentListItem } from './document-list';
 import { DocumentListContainer, useDocumentsInvalidator } from './document-list-container';
@@ -23,7 +22,7 @@ interface DocumentLibraryProps {
   communityId: number;
   communityType: CommunityType;
   userId: string;
-  userRole: CommunityRole | TransitionRole;
+  userRole: TransitionRole;
   isUnitOwner?: boolean;
   permissions?: ManagerPermissions;
   /** Effective community feature — hide E‑Sign when the plan/type does not include it. */
@@ -51,7 +50,7 @@ export function DocumentLibrary({
   const [showUpload, setShowUpload] = useState(false);
   const [searchMode, setSearchMode] = useState(!!initialSearchQuery);
 
-  const canUpload = checkPermission(userRole, communityType, 'documents', 'write', {
+  const canUpload = checkPermissionV2(userRole, communityType, 'documents', 'write', {
     isUnitOwner,
     permissions,
   });
