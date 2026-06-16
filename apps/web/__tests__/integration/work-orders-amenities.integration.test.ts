@@ -219,7 +219,11 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
     // removes any reliance on that scoping and guarantees two runs can never share
     // a reservation window. Always ≥30 days out so the reservation never falls into
     // the past (the prior hardcoded 2026-06-15 date bomb that this replaced).
-    const runOffsetMinutes = parseInt(kit.runSuffix, 16) % (365 * 24 * 60);
+    // runSuffix is `randomUUID().slice(0, 8)` (8 hex chars), so parseInt never
+    // returns NaN today; the fallback keeps a future runSuffix change from
+    // yielding an Invalid Date (→ toISOString() RangeError).
+    const parsedSuffix = parseInt(kit.runSuffix, 16);
+    const runOffsetMinutes = (Number.isNaN(parsedSuffix) ? 0 : parsedSuffix) % (365 * 24 * 60);
     const reservationStart = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     reservationStart.setUTCHours(14, 0, 0, 0); // clean anchor before per-run offset
     reservationStart.setUTCMinutes(reservationStart.getUTCMinutes() + runOffsetMinutes);
