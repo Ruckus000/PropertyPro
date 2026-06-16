@@ -1,10 +1,24 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 let isUniqueViolation: typeof import('../../../src/lib/onboarding/wizard-common').isUniqueViolation;
+let requireMutationAuthorization: typeof import('../../../src/lib/onboarding/wizard-common').requireMutationAuthorization;
 
 beforeAll(async () => {
   process.env.DATABASE_URL ??= 'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
-  ({ isUniqueViolation } = await import('../../../src/lib/onboarding/wizard-common'));
+  ({ isUniqueViolation, requireMutationAuthorization } = await import('../../../src/lib/onboarding/wizard-common'));
+});
+
+describe('requireMutationAuthorization', () => {
+  it('allows admin-tier roles including the v3 property_manager / root_manager (lockout regression guard)', () => {
+    expect(() => requireMutationAuthorization('property_manager')).not.toThrow();
+    expect(() => requireMutationAuthorization('root_manager')).not.toThrow();
+    expect(() => requireMutationAuthorization('manager')).not.toThrow();
+    expect(() => requireMutationAuthorization('pm_admin')).not.toThrow();
+  });
+
+  it('rejects resident-tier roles', () => {
+    expect(() => requireMutationAuthorization('resident')).toThrow();
+  });
 });
 
 describe('isUniqueViolation', () => {

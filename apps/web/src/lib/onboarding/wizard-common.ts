@@ -1,6 +1,7 @@
 import type { createScopedClient } from '@propertypro/db';
 import { communities, onboardingWizardState } from '@propertypro/db';
 import { eq, and } from '@propertypro/db/filters';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 
 export type ScopedClient = ReturnType<typeof createScopedClient>;
@@ -26,8 +27,9 @@ export interface WizardRow {
 }
 
 export function requireMutationAuthorization(role: string): void {
-    const allowedRoles = ['manager', 'pm_admin'];
-    if (!allowedRoles.includes(role)) {
+    // role-v3: admin-tier DB roles (bilingual). The legacy ['manager','pm_admin']
+    // set locked every v3 property_manager out of onboarding-wizard mutations.
+    if (!(ADMIN_TIER_DB_ROLES as readonly string[]).includes(role)) {
         throw new ForbiddenError('Only board members, CAMs, and property managers can modify wizard state');
     }
 }

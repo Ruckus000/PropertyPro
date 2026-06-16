@@ -110,6 +110,18 @@ describe('GET /api/v1/delinquency', () => {
     expect(json.data.meta.lienThresholdDays).toBe(120);
   });
 
+  it('allows a v3 property_manager (role-v3 lockout regression guard)', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      ...MANAGER_MEMBERSHIP,
+      role: 'property_manager' as const,
+    });
+
+    const res = await GET(buildReq('http://localhost/api/v1/delinquency?communityId=42'));
+
+    expect(res.status).toBe(200);
+    expect(listDelinquentUnitsMock).toHaveBeenCalledWith(42, 90);
+  });
+
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
