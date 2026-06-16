@@ -217,6 +217,7 @@ async function seedData(): Promise<SeededData> {
       displayTitle: user.displayTitle,
       presetKey: user.presetKey ?? null,
       permissions: user.permissions ?? null,
+      designation: user.designation ?? null,
       unitId: null,
     });
   }
