@@ -26,12 +26,11 @@ import { runRoute } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import type { DocumentMutationWarning } from '@/lib/documents/types';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { validateUploadFilePath } from '@/lib/api/upload-path';
-import { isElevatedRole } from '@propertypro/shared';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
@@ -138,14 +137,15 @@ export const DELETE = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const { id } = query;
     const membership = await requireCommunityMembership(communityId, userId);
-    if (
-      !isElevatedRole(membership.role, {
-        isUnitOwner: membership.isUnitOwner,
-        permissions: membership.permissions,
-      })
-    ) {
-      throw new ForbiddenError('Only elevated roles can delete documents');
-    }
+    // Deleting a document is a destructive write — gate it on the same
+    // `documents:write` permission as upload and the drafts/* routes (issue
+    // #734). This previously used isElevatedRole(), which is a READ-access
+    // predicate (who may view unknown/unmapped categories) and excludes
+    // cam/site_manager — so it let owners delete but blocked CAM, contradicting
+    // both the upload gate and the RBAC matrix. requirePermission() runs through
+    // checkPermissionV2, so role-v3 values (resident/pm_admin/root_manager/
+    // manager) resolve identically to the upload path.
+    requirePermission(membership, 'documents', 'write');
     await requireActiveSubscriptionForMutation(communityId);
 
     // First, get the document to capture old values for audit

@@ -99,7 +99,16 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
 };
 
 /**
- * Elevated roles can view unknown/unmapped categories.
+ * READ-access tier: these roles may VIEW documents in unknown/unmapped
+ * categories (and, via buildDocumentAccessFilter, uncategorized rows). This is
+ * deliberately NOT a write/delete authority. `owner` is included so unit owners
+ * get full §718 read transparency even though the RBAC matrix gives `owner`
+ * `documents:write:false` — the two are consistent because they govern
+ * different axes (read breadth vs. write permission).
+ *
+ * Document upload AND delete are gated on `documents:write` via
+ * requirePermission()/checkPermissionV2 (issue #734). Do NOT reuse this
+ * predicate to authorize mutations.
  */
 export const ELEVATED_ROLES: readonly CommunityRole[] = [
   'owner',
