@@ -109,7 +109,7 @@ describe('DocumentLibrary', () => {
           communityId={9}
           communityType="condo_718"
           userId="user-1"
-          userRole="board_president"
+          userRole="property_manager"
           hasEsign
         />
       </QueryClientProvider>,
