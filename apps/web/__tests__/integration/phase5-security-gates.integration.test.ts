@@ -224,7 +224,8 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const communityA = requireCommunity(kit, 'communityA');
     const communityC = requireCommunity(kit, 'communityC');
 
-    setActor(kit, 'residentA');
+    // finances: tenant write=false (property_manager now has write; use resident-tier actor)
+    setActor(kit, 'tenantA');
     const financeDenied = await routeModules.assessments.POST(
       jsonRequest(apiUrl('/api/v1/assessments'), 'POST', {
         communityId: communityA.id,
@@ -236,23 +237,15 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     );
     expect(financeDenied.status).toBe(403);
 
+    // violations: apartment community-type exclusion (not an RBAC role flip) — keep actorC/403
     setActor(kit, 'actorC');
     const violationsDenied = await routeModules.violations.GET(
       new NextRequest(apiUrl(`/api/v1/violations?communityId=${communityC.id}`)),
     );
     expect(violationsDenied.status).toBe(403);
 
-    setActor(kit, 'residentA');
-    const arcDenied = await routeModules.arc.POST(
-      jsonRequest(apiUrl('/api/v1/arc'), 'POST', {
-        communityId: communityA.id,
-        unitId: unitAId,
-        title: 'Board Member ARC Submit',
-        description: 'Should be rejected',
-        projectType: 'paint',
-      }),
-    );
-    expect(arcDenied.status).toBe(403);
+    // arc_submissions: property_manager_admin now has write=true (same as all residents);
+    // no resident-tier actor can be denied — assertion removed.
 
     setActor(kit, 'tenantA');
     const pollsDenied = await routeModules.polls.POST(
@@ -276,16 +269,9 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     );
     expect(workOrdersDenied.status).toBe(403);
 
-    setActor(kit, 'residentA');
-    const amenitiesDenied = await routeModules.amenities.POST(
-      jsonRequest(apiUrl('/api/v1/amenities'), 'POST', {
-        communityId: communityA.id,
-        name: 'Board Member Amenity Attempt',
-      }),
-    );
-    expect(amenitiesDenied.status).toBe(403);
+    // amenities: property_manager_admin now has write=true (same as residents);
+    // no resident-tier actor can be denied — assertion removed.
 
-    setActor(kit, 'tenantA');
     const packagesDenied = await routeModules.packages.POST(
       jsonRequest(apiUrl('/api/v1/packages'), 'POST', {
         communityId: communityA.id,
@@ -296,18 +282,11 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     );
     expect(packagesDenied.status).toBe(403);
 
-    setActor(kit, 'residentA');
-    const visitorsDenied = await routeModules.visitors.POST(
-      jsonRequest(apiUrl('/api/v1/visitors'), 'POST', {
-        communityId: communityA.id,
-        visitorName: 'Guest',
-        purpose: 'Visit',
-        hostUnitLabel: unitALabel,
-        expectedArrival: '2026-08-01T12:00:00.000Z',
-      }),
-    );
-    expect(visitorsDenied.status).toBe(403);
+    // visitors: property_manager_admin now has write=true (same as residents);
+    // no resident-tier actor can be denied — assertion removed.
 
+    // calendar_sync: tenant write=false (property_manager now has write; use resident-tier actor)
+    setActor(kit, 'tenantA');
     const calendarDenied = await routeModules.googleConnect.POST(
       jsonRequest(apiUrl('/api/v1/calendar/google/connect'), 'POST', {
         communityId: communityA.id,
@@ -315,7 +294,8 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     );
     expect(calendarDenied.status).toBe(403);
 
-    setActor(kit, 'actorA');
+    // accounting: tenant write=false (property_manager now has write; use resident-tier actor)
+    setActor(kit, 'tenantA');
     const accountingDenied = await routeModules.accountingConnect.POST(
       jsonRequest(apiUrl('/api/v1/accounting/connect'), 'POST', {
         communityId: communityA.id,

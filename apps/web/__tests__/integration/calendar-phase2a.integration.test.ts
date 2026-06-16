@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPresetPermissions } from '@propertypro/shared';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
@@ -67,7 +66,6 @@ let routes: RouteModules | null = null;
 let ownerResidentUserId = '';
 let ownerUnitId = 0;
 let ownerUnitLabel = '';
-let noFinanceManagerUserId = '';
 let inRangeMeetingId = 0;
 let outOfRangeMeetingId = 0;
 let apartmentMeetingId = 0;
@@ -118,33 +116,6 @@ async function seedRuntimeResidentOwner(testState: TestKitState, communityId: nu
   ownerResidentUserId = userId;
 }
 
-async function seedRuntimeNoFinanceManager(testState: TestKitState, communityId: number) {
-  const userId = randomUUID();
-  trackUserForCleanup(testState, userId);
-
-  await testState.db.insert(testState.dbModule.users).values({
-    id: userId,
-    email: `manager-no-finance-${testState.runSuffix}@example.com`,
-    fullName: `Manager No Finance ${testState.runSuffix}`,
-    phone: null,
-  });
-
-  const permissions = structuredClone(getPresetPermissions('board_member', 'condo_718'));
-  permissions.resources.finances = { read: false, write: false };
-  permissions.resources.meetings = { read: true, write: true };
-
-  const scoped = testState.dbModule.createScopedClient(communityId);
-  await scoped.insert(testState.dbModule.userRoles, {
-    userId,
-    role: 'manager',
-    isUnitOwner: false,
-    displayTitle: 'Manager No Finance',
-    permissions,
-  });
-
-  noFinanceManagerUserId = userId;
-}
-
 describeDb('Phase 2A calendar stack (db-backed integration)', () => {
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) {
@@ -170,7 +141,6 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
     const communityC = requireCommunity(state, 'communityC');
 
     await seedRuntimeResidentOwner(state, communityA.id);
-    await seedRuntimeNoFinanceManager(state, communityA.id);
 
     const scopedA = state.dbModule.createScopedClient(communityA.id);
     const scopedC = state.dbModule.createScopedClient(communityC.id);
@@ -347,11 +317,6 @@ describeDb('Phase 2A calendar stack (db-backed integration)', () => {
     const tenantResponse = await routeModules.calendarEvents.GET(new NextRequest(apiUrl(url)));
     const tenantJson = await parseJson<{ data: Array<{ type: string }> }>(tenantResponse);
     expect(tenantJson.data.some((event) => event.type !== 'meeting')).toBe(false);
-
-    setActorById(testState, noFinanceManagerUserId);
-    const noFinanceResponse = await routeModules.calendarEvents.GET(new NextRequest(apiUrl(url)));
-    const noFinanceJson = await parseJson<{ data: Array<{ type: string }> }>(noFinanceResponse);
-    expect(noFinanceJson.data.some((event) => event.type !== 'meeting')).toBe(false);
   });
 
   it('apartment tenant/site manager/property manager admin flows succeed on the meetings API', async () => {

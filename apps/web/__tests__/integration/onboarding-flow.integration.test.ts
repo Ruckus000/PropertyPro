@@ -4,7 +4,7 @@
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ADMIN_APARTMENT_ITEMS } from '../../src/lib/services/onboarding-checklist-service';
+import { ADMIN_APARTMENT_ITEMS, PM_ADMIN_ITEMS } from '../../src/lib/services/onboarding-checklist-service';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
@@ -248,8 +248,12 @@ describeDb('onboarding flow (db-backed integration)', () => {
 
     const checklistRows = await scoped.query(kit.dbModule.onboardingChecklistItems);
     const actorChecklist = checklistRows.filter((row) => row['userId'] === siteManagerC.id);
+    // role-v3: siteManagerC is now a property_manager (PM-scope) → admin base set +
+    // PM_ADMIN_ITEMS (customize_portal). The legacy site_manager checklist was the
+    // base set only; the uniform collapse gives former site managers the PM-admin
+    // onboarding nudge (onboarding-only; documented Phase 3.3 change).
     expect(actorChecklist.map((row) => String(row['itemKey'])).sort()).toEqual(
-      [...ADMIN_APARTMENT_ITEMS].sort(),
+      [...ADMIN_APARTMENT_ITEMS, ...PM_ADMIN_ITEMS].sort(),
     );
     expect(actorChecklist.every((row) => row['completedAt'] == null)).toBe(true);
   });
