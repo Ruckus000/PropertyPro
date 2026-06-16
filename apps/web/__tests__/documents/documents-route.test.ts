@@ -23,7 +23,6 @@ const {
   assertNotDemoGraceMock,
   requirePermissionMock,
   requireActiveSubscriptionForMutationMock,
-  isElevatedRoleMock,
   createUploadedDocumentMock,
   paginateAccessibleDocumentsMock,
   getDocumentForDeletionAuditMock,
@@ -38,7 +37,6 @@ const {
   assertNotDemoGraceMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn(),
-  isElevatedRoleMock: vi.fn(),
   createUploadedDocumentMock: vi.fn(),
   paginateAccessibleDocumentsMock: vi.fn(),
   getDocumentForDeletionAuditMock: vi.fn(),
@@ -74,11 +72,6 @@ vi.mock('@/lib/db/access-control', () => ({
 vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
 }));
-
-vi.mock('@propertypro/shared', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return { ...actual, isElevatedRole: isElevatedRoleMock };
-});
 
 vi.mock('@/lib/documents/create-uploaded-document', () => ({
   createUploadedDocument: createUploadedDocumentMock,
@@ -370,7 +363,7 @@ describe('DELETE /api/v1/documents', () => {
     resolveEffectiveCommunityIdMock.mockReturnValue(42);
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
-    isElevatedRoleMock.mockReturnValue(true);
+    requirePermissionMock.mockReturnValue(undefined);
     requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
     getDocumentForDeletionAuditMock.mockResolvedValue({
       title: 'Bylaws',
@@ -390,6 +383,8 @@ describe('DELETE /api/v1/documents', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { deleted: boolean; id: number } };
     expect(json.data).toEqual({ deleted: true, id: 7 });
+    // Delete is gated on the same `documents:write` permission as upload (#734).
+    expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'documents', 'write');
     expect(softDeleteDocumentMock).toHaveBeenCalledWith(42, 7);
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -450,8 +445,10 @@ describe('DELETE /api/v1/documents', () => {
     expect(softDeleteDocumentMock).not.toHaveBeenCalled();
   });
 
-  it('returns 403 when the caller is not an elevated role', async () => {
-    isElevatedRoleMock.mockReturnValueOnce(false);
+  it('returns 403 when the documents/write permission gate fails', async () => {
+    requirePermissionMock.mockImplementationOnce(() => {
+      throw new ForbiddenError('Insufficient permissions');
+    });
 
     const res = await DELETE(
       deleteReq('http://localhost:3000/api/v1/documents?id=7&communityId=42'),

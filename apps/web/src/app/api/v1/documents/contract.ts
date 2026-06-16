@@ -41,12 +41,12 @@
  * when non-empty. Wire shape stays byte-identical:
  *   `{ data: <row>, warnings?: [...] }`.
  *
- * DELETE auth surface (preserved verbatim — mutating, so demo-grace first):
+ * DELETE auth surface (mutating, so demo-grace first):
  *   requireAuthenticatedUserId
  *     → resolveEffectiveCommunityId(req, query.communityId)
  *     → assertNotDemoGrace (ASYNC — awaited)
  *     → requireCommunityMembership
- *     → isElevatedRole gate (→ ForbiddenError when false)
+ *     → requirePermission(membership, 'documents', 'write') (sync)
  *     → requireActiveSubscriptionForMutation (ASYNC — awaited)
  *     → getDocumentForDeletionAudit → softDeleteDocument → logAuditEvent
  *
@@ -54,10 +54,15 @@
  * response is a synthesized `{ deleted: true, id }` shape with no Dates, so a
  * tight `z.object({...})` is used.
  *
+ * The DELETE gate was unified onto `documents:write` in issue #734. It used to
+ * call isElevatedRole() — a read-access predicate (who may view unknown/
+ * unmapped categories) — which let owners delete but blocked CAM, out of step
+ * with the upload gate, the RBAC matrix, and the UI delete button.
+ *
  * `permission` metadata matches the runtime gates: `documents`/`read` (GET),
- * `documents`/`write` (POST + DELETE — the DELETE `isElevatedRole` check is a
- * mutating write gate). `documents` IS in `RBAC_RESOURCES`; `RBAC_ACTIONS`
- * has only `read`/`write`, so the DELETE pairs the verb with `write`.
+ * `documents`/`write` (POST + DELETE). `documents` IS in `RBAC_RESOURCES`;
+ * `RBAC_ACTIONS` has only `read`/`write`, so the DELETE pairs the verb with
+ * `write`.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

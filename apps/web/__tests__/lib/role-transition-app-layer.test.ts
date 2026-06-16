@@ -9,6 +9,13 @@ describe('checkPermissionV2 — v3 transition roles', () => {
       checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
     );
   });
+  it('resident (owner or tenant) is read-only for documents:write — the gate used by upload/delete (#734)', () => {
+    // The documents route gates upload AND delete on documents:write via this
+    // function; residents must not write/delete documents regardless of unit ownership.
+    expect(checkPermissionV2('resident', 'condo_718', 'documents', 'write', { isUnitOwner: true })).toBe(false);
+    expect(checkPermissionV2('resident', 'condo_718', 'documents', 'write', { isUnitOwner: false })).toBe(false);
+    expect(checkPermissionV2('resident', 'condo_718', 'documents', 'read', { isUnitOwner: true })).toBe(true);
+  });
   it('property_manager uses JSONB permissions like manager', () => {
     const permissions = { resources: { documents: { read: true, write: false } } } as never;
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read', { permissions })).toBe(true);

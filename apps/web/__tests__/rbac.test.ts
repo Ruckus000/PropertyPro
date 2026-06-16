@@ -140,6 +140,63 @@ describe('policy invariants', () => {
     expect(checkPermission('site_manager', 'apartment', 'settings', 'write')).toBe(false);
   });
 
+  // --- documents write: management-tier only; owners/tenants are read-only ---
+  // Issue #734: upload AND delete both gate on `documents:write` via
+  // requirePermission(). owner is in ELEVATED_ROLES for READ transparency but
+  // must NOT write. These invariants pin the per-type upload/delete authority.
+
+  it('owner cannot write documents in condo_718 (read-only transparency)', () => {
+    expect(checkPermission('owner', 'condo_718', 'documents', 'write')).toBe(false);
+  });
+
+  it('owner cannot write documents in hoa_720 (read-only transparency)', () => {
+    expect(checkPermission('owner', 'hoa_720', 'documents', 'write')).toBe(false);
+  });
+
+  it('owner can read documents in condo_718 (§718 transparency)', () => {
+    expect(checkPermission('owner', 'condo_718', 'documents', 'read')).toBe(true);
+  });
+
+  it('tenant cannot write documents in condo_718', () => {
+    expect(checkPermission('tenant', 'condo_718', 'documents', 'write')).toBe(false);
+  });
+
+  it('tenant cannot write documents in apartment', () => {
+    expect(checkPermission('tenant', 'apartment', 'documents', 'write')).toBe(false);
+  });
+
+  it('board_member can write documents in condo_718', () => {
+    expect(checkPermission('board_member', 'condo_718', 'documents', 'write')).toBe(true);
+  });
+
+  it('board_president can write documents in hoa_720', () => {
+    expect(checkPermission('board_president', 'hoa_720', 'documents', 'write')).toBe(true);
+  });
+
+  it('cam can write documents in condo_718', () => {
+    expect(checkPermission('cam', 'condo_718', 'documents', 'write')).toBe(true);
+  });
+
+  it('cam can write documents in hoa_720', () => {
+    expect(checkPermission('cam', 'hoa_720', 'documents', 'write')).toBe(true);
+  });
+
+  it('property_manager_admin can write documents in condo_718', () => {
+    expect(checkPermission('property_manager_admin', 'condo_718', 'documents', 'write')).toBe(true);
+  });
+
+  it('property_manager_admin can write documents in apartment', () => {
+    expect(checkPermission('property_manager_admin', 'apartment', 'documents', 'write')).toBe(true);
+  });
+
+  it('site_manager can write documents in apartment', () => {
+    expect(checkPermission('site_manager', 'apartment', 'documents', 'write')).toBe(true);
+  });
+
+  it('site_manager cannot write documents in condo_718 (invalid role)', () => {
+    expect(checkPermission('site_manager', 'condo_718', 'documents', 'write')).toBe(false);
+  });
+
   // --- owner/tenant can write maintenance (their own requests) ---
 
   it('condo_718 owner can write maintenance', () => {

@@ -473,6 +473,10 @@ describe('p1-11 documents route', () => {
 describe('p1-15 documents route DELETE', () => {
   beforeEach(() => {
     resetRouteMocks();
+    // Documents delete now gates on `documents:write` (#734), matching upload.
+    // Default to an authorized writer (board_president-preset manager); the
+    // denial-path tests below override the membership with owner/tenant.
+    requireCommunityMembershipMock.mockResolvedValue(MANAGER_MEMBERSHIP);
   });
 
   it('DELETE soft-deletes document and logs audit event', async () => {
@@ -563,6 +567,24 @@ describe('p1-15 documents route DELETE', () => {
   it('DELETE rejects restricted roles', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+      communityType: 'condo_718',
+    });
+
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/documents?id=99&communityId=42',
+      { method: 'DELETE' },
+    );
+
+    const res = await DELETE(req);
+    expect(res.status).toBe(403);
+  });
+
+  it('DELETE rejects owner — documents are read-only for owners (#734)', async () => {
+    // Behavior change: delete is gated on documents:write, where owner is
+    // false. Previously isElevatedRole() let owners delete; now they cannot
+    // (they were never able to upload either — read-only §718 transparency).
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityType: 'condo_718',
     });
 
