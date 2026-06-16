@@ -210,16 +210,24 @@ describeDb('WS69 work-orders/amenities (db-backed integration)', () => {
     const createAmenityJson = await parseJson<{ data: Record<string, unknown> }>(createAmenityResponse);
     const amenityId = readNumberField(createAmenityJson.data, 'id');
 
-    // Relative-future window (anchored ~30 days out) so the reservation is never
-    // in the past. Previously hardcoded to 2026-06-15, which began failing once
-    // that wall-clock date arrived (amenity reservations must start in the future).
-    const reservationDay = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    reservationDay.setUTCHours(14, 0, 0, 0);
-    const startTime = reservationDay.toISOString(); // T14:00
-    const endTime = new Date(reservationDay.getTime() + 2 * 60 * 60 * 1000).toISOString(); // T16:00
-    // Conflicting window overlaps the base reservation (15:00–17:00 vs 14:00–16:00).
-    const conflictStartTime = new Date(reservationDay.getTime() + 1 * 60 * 60 * 1000).toISOString(); // T15:00
-    const conflictEndTime = new Date(reservationDay.getTime() + 3 * 60 * 60 * 1000).toISOString(); // T17:00
+    // Unique-per-run future window. The shared integration DB accumulates rows
+    // across runs: community teardown is FK-restricted by the append-only
+    // compliance_audit_log (see teardownTestKit), so a reservation that triggers
+    // an audit entry — i.e. every reservation — persists after the suite ends.
+    // Conflict detection is scoped per amenity+community (both freshly seeded each
+    // run), but anchoring the window to a per-run offset derived from runSuffix
+    // removes any reliance on that scoping and guarantees two runs can never share
+    // a reservation window. Always ≥30 days out so the reservation never falls into
+    // the past (the prior hardcoded 2026-06-15 date bomb that this replaced).
+    const runOffsetMinutes = parseInt(kit.runSuffix, 16) % (365 * 24 * 60);
+    const reservationStart = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    reservationStart.setUTCHours(14, 0, 0, 0); // clean anchor before per-run offset
+    reservationStart.setUTCMinutes(reservationStart.getUTCMinutes() + runOffsetMinutes);
+    const startTime = reservationStart.toISOString();
+    const endTime = new Date(reservationStart.getTime() + 2 * 60 * 60 * 1000).toISOString(); // +2h
+    // Conflicting window overlaps the base reservation (start+1h..start+3h vs base..base+2h).
+    const conflictStartTime = new Date(reservationStart.getTime() + 1 * 60 * 60 * 1000).toISOString(); // +1h
+    const conflictEndTime = new Date(reservationStart.getTime() + 3 * 60 * 60 * 1000).toISOString(); // +3h
 
     setActor(kit, 'tenantA');
     const reserveResponse = await routeModules.amenityReserve.POST(
