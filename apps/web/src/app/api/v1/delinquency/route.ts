@@ -1,4 +1,5 @@
 import { runRoute } from '@propertypro/api-contract';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -8,7 +9,10 @@ import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { listDelinquentUnits } from '@/lib/services/finance-service';
 import { delinquencyGetContract } from './contract';
 
-const DELINQUENCY_READ_ROLES = new Set(['manager', 'pm_admin']);
+// role-v3: admin-tier DB roles (bilingual — manager/pm_admin + property_manager/
+// root_manager). The legacy ['manager','pm_admin'] set locked every v3
+// property_manager out of delinquency, though the RBAC matrix grants them finances:read.
+const DELINQUENCY_READ_ROLES = new Set<string>(ADMIN_TIER_DB_ROLES);
 
 export const GET = withErrorHandler(
   runRoute(delinquencyGetContract, async ({ req }) => {

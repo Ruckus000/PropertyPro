@@ -18,6 +18,7 @@
  * code (400) is unchanged.
  */
 import { runRoute } from '@propertypro/api-contract';
+import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -27,7 +28,9 @@ import { requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finan
 import { getConnectStatus } from '@/lib/services/finance-service';
 import { stripeConnectStatusGetContract } from './contract';
 
-const CONNECT_STATUS_ROLES = new Set(['manager', 'pm_admin']);
+// role-v3: admin-tier DB roles (bilingual). The legacy ['manager','pm_admin']
+// set locked every v3 property_manager out of Stripe Connect status.
+const CONNECT_STATUS_ROLES = new Set<string>(ADMIN_TIER_DB_ROLES);
 
 export const GET = withErrorHandler(
   runRoute(stripeConnectStatusGetContract, async ({ query, req }) => {
