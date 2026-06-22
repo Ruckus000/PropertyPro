@@ -241,8 +241,7 @@ describe('POST /api/v1/pm/site/publish', () => {
 
   it('allows CAM managers to publish', async () => {
     requireMembershipMock.mockResolvedValueOnce({
-      role: 'manager',
-      presetKey: 'cam',
+      role: 'property_manager',
       communityId: 42,
     });
     publishMock.mockResolvedValueOnce({

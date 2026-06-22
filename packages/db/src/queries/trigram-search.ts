@@ -402,7 +402,6 @@ export interface UserSearchHit {
   unit_number: string | null;
   role: string;
   display_title: string | null;
-  preset_key: string | null;
   relevance: number;
 }
 
@@ -429,7 +428,6 @@ export async function searchUsersByTrigram(
         un.unit_number,
         ur.role,
         ur.display_title,
-        ur.preset_key,
         CASE
           WHEN un.unit_number LIKE ${likePattern} THEN 0.9
           ELSE GREATEST(

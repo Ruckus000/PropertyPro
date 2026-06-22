@@ -49,17 +49,11 @@ vi.mock('@/lib/services/polls-service', () => ({
 import { DELETE } from '../../src/app/api/v1/forum/threads/[id]/reply/route';
 
 const ADMIN_MEMBERSHIP = {
-  role: 'manager',
+  role: 'property_manager',
   isAdmin: true,
   isUnitOwner: false,
   displayTitle: 'Board President',
-  presetKey: 'board_president',
   communityType: 'condo_718',
-  permissions: {
-    resources: {
-      polls: { read: true, write: true },
-    },
-  },
 };
 
 const RESIDENT_MEMBERSHIP = {
@@ -67,27 +61,7 @@ const RESIDENT_MEMBERSHIP = {
   isAdmin: false,
   isUnitOwner: true,
   displayTitle: 'Owner',
-  presetKey: 'owner',
   communityType: 'condo_718',
-  permissions: {
-    resources: {
-      polls: { read: true, write: false },
-    },
-  },
-};
-
-const LIMITED_MANAGER_MEMBERSHIP = {
-  role: 'manager',
-  isAdmin: true,
-  isUnitOwner: false,
-  displayTitle: 'Community Manager',
-  presetKey: 'cam',
-  communityType: 'condo_718',
-  permissions: {
-    resources: {
-      polls: { read: true, write: false },
-    },
-  },
 };
 
 describe('forum reply moderation route', () => {
@@ -158,28 +132,6 @@ describe('forum reply moderation route', () => {
       undefined,
     );
     expect(json.data).toEqual({ id: 99, deleted: true });
-  });
-
-  it('rejects managers without polls write permission', async () => {
-    requireCommunityMembershipMock.mockResolvedValueOnce(LIMITED_MANAGER_MEMBERSHIP);
-
-    const req = new NextRequest('http://localhost:3000/api/v1/forum/threads/7/reply', {
-      method: 'DELETE',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        communityId: 42,
-        replyId: 99,
-      }),
-    });
-
-    const res = await DELETE(req, { params: Promise.resolve({ id: '7' }) });
-    const json = (await res.json()) as { error: { message: string; code: string } };
-
-    expect(res.status).toBe(403);
-    expect(deleteForumReplyForCommunityMock).not.toHaveBeenCalled();
-    expect(json.error.code).toBe('FORBIDDEN');
   });
 
   it('rejects invalid reply ids before calling the service', async () => {

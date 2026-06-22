@@ -49,10 +49,10 @@ import { GET } from '../../src/app/api/v1/delinquency/route';
 const MANAGER_MEMBERSHIP = {
   userId: 'mgr-1',
   communityId: 42,
-  role: 'manager' as const,
+  role: 'property_manager' as const,
   isAdmin: true,
   isUnitOwner: false,
-  displayTitle: 'Community Manager',
+  displayTitle: 'Property Manager',
   communityType: 'condo_718' as const,
 };
 

@@ -22,9 +22,9 @@ describe('listBillingCapableUserIds', () => {
     selectFromMock.mockResolvedValue([]);
   });
 
-  it('includes PM-scope roles regardless of preset or designation', async () => {
+  it('includes PM-scope roles regardless of designation', async () => {
     selectFromMock.mockResolvedValueOnce([
-      { userId: 'user-pm', role: 'pm_admin', presetKey: null, designation: null },
+      { userId: 'user-pm', role: 'property_manager', designation: null },
     ]);
 
     const result = await listBillingCapableUserIds(1, EXCLUDE_USER_ID);
@@ -32,14 +32,11 @@ describe('listBillingCapableUserIds', () => {
     expect(result).toEqual(['user-pm']);
   });
 
-  it('includes manager-tier rows with board-president designation (no preset)', async () => {
-    // role 'manager' is the only manager-tier role NOT also PM-scope, so this
-    // row exercises the designation arm rather than the always-include PM arm.
+  it('includes PM-scope rows regardless of board designation', async () => {
     selectFromMock.mockResolvedValueOnce([
       {
         userId: 'user-president',
-        role: 'manager',
-        presetKey: null,
+        role: 'property_manager',
         designation: 'board_president',
       },
     ]);
@@ -49,37 +46,11 @@ describe('listBillingCapableUserIds', () => {
     expect(result).toEqual(['user-president']);
   });
 
-  it('includes legacy manager rows with cam preset and no designation', async () => {
-    selectFromMock.mockResolvedValueOnce([
-      { userId: 'user-cam', role: 'manager', presetKey: 'cam', designation: null },
-    ]);
-
-    const result = await listBillingCapableUserIds(1, EXCLUDE_USER_ID);
-
-    expect(result).toEqual(['user-cam']);
-  });
-
-  it('excludes manager-tier rows with a president preset but no designation', async () => {
-    selectFromMock.mockResolvedValueOnce([
-      {
-        userId: 'user-preset-only',
-        role: 'manager',
-        presetKey: 'board_president',
-        designation: null,
-      },
-    ]);
-
-    const result = await listBillingCapableUserIds(1, EXCLUDE_USER_ID);
-
-    expect(result).toEqual([]);
-  });
-
-  it('excludes manager-tier rows with a board-member designation and no preset', async () => {
+  it('excludes residents with a board-member designation', async () => {
     selectFromMock.mockResolvedValueOnce([
       {
         userId: 'user-board-member',
-        role: 'manager',
-        presetKey: null,
+        role: 'resident',
         designation: 'board_member',
       },
     ]);
@@ -91,11 +62,10 @@ describe('listBillingCapableUserIds', () => {
 
   it('excludes the requester even when otherwise billing-capable', async () => {
     selectFromMock.mockResolvedValueOnce([
-      { userId: EXCLUDE_USER_ID, role: 'pm_admin', presetKey: null, designation: null },
+      { userId: EXCLUDE_USER_ID, role: 'property_manager', designation: null },
       {
         userId: 'user-president',
         role: 'root_manager',
-        presetKey: null,
         designation: 'board_president',
       },
     ]);

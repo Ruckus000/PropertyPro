@@ -11,9 +11,6 @@ import {
   NEW_COMMUNITY_ROLES,
   type NewCommunityRole,
   type CommunityType,
-  type PresetKey,
-  getPresetPermissions,
-  PRESET_METADATA,
 } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -87,7 +84,7 @@ export const GET = withErrorHandler(
 export const POST = withErrorHandler(
   runRoute(residentsCreateContract, async ({ body, communityId }) => {
     await assertNotDemoGrace(communityId);
-    const { email, fullName, phone, role, unitId, isUnitOwner, presetKey } = body;
+    const { email, fullName, phone, role, unitId, isUnitOwner } = body;
     const actorUserId = await requireAuthenticatedUserId();
     const actorMembership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(actorMembership, 'residents', 'write');
@@ -103,9 +100,6 @@ export const POST = withErrorHandler(
       throw new ValidationError(validation.error ?? 'Invalid role assignment');
     }
 
-    if (role === 'manager' && !presetKey) {
-      throw new ValidationError('presetKey is required when role is "manager"');
-    }
     if (role === 'resident' && isUnitOwner && communityType === 'apartment') {
       throw new ValidationError('Owners are not allowed in apartment communities');
     }
@@ -135,19 +129,13 @@ export const POST = withErrorHandler(
     }
 
     const effectiveIsUnitOwner = role === 'resident' ? (isUnitOwner ?? false) : false;
-    const permissions =
-      role === 'manager' && presetKey
-        ? getPresetPermissions(presetKey, communityType)
-        : null;
-    const displayTitle = resolveDisplayTitle(role, effectiveIsUnitOwner, presetKey);
+    const displayTitle = resolveDisplayTitle(role, effectiveIsUnitOwner);
 
     const insertedRole = await createResidentRole(communityId, {
       userId,
       role,
       unitId: unitId ?? null,
       isUnitOwner: effectiveIsUnitOwner,
-      permissions,
-      presetKey: role === 'manager' ? (presetKey ?? null) : null,
       displayTitle,
     });
 
@@ -192,7 +180,6 @@ export const PATCH = withErrorHandler(
       role,
       unitId,
       isUnitOwner: patchIsUnitOwner,
-      presetKey: patchPresetKey,
     } = body;
     const actorUserId = await requireAuthenticatedUserId();
     const actorMembership = await requireCommunityMembership(communityId, actorUserId);
@@ -215,20 +202,15 @@ export const PATCH = withErrorHandler(
     const oldRole = requireNewCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
     const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
 
-    // A manager-tier member's role configuration (role / unit / owner flag /
-    // preset / permissions) is managed exclusively from the root-only Roles &
-    // Access screen. The residents path must not mutate it even when `role` is
-    // omitted — otherwise a preset/unit edit on a property_manager row would
-    // recompute (and, via the legacy-'manager'-keyed branch below, NULL) its
-    // permissions, which checkPermissionV2 resolves to the FULL
-    // property_manager_admin matrix: a self-serve privilege escalation. Only
+    // A manager-tier member's role configuration (role / unit / owner flag) is
+    // managed exclusively from the root-only Roles & Access screen. The
+    // residents path must not mutate it even when `role` is omitted. Only
     // contact fields (fullName / phone) remain editable here for these rows.
     if (
       !isResidentTierRole(oldRole) &&
       (role !== undefined ||
         unitId !== undefined ||
-        patchIsUnitOwner !== undefined ||
-        patchPresetKey !== undefined)
+        patchIsUnitOwner !== undefined)
     ) {
       throw new ForbiddenError(MANAGER_TIER_VIA_RESIDENTS_MSG);
     }
@@ -269,16 +251,9 @@ export const PATCH = withErrorHandler(
       }
     }
 
-    if (role !== undefined || unitId !== undefined || patchIsUnitOwner !== undefined || patchPresetKey !== undefined) {
+    if (role !== undefined || unitId !== undefined || patchIsUnitOwner !== undefined) {
       const communityType = await getCommunityType(communityId);
       const roleUpdate: Record<string, unknown> = {};
-
-      if (newRole === 'manager') {
-        const effectivePreset = patchPresetKey ?? (existingRole['presetKey'] as string | null);
-        if (!effectivePreset) {
-          throw new ValidationError('presetKey is required when role is "manager"');
-        }
-      }
 
       if (role !== undefined) {
         oldValues['role'] = oldRole;
@@ -301,21 +276,10 @@ export const PATCH = withErrorHandler(
         if (newRole === 'resident' && effectiveIsUnitOwner && communityType === 'apartment') {
           throw new ValidationError('Owners are not allowed in apartment communities');
         }
-      }
 
-      if (role !== undefined || patchPresetKey !== undefined) {
-        const effectivePreset = newRole === 'manager'
-          ? (patchPresetKey ?? (existingRole['presetKey'] as PresetKey | null))
-          : null;
-        roleUpdate['presetKey'] = effectivePreset;
-
-        roleUpdate['permissions'] = newRole === 'manager' && effectivePreset
-          ? getPresetPermissions(effectivePreset as PresetKey, communityType)
-          : null;
         roleUpdate['displayTitle'] = resolveDisplayTitle(
           newRole as NewCommunityRole,
-          roleUpdate['isUnitOwner'] as boolean | undefined,
-          effectivePreset as PresetKey | undefined,
+          effectiveIsUnitOwner,
         );
       }
 
@@ -383,11 +347,9 @@ export const DELETE = withErrorHandler(
 function resolveDisplayTitle(
   role: NewCommunityRole,
   isUnitOwner?: boolean,
-  presetKey?: PresetKey | null,
 ): string {
-  if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
-  // Unreachable from the residents path post-2c: manager/pm_admin roles are
-  // rejected by the isResidentTierRole guard before this runs.
+  // Unreachable from the residents path: manager-tier roles are rejected by
+  // the isResidentTierRole guard before this runs.
   return 'Property Manager Admin';
 }

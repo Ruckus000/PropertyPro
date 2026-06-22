@@ -96,12 +96,12 @@ import { DELETE, GET, POST } from '../../src/app/api/v1/documents/route';
 const MEMBERSHIP = {
   userId: 'user-admin',
   communityId: 42,
-  role: 'board_president' as const,
+  role: 'property_manager' as const,
   isAdmin: true,
   isUnitOwner: false,
   displayTitle: 'Board President',
   communityType: 'condo_718' as const,
-  permissions: {},
+  designation: 'board_president' as const,
 };
 
 const DOCUMENT_ROW = {
@@ -178,10 +178,9 @@ describe('GET /api/v1/documents', () => {
       expect.objectContaining({
         filter: {
           communityId: 42,
-          role: 'board_president',
+          role: 'property_manager',
           communityType: 'condo_718',
           isUnitOwner: false,
-          permissions: {},
         },
         categoryId: null,
         cursor: undefined,

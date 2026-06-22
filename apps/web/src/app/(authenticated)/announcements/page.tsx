@@ -52,7 +52,6 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
   const query =

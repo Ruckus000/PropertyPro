@@ -88,7 +88,6 @@ export const DELETE = withErrorHandler(
         'write',
         {
           isUnitOwner: membership.isUnitOwner,
-          permissions: membership.permissions,
         },
       );
 

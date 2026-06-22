@@ -3,7 +3,6 @@ import { onboardingChecklistItems } from '@propertypro/db';
 import { eq, and, isNull } from '@propertypro/db/filters';
 import {
   PM_SCOPE_DB_ROLES,
-  MANAGER_TIER_DB_ROLES,
   isBoardPresident,
   hasBoardDesignation,
   type BoardDesignation,
@@ -95,14 +94,6 @@ export function getItemKeysForRole(
   // base set plus customize_portal — parity with the pre-3.3 PM_SCOPE branch.
   if ((PM_SCOPE_DB_ROLES as readonly string[]).includes(role)) {
     return [...adminBase, ...PM_ADMIN_ITEMS];
-  }
-  // MANAGER_TIER but NOT PM-scope: in practice only the v2 'manager' role during the
-  // bilingual window (property_manager/root_manager are captured by the PM_SCOPE branch
-  // above). DOCUMENTED 3.3 change: the legacy site_manager preset previously keyed on the
-  // display string and its welcome PREVIEW fell through to OWNER_TENANT_ITEMS; under v3 role
-  // keys it now shows the admin base set. Onboarding-only; no permission or data change.
-  if ((MANAGER_TIER_DB_ROLES as readonly string[]).includes(role)) {
-    return adminBase;
   }
   // resident (no board designation) → owner/tenant checklist.
   return OWNER_TENANT_ITEMS;

@@ -243,7 +243,7 @@ describe('access-request-service', () => {
           },
         ],
         roleRows: [
-          { userId: 'admin-1', role: 'pm_admin', presetKey: null },
+          { userId: 'admin-1', role: 'property_manager', designation: null },
         ],
         userRows: [
           { id: 'admin-1', email: 'admin@example.com', fullName: 'Admin User' },
@@ -301,21 +301,18 @@ describe('access-request-service', () => {
       it('notifies all PM-scope role holders', async () => {
         const emails = await notifiedEmails(
           [
-            { userId: 'admin-1', role: 'property_manager', presetKey: null, designation: null },
-            { userId: 'admin-2', role: 'root_manager', presetKey: null, designation: null },
-            { userId: 'admin-3', role: 'pm_admin', presetKey: null, designation: null },
+            { userId: 'admin-1', role: 'property_manager', designation: null },
+            { userId: 'admin-2', role: 'root_manager', designation: null },
           ],
           [
             { id: 'admin-1', email: 'pm@example.com', fullName: 'PM' },
             { id: 'admin-2', email: 'root@example.com', fullName: 'Root' },
-            { id: 'admin-3', email: 'pmadmin@example.com', fullName: 'PM Admin' },
           ],
         );
 
         expect(emails).toEqual([
           'pm@example.com',
           'root@example.com',
-          'pmadmin@example.com',
         ]);
       });
 
@@ -325,7 +322,6 @@ describe('access-request-service', () => {
             {
               userId: 'pres-1',
               role: 'resident',
-              presetKey: null,
               designation: 'board_president',
             },
           ],
@@ -335,38 +331,12 @@ describe('access-request-service', () => {
         expect(emails).toEqual(['president@example.com']);
       });
 
-      it('does NOT notify a board_president presetKey row without designation (preset arm removed)', async () => {
-        const emails = await notifiedEmails(
-          [
-            {
-              userId: 'legacy-1',
-              role: 'manager',
-              presetKey: 'board_president',
-              designation: null,
-            },
-          ],
-          [{ id: 'legacy-1', email: 'legacy-pres@example.com', fullName: 'Legacy Pres' }],
-        );
-
-        expect(emails).toEqual([]);
-      });
-
-      it('does NOT notify a cam presetKey row without PM-scope role (cam arm removed)', async () => {
-        const emails = await notifiedEmails(
-          [{ userId: 'cam-1', role: 'manager', presetKey: 'cam', designation: null }],
-          [{ id: 'cam-1', email: 'cam@example.com', fullName: 'Cam User' }],
-        );
-
-        expect(emails).toEqual([]);
-      });
-
       it('does NOT notify a board_member designation on a non-PM-scope role', async () => {
         const emails = await notifiedEmails(
           [
             {
               userId: 'member-1',
               role: 'resident',
-              presetKey: null,
               designation: 'board_member',
             },
           ],

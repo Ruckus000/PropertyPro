@@ -39,7 +39,7 @@ export default async function CompliancePage({ params }: PageProps) {
     redirect('/dashboard?reason=feature-not-available');
   }
 
-  const opts = { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions };
+  const opts = { isUnitOwner: membership.isUnitOwner };
   if (!checkPermissionV2(membership.role, membership.communityType, 'compliance', 'read', opts)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }

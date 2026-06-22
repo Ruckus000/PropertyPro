@@ -33,7 +33,6 @@ export default async function MobileMorePage() {
   let communityName = '';
   let displayTitle = '';
   let role = '';
-  let presetKey: string | undefined;
   let hasCompliance = false;
   let hasFinance = false;
 
@@ -43,7 +42,6 @@ export default async function MobileMorePage() {
     communityName = membership.communityName;
     displayTitle = membership.displayTitle;
     role = membership.role;
-    presetKey = membership.presetKey;
     hasCompliance = features.hasCompliance;
     hasFinance = features.hasFinance;
   } catch {
@@ -57,7 +55,6 @@ export default async function MobileMorePage() {
       communityName={communityName}
       communityId={communityId}
       role={role}
-      presetKey={presetKey}
       hasCompliance={hasCompliance}
       hasFinance={hasFinance}
     />

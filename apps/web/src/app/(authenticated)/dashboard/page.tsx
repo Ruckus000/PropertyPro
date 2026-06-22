@@ -81,7 +81,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

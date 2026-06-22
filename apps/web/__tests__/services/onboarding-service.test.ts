@@ -210,11 +210,10 @@ describe('createOnboardingResident', () => {
         email: 'dup@example.com',
         fullName: 'Dup User',
         phone: null,
-        role: 'manager',
-        unitId: null,
+        role: 'resident',
+        unitId: 4,
         actorUserId: ACTOR_USER_ID,
         communityType: 'condo_718',
-        presetKey: 'cam',
       }),
     ).rejects.toThrow('User already has role "resident" in this community');
   });
@@ -243,78 +242,6 @@ describe('createOnboardingResident', () => {
     );
   });
 
-  it('resolves displayTitle from PRESET_METADATA for manager with presetKey', async () => {
-    setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
-
-    await createOnboardingResident({
-      communityId: COMMUNITY_ID,
-      email: 'cam@example.com',
-      fullName: 'CAM User',
-      phone: null,
-      role: 'manager',
-      unitId: null,
-      actorUserId: ACTOR_USER_ID,
-      communityType: 'condo_718',
-      presetKey: 'cam',
-    });
-
-    expect(mockScopedInsert).toHaveBeenCalledWith(
-      userRoles,
-      expect.objectContaining({
-        displayTitle: 'Community Association Manager',
-        presetKey: 'cam',
-      }),
-    );
-  });
-
-  it('writes designation in lockstep with a board presetKey (board_president)', async () => {
-    setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
-
-    await createOnboardingResident({
-      communityId: COMMUNITY_ID,
-      email: 'prez@example.com',
-      fullName: 'Prez User',
-      phone: null,
-      role: 'manager',
-      unitId: null,
-      actorUserId: ACTOR_USER_ID,
-      communityType: 'condo_718',
-      presetKey: 'board_president',
-    });
-
-    expect(mockScopedInsert).toHaveBeenCalledWith(
-      userRoles,
-      expect.objectContaining({
-        presetKey: 'board_president',
-        designation: 'board_president',
-      }),
-    );
-  });
-
-  it('writes designation null for a non-board manager presetKey (cam)', async () => {
-    setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
-
-    await createOnboardingResident({
-      communityId: COMMUNITY_ID,
-      email: 'cam2@example.com',
-      fullName: 'CAM Two',
-      phone: null,
-      role: 'manager',
-      unitId: null,
-      actorUserId: ACTOR_USER_ID,
-      communityType: 'condo_718',
-      presetKey: 'cam',
-    });
-
-    expect(mockScopedInsert).toHaveBeenCalledWith(
-      userRoles,
-      expect.objectContaining({
-        presetKey: 'cam',
-        designation: null,
-      }),
-    );
-  });
-
   it('writes designation null for a resident', async () => {
     setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
 
@@ -339,7 +266,7 @@ describe('createOnboardingResident', () => {
     );
   });
 
-  it('resolves displayTitle as "Administrator" for pm_admin role', async () => {
+  it('resolves displayTitle as "Administrator" for a non-resident role (property_manager)', async () => {
     setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
 
     await createOnboardingResident({
@@ -347,7 +274,7 @@ describe('createOnboardingResident', () => {
       email: 'admin@example.com',
       fullName: 'PM Admin',
       phone: null,
-      role: 'pm_admin',
+      role: 'property_manager',
       unitId: null,
       actorUserId: ACTOR_USER_ID,
       communityType: 'condo_718',

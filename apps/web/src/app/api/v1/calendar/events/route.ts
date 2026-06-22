@@ -68,7 +68,6 @@ export const GET = withErrorHandler(
       'read',
       {
         isUnitOwner: membership.isUnitOwner,
-        permissions: membership.permissions,
       },
     );
 

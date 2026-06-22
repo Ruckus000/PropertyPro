@@ -136,7 +136,7 @@ describe('PATCH /api/v1/pm/site/hero', () => {
   });
 
   it('allows CAM managers to update the hero block', async () => {
-    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     const res = await PATCH(makeRequest(VALID_BODY));
     expect(res.status).toBe(200);
     expect(upsertMock).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: 'user-1' }));
@@ -265,7 +265,7 @@ describe('GET /api/v1/pm/site/hero', () => {
   });
 
   it('allows CAM managers to read the hero block', async () => {
-    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     listSiteBlocksMock.mockResolvedValueOnce([]);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);

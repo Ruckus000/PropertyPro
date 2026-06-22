@@ -216,14 +216,13 @@ export async function approveJoinRequest(
       throw new ConflictError('Request is no longer pending');
     }
 
-    // Create user_roles row (v2 hybrid model: role='resident' + isUnitOwner flag)
+    // Create user_roles row (v3: role='resident' + isUnitOwner flag)
     await tx.insert(userRoles).values({
       userId: req.userId,
       communityId: req.communityId,
       role: 'resident',
       isUnitOwner: isOwner,
       displayTitle,
-      legacyRole: req.residentType,
     });
 
     // Notify the requester INSIDE the transaction (Plan C3): if the

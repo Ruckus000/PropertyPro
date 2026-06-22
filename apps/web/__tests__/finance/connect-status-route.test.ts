@@ -66,7 +66,7 @@ describe('GET /api/v1/stripe/connect/status', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'user-finance-1',
       communityId: 42,
-      role: 'manager',
+      role: 'property_manager',
       isAdmin: true,
       communityType: 'condo_718',
     });

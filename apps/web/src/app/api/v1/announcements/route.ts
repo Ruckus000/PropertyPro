@@ -255,7 +255,6 @@ export const DELETE = withErrorHandler(
         membership.isAdmin &&
         checkPermissionV2(membership.role, membership.communityType, 'announcements', 'write', {
           isUnitOwner: membership.isUnitOwner,
-          permissions: membership.permissions,
         });
       if (!isAuthor && !canModerate) {
         throw new ForbiddenError('You can only delete your own announcements');

@@ -42,8 +42,6 @@ interface AppSidebarProps {
   role: AnyCommunityRole | null;
   /** True when the current user is a unit owner — used to distinguish owner vs tenant within `resident`. */
   isUnitOwner?: boolean;
-  /** Manager preset (e.g. 'board_president', 'cam'); null/undefined for non-managers. */
-  presetKey?: string | null;
   /** Board designation (BoardDesignation value); null when not on the board. */
   designation?: string | null;
   features: CommunityFeatures | null;
@@ -63,7 +61,6 @@ export function AppSidebar({
   communityType,
   role,
   isUnitOwner = false,
-  presetKey = null,
   designation = null,
   features,
   userName,
@@ -85,11 +82,11 @@ export function AppSidebar({
 
   const isPmContext = pathname.startsWith('/pm/');
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
-  // The runtime role is on the new 4-role model (resident | manager | pm_admin).
+  // The runtime role is on the v3 model (resident | property_manager | root_manager).
   // Plan-gate logic operates on the canonical role (owner, tenant, board_president, ...)
-  // so we resolve once here using isUnitOwner + designation (presetKey is the bilingual fallback).
+  // so we resolve once here using isUnitOwner + designation.
   const canonicalRole: AnyCommunityRole | null = role
-    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, presetKey: presetKey ?? null, designation: designation ?? null })
+    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, designation: designation ?? null })
     : null;
 
   const allVisible: NavItemWithGateStatus[] = isPmContext

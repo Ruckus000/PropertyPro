@@ -6,7 +6,6 @@ import { FilePlus2, PenTool } from 'lucide-react';
 import {
   type CommunityType,
   type TransitionRole,
-  type ManagerPermissions,
 } from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { DocumentUploadArea } from './document-upload-area';
@@ -24,7 +23,6 @@ interface DocumentLibraryProps {
   userId: string;
   userRole: TransitionRole;
   isUnitOwner?: boolean;
-  permissions?: ManagerPermissions;
   /** Effective community feature — hide E‑Sign when the plan/type does not include it. */
   hasEsign: boolean;
   /** Pre-populate search from command palette "View all" link */
@@ -39,7 +37,6 @@ export function DocumentLibrary({
   userId,
   userRole,
   isUnitOwner,
-  permissions,
   hasEsign,
   initialSearchQuery,
 }: DocumentLibraryProps) {
@@ -52,7 +49,6 @@ export function DocumentLibrary({
 
   const canUpload = checkPermissionV2(userRole, communityType, 'documents', 'write', {
     isUnitOwner,
-    permissions,
   });
   const invalidateDocuments = useDocumentsInvalidator(communityId);
 

@@ -109,7 +109,6 @@ export default async function MobileSettingsPage() {
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
   const canReadFinances = checkPermissionV2(
@@ -119,7 +118,6 @@ export default async function MobileSettingsPage() {
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

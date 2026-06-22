@@ -56,7 +56,6 @@ export const GET = withErrorHandler(
       role: membership.role,
       communityType: membership.communityType,
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     })) as Array<Record<string, unknown>>;
 
     const q = (query.q ?? '').trim().toLowerCase();

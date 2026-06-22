@@ -49,7 +49,6 @@ export default async function UnitsPage({ searchParams }: PageProps) {
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

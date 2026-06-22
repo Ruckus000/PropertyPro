@@ -48,7 +48,7 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     membership.communityType,
     'emergency_broadcasts',
     'write',
-    { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions },
+    { isUnitOwner: membership.isUnitOwner },
   );
 
   const scoped = createScopedClient(context.communityId);

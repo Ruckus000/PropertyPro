@@ -64,7 +64,6 @@ describe('calendar-event-reminder-service SQL-shape regression', () => {
         userId: userRoles.userId,
         role: userRoles.role,
         isUnitOwner: userRoles.isUnitOwner,
-        permissions: userRoles.permissions,
         unitId: userRoles.unitId,
       })
       .from(userRoles)
@@ -157,7 +156,6 @@ function makeRecipient(overrides: Partial<CommunityRecipient> = {}): CommunityRe
     isUnitOwner: true,
     isAdmin: false,
     unitId: 42,
-    permissions: undefined,
     preferences: getDefaultPreferences(),
     canReadMeetings: true,
     canReadFinances: true,

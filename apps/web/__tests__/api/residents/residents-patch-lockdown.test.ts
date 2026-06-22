@@ -158,8 +158,9 @@ describe('residents manager-tier lockdown', () => {
 
   // -----------------------------------------------------------------------
   // PATCH: manager-tier role → 403
-  // role='manager' is valid per the contract schema (NEW_COMMUNITY_ROLES includes it)
-  // but must be blocked by the isResidentTierRole guard before any DB write.
+  // role='property_manager' is valid per the contract schema (NEW_COMMUNITY_ROLES
+  // includes it) but must be blocked by the isResidentTierRole guard before any
+  // DB write.
   // -----------------------------------------------------------------------
   describe('PATCH with manager-tier role', () => {
     it('returns 403 and does NOT call updateResidentRole', async () => {
@@ -175,7 +176,7 @@ describe('residents manager-tier lockdown', () => {
         patchReq({
           communityId: COMMUNITY_ID,
           userId: 'b0476f53-6f95-4493-b329-13ff1a2334e6',
-          role: 'manager',
+          role: 'property_manager',
         }),
       );
 
@@ -190,29 +191,28 @@ describe('residents manager-tier lockdown', () => {
 
   // -----------------------------------------------------------------------
   // PATCH on an EXISTING manager-tier row with NO `role` (the escalation vector)
-  // A non-root admin must not be able to mutate a property_manager row's preset/
-  // unit/owner via the residents path — doing so would recompute & NULL its
-  // permissions (legacy-'manager'-keyed branch), which checkPermissionV2 resolves
-  // to FULL property_manager_admin access. Guard must fire on the EXISTING role.
+  // A non-root admin must not be able to mutate a property_manager row's
+  // unit/owner config via the residents path. The guard fires on the EXISTING
+  // role whenever a role-config field (role/unitId/isUnitOwner) is present, even
+  // when `role` itself is omitted.
   // -----------------------------------------------------------------------
-  describe('PATCH preset/unit on an existing property_manager (escalation vector)', () => {
+  describe('PATCH unit/owner on an existing property_manager (escalation vector)', () => {
     it('returns 403 and does NOT call updateResidentRole when role is omitted', async () => {
       // Existing manager-tier row (post-2a backfill: board/CAM members are
-      // property_manager with a restricted JSONB preset).
+      // property_manager rows).
       getResidentRoleByUserIdMock.mockResolvedValue({
         role: 'property_manager',
         unitId: null,
         isUnitOwner: false,
-        presetKey: 'cam',
       });
 
       const res = await PATCH(
         patchReq({
           communityId: COMMUNITY_ID,
           userId: 'b0476f53-6f95-4493-b329-13ff1a2334e6',
-          // No `role` — only a preset change. Pre-fix this slipped past the
-          // role-gated guards and nulled permissions.
-          presetKey: 'cam',
+          // No `role` — only a unit-config change. The guard must still fire on
+          // the existing property_manager role before any role-row write.
+          unitId: 5,
         }),
       );
 
@@ -220,7 +220,7 @@ describe('residents manager-tier lockdown', () => {
       const json = await res.json();
       expect(json.error.message).toMatch(/Manager roles/i);
 
-      // The permission-nulling write must NOT have happened.
+      // The role-config write must NOT have happened.
       expect(updateResidentRoleMock).not.toHaveBeenCalled();
     });
 
@@ -229,7 +229,6 @@ describe('residents manager-tier lockdown', () => {
         role: 'property_manager',
         unitId: null,
         isUnitOwner: false,
-        presetKey: 'cam',
       });
       getResidentUserByIdMock.mockResolvedValue({ fullName: 'Old', phone: null });
       updateResidentUserMock.mockResolvedValue(undefined);
@@ -251,8 +250,8 @@ describe('residents manager-tier lockdown', () => {
 
   // -----------------------------------------------------------------------
   // POST: manager-tier role → 403
-  // role='manager' passes Zod (NEW_COMMUNITY_ROLES includes it) but must be
-  // blocked by the isResidentTierRole guard before any DB write.
+  // role='property_manager' passes Zod (NEW_COMMUNITY_ROLES includes it) but
+  // must be blocked by the isResidentTierRole guard before any DB write.
   // -----------------------------------------------------------------------
   describe('POST with manager-tier role', () => {
     it('returns 403 and does NOT call createResidentRole or createResidentUser', async () => {
@@ -261,8 +260,7 @@ describe('residents manager-tier lockdown', () => {
           communityId: COMMUNITY_ID,
           email: 'pm@example.com',
           fullName: 'Property Manager',
-          role: 'manager',
-          presetKey: 'board_member',
+          role: 'property_manager',
           unitId: null,
         }),
       );

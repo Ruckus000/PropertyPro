@@ -11,22 +11,17 @@ describe('resolveHelpViewerRole', () => {
     expect(resolveHelpViewerRole('resident', null, false)).toBe('tenant');
   });
 
-  it('maps PM-tier DB roles to property_manager_admin', () => {
-    expect(resolveHelpViewerRole('pm_admin')).toBe('property_manager_admin');
+  it('maps root_manager to property_manager_admin', () => {
     expect(resolveHelpViewerRole('root_manager')).toBe('property_manager_admin');
   });
 
-  it('maps property_manager without preset to property_manager_admin', () => {
+  it('maps property_manager without designation to property_manager_admin', () => {
     expect(resolveHelpViewerRole('property_manager')).toBe('property_manager_admin');
   });
 
-  it('maps manager presets to legacy role names', () => {
-    expect(resolveHelpViewerRole('manager', 'cam')).toBe('cam');
+  it('maps property_manager with board designation to board role names', () => {
     expect(resolveHelpViewerRole('property_manager', 'board_president')).toBe('board_president');
-  });
-
-  it('defaults bare manager to cam', () => {
-    expect(resolveHelpViewerRole('manager')).toBe('cam');
+    expect(resolveHelpViewerRole('property_manager', 'board_member')).toBe('board_member');
   });
 });
 

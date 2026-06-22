@@ -41,16 +41,15 @@ export function requireCommunityRole(
 }
 
 /**
- * v3 transition window: accepts both role generations
- * (resident|manager|pm_admin|property_manager|root_manager).
- * Phase 4 narrows this back to the v3-only set.
+ * v3 end state: accepts the v3 role set
+ * (resident|property_manager|root_manager).
  */
 export function requireNewCommunityRole(
   value: unknown,
   context: string,
 ): TransitionRole {
   if (!isTransitionRole(value)) {
-    throw new DataIntegrityError(`Invalid community role (transition window: v2+v3) in ${context}`, {
+    throw new DataIntegrityError(`Invalid community role (v3) in ${context}`, {
       context,
       value,
     });

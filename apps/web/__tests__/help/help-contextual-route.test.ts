@@ -92,11 +92,11 @@ describe('GET /api/v1/help/contextual', () => {
     expect(getContextualArticlesMock).toHaveBeenCalledWith('/compliance', 'owner', 8);
   });
 
-  it('honors a board preset on a manager-tier membership for the viewer role', async () => {
+  it('honors a board designation on a property_manager membership for the viewer role', async () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       ...MEMBERSHIP,
-      role: 'manager',
-      presetKey: 'board_member',
+      role: 'property_manager',
+      designation: 'board_member',
     });
 
     const res = await GET(

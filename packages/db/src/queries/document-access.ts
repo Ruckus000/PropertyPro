@@ -6,7 +6,7 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
-import type { CommunityRole, CommunityType, TransitionRole, ManagerPermissions } from '@propertypro/shared';
+import type { CommunityRole, CommunityType, TransitionRole } from '@propertypro/shared';
 import {
   getAccessibleKnownCategories,
   isElevatedRole,
@@ -39,7 +39,6 @@ export interface DocumentAccessContext {
   role: CommunityRole | TransitionRole;
   communityType: CommunityType;
   isUnitOwner?: boolean;
-  permissions?: ManagerPermissions;
 }
 
 async function getAllowedCategoryIds(
@@ -48,7 +47,6 @@ async function getAllowedCategoryIds(
   const allowedKeys = new Set<KnownDocumentCategoryKey>(
     getAccessibleKnownCategories(context.role, context.communityType, {
       isUnitOwner: context.isUnitOwner,
-      permissions: context.permissions,
     }),
   );
 
@@ -73,7 +71,7 @@ async function getAllowedCategoryIds(
 export async function buildDocumentAccessFilter(
   context: DocumentAccessContext,
 ): Promise<SQL | undefined> {
-  if (isElevatedRole(context.role, { isUnitOwner: context.isUnitOwner, permissions: context.permissions })) {
+  if (isElevatedRole(context.role, { isUnitOwner: context.isUnitOwner })) {
     return undefined;
   }
 

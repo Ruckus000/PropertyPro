@@ -30,8 +30,6 @@ export interface PageShellContext {
   role: AnyCommunityRole | null;
   /** Membership flag — true when the resident is a unit owner. Used to distinguish owner vs tenant. */
   isUnitOwner: boolean;
-  /** Manager preset (e.g. 'board_president', 'cam'); null for non-managers. */
-  presetKey: string | null;
   /** Board designation (BoardDesignation value); null when not on the board. */
   designation: string | null;
   features: CommunityFeatures | null;
@@ -48,7 +46,6 @@ const EMPTY_PAGE_SHELL_CONTEXT: PageShellContext = {
   community: null,
   role: null,
   isUnitOwner: false,
-  presetKey: null,
   designation: null,
   features: null,
   resourceAccess: null,
@@ -76,7 +73,6 @@ const getPageActiveCommunityShellContextCached = cache(
         },
         role: membership.role as AnyCommunityRole,
         isUnitOwner: membership.isUnitOwner,
-        presetKey: membership.presetKey ?? null,
         designation: membership.designation ?? null,
         features: getEffectiveFeatures(
           membership.communityType,

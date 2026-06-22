@@ -24,18 +24,9 @@ interface MobileProfileContentProps {
   communityName: string;
   communityId: number;
   role: string;
-  presetKey?: string;
   hasCompliance: boolean;
   hasFinance: boolean;
 }
-
-const ADMIN_PRESETS = new Set([
-  "board_member",
-  "board_president",
-  "cam",
-  "site_manager",
-  "property_manager_admin",
-]);
 
 interface SettingsRowProps {
   icon: React.ElementType;
@@ -74,16 +65,15 @@ export function MobileProfileContent({
   communityName,
   communityId,
   role,
-  presetKey,
   hasCompliance,
   hasFinance,
 }: MobileProfileContentProps) {
   const [loggingOut, setLoggingOut] = useState(false);
   const initials = toInitials(userName);
+  // v3: property_manager / root_manager are uniformly management-tier (admin).
   const canAccessCompliance =
     hasCompliance &&
-    (role === "manager" || role === "pm_admin") &&
-    ADMIN_PRESETS.has(presetKey ?? "");
+    (role === "property_manager" || role === "root_manager");
 
   async function handleSignOut() {
     if (loggingOut) return;

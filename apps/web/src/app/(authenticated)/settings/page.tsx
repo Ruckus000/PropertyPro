@@ -56,7 +56,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
   const canReadFinances = checkPermissionV2(
@@ -66,7 +65,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

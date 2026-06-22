@@ -44,7 +44,6 @@ export const POST = withErrorHandler(
     const inferredCanonicalRole = inferCanonicalRoleFromMembership({
       role: membership.role,
       isUnitOwner: membership.isUnitOwner,
-      presetKey: membership.presetKey ?? null,
       designation: membership.designation ?? null,
     });
     if (!canRequestUpgrade(inferredCanonicalRole)) {

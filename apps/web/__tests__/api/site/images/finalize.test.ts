@@ -77,7 +77,7 @@ describe('POST /api/v1/site/images/finalize', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthMock.mockResolvedValue('user-1');
-    requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
+    requireMembershipMock.mockResolvedValue({ role: 'property_manager', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     storageDownloadMock.mockResolvedValue({ data: makeBlob(1000), error: null });

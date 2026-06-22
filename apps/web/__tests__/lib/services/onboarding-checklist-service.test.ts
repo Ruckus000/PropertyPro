@@ -44,8 +44,8 @@ describe('getItemKeysForRole — v3 role + designation resolution', () => {
     expect(keys).toContain('customize_portal');
   });
 
-  it('pm_admin (no designation) → admin base + PM_ADMIN_ITEMS', () => {
-    const keys = getItemKeysForRole('pm_admin', null, 'apartment');
+  it('property_manager (no designation, PM scope) → admin base + PM_ADMIN_ITEMS (apartment)', () => {
+    const keys = getItemKeysForRole('property_manager', null, 'apartment');
     expect(keys).toEqual([...ADMIN_APARTMENT_ITEMS, ...PM_ADMIN_ITEMS]);
     expect(keys).toContain('customize_portal');
   });
@@ -54,17 +54,6 @@ describe('getItemKeysForRole — v3 role + designation resolution', () => {
     const keys = getItemKeysForRole('property_manager', null, 'condo_718');
     expect(keys).toEqual([...ADMIN_CONDO_ITEMS, ...PM_ADMIN_ITEMS]);
     expect(keys).toContain('customize_portal');
-  });
-
-  // DOCUMENTED behavior change (role-v3 Phase 3.3): the legacy site_manager —
-  // a manager-tier v3 role with no board designation — previously resolved to
-  // the display string 'site_manager' and fell through to the owner/tenant
-  // checklist. Keyed on the v3 role, a bare manager now receives the admin base
-  // set. Onboarding-only; no permission or data change.
-  it('manager (no designation, ex-site_manager) → admin base, no customize_portal', () => {
-    const keys = getItemKeysForRole('manager', null, 'condo_718');
-    expect(keys).toEqual([...ADMIN_CONDO_ITEMS]);
-    expect(keys).not.toContain('customize_portal');
   });
 
   it('resident (no designation) → OWNER_TENANT_ITEMS', () => {

@@ -17,8 +17,8 @@ function buildAccess(overrides: Partial<Record<string, { read: boolean; write: b
 
 describe('roleMatchesRegistryItem', () => {
   it('bridges transition admin roles to legacy admin-gated registry entries', () => {
-    expect(roleMatchesRegistryItem('manager', ['property_manager_admin'])).toBe(true);
-    expect(roleMatchesRegistryItem('pm_admin', ['cam'])).toBe(true);
+    expect(roleMatchesRegistryItem('property_manager', ['property_manager_admin'])).toBe(true);
+    expect(roleMatchesRegistryItem('root_manager', ['cam'])).toBe(true);
     expect(roleMatchesRegistryItem('property_manager', ['board_president'])).toBe(true);
     expect(roleMatchesRegistryItem('root_manager', ['site_manager'])).toBe(true);
   });
@@ -33,7 +33,7 @@ describe('useFilteredRegistry', () => {
   it('hides read-gated pages for managers without resource access', () => {
     const { result } = renderHook(() =>
       useFilteredRegistry(
-        'manager',
+        'property_manager',
         {
           hasMeetings: true,
           hasMaintenanceRequests: true,
@@ -57,7 +57,7 @@ describe('useFilteredRegistry', () => {
   it('hides write-gated quick actions when a manager cannot mutate that resource', () => {
     const { result } = renderHook(() =>
       useFilteredRegistry(
-        'manager',
+        'property_manager',
         {
           hasMeetings: true,
         } as never,
@@ -94,13 +94,13 @@ describe('useFilteredRegistry', () => {
     expect(postAnnouncement?.href).toBe('/announcements/new?communityId=42');
   });
 
-  it('shows admin-gated nav entries to a manager membership (user_role_v2 value)', () => {
+  it('shows admin-gated nav entries to a property_manager membership (user_role_v2 value)', () => {
     // Regression: ADMIN_ROLES holds legacy role names, but membership.role is
-    // the user_role_v2 enum value ('manager'). A bare includes() check treated
-    // every manager as a resident and hid admin entries.
+    // the user_role_v2 enum value ('property_manager'). A bare includes() check
+    // treated every manager as a resident and hid admin entries.
     const { result } = renderHook(() =>
       useFilteredRegistry(
-        'manager',
+        'property_manager',
         {
           hasCompliance: true,
           hasViolations: true,
@@ -121,10 +121,10 @@ describe('useFilteredRegistry', () => {
     expect(ids).toContain('page-payments');
   });
 
-  it('shows admin-gated nav entries to a pm_admin membership (user_role_v2 value)', () => {
+  it('shows admin-gated nav entries to a root_manager membership (user_role_v2 value)', () => {
     const { result } = renderHook(() =>
       useFilteredRegistry(
-        'pm_admin',
+        'root_manager',
         {
           hasCompliance: true,
         } as never,

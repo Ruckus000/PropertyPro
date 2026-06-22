@@ -20,7 +20,7 @@ import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
-import { ADMIN_ROLES } from '@propertypro/shared';
+import { ADMIN_ROLES, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
@@ -90,7 +90,6 @@ interface AppShellProps {
   community: AppShellCommunity | null;
   role: AnyCommunityRole | null;
   isUnitOwner?: boolean;
-  presetKey?: string | null;
   designation?: string | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
@@ -99,7 +98,7 @@ interface AppShellProps {
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, isUnitOwner, presetKey, designation, features, resourceAccess, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -172,7 +171,6 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, d
           communityType={community?.type ?? null}
           role={role}
           isUnitOwner={isUnitOwner ?? false}
-          presetKey={presetKey ?? null}
           designation={designation ?? null}
           features={features}
           userName={user?.fullName ?? null}
@@ -197,7 +195,6 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, d
               communityType={community?.type ?? null}
               role={role}
               isUnitOwner={isUnitOwner ?? false}
-              presetKey={presetKey ?? null}
               designation={designation ?? null}
               features={features}
               userName={user?.fullName ?? null}
@@ -216,8 +213,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, presetKey, d
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
         />
-        {/* BILINGUAL (role-v3): drop the v3 alternatives at Phase 4 cleanup */}
-        {(role === 'pm_admin' || role === 'property_manager_admin' || (role as string) === 'property_manager' || (role as string) === 'root_manager') && community && (
+        {role && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role) && community && (
           <div className="flex items-center gap-1.5 border-b border-edge bg-surface-page px-6 py-2 lg:px-8">
             <Link
               href="/pm/dashboard/communities"

@@ -162,7 +162,7 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
   });
 
   it('allows CAM managers to write through the wizard', async () => {
-    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     const res = await PATCH(makeRequest({ communityId: 42, layoutId: 'tidewater' }));
     expect(res.status).toBe(200);
     expect(updateBrandingMock).toHaveBeenCalled();
