@@ -205,10 +205,12 @@ export interface DocumentAccessOpts {
 
 /**
  * Resolve a role (old or new) to the legacy CommunityRole for policy lookup.
- * Returns null for the manager-tier JSONB roles (manager / property_manager).
+ * Returns null only for the legacy `manager` JSONB role.
  *
- * v3 transition window: property_manager maps onto manager (JSONB → null) and
- * root_manager maps onto pm_admin (→ property_manager_admin).
+ * v3 (ADR-006): property_manager + root_manager are uniformly elevated and map
+ * onto pm_admin (→ property_manager_admin), bypassing the per-row JSONB. Only
+ * the legacy `manager` value still derives category access from JSONB (→ null);
+ * a later Phase 4 task removes the `manager` branch and DocumentAccessOpts.permissions.
  */
 function resolveLegacyRole(
   role: CommunityRole | TransitionRole,
@@ -217,10 +219,13 @@ function resolveLegacyRole(
   if ((COMMUNITY_ROLES as readonly string[]).includes(role)) {
     return role as CommunityRole;
   }
-  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
-  if (role === 'pm_admin' || role === 'root_manager') return 'property_manager_admin';
+  // BILINGUAL (role-v3): pm_admin/property_manager/root_manager are all
+  // uniformly elevated; drop the v2 `pm_admin` alternative at Phase 4 cleanup.
+  if (role === 'pm_admin' || role === 'property_manager' || role === 'root_manager') {
+    return 'property_manager_admin';
+  }
   if (role === 'resident') return opts?.isUnitOwner ? 'owner' : 'tenant';
-  return null; // manager / property_manager → uses JSONB
+  return null; // legacy manager → uses JSONB
 }
 
 export function isElevatedRole(
