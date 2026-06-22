@@ -44,26 +44,20 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # Run pending DB migrations BEFORE shipping the new code, and gate the
-      # deploy on their success. Migrations are additive (expand pattern), so
-      # running them ahead of the code swap is safe: old code ignores new
-      # columns/tables. This prevents the schema-drift class of outage where
-      # Vercel ships code that selects columns the production DB doesn't have.
-      # Requires the DIRECT_URL secret (direct 5432 connection) in the
-      # `production` environment — drizzle.config.ts reads process.env.DIRECT_URL.
+      # NOTE: This workflow deploys CODE ONLY. Database migrations are applied
+      # MANUALLY (Supabase MCP) with explicit expand/contract ordering — see
+      # .claude/rules/migration-safety.md. An earlier auto-migrate gate here
+      # (drizzle-kit migrate, #683) is intentionally removed: it conflicted with
+      # the manual-apply model (drifting the __drizzle_migrations ledger →
+      # check_for_column_name_collision), so it FAILED on every run and silently
+      # blocked all production deploys for ~2 weeks. It was also unsafe by design
+      # for contract migrations (it ran migrate-FIRST, which would drop columns
+      # the still-live old code reads). Drift protection now comes from the
+      # expand/contract discipline (apply expand migrations BEFORE the dependent
+      # code ships; apply contract migrations AFTER the new code is live), not
+      # from a CI gate.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Run database migrations
-        env:
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: |
-          if [ -z "$DIRECT_URL" ]; then
-            echo "::error::DIRECT_URL secret is not set for the production environment."
-            echo "Add it under Settings → Environments → production → secrets (direct 5432 connection)."
-            exit 1
-          fi
-          pnpm --filter @propertypro/db db:migrate
 
       - name: Install Vercel CLI
         run: pnpm add -g vercel@50.23.2
