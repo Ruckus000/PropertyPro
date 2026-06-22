@@ -51,7 +51,7 @@ const ALLOWLIST = new Map<string, number>([
   // BRIDGE (Phase 4.4 drain targets)
   ['apps/web/src/components/compliance/compliance-command-center.tsx', 6],
   ['apps/web/src/components/layout/nav-config.ts', 5],
-  ['apps/web/src/lib/api/role-guard.ts', 4],
+  ['apps/web/src/lib/api/role-guard.ts', 3],
   ['apps/web/src/lib/constants/feature-registry.ts', 3],
   ['packages/shared/src/esign-constants.ts', 2],
   ['apps/web/src/lib/services/invitations-service.ts', 1],

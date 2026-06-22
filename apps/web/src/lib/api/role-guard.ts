@@ -10,20 +10,21 @@
  */
 import { ForbiddenError } from '@/lib/api/errors';
 
+/**
+ * v3 property-manager tier — re-exported under the call-site name for use with
+ * requireRole/hasRole. The single source of truth is the shared role-transition
+ * const (role-v3 Phase 4.3). ROLE_ALIASES expands `property_manager` to also
+ * accept the legacy pm_admin/property_manager_admin analogs, so gating on it is
+ * behavior-neutral; prod has no `cam`-role rows.
+ */
+export { PM_SCOPE_DB_ROLES as PM_MANAGER_ROLES } from '@propertypro/shared';
+
 const ROLE_ALIASES: Record<string, readonly string[]> = {
   pm_admin: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
   property_manager_admin: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
   property_manager: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
   root_manager: ['root_manager'],
 };
-
-/**
- * v3 property-manager tier (role-v3 Phase 4.3). Pass this to requireRole/hasRole
- * instead of the legacy `['pm_admin','cam']`. ROLE_ALIASES expands
- * `property_manager` to also accept the legacy `pm_admin`/`property_manager_admin`
- * analogs, so this is behavior-neutral; prod has no `cam`-role rows.
- */
-export const PM_MANAGER_ROLES = ['property_manager', 'root_manager'] as const;
 
 export type Membership = { role: string; communityId: number };
 
