@@ -30,7 +30,6 @@ export async function resolveLibraryDocumentRequest({
       role: membership.role,
       communityType: membership.communityType,
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
     documentId,
   );

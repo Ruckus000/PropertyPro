@@ -68,15 +68,13 @@ type Recorded = { table: unknown; values: unknown };
  *
  * Select call order across handleDemoConversion:
  *   1. banDemoUsers: select demo instance        → limit → [demo]
- *   2. fetchCommunityType: select community type  → limit → [{communityType}]
- *   3. ensureFoundingUser: existing root_manager   → limit → []   (none yet)
- *   4. ensureFoundingUser: existing user by email → limit → []   (none yet)
+ *   2. ensureFoundingUser: existing root_manager → limit → []   (none yet)
+ *   3. ensureFoundingUser: existing user by email → limit → []   (none yet)
  */
 function buildDb(): { inserts: Recorded[] } {
   const inserts: Recorded[] = [];
   const selectQueue: unknown[][] = [
     [{ demoResidentUserId: 'res-1', demoBoardUserId: 'board-1' }], // banDemoUsers
-    [{ communityType: 'condo_718' }],                              // fetchCommunityType
     [],                                                            // existing root_manager → none
     [],                                                            // existing user → none
   ];
@@ -188,7 +186,8 @@ describe('demo-conversion prerequisites', () => {
       const roots = rows.filter((r) => r.role === 'root_manager');
       expect(roots).toHaveLength(1);
       expect(roots[0].designation).toBe('board_president');
-      expect(roots[0].presetKey).toBe('board_president');
+      // role-v3: founding rows no longer carry a presetKey (column removed).
+      expect(roots[0].presetKey).toBeUndefined();
 
       // The companion PM-portfolio row must NOT be a second root.
       const companions = rows.filter((r) => r.role !== 'root_manager');

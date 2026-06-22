@@ -364,7 +364,6 @@ export async function filterVisibleAnnouncements(
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
   if (!canReadAnnouncements) {
@@ -443,7 +442,6 @@ export async function listVisibleAnnouncements(
       'read',
       {
         isUnitOwner: membership.isUnitOwner,
-        permissions: membership.permissions,
       },
     );
     if (!canReadAnnouncements) {

@@ -23,40 +23,25 @@ import { searchUsersByTrigram, type UserSearchHit } from '@propertypro/db';
 import { escapeLikePattern } from '@/lib/utils/escape-like';
 import { searchUsersContract } from './contract';
 
-function humanizePresetKey(presetKey: string | null): string {
-  if (!presetKey?.trim()) return '';
-  const s = presetKey.replace(/_/g, ' ').trim();
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+function roleLabel(role: string): string {
+  if (role === 'resident') return 'Resident';
+  if (role === 'property_manager' || role === 'root_manager') return 'Property manager';
+  return String(role);
 }
 
 function mapUserSearchRow(r: UserSearchHit) {
-  const presetPretty = humanizePresetKey(r.preset_key);
-
   const title =
     r.full_name?.trim()
     || r.display_title?.trim()
-    || presetPretty
-    || (r.role === 'resident' ? 'Resident'
-      : r.role === 'manager' ? 'Staff member'
-      : r.role === 'pm_admin' ? 'PM administrator'
-      : String(r.role));
+    || roleLabel(r.role);
 
   let subtitle: string;
   if (r.unit_number) {
     subtitle = `Unit ${r.unit_number}`;
   } else if (r.display_title?.trim()) {
     subtitle = r.display_title.trim();
-  } else if (presetPretty) {
-    subtitle = presetPretty;
   } else {
-    subtitle =
-      r.role === 'manager'
-        ? 'Staff'
-        : r.role === 'resident'
-          ? 'Resident'
-          : r.role === 'pm_admin'
-            ? 'PM admin'
-            : String(r.role);
+    subtitle = roleLabel(r.role);
   }
 
   return {

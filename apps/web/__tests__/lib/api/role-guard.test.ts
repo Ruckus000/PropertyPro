@@ -13,14 +13,14 @@ describe('requireRole', () => {
     expect(() => requireRole(membership('tenant'), ['board_president', 'cam'])).toThrow(ForbiddenError);
   });
 
-  it('allows manager callers when their presetKey is in the allowed list', () => {
-    expect(() => requireRole(membership('manager', 'cam'), ['pm_admin', 'cam'])).not.toThrow();
-    expect(() => requireRole(membership('manager', 'board_president'), ['board_president'])).not.toThrow();
+  it('allows property_manager callers when a PM-tier alias is in the allowed list', () => {
+    expect(() => requireRole(membership('property_manager'), ['pm_admin', 'cam'])).not.toThrow();
+    expect(() => requireRole(membership('root_manager'), ['root_manager'])).not.toThrow();
   });
 
-  it('rejects manager callers when their presetKey is missing or unrelated', () => {
-    expect(() => requireRole(membership('manager', null), ['cam'])).toThrow(ForbiddenError);
-    expect(() => requireRole(membership('manager', 'board_member'), ['cam'])).toThrow(ForbiddenError);
+  it('rejects property_manager callers when the allowed list is not a PM-tier alias', () => {
+    expect(() => requireRole(membership('property_manager'), ['cam'])).toThrow(ForbiddenError);
+    expect(() => requireRole(membership('property_manager'), ['board_member'])).toThrow(ForbiddenError);
   });
 
   it('accepts pm_admin when property_manager_admin is in the allowed list (alias expansion)', () => {
@@ -45,13 +45,13 @@ describe('requireRole', () => {
 describe('hasRole', () => {
   const membership = (role: string, presetKey?: string | null) => ({ role, presetKey, communityId: 42 });
 
-  it('returns true for direct roles, aliases, and manager preset roles', () => {
+  it('returns true for direct roles and PM-tier aliases', () => {
     expect(hasRole(membership('pm_admin'), ['property_manager_admin'])).toBe(true);
-    expect(hasRole(membership('manager', 'cam'), ['cam'])).toBe(true);
+    expect(hasRole(membership('property_manager'), ['pm_admin'])).toBe(true);
   });
 
   it('returns false instead of throwing when the caller is unauthorized', () => {
     expect(hasRole(membership('resident'), ['pm_admin'])).toBe(false);
-    expect(hasRole(membership('manager', 'board_member'), ['cam'])).toBe(false);
+    expect(hasRole(membership('property_manager'), ['cam'])).toBe(false);
   });
 });

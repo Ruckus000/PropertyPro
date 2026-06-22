@@ -67,7 +67,7 @@ describe('resolvePmDashboardTarget', () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         userId: PM_USER_ID,
         communityId: CONDO_COMMUNITY_ID,
-        role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+        role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Board Member',
         communityType: 'condo_718',
       });
 
@@ -99,7 +99,7 @@ describe('resolvePmDashboardTarget', () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         userId: PM_USER_ID,
         communityId: CONDO_COMMUNITY_ID,
-        role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin',
+        role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
         communityType: 'condo_718',
       });
       getFeaturesForCommunityMock.mockReturnValueOnce({ hasLeaseTracking: false });
@@ -112,7 +112,7 @@ describe('resolvePmDashboardTarget', () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         userId: PM_USER_ID,
         communityId: CONDO_COMMUNITY_ID,
-        role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin',
+        role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
         communityType: 'hoa_720',
       });
       getFeaturesForCommunityMock.mockReturnValueOnce({ hasLeaseTracking: false });
@@ -125,7 +125,7 @@ describe('resolvePmDashboardTarget', () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         userId: PM_USER_ID,
         communityId: APARTMENT_COMMUNITY_ID,
-        role: 'pm_admin', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager Admin',
+        role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
         communityType: 'apartment',
       });
       getFeaturesForCommunityMock.mockReturnValueOnce({ hasLeaseTracking: true });
@@ -149,7 +149,7 @@ describe('resolvePmDashboardTarget', () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         userId: PM_USER_ID,
         communityId: CONDO_COMMUNITY_ID,
-        role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager', presetKey: 'cam', permissions: { resources: { documents: { read: true, write: true }, meetings: { read: true, write: true }, announcements: { read: true, write: true }, compliance: { read: true, write: true }, residents: { read: true, write: true }, financial: { read: true, write: true }, maintenance: { read: true, write: true }, violations: { read: true, write: true }, leases: { read: true, write: true }, contracts: { read: true, write: true }, polls: { read: true, write: true }, settings: { read: true, write: true }, audit: { read: true, write: true }, arc_submissions: { read: true, write: true }, work_orders: { read: true, write: true }, amenities: { read: true, write: true }, packages: { read: true, write: true }, visitors: { read: true, write: true }, calendar_sync: { read: true, write: true }, accounting: { read: true, write: true }, esign: { read: true, write: true }, finances: { read: true, write: true } } },
+        role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Community Manager',
         communityType: 'condo_718',
       });
 

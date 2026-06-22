@@ -223,7 +223,7 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   await db
     .insert(userRoles)
     // creator-is-root (v3). Spec §3.5(a).
-    .values({ userId, communityId, role: 'root_manager', presetKey: null, displayTitle, permissions: null })
+    .values({ userId, communityId, role: 'root_manager', displayTitle })
     .onConflictDoNothing();
 }
 

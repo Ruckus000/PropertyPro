@@ -23,7 +23,6 @@ import {
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getPresetPermissions } from '@propertypro/shared';
 import type { CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
 
@@ -71,8 +70,7 @@ export async function handleDemoConversion(
   }
 
   // Step 4: Create founding user (independently idempotent)
-  const communityType = await fetchCommunityType(Number(communityId));
-  await ensureFoundingUser(Number(demoId), Number(communityId), customerEmail, customerName, communityType);
+  await ensureFoundingUser(Number(demoId), Number(communityId), customerEmail, customerName);
 
   console.info(
     `[demo-conversion] completed for demo=${demoId} community=${communityId} converted=${converted}`,
@@ -106,23 +104,6 @@ function extractMetadata(session: Stripe.Checkout.Session): DemoConversionMetada
   }
 
   return { demoId, communityId, planId, customerEmail, customerName };
-}
-
-// ---------------------------------------------------------------------------
-// Community type lookup
-// ---------------------------------------------------------------------------
-
-async function fetchCommunityType(communityId: number): Promise<CommunityType> {
-  const db = createUnscopedClient();
-  const [row] = await db
-    .select({ communityType: communities.communityType })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-  if (!row) {
-    throw new Error(`[demo-conversion] community ${communityId} not found`);
-  }
-  return row.communityType;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +206,6 @@ async function ensureFoundingUser(
   communityId: number,
   email: string,
   name: string,
-  communityType: CommunityType,
 ): Promise<void> {
   const db = createUnscopedClient();
 
@@ -298,7 +278,6 @@ async function ensureFoundingUser(
   // is exactly ONE root_manager per community (partial unique index).
   // - root_manager + board_president designation: community management authority
   // - property_manager: PM portfolio dashboard access (fixes PM-03 audit gap)
-  const permissions = getPresetPermissions('board_president', communityType);
   await db
     .insert(userRoles)
     .values([
@@ -307,10 +286,8 @@ async function ensureFoundingUser(
         communityId,
         role: 'root_manager',
         designation: 'board_president',
-        presetKey: 'board_president', // preserved for the bilingual window
         displayTitle: 'Board President',
         isUnitOwner: false,
-        permissions,
       },
       {
         userId,

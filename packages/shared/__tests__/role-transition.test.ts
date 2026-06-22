@@ -10,25 +10,25 @@ import {
 } from '../src/role-transition';
 
 describe('role-transition constants', () => {
-  // Contract-pin tests: they catch accidental constant mutation across the bilingual window, not logic.
-  it('TRANSITION_ROLES carries both generations', () => {
-    expect(TRANSITION_ROLES).toEqual(['resident', 'manager', 'pm_admin', 'property_manager', 'root_manager']);
+  // Contract-pin tests: they catch accidental constant mutation, not logic.
+  it('TRANSITION_ROLES is the v3-only set', () => {
+    expect(TRANSITION_ROLES).toEqual(['resident', 'property_manager', 'root_manager']);
   });
-  it('ADMIN_TIER includes every manager-or-above value of both generations', () => {
-    expect(ADMIN_TIER_DB_ROLES).toEqual(['manager', 'pm_admin', 'property_manager', 'root_manager']);
+  it('ADMIN_TIER includes the v3 manager-or-above values', () => {
+    expect(ADMIN_TIER_DB_ROLES).toEqual(['property_manager', 'root_manager']);
   });
-  it('PM_SCOPE covers pm_admin and its v3 successors', () => {
-    expect(PM_SCOPE_DB_ROLES).toEqual(['pm_admin', 'property_manager', 'root_manager']);
+  it('PM_SCOPE covers the v3 manager-tier roles', () => {
+    expect(PM_SCOPE_DB_ROLES).toEqual(['property_manager', 'root_manager']);
   });
-  it('MANAGER_TIER covers manager and its v3 successors', () => {
-    expect(MANAGER_TIER_DB_ROLES).toEqual(['manager', 'property_manager', 'root_manager']);
+  it('MANAGER_TIER covers the v3 manager-tier roles', () => {
+    expect(MANAGER_TIER_DB_ROLES).toEqual(['property_manager', 'root_manager']);
   });
 });
 
 describe('expandTransitionRoleFilter', () => {
-  it('expands v2 filter values to match rows of both generations', () => {
-    expect(expandTransitionRoleFilter('manager')).toEqual(['manager', 'property_manager', 'root_manager']);
-    expect(expandTransitionRoleFilter('pm_admin')).toEqual(['pm_admin', 'property_manager', 'root_manager']);
+  it('returns [] for retired legacy filter values (manager / pm_admin)', () => {
+    expect(expandTransitionRoleFilter('manager')).toEqual([]);
+    expect(expandTransitionRoleFilter('pm_admin')).toEqual([]);
   });
   it('passes v3 and resident values through unchanged', () => {
     expect(expandTransitionRoleFilter('resident')).toEqual(['resident']);

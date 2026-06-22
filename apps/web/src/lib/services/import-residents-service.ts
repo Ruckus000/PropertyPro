@@ -102,9 +102,7 @@ export interface InsertUserRoleForImportInput {
   role: string;
   unitId: number | null;
   isUnitOwner: boolean;
-  permissions: unknown;
-  presetKey: string | null;
-  /** Phase 3.2 writer lockstep: identical to presetKey when it is a board preset, else null. */
+  /** Resident-tier imports never carry a board designation (role-v3 invariant 3). */
   designation?: string | null;
   displayTitle: string;
 }

@@ -17,8 +17,6 @@ describe('canManageBilling', () => {
     ['cam', true],
     ['site_manager', false],
     ['property_manager_admin', true],
-    ['pm_admin', true],
-    ['manager', false],
     ['resident', false],
   ];
   it.each(cases)('role=%s → %s', (role, expected) => {
@@ -36,8 +34,6 @@ describe('canRequestUpgrade', () => {
     ['cam', true],
     ['site_manager', true],
     ['property_manager_admin', true],
-    ['pm_admin', true],
-    ['manager', true],
     ['resident', true],
   ];
   it.each(cases)('role=%s → %s', (role, expected) => {
@@ -55,8 +51,6 @@ describe('getLockedFeatureBehavior', () => {
     ['cam', 'upgrade'],
     ['site_manager', 'request'],
     ['property_manager_admin', 'upgrade'],
-    ['pm_admin', 'upgrade'],
-    ['manager', 'request'],
     ['resident', 'request'],
   ];
   it.each(cases)('role=%s → %s', (role, expected) => {
@@ -68,52 +62,42 @@ describe('inferCanonicalRoleFromMembership — v3 transition values', () => {
   it('maps root_manager to property_manager_admin', () => {
     expect(inferCanonicalRoleFromMembership({ role: 'root_manager' })).toBe('property_manager_admin');
   });
-  it('maps presetKey-less property_manager to cam', () => {
+  it('maps designation-less property_manager to cam', () => {
     expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
   });
-  it('keeps preset fidelity for backfilled property_managers', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: 'board_member' })).toBe('board_member');
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: 'board_president' })).toBe('board_president');
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: 'site_manager' })).toBe('site_manager');
+  it('resolves board designation for property_managers', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: 'board_member' })).toBe('board_member');
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: 'board_president' })).toBe('board_president');
   });
-  it('does NOT regress v2 behavior', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'pm_admin' })).toBe('property_manager_admin');
-    expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey: 'cam' })).toBe('cam');
-    expect(inferCanonicalRoleFromMembership({ role: 'manager' })).toBe('board_member');
+  it('maps residents by unit ownership', () => {
     expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true })).toBe('owner');
     expect(inferCanonicalRoleFromMembership({ role: 'resident' })).toBe('tenant');
   });
 });
 
 describe('inferCanonicalRoleFromMembership', () => {
-  describe('pm_admin role', () => {
-    it('always maps to property_manager_admin (presetKey ignored)', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'pm_admin' })).toBe('property_manager_admin');
-      expect(inferCanonicalRoleFromMembership({ role: 'pm_admin', presetKey: 'cam' })).toBe('property_manager_admin');
-      expect(inferCanonicalRoleFromMembership({ role: 'pm_admin', isUnitOwner: true })).toBe('property_manager_admin');
+  describe('root_manager role', () => {
+    it('always maps to property_manager_admin', () => {
+      expect(inferCanonicalRoleFromMembership({ role: 'root_manager' })).toBe('property_manager_admin');
+      expect(inferCanonicalRoleFromMembership({ role: 'root_manager', isUnitOwner: true })).toBe('property_manager_admin');
+      expect(inferCanonicalRoleFromMembership({ role: 'root_manager', designation: 'board_member' })).toBe('property_manager_admin');
     });
   });
 
-  describe('manager role with preset keys', () => {
+  describe('property_manager role with board designation', () => {
     it.each([
       ['board_president', 'board_president'],
-      ['cam', 'cam'],
-      ['site_manager', 'site_manager'],
       ['board_member', 'board_member'],
-    ])('presetKey=%s → %s', (presetKey, expected) => {
-      expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey })).toBe(expected);
+    ])('designation=%s → %s', (designation, expected) => {
+      expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation })).toBe(expected);
     });
 
-    it('null presetKey defaults to board_member', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey: null })).toBe('board_member');
+    it('null designation defaults to cam', () => {
+      expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: null })).toBe('cam');
     });
 
-    it('unknown presetKey defaults to board_member', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey: 'mystery' })).toBe('board_member');
-    });
-
-    it('missing presetKey defaults to board_member', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'manager' })).toBe('board_member');
+    it('missing designation defaults to cam', () => {
+      expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
     });
   });
 
@@ -143,35 +127,17 @@ describe('inferCanonicalRoleFromMembership', () => {
 });
 
 describe('inferCanonicalRoleFromMembership — designation precedence (3.2)', () => {
-  it('designation wins over presetKey for manager-tier rows', () => {
+  it('resolves board designation for property_manager rows', () => {
     expect(inferCanonicalRoleFromMembership({
-      role: 'property_manager', presetKey: null, designation: 'board_president',
+      role: 'property_manager', designation: 'board_president',
     })).toBe('board_president');
     expect(inferCanonicalRoleFromMembership({
-      role: 'property_manager', presetKey: 'cam', designation: 'board_member',
-    })).toBe('board_member');
-    expect(inferCanonicalRoleFromMembership({
-      role: 'manager', presetKey: null, designation: 'board_president',
-    })).toBe('board_president');
-    expect(inferCanonicalRoleFromMembership({
-      role: 'manager', presetKey: 'cam', designation: 'board_member',
-    })).toBe('board_member');
-    // Redundant with the manager default, but pins that it's the designation deciding.
-    expect(inferCanonicalRoleFromMembership({
-      role: 'manager', presetKey: null, designation: 'board_member',
+      role: 'property_manager', designation: 'board_member',
     })).toBe('board_member');
   });
-  it('falls back to presetKey when designation is absent (bilingual window)', () => {
-    expect(inferCanonicalRoleFromMembership({
-      role: 'manager', presetKey: 'board_president',
-    })).toBe('board_president');
-    expect(inferCanonicalRoleFromMembership({
-      role: 'property_manager', presetKey: 'board_member', designation: null,
-    })).toBe('board_member');
-  });
-  it('default branches are untouched (LOAD-BEARING: 10 prod null-preset rows)', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', presetKey: null })).toBe('cam');
-    expect(inferCanonicalRoleFromMembership({ role: 'manager', presetKey: null })).toBe('board_member');
+  it('default branches are untouched (LOAD-BEARING: prod null-designation rows)', () => {
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: null })).toBe('cam');
+    expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
     expect(inferCanonicalRoleFromMembership({ role: 'root_manager', designation: 'board_president' })).toBe('property_manager_admin');
     expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true, designation: 'board_member' })).toBe('owner');
   });

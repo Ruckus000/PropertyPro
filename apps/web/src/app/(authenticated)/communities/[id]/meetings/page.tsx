@@ -31,7 +31,6 @@ export default async function MeetingsPage({ params }: PageProps) {
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

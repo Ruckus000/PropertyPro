@@ -111,15 +111,6 @@ describe('access-policies strict matrix', () => {
     );
   });
 
-  // Legacy manager path still derives category access from JSONB (removed in a later task).
-  it('keeps legacy manager routed through JSONB permissions', () => {
-    expect(isElevatedRole('manager')).toBe(false);
-    expect(isElevatedRole('manager', { permissions: perms('all') })).toBe(true);
-    expect(isElevatedRole('manager', { permissions: perms(['rules']) })).toBe(
-      false,
-    );
-  });
-
   const condoOrHoa: CommunityType[] = ['condo_718', 'hoa_720'];
 
   for (const communityType of condoOrHoa) {

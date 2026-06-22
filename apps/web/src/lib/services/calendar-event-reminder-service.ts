@@ -2,7 +2,6 @@ import { createElement, type ReactElement } from 'react';
 import { addDays } from 'date-fns';
 import type {
   CommunityType,
-  ManagerPermissions,
   TransitionRole,
 } from '@propertypro/shared';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
@@ -76,7 +75,6 @@ interface CommunityRoleRow {
   userId: string;
   role: TransitionRole;
   isUnitOwner: boolean;
-  permissions: ManagerPermissions | null;
   unitId: number | null;
 }
 
@@ -115,7 +113,6 @@ export interface CommunityRecipient {
   isUnitOwner: boolean;
   isAdmin: boolean;
   unitId: number | null;
-  permissions?: ManagerPermissions;
   preferences: UserNotificationPreferences;
   canReadMeetings: boolean;
   canReadFinances: boolean;
@@ -350,7 +347,6 @@ async function loadCommunityRecipients(
     userId: userRoles.userId,
     role: userRoles.role,
     isUnitOwner: userRoles.isUnitOwner,
-    permissions: userRoles.permissions,
     unitId: userRoles.unitId,
   });
 
@@ -403,7 +399,6 @@ async function loadCommunityRecipients(
       `calendar reminder role ${community.id}:${row.userId}`,
     );
     const isUnitOwner = row.isUnitOwner === true;
-    const permissions = row.permissions ?? undefined;
     const preferences = coercePreferences(preferencesByUserId.get(row.userId));
     recipients.set(row.userId, {
       userId: row.userId,
@@ -413,7 +408,6 @@ async function loadCommunityRecipients(
       isUnitOwner,
       isAdmin: (ADMIN_TIER_DB_ROLES as readonly string[]).includes(role),
       unitId: row.unitId,
-      permissions,
       preferences,
       canReadMeetings: checkPermissionV2(
         role,
@@ -422,7 +416,6 @@ async function loadCommunityRecipients(
         'read',
         {
           isUnitOwner,
-          permissions,
         },
       ),
       canReadFinances: checkPermissionV2(
@@ -432,7 +425,6 @@ async function loadCommunityRecipients(
         'read',
         {
           isUnitOwner,
-          permissions,
         },
       ),
     });

@@ -7,7 +7,6 @@
 
 import type { CommunityRole, CommunityType } from './index';
 import type { TransitionRole } from './role-transition';
-import type { ManagerPermissions } from './manager-permissions';
 import { COMMUNITY_ROLES } from './index';
 import {
   KNOWN_DOCUMENT_CATEGORY_KEYS,
@@ -197,20 +196,19 @@ export function normalizeCategoryName(name: string | null | undefined): Document
   return 'unknown';
 }
 
-/** Options for document access functions when using NewCommunityRole. */
+/** Options for document access functions when using a v3 TransitionRole. */
 export interface DocumentAccessOpts {
   isUnitOwner?: boolean;
-  permissions?: ManagerPermissions;
 }
 
 /**
- * Resolve a role (old or new) to the legacy CommunityRole for policy lookup.
- * Returns null only for the legacy `manager` JSONB role.
+ * Resolve a role (legacy 7-role or v3 TransitionRole) to the legacy
+ * CommunityRole for policy lookup.
  *
  * v3 (ADR-006): property_manager + root_manager are uniformly elevated and map
- * onto pm_admin (→ property_manager_admin), bypassing the per-row JSONB. Only
- * the legacy `manager` value still derives category access from JSONB (→ null);
- * a later Phase 4 task removes the `manager` branch and DocumentAccessOpts.permissions.
+ * onto property_manager_admin. resident splits owner/tenant via isUnitOwner.
+ * A final defensive `return null` remains for exhaustiveness; no live role
+ * reaches it.
  */
 function resolveLegacyRole(
   role: CommunityRole | TransitionRole,
@@ -219,13 +217,11 @@ function resolveLegacyRole(
   if ((COMMUNITY_ROLES as readonly string[]).includes(role)) {
     return role as CommunityRole;
   }
-  // BILINGUAL (role-v3): pm_admin/property_manager/root_manager are all
-  // uniformly elevated; drop the v2 `pm_admin` alternative at Phase 4 cleanup.
-  if (role === 'pm_admin' || role === 'property_manager' || role === 'root_manager') {
+  if (role === 'property_manager' || role === 'root_manager') {
     return 'property_manager_admin';
   }
   if (role === 'resident') return opts?.isUnitOwner ? 'owner' : 'tenant';
-  return null; // legacy manager → uses JSONB
+  return null;
 }
 
 export function isElevatedRole(
@@ -233,21 +229,13 @@ export function isElevatedRole(
   opts?: DocumentAccessOpts,
 ): boolean {
   const legacy = resolveLegacyRole(role, opts);
-  if (legacy) return ELEVATED_ROLES.includes(legacy);
-  // manager: elevated if document_categories === 'all'
-  return opts?.permissions?.document_categories === 'all';
+  return legacy ? ELEVATED_ROLES.includes(legacy) : false;
 }
 
 export function isAdminRole(
   role: CommunityRole | TransitionRole,
 ): boolean {
-  // v3 transition values (property_manager/root_manager) map onto manager/pm_admin admin-tier.
-  if (
-    role === 'manager'
-    || role === 'pm_admin'
-    || role === 'property_manager'
-    || role === 'root_manager'
-  ) {
+  if (role === 'property_manager' || role === 'root_manager') {
     return true;
   }
   return (ADMIN_ROLES as readonly string[]).includes(role);
@@ -269,10 +257,7 @@ export function getCategoryAccessForRole(
 ): CategoryAccess {
   const legacy = resolveLegacyRole(role, opts);
   if (legacy) return DOCUMENT_ACCESS_POLICY[communityType][legacy];
-  // manager: derive from JSONB
-  if (!opts?.permissions) return [];
-  const cats = opts.permissions.document_categories;
-  return cats === 'all' ? 'all' : cats;
+  return [];
 }
 
 export function getAccessibleKnownCategories(

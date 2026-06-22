@@ -37,7 +37,6 @@ export default async function DocumentsPage({ params, searchParams }: PageProps)
       userId={userId}
       userRole={membership.role}
       isUnitOwner={membership.isUnitOwner}
-      permissions={membership.permissions}
       hasEsign={features.hasEsign}
       initialSearchQuery={q}
     />

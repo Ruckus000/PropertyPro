@@ -17,7 +17,6 @@ function canReadResource(
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 }

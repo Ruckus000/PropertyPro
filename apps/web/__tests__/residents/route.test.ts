@@ -146,8 +146,6 @@ describe('p1-18 residents route', () => {
         unitId: 12,
         isUnitOwner: true,
         displayTitle: 'Owner',
-        permissions: null,
-        presetKey: null,
       }),
     );
 
@@ -169,7 +167,7 @@ describe('p1-18 residents route', () => {
     );
   });
 
-  it('POST returns 403 when role is manager (manager-tier lockdown)', async () => {
+  it('POST returns 403 when role is property_manager (manager-tier lockdown)', async () => {
     // Manager roles must be assigned via the root-only Roles & Access endpoints.
     // The residents POST path is locked to resident-tier roles only.
     const req = new NextRequest('http://localhost:3000/api/v1/residents', {
@@ -182,8 +180,7 @@ describe('p1-18 residents route', () => {
         email: 'board@example.com',
         fullName: 'Board One',
         phone: null,
-        role: 'manager',
-        presetKey: 'board_member',
+        role: 'property_manager',
         unitId: null,
       }),
     });

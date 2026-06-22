@@ -1,13 +1,11 @@
 /**
  * Resolve membership fields to the help-article frontmatter role vocabulary.
  *
- * Call sites historically used `presetKey ?? role`, which mis-resolved:
- * - resident → should be owner/tenant (via isUnitOwner)
- * - pm_admin / root_manager → property_manager_admin
- * - property_manager without preset → property_manager_admin (full ops)
- * - manager without preset → cam (legacy default)
- *
- * Preset keys (board_president, cam, etc.) win for manager-generation rows.
+ * v3 mapping:
+ * - resident → owner/tenant (via isUnitOwner)
+ * - root_manager → property_manager_admin
+ * - property_manager with board designation → board_president / board_member
+ * - property_manager without designation → property_manager_admin (full ops)
  *
  * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
  *
@@ -19,7 +17,7 @@ import { HELP_FRONTMATTER_ROLES as R } from '@propertypro/shared';
 
 export interface HelpViewerMembership {
   role: string;
-  presetKey?: string | null;
+  designation?: string | null;
   isUnitOwner?: boolean;
 }
 
@@ -28,20 +26,17 @@ export interface HelpViewerMembership {
  */
 export function resolveHelpViewerRole(
   role: string,
-  presetKey?: string | null,
+  designation?: string | null,
   isUnitOwner?: boolean,
 ): string {
-  if (role === 'pm_admin' || role === 'root_manager') {
+  if (role === 'root_manager') {
     return R.propertyManagerAdmin;
   }
 
-  if (role === 'manager' || role === 'property_manager') {
-    if (presetKey === R.boardPresident) return R.boardPresident;
-    if (presetKey === R.boardMember) return R.boardMember;
-    if (presetKey === R.cam) return R.cam;
-    if (presetKey === R.siteManager) return R.siteManager;
-    if (role === 'property_manager') return R.propertyManagerAdmin;
-    return R.cam;
+  if (role === 'property_manager') {
+    if (designation === R.boardPresident) return R.boardPresident;
+    if (designation === R.boardMember) return R.boardMember;
+    return R.propertyManagerAdmin;
   }
 
   if (role === 'resident') {
@@ -56,7 +51,7 @@ export function resolveHelpViewerRoleFromMembership(
 ): string {
   return resolveHelpViewerRole(
     membership.role,
-    membership.presetKey,
+    membership.designation,
     membership.isUnitOwner,
   );
 }

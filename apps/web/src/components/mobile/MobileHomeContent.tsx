@@ -28,7 +28,6 @@ interface MobileHomeContentProps {
   state: string | null;
   timezone: string;
   role: string;
-  presetKey?: string;
   hasCompliance: boolean;
   hasFinance: boolean;
   hasMaintenanceRequests: boolean;
@@ -37,14 +36,6 @@ interface MobileHomeContentProps {
   openMaintenanceCount: number;
   nextMeetingDate: string | null;
 }
-
-const ADMIN_PRESETS = new Set([
-  "board_member",
-  "board_president",
-  "cam",
-  "site_manager",
-  "property_manager_admin",
-]);
 
 // ── Component ───────────────────────────────────────
 
@@ -56,7 +47,6 @@ export function MobileHomeContent({
   state,
   timezone,
   role,
-  presetKey,
   hasCompliance,
   hasFinance,
   hasMaintenanceRequests,
@@ -67,10 +57,8 @@ export function MobileHomeContent({
 }: MobileHomeContentProps) {
   const initials = toInitials(userName);
   const location = [city, state].filter(Boolean).join(", ");
-  const isAdminRole =
-    role === "manager" || role === "pm_admin"
-      ? ADMIN_PRESETS.has(presetKey ?? "")
-      : false;
+  // v3: property_manager / root_manager are uniformly management-tier (admin).
+  const isAdminRole = role === "property_manager" || role === "root_manager";
   const showCompliance = isAdminRole && hasCompliance;
 
   return (

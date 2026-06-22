@@ -13,14 +13,6 @@ describe('isResidentTierRole', () => {
     expect(isResidentTierRole('resident')).toBe(true);
   });
 
-  it('returns false for manager', () => {
-    expect(isResidentTierRole('manager')).toBe(false);
-  });
-
-  it('returns false for pm_admin', () => {
-    expect(isResidentTierRole('pm_admin')).toBe(false);
-  });
-
   it('returns false for property_manager', () => {
     expect(isResidentTierRole('property_manager')).toBe(false);
   });

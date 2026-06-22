@@ -61,7 +61,6 @@ export default async function ApartmentDashboardPage({
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

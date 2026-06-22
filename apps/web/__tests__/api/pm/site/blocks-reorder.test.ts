@@ -85,7 +85,7 @@ describe('POST /api/v1/pm/site/blocks/reorder', () => {
   });
 
   it('allows CAM managers to reorder', async () => {
-    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(200);
     expect(reorderSiteBlockMock).toHaveBeenCalled();

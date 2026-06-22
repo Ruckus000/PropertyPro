@@ -141,6 +141,13 @@
       "when": 1781137697812,
       "tag": "0019_root_claim_disputes",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1782093928465,
+      "tag": "0020_role_v3_cleanup",
+      "breakpoints": true
     }
   ]
 }

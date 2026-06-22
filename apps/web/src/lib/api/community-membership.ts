@@ -1,8 +1,8 @@
 import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
-import type { CommunityType, TransitionRole, ManagerPermissions, BoardDesignation } from '@propertypro/shared';
-import { normalizeManagerPermissions, getPresetPermissions, isPresetKey, ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS } from '@propertypro/shared';
+import type { CommunityType, TransitionRole, BoardDesignation } from '@propertypro/shared';
+import { ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
@@ -17,14 +17,10 @@ export interface CommunityMembership {
   timezone: string;
   /** True if this resident is a unit owner (only meaningful when role = 'resident'). */
   isUnitOwner: boolean;
-  /** True if role is 'manager' or 'pm_admin'. */
+  /** True if role is a management-tier role (property_manager or root_manager). */
   isAdmin: boolean;
-  /** Manager permissions (only present when role = 'manager'). */
-  permissions?: ManagerPermissions;
   /** Human-readable role title. */
   displayTitle: string;
-  /** Preset key for managers (e.g. 'board_president', 'cam'). */
-  presetKey?: string;
   /** Board designation (role-v3 §3.2) — statutory marker, independent of role. Null when not a board member. */
   designation: BoardDesignation | null;
   /** Community city for location display. */
@@ -93,9 +89,6 @@ export async function requireCommunityMembership(
   const displayTitle = typeof membership['displayTitle'] === 'string'
     ? membership['displayTitle']
     : role;
-  const presetKey = typeof membership['presetKey'] === 'string'
-    ? membership['presetKey']
-    : undefined;
 
   const rawDesignation = membership['designation'];
   const designation = (BOARD_DESIGNATIONS as readonly string[]).includes(rawDesignation as string)
@@ -111,30 +104,6 @@ export async function requireCommunityMembership(
     typeof communitySettings === 'object'
     && communitySettings !== null
     && (communitySettings as Record<string, unknown>).electionsAttorneyReviewed === true;
-
-  // Normalize manager permissions from JSONB on every read.
-  // For preset-based managers, fall back to RBAC matrix defaults for resources
-  // missing from stored JSONB (e.g. newly-added resources like emergency_broadcasts).
-  let permissions: ManagerPermissions | undefined;
-  // BILINGUAL (role-v3): drop the v3 alternative at Phase 4 cleanup
-  if (role === 'manager' || role === 'property_manager') {
-    const rawPerms = membership['permissions'];
-    const fallback = presetKey && isPresetKey(presetKey)
-      ? getPresetPermissions(presetKey, communityType).resources
-      : undefined;
-    // BILINGUAL (role-v3): an ex-pm_admin backfilled to property_manager has neither
-    // stored JSONB nor a usable preset. Leave permissions undefined so checkPermissionV2
-    // resolves it to the uniform full-operational set (property_manager_admin matrix)
-    // rather than normalizeManagerPermissions' all-DENY default — otherwise the defined
-    // all-DENY object would skip checkPermissionV2's `if (!opts?.permissions)` fallback
-    // and lock the user out. manager always carries stored perms
-    // (chk_manager_has_permissions); board/cam property_managers keep their JSONB.
-    if (rawPerms == null && fallback === undefined && role === 'property_manager') {
-      permissions = undefined;
-    } else {
-      permissions = normalizeManagerPermissions(rawPerms, fallback);
-    }
-  }
 
   return {
     userId,
@@ -153,9 +122,7 @@ export async function requireCommunityMembership(
     timezone: typeof community['timezone'] === 'string' ? community['timezone'] : 'America/New_York',
     isUnitOwner,
     isAdmin,
-    permissions,
     displayTitle,
-    presetKey,
     designation,
     city: typeof community['city'] === 'string' ? community['city'] : null,
     state: typeof community['state'] === 'string' ? community['state'] : null,

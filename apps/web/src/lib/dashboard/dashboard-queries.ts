@@ -124,7 +124,6 @@ export async function listDashboardAnnouncements(
     'read',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

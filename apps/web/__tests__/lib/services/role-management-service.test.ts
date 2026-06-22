@@ -61,7 +61,7 @@ describe('role-management-service', () => {
       expect(result).toEqual({ assigned: true, alreadyAssigned: false });
       expect(scopedUpdateMock).toHaveBeenCalledWith(
         userRolesTable,
-        { role: 'property_manager', isUnitOwner: false, presetKey: null, designation: null },
+        { role: 'property_manager', isUnitOwner: false, designation: null },
         expect.objectContaining({ __eq: expect.objectContaining({ val: 'target-user' }) }),
       );
       expect(logAuditEventMock).toHaveBeenCalledWith(

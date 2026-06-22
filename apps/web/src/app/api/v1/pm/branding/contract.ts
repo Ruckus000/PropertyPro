@@ -7,7 +7,7 @@
  *   requireAuthenticatedUserId
  *     → resolveEffectiveCommunityId(req, query.communityId)
  *     → requireCommunityMembership
- *     → membership.role === 'pm_admin' else ForbiddenError
+ *     → membership.role is property_manager-tier else ForbiddenError
  *     → getBrandingForCommunity → `{}` when null
  *
  * PATCH auth surface (preserved verbatim):
@@ -15,7 +15,7 @@
  *     → resolveEffectiveCommunityId(req, body.communityId)
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
- *     → membership.role === 'pm_admin'
+ *     → membership.role is property_manager-tier
  *     → [optional requirePlanFeature when customCssOverrides touched]
  *     → [optional logo sharp pipeline when logoStoragePath set]
  *     → updateBrandingForCommunity → logAuditEvent → tryAutoComplete
@@ -27,8 +27,8 @@
  * the service return type is a partial community branding projection.
  *
  * `permission: { resource: 'settings', action: 'read' | 'write' }` — `settings`
- * IS in `RBAC_RESOURCES`; the real gate is the `pm_admin` role check in the
- * handler (documented placeholder pattern for PM-only routes).
+ * IS in `RBAC_RESOURCES`; the real gate is the property_manager-tier role
+ * check in the handler (documented placeholder pattern for PM-only routes).
  *
  * Behavior change vs. pre-migration: invalid query/body shapes return the
  * runner's `VALIDATION_ERROR` envelope (was hand-constructed ValidationError

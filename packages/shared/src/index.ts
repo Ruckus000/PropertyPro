@@ -94,11 +94,11 @@ export * from './manager-presets';
 export * from './default-faqs';
 export * from './role-transition';
 
-// Hybrid 4-role model types
-export const NEW_COMMUNITY_ROLES = ['resident', 'manager', 'pm_admin'] as const;
+// v3 simplified-role model types
+export const NEW_COMMUNITY_ROLES = ['resident', 'property_manager', 'root_manager'] as const;
 export type NewCommunityRole = (typeof NEW_COMMUNITY_ROLES)[number];
 
-/** Any community role — legacy or new. Used during the hybrid migration period. */
+/** Any community role — legacy 7-role vocabulary or v3 role. */
 export type AnyCommunityRole = CommunityRole | NewCommunityRole;
 
 // PR #1a — Property Landing Page block schemas (Zod-based)

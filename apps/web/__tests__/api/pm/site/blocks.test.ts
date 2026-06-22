@@ -143,7 +143,7 @@ describe('GET /api/v1/pm/site/blocks', () => {
   });
 
   it('allows CAM managers to list site blocks', async () => {
-    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     listSiteBlocksMock.mockResolvedValueOnce([]);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
@@ -444,7 +444,7 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
   });
 
   it('allows CAM managers to upsert site blocks', async () => {
-    requireMembershipMock.mockResolvedValueOnce({ role: 'manager', presetKey: 'cam', communityId: 42 });
+    requireMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 42 });
     const res = await PATCH(makePatchRequest(VALID_TEXT_BODY));
     expect(res.status).toBe(200);
     expect(upsertPublishedBlockMock).toHaveBeenCalledWith(expect.objectContaining({ blockType: 'text' }));

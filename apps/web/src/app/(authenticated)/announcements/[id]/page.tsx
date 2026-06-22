@@ -73,7 +73,6 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
   const canManage = isAuthor || (membership.isAdmin && canWriteAnnouncements);

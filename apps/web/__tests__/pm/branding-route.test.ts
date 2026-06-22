@@ -71,10 +71,10 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
 import { GET, PATCH } from '../../src/app/api/v1/pm/branding/route';
 
 const PM_MEMBERSHIP = {
-  role: 'pm_admin',
+  role: 'property_manager',
   isAdmin: true,
   isUnitOwner: false,
-  displayTitle: 'Property Manager Admin',
+  displayTitle: 'Property Manager',
   communityId: 1,
   userId: 'pm-1',
   communityType: 'condo_718',
@@ -267,8 +267,9 @@ describe('pm branding route', () => {
     it('returns 403 for non-PM user — demo grace runs but update does not', async () => {
       requireCommunityMembershipMock.mockResolvedValueOnce({
         ...PM_MEMBERSHIP,
-        role: 'cam',
-        isAdmin: true,
+        role: 'resident',
+        isAdmin: false,
+        isUnitOwner: true,
       });
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',

@@ -801,9 +801,9 @@ export async function seedRoles(
   const values = sql.join(
     assignments.map((a) => {
       const m = mapSeedRoleToStorage({ role: a.role, designation: a.designation });
-      // v3 end-state: no preset_key, no stored permissions — seeded managers
-      // resolve perms via checkPermissionV2's matrix-fallback (spec §3.4).
-      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, NULL::jsonb, NULL, ${m.designation}, ${m.displayTitle})`;
+      // v3 end-state: seeded managers resolve perms via checkPermissionV2's
+      // matrix-fallback (spec §3.4). No permissions/preset_key/legacy_role columns.
+      return sql`(${a.userId}, ${a.communityId}, ${m.role}, NULL, ${m.isUnitOwner}, ${m.designation}, ${m.displayTitle})`;
     }),
     sql`, `,
   );
@@ -814,8 +814,6 @@ export async function seedRoles(
       role,
       unit_id,
       is_unit_owner,
-      permissions,
-      preset_key,
       designation,
       display_title
     )
@@ -824,8 +822,6 @@ export async function seedRoles(
     set role = excluded.role,
         unit_id = excluded.unit_id,
         is_unit_owner = excluded.is_unit_owner,
-        permissions = excluded.permissions,
-        preset_key = excluded.preset_key,
         designation = excluded.designation,
         display_title = excluded.display_title,
         updated_at = now()

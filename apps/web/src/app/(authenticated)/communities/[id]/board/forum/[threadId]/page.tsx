@@ -25,7 +25,6 @@ export default async function ForumThreadPage({ params }: PageProps) {
     'write',
     {
       isUnitOwner: membership.isUnitOwner,
-      permissions: membership.permissions,
     },
   );
 

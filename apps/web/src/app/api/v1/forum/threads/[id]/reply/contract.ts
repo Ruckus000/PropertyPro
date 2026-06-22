@@ -17,7 +17,7 @@
  * DELETE additionally computes:
  *   canModerateReplies = membership.isAdmin && checkPermissionV2(
  *     membership.role, membership.communityType, 'polls', 'write',
- *     { isUnitOwner: membership.isUnitOwner, permissions: membership.permissions },
+ *     { isUnitOwner: membership.isUnitOwner },
  *   )
  * and passes it as the 5th positional arg to
  *   deleteForumReplyForCommunity(communityId, params.id, body.replyId,

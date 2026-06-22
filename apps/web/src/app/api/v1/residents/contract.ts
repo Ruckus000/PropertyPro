@@ -11,9 +11,7 @@
  */
 import {
   NEW_COMMUNITY_ROLES,
-  PRESET_KEYS,
   type NewCommunityRole,
-  type PresetKey,
 } from '@propertypro/shared';
 import { defineRoute, z } from '@propertypro/api-contract';
 
@@ -25,7 +23,6 @@ const createResidentBodySchema = z.object({
   role: z.enum(NEW_COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<NewCommunityRole>,
   unitId: z.number().int().positive().nullable().optional(),
   isUnitOwner: z.boolean().optional().default(false),
-  presetKey: (z.enum(PRESET_KEYS as unknown as [string, ...string[]]) as z.ZodType<PresetKey>).optional(),
 });
 
 const updateResidentBodySchema = z.object({
@@ -36,7 +33,6 @@ const updateResidentBodySchema = z.object({
   role: (z.enum(NEW_COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<NewCommunityRole>).optional(),
   unitId: z.number().int().positive().nullable().optional(),
   isUnitOwner: z.boolean().optional(),
-  presetKey: (z.enum(PRESET_KEYS as unknown as [string, ...string[]]) as z.ZodType<PresetKey>).nullable().optional(),
 });
 
 const deleteResidentBodySchema = z.object({

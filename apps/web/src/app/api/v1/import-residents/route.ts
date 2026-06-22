@@ -30,7 +30,7 @@ import {
   type ResidentImportRole,
 } from "@/lib/utils/csv-validator";
 import { isResidentTierRole, validateRoleAssignment } from "@/lib/utils/role-validator";
-import type { NewCommunityRole, PresetKey } from "@propertypro/shared";
+import type { NewCommunityRole } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
@@ -51,7 +51,6 @@ import { importResidentsContract } from "./contract";
 interface MappedRole {
   role: NewCommunityRole;
   isUnitOwner: boolean;
-  presetKey: PresetKey | null;
   displayTitle: string;
 }
 
@@ -62,9 +61,9 @@ interface MappedRole {
  */
 function mapImportRole(csvRole: ResidentImportRole): MappedRole {
   if (csvRole === "owner") {
-    return { role: "resident", isUnitOwner: true, presetKey: null, displayTitle: "Owner" };
+    return { role: "resident", isUnitOwner: true, displayTitle: "Owner" };
   }
-  return { role: "resident", isUnitOwner: false, presetKey: null, displayTitle: "Tenant" };
+  return { role: "resident", isUnitOwner: false, displayTitle: "Tenant" };
 }
 
 export const POST = withErrorHandler(
@@ -191,16 +190,13 @@ export const POST = withErrorHandler(
         }
       }
 
-      // Resident-tier rows never carry a permissions JSONB or preset.
+      // Resident-tier rows never carry a board designation (role-v3 invariant 3);
+      // the designation column stays null and is set only via the root-only path.
       await insertUserRoleForImport(communityId, {
         userId,
         role: mapped.role,
         unitId,
         isUnitOwner: mapped.isUnitOwner,
-        permissions: null,
-        presetKey: mapped.presetKey,
-        // Resident-tier rows never carry a board designation (role-v3 invariant 3);
-        // the designation column stays null and is set only via the root-only path.
         displayTitle: mapped.displayTitle,
       });
 

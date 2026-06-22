@@ -45,7 +45,6 @@ export interface ResidentRoleRow {
   role?: unknown;
   unitId?: number | null;
   isUnitOwner?: boolean | null;
-  presetKey?: string | null;
   createdAt?: unknown;
   [key: string]: unknown;
 }

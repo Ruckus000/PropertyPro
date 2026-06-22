@@ -140,8 +140,14 @@ export async function GET(request: Request) {
   ) ?? communities[0] ?? null;
 
   const isAdmin = ADMIN_ROLES.has(role);
-  let portal = role === 'pm_admin' ? '/pm/dashboard/communities' : isAdmin ? '/dashboard' : '/mobile';
-  if (primary && role !== 'pm_admin') {
+  // PM-tier users (property_manager / root_manager) land on the PM portfolio
+  // dashboard. The `?as=pm_admin` alias resolves to a property_manager demo row.
+  const isPmTier =
+    role === 'pm_admin'
+    || primary?.role === 'property_manager'
+    || primary?.role === 'root_manager';
+  let portal = isPmTier ? '/pm/dashboard/communities' : isAdmin ? '/dashboard' : '/mobile';
+  if (primary && !isPmTier) {
     portal += `?communityId=${primary.communityId}`;
   }
 

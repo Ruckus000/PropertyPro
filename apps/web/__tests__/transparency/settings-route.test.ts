@@ -80,33 +80,6 @@ function makePatchRequest(body: Record<string, unknown>, headers?: Record<string
   });
 }
 
-const FULL_PERMS = {
-  resources: {
-    documents: { read: true, write: true },
-    meetings: { read: true, write: true },
-    announcements: { read: true, write: true },
-    compliance: { read: true, write: true },
-    residents: { read: true, write: true },
-    financial: { read: true, write: true },
-    maintenance: { read: true, write: true },
-    violations: { read: true, write: true },
-    leases: { read: true, write: true },
-    contracts: { read: true, write: true },
-    polls: { read: true, write: true },
-    settings: { read: true, write: true },
-    audit: { read: true, write: true },
-    arc_submissions: { read: true, write: true },
-    work_orders: { read: true, write: true },
-    amenities: { read: true, write: true },
-    packages: { read: true, write: true },
-    visitors: { read: true, write: true },
-    calendar_sync: { read: true, write: true },
-    accounting: { read: true, write: true },
-    esign: { read: true, write: true },
-    finances: { read: true, write: true },
-  },
-};
-
 describe('transparency settings route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,7 +89,7 @@ describe('transparency settings route', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'user-123',
       communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board President', presetKey: 'board_president', permissions: FULL_PERMS,
+      role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'condo_718',
     });
 
@@ -138,7 +111,7 @@ describe('transparency settings route', () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       userId: 'user-123',
       communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: FULL_PERMS,
+      role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'condo_718',
     });
 
@@ -161,7 +134,7 @@ describe('transparency settings route', () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       userId: 'user-123',
       communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: FULL_PERMS,
+      role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'apartment',
     });
 
@@ -238,12 +211,12 @@ describe('transparency settings route', () => {
     expect(res.status).toBe(404);
   });
 
-  it('PATCH denies board_member write access', async () => {
-    // board_member has settings.write = false in the RBAC matrix
+  it('PATCH denies resident write access', async () => {
+    // resident has settings.write = false in the RBAC matrix
     requireCommunityMembershipMock.mockResolvedValueOnce({
       userId: 'user-123',
       communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Board Member', presetKey: 'board_member', permissions: { resources: { ...FULL_PERMS.resources, settings: { read: true, write: false }, audit: { read: true, write: false } } },
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityType: 'condo_718',
     });
 
@@ -454,7 +427,7 @@ describe('transparency settings route', () => {
     requireCommunityMembershipMock.mockResolvedValueOnce({
       userId: 'user-123',
       communityId: 42,
-      role: 'manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Site Manager', presetKey: 'site_manager', permissions: FULL_PERMS,
+      role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'apartment',
     });
 

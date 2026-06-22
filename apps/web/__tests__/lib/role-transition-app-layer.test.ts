@@ -16,39 +16,20 @@ describe('checkPermissionV2 — v3 transition roles', () => {
     expect(checkPermissionV2('resident', 'condo_718', 'documents', 'write', { isUnitOwner: false })).toBe(false);
     expect(checkPermissionV2('resident', 'condo_718', 'documents', 'read', { isUnitOwner: true })).toBe(true);
   });
-  it('property_manager IGNORES JSONB permissions — always resolves the property_manager_admin matrix (uniform widening)', () => {
-    // A restricted JSONB that denies documents:read, documents:write and finances:write.
-    const permissions = {
-      resources: {
-        documents: { read: false, write: false },
-        finances: { read: true, write: false },
-      },
-    } as never;
-    // Reads AND writes resolve from the matrix, not the JSONB.
-    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read', { permissions })).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'read'),
-    );
-    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write', { permissions })).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
-    );
-    expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write', { permissions })).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'finances', 'write'),
-    );
-    // The matrix grants these — the JSONB's false values are ignored.
-    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read', { permissions })).toBe(true);
-    expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write', { permissions })).toBe(true);
-  });
-  it('property_manager without permissions resolves the property_manager_admin matrix (ex-pm_admin backfill fallback)', () => {
-    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write')).toBe(
-      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
-    );
+  it('property_manager resolves the property_manager_admin matrix (uniform widening)', () => {
+    // Reads AND writes resolve from the matrix.
     expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read')).toBe(
       checkPermissionV2('pm_admin', 'condo_718', 'documents', 'read'),
     );
-  });
-  it('manager without permissions is still denied (regression guard — manager always carries permissions)', () => {
-    expect(checkPermissionV2('manager', 'condo_718', 'documents', 'read')).toBe(false);
-    expect(checkPermissionV2('manager', 'condo_718', 'documents', 'write')).toBe(false);
+    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'write')).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'documents', 'write'),
+    );
+    expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write')).toBe(
+      checkPermissionV2('pm_admin', 'condo_718', 'finances', 'write'),
+    );
+    // The matrix grants these.
+    expect(checkPermissionV2('property_manager', 'condo_718', 'documents', 'read')).toBe(true);
+    expect(checkPermissionV2('property_manager', 'condo_718', 'finances', 'write')).toBe(true);
   });
 });
 
@@ -57,11 +38,12 @@ describe('hasRole — v3 transition aliases', () => {
     expect(hasRole({ role: 'property_manager', communityId: 1 }, ['pm_admin'])).toBe(true);
     expect(hasRole({ role: 'root_manager', communityId: 1 }, ['pm_admin'])).toBe(true);
   });
-  it('matches manager-preset allowlists for property_manager rows (backfill keeps presetKey)', () => {
-    expect(hasRole({ role: 'property_manager', communityId: 1, presetKey: 'cam' }, ['cam'])).toBe(true);
+  it('accepts property_manager rows where a manager-alias is allowed', () => {
+    // property_manager is the canonical PM-tier value and matches pm_admin / property_manager_admin allowlists.
+    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['property_manager_admin'])).toBe(true);
   });
-  it('does not regress v2 behavior', () => {
-    expect(hasRole({ role: 'manager', communityId: 1, presetKey: 'cam' }, ['cam'])).toBe(true);
+  it('does not match non-PM allowlists', () => {
+    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['cam'])).toBe(false);
     expect(hasRole({ role: 'resident', communityId: 1 }, ['pm_admin'])).toBe(false);
   });
 });
@@ -71,9 +53,8 @@ describe('isAdminRole — v3 transition roles', () => {
     expect(isAdminRole('property_manager' as never)).toBe(true);
     expect(isAdminRole('root_manager' as never)).toBe(true);
   });
-  it('does not regress v2 behavior', () => {
-    expect(isAdminRole('manager')).toBe(true);
-    expect(isAdminRole('pm_admin')).toBe(true);
+  it('treats residents as non-admin', () => {
+    expect(isAdminRole('resident' as never)).toBe(false);
     expect(isAdminRole('tenant')).toBe(false);
   });
 });

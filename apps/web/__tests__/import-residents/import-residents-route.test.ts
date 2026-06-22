@@ -209,8 +209,6 @@ describe('POST /api/v1/import-residents', () => {
       role: 'resident',
       unitId: 7,
       isUnitOwner: true,
-      permissions: null,
-      presetKey: null,
       displayTitle: 'Owner',
     });
     expect(insertNotificationPreferencesForImportMock).toHaveBeenCalledWith(42, 'new-user-1');

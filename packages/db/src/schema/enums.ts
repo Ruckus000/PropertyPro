@@ -102,18 +102,14 @@ export const emailFrequencyEnum = pgEnum('email_frequency', [
 ]);
 
 /**
- * Simplified community-scoped roles (v3 transition window).
+ * Simplified community-scoped roles (v3 end state).
  * - resident: owner or tenant (distinguished by is_unit_owner flag)
- * - manager: v2 manager (presets) — retired by the v3 cleanup migration
- * - pm_admin: v2 PM admin — retired by the v3 cleanup migration
  * - property_manager: v3 operational manager (assigned by root)
  * - root_manager: v3 root (≤1 per community, partial unique index)
  * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
  */
 export const userRoleV2Enum = pgEnum('user_role_v2', [
   'resident',
-  'manager',
-  'pm_admin',
   'property_manager',
   'root_manager',
 ]);

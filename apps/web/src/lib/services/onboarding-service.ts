@@ -17,8 +17,7 @@ import {
 import { eq } from '@propertypro/db/filters';
 import { createElement } from 'react';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
-import type { CommunityType, NewCommunityRole, PresetKey } from '@propertypro/shared';
-import { getPresetPermissions, hasBoardDesignation, PRESET_METADATA } from '@propertypro/shared';
+import type { CommunityType, NewCommunityRole } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -69,7 +68,6 @@ export async function createOnboardingResident(params: {
   actorUserId: string;
   communityType: CommunityType;
   isUnitOwner?: boolean;
-  presetKey?: PresetKey;
 }): Promise<{ userId: string; isNewUser: boolean }> {
   const { communityId, email, fullName, phone, role, unitId, actorUserId, communityType } = params;
   const scoped = createScopedClient(communityId);
@@ -112,25 +110,17 @@ export async function createOnboardingResident(params: {
     );
   }
 
-  // Create role with hybrid-model fields
+  // Onboarding mints resident-tier rows only (owner/tenant). Manager-tier rows
+  // are assigned from the root-only Roles & Access path.
   const isUnitOwner = role === 'resident' ? (params.isUnitOwner ?? false) : false;
-  const permissions =
-    role === 'manager' && params.presetKey
-      ? getPresetPermissions(params.presetKey, communityType)
-      : null;
-  const presetKey = role === 'manager' ? (params.presetKey ?? null) : null;
-  // Phase 3.2 writer lockstep: a board presetKey always carries the identical designation.
-  const designation = presetKey && hasBoardDesignation(presetKey) ? presetKey : null;
-  const displayTitle = resolveDisplayTitle(role, params.isUnitOwner, params.presetKey);
+  const displayTitle = resolveDisplayTitle(role, params.isUnitOwner);
 
   await scoped.insert(userRoles, {
     userId,
     role,
     unitId: unitId ?? null,
     isUnitOwner,
-    permissions,
-    presetKey,
-    designation,
+    designation: null,
     displayTitle,
   });
 
@@ -243,9 +233,7 @@ function addDays(date: Date, days: number): Date {
 function resolveDisplayTitle(
   role: NewCommunityRole,
   isUnitOwner?: boolean,
-  presetKey?: PresetKey,
 ): string {
-  if (role === 'manager' && presetKey) return PRESET_METADATA[presetKey].displayTitle;
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
-  return 'Administrator'; // pm_admin — the only non-manager, non-resident NewCommunityRole
+  return 'Administrator'; // non-resident NewCommunityRole (not minted via onboarding)
 }

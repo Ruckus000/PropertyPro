@@ -76,12 +76,11 @@ import { POST, DELETE } from '../../src/app/api/v1/forum/threads/[id]/reply/rout
 const ADMIN_MEMBERSHIP = {
   userId: 'user-admin',
   communityId: 42,
-  role: 'manager' as const,
+  role: 'property_manager' as const,
   isAdmin: true,
   isUnitOwner: false,
   displayTitle: 'Board President',
   communityType: 'condo_718' as const,
-  permissions: { resources: { polls: { read: true, write: true } } } as unknown as Record<string, unknown>,
 };
 
 const RESIDENT_MEMBERSHIP = {
@@ -92,7 +91,6 @@ const RESIDENT_MEMBERSHIP = {
   isUnitOwner: true,
   displayTitle: 'Unit Owner',
   communityType: 'condo_718' as const,
-  permissions: {} as Record<string, unknown>,
 };
 
 const REPLY_RECORD = {
@@ -351,11 +349,11 @@ describe('DELETE /api/v1/forum/threads/[id]/reply', () => {
     const json = (await res.json()) as { data: { id: number; deleted: boolean } };
     expect(json.data).toEqual({ id: 99, deleted: true });
     expect(checkPermissionV2Mock).toHaveBeenCalledWith(
-      'manager',
+      'property_manager',
       'condo_718',
       'polls',
       'write',
-      { isUnitOwner: false, permissions: ADMIN_MEMBERSHIP.permissions },
+      { isUnitOwner: false },
     );
     expect(deleteForumReplyForCommunityMock).toHaveBeenCalledWith(
       42,

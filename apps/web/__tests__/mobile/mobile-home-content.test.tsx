@@ -50,8 +50,7 @@ describe('MobileHomeContent', () => {
         city="Miami"
         state="FL"
         timezone="America/New_York"
-        role="manager"
-        presetKey="board_member"
+        role="property_manager"
         hasCompliance
         hasFinance
         hasMaintenanceRequests

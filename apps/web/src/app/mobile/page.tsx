@@ -79,7 +79,6 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
       state={membership!.state}
       timezone={data.timezone}
       role={membership!.role}
-      presetKey={membership!.presetKey}
       hasCompliance={features.hasCompliance}
       hasFinance={features.hasFinance}
       hasMaintenanceRequests={features.hasMaintenanceRequests}
