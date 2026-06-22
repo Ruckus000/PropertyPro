@@ -21,7 +21,7 @@ import type { CommunityType } from '@propertypro/shared';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { hasRole } from '@/lib/api/role-guard';
+import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
@@ -53,7 +53,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
     redirect('/auth/login');
   }
   const membership = await requireCommunityMembership(communityId, userId!);
-  if (!hasRole(membership, ['pm_admin', 'cam'])) {
+  if (!hasRole(membership, PM_MANAGER_ROLES)) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 

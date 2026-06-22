@@ -15,7 +15,7 @@ import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { requireRole } from '@/lib/api/role-guard';
+import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { reorderSiteBlock } from '@/lib/services/site-blocks-service';
@@ -26,7 +26,7 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
   const membership = await requireCommunityMembership(effective, userId);
-  requireRole(membership, ['pm_admin', 'cam'], 'Only property managers can reorder site blocks');
+  requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can reorder site blocks');
   await requirePlanFeature(effective, 'hasSiteEditor');
   return { userId, communityId: effective };
 }

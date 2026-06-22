@@ -11,7 +11,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { hasRole } from '@/lib/api/role-guard';
+import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { WizardLayoutThemePreview } from '@/components/pm/onboarding-wizard/WizardLayoutThemePreview';
@@ -53,7 +53,7 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
   }
 
   const membership = await requireCommunityMembership(communityId, userId!);
-  if (!hasRole(membership, ['pm_admin', 'cam'])) {
+  if (!hasRole(membership, PM_MANAGER_ROLES)) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 

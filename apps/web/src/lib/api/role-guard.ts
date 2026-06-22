@@ -17,6 +17,14 @@ const ROLE_ALIASES: Record<string, readonly string[]> = {
   root_manager: ['root_manager'],
 };
 
+/**
+ * v3 property-manager tier (role-v3 Phase 4.3). Pass this to requireRole/hasRole
+ * instead of the legacy `['pm_admin','cam']`. ROLE_ALIASES expands
+ * `property_manager` to also accept the legacy `pm_admin`/`property_manager_admin`
+ * analogs, so this is behavior-neutral; prod has no `cam`-role rows.
+ */
+export const PM_MANAGER_ROLES = ['property_manager', 'root_manager'] as const;
+
 export type Membership = { role: string; communityId: number };
 
 function expandRoles(allowed: readonly string[]): Set<string> {

@@ -1,52 +1,73 @@
 /**
- * Legacy-role literal guard (role-simplification Phase 1+).
+ * Legacy-role literal guard (role-simplification Phase 4.3+).
  *
- * Counts occurrences of (a) the five legacy admin-role string literals and
- * (b) the v2 union-type cast pattern, across app + package source. This is a
- * REGRESSION FLOOR during the Phase 3 drain (ratchet FLOOR down with every
- * drain PR), and flips to forbid (FLOOR = allowlist-only) at Phase 4.
+ * BAN mode (Phase 4.3): the guard no longer ratchets a numeric floor. It counts
+ * the genuinely-DEAD legacy admin-role string literals — `cam`, `site_manager`,
+ * `property_manager_admin` — plus the v2 union-type cast, across app + package
+ * source, and FAILS if any appear in a file that is NOT on the ALLOWLIST below,
+ * or if an allowlisted file EXCEEDS its pinned ceiling. New code therefore cannot
+ * introduce a new dead-legacy-role literal anywhere.
  *
  * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
- * NOTE: 'owner'/'tenant' literals are NOT counted (too many legitimate uses:
- * ownerUserId, tenant isolation, etc.). presetKey VALUES share these strings
- * and legitimately persist until Phase 4 drops the column — that's why this
- * is a floor, not a ban.
+ *
+ * NOT counted (deliberately):
+ * - 'owner'/'tenant' — too many legitimate uses (ownerUserId, tenant isolation).
+ * - 'board_president'/'board_member' — these are first-class v3 `designation`
+ *   enum values now (valid on any role), not legacy admin-role names to drain.
+ *   `role` is a typed enum (TransitionRole), so misusing a designation value as a
+ *   role is a tsc error, not something this string guard needs to catch.
+ *
+ * The ALLOWLIST is a CEILING per file: exceeding it fails (no growth); dropping
+ * below it only warns (tighten opportunistically on the next drain). The long-term
+ * structural sites (rbac-matrix / access-policies / DB enum) are removed when the
+ * RBAC_MATRIX/CommunityRole 7→3 collapse lands (a later phase); the bridge-display
+ * sites (nav-config / feature-registry / role-guard aliases / esign / compliance /
+ * invitations) drain in Phase 4.4 with the inferCanonicalRoleFromMembership removal.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FLOOR = 151; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
-                   // reference in access-control.ts checkPermissionV2 (ex-pm_admin null-perms fallback).
-                   // 2026-06-11 (Phase 2c): +3 for the irreducible board-designation literals in the
-                   // /settings/roles UI — `'board_president'`/`'board_member'` are the designations API
-                   // contract values (BoardDesignation union in use-role-management + the two named
-                   // constants in RolesAccessClient), NOT legacy admin-role literals to drain.
-                   // 2026-06-12 (Phase 3.2): 254 → 242 — board-targeting repoint drained the presetKey
-                   // board literals (announcement/notification board_only, §718 roster, access-request
-                   // notify, billing presets) to the designation helpers in role-transition.ts.
-                   // 2026-06-13 (invariant 3 lockdown): 242 → 241 — dropped a stale `'board_president'`
-                   // example from the resident-form roleKey JSDoc (the picker is owner/tenant-only).
-                   // 2026-06-15 (help v3 visibility): 241 → 252 — +11 for IRREDUCIBLE TEST FIXTURES in
-                   // the help viewer-role bridge (viewer-role.test +9, help-article-service.test +2) that
-                   // assert the v3→v1 help-frontmatter mapping. Production literals live in the guard-
-                   // exempt HELP_FRONTMATTER_ROLES (role-transition.ts); only the test fixtures spell the
-                   // frontmatter roles inline. Help-content vocabulary, NOT runtime role literals to drain.
-                   // 2026-06-15 (Phase 3.3 vocabulary drain): 252 → 187 — drained dead constants
-                   // (STAFF_ROLES/RESIDENT_ROLES), compliance command-center + cta, welcome display +
-                   // onboarding checklist, and the demo seeds to designation/v3 helpers. Structural
-                   // matrix/access-policies literals + the inferCanonicalRole shim remain for Phase 4.
-                   // 2026-06-22 (Phase 4.2 dead-vocabulary cleanup): 187 -> 151 — deleted
-                   // manager-presets.ts and drained the apps/admin member-management preset enums to
-                   // v3. Remaining literals are the structural rbac-matrix/access-policies/nav-config/
-                   // feature-registry sites, the dev-login portal aliases, and irreducible board
-                   // designation values; they drain or move to an allowlist when 4.3 flips floor->ban.
-                   // Resume ratcheting DOWN on the Phase 4.3 ban flip.
 const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'packages/db/src', 'packages/ui/src', 'packages/email/src'];
-const LITERAL = /'(board_member|board_president|cam|site_manager|property_manager_admin)'/g;
+const LITERAL = /'(cam|site_manager|property_manager_admin)'/g;
 const V2_CAST = /'resident'\s*\|\s*'manager'\s*\|\s*'pm_admin'/g;
 const EXEMPT = new Set([
   'packages/shared/src/role-transition.ts',
-  'packages/shared/src/billing/permissions.ts', // the shim — deleted at Phase 4
+  'packages/shared/src/billing/permissions.ts', // the inferCanonicalRoleFromMembership shim — deleted at Phase 4.4
+]);
+
+// Per-file CEILING of legitimate dead-legacy-role literals (pinned 2026-06-22, Phase 4.3).
+// Any file NOT listed here must have ZERO such literals. Buckets:
+//   STRUCTURAL  — the RBAC permission authority + DB enum; removed at the 7→3 collapse.
+//   BRIDGE      — canonical-role-bridge display/config; drains in Phase 4.4 with the shim.
+//   HELP        — #733 help-frontmatter v1 visibility vocabulary (content, not runtime roles).
+//   DEV         — dev-only portal login aliases (404 in prod).
+//   TEST        — co-located *.test fixtures under src asserting the v3↔legacy mapping.
+const ALLOWLIST = new Map<string, number>([
+  // STRUCTURAL
+  ['packages/shared/src/rbac-matrix.ts', 16],
+  ['packages/shared/src/access-policies.ts', 7],
+  ['packages/db/src/schema/enums.ts', 3],
+  ['apps/web/src/lib/db/access-control.ts', 1],
+  // BRIDGE (Phase 4.4 drain targets)
+  ['apps/web/src/components/compliance/compliance-command-center.tsx', 6],
+  ['apps/web/src/components/layout/nav-config.ts', 5],
+  ['apps/web/src/lib/api/role-guard.ts', 4],
+  ['apps/web/src/lib/constants/feature-registry.ts', 3],
+  ['packages/shared/src/esign-constants.ts', 2],
+  ['apps/web/src/lib/services/invitations-service.ts', 1],
+  // HELP
+  ['packages/shared/src/default-faqs.ts', 3],
+  ['apps/web/src/lib/help/aliases.ts', 1],
+  // DEV
+  ['apps/web/src/app/dev/agent-login/route.ts', 2],
+  ['apps/web/src/app/dev/login/route.ts', 2],
+  // TEST
+  ['packages/shared/src/__tests__/rbac-parity.test.ts', 6],
+  ['apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts', 4],
+  ['apps/web/src/hooks/__tests__/use-residents.test.tsx', 3],
+  ['apps/web/src/lib/help/__tests__/viewer-role.test.ts', 3],
+  ['apps/web/src/lib/services/__tests__/help-article-service.test.ts', 1],
+  ['apps/web/src/lib/work-orders/__tests__/common.test.ts', 1],
 ]);
 
 function* walk(dir: string): Generator<string> {
@@ -59,7 +80,7 @@ function* walk(dir: string): Generator<string> {
 }
 
 let total = 0;
-const perFile: Array<[string, number]> = [];
+const perFile = new Map<string, number>();
 for (const root of ROOTS) {
   for (const file of walk(root)) {
     if (EXEMPT.has(file)) continue;
@@ -67,25 +88,40 @@ for (const root of ROOTS) {
     const n = (src.match(LITERAL)?.length ?? 0) + (src.match(V2_CAST)?.length ?? 0);
     if (n > 0) {
       total += n;
-      perFile.push([file, n]);
+      perFile.set(file, n);
     }
   }
 }
 
 if (process.argv.includes('--report')) {
-  perFile.sort((a, b) => b[1] - a[1]).forEach(([f, n]) => console.log(`${String(n).padStart(4)}  ${f}`));
+  [...perFile.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([f, n]) => console.log(`${String(n).padStart(4)}  ${f}  ${ALLOWLIST.has(f) ? `(allowlisted ≤${ALLOWLIST.get(f)})` : 'NOT ALLOWLISTED'}`));
   console.log(`\nTOTAL: ${total}`);
   process.exit(0);
 }
 
-if (Number.isNaN(FLOOR)) {
-  console.error('guard:legacy-roles — FLOOR not set. Run with --report and pin the count.');
+const violations: string[] = [];
+for (const [file, n] of perFile) {
+  const ceiling = ALLOWLIST.get(file);
+  if (ceiling === undefined) {
+    violations.push(`  ${file}: ${n} dead legacy-role literal(s) — NOT allowlisted. Use the v3 roles / designation / transition constants (packages/shared/src/role-transition.ts).`);
+  } else if (n > ceiling) {
+    violations.push(`  ${file}: ${n} legacy literal(s) exceeds the allowlisted ceiling of ${ceiling}. Drain the new one or it cannot land.`);
+  }
+}
+
+if (violations.length > 0) {
+  console.error('guard:legacy-roles BAN — new/over-ceiling dead legacy-role literals found:');
+  console.error(violations.join('\n'));
   process.exit(1);
 }
-if (total > FLOOR) {
-  console.error(`guard:legacy-roles — ${total} legacy role literals found, floor is ${FLOOR}.`);
-  console.error('New code must use the v3 roles / transition constants (packages/shared/src/role-transition.ts).');
-  console.error('If you DRAINED literals, lower FLOOR in scripts/verify-legacy-roles.ts to the new count.');
-  process.exit(1);
+
+// Non-failing hint: files now below their pinned ceiling (a drain happened elsewhere) —
+// tighten the ALLOWLIST opportunistically.
+const slack = [...ALLOWLIST.entries()].filter(([f, max]) => (perFile.get(f) ?? 0) < max);
+if (slack.length > 0) {
+  console.log('guard:legacy-roles — ceilings with slack (lower them when convenient):');
+  slack.forEach(([f, max]) => console.log(`  ${f}: now ${perFile.get(f) ?? 0}, ceiling ${max}`));
 }
-console.log(`guard:legacy-roles OK — ${total} legacy literals (floor ${FLOOR}).`);
+console.log(`guard:legacy-roles OK (ban mode) — ${total} legacy literals, all within the ${ALLOWLIST.size}-file allowlist.`);
