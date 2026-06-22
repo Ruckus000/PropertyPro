@@ -39,6 +39,7 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 vi.mock('@/lib/api/role-guard', () => ({
   requireRole: requireRoleMock,
+  PM_MANAGER_ROLES: ['property_manager', 'root_manager'],
 }));
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
@@ -146,14 +147,14 @@ describe('pm site domain route', () => {
       expect(setDomainMock).toHaveBeenCalledWith(1, 'pm-1', 'www.example.com');
     });
 
-    it('allows a cam role', async () => {
-      requireCommunityMembershipMock.mockResolvedValueOnce({ role: 'cam', communityId: 1 });
+    it('allows a property_manager role', async () => {
+      requireCommunityMembershipMock.mockResolvedValueOnce({ role: 'property_manager', communityId: 1 });
       const res = await POST(postReq('/api/v1/pm/site/domain', { communityId: 1, domain: 'www.example.com' }));
 
       expect(res.status).toBe(200);
       expect(requireRoleMock).toHaveBeenCalledWith(
-        { role: 'cam', communityId: 1 },
-        ['pm_admin', 'cam'],
+        { role: 'property_manager', communityId: 1 },
+        ['property_manager', 'root_manager'],
         expect.any(String),
       );
       expect(setDomainMock).toHaveBeenCalled();

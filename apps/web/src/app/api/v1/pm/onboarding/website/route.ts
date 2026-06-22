@@ -21,7 +21,7 @@ import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { requireRole } from '@/lib/api/role-guard';
+import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { updateBrandingForCommunity } from '@/lib/api/branding';
@@ -35,7 +35,7 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(
     membership,
-    ['pm_admin', 'cam'],
+    PM_MANAGER_ROLES,
     'Only property managers can run the onboarding wizard',
   );
   await requirePlanFeature(effective, 'hasSiteEditor');

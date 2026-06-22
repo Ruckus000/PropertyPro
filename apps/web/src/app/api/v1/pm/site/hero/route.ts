@@ -15,7 +15,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { requireRole } from '@/lib/api/role-guard';
+import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
@@ -29,7 +29,7 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   const userId = await requireAuthenticatedUserId();
   const effective = resolveEffectiveCommunityId(req, communityId);
   const membership = await requireCommunityMembership(effective, userId);
-  requireRole(membership, ['pm_admin', 'cam'], 'Only property managers can edit the community site');
+  requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can edit the community site');
   await requirePlanFeature(effective, 'hasSiteEditor');
   return { userId, communityId: effective };
 }

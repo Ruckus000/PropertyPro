@@ -8,7 +8,7 @@
  *     → resolveEffectiveCommunityId(req, communityId)
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
- *     → requireRole(['pm_admin','cam'])
+ *     → requireRole(PM_MANAGER_ROLES)
  *     → requirePlanFeature('hasSiteCustomDomain')
  *
  * `permission: { resource: 'settings', action }` — `settings` IS in

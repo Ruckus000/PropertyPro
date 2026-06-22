@@ -13,7 +13,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { requireRole } from '@/lib/api/role-guard';
+import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import * as svc from '@/lib/services/custom-domain-service';
@@ -25,7 +25,7 @@ async function gate(req: NextRequest, communityIdInput: number) {
   const communityId = resolveEffectiveCommunityId(req, communityIdInput);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, userId);
-  requireRole(membership, ['pm_admin', 'cam'], 'Only property managers can manage the custom domain');
+  requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can manage the custom domain');
   await requirePlanFeature(communityId, 'hasSiteCustomDomain');
   return { userId, communityId };
 }

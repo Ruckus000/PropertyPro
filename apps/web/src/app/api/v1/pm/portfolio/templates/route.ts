@@ -15,7 +15,7 @@ import { isPmAdminInAnyCommunity } from '@/lib/api/pm-communities';
 import { AppError, ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { requireRole } from '@/lib/api/role-guard';
+import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import * as svc from '@/lib/services/site-portfolio-template-service';
 import {
   templatesListContract,
@@ -52,7 +52,7 @@ export const POST = withErrorHandler(
     const userId = await gateUser();
     // Authorize the caller manages the SOURCE community before capturing it.
     const membership = await requireCommunityMembership(body.communityId, userId);
-    requireRole(membership, ['pm_admin', 'cam'], 'You do not manage that community');
+    requireRole(membership, PM_MANAGER_ROLES, 'You do not manage that community');
     return svc.createFromCommunity(userId, body.communityId, body.name);
   }),
 );

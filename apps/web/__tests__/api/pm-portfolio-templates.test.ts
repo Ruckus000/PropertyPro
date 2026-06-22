@@ -26,7 +26,7 @@ const {
 
 vi.mock('@/lib/api/auth', () => ({ requireAuthenticatedUserId: requireAuthenticatedUserIdMock }));
 vi.mock('@/lib/api/community-membership', () => ({ requireCommunityMembership: requireCommunityMembershipMock }));
-vi.mock('@/lib/api/role-guard', () => ({ requireRole: requireRoleMock }));
+vi.mock('@/lib/api/role-guard', () => ({ requireRole: requireRoleMock, PM_MANAGER_ROLES: ['property_manager', 'root_manager'] }));
 vi.mock('@/lib/api/pm-communities', () => ({ isPmAdminInAnyCommunity: isPmAdminInAnyCommunityMock }));
 vi.mock('@/lib/services/site-portfolio-template-service', () => ({
   userHasPortfolioTemplatesAccess: userHasAccessMock,
