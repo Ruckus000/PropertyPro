@@ -557,7 +557,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     try {
       await authSql`
         insert into public.user_roles (user_id, community_id, role)
-        values (${seed.tenantAUserId}, ${seed.communityAId}, 'manager')
+        values (${seed.tenantAUserId}, ${seed.communityAId}, 'property_manager')
       `;
       expect.fail('Tenant INSERT on user_roles should be blocked by pp_user_roles_insert');
     } catch (error: unknown) {
@@ -572,7 +572,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     try {
       await authSql`
         update public.user_roles
-        set role = 'manager'
+        set role = 'property_manager'
         where user_id = ${seed.tenantAUserId} and community_id = ${seed.communityAId}
       `;
     } catch (error: unknown) {

@@ -146,7 +146,7 @@ describe('recalculateVolumeTier (integration)', () => {
       insertedCommunities.map((community) => ({
         userId: TEST_PM_USER_ID,
         communityId: community.id,
-        role: 'pm_admin',
+        role: 'property_manager',
       })),
     );
 
@@ -183,7 +183,7 @@ describe('recalculateVolumeTier (integration)', () => {
       insertedCommunities.map((community) => ({
         userId: TEST_PM_USER_ID,
         communityId: community.id,
-        role: 'pm_admin',
+        role: 'property_manager',
       })),
     );
 
@@ -206,7 +206,7 @@ describe('recalculateVolumeTier (integration)', () => {
       insertedCommunities.map((community) => ({
         userId: TEST_PM_USER_ID,
         communityId: community.id,
-        role: 'pm_admin',
+        role: 'property_manager',
       })),
     );
 

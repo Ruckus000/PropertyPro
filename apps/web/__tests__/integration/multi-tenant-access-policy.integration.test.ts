@@ -1,9 +1,13 @@
 /**
  * P2-43 Gap B+C+D: Access policy integration tests.
  *
- * Verifies that restricted roles (tenant, cam, site_manager) see only
- * their allowed document categories through the real API layer, and that
- * elevated roles (board_president, property_manager_admin) see everything.
+ * Verifies that residents (tenant) see only their allowed document categories
+ * through the real API layer, and that all management-tier actors see everything.
+ *
+ * role-v3 (Phase 4.1, ADR-006): the former cam / site_manager presets are now
+ * uniform `property_manager` rows and are UNIFORMLY ELEVATED — they see every
+ * category, the same as board_president / property_manager_admin. Only residents
+ * remain category-restricted (by isUnitOwner → owner/tenant policy).
  *
  * Seeds 3 community types:
  *   A: condo_718, B: hoa_720, C: apartment
@@ -304,19 +308,17 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
   // CAM (communityA, condo_718)
   // =========================================================================
 
-  it('cam in condo_718 sees only rules, inspection_reports, announcements, meeting_minutes', async () => {
+  // role-v3 (Phase 4.1): the former cam preset is now a uniform property_manager
+  // and is elevated — it sees ALL categories + uncategorized, same as the board
+  // president / property_manager_admin actors below.
+  it('cam (now property_manager) in condo_718 sees ALL categories + uncategorized', async () => {
     const { titles } = await getDocumentCategoryNames('camA', 'communityA');
     const suffix = requireState().runSuffix;
 
-    // Should see
-    expect(titles).toContain(`rules Doc ${suffix}`);
-    expect(titles).toContain(`inspection_reports Doc ${suffix}`);
-    expect(titles).toContain(`announcements Doc ${suffix}`);
-    expect(titles).toContain(`meeting_minutes Doc ${suffix}`);
-
-    // Should NOT see
-    expect(titles).not.toContain(`declaration Doc ${suffix}`);
-    expect(titles).not.toContain(`Uncategorized Doc A ${suffix}`);
+    for (const cat of CONDO_CATEGORIES) {
+      expect(titles).toContain(`${cat} Doc ${suffix}`);
+    }
+    expect(titles).toContain(`Uncategorized Doc A ${suffix}`);
   });
 
   // =========================================================================
@@ -343,20 +345,16 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
   // Apartment site manager (communityC, apartment)
   // =========================================================================
 
-  it('site_manager in apartment sees only rules, announcements, maintenance_records', async () => {
+  // role-v3 (Phase 4.1): the former site_manager preset is now a uniform
+  // property_manager and is elevated — it sees ALL categories + uncategorized.
+  it('site_manager (now property_manager) in apartment sees ALL categories + uncategorized', async () => {
     const { titles } = await getDocumentCategoryNames('siteManagerC', 'communityC');
     const suffix = requireState().runSuffix;
 
-    // Should see
-    expect(titles).toContain(`rules Doc ${suffix}`);
-    expect(titles).toContain(`announcements Doc ${suffix}`);
-    expect(titles).toContain(`maintenance_records Doc ${suffix}`);
-
-    // Should NOT see
-    expect(titles).not.toContain(`lease_docs Doc ${suffix}`);
-    expect(titles).not.toContain(`community_handbook Doc ${suffix}`);
-    expect(titles).not.toContain(`move_in_out_docs Doc ${suffix}`);
-    expect(titles).not.toContain(`Uncategorized Doc C ${suffix}`);
+    for (const cat of APARTMENT_CATEGORIES) {
+      expect(titles).toContain(`${cat} Doc ${suffix}`);
+    }
+    expect(titles).toContain(`Uncategorized Doc C ${suffix}`);
   });
 
   // =========================================================================
@@ -452,7 +450,10 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
     }
   });
 
-  it('siteManagerC search: only allowed categories; sentinel text from forbidden docs never appears', async () => {
+  // role-v3 (Phase 4.1): site_manager is now a uniform, elevated property_manager,
+  // so its document search surfaces every category — including the categories that
+  // were forbidden under the old preset model.
+  it('siteManagerC (now property_manager) search: elevated — surfaces all categories incl. previously-forbidden', async () => {
     const kit = requireState();
     const appRoutes = requireRoutes();
     const communityC = requireCommunity(kit, 'communityC');
@@ -464,16 +465,14 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
     expect(response.status).toBe(200);
     const json = await parseJson<{ data: { data: Array<Record<string, unknown>> } }>(response);
 
-    const searchTexts = json.data.data
-      .map((d) => d['searchText'] as string | null)
-      .filter(Boolean) as string[];
+    const allText = json.data.data
+      .map((d) => (d['searchText'] as string | null) ?? '')
+      .join('\n');
 
-    // Forbidden sentinels for site_manager in apartment: lease_docs, community_handbook, move_in_out_docs, uncategorized
-    for (const text of searchTexts) {
-      expect(text).not.toContain(`${SENTINEL_PREFIX}lease_docs`);
-      expect(text).not.toContain(`${SENTINEL_PREFIX}community_handbook`);
-      expect(text).not.toContain(`${SENTINEL_PREFIX}move_in_out_docs`);
-      expect(text).not.toContain(`${SENTINEL_PREFIX}uncategorized`);
-    }
+    // Previously forbidden for the site_manager preset; now visible (uniform PM elevation).
+    expect(allText).toContain(`${SENTINEL_PREFIX}lease_docs`);
+    expect(allText).toContain(`${SENTINEL_PREFIX}community_handbook`);
+    expect(allText).toContain(`${SENTINEL_PREFIX}move_in_out_docs`);
+    expect(allText).toContain(`${SENTINEL_PREFIX}uncategorized`);
   });
 });
