@@ -21,7 +21,6 @@ export interface Member {
 
 interface CommunityMembersProps {
   communityId: number;
-  communityType: string;
 }
 
 // role-v3 (Phase 4.2): the canonical roles are resident / property_manager /

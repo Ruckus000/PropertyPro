@@ -260,7 +260,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
         )}
 
         {activeTab === 'members' && (
-          <CommunityMembers communityId={community.id} communityType={community.community_type} />
+          <CommunityMembers communityId={community.id} />
         )}
 
         {activeTab === 'compliance' && (
