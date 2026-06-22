@@ -15,7 +15,7 @@ interface UserRoleRow {
   id: number;
   user_id: string;
   role: string;
-  preset_key: string | null;
+  designation: string | null;
   display_title: string | null;
   is_unit_owner: boolean;
   created_at: string;
@@ -54,7 +54,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   // Fetch user roles for this community
   const { data: roles, error } = await db
     .from('user_roles')
-    .select('id, user_id, role, preset_key, display_title, is_unit_owner, created_at, updated_at')
+    .select('id, user_id, role, designation, display_title, is_unit_owner, created_at, updated_at')
     .eq('community_id', communityId)
     .order('created_at');
 
@@ -97,7 +97,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       fullName: profile?.full_name ?? null,
       phone: profile?.phone ?? null,
       role: row.role,
-      presetKey: row.preset_key,
+      designation: row.designation,
       displayTitle: row.display_title,
       isUnitOwner: row.is_unit_owner,
       lastSignInAt: authUser?.last_sign_in_at ?? null,

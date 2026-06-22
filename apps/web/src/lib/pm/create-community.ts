@@ -88,8 +88,11 @@ export async function createCommunityForPm(
     return { communityId: cId, slug: community.slug };
   });
 
-  // 5. Generate onboarding checklist (outside transaction — uses scoped client, is idempotent)
-  await createChecklistItems(communityId, input.userId, 'pm_admin', null, input.communityType);
+  // 5. Generate onboarding checklist (outside transaction — uses scoped client, is idempotent).
+  // The creator is linked as root_manager (step 2); pass that v3 role so
+  // getItemKeysForRole resolves the PM-admin checklist (the legacy 'pm_admin'
+  // string is not in PM_SCOPE_DB_ROLES and would fall through to owner/tenant).
+  await createChecklistItems(communityId, input.userId, 'root_manager', null, input.communityType);
 
   // 5b. Apply starter pack (outside transaction — best-effort, idempotent)
   // PR #5: §4.0 "site is always live" guarantee — pre-populate published site_blocks so

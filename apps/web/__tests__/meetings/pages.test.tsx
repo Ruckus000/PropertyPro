@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getPresetPermissions } from '@propertypro/shared';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -97,12 +96,10 @@ describe('meetings pages', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'user-1',
       communityId: 7,
-      role: 'manager',
+      role: 'property_manager',
       isAdmin: true,
       isUnitOwner: false,
       displayTitle: 'Site Manager',
-      presetKey: 'site_manager',
-      permissions: getPresetPermissions('site_manager', 'apartment'),
       communityType: 'apartment',
       timezone: 'America/New_York',
     });
@@ -113,7 +110,7 @@ describe('meetings pages', () => {
       props: expect.objectContaining({
         communityId: 7,
         userId: 'user-1',
-        role: 'manager',
+        role: 'property_manager',
         canWrite: true,
       }),
     });

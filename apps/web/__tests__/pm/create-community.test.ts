@@ -153,4 +153,21 @@ describe('createCommunityForPm', () => {
     expect(founding?.role).toBe('root_manager');
     expect(founding?.displayTitle).toBe('Administrator');
   });
+
+  it('seeds the onboarding checklist with the creator v3 role (root_manager), not legacy pm_admin', async () => {
+    buildDb();
+
+    await createCommunityForPm(VALID_INPUT);
+
+    // getItemKeysForRole only treats PM_SCOPE_DB_ROLES (property_manager /
+    // root_manager) as admin; the legacy 'pm_admin' string would fall through
+    // to the owner/tenant checklist. Regression guard for that 4.2 bugfix.
+    expect(createChecklistItemsMock).toHaveBeenCalledWith(
+      expect.any(Number),
+      VALID_INPUT.userId,
+      'root_manager',
+      null,
+      VALID_INPUT.communityType,
+    );
+  });
 });

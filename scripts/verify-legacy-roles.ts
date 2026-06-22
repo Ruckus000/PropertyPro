@@ -15,7 +15,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const FLOOR = 187; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
+const FLOOR = 151; // 2026-06-10: 250 baseline +1 for the intentional property_manager_admin matrix
                    // reference in access-control.ts checkPermissionV2 (ex-pm_admin null-perms fallback).
                    // 2026-06-11 (Phase 2c): +3 for the irreducible board-designation literals in the
                    // /settings/roles UI — `'board_president'`/`'board_member'` are the designations API
@@ -35,7 +35,12 @@ const FLOOR = 187; // 2026-06-10: 250 baseline +1 for the intentional property_m
                    // (STAFF_ROLES/RESIDENT_ROLES), compliance command-center + cta, welcome display +
                    // onboarding checklist, and the demo seeds to designation/v3 helpers. Structural
                    // matrix/access-policies literals + the inferCanonicalRole shim remain for Phase 4.
-                   // Resume ratcheting DOWN on Phase 3/4 drains.
+                   // 2026-06-22 (Phase 4.2 dead-vocabulary cleanup): 187 -> 151 — deleted
+                   // manager-presets.ts and drained the apps/admin member-management preset enums to
+                   // v3. Remaining literals are the structural rbac-matrix/access-policies/nav-config/
+                   // feature-registry sites, the dev-login portal aliases, and irreducible board
+                   // designation values; they drain or move to an allowlist when 4.3 flips floor->ban.
+                   // Resume ratcheting DOWN on the Phase 4.3 ban flip.
 const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'packages/db/src', 'packages/ui/src', 'packages/email/src'];
 const LITERAL = /'(board_member|board_president|cam|site_manager|property_manager_admin)'/g;
 const V2_CAST = /'resident'\s*\|\s*'manager'\s*\|\s*'pm_admin'/g;

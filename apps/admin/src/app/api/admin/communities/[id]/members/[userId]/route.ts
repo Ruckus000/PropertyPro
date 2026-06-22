@@ -6,7 +6,6 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { hasBoardDesignation } from '@propertypro/shared';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 
@@ -14,25 +13,16 @@ interface RouteContext {
   params: Promise<{ id: string; userId: string }>;
 }
 
+// role-v3 (Phase 4.2): the user_roles enum is {resident, property_manager,
+// root_manager} and the preset_key/permissions columns are dropped. Board
+// membership is the orthogonal `designation` column (valid on any role),
+// settable here directly rather than derived from a manager preset.
 const patchSchema = z.object({
-  role: z.enum(['resident', 'manager', 'pm_admin']).optional(),
-  preset_key: z.enum(['board_president', 'board_member', 'cam', 'site_manager']).nullable().optional(),
+  role: z.enum(['resident', 'property_manager', 'root_manager']).optional(),
+  designation: z.enum(['board_president', 'board_member']).nullable().optional(),
   display_title: z.string().max(200).nullable().optional(),
   is_unit_owner: z.boolean().optional(),
 }).strict();
-
-/**
- * Phase 3.2 writer lockstep: when a PATCH touches preset_key, designation
- * follows it (board preset ⇒ same designation; non-board/null ⇒ cleared).
- * When preset_key is absent, designation is left untouched (root-set
- * designations on rows edited for other reasons survive).
- */
-export function deriveDesignationUpdate(
-  presetKey: string | null | undefined,
-): { designation: string | null } | null {
-  if (presetKey === undefined) return null;
-  return { designation: hasBoardDesignation(presetKey) ? presetKey : null };
-}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   await requirePlatformAdmin();
@@ -82,15 +72,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
-  const designationUpdate = deriveDesignationUpdate(parsed.data.preset_key);
-  if (designationUpdate) {
-    updates.designation = designationUpdate.designation;
-  }
-
-  // If changing away from manager, clear preset_key, permissions, and designation
-  if (parsed.data.role && parsed.data.role !== 'manager') {
-    updates.preset_key = null;
-    updates.permissions = null;
+  // A resident does not carry a board designation in this admin surface; clear
+  // it when demoting to resident (board designations live on manager-tier rows).
+  if (parsed.data.role === 'resident') {
     updates.designation = null;
   }
 
@@ -99,7 +83,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     .update(updates as never)
     .eq('community_id', communityId)
     .eq('user_id', userId)
-    .select('id, user_id, role, preset_key, designation, display_title, is_unit_owner, created_at, updated_at')
+    .select('id, user_id, role, designation, display_title, is_unit_owner, created_at, updated_at')
     .single();
 
   if (error) {

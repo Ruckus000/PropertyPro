@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
-import { getPresetPermissions } from '@propertypro/shared';
-
-const MANAGER_PERMISSIONS = getPresetPermissions('board_member', 'condo_718');
 
 const {
   createScopedClientMock,
@@ -68,12 +65,11 @@ describe('p1-18 residents route', () => {
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'actor-1',
       communityId: 777,
-      role: 'manager',
+      role: 'property_manager',
       isAdmin: true,
       isUnitOwner: false,
       displayTitle: 'Board Member',
-      presetKey: 'board_member',
-      permissions: MANAGER_PERMISSIONS,
+      designation: 'board_member',
       communityType: 'condo_718',
     });
 

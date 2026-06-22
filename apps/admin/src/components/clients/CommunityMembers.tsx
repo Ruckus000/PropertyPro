@@ -11,7 +11,7 @@ export interface Member {
   fullName: string | null;
   phone: string | null;
   role: string;
-  presetKey: string | null;
+  designation: string | null;
   displayTitle: string | null;
   isUnitOwner: boolean;
   lastSignInAt: string | null;
@@ -21,51 +21,30 @@ export interface Member {
 
 interface CommunityMembersProps {
   communityId: number;
-  communityType: string;
 }
 
+// role-v3 (Phase 4.2): the canonical roles are resident / property_manager /
+// root_manager. Board membership is the orthogonal `designation` column.
 const ROLE_OPTIONS = [
   { value: 'resident', label: 'Resident' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'pm_admin', label: 'PM Admin' },
+  { value: 'property_manager', label: 'Property Manager' },
+  { value: 'root_manager', label: 'Root Manager' },
 ] as const;
-
-const PRESET_OPTIONS: Record<string, { value: string; label: string }[]> = {
-  condo_718: [
-    { value: 'board_president', label: 'Board President' },
-    { value: 'board_member', label: 'Board Member' },
-    { value: 'cam', label: 'Community Assoc. Manager' },
-  ],
-  hoa_720: [
-    { value: 'board_president', label: 'Board President' },
-    { value: 'board_member', label: 'Board Member' },
-    { value: 'cam', label: 'Community Assoc. Manager' },
-  ],
-  apartment: [
-    { value: 'site_manager', label: 'Site Manager' },
-  ],
-};
 
 const ROLE_BADGES: Record<string, string> = {
   resident: 'bg-gray-100 text-gray-600',
-  manager: 'bg-blue-100 text-blue-700',
-  pm_admin: 'bg-purple-100 text-purple-700',
+  property_manager: 'bg-blue-100 text-blue-700',
+  root_manager: 'bg-purple-100 text-purple-700',
 };
 
 export function displayRole(member: Member): string {
   if (member.displayTitle) return member.displayTitle;
-  if (member.presetKey) {
-    const labels: Record<string, string> = {
-      board_president: 'Board President',
-      board_member: 'Board Member',
-      cam: 'CAM',
-      site_manager: 'Site Manager',
-    };
-    return labels[member.presetKey] ?? member.presetKey;
-  }
+  if (member.designation === 'board_president') return 'Board President';
+  if (member.designation === 'board_member') return 'Board Member';
   if (member.role === 'resident') return member.isUnitOwner ? 'Owner' : 'Tenant';
-  if (member.role === 'pm_admin') return 'PM Admin';
-  return 'Manager';
+  if (member.role === 'root_manager') return 'Root Manager';
+  if (member.role === 'property_manager') return 'Property Manager';
+  return member.role;
 }
 
 export type MemberSort =
@@ -74,12 +53,12 @@ export type MemberSort =
   | 'lastSignIn-asc' | 'lastSignIn-desc'
   | 'joined-asc' | 'joined-desc';
 
-export function CommunityMembers({ communityId, communityType }: CommunityMembersProps) {
+export function CommunityMembers({ communityId }: CommunityMembersProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ role: '', preset_key: '', display_title: '', is_unit_owner: false });
+  const [editForm, setEditForm] = useState({ role: '', display_title: '', is_unit_owner: false });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
@@ -173,7 +152,6 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
     setEditingId(member.userId);
     setEditForm({
       role: member.role,
-      preset_key: member.presetKey ?? '',
       display_title: member.displayTitle ?? '',
       is_unit_owner: member.isUnitOwner,
     });
@@ -186,12 +164,6 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
 
     try {
       const body: Record<string, unknown> = { role: editForm.role };
-
-      if (editForm.role === 'manager' && editForm.preset_key) {
-        body.preset_key = editForm.preset_key;
-      } else {
-        body.preset_key = null;
-      }
 
       if (editForm.display_title) {
         body.display_title = editForm.display_title;
@@ -351,25 +323,13 @@ export function CommunityMembers({ communityId, communityType }: CommunityMember
                     <div className="space-y-2 min-w-[180px]">
                       <select
                         value={editForm.role}
-                        onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value, preset_key: '' }))}
+                        onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
                         className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
                       >
                         {ROLE_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
-                      {editForm.role === 'manager' && (PRESET_OPTIONS[communityType] ?? []).length > 0 && (
-                        <select
-                          value={editForm.preset_key}
-                          onChange={(e) => setEditForm((f) => ({ ...f, preset_key: e.target.value }))}
-                          className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                        >
-                          <option value="">Custom Manager</option>
-                          {(PRESET_OPTIONS[communityType] ?? []).map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      )}
                       {editForm.role === 'resident' && (
                         <label className="flex items-center gap-1.5 text-xs text-gray-600">
                           <input

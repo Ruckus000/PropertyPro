@@ -100,7 +100,6 @@ vi.mock('@/lib/services/announcement-delivery', () => ({
 
 // Route import — after all mocks
 import { POST } from '../../src/app/api/v1/announcements/route';
-import { getPresetPermissions } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
 // Helper: configure the real guard's DB mock
@@ -126,14 +125,13 @@ describe('P0: subscription gate end-to-end (real guard — no mock)', () => {
       userId: 'user-p0-1',
       communityId: 1,
       communityName: 'Test',
-      role: 'manager',
+      role: 'property_manager',
       communityType: 'condo_718',
       timezone: 'America/New_York',
       isUnitOwner: false,
       isAdmin: true,
       displayTitle: 'Board Member',
-      presetKey: 'board_member',
-      permissions: getPresetPermissions('board_member', 'condo_718'),
+      designation: 'board_member',
     });
     createScopedClientMock.mockReturnValue({
       query: vi.fn().mockImplementation(async (table: unknown) => {
