@@ -67,25 +67,25 @@ function filterAndSortMembers(
 const members: Member[] = [
   {
     roleId: 1, userId: 'u1', email: 'alice@test.com', fullName: 'Alice Smith',
-    phone: null, role: 'resident', presetKey: null, displayTitle: null,
+    phone: null, role: 'resident', designation: null, displayTitle: null,
     isUnitOwner: true, lastSignInAt: '2026-03-01T10:00:00Z',
     createdAt: '2025-06-01T00:00:00Z', updatedAt: '2025-06-01T00:00:00Z',
   },
   {
     roleId: 2, userId: 'u2', email: 'bob@test.com', fullName: 'Bob Jones',
-    phone: null, role: 'manager', presetKey: 'board_president', displayTitle: null,
+    phone: null, role: 'property_manager', designation: 'board_president', displayTitle: null,
     isUnitOwner: false, lastSignInAt: null,
     createdAt: '2025-03-01T00:00:00Z', updatedAt: '2025-03-01T00:00:00Z',
   },
   {
     roleId: 3, userId: 'u3', email: 'carol@test.com', fullName: null,
-    phone: null, role: 'resident', presetKey: null, displayTitle: null,
+    phone: null, role: 'resident', designation: null, displayTitle: null,
     isUnitOwner: false, lastSignInAt: '2026-02-15T08:00:00Z',
     createdAt: '2025-09-01T00:00:00Z', updatedAt: '2025-09-01T00:00:00Z',
   },
   {
     roleId: 4, userId: 'u4', email: 'dave.miller@test.com', fullName: 'Dave Miller',
-    phone: null, role: 'manager', presetKey: 'cam', displayTitle: null,
+    phone: null, role: 'property_manager', designation: null, displayTitle: null,
     isUnitOwner: false, lastSignInAt: '2026-03-10T12:00:00Z',
     createdAt: '2025-01-15T00:00:00Z', updatedAt: '2025-01-15T00:00:00Z',
   },
@@ -135,14 +135,14 @@ describe('community members sort by name', () => {
 });
 
 describe('community members sort by role', () => {
-  // displayRole values: u1=Owner, u2=Board President, u3=Tenant, u4=CAM
-  // Alphabetical asc: Board President (u2), CAM (u4), Owner (u1), Tenant (u3)
+  // displayRole values: u1=Owner, u2=Board President, u3=Tenant, u4=Property Manager
+  // Alphabetical asc: Board President (u2), Owner (u1), Property Manager (u4), Tenant (u3)
   it('sorts role ascending', () => {
-    expect(ids(filterAndSortMembers(members, '', 'role-asc'))).toEqual(['u2', 'u4', 'u1', 'u3']);
+    expect(ids(filterAndSortMembers(members, '', 'role-asc'))).toEqual(['u2', 'u1', 'u4', 'u3']);
   });
 
   it('sorts role descending', () => {
-    expect(ids(filterAndSortMembers(members, '', 'role-desc'))).toEqual(['u3', 'u1', 'u4', 'u2']);
+    expect(ids(filterAndSortMembers(members, '', 'role-desc'))).toEqual(['u3', 'u4', 'u1', 'u2']);
   });
 });
 

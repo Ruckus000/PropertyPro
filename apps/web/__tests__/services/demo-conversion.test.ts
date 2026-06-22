@@ -52,7 +52,6 @@ vi.mock('../../src/lib/services/conversion-events', () => ({
   emitConversionEvent: emitConversionEventMock,
 }));
 
-import { getPresetPermissions } from '@propertypro/shared';
 // Imported after mocks so the mocked deps are picked up.
 import { handleDemoConversion } from '../../src/lib/services/demo-conversion';
 
@@ -134,33 +133,6 @@ const SESSION = {
 // ---------------------------------------------------------------------------
 
 describe('demo-conversion prerequisites', () => {
-  describe('getPresetPermissions for founding user', () => {
-    it('returns expected shape for board_president + condo_718', () => {
-      const perms = getPresetPermissions('board_president', 'condo_718');
-
-      expect(perms).toHaveProperty('resources');
-      expect(typeof perms.resources).toBe('object');
-      expect(perms.can_manage_roles).toBe(true);
-      expect(perms.can_manage_settings).toBe(true);
-      expect(perms.is_board_member).toBe(true);
-      expect(perms).toHaveProperty('document_categories');
-
-      const resourceKeys = Object.keys(perms.resources);
-      expect(resourceKeys.length).toBeGreaterThan(0);
-      for (const key of resourceKeys) {
-        const entry = perms.resources[key as keyof typeof perms.resources];
-        expect(typeof entry.read).toBe('boolean');
-        expect(typeof entry.write).toBe('boolean');
-      }
-    });
-
-    it('returns permissions that are not null or undefined', () => {
-      const perms = getPresetPermissions('board_president', 'condo_718');
-      expect(perms).toBeTruthy();
-      expect(perms.resources).toBeTruthy();
-    });
-  });
-
   describe('ensureFoundingUser (via handleDemoConversion)', () => {
     beforeEach(() => {
       vi.clearAllMocks();

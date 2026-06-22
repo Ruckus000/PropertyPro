@@ -149,8 +149,6 @@ export async function seedUsers(
       role: fixture.role,
       isUnitOwner: fixture.isUnitOwner,
       displayTitle: fixture.displayTitle,
-      presetKey: fixture.presetKey ?? null,
-      permissions: fixture.permissions ?? null,
       designation: fixture.designation ?? null,
       unitId: unitIds?.get(fixture.key) ?? null,
     });
