@@ -178,15 +178,15 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
       );
       try {
         // Remove the RESTRICT / NO-ACTION children that block the community delete.
-        await state.db.execute(
-          sql`DELETE FROM compliance_audit_log WHERE community_id = ANY(${communityIds})`,
-        );
-        await state.db.execute(
-          sql`DELETE FROM provisioning_jobs WHERE community_id = ANY(${communityIds})`,
-        );
-        await state.db.execute(
-          sql`DELETE FROM conversion_events WHERE community_id = ANY(${communityIds})`,
-        );
+        await state.db
+          .delete(state.dbModule.complianceAuditLog)
+          .where(inArray(state.dbModule.complianceAuditLog.communityId, communityIds));
+        await state.db
+          .delete(state.dbModule.provisioningJobs)
+          .where(inArray(state.dbModule.provisioningJobs.communityId, communityIds));
+        await state.db
+          .delete(state.dbModule.conversionEvents)
+          .where(inArray(state.dbModule.conversionEvents.communityId, communityIds));
         // Remaining children cascade on community delete.
         await state.db
           .delete(state.dbModule.communities)
