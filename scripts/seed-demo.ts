@@ -1922,6 +1922,7 @@ async function main(): Promise<void> {
   if (process.env.PROPERTYPRO_SEED_RESOLVE_ONLY === '1') {
     // eslint-disable-next-line no-console
     console.log('[seed-demo] resolve-only: import graph loaded OK, skipping seed');
+    await closeUnscopedClient();
     return;
   }
   try {

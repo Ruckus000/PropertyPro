@@ -284,6 +284,7 @@ async function main(): Promise<void> {
   // without touching the database. See .github/workflows/ci.yml.
   if (process.env.PROPERTYPRO_SEED_RESOLVE_ONLY === '1') {
     console.log('[reset-demo] resolve-only: import graph loaded OK, skipping reset');
+    await closeUnscopedClient();
     return;
   }
   try {
