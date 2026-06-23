@@ -17,6 +17,33 @@ import { sql } from 'drizzle-orm';
 export const ALLOWED_SEED_ENVIRONMENTS = ['development', 'ci', 'demo-nightly'] as const;
 export type SeedEnvironment = (typeof ALLOWED_SEED_ENVIRONMENTS)[number];
 
+/**
+ * Slug prefixes for ephemeral communities created by integration-test suites.
+ * These are NOT real signups — they leak when a suite's teardown cannot delete
+ * a community whose audited mutations wrote append-only `compliance_audit_log`
+ * rows. The demo-reset safety backstop treats them as recognized (ignorable) so
+ * a single leaked fixture cannot block the nightly reset, while still refusing
+ * on genuinely unrecognized rows.
+ *
+ * Keep in sync with the fixtures that mint these slugs:
+ *   - `apps/web/__tests__/fixtures/multi-tenant-communities.ts`  (`p2-43-*`)
+ *   - `packages/db/__tests__/rls-policies.integration.test.ts`   (`p4_55_rls_*`)
+ *   - `apps/web/__tests__/elections/vote-integration.test.ts`    (`vote-integ*`)
+ *   - `apps/web/__tests__/integration/signup-subdomain.integration.test.ts` (`advisory-*`)
+ */
+export const EPHEMERAL_TEST_SLUG_PREFIXES = [
+  'p2-43-',
+  'p4_55_rls_',
+  'vote-integ',
+  'advisory-',
+  't-bootstrap-',
+] as const;
+
+/** True when a community slug belongs to a known ephemeral test fixture. */
+export function isEphemeralTestSlug(slug: string): boolean {
+  return EPHEMERAL_TEST_SLUG_PREFIXES.some((prefix) => slug.startsWith(prefix));
+}
+
 export class SeedSafetyError extends Error {
   constructor(message: string) {
     super(message);
@@ -95,26 +122,39 @@ export async function assertNoUnrecognizedProductionData(
     ? (maybe as CommunityBackstopRow[])
     : ((maybe as { rows?: CommunityBackstopRow[] }).rows ?? []);
 
-  if (rows.length === 0) {
+  // Ignore leaked integration-test fixtures — they are not real signup data,
+  // and a single one must not be able to block the nightly demo reset.
+  const recognizedTestRows = rows.filter((r) => isEphemeralTestSlug(r.slug));
+  const unrecognized = rows.filter((r) => !isEphemeralTestSlug(r.slug));
+
+  if (recognizedTestRows.length > 0) {
+    console.log(
+      `[seed-safety] Ignoring ${String(
+        recognizedTestRows.length,
+      )} ephemeral integration-test community row(s).`,
+    );
+  }
+
+  if (unrecognized.length === 0) {
     return;
   }
 
   const ack = process.env.PROPERTYPRO_SEED_ACK_NONDEMO;
   if (ack === '1') {
-    const slugs = rows.map((r) => r.slug).join(', ');
+    const slugs = unrecognized.map((r) => r.slug).join(', ');
     console.log(
       `[seed-safety] PROPERTYPRO_SEED_ACK_NONDEMO=1 — proceeding despite ${String(
-        rows.length,
+        unrecognized.length,
       )} non-demo community row(s) present: ${slugs}`,
     );
     return;
   }
 
-  const slugs = rows.map((r) => `  - ${r.slug} (id=${String(r.id)})`).join('\n');
+  const slugs = unrecognized.map((r) => `  - ${r.slug} (id=${String(r.id)})`).join('\n');
   throw new SeedSafetyError(
     [
       `Refusing to run: found ${String(
-        rows.length,
+        unrecognized.length,
       )} community row(s) with is_demo=false and deleted_at IS NULL.`,
       'This database may contain production (or real signup-created) data.',
       '',
