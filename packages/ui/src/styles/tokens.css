@@ -351,15 +351,22 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --nav-text-active: rgba(255, 255, 255, 1);
-  --nav-text-inactive: rgba(255, 255, 255, 0.85);
-  --nav-text-muted: rgba(255, 255, 255, 0.65);
-  --nav-bg-active: rgba(255, 255, 255, 0.15);
-  --nav-bg-hover: rgba(255, 255, 255, 0.07);
-  --nav-divider: rgba(255, 255, 255, 0.10);
-  --nav-border-divider: rgba(255, 255, 255, 0.10);
-  --nav-badge-bg: rgba(255, 255, 255, 0.15);
-  --nav-badge-border: var(--surface-inverse);
+  /* Light/neutral sidebar (Cloudflare-style). All values resolve to existing
+     semantic tokens — no raw hex. Active state = neutral bg + themed left bar
+     + bold label (never color-alone), so a non-blue community theme never
+     produces a themed-bar/blue-bg mismatch.
+     NOTE: this block is hand-maintained — the token generator (build.ts) only
+     patches the primitive + semantic color regions higher up in this file. */
+  --nav-surface: var(--surface-card);
+  --nav-text-active: var(--text-primary);
+  --nav-text-inactive: var(--text-secondary);
+  --nav-text-muted: var(--text-tertiary);
+  --nav-bg-active: var(--surface-muted);
+  --nav-bg-hover: var(--surface-hover);
+  --nav-divider: var(--border-subtle);
+  --nav-border-divider: var(--border-default);
+  --nav-badge-bg: var(--surface-muted);
+  --nav-badge-border: var(--surface-card);
   --nav-indicator: var(--interactive-primary);
 }
 

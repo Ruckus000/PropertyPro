@@ -72,6 +72,19 @@ export interface NavRailProps {
   /** Optional footer content rendered below the toggle (e.g. user profile). */
   footer?: React.ReactNode;
   /**
+   * When true, sections that have a non-null label render as collapsible groups:
+   * the label becomes a button (`aria-expanded`/`aria-controls`) and its items
+   * are hidden when closed. The first null-label section is always expanded.
+   */
+  collapsibleSections?: boolean;
+  /**
+   * Controlled open/closed state keyed by section label. A label absent from the
+   * map defaults to open. Only consulted when `collapsibleSections` is true.
+   */
+  sectionOpen?: Record<string, boolean>;
+  /** Called with the section label when a collapsible section header is toggled. */
+  onSectionToggle?: (label: string) => void;
+  /**
    * @deprecated Use `sections` instead. Optional separator with label rendered between item groups.
    */
   groupSeparator?: React.ReactNode;
@@ -145,6 +158,9 @@ export function NavRail({
   renderLink,
   header,
   footer,
+  collapsibleSections = false,
+  sectionOpen,
+  onSectionToggle,
   sections: sectionsProp,
   groupSeparator,
   groupSeparatorAfterIndex,
@@ -291,10 +307,10 @@ export function NavRail({
           {badge !== null && badge > 0 && (
             <span
               className={cn(
-                "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold text-[var(--nav-text-active)]",
+                "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold",
                 badgeVariant === "danger"
-                  ? "bg-[var(--status-danger)]"
-                  : "bg-[var(--nav-badge-bg)]",
+                  ? "bg-[var(--status-danger)] text-[var(--text-inverse)]"
+                  : "bg-[var(--nav-badge-bg)] text-[var(--nav-text-active)]",
               )}
             >
               {badge}
@@ -318,7 +334,7 @@ export function NavRail({
     hasChildren: boolean;
   }) =>
     cn(
-      "relative flex h-12 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
+      "relative flex h-11 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
       isActive
         ? "bg-[var(--nav-bg-active)] text-[var(--nav-text-active)]"
         : containsActiveChild
@@ -329,7 +345,7 @@ export function NavRail({
 
   const subItemClassName = (isActive: boolean) =>
     cn(
-      "flex h-9 items-center justify-between rounded-[10px] px-3 text-left text-sm transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
+      "flex h-9 items-center justify-between rounded-[10px] px-3 text-left text-sm transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
       isActive
         ? "bg-[var(--nav-bg-active)] font-medium text-[var(--nav-text-active)]"
         : "text-[var(--nav-text-muted)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)]",
@@ -355,10 +371,10 @@ export function NavRail({
         {badge !== null && badge > 0 && (
           <span
             className={cn(
-              "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold text-[var(--nav-text-active)]",
+              "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold",
               badgeVariant === "danger"
-                ? "bg-[var(--status-danger)]"
-                : "bg-[var(--nav-badge-bg)]",
+                ? "bg-[var(--status-danger)] text-[var(--text-inverse)]"
+                : "bg-[var(--nav-badge-bg)] text-[var(--nav-text-active)]",
             )}
           >
             {badge}
@@ -402,7 +418,7 @@ export function NavRail({
       ref={navRef}
       aria-label="Main navigation"
       className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden bg-[var(--surface-inverse)] text-[var(--text-inverse)] transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] dark:bg-gray-900",
+        "relative flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--nav-border-divider)] bg-[var(--nav-surface)] text-[var(--nav-text-inactive)] transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]",
         expanded ? "w-[260px] min-w-[260px]" : "w-[72px] min-w-[72px]",
       )}
     >
@@ -421,6 +437,22 @@ export function NavRail({
                 .slice(0, sectionIndex)
                 .reduce((count, currentSection) => count + currentSection.items.length, 0);
 
+              // A section is force-opened when it contains the active view, so the
+              // user is never navigated to an item hidden inside a collapsed group.
+              const sectionContainsActive =
+                section.label != null &&
+                section.items.some(
+                  (it) =>
+                    it.id === activeView ||
+                    (it.children?.some((child) => child.id === activeView) ?? false),
+                );
+              const isCollapsibleSection = collapsibleSections && section.label != null;
+              const isSectionOpen =
+                !isCollapsibleSection ||
+                sectionContainsActive ||
+                (sectionOpen?.[section.label as string] ?? true);
+              const sectionContentId = `nav-section-${sectionIndex}`;
+
               return (
                 <React.Fragment key={`section-${sectionIndex}-${section.label ?? "untitled"}`}>
                   {sectionIndex > 0 && (
@@ -428,7 +460,28 @@ export function NavRail({
                       <div className="border-t border-[var(--nav-divider)]" />
                     </div>
                   )}
-                  {expanded && section.label && (
+                  {expanded && section.label && isCollapsibleSection && (
+                    <button
+                      type="button"
+                      aria-expanded={isSectionOpen}
+                      aria-controls={sectionContentId}
+                      onClick={() => onSectionToggle?.(section.label as string)}
+                      data-testid="section-label"
+                      className="flex w-full items-center justify-between gap-2 rounded-[8px] px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
+                    >
+                      <span className="truncate">{section.label}</span>
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "inline-flex transition-transform duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]",
+                          isSectionOpen ? "rotate-90" : "rotate-0",
+                        )}
+                      >
+                        <ChevronRightIcon size={14} />
+                      </span>
+                    </button>
+                  )}
+                  {expanded && section.label && !isCollapsibleSection && (
                     <div
                       className="px-3 pt-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)]"
                       data-testid="section-label"
@@ -436,6 +489,8 @@ export function NavRail({
                       {section.label}
                     </div>
                   )}
+                  {isSectionOpen && (
+                    <div id={sectionContentId} className="contents">
                   {section.items.map((navItem, itemIndex) => {
                     const flatIndex = itemsBeforeSection + itemIndex;
                     const hasChildren = Boolean(navItem.children?.length);
@@ -512,7 +567,7 @@ export function NavRail({
                                     [navItem.id]: !isExpanded,
                                   }))
                                 }
-                                className="flex h-12 w-10 shrink-0 items-center justify-center rounded-[10px] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]"
+                                className="flex h-11 w-10 shrink-0 items-center justify-center rounded-[10px] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
                               >
                                 <span
                                   aria-hidden="true"
@@ -544,6 +599,8 @@ export function NavRail({
                       </React.Fragment>
                     );
                   })}
+                    </div>
+                  )}
                 </React.Fragment>
               );
             });
@@ -558,7 +615,7 @@ export function NavRail({
             onClick={onToggle}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
-              "flex w-full items-center gap-2 bg-transparent px-2.5 py-2 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-inverse)]",
+              "flex w-full items-center gap-2 bg-transparent px-2.5 py-2 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
               expanded ? "" : "justify-center",
             )}
           >

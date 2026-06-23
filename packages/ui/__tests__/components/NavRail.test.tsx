@@ -103,9 +103,19 @@ describe("NavRail", () => {
       expect(listItems).toHaveLength(defaultItems.length);
     });
 
-    it("renders explicit dark classes on nav", () => {
+    it("renders the light nav surface and right border, not a hardcoded dark bg", () => {
       renderNavRail();
-      expect(screen.getByRole("navigation").className).toContain("dark:bg-gray-900");
+      const nav = screen.getByRole("navigation").className;
+      expect(nav).toContain("bg-[var(--nav-surface)]");
+      expect(nav).toContain("border-r");
+      expect(nav).not.toContain("dark:bg-gray-900");
+    });
+
+    it("uses a token-driven focus ring (not ring-white) so it shows on a light bg", () => {
+      renderNavRail();
+      const item = screen.getByLabelText("Documents");
+      expect(item.className).toContain("focus-visible:ring-[var(--border-focus)]");
+      expect(item.className).not.toContain("ring-white");
     });
 
     it("uses nav semantic tokens for item treatments", () => {
@@ -494,6 +504,63 @@ describe("NavRail", () => {
       for (const item of defaultItems) {
         expect(screen.getByLabelText(item.label)).toBeTruthy();
       }
+    });
+  });
+
+  describe("Collapsible sections", () => {
+    it("renders labelled section headers as buttons with aria-expanded when collapsible", () => {
+      renderNavRail({ sections: sectionItems, collapsibleSections: true, activeView: "dashboard" });
+
+      const community = screen.getByRole("button", { name: "Community" });
+      expect(community.getAttribute("aria-expanded")).toBe("true");
+      // The null-label first section is never a header button.
+      expect(screen.queryByRole("button", { name: "" })).toBeNull();
+    });
+
+    it("hides a section's items when sectionOpen marks it closed", () => {
+      renderNavRail({
+        sections: sectionItems,
+        collapsibleSections: true,
+        activeView: "dashboard",
+        sectionOpen: { Community: false },
+      });
+
+      expect(screen.queryByLabelText("Announcements")).toBeNull();
+      expect(screen.queryByLabelText("Meetings")).toBeNull();
+      const community = screen.getByRole("button", { name: "Community" });
+      expect(community.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("calls onSectionToggle with the section label when a header is clicked", () => {
+      const onSectionToggle = vi.fn();
+      renderNavRail({
+        sections: sectionItems,
+        collapsibleSections: true,
+        activeView: "dashboard",
+        onSectionToggle,
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Admin" }));
+      expect(onSectionToggle).toHaveBeenCalledWith("Admin");
+    });
+
+    it("force-opens a closed section that contains the active view", () => {
+      renderNavRail({
+        sections: sectionItems,
+        collapsibleSections: true,
+        activeView: "announcements",
+        sectionOpen: { Community: false },
+      });
+
+      // Even though Community is marked closed, it holds the active item, so it stays open.
+      expect(screen.getByLabelText("Announcements")).toBeTruthy();
+    });
+
+    it("renders static section labels (not buttons) when not collapsible", () => {
+      renderNavRail({ sections: sectionItems, activeView: "dashboard" });
+
+      expect(screen.queryByRole("button", { name: "Community" })).toBeNull();
+      expect(screen.getByText("Community")).toBeTruthy();
     });
   });
 });
