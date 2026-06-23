@@ -8,7 +8,7 @@
  * Cleanup is derived dynamically from seeded data maps — not hardcoded.
  */
 import { randomUUID } from 'node:crypto';
-import { inArray } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { NextRequest } from 'next/server';
 import postgres from 'postgres';
@@ -167,13 +167,34 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
 
   try {
     if (communityIds.length > 0) {
+      // Audited mutations during the test write `compliance_audit_log` rows
+      // whose append-only guard trigger + RESTRICT FK block deleting the parent
+      // community. Previously this delete was swallowed, leaking the community
+      // as an `is_demo=false` row that breaks the nightly demo reset. Lift the
+      // guard for the purge, then restore it (mirrors the elections
+      // vote-integration suite's proven pattern).
+      await state.db.execute(
+        sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
+      );
       try {
+        // Remove the RESTRICT / NO-ACTION children that block the community delete.
+        await state.db
+          .delete(state.dbModule.complianceAuditLog)
+          .where(inArray(state.dbModule.complianceAuditLog.communityId, communityIds));
+        await state.db
+          .delete(state.dbModule.provisioningJobs)
+          .where(inArray(state.dbModule.provisioningJobs.communityId, communityIds));
+        await state.db
+          .delete(state.dbModule.conversionEvents)
+          .where(inArray(state.dbModule.conversionEvents.communityId, communityIds));
+        // Remaining children cascade on community delete.
         await state.db
           .delete(state.dbModule.communities)
           .where(inArray(state.dbModule.communities.id, communityIds));
-      } catch {
-        // compliance_audit_log is DB-enforced append-only with FK restrict.
-        // If audited mutations ran, teardown cannot delete parent communities.
+      } finally {
+        await state.db.execute(
+          sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`,
+        );
       }
     }
 

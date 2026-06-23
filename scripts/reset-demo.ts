@@ -278,6 +278,15 @@ export async function runDemoReset(options: DemoResetOptions = {}): Promise<void
 }
 
 async function main(): Promise<void> {
+  // Resolve-only mode: by the time main() runs, every static import in the
+  // seed graph (including apps/web `@/` aliases) has already been resolved. CI
+  // uses this to verify the real `pnpm reset:demo` invocation loads cleanly
+  // without touching the database. See .github/workflows/ci.yml.
+  if (process.env.PROPERTYPRO_SEED_RESOLVE_ONLY === '1') {
+    console.log('[reset-demo] resolve-only: import graph loaded OK, skipping reset');
+    await closeUnscopedClient();
+    return;
+  }
   try {
     await runSeedSafetyChecks({
       databaseUrl: process.env.DATABASE_URL ?? '',
