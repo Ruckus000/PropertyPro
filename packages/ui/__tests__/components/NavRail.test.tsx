@@ -544,7 +544,9 @@ describe("NavRail", () => {
       expect(onSectionToggle).toHaveBeenCalledWith("Admin");
     });
 
-    it("force-opens a closed section that contains the active view", () => {
+    it("respects an explicit collapse of the active section (no render-time force-open)", () => {
+      // Purely controlled: a section the user collapsed stays closed even when it
+      // holds the active view — the user's collapse intent wins.
       renderNavRail({
         sections: sectionItems,
         collapsibleSections: true,
@@ -552,8 +554,7 @@ describe("NavRail", () => {
         sectionOpen: { Community: false },
       });
 
-      // Even though Community is marked closed, it holds the active item, so it stays open.
-      expect(screen.getByLabelText("Announcements")).toBeTruthy();
+      expect(screen.queryByLabelText("Announcements")).toBeNull();
     });
 
     it("renders static section labels (not buttons) when not collapsible", () => {

@@ -36,7 +36,7 @@ interface SidebarTenantSwitcherProps {
 }
 
 const itemClass =
-  'flex items-center gap-2 rounded-[8px] px-2 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]';
+  'flex items-center gap-2 rounded-[10px] px-2 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)]';
 
 export function SidebarTenantSwitcher({
   communityId,
@@ -130,33 +130,38 @@ export function SidebarTenantSwitcher({
               />
             </div>
           )}
-          <div role="menu" className="max-h-72 overflow-y-auto p-1.5">
-            <a role="menuitem" href="/dashboard/overview" className={itemClass}>
-              All communities overview
-            </a>
-            <div className="my-1 border-t border-[var(--border-subtle)]" />
+          <ul className="max-h-72 overflow-y-auto p-1.5">
+            <li>
+              <a href="/dashboard/overview" className={itemClass}>
+                All communities overview
+              </a>
+            </li>
+            {filtered.length > 0 && (
+              <li className="my-1 border-t border-[var(--border-subtle)]" aria-hidden="true" />
+            )}
             {filtered.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-[var(--text-tertiary)]">No communities found.</p>
+              <li>
+                <p className="px-2 py-3 text-sm text-[var(--text-tertiary)]">
+                  No communities found.
+                </p>
+              </li>
             ) : (
               filtered.map((c) => (
-                <a
-                  key={c.id}
-                  role="menuitem"
-                  href={buildCommunityDashboardUrl(c.slug)}
-                  className={itemClass}
-                >
-                  <span className="flex-1 truncate">{c.name}</span>
-                  {c.id === communityId && (
-                    <Check
-                      size={16}
-                      className="ml-2 shrink-0 text-[var(--interactive-primary)]"
-                      aria-hidden="true"
-                    />
-                  )}
-                </a>
+                <li key={c.id}>
+                  <a href={buildCommunityDashboardUrl(c.slug)} className={itemClass}>
+                    <span className="flex-1 truncate">{c.name}</span>
+                    {c.id === communityId && (
+                      <Check
+                        size={16}
+                        className="ml-2 shrink-0 text-[var(--interactive-primary)]"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </a>
+                </li>
               ))
             )}
-          </div>
+          </ul>
         </PopoverContent>
       </Popover>
     </div>

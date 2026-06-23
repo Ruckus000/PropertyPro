@@ -437,20 +437,12 @@ export function NavRail({
                 .slice(0, sectionIndex)
                 .reduce((count, currentSection) => count + currentSection.items.length, 0);
 
-              // A section is force-opened when it contains the active view, so the
-              // user is never navigated to an item hidden inside a collapsed group.
-              const sectionContainsActive =
-                section.label != null &&
-                section.items.some(
-                  (it) =>
-                    it.id === activeView ||
-                    (it.children?.some((child) => child.id === activeView) ?? false),
-                );
               const isCollapsibleSection = collapsibleSections && section.label != null;
+              // Purely controlled: a section is open unless the user has explicitly
+              // collapsed it (sectionOpen[label] === false). Sections default to open,
+              // so the active item is always visible until the user chooses to hide it.
               const isSectionOpen =
-                !isCollapsibleSection ||
-                sectionContainsActive ||
-                (sectionOpen?.[section.label as string] ?? true);
+                !isCollapsibleSection || (sectionOpen?.[section.label as string] ?? true);
               const sectionContentId = `nav-section-${sectionIndex}`;
 
               return (
@@ -467,7 +459,7 @@ export function NavRail({
                       aria-controls={sectionContentId}
                       onClick={() => onSectionToggle?.(section.label as string)}
                       data-testid="section-label"
-                      className="flex w-full items-center justify-between gap-2 rounded-[8px] px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
+                      className="flex w-full items-center justify-between gap-2 rounded-[10px] px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
                     >
                       <span className="truncate">{section.label}</span>
                       <span
