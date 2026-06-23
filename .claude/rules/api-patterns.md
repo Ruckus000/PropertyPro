@@ -243,7 +243,9 @@ GET/POST /api/v1/esign/templates, /submissions
 POST     /api/v1/esign/sign/[submissionExternalId]/[slug]  (unauthenticated)
 
 # Calendar
-GET      /api/v1/calendar/events, /meetings.ics, /my-meetings.ics
+GET      /api/v1/calendar/events
+#        Google Calendar integration: /calendar/google/{connect,callback,disconnect,sync}
+#        (No .ics export route exists — the meetings UI tells users to copy details manually.)
 
 # PM dashboard
 GET      /api/v1/pm/communities, /dashboard/summary, /reports/[reportType]

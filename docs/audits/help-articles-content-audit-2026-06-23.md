@@ -4,6 +4,8 @@
 **Scope:** All 60 published help articles under `apps/web/src/content/help/**`, across 19 categories.
 **Focus:** Content only — (a) is each article written clearly and comprehensibly, and (b) does it accurately describe features that actually exist in the app? Every UI label, navigation path, button name, status value, timing rule, statute reference, and workflow claim was traced to the live route/component/service that implements it.
 
+> **Remediation status (2026-06-23):** All HIGH, MEDIUM, and LOW findings against existing articles below have been **fixed** on branch `claude/help-articles-audit-x3nwav`, along with the stale `.ics` route-catalog entry in `.claude/rules/api-patterns.md`. `pnpm guard:help-content` is clean and all 31 help test files (187 tests) pass. The 4 **coverage-gap new articles** are intentionally deferred to a follow-up (see the Coverage-gaps section).
+
 ## Relationship to the 2026-06-10 audit
 
 This audit follows `docs/audits/help-content-accuracy-audit-2026-06-10.md` (which reported 58 Critical · 171 High · 88 Medium · 25 Low against a "describes a product that was never shipped" baseline). **The large majority of those Critical/High items have since been remediated** — re-verification confirms the articles now match the code on the previously-broken claims, including:

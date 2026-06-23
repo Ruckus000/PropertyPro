@@ -22,8 +22,8 @@ keywords:
 tags:
   - pm
   - admin
-updatedAt: "2026-06-11"
-lastReviewedAt: "2026-06-11"
+updatedAt: "2026-06-23"
+lastReviewedAt: "2026-06-23"
 relatedArticles:
   - managing-multiple-communities
   - onboarding-a-new-community
@@ -49,39 +49,47 @@ Five role tiers carry admin capabilities:
 
 Each role has a defined permission set in the role permission matrix.
 
-## Adding a CAM or board admin
+<Callout type="info" title="Admin roles are NOT set on the Add Resident form">
+The **Add Resident** form only creates **Owners** and **Tenants** — its Role dropdown has no admin options. Board and property-manager designations are assigned separately on the **Roles & Access** screen (Settings → Roles & Access), which only the community's **root manager** can open. CAM and site-manager roles are not assignable in the UI at all and require PropertyPro support.
+</Callout>
+
+## Adding a board member or board president
+
+Board designations are managed on the **Roles & Access** screen and apply to **condo and HOA** communities (the board section is hidden for apartments).
 
 <StepByStep>
-<Step title="Open Add Resident">
-On the community's **Residents** page, click **Add Resident** and enter the person's name, email, and phone.
+<Step title="Add the person as a resident first">
+On the community's **Residents** page, click **Add Resident** and add them as an **Owner** (or Tenant). Keep **Send invitation email** checked so they get portal access. The Add Resident form cannot set an admin role.
 </Step>
 
-<Step title="Pick the admin role">
-In the **Role** dropdown, choose the admin role directly — **Community Association Manager**, **Board Member**, **Board President**, or **Site Manager**. The role is set as you add them. Keep **Send invitation email** checked so they get portal access.
-
-Available roles depend on community type: CAM and board roles appear for condos and HOAs; **Site Manager** appears for apartments.
+<Step title="Open Roles & Access">
+Go to **Settings → Roles & Access** (`/settings/roles`). Only the community's **root manager** can open this screen — if you don't see it, you aren't the root manager for that community.
 </Step>
 
-<Step title="Confirm immediately">
-Once they accept the invitation, the new admin sees admin features on their next page load. Walk them through the dashboard to verify they have what they need (and only what they need).
+<Step title="Set the board designation">
+In the **Board** section, find the member and assign **President** or **Member**. If the person is not a unit owner, you'll be asked to confirm their eligibility per your bylaws before the designation is applied. Use the same screen to **clear** a designation later.
 </Step>
 </StepByStep>
 
-<Callout type="info" title="Setting a role vs. changing it later">
-You choose a member's role when you add them. PropertyPro doesn't yet offer an in-app control to change or remove an existing member's role from the resident list — that capability is on the roadmap. For now, assign the correct role when you add someone; anywhere this guide describes promoting, demoting, or removing an existing member, that change currently goes through PropertyPro support.
+## Adding a CAM or site manager
+
+<Callout type="warning" title="CAM and site-manager roles require support today">
+There is currently **no in-app control** to assign the **`cam`** (Community Association Manager) or **`site_manager`** roles. Add the person as a resident for portal access, then contact PropertyPro support to apply the CAM or site-manager role. This is the only path for those two roles until an assignment UI ships.
 </Callout>
 
-Portfolio-level **property_manager_admin** access is not assignable through the **Add Resident** flow. Contact PropertyPro support to grant or revoke portfolio-level admin access.
+## Granting portfolio-level (property manager) access
+
+Portfolio-level **property manager** access *can* be managed in-app on the **Roles & Access** screen (root manager only): promote an existing member to **property manager**, **revoke** a property manager, or **transfer the root manager** role to another property manager. Portfolio-level access lets someone administer the whole community and reach billing and branding — grant it deliberately.
 
 ## Multi-community admins
 
 A CAM often covers several communities. Add them to each:
 
-- For 2-3 communities, invite with the correct role per community.
-- For 5+ communities, contact PropertyPro support about portfolio-level access if your management agreement requires it.
+- Add them as a resident in each community, then have the root manager apply their role (CAM via support; board designations via Roles & Access).
+- For someone who genuinely needs to administer the whole portfolio, grant **property manager** access on the Roles & Access screen instead of repeating per-community grants.
 
 <Callout type="tip" title="Least privilege">
-Don't grant portfolio-level access to a junior CAM "just to make access easier." That role can change billing, modify branding, and onboard new communities. Use community-scoped roles for staff whose scope is intentionally limited.
+Don't grant portfolio-level (property manager) access to a junior CAM "just to make access easier." That role can change billing, modify branding, and onboard new communities. Use community-scoped roles for staff whose scope is intentionally limited.
 </Callout>
 
 ## Onboarding a new board after an election
@@ -90,11 +98,11 @@ When a board changes hands after an election:
 
 <StepByStep>
 <Step title="Add the new board">
-For each new board member, use **Add Resident** with the correct role — **Board Member** or **Board President**.
+Add each new board member as a resident (if they aren't one already), then assign **Member** or **President** on the **Roles & Access** screen (root manager only).
 </Step>
 
 <Step title="Revoke outgoing board access">
-For each outgoing member who's no longer on the board, contact PropertyPro support to change their role back to owner or tenant. Their admin features disappear once the role is updated.
+For each outgoing member, open **Roles & Access** and **clear their board designation**. Their admin features disappear once the designation is removed; their resident (owner/tenant) access is unchanged.
 </Step>
 
 <Step title="Notify outgoing members">
@@ -120,7 +128,7 @@ Reassign open work orders, transfer ownership of draft documents, and update any
 </Step>
 
 <Step title="Remove their admin access">
-To revoke a departing CAM's access, contact PropertyPro support to change their role or remove them from the community (existing-member role changes aren't self-serve yet — see the note above). Their PropertyPro account stays (they can use it elsewhere); their access to your portfolio ends.
+To revoke a departing CAM's access, contact PropertyPro support (CAM/site-manager role changes aren't self-serve yet — see the note above). If the person instead held **property manager** or a **board** designation, the root manager can revoke or clear it directly on the **Roles & Access** screen. Their PropertyPro account stays (they can use it elsewhere); their access to your portfolio ends.
 </Step>
 
 <Step title="Communicate the change">
@@ -136,9 +144,9 @@ Admins who shouldn't have access anymore are a primary cause of data leaks and u
 
 Every quarter:
 
-1. List the admins in each community (open the community's **Residents** page and note who holds an admin role — CAM, board member, board president, or site manager).
+1. List the admins in each community — check the **Roles & Access** screen for board designations and property managers, and note any CAM/site-manager staff you assigned through support.
 2. Verify each one is still in their role (CAM still works on this account; board member still on the board).
-3. Contact PropertyPro support to demote or remove anyone whose access is outdated.
+3. Remove outdated access: clear board designations and revoke property managers on **Roles & Access**; contact PropertyPro support to remove a CAM or site manager.
 
 The audit takes 30 minutes for a 10-community portfolio and prevents the worst-case "former employee deleted records" scenario.
 
@@ -168,7 +176,7 @@ If an admin reports they can't do something they should:
 
 If an admin can do something they shouldn't:
 
-1. Contact PropertyPro support to demote them immediately.
+1. Remove the access immediately — clear a board designation or revoke a property manager on **Roles & Access**, or contact PropertyPro support for a CAM/site-manager role.
 2. Audit their recent actions.
 3. Investigate how they were granted that role.
 4. Strengthen the policy or training that allowed the mistake.
