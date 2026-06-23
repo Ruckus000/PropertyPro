@@ -11,7 +11,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Building } from 'lucide-react';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
   inferCanonicalRoleFromMembership,
@@ -33,6 +32,7 @@ import {
   type NavItemWithGateStatus,
 } from './nav-config';
 import { useSidebar } from './sidebar-context';
+import { SidebarTenantSwitcher } from './sidebar-tenant-switcher';
 import { UpgradeDialog } from '../billing/upgrade-dialog';
 
 interface AppSidebarProps {
@@ -72,7 +72,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { expanded, toggleExpanded } = useSidebar();
+  const { expanded, toggleExpanded, sectionOpen, toggleSection } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
     upgradePlanId: PlanId | null;
@@ -129,7 +129,7 @@ export function AppSidebar({
         ? item.href(communityId)
         : '/select-community',
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
-    trailingBadge: item.planLocked ? <PlanBadge variant="pro" tone="dark" /> : undefined,
+    trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
   });
 
   const navRailSections: NavRailSection[] = baseSections
@@ -173,44 +173,39 @@ export function AppSidebar({
 
   const activeId = getActiveItemId(allVisible, pathname, searchParams.toString()) ?? '';
 
-  // Brand header
+  // Brand header / community switcher. The switcher renders a flat searchable
+  // community list for multi-community users; single-community users and the PM
+  // portal (isPmContext) fall back to a static brand header inside the component.
   const header = (
-    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-3 dark:border-surface-inverse">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--interactive-primary,#2563EB)]">
-        <Building size={20} color="white" />
-      </div>
-      <div
-        className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${resolvedExpanded ? 'opacity-100' : 'opacity-0'}`}
-      >
-        <span className="text-base font-semibold text-white">PropertyPro</span>
-        {communityName && (
-          <span className="truncate text-sm text-white/75">{communityName}</span>
-        )}
-      </div>
-    </div>
+    <SidebarTenantSwitcher
+      communityId={communityId}
+      communityName={communityName}
+      expanded={resolvedExpanded}
+      staticOnly={isPmContext}
+    />
   );
 
   // User profile footer
   const footer = userName ? (
-    <div className="border-t border-white/10 px-3 py-3 dark:border-surface-inverse">
+    <div className="border-t border-[var(--border-default)] px-3 py-3">
       <div className="flex items-center gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-card/10 text-xs font-medium text-white">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-xs font-medium text-[var(--text-secondary)]">
           {toInitials(userName)}
         </div>
         <div
           className={`flex flex-col overflow-hidden whitespace-nowrap transition-opacity duration-quick ${resolvedExpanded ? 'opacity-100' : 'opacity-0'}`}
         >
-          <span className="truncate text-sm font-medium text-white">{userName}</span>
+          <span className="truncate text-sm font-medium text-[var(--text-primary)]">{userName}</span>
           {role && (
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-xs text-white/70">
+              <span className="truncate text-xs text-[var(--text-tertiary)]">
                 {role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
               </span>
               {resolvedPlanId ? (
-                <PlanBadge tone="dark" label={PLAN_FEATURES[resolvedPlanId].displayName} />
+                <PlanBadge label={PLAN_FEATURES[resolvedPlanId].displayName} />
               ) : (
                 <span
-                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-white/10 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/60 ring-1 ring-inset ring-white/15"
+                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--surface-muted)] px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)] ring-1 ring-inset ring-[var(--border-default)]"
                   aria-label="No plan"
                 >
                   No plan
@@ -227,6 +222,9 @@ export function AppSidebar({
     <>
       <NavRail
         sections={navRailSections}
+        collapsibleSections
+        sectionOpen={sectionOpen}
+        onSectionToggle={toggleSection}
         activeView={activeId}
         onViewChange={(id) => {
           const clickedItem = visibleById.get(id);

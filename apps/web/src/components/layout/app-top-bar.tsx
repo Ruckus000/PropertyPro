@@ -10,7 +10,6 @@
 import { CircleHelp, Menu, Search } from 'lucide-react';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
 import { NotificationBell } from '@/components/notifications/notification-bell';
-import { CommunitySwitcher } from '@/components/overview/community-switcher';
 import { ProfileMenu } from './profile-menu';
 import { useSidebar } from './sidebar-context';
 
@@ -64,7 +63,6 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
           >
             <CircleHelp size={18} aria-hidden="true" />
           </button>
-          <CommunitySwitcher />
           <NotificationBell communityId={communityId} />
           <ProfileMenu userName={userName} userEmail={userEmail} communityId={communityId} />
         </div>
