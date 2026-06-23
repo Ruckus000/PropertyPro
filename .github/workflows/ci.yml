@@ -94,6 +94,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Guards that the seed/reset scripts' real `pnpm` invocations resolve their
+      # full import graph (incl. apps/web `@/` aliases). Resolve-only mode exits
+      # before any DB work, so the job's stub DATABASE_URL is sufficient — no live
+      # DB is contacted. Catches a regression of the --tsconfig wiring that left the
+      # Nightly Demo Reset broken for ~4 months.
+      - name: Verify seed/reset resolve under their real invocation
+        env:
+          PROPERTYPRO_SEED_RESOLVE_ONLY: '1'
+        run: |
+          pnpm reset:demo
+          pnpm seed:demo
+
       - name: Build workspace packages
         run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
 

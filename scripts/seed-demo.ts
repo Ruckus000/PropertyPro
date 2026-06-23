@@ -1915,6 +1915,15 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
 }
 
 async function main(): Promise<void> {
+  // Resolve-only mode: by the time main() runs, every static import in the
+  // seed graph (including apps/web `@/` aliases) has already been resolved. CI
+  // uses this to verify the real `pnpm seed:demo` invocation loads cleanly
+  // without touching the database. See .github/workflows/ci.yml.
+  if (process.env.PROPERTYPRO_SEED_RESOLVE_ONLY === '1') {
+    // eslint-disable-next-line no-console
+    console.log('[seed-demo] resolve-only: import graph loaded OK, skipping seed');
+    return;
+  }
   try {
     const syncAuthUsers = shouldSyncDemoAuthUsers();
     await runSeedSafetyChecks({
