@@ -264,9 +264,20 @@ DELETE   /api/v1/communities/delete          (admin: cancel community deletion)
 POST     /api/v1/subscribe                   (user: Stripe checkout for subscription)
 POST     /api/v1/internal/account-lifecycle  (cron: daily lifecycle processing)
 
-# Move checklists, packages, visitors — under /api/v1/
+# Finance & billing — /api/v1/finance, /accounting, /ledger, /payments, /billing,
+#                      /billing-groups, /assessments, /delinquency, /stripe
+# Governance — /api/v1/elections, /polls, /violations, /arc
+# Operations — /api/v1/work-orders, /maintenance-requests, /amenities, /reservations,
+#              /vendors, /contracts, /move-checklists, /packages, /visitors, /units
+# Engagement — /api/v1/forum, /emergency-broadcasts, /notifications,
+#              /notification-preferences, /help, /faqs, /search
+# Residents & access — /api/v1/access-requests, /import-residents, /invitations,
+#                       /transparency, /me, /user, /users
 # Auth & onboarding — /api/v1/auth/signup, /onboarding/condo, /onboarding/apartment
-# Webhooks — /api/v1/webhooks/stripe
+# Webhooks — /api/v1/webhooks/stripe, /webhooks/twilio
 ```
+
+> This catalog is **representative, not exhaustive** (~60 top-level groups exist).
+> The authoritative source is the route tree itself: `apps/web/src/app/api/v1/`.
 
 </important>
