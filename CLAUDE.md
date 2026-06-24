@@ -2,7 +2,7 @@
 
 Compliance and community management platform for Florida condominium associations (§718.111(12)(g)).
 
-**Status:** Phase 2 Complete. Phase 3 kickoff next.
+**Status:** Phase 4 complete (role-v3 / ADR-006). Phase 5 (table-stakes) in progress.
 
 ## Tech Stack
 
@@ -23,8 +23,10 @@ apps/web/src/           # Next.js app (routes, components, hooks, lib, middlewar
 apps/admin/src/         # Platform admin app (community management, access plans, deletion requests)
 packages/db/            # Drizzle ORM schema, migrations, scoped-client, queries
 packages/email/         # Email templates and service
-packages/shared/        # Shared types and constants
+packages/shared/        # Shared types and constants (roles, RBAC, access policies)
+packages/api-contract/  # Typed API route contracts (@propertypro/api-contract)
 packages/ui/            # Shared UI components
+packages/tokens/        # Design tokens
 scripts/                # Seed, verify, and utility scripts
 docs/                   # Specs, ADRs, audits, design system
 ```
@@ -33,7 +35,9 @@ docs/                   # Specs, ADRs, audits, design system
 
 **Multi-Tenancy:** Single DB with `community_id` FK isolation. Subdomains per association (`[slug].getpropertypro.com`). PM dashboard at `pm.getpropertypro.com`.
 
-**User Roles:** `owner`, `tenant`, `board_member`, `board_president`, `cam`, `site_manager`, `property_manager_admin`
+**User Roles (v3 / ADR-006):** Community-scoped roles in `user_roles` are `resident`, `property_manager`, and `root_manager` (≤1 per community). `resident.isUnitOwner` distinguishes owner vs. tenant. Board status is an orthogonal `designation` column (`board_president` / `board_member`), read only by statutory features — not general permissions. `super_admin` is system-scoped (`platformAdminRoleEnum`), stored outside `user_roles`.
+
+> Transition note: the legacy seven-role vocabulary (`owner`, `tenant`, `board_member`, `board_president`, `cam`, `site_manager`, `property_manager_admin`) is being retired but is still live in the app/RBAC layer during the shimmed transition (`CommunityRole`, `ADMIN_ROLES`/`BILLING_ADMIN_ROLES` in `packages/shared/src/access-policies.ts`). See `docs/adr/ADR-006-root-manager-role-model.md` (supersedes ADR-001).
 
 ## Development Commands
 
@@ -54,7 +58,20 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 
 # Full integration preflight
 scripts/with-env-local.sh pnpm test:integration:preflight
+
+# E2E (Playwright)
+pnpm test:e2e                   # Run end-to-end suite
+pnpm playwright:install         # Install browsers
+
+# Other guards (run individually; all bundled into `pnpm lint`)
+pnpm guard:breadcrumbs          # Breadcrumb coverage
+pnpm guard:tenant-scope         # tenantScope contract well-formedness
+pnpm guard:legacy-roles         # Legacy-role vocabulary floor
 ```
+
+> The list above is representative, not exhaustive. See the root `package.json`
+> `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,
+> `plan:verify:*`, `help:*`, and E2E variants).
 
 **CI:** 7 parallel jobs per PR — lint (includes DB access guard), typecheck, unit tests, no-mock-guard, migration-ordering, perf-check, then build.
 
