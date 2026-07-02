@@ -587,7 +587,16 @@ export async function executeUserSoftDelete(requestIds: number[]) {
     const requests = await tx
       .update(accountDeletionRequests)
       .set({ status: 'soft_deleted', scheduledPurgeAt })
-      .where(inArray(accountDeletionRequests.id, requestIds))
+      // State-guarded: only progress requests still in 'cooling'. A request
+      // cancelled or recovered between the cron scan and this batch write is
+      // simply not returned/updated (TOCTOU race protection) — without this,
+      // a raced request would be force-flipped back to 'soft_deleted'.
+      .where(
+        and(
+          inArray(accountDeletionRequests.id, requestIds),
+          eq(accountDeletionRequests.status, 'cooling'),
+        ),
+      )
       .returning();
 
     // We don't throw if some are missing, just process what we found to avoid failing the whole batch
@@ -764,7 +773,16 @@ export async function executeCommunitySoftDelete(requestIds: number[]) {
     const requests = await tx
       .update(accountDeletionRequests)
       .set({ status: 'soft_deleted', scheduledPurgeAt })
-      .where(inArray(accountDeletionRequests.id, requestIds))
+      // State-guarded: only progress requests still in 'cooling'. A request
+      // cancelled or recovered between the cron scan and this batch write is
+      // simply not returned/updated (TOCTOU race protection) — without this,
+      // a raced request would be force-flipped back to 'soft_deleted'.
+      .where(
+        and(
+          inArray(accountDeletionRequests.id, requestIds),
+          eq(accountDeletionRequests.status, 'cooling'),
+        ),
+      )
       .returning();
 
     // We don't throw if some are missing, just process what we found to avoid failing the whole batch

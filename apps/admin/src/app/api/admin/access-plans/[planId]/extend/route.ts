@@ -84,5 +84,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: { message: updateError.message } }, { status: 500 });
   }
 
+  // Refresh the denormalized free_access_expires_at on the community so
+  // subscription-guard sees the new grace window. Best-effort follow-up
+  // write (non-fatal if it fails — logged for observability).
+  const updatedRow = updated as { community_id: number };
+  const { error: communityUpdateError } = await (db
+    .from('communities'))
+    .update({ free_access_expires_at: newGraceEnds.toISOString() })
+    .eq('id', updatedRow.community_id);
+
+  if (communityUpdateError) {
+    console.error(
+      '[admin/access-plans/extend] Plan extended but community.free_access_expires_at update failed:',
+      communityUpdateError.message,
+    );
+  }
+
   return NextResponse.json({ plan: updated });
 }

@@ -104,5 +104,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: { message: error.message } }, { status: 500 });
   }
 
+  // Denormalize grace expiry onto the communities row so the
+  // subscription-guard middleware (which reads communities.free_access_expires_at)
+  // sees the grant. The web-side service does this in the same transaction;
+  // here we do it as a follow-up write — best-effort consistency, errors logged.
+  const { error: communityUpdateError } = await (db
+    .from('communities'))
+    .update({ free_access_expires_at: graceEndsAt.toISOString() })
+    .eq('id', communityId);
+
+  if (communityUpdateError) {
+    console.error(
+      '[admin/access-plans] Plan inserted but community.free_access_expires_at update failed:',
+      communityUpdateError.message,
+    );
+  }
+
   return NextResponse.json({ plan: data }, { status: 201 });
 }
