@@ -18,7 +18,7 @@
  *             `{ data: { data, meta } }` (already-generated / race / empty)
  *   - PATCH → `{ data: result }`
  */
-import { createScopedClient, logAuditEvent } from '@propertypro/db';
+import { createScopedClient, documents, logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
@@ -68,8 +68,17 @@ function isUniqueViolation(error: unknown): boolean {
   return maybeCode === '23505';
 }
 
-/** Decorate a checklist row with its derived compliance status. */
-function withDerivedStatus(row: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Decorate a checklist row with its derived compliance status.
+ *
+ * `documentDeletedAtById` maps a linked document id to its `deleted_at` (or
+ * null when live). A soft-deleted linked document must not keep the item
+ * satisfied, so the deletion timestamp is threaded into the calculator.
+ */
+function withDerivedStatus(
+  row: Record<string, unknown>,
+  documentDeletedAtById: Map<number, Date | null> = new Map(),
+): Record<string, unknown> {
   const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
   const documentPostedAt = row['documentPostedAt']
     ? new Date(row['documentPostedAt'] as string)
@@ -79,12 +88,17 @@ function withDerivedStatus(row: Record<string, unknown>): Record<string, unknown
   const rollingWindowMonths =
     typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
 
+  const documentId = (row['documentId'] as number | null) ?? null;
+  const documentDeletedAt =
+    documentId != null ? documentDeletedAtById.get(documentId) ?? null : null;
+
   return {
     ...row,
     status: calculateComplianceStatus({
       isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId: (row['documentId'] as number | null) ?? null,
+      documentId,
       documentPostedAt,
+      documentDeletedAt,
       deadline,
       rollingWindowMonths,
     }),
@@ -100,7 +114,30 @@ export const GET = withErrorHandler(
     requirePermission(membership, 'compliance', 'read');
 
     const rows = await listComplianceChecklistItems(communityId);
-    const data = rows.map(withDerivedStatus);
+
+    // Resolve `documents.deleted_at` for every linked document so a
+    // soft-deleted document does not silently keep its checklist item
+    // satisfied. queryIncludingDeleted lets us detect the deletion explicitly
+    // rather than having the document silently drop out of a scoped read.
+    const linkedDocumentIds = new Set(
+      rows
+        .map((r) => r['documentId'] as number | null)
+        .filter((v): v is number => typeof v === 'number'),
+    );
+    const documentDeletedAtById = new Map<number, Date | null>();
+    if (linkedDocumentIds.size > 0) {
+      const scoped = createScopedClient(communityId);
+      const allDocs = await scoped.queryIncludingDeleted(documents);
+      for (const doc of allDocs) {
+        const id = doc['id'] as number;
+        if (linkedDocumentIds.has(id)) {
+          const deletedAtRaw = doc['deletedAt'] as string | Date | null;
+          documentDeletedAtById.set(id, deletedAtRaw ? new Date(deletedAtRaw) : null);
+        }
+      }
+    }
+
+    const data = rows.map((row) => withDerivedStatus(row, documentDeletedAtById));
 
     if (data.length > 0) {
       void tryAutoComplete(communityId, userId, 'review_compliance');

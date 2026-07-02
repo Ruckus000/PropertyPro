@@ -29,6 +29,9 @@ const {
   softDeleteDocumentMock,
   tryAutoCompleteMock,
   logAuditEventMock,
+  createScopedClientMock,
+  scopedUpdateMock,
+  complianceChecklistItemsTable,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -43,6 +46,9 @@ const {
   softDeleteDocumentMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
   logAuditEventMock: vi.fn(),
+  createScopedClientMock: vi.fn(),
+  scopedUpdateMock: vi.fn(),
+  complianceChecklistItemsTable: Symbol('compliance_checklist_items'),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -89,6 +95,12 @@ vi.mock('@/lib/services/documents-service', () => ({
 
 vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
+  createScopedClient: createScopedClientMock,
+  complianceChecklistItems: complianceChecklistItemsTable,
+}));
+
+vi.mock('@propertypro/db/filters', () => ({
+  eq: vi.fn((col: unknown, value: unknown) => ({ __eq: { col, value } })),
 }));
 
 import { DELETE, GET, POST } from '../../src/app/api/v1/documents/route';
@@ -375,6 +387,10 @@ describe('DELETE /api/v1/documents', () => {
     });
     softDeleteDocumentMock.mockResolvedValue([{ id: 7 }]);
     logAuditEventMock.mockResolvedValue(undefined);
+    // DELETE now unlinks compliance checklist items referencing the doc before
+    // soft-deleting it, via a scoped update.
+    scopedUpdateMock.mockResolvedValue([]);
+    createScopedClientMock.mockReturnValue({ update: scopedUpdateMock });
   });
 
   it('soft-deletes a document and writes an audit entry', async () => {

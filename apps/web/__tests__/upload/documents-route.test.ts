@@ -12,7 +12,9 @@ const {
   scopedInsertMock,
   scopedQueryMock,
   scopedSoftDeleteMock,
+  scopedUpdateMock,
   documentsTable,
+  complianceChecklistItemsTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
   queuePdfExtractionMock,
@@ -30,7 +32,9 @@ const {
   scopedInsertMock: vi.fn(),
   scopedQueryMock: vi.fn(),
   scopedSoftDeleteMock: vi.fn(),
+  scopedUpdateMock: vi.fn(),
   documentsTable: Symbol('documents'),
+  complianceChecklistItemsTable: Symbol('compliance_checklist_items'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn().mockResolvedValue({
     role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
@@ -56,9 +60,14 @@ vi.mock('@propertypro/db', () => ({
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
   deleteStorageObject: deleteStorageObjectMock,
   documents: documentsTable,
+  complianceChecklistItems: complianceChecklistItemsTable,
   logAuditEvent: logAuditEventMock,
   getAccessibleDocuments: getAccessibleDocumentsMock,
   paginate: paginateMock,
+}));
+
+vi.mock('@propertypro/db/filters', () => ({
+  eq: vi.fn((col: unknown, value: unknown) => ({ __eq: { col, value } })),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -122,6 +131,7 @@ function resetRouteMocks() {
     failedCount: 0,
   });
   createNotificationsForEventMock.mockResolvedValue({ created: 0, skipped: 0 });
+  scopedUpdateMock.mockResolvedValue([]);
   createScopedClientMock.mockReturnValue({
     insert: scopedInsertMock,
     query: scopedQueryMock,
@@ -130,6 +140,9 @@ function resetRouteMocks() {
     // queryMock so existing test rows feed through unchanged.
     selectFrom: scopedQueryMock,
     softDelete: scopedSoftDeleteMock,
+    // DELETE now unlinks compliance checklist items that reference the doc
+    // before soft-deleting it.
+    update: scopedUpdateMock,
   });
 }
 
