@@ -10,7 +10,7 @@
 Tenant isolation is enforced at four layers — not by convention alone:
 
 1. **Runtime:** `createScopedClient()` (`packages/db/src/scoped-client.ts`) auto-injects `community_id` and `deleted_at IS NULL` on every query. Throws `TenantContextMissing` if community ID is null/undefined/NaN.
-2. **Database RLS:** `FORCE ROW LEVEL SECURITY` is enabled on all 21+ tenant tables (migrations 0020, 0027). Even the table owner role cannot bypass policies.
+2. **Database RLS:** `FORCE ROW LEVEL SECURITY` is enabled on all 50+ tenant tables (baseline migration `0000`; policy repairs in `0021`/`0023`). Even the table owner role cannot bypass policies.
 3. **Write trigger:** `pp_rls_enforce_tenant_community_id` blocks any non-privileged INSERT/UPDATE lacking `app.current_community_id` in session context. Direct browser-to-Supabase writes are blocked even if RLS policies pass.
 4. **CI guard:** `scripts/verify-scoped-db-access.ts` (rules DB001–DB005) runs on every PR via `pnpm lint`. It uses TypeScript AST parsing to catch unauthorized `drizzle-orm` imports, direct `@propertypro/db/src` imports, and new tables missing RLS enablement.
 
