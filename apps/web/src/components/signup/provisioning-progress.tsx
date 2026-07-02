@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 
 interface ProvisioningStatusResponse {
-  status: 'pending' | 'provisioning' | 'completed' | 'failed';
+  status: 'pending' | 'provisioning' | 'completed' | 'consumed' | 'failed';
   step: string;
   loginToken?: string;
   communityId?: number;
@@ -76,6 +76,23 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
     [router, stopPolling],
   );
 
+  const handleConsumed = useCallback(
+    async (communityId?: number) => {
+      // The single-use login token was already claimed — typically this tab
+      // was refreshed (or a second tab polled first) after auto-login. If a
+      // session exists, go straight in; otherwise fall back to manual login.
+      stopPolling();
+      const supabase = createBrowserClient();
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        router.push(communityId ? `/dashboard?communityId=${communityId}` : '/select-community');
+        return;
+      }
+      router.push('/auth/login?message=portal-ready');
+    },
+    [router, stopPolling],
+  );
+
   const handleFailure = useCallback(() => {
     stopPolling();
     setFailed(true);
@@ -126,13 +143,19 @@ export function ProvisioningProgress({ signupRequestId }: ProvisioningProgressPr
         return;
       }
 
+      if (data.status === 'consumed') {
+        setCompletedStages(new Set([0, 1, 2]));
+        await handleConsumed(data.communityId);
+        return;
+      }
+
       if (data.status === 'failed') {
         handleFailure();
       }
     } catch {
       // Network error — keep polling silently
     }
-  }, [signupRequestId, handleComplete, handleFailure, handleDelayed]);
+  }, [signupRequestId, handleComplete, handleConsumed, handleFailure, handleDelayed]);
 
   const startPolling = useCallback(() => {
     stopPolling();
