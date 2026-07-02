@@ -32,6 +32,8 @@ const {
     userRoles: Symbol('user_roles'),
     communities: Symbol('communities'),
     notificationPreferences: Symbol('notification_preferences'),
+    units: Symbol('units'),
+    documents: Symbol('documents'),
   },
 }));
 
@@ -43,6 +45,8 @@ vi.mock('@propertypro/db', () => ({
   userRoles: tables.userRoles,
   communities: tables.communities,
   notificationPreferences: tables.notificationPreferences,
+  units: tables.units,
+  documents: tables.documents,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -116,10 +120,16 @@ function setupScopedMock(overrides: {
 
   const updateMock = vi.fn(async () => [{}]);
 
+  // Cross-tenant FK guard resolves a referenced unitId through queryById.
+  // Default to "found in this community"; a test can override to null to
+  // exercise the rejection path.
+  const queryByIdMock = vi.fn(async (_table: unknown, id: number) => ({ id }));
+
   const scoped = {
     query: queryMock,
     insert: insertMock,
     update: updateMock,
+    queryById: queryByIdMock,
   };
 
   createScopedClientMock.mockReturnValue(scoped);
