@@ -12,7 +12,8 @@ export type RlsPolicyFamily =
   | 'tenant_user_scoped'       // SELECT/UPDATE/DELETE scoped to auth.uid() for non-admins; admin-tier sees all; INSERT uses community-membership check (generic pp_tenant_insert) unless a bespoke insert policy replaces it
   | 'tenant_member_configurable' // SELECT on membership; INSERT/UPDATE/DELETE gated on community_settings JSONB (admin-tier always allowed; members allowed when setting is absent or 'all_members')
   | 'service_only'             // All ops require pp_rls_is_privileged()
-  | 'audit_log_restricted';    // SELECT requires admin-tier role; INSERT requires privilege
+  | 'audit_log_restricted'     // SELECT requires admin-tier role; INSERT requires privilege
+  | 'public_read_service_write'; // anon + authenticated SELECT of published rows scoped to the GUC-selected community; INSERT/UPDATE/DELETE are service-role only (no authenticated write path → no write-scope trigger). Public-facing per-community site content.
 
 export interface RlsTenantTableConfig {
   tableName: string;
@@ -297,6 +298,18 @@ export const RLS_TENANT_TABLES = [
     notes:
       'Self-service community linking: users submit a request to join a community, admins approve/deny. RLS hardened in 0021 (same GUC + missing-trigger drift fix as access_requests).',
   },
+  {
+    tableName: 'onboarding_checklist_items',
+    policyFamily: 'tenant_user_scoped',
+    notes:
+      'Per-user onboarding progress. Baseline policies (checklist_items_{insert,select,update}_own) gate on community_id = GUC AND user_id = auth.uid(); wrong-GUC drift repaired in 0023. No DELETE policy (rows soft-deleted via UPDATE by onboarding-checklist-service; authenticated hard-delete fails closed). Bespoke policy names retained — see the per-table override in rls-policies.integration.test.ts. Legacy write-scope trigger canonicalized to pp_rls_enforce_tenant_scope in 0024. Runtime uses createScopedClient (privileged role) so RLS here is defense-in-depth.',
+  },
+  {
+    tableName: 'site_blocks',
+    policyFamily: 'public_read_service_write',
+    notes:
+      'Public per-community site content. anon + authenticated SELECT expose only published (is_draft=false) rows of the GUC-selected community (site_blocks_anon_read / site_blocks_read_published); all writes are service-role only (site_blocks_service_role). Wrong-GUC drift repaired in 0023. No write-scope trigger — there is no authenticated write path (trigger-exempt family). Bespoke policy names retained — see the per-table override in rls-policies.integration.test.ts. Runtime reads via createUnscopedClient (public-community-reader) so RLS here is defense-in-depth for direct anon/authenticated access.',
+  },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -327,7 +340,10 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 60;
+// 60 on main + onboarding_checklist_items + site_blocks = 62. This PR was
+// authored when the count was 54 (→56); the true total must be re-derived at
+// merge time because parallel PRs each bump +1 and git merges both silently.
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 62;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
