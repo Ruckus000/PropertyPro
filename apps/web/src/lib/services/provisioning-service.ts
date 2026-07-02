@@ -809,11 +809,20 @@ export interface PendingSignupTokenRow {
   email: string;
   payload: Record<string, unknown> | null;
   signupRequestId: string;
+  loginTokenConsumedAt: Date | null;
 }
 
+/** Result of an attempt to issue a single-use magic-link login token. */
+export type IssueLoginTokenResult =
+  | { status: 'issued'; token: string }
+  | { status: 'consumed' }
+  | { status: 'error' };
+
+const LOGIN_TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Fetch the email + payload for a pending signup, used by the post-completion
- * magic-link generation path in the status poller. Returns `null` when no
+ * Fetch the email + token lifecycle state for a pending signup, used by the
+ * post-completion magic-link path in the status poller. Returns `null` when no
  * pending_signups row matches.
  *
  * AUTHZ: same pre-auth endpoint as `getProvisioningJobBySignupRequestId`.
@@ -827,6 +836,7 @@ export async function getPendingSignupBySignupRequestId(
       email: pendingSignups.email,
       payload: pendingSignups.payload,
       signupRequestId: pendingSignups.signupRequestId,
+      loginTokenConsumedAt: pendingSignups.loginTokenConsumedAt,
     })
     .from(pendingSignups)
     .where(eq(pendingSignups.signupRequestId, signupRequestId))
@@ -836,43 +846,29 @@ export async function getPendingSignupBySignupRequestId(
     email: row.email,
     payload: (row.payload ?? null) as Record<string, unknown> | null,
     signupRequestId: row.signupRequestId,
+    loginTokenConsumedAt: row.loginTokenConsumedAt ?? null,
   };
 }
 
 /**
- * Persist a generated magic-link token into `pending_signups.payload.loginToken`
- * so subsequent status polls reuse the same token without re-issuing one.
- * Caller passes the existing payload (which the helper merges into) so we
- * don't blow away other keys.
- */
-export async function cacheLoginTokenInPendingSignup(
-  signupRequestId: string,
-  existingPayload: Record<string, unknown>,
-  loginToken: string,
-): Promise<void> {
-  const db = createUnscopedClient();
-  await db
-    .update(pendingSignups)
-    .set({
-      payload: { ...existingPayload, loginToken },
-    })
-    .where(eq(pendingSignups.signupRequestId, signupRequestId));
-}
-
-/**
- * Generate a fresh Supabase magic-link token for the email and persist it
- * into `pending_signups.payload.loginToken`. Returns the token string on
- * success, or `null` when Supabase auth-admin failed to issue one (caller
- * should respond with a 500).
+ * Issue a SINGLE-USE magic-link login token for a completed provisioning
+ * signup. Generates a fresh Supabase magic link, then atomically claims it by
+ * stamping login_token_issued_at + login_token_consumed_at guarded by
+ * `WHERE login_token_consumed_at IS NULL OR login_token_issued_at < ttlCutoff`.
  *
- * Wraps the auth-admin client + cache write in one helper so the route
- * doesn't need to import `@propertypro/db/supabase/admin` directly.
+ * - `issued` — this caller won the claim; return the token to the browser.
+ * - `consumed` — a concurrent poll (or an earlier poll / leaked-id replay)
+ *   already claimed the token; return NO token.
+ * - `error` — Supabase failed to generate a link (caller responds 500).
+ *
+ * The TTL lets a fresh token be minted if the genuine browser closed before
+ * consuming the previous one (stale unused window), without ever re-serving a
+ * previously-consumed token.
  */
-export async function generateAndCacheLoginToken(
+export async function issueSingleUseLoginToken(
   signupRequestId: string,
   email: string,
-  existingPayload: Record<string, unknown>,
-): Promise<string | null> {
+): Promise<IssueLoginTokenResult> {
   const admin = createAdminClient();
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
@@ -884,12 +880,41 @@ export async function generateAndCacheLoginToken(
       '[provisioning-service] Failed to generate magic link:',
       linkError?.message,
     );
-    return null;
+    return { status: 'error' };
   }
 
-  const loginToken: string = linkData.properties.hashed_token;
-  await cacheLoginTokenInPendingSignup(signupRequestId, existingPayload, loginToken);
-  return loginToken;
+  const token: string = linkData.properties.hashed_token;
+  const now = new Date();
+  const ttlCutoff = new Date(now.getTime() - LOGIN_TOKEN_TTL_MS);
+
+  const db = createUnscopedClient();
+  // Atomic single-use claim: only stamp the token if not already consumed
+  // (or the prior issuance is older than the TTL). A concurrent poll that
+  // already claimed leaves 0 rows here, so we surface 'consumed' rather than
+  // double-issuing.
+  const [claimed] = await db
+    .update(pendingSignups)
+    .set({
+      loginTokenIssuedAt: now,
+      loginTokenConsumedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(pendingSignups.signupRequestId, signupRequestId),
+        or(
+          isNull(pendingSignups.loginTokenConsumedAt),
+          lt(pendingSignups.loginTokenIssuedAt, ttlCutoff),
+        ),
+      ),
+    )
+    .returning({ id: pendingSignups.id });
+
+  if (!claimed) {
+    return { status: 'consumed' };
+  }
+
+  return { status: 'issued', token };
 }
 
 // ---------------------------------------------------------------------------
