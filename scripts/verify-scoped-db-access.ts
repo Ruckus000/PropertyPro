@@ -507,6 +507,38 @@ function hasTableRlsEnable(sql: string, tableName: string): boolean {
   return pattern.test(sql);
 }
 
+function hasTableRlsForce(sql: string, tableName: string): boolean {
+  const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|${escapedTableName})\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`,
+    'i',
+  );
+  return pattern.test(sql);
+}
+
+function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
+  const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Direct CREATE TRIGGER form, e.g.
+  //   CREATE TRIGGER "pp_rls_enforce_tenant_scope" BEFORE INSERT OR UPDATE
+  //   ON "public"."tableName" FOR EACH ROW EXECUTE FUNCTION ...
+  const directPattern = new RegExp(
+    `CREATE\\s+TRIGGER\\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)[\\s\\S]*?ON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|${escapedTableName})\\b`,
+    'i',
+  );
+  if (directPattern.test(sql)) return true;
+
+  // Loop-based form where the trigger is installed via dynamic SQL across an
+  // array of table names. Match the table name appearing in a `SELECT
+  // unnest(ARRAY[ ... ])` literal AND a CREATE TRIGGER pp_rls_enforce_tenant_scope
+  // reference somewhere in the corpus.
+  const arrayContainsTable = new RegExp(
+    `unnest\\s*\\(\\s*ARRAY\\s*\\[[\\s\\S]*?'${escapedTableName}'[\\s\\S]*?\\]`,
+    'i',
+  );
+  const hasLoopTriggerInstall = /CREATE\s+TRIGGER\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)/i;
+  return arrayContainsTable.test(sql) && hasLoopTriggerInstall.test(sql);
+}
+
 function stripSqlComments(sql: string): string {
   // Replace block comments /* ... */ with equivalent whitespace (preserves newlines for accurate line reporting)
   let s = sql.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '));
@@ -627,7 +659,120 @@ function runRlsPolicyCheck(): number {
   return 1;
 }
 
-function main(): number {
+/**
+ * Inventory-driven RLS coverage check.
+ *
+ * RLS hardening for a tenant table is frequently split across several
+ * migrations (e.g. initial CREATE TABLE in one file, FORCE + write-scope
+ * trigger added later). The audit's intent — "every tenant table has RLS
+ * ENABLE + FORCE, at least one policy, and (unless service/audit-only) the
+ * write-scope trigger" — is therefore a coverage check across the entire
+ * migration corpus rather than a per-file rule. Complements the non-gating
+ * live integration test (which needs DATABASE_URL); this runs in every PR.
+ */
+async function runRlsTenantTableCoverageCheck(): Promise<number> {
+  if (!isDirectory(migrationsRoot)) {
+    // eslint-disable-next-line no-console
+    console.error(`Migrations directory not found: ${migrationsRoot}`);
+    return 1;
+  }
+
+  const migrationFiles = readdirSync(migrationsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
+    .map((entry) => join(migrationsRoot, entry.name))
+    .sort();
+
+  const corpus = stripSqlComments(
+    migrationFiles.map((f) => readFileSync(f, 'utf8')).join('\n'),
+  );
+
+  type RlsTenantTableConfig = {
+    tableName: string;
+    policyFamily: string;
+  };
+  let RLS_TENANT_TABLES: readonly RlsTenantTableConfig[];
+  try {
+    const mod = await import('../packages/db/src/schema/rls-config.ts');
+    RLS_TENANT_TABLES = mod.RLS_TENANT_TABLES as readonly RlsTenantTableConfig[];
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      'Could not load RLS_TENANT_TABLES from packages/db/src/schema/rls-config.ts:',
+      err,
+    );
+    return 1;
+  }
+
+  // service_only and audit_log_restricted tables are written exclusively under
+  // a privileged role; append-only tables take INSERT-only writes. The generic
+  // INSERT/UPDATE write-scope trigger is not installed on those families.
+  const FAMILIES_WITHOUT_TRIGGER = new Set([
+    'service_only',
+    'audit_log_restricted',
+    'tenant_append_only',
+  ]);
+
+  const violations: Violation[] = [];
+  for (const entry of RLS_TENANT_TABLES) {
+    const t = entry.tableName;
+    if (!hasTableRlsEnable(corpus, t)) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" has no ALTER TABLE … ENABLE ROW LEVEL SECURITY in any migration.`,
+      });
+    }
+    if (!hasTableRlsForce(corpus, t)) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" has no ALTER TABLE … FORCE ROW LEVEL SECURITY in any migration.`,
+      });
+    }
+    // NOTE: policy-presence is intentionally NOT checked here. Per-family
+    // CREATE POLICY coverage is verified with higher fidelity by the live
+    // rls-policies integration test (pg_policies per family); a static text
+    // scan for CREATE POLICY is both redundant and brittle against the
+    // quote-wrapped baseline DDL. FORCE + write-scope-trigger coverage below
+    // is what no other gate enforces, which is the gap this check fills.
+    if (
+      !FAMILIES_WITHOUT_TRIGGER.has(entry.policyFamily) &&
+      !hasTenantWriteScopeTrigger(corpus, t)
+    ) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" (${entry.policyFamily}) has no pp_rls_enforce_tenant_scope trigger in any migration.`,
+      });
+    }
+  }
+
+  if (violations.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `PASS: RLS tenant-table coverage check is clean for ${RLS_TENANT_TABLES.length} tables.`,
+    );
+    return 0;
+  }
+
+  for (const violation of violations) {
+    // eslint-disable-next-line no-console
+    console.error(`${violation.file} [${violation.code}] ${violation.message}`);
+  }
+  // eslint-disable-next-line no-console
+  console.error(
+    `FAIL: ${violations.length} tenant-table RLS coverage violation(s) found.`,
+  );
+  return 1;
+}
+
+async function main(): Promise<number> {
   let exitCode = 0;
 
   for (const config of APP_CONFIGS) {
@@ -642,7 +787,12 @@ function main(): number {
     exitCode = rlsCode;
   }
 
+  const coverageCode = await runRlsTenantTableCoverageCheck();
+  if (coverageCode !== 0) {
+    exitCode = coverageCode;
+  }
+
   return exitCode;
 }
 
-process.exit(main());
+main().then((code) => process.exit(code));
