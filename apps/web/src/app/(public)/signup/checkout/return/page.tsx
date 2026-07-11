@@ -18,9 +18,10 @@ export default async function CheckoutReturnPage({ searchParams }: CheckoutRetur
   if (!signupRequestId) {
     return (
       <main className="mx-auto max-w-lg px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-content">Invalid return URL</h1>
+        <h1 className="text-xl font-semibold text-content">Let&apos;s restart checkout</h1>
         <p className="mt-2 text-sm text-content-secondary">
-          Missing signup reference. Please restart the signup process.
+          We couldn&apos;t find your signup session. Return to sign up to continue — your community
+          details can be entered again.
         </p>
         <a
           href="/signup"
