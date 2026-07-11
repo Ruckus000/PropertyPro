@@ -155,15 +155,21 @@ function isApiPath(pathname: string): boolean {
 export function shouldHideDevSurfaceInProduction(
   pathname: string,
   nodeEnv: string | undefined = process.env.NODE_ENV,
+  pdfjsTestEnabled: string | undefined = process.env.PDFJS_TEST_ENABLED,
 ): boolean {
+  if (nodeEnv !== 'production') {
+    return false;
+  }
+
+  if (pathname === '/pdfjs-test' || pathname.startsWith('/pdfjs-test/')) {
+    return pdfjsTestEnabled !== '1';
+  }
+
   return (
-    nodeEnv === 'production' &&
-    (pathname === '/pdfjs-test' ||
-      pathname.startsWith('/pdfjs-test/') ||
-      pathname === '/dev/site-preview' ||
-      pathname === '/dev/reset-onboarding' ||
-      pathname === '/dev/login' ||
-      pathname.startsWith('/dev/login/'))
+    pathname === '/dev/site-preview' ||
+    pathname === '/dev/reset-onboarding' ||
+    pathname === '/dev/login' ||
+    pathname.startsWith('/dev/login/')
   );
 }
 

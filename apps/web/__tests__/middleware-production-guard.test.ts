@@ -13,6 +13,13 @@ describe('production development-surface guard', () => {
     expect(shouldHideDevSurfaceInProduction(pathname, 'production')).toBe(true);
   });
 
+  it.each(['/pdfjs-test', '/pdfjs-test/viewer'])(
+    'allows %s in production when PDFJS_TEST_ENABLED=1',
+    (pathname) => {
+      expect(shouldHideDevSurfaceInProduction(pathname, 'production', '1')).toBe(false);
+    },
+  );
+
   it('keeps development surfaces available outside production', () => {
     expect(shouldHideDevSurfaceInProduction('/pdfjs-test', 'development')).toBe(false);
   });
