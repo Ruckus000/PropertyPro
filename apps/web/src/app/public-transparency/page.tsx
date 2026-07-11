@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+// AUTHZ: Host-native public transparency page; community ID injected by middleware before tenant context exists.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { getCommunityPublicInfo } from '@/lib/api/branding';

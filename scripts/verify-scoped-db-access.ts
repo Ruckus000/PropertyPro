@@ -117,7 +117,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // so the route itself no longer needs the allowance.
   // Transparency public route: slug resolution and opt-in lookup before tenant scoping
   resolve(repoRoot, 'apps/web/src/app/api/v1/transparency/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/(public)/[subdomain]/transparency/page.tsx'),
+  // Host-native transparency renderer: community resolved via middleware x-community-id header
+  resolve(repoRoot, 'apps/web/src/app/public-transparency/page.tsx'),
   // Dev auto-login — resolves user's community for /mobile redirect (dev-only, 404 in production)
   resolve(repoRoot, 'apps/web/src/app/dev/login/route.ts'),
   // Dev agent-login — password-based login for agents (dev-only, 404 in production)
