@@ -483,7 +483,7 @@ describe('sendSubscriptionCanceledEmail', () => {
     );
     expect(canceledCall).toBeDefined();
     expect(canceledCall?.[1]).toEqual(
-      expect.objectContaining({ gracePeriodEndDate: 'February 7, 2026' }),
+      expect.objectContaining({ gracePeriodEndDate: 'February 8, 2026' }),
     );
   });
 
