@@ -1,4 +1,5 @@
 import React from 'react';
+import { signupTrialMarketingLine } from '@propertypro/shared';
 
 interface Tier {
   name: string;
@@ -67,7 +68,7 @@ export function PricingSection() {
           <h2 className="mk-display">Priced for one building or fifty.</h2>
           <p className="mk-muted" style={{ marginLeft: 'auto', marginRight: 'auto' }}>
             Every plan includes statute compliance monitoring, hosting, and SSL.
-            14-day free trial, no card required.
+            {' '}{signupTrialMarketingLine()}
           </p>
         </div>
         <div className="mk-price-grid">
