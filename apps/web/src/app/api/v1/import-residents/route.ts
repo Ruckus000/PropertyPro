@@ -37,6 +37,7 @@ import { requirePermission } from "@/lib/db/access-control";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 import { listCommunitiesForUser } from "@/lib/api/user-communities";
 import { assertNotDemoGrace } from "@/lib/middleware/demo-grace-guard";
+import { requireActiveSubscriptionForMutation } from "@/lib/middleware/subscription-guard";
 import { getCommunityTypeForOnboarding } from "@/lib/services/onboarding-service";
 import {
   insertNotificationPreferencesForImport,
@@ -72,6 +73,7 @@ export const POST = withErrorHandler(
 
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const { csv, dryRun } = body;
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'residents', 'write');
