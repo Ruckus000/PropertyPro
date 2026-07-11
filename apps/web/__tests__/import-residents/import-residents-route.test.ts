@@ -77,6 +77,10 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/lib/utils/csv-validator', () => ({
   RESIDENT_IMPORT_ROLES: ['owner', 'tenant'] as const,
   validateResidentCsv: validateResidentCsvMock,
