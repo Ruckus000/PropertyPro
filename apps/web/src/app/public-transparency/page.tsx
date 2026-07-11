@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 // AUTHZ: Host-native public transparency page; community ID injected by middleware before tenant context exists.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
-import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
+import { getFeaturesForCommunity, resolveCommunityContext, type CommunityType } from '@propertypro/shared';
 import { getCommunityPublicInfo } from '@/lib/api/branding';
 import { TransparencyPage } from '@/components/transparency/transparency-page';
 import { TransparencyDisabledEmptyState } from '@/components/transparency/transparency-disabled-empty-state';
@@ -12,12 +12,30 @@ import { resolveTimezone } from '@/lib/utils/timezone';
 async function resolveCommunityId(): Promise<number | null> {
   const requestHeaders = await headers();
   const communityIdStr = requestHeaders.get('x-community-id');
-  if (!communityIdStr) return null;
+  if (communityIdStr) {
+    const communityId = Number(communityIdStr);
+    if (Number.isInteger(communityId) && communityId > 0) {
+      return communityId;
+    }
+  }
 
-  const communityId = Number(communityIdStr);
-  if (!Number.isInteger(communityId) || communityId <= 0) return null;
+  const tenantSlug = requestHeaders.get('x-tenant-slug')?.trim().toLowerCase();
+  if (tenantSlug) {
+    const community = await findCommunityBySlugUnscoped(tenantSlug);
+    return community?.id ?? null;
+  }
 
-  return communityId;
+  const host = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host');
+  const tenantContext = resolveCommunityContext({
+    host,
+    rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
+  });
+  if (tenantContext.tenantSlug) {
+    const community = await findCommunityBySlugUnscoped(tenantContext.tenantSlug);
+    return community?.id ?? null;
+  }
+
+  return null;
 }
 
 export default async function PublicTransparencyHostPage() {

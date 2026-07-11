@@ -808,15 +808,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
         forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
       } else if (tenantContext.tenantSlug) {
+        forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
         try {
           const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
           if (communityId != null) {
             forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-            forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
             forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
           }
         } catch {
-          // Non-fatal — continue without community headers
+          // Non-fatal — public-transparency resolves slug server-side when RLS blocks anon lookup
         }
       }
 
