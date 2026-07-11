@@ -35,7 +35,7 @@ export default async function PublicTransparencyHostPage() {
     notFound();
   }
 
-  const features = getFeaturesForCommunity(community.communityType);
+  const features = getFeaturesForCommunity(community.communityType as CommunityType);
   if (!features.hasTransparencyPage) {
     notFound();
   }

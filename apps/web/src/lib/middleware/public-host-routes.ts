@@ -43,7 +43,7 @@ export function parsePathBasedPublicRoute(pathname: string): { slug: string; pat
   if (segments.length === 0 || segments.length > 2) return null;
 
   const slug = segments[0];
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) return null;
+  if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) return null;
   if (isReservedSubdomain(slug)) return null;
   if (PROTECTED_FIRST_SEGMENTS.has(slug)) return null;
 
@@ -52,7 +52,7 @@ export function parsePathBasedPublicRoute(pathname: string): { slug: string; pat
   }
 
   const suffix = segments[1];
-  if (!PATH_PUBLIC_SUFFIXES.has(suffix)) return null;
+  if (!suffix || !PATH_PUBLIC_SUFFIXES.has(suffix)) return null;
   return { slug, path: `/${suffix}` };
 }
 
