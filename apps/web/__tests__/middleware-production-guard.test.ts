@@ -16,4 +16,11 @@ describe('production development-surface guard', () => {
   it('keeps development surfaces available outside production', () => {
     expect(shouldHideDevSurfaceInProduction('/pdfjs-test', 'development')).toBe(false);
   });
+
+  it.each(['/dev/agent-login', '/dev/login-something'])(
+    'does not hide %s in production',
+    (pathname) => {
+      expect(shouldHideDevSurfaceInProduction(pathname, 'production')).toBe(false);
+    },
+  );
 });

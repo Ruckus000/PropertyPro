@@ -163,7 +163,7 @@ export function shouldHideDevSurfaceInProduction(
       pathname === '/dev/site-preview' ||
       pathname === '/dev/reset-onboarding' ||
       pathname === '/dev/login' ||
-      pathname.startsWith('/dev/login'))
+      pathname.startsWith('/dev/login/'))
   );
 }
 
