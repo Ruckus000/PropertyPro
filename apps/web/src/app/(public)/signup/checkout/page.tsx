@@ -12,6 +12,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 import { useSearchParams } from 'next/navigation';
+import { CheckoutMissingSession } from '@/components/signup/checkout-missing-session';
 import { createCheckoutSession } from '@/lib/actions/checkout';
 
 // Lazy-initialize Stripe only in the browser to avoid SSR crashes.
@@ -26,24 +27,6 @@ function getStripePromise() {
     }
   }
   return stripePromise;
-}
-
-function MissingSessionRecovery() {
-  return (
-    <main className="mx-auto max-w-lg px-6 py-16 text-center">
-      <h1 className="text-xl font-semibold text-content">Let&apos;s restart checkout</h1>
-      <p className="mt-2 text-sm text-content-secondary">
-        We couldn&apos;t find your signup session. Return to sign up to continue — your community
-        details can be entered again.
-      </p>
-      <a
-        href="/signup"
-        className="mt-6 inline-block text-sm font-medium text-interactive hover:text-interactive-hover"
-      >
-        &larr; Back to sign up
-      </a>
-    </main>
-  );
 }
 
 function CheckoutInner() {
@@ -70,7 +53,7 @@ function CheckoutInner() {
   }, [signupRequestId]);
 
   if (!signupRequestId) {
-    return <MissingSessionRecovery />;
+    return <CheckoutMissingSession />;
   }
 
   if (error) {
