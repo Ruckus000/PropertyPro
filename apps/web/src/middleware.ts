@@ -152,6 +152,21 @@ function isApiPath(pathname: string): boolean {
   return pathname.startsWith(API_PATH_PREFIX);
 }
 
+export function shouldHideDevSurfaceInProduction(
+  pathname: string,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean {
+  return (
+    nodeEnv === 'production' &&
+    (pathname === '/pdfjs-test' ||
+      pathname.startsWith('/pdfjs-test/') ||
+      pathname === '/dev/site-preview' ||
+      pathname === '/dev/reset-onboarding' ||
+      pathname === '/dev/login' ||
+      pathname.startsWith('/dev/login'))
+  );
+}
+
 function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
   // E-sign signing routes use dynamic segments (e.g. /api/v1/esign/sign/:token)
   // so they can't use exact-path matching via TOKEN_AUTH_ROUTES.
@@ -385,6 +400,10 @@ function stampForwardedUserHeaders(
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+  if (shouldHideDevSurfaceInProduction(pathname)) {
+    return NextResponse.rewrite(new URL('/404', request.url));
+  }
+
   const origin = request.headers.get('origin');
   const isApi = isApiPath(pathname);
   const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
