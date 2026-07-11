@@ -39,6 +39,7 @@ import {
   type CommunityFeatures,
   type CommunityType,
   type PlanId,
+  type TransitionRole,
 } from '@propertypro/shared';
 
 const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
@@ -50,11 +51,16 @@ const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
   'property_manager_admin',
 ];
 
+/** Essentials slim-nav placement. Ignored outside slim-nav mode. */
+export type NavTier = 'default' | 'more';
+
 export interface NavItemConfig {
   id: string;
   label: string;
   icon: LucideIcon;
   href: (communityId: number) => string;
+  /** Essentials slim-nav tier for founding root_manager. Defaults to `default`. */
+  navTier?: NavTier;
   /** Optional child item IDs for nested sidebar disclosure groups. */
   children?: readonly string[];
   /** Restrict to these roles. Omit = visible to all roles. */
@@ -109,6 +115,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Vote,
     href: (cid) => `/communities/${cid}/board/polls`,
     featureKey: 'hasCommunityBoard',
+    navTier: 'more',
     matchPrefixes: ['/board'],
   },
   {
@@ -117,6 +124,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: BriefcaseBusiness,
     href: (cid) => `/communities/${cid}/operations?tab=requests`,
     featureKeys: ['hasMaintenanceRequests', 'hasWorkOrders', 'hasAmenities'],
+    navTier: 'more',
     matchPrefixes: ['/operations'],
   },
   {
@@ -126,6 +134,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/dashboard/leases?communityId=${cid}`,
     children: ['move-in-out'],
     featureKey: 'hasLeaseTracking',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/leases'],
   },
   {
@@ -134,6 +143,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Package,
     href: (cid) => `/dashboard/packages?communityId=${cid}`,
     featureKey: 'hasPackageLogging',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/packages'],
   },
   {
@@ -142,6 +152,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Users,
     href: (cid) => `/dashboard/visitors?communityId=${cid}`,
     featureKey: 'hasVisitorLogging',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/visitors'],
   },
   {
@@ -151,6 +162,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/communities/${cid}/payments`,
     roles: FINANCE_READ_NAV_ROLES,
     featureKey: 'hasFinance',
+    navTier: 'more',
     matchPrefixes: ['/payments'],
   },
   {
@@ -174,6 +186,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/violations/report?communityId=${cid}`,
     children: ['violations-inbox'],
     featureKey: 'hasViolations',
+    navTier: 'more',
     matchPrefixes: ['/violations/report'],
   },
 
@@ -210,6 +223,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/contracts?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasCompliance',
+    navTier: 'more',
     matchPrefixes: ['/contracts'],
   },
   {
@@ -219,6 +233,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/esign?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasEsign',
+    navTier: 'more',
     matchPrefixes: ['/esign'],
   },
   {
@@ -228,6 +243,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/violations?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasViolations',
+    navTier: 'more',
     matchPrefixes: ['/violations'],
   },
   {
@@ -237,6 +253,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/arc-requests?communityId=${cid}`,
     roles: ADMIN_ROLES,
     featureKey: 'hasARC',
+    navTier: 'more',
     matchPrefixes: ['/arc-requests'],
   },
   {
@@ -246,6 +263,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/dashboard/move-in-out?communityId=${cid}`,
     featureKey: 'hasLeaseTracking',
     roles: ADMIN_ROLES,
+    navTier: 'more',
     matchPrefixes: ['/dashboard/move-in-out'],
   },
   {
@@ -254,6 +272,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: History,
     href: (cid) => `/audit-trail?communityId=${cid}`,
     roles: ADMIN_ROLES,
+    navTier: 'more',
     matchPrefixes: ['/audit-trail'],
   },
 ];
@@ -463,6 +482,50 @@ export function getVisibleItemsWithPlanGate(
     })
     // Tenants: drop plan-locked items so they never see a "Pro" pill or upgrade prompt.
     .filter((item) => !(hideLockedEntirely && item.planLocked));
+}
+
+/**
+ * Essentials founding admin (`root_manager`) gets a slim default rail with
+ * advanced tools collapsed under a "More" section.
+ */
+export function shouldUseSlimNav(
+  role: TransitionRole | AnyCommunityRole | null,
+  planId: PlanId | null,
+): boolean {
+  return role === 'root_manager' && planId === 'essentials';
+}
+
+/**
+ * Rebuild NAV_SECTIONS for slim nav: default-tier items stay in their
+ * original section groupings; more-tier items move to a trailing "More" section.
+ */
+export function buildSlimNavSections(
+  visibleById: ReadonlyMap<string, NavItemWithGateStatus>,
+  baseSections: readonly NavSection[],
+): NavSection[] {
+  const defaultSections: NavSection[] = [];
+  const moreItems: NavItemConfig[] = [];
+
+  for (const section of baseSections) {
+    const defaultItems: NavItemConfig[] = [];
+    for (const item of section.items) {
+      if (!visibleById.has(item.id)) continue;
+      if (item.navTier === 'more') {
+        moreItems.push(item);
+      } else {
+        defaultItems.push(item);
+      }
+    }
+    if (defaultItems.length > 0) {
+      defaultSections.push({ label: section.label, items: defaultItems });
+    }
+  }
+
+  if (moreItems.length > 0) {
+    defaultSections.push({ label: 'More', items: moreItems });
+  }
+
+  return defaultSections;
 }
 
 /**

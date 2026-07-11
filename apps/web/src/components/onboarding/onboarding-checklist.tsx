@@ -28,11 +28,14 @@ export const ACTION_ROUTES: Record<string, ChecklistAction> = {
 interface OnboardingChecklistProps {
   communityId: number;
   communityName: string;
+  /** Secondary variant demotes checklist below founding aha. */
+  variant?: 'primary' | 'secondary';
 }
 
 export function OnboardingChecklist({
   communityId,
   communityName,
+  variant = 'primary',
 }: OnboardingChecklistProps) {
   const router = useRouter();
   const { data: items, isLoading } = useOnboardingChecklist(communityId);
@@ -72,17 +75,23 @@ export function OnboardingChecklist({
 
   if (dismissed) return null;
 
+  const title =
+    variant === 'secondary'
+      ? 'Strengthen your community'
+      : 'Finish setting up your community';
+
   return (
     <section
       aria-label={`Setup checklist for ${communityName}`}
-      className="rounded-md border border-edge bg-surface-card shadow-sm"
+      className={cn(
+        'rounded-md border border-edge bg-surface-card shadow-sm',
+        variant === 'secondary' && 'border-dashed',
+      )}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-edge px-5 py-4">
         <div>
-          <h2 className="text-base font-semibold text-content">
-            Finish setting up your community
-          </h2>
+          <h2 className="text-base font-semibold text-content">{title}</h2>
           <p className="mt-0.5 text-sm text-content-secondary">
             {completedCount} of {totalCount} complete
           </p>

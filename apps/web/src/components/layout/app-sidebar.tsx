@@ -28,6 +28,8 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  shouldUseSlimNav,
+  buildSlimNavSections,
   type NavSection,
   type NavItemWithGateStatus,
 } from './nav-config';
@@ -100,9 +102,12 @@ export function AppSidebar({
     : getVisibleItemsWithPlanGate(NAV_ITEMS, canonicalRole, features, communityType, resolvedPlanId);
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
+  const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);
   const baseSections: readonly NavSection[] = isPmContext
     ? [{ label: null, items: PM_NAV_ITEMS }]
-    : NAV_SECTIONS;
+    : useSlimNav
+      ? buildSlimNavSections(visibleById, NAV_SECTIONS)
+      : NAV_SECTIONS;
   const childParentById = new Map<string, string>();
 
   for (const section of baseSections) {
