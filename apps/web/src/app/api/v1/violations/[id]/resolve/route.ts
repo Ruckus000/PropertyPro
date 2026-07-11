@@ -34,6 +34,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireViolationAdminWrite, requireViolationsEnabled } from '@/lib/violations/common';
 import { resolveViolationForCommunity } from '@/lib/services/violations-service';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
@@ -45,6 +46,7 @@ export const POST = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);

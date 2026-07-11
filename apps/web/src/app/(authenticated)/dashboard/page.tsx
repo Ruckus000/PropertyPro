@@ -3,7 +3,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, resolvePlanId } from '@propertypro/shared';
+import { getCommunityPublicInfo } from '@/lib/api/branding';
+import { FoundingAhaPanel } from '@/components/onboarding/founding-aha-panel';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
@@ -84,14 +86,31 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     },
   );
 
+  const planId = resolvePlanId(membership.subscriptionPlan);
+  const showFoundingAha =
+    membership.role === 'root_manager' &&
+    planId === 'essentials' &&
+    features.hasCompliance;
+  const publicInfo = showFoundingAha
+    ? await getCommunityPublicInfo(context.communityId)
+    : null;
+
   return (
     <ErrorBoundary>
       <Suspense fallback={<DashboardSkeleton />}>
         <div className="space-y-6">
           <ClaimRootBanner isAdmin={membership.isAdmin} />
+          {showFoundingAha && publicInfo ? (
+            <FoundingAhaPanel
+              communityId={context.communityId}
+              communitySlug={publicInfo.slug}
+              communityName={data.communityName}
+            />
+          ) : null}
           <OnboardingChecklist
             communityId={context.communityId}
             communityName={data.communityName}
+            variant={showFoundingAha ? 'secondary' : 'primary'}
           />
           <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
           <div className="grid gap-6 lg:grid-cols-2">

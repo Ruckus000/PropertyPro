@@ -132,6 +132,10 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { GET, POST } from '../../src/app/api/v1/arc/route';
 
 function makeGetRequest(url: string) {

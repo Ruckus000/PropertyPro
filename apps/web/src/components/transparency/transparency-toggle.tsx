@@ -6,6 +6,7 @@ import {
   useTransparencySettings,
   useUpdateTransparencySettings,
 } from '@/hooks/use-transparency';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 
 interface Props {
   communityId: number;
@@ -19,7 +20,10 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const transparencyUrl = useMemo(() => `/${subdomain}/transparency`, [subdomain]);
+  const transparencyUrl = useMemo(
+    () => buildCommunityUrl(subdomain, '/transparency'),
+    [subdomain],
+  );
 
   const settingsQuery = useTransparencySettings(communityId);
   const updateSettings = useUpdateTransparencySettings(communityId);

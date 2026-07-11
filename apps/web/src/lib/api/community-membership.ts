@@ -13,6 +13,7 @@ export interface CommunityMembership {
   communityType: CommunityType;
   subscriptionPlan: string | null;
   subscriptionStatus: string | null;
+  subscriptionCanceledAt: Date | null;
   freeAccessExpiresAt: Date | null;
   timezone: string;
   /** True if this resident is a unit owner (only meaningful when role = 'resident'). */
@@ -116,6 +117,10 @@ export async function requireCommunityMembership(
     subscriptionStatus:
       typeof community['subscriptionStatus'] === 'string'
         ? community['subscriptionStatus']
+        : null,
+    subscriptionCanceledAt:
+      community['subscriptionCanceledAt'] instanceof Date
+        ? community['subscriptionCanceledAt']
         : null,
     freeAccessExpiresAt:
       community['freeAccessExpiresAt'] instanceof Date ? community['freeAccessExpiresAt'] : null,

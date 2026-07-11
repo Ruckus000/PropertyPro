@@ -47,6 +47,12 @@ import {
   USER_ID_HEADER,
   USER_PHONE_HEADER,
 } from './lib/request/forwarded-headers';
+import { buildCommunityUrl } from './lib/utils/community-url';
+import {
+  isApexHost,
+  parsePathBasedPublicRoute,
+  shouldRewriteHostTransparency,
+} from './lib/middleware/public-host-routes';
 
 /**
  * Routes under (authenticated) that require a valid session.
@@ -150,6 +156,27 @@ function shouldResolveTenant(pathname: string): boolean {
 
 function isApiPath(pathname: string): boolean {
   return pathname.startsWith(API_PATH_PREFIX);
+}
+
+export function shouldHideDevSurfaceInProduction(
+  pathname: string,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+  pdfjsTestEnabled: string | undefined = process.env.PDFJS_TEST_ENABLED,
+): boolean {
+  if (nodeEnv !== 'production') {
+    return false;
+  }
+
+  if (pathname === '/pdfjs-test' || pathname.startsWith('/pdfjs-test/')) {
+    return pdfjsTestEnabled !== '1';
+  }
+
+  return (
+    pathname === '/dev/site-preview' ||
+    pathname === '/dev/reset-onboarding' ||
+    pathname === '/dev/login' ||
+    pathname.startsWith('/dev/login/')
+  );
 }
 
 function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
@@ -385,6 +412,16 @@ function stampForwardedUserHeaders(
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+  if (shouldHideDevSurfaceInProduction(pathname)) {
+    return NextResponse.rewrite(new URL('/404', request.url));
+  }
+
+  const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com';
+  const pathPublic = parsePathBasedPublicRoute(pathname);
+  if (pathPublic && isApexHost(request.headers.get('host'), rootDomain)) {
+    return NextResponse.redirect(buildCommunityUrl(pathPublic.slug, pathPublic.path), 308);
+  }
+
   const origin = request.headers.get('origin');
   const isApi = isApiPath(pathname);
   const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
@@ -743,6 +780,54 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finaliseResponse(
         response as unknown as NextResponse,
         publicSiteResponse,
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
+    }
+  }
+
+  // --- Host-native public transparency [Wave 2] ---
+  // When a community subdomain requests '/transparency', rewrite to the
+  // internal public-transparency renderer with tenant headers injected.
+  if (shouldRewriteHostTransparency(pathname)) {
+    const tenantContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+      rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
+    });
+
+    const hasCommunityContext =
+      tenantContext.source !== 'none' &&
+      tenantContext.source !== 'custom_domain' &&
+      !tenantContext.isReservedSubdomain;
+
+    if (hasCommunityContext) {
+      if (tenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } else if (tenantContext.tenantSlug) {
+        forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+          }
+        } catch {
+          // Non-fatal — public-transparency resolves slug server-side when RLS blocks anon lookup
+        }
+      }
+
+      const transparencyUrl = request.nextUrl.clone();
+      transparencyUrl.pathname = '/public-transparency';
+      const transparencyResponse = NextResponse.rewrite(transparencyUrl, {
+        request: { headers: forwardedHeaders },
+      });
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        transparencyResponse,
         requestId,
         origin,
         isApi,

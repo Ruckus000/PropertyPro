@@ -9,12 +9,13 @@
  *   active / trialing / null → allowed (null = new community, not yet provisioned)
  *   past_due               → allowed (banner shown at UI level only)
  *   free_access_expires_at > now → allowed (overrides locked status, see spec §4.2)
- *   canceled / expired / unpaid → throws 403 SUBSCRIPTION_REQUIRED
+ *   canceled (after seven-day grace) / expired / unpaid → throws 403 SUBSCRIPTION_REQUIRED
  */
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 // AUTHZ: Reads communities row by primary key — communities is the root tenant table and cannot be scoped by community_id (it IS the community_id).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { isWithinPaidGrace } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';
 
 const LOCKED_STATUSES = new Set(['canceled', 'expired', 'unpaid', 'incomplete_expired']);
@@ -31,6 +32,7 @@ export async function requireActiveSubscriptionForMutation(
     .select({
       subscriptionStatus: communities.subscriptionStatus,
       freeAccessExpiresAt: communities.freeAccessExpiresAt,
+      subscriptionCanceledAt: communities.subscriptionCanceledAt,
     })
     .from(communities)
     .where(eq(communities.id, communityId))
@@ -38,9 +40,18 @@ export async function requireActiveSubscriptionForMutation(
 
   const status = rows[0]?.subscriptionStatus ?? null;
   const freeAccessExpiresAt = rows[0]?.freeAccessExpiresAt ?? null;
+  const subscriptionCanceledAt = rows[0]?.subscriptionCanceledAt ?? null;
 
   // Free access overrides locked subscription status (see spec §4.2)
   if (freeAccessExpiresAt && freeAccessExpiresAt > new Date()) {
+    return;
+  }
+
+  if (
+    status === 'canceled' &&
+    subscriptionCanceledAt &&
+    isWithinPaidGrace(subscriptionCanceledAt)
+  ) {
     return;
   }
 

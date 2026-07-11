@@ -34,6 +34,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { getActorUnitIds, isResidentRole, requireViolationsEnabled } from '@/lib/violations/common';
 import { requirePermission } from '@/lib/db/access-control';
@@ -135,6 +136,7 @@ export const POST = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = parseCommunityIdFromBody(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);

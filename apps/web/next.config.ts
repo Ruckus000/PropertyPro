@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     "http://localtest.me:3002",
     "http://sunset-condos.localtest.me:3002",
     "http://palm-shores-hoa.localtest.me:3002",
+    "http://*.localtest.me:3002",
   ],
   // Server-only packages that must not be bundled by webpack:
   //   - puppeteer-core / @sparticuz/chromium-min: Chromium binary is
@@ -40,6 +41,15 @@ const nextConfig: NextConfig = {
   ],
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",
+  },
+  async redirects() {
+    return [
+      {
+        source: "/login",
+        destination: "/auth/login",
+        permanent: true,
+      },
+    ];
   },
 };
 

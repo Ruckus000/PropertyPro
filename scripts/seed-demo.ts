@@ -77,6 +77,7 @@ const PRIMARY_ASSIGNMENTS: Record<DemoCommunitySlug, CommunityRoleAssignment[]> 
   ],
   'palm-shores-hoa': [
     { email: 'board.president@sunset.local', role: 'property_manager', designation: BOARD_DESIGNATIONS[0] },
+    { email: 'founding.admin@palm.local', role: 'property_manager' },
   ],
   'sunset-ridge-apartments': [
     { email: 'site.manager@sunsetridge.local', role: 'property_manager' },
@@ -113,6 +114,7 @@ const GLOBAL_PREF_USER_EMAILS = [
   'tenant.one@sunset.local',
   'cam.one@sunset.local',
   'pm.admin@sunset.local',
+  'founding.admin@palm.local',
   'site.manager@sunsetridge.local',
 ] as const;
 
@@ -137,7 +139,8 @@ const DEMO_PM_PORTFOLIO_CUSTOMER_METADATA = {
 // apartment feature set.
 const PM_PORTFOLIO_PLAN_BY_SLUG: Record<DemoCommunitySlug, PlanId> = {
   'sunset-condos': 'professional',
-  'palm-shores-hoa': 'professional',
+  // Essentials exercises Wave 2 founding-admin slim nav + aha panel in staging E2E.
+  'palm-shores-hoa': 'essentials',
   'sunset-ridge-apartments': 'operations_plus',
 };
 
@@ -1646,6 +1649,40 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     await seedRoles(assignments);
   }
 
+  const foundingAdminId = await ensureDemoUserRecord(
+    'founding.admin@palm.local',
+    userIdsByEmail['founding.admin@palm.local'],
+  );
+  userIdsByEmail['founding.admin@palm.local'] = foundingAdminId;
+  await db.execute(sql`
+    insert into user_roles (
+      user_id,
+      community_id,
+      role,
+      unit_id,
+      is_unit_owner,
+      designation,
+      display_title
+    )
+    values (
+      ${foundingAdminId},
+      ${palmCommunityId},
+      'root_manager',
+      NULL,
+      false,
+      NULL,
+      'Root Manager'
+    )
+    on conflict (user_id, community_id) do update
+    set role = excluded.role,
+        unit_id = excluded.unit_id,
+        is_unit_owner = excluded.is_unit_owner,
+        designation = excluded.designation,
+        display_title = excluded.display_title,
+        updated_at = now()
+  `);
+  await ensureNotificationPreference(palmCommunityId, foundingAdminId);
+
   const crossAssignments = CROSS_COMMUNITY_ASSIGNMENTS.map((assignment) => ({
     communityId: communityIdsBySlug[assignment.slug]!,
     userId: resolveUserId(userIdsByEmail, assignment.email),
@@ -1685,6 +1722,20 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   userIdsByEmail['board.president@sunset.local'] = boardPresidentId;
   for (const community of condoAndHoa) {
     if (community.communityType === 'apartment') {
+      await db
+        .update(communities)
+        .set({
+          transparencyEnabled: false,
+          transparencyAcknowledgedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(communities.id, community.id));
+      continue;
+    }
+
+    // Palm Shores stays disabled so Wave 2 staging E2E can assert the empty state
+    // and exercise one-click publish from the founding aha panel.
+    if (community.slug === 'palm-shores-hoa') {
       await db
         .update(communities)
         .set({

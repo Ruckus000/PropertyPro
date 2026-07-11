@@ -67,6 +67,11 @@ vi.mock('@/lib/services/transparency-service', () => ({
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
+
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { GET, PATCH } from '../../src/app/api/v1/transparency/settings/route';
 
 function makePatchRequest(body: Record<string, unknown>, headers?: Record<string, string>): NextRequest {
