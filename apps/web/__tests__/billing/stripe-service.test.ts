@@ -11,6 +11,7 @@
  * - createBillingPortalSession — positional args (customerId, returnUrl)
  * - getStripeClient — throws when STRIPE_SECRET_KEY not set
  */
+import { SIGNUP_TRIAL_DAYS } from '@propertypro/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -168,7 +169,7 @@ describe('stripe-service', () => {
         return_url:
           'https://app.example.com/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}&signupRequestId=req_001',
         subscription_data: {
-          trial_period_days: 14,
+          trial_period_days: SIGNUP_TRIAL_DAYS,
         },
         metadata: {
           signupRequestId: 'req_001',

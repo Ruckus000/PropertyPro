@@ -12,6 +12,7 @@ import { eq, and } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups, stripePrices } from '@propertypro/db';
 import type { CommunityType, PlanId } from '@propertypro/shared';
+import { SIGNUP_TRIAL_DAYS } from '@propertypro/shared';
 import type { SignupPlanId } from '@/lib/auth/signup-schema';
 import { AppError } from '@/lib/api/errors/AppError';
 
@@ -120,7 +121,7 @@ export async function createEmbeddedCheckoutSession(
     customer_email: customerEmail,
     return_url: `${returnBaseUrl}/signup/checkout/return?session_id={CHECKOUT_SESSION_ID}&signupRequestId=${encodeURIComponent(signupRequestId)}`,
     subscription_data: {
-      trial_period_days: 14,
+      trial_period_days: SIGNUP_TRIAL_DAYS,
     },
     metadata: {
       signupRequestId,
