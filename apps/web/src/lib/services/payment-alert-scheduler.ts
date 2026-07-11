@@ -9,8 +9,8 @@
  *   Day 0  — webhook fires sendPaymentFailedEmail() directly
  *   Day 3  — processPaymentReminders() sends Day 3 reminder, advances to Day 7
  *   Day 7  — processPaymentReminders() sends Day 7 escalation, clears pre-cancel schedule
- *   Cancel — webhook fires sendSubscriptionCanceledEmail() directly, sets Day 23 reminder
- *   Day 23 — processPaymentReminders() sends 7-day final expiry warning, clears schedule
+ *   Cancel — webhook fires sendSubscriptionCanceledEmail() directly, sets Day 5 reminder
+ *   Day 5  — processPaymentReminders() sends final 2-day lock warning, clears schedule
  *
  * Uses createUnscopedClient() because the cron scans across all communities.
  */
@@ -25,7 +25,13 @@ import {
   SubscriptionExpiryWarningEmail,
   sendEmail,
 } from '@propertypro/email';
-import { ADMIN_TIER_DB_ROLES, MANAGER_TIER_DB_ROLES, type TransitionRole } from '@propertypro/shared';
+import {
+  ADMIN_TIER_DB_ROLES,
+  GRACE_EXPIRY_WARNING_OFFSET_DAYS,
+  MANAGER_TIER_DB_ROLES,
+  PAID_GRACE_DAYS,
+  type TransitionRole,
+} from '@propertypro/shared';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -163,7 +169,7 @@ export interface SendSubscriptionCanceledEmailOpts {
 
 /**
  * Sends a cancellation email immediately on subscription deletion.
- * Also schedules the Day 23 reminder via next_reminder_at (done in webhook handler).
+ * Also schedules the Day 5 reminder via next_reminder_at (done in webhook handler).
  */
 export async function sendSubscriptionCanceledEmail(
   communityId: number,
@@ -173,11 +179,11 @@ export async function sendSubscriptionCanceledEmail(
   if (recipients.length === 0) return;
 
   const billingPortalUrl = `${getBaseUrl()}/billing/portal?communityId=${communityId}`;
-  const gracePeriodEnd = addDays(opts.canceledAt, 30);
+  const gracePeriodEnd = addDays(opts.canceledAt, PAID_GRACE_DAYS);
 
   await sendToAll(
     recipients,
-    `${opts.communityName} subscription canceled — 30-day grace period begins`,
+    `${opts.communityName} subscription canceled — ${PAID_GRACE_DAYS}-day grace period begins`,
     (r) =>
       createElement(SubscriptionCanceledEmail, {
         branding: { communityName: opts.communityName },
@@ -262,13 +268,13 @@ async function processCommunityReminder(
   const recipients = await lookupAdminRecipients(community.id, community.communityType);
 
   if (community.subscriptionCanceledAt != null) {
-    // Post-cancellation: send the Day 23 expiry warning
+    // Post-cancellation: send the Day 5, two-day lock warning.
     const canceledAt = community.subscriptionCanceledAt;
-    const expiryDate = addDays(canceledAt, 30);
+    const expiryDate = addDays(canceledAt, PAID_GRACE_DAYS);
 
     await sendToAll(
       recipients,
-      `Final warning: ${community.name} portal access expires ${formatDate(expiryDate)}`,
+      `Final warning: ${community.name} access locked in ${GRACE_EXPIRY_WARNING_OFFSET_DAYS} days`,
       (r) =>
         createElement(SubscriptionExpiryWarningEmail, {
           branding: { communityName: community.name },
@@ -277,7 +283,7 @@ async function processCommunityReminder(
           billingPortalUrl,
         }),
     );
-    // Clear reminder — no further scheduled reminders after Day 23
+    // Clear reminder — no further scheduled reminders after the final warning.
     await db
       .update(communities)
       .set({ nextReminderAt: null, updatedAt: now })
@@ -305,7 +311,7 @@ async function processCommunityReminder(
     const nextReminderAt =
       dayElapsed < 7
         ? addDays(community.paymentFailedAt, 7) // Day 3 → Day 7
-        : null; // Day 7+ → clear (wait for cancellation to set Day 23)
+        : null; // Day 7+ → clear (wait for cancellation to set Day 5)
 
     await db
       .update(communities)

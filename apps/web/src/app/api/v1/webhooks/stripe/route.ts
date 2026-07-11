@@ -18,7 +18,12 @@ import {
   retrieveCheckoutSession,
   retrieveSubscription,
 } from '@/lib/services/stripe-service';
-import { PLAN_IDS, type PlanId } from '@propertypro/shared';
+import {
+  GRACE_EXPIRY_WARNING_OFFSET_DAYS,
+  PAID_GRACE_DAYS,
+  PLAN_IDS,
+  type PlanId,
+} from '@propertypro/shared';
 import {
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
@@ -48,8 +53,9 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Grace period reminder offset: Day 23 after cancellation (ms). */
-const DAY_23_MS = 23 * 24 * 60 * 60 * 1000;
+/** Grace period reminder: two days before the paid grace window ends. */
+const GRACE_EXPIRY_WARNING_DELAY_MS =
+  (PAID_GRACE_DAYS - GRACE_EXPIRY_WARNING_OFFSET_DAYS) * 24 * 60 * 60 * 1000;
 
 const STRIPE_WEBHOOK_ERROR_CODES = {
   SECRET_NOT_CONFIGURED: 'STRIPE_WEBHOOK_SECRET_NOT_CONFIGURED',
@@ -312,7 +318,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
   const wasFirstCancellation = await cancelCommunitySubscriptionByIdIfFirst({
     communityId: community.id,
     canceledAt: now,
-    nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
+    nextReminderAt: new Date(now.getTime() + GRACE_EXPIRY_WARNING_DELAY_MS), // Day 5
   });
 
   if (!wasFirstCancellation) return; // already canceled — skip email
@@ -338,7 +344,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Pro
   const community = await cancelCommunitySubscriptionByStripeSubscriptionIfFirst({
     stripeSubscriptionId: subscription.id,
     canceledAt: now,
-    nextReminderAt: new Date(now.getTime() + DAY_23_MS), // Day 23
+    nextReminderAt: new Date(now.getTime() + GRACE_EXPIRY_WARNING_DELAY_MS), // Day 5
   });
   if (!community) return; // already canceled or community not found
 

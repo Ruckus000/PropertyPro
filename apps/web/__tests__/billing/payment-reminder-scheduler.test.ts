@@ -201,8 +201,8 @@ describe('processPaymentReminders', () => {
     );
   });
 
-  it('sends expiry warning email and clears nextReminderAt when subscriptionCanceledAt is set', async () => {
-    const subscriptionCanceledAt = daysAgo(23);
+  it('sends a two-day lock warning on grace Day 5 and clears nextReminderAt', async () => {
+    const subscriptionCanceledAt = daysAgo(5);
     const community = {
       id: 3,
       name: 'Ocean Breeze HOA',
@@ -236,9 +236,12 @@ describe('processPaymentReminders', () => {
     );
     expect(paymentFailedCall).toBeUndefined();
 
-    // Subject should reference "Final warning" / expiry
+    // The final warning is sent two days before the 7-day grace period ends.
     expect(sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: expect.stringContaining('Final warning') }),
+      expect.objectContaining({ subject: 'Final warning: Ocean Breeze HOA access locked in 2 days' }),
+    );
+    expect(expiryCall?.[1]).toEqual(
+      expect.objectContaining({ expiryDate: expect.any(String) }),
     );
 
     // nextReminderAt should be cleared
@@ -442,7 +445,7 @@ describe('sendSubscriptionCanceledEmail', () => {
     (createUnscopedClient as ReturnType<typeof vi.fn>).mockReset();
   });
 
-  it('sends an email to each recipient with a subject including "30-day grace period"', async () => {
+  it('sends an email to each recipient with a subject including "7-day grace period"', async () => {
     const recipients = [
       { email: 'president@hoa.com', fullName: 'Frank President' },
       { email: 'cam@hoa.com', fullName: 'Grace CAM' },
@@ -467,10 +470,10 @@ describe('sendSubscriptionCanceledEmail', () => {
     // One sendEmail call per recipient
     expect(sendEmail).toHaveBeenCalledTimes(recipients.length);
 
-    // Every call must have a subject containing "30-day grace period"
+    // Every call must have a subject containing "7-day grace period"
     for (const call of (sendEmail as ReturnType<typeof vi.fn>).mock.calls) {
       const arg = call[0] as { subject: string };
-      expect(arg.subject).toMatch(/30-day grace period/i);
+      expect(arg.subject).toMatch(/7-day grace period/i);
     }
 
     // createElement should have been called with SubscriptionCanceledEmail
@@ -479,6 +482,9 @@ describe('sendSubscriptionCanceledEmail', () => {
       ([comp]) => comp === SubscriptionCanceledEmail,
     );
     expect(canceledCall).toBeDefined();
+    expect(canceledCall?.[1]).toEqual(
+      expect.objectContaining({ gracePeriodEndDate: 'February 7, 2026' }),
+    );
   });
 
   it('sends no emails when there are no admin recipients', async () => {
