@@ -155,6 +155,21 @@ describe('role-management-service', () => {
       ).rejects.toBeInstanceOf(ForbiddenError);
       expect(scopedUpdateMock).not.toHaveBeenCalled();
     });
+
+    it('tags the admin-cap 403 with a machine-readable code + maxAdmins detail', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([
+        { role: 'resident', isUnitOwner: false },
+      ]);
+      mockEssentialsAdminCapacity(3);
+
+      const error = await assignPropertyManager(7, 'target-user', 'actor-user').catch(
+        (e) => e as ForbiddenError,
+      );
+      expect(error).toBeInstanceOf(ForbiddenError);
+      expect(error.code).toBe('ADMIN_LIMIT_REACHED');
+      expect(error.statusCode).toBe(403);
+      expect(error.details).toEqual({ maxAdmins: 3, planId: 'essentials' });
+    });
   });
 
   // ---------------------------------------------------------------------------

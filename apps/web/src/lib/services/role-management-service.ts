@@ -85,8 +85,12 @@ async function assertAdminCapacity(
   }
   const currentCount = await countAdminRoles(scoped);
   if (currentCount >= maxAdmins) {
+    // Distinct code + structured detail so the UI can render an upgrade
+    // affordance for THIS reason (plan cap) rather than a generic 403.
     throw new ForbiddenError(
       `This plan includes up to ${maxAdmins} administrators. Upgrade your plan or remove an administrator before adding another.`,
+      'ADMIN_LIMIT_REACHED',
+      { maxAdmins, planId },
     );
   }
 }
