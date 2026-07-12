@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { COMPLIANCE_QUERY_KEY } from "./useComplianceChecklist";
 import type { ChecklistItemData } from "@/components/compliance/compliance-checklist-item";
 
@@ -84,6 +85,7 @@ export function useComplianceMutations(communityId: number) {
         status: "satisfied" as const,
       })),
     onError,
+    onSuccess: () => toast.success("Document linked."),
     onSettled,
   });
 
@@ -97,6 +99,7 @@ export function useComplianceMutations(communityId: number) {
         status: "unsatisfied" as const,
       })),
     onError,
+    onSuccess: () => toast.success("Document unlinked."),
     onSettled,
   });
 
@@ -109,6 +112,7 @@ export function useComplianceMutations(communityId: number) {
         status: "not_applicable" as const,
       })),
     onError,
+    onSuccess: () => toast.success("Marked as not applicable."),
     onSettled,
   });
 
@@ -121,6 +125,7 @@ export function useComplianceMutations(communityId: number) {
         status: "unsatisfied" as const,
       })),
     onError,
+    onSuccess: () => toast.success("Marked as applicable."),
     onSettled,
   });
 
