@@ -36,6 +36,8 @@ interface DocumentListProps {
   onDeleteDocument: (document: DocumentListItem) => void | Promise<void>;
   onDownloadDocument: (document: DocumentListItem) => void;
   onUploadRequest?: () => void;
+  /** Retry the underlying fetch when the list fails to load. */
+  onRetry?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -108,6 +110,7 @@ export function DocumentList({
   onDeleteDocument,
   onDownloadDocument,
   onUploadRequest,
+  onRetry,
 }: DocumentListProps) {
   if (errorMessage) {
     return (
@@ -115,6 +118,17 @@ export function DocumentList({
         status="danger"
         title="Something went wrong"
         description={errorMessage}
+        action={
+          onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+            >
+              Retry
+            </button>
+          ) : undefined
+        }
       />
     );
   }

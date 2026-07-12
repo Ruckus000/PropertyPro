@@ -20,6 +20,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import { toast } from 'sonner';
 import { DocumentList, type DocumentListItem } from './document-list';
 import { useDeleteDocument, useDocuments } from '@/hooks/use-documents';
 
@@ -65,6 +66,7 @@ export function DocumentListContainer({
       }
       try {
         await deleteMutation.mutateAsync({ id: doc.id });
+        toast.success('Document deleted.');
         onDeleteDocument?.(doc);
       } catch {
         // error surfaced via errorMessage above
@@ -94,6 +96,7 @@ export function DocumentListContainer({
       onDeleteDocument={handleDelete}
       onDownloadDocument={handleDownload}
       onUploadRequest={onUploadRequest}
+      onRetry={() => void query.refetch()}
     />
   );
 }
