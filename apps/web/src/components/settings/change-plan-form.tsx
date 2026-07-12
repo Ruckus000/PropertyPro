@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { Check, Loader2 } from 'lucide-react';
 import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { useReauth } from '@/hooks/use-reauth';
@@ -99,6 +100,8 @@ export function ChangePlanForm({
         billingInterval: interval,
       });
       // Webhook will sync subscriptionPlan in a few seconds; bounce back and refresh.
+      // Toast confirms the change given the webhook lag before the plan pill updates.
+      toast.success('Plan change submitted — your subscription will update shortly.');
       router.push(cancelHref);
       router.refresh();
     } catch (err) {
