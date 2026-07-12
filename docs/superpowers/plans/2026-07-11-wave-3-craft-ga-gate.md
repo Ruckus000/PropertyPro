@@ -192,17 +192,17 @@ pnpm --filter @propertypro/web exec vitest run __tests__/services/role-managemen
 
 ### GA checklist (track here)
 
-- [ ] Marketing ↔ Stripe ↔ emails consistent (in-app trialing/grace banners done C1; full signup→Stripe E2E deferred)
+- [~] Marketing ↔ Stripe ↔ emails consistent — in-app trialing/grace banners done (C1); signup→provision server logic unit/integration-tested. **GATE:** one-time live signup→Stripe browser E2E (external Stripe test secrets) → see [GA sign-off](../../audits/2026-07-12-ga-go-no-go.md#remaining-gate--live-stripe-test-mode-e2e-external-secrets)
 - [x] Lifecycle matrix documented
 - [x] Mutation guard inventory reviewed
-- [ ] Signup→provision→aha E2E (seeded path; signup flow documented/deferred)
+- [~] Signup→provision→aha E2E — seeded path done (`wave-2-ga-staging.spec.ts`); **GATE:** live signup→Stripe browser run (same external gate as above)
 - [x] Public host transparency loads
 - [x] Zero orphan registry links
 - [x] Soft lock enforced + UI banners — shared `SubscriptionBillingBanners` (trialing/grace/lock/past_due) on desktop + mobile (C1 `b16bb533`); mobile compliance CTA parity (C3 `ebb2e861`)
 - [x] `/login` redirect
 - [x] Slim nav + Essentials craft pass signed off — slim nav (Wave 2) + 8-route craft pass (C2 `e38419f8`…`f294d740`) + mobile polish (C3 `ebb2e861`)
 - [x] `maxAdmins: 3` verified — API enforcement (C1 `b16bb533`) + UI surfacing/upsell (C5 `24525af2`)
-- [ ] Tenant isolation CI green (verified on PR CI — `pnpm lint` DB guard + integration)
+- [x] Tenant isolation CI green — `guard:db-access` + `guard:tenant-scope` clean; `tenant-isolation-game-day` + `multi-tenant-isolation` integration tests run on PR CI
 - [x] Support runbook published
 
 ### Final verification gate
@@ -217,7 +217,11 @@ pnpm lint
 pnpm typecheck
 ```
 
-**Wave 3 exit:** All §3.5 boxes checked with evidence → Public GA go decision.
+**Wave 3 exit:** All in-app/craft/lifecycle/isolation boxes checked with evidence.
+Decision recorded 2026-07-12: **CONDITIONAL GO** — see
+[GA go/no-go sign-off](../../audits/2026-07-12-ga-go-no-go.md). Sole remaining
+gate = one-time live Stripe test-mode E2E (external secrets); no code work
+remains for Wave 3.
 
 ---
 
