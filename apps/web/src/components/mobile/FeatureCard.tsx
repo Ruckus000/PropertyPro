@@ -1,6 +1,7 @@
 "use client";
 
-import { Check } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronRight } from "lucide-react";
 import { useComplianceChecklist } from "@/hooks/useComplianceChecklist";
 import { formatShortDate } from "@/lib/utils/format-date";
 
@@ -44,8 +45,16 @@ export function ComplianceCard({
     );
   }
 
+  // The card is the founding admin's primary entry into the compliance /
+  // transparency flow on mobile (Wave 3 C3 — aha CTA reachable from the mobile
+  // dashboard). Making the whole card tappable, not just the nav row below,
+  // keeps the desktop founding-aha "update compliance records" CTA reachable.
   return (
-    <div className="mx-5 mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+    <Link
+      href={`/communities/${communityId}/compliance`}
+      aria-label={`Compliance score ${score} percent — open compliance dashboard`}
+      className="mx-5 mt-5 block rounded-2xl border border-stone-200 bg-white p-5 shadow-sm transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2"
+    >
       <div className="flex items-center justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.8px] text-stone-400">
@@ -80,7 +89,11 @@ export function ComplianceCard({
           <div className="text-[11px] text-stone-400">Next meeting</div>
         </div>
       </div>
-    </div>
+      <div className="mt-3 flex items-center gap-1 text-[13px] font-medium text-stone-500">
+        View compliance dashboard
+        <ChevronRight size={15} aria-hidden="true" />
+      </div>
+    </Link>
   );
 }
 
