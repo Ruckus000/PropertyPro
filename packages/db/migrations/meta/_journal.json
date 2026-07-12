@@ -171,10 +171,10 @@
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 25,
       "version": "7",
-      "when": 1782991000000,
-      "tag": "0024_subscription_current_period_end",
+      "when": 1783832536018,
+      "tag": "0025_subscription_current_period_end",
       "breakpoints": true
     }
   ]

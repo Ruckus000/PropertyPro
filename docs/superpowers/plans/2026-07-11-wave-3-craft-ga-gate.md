@@ -36,12 +36,12 @@
 ### C1.1 Schema + webhook persistence
 
 **Files:**
-- Create: `packages/db/migrations/0024_subscription_current_period_end.sql`
+- Create: `packages/db/migrations/0025_subscription_current_period_end.sql` (renumbered from 0024 — prod's 0024 slot is #763's `0024_canonicalize_onboarding_checklist_trigger`, applied 2026-07-03)
 - Modify: `packages/db/src/schema/communities.ts`
 - Modify: `apps/web/src/lib/services/stripe-webhook-service.ts` — `updateCommunitySubscriptionFromStripe`
 - Modify: `apps/web/src/app/api/v1/webhooks/stripe/route.ts` — pass period end from `retrieveSubscription`
 
-- [x] **Step 1: Add migration**
+- [x] **Step 1: Add migration** (idx 25; idx 24 gap reserved for the already-applied #763 trigger migration)
 - [x] **Step 2: Extend webhook update helper** — accept optional `subscriptionCurrentPeriodEndAt: Date | null`
 - [x] **Step 3: On `customer.subscription.updated` / checkout complete** — set from `subscription.current_period_end`
 - [x] **Step 4: Run migration** — `pnpm --filter @propertypro/db db:migrate`
