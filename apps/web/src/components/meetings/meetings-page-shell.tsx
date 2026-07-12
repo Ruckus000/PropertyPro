@@ -4,6 +4,8 @@ import { startTransition, useDeferredValue, useState } from 'react';
 import Link from 'next/link';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
 import { Button, Card } from '@propertypro/ui';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
 import { MonthGrid } from '@/components/calendar/month-grid';
 import { DayDetailPanel } from '@/components/calendar/day-detail-panel';
 import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
@@ -74,11 +76,21 @@ export function MeetingsPageShell({
       </Card>
 
       {eventsQuery.isError ? (
-        <div className="rounded-[var(--radius-md)] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-4 py-3">
-          <p className="text-sm text-[var(--status-danger)]">
-            Failed to load calendar events. Refresh the page to try again.
-          </p>
-        </div>
+        <AlertBanner
+          status="danger"
+          variant="subtle"
+          title="Couldn't load calendar events"
+          description="Something went wrong while loading your meetings."
+          action={
+            <button
+              type="button"
+              onClick={() => eventsQuery.refetch()}
+              className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+            >
+              Try again
+            </button>
+          }
+        />
       ) : (
         <MonthGrid
           events={events}
@@ -91,7 +103,20 @@ export function MeetingsPageShell({
         />
       )}
 
-      {selectedDate ? (
+      {!eventsQuery.isError && !eventsQuery.isLoading && events.length === 0 ? (
+        <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
+          <Card.Body>
+            <EmptyState
+              preset="no_meetings"
+              action={
+                canWrite ? (
+                  <Button onClick={() => setShowCreateForm(true)}>Schedule Meeting</Button>
+                ) : undefined
+              }
+            />
+          </Card.Body>
+        </Card>
+      ) : selectedDate ? (
         <DayDetailPanel
           date={selectedDate}
           events={selectedDateEvents}
