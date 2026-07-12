@@ -71,7 +71,7 @@ pnpm --filter @propertypro/web exec vitest run __tests__/billing/stripe-webhook.
 
 ---
 
-## Slice C2 — Essentials craft pass (PRD §3.1)
+## Slice C2 — Essentials craft pass (PRD §3.1) — ✅ DONE (`e38419f8`…`f294d740`)
 
 Priority order per PRD: **Compliance → Documents → Meetings → Announcements → Residents → Settings/Billing → Help → Website**
 
@@ -81,38 +81,38 @@ For each route, ensure: loading skeleton, intentional empty state, error recover
 
 **Files:** `apps/web/src/app/(authenticated)/compliance/page.tsx`, related list components
 
-- [ ] Audit loading/empty/error — align with `DESIGN.md` EmptyState pattern
-- [ ] Add or extend unit test if page uses client fetch hooks
+- [x] Audit loading/empty/error — align with `DESIGN.md` EmptyState pattern — `e38419f8`
+- [x] Add or extend unit test if page uses client fetch hooks — `e38419f8`
 
 ### C2.2 Documents (`/documents`)
 
 **Files:** documents page + upload empty state
 
-- [ ] Empty: “No documents yet” + primary upload CTA (founding aha may have linked one — list still handles zero)
+- [x] Empty: “No documents yet” + primary upload CTA (founding aha may have linked one — list still handles zero) — `18c8c3fe`
 
 ### C2.3 Meetings (`/meetings`)
 
-- [ ] Skeleton table; empty “Schedule your first meeting” CTA
+- [x] Skeleton table; empty “Schedule your first meeting” CTA — `f9cf02b9`
 
 ### C2.4 Announcements (`/announcements`)
 
-- [ ] Empty state + error boundary with retry
+- [x] Empty state + error boundary with retry — `6df0bdbf`
 
 ### C2.5 Residents (`/residents`)
 
-- [ ] Empty + import CTA; error recovery on failed fetch
+- [x] Empty + import CTA; error recovery on failed fetch — `07789ba5`
 
 ### C2.6 Settings / Billing (`/settings/billing`)
 
-- [ ] Trialing/grace status card matches shell banners (no contradictory copy)
+- [x] Trialing/grace status card matches shell banners (no contradictory copy) — `e2123666`
 
 ### C2.7 Help (`/help` or contextual)
 
-- [ ] Community-scoped help loads; no 404 for Essentials slim nav users
+- [x] Community-scoped help loads; no 404 for Essentials slim nav users — `40b804a1`
 
 ### C2.8 Website (`/website` or site editor entry)
 
-- [ ] Empty draft vs published states distinct
+- [x] Empty draft vs published states distinct — `f294d740`
 
 ### Verify (per slice or batch)
 
@@ -124,16 +124,17 @@ pnpm test
 
 ---
 
-## Slice C3 — Mobile web polish (PRD §3.3)
+## Slice C3 — Mobile web polish (PRD §3.3) — ✅ DONE (`ebb2e861`)
 
 **Files:**
 - `apps/web/src/app/mobile/layout.tsx` — subscription banners (C1)
-- `apps/web/src/app/mobile/**/page.tsx` — audit “More” menu rows for dead links
-- `apps/web/e2e/mobile-billing-banner.spec.ts` (new, optional)
+- `apps/web/src/components/mobile/FeatureCard.tsx` — compliance card → tappable link (C3)
+- `apps/web/src/components/mobile/MobileProfileContent.tsx` — “More” menu dead-link a11y (C3)
+- Tests: `apps/web/__tests__/mobile/feature-card.test.tsx`, `mobile-profile-content.test.tsx`
 
-- [x] Subscription banners visible on mobile for billing admins
-- [ ] Founding aha CTA reachable from mobile dashboard (link to compliance / transparency flow)
-- [ ] No `href`-less “Coming soon” rows without `aria-disabled` + explanation
+- [x] Subscription banners visible on mobile for billing admins — C1 (`b16bb533`)
+- [x] Founding aha CTA reachable from mobile dashboard — mobile compliance score card is now a `Link` into `/communities/[id]/compliance` — `ebb2e861`
+- [x] No `href`-less “Coming soon” rows without `aria-disabled` + explanation — audit found no live dead rows; hardened the href-less fallback with `aria-disabled` + explanatory title — `ebb2e861`
 
 ### Verify
 
@@ -144,13 +145,13 @@ pnpm --filter @propertypro/web exec playwright test -c playwright.config.ts e2e/
 
 ---
 
-## Slice C4 — Apartment secondary path (PRD §3.4)
+## Slice C4 — Apartment secondary path (PRD §3.4) — ✅ DONE (`9e936eec`)
 
 **Files:**
-- `apps/web/src/app/(authenticated)/dashboard/page.tsx` — apartment branch
-- Apartment onboarding wizard (existing)
+- `apps/web/src/app/(authenticated)/dashboard/page.tsx` — apartment branch (redirect already shipped P2-36/38)
+- `apps/web/__tests__/app/dashboard/apartment-redirect.test.ts` — regression lock (C4)
 
-- [x] Post-provision apartment community lands on apartment dashboard (not condo compliance aha) — `dashboard/page.tsx` redirects to `/dashboard/apartment`
+- [x] Post-provision apartment community lands on apartment dashboard (not condo compliance aha) — `dashboard/page.tsx` redirects to `/dashboard/apartment` before the founding-aha branch; regression test added — `9e936eec`
 - [x] Marketing homepage remains board-first (no apartment hero regression — `marketing-smoke.spec.ts`)
 
 ### Verify
@@ -162,16 +163,18 @@ pnpm --filter @propertypro/web exec playwright test -c playwright.config.ts e2e/
 
 ---
 
-## Slice C5 — maxAdmins invite UX (PRD §3.5)
+## Slice C5 — maxAdmins invite UX (PRD §3.5) — ✅ DONE (API `b16bb533`, UI `24525af2`)
 
 **Files:**
-- Modify: `apps/web/src/lib/services/role-management-service.ts` — `assignPropertyManager`
-- Modify: Settings team UI (locate via `role-assignments` consumer)
-- Test: `apps/web/__tests__/services/role-management-max-admins.test.ts`
+- `apps/web/src/lib/services/role-management-service.ts` — `assignPropertyManager` (cap enforcement + `ADMIN_LIMIT_REACHED` code)
+- `apps/web/src/lib/api/errors/ForbiddenError.ts` — optional `code`/`details` so the reason survives the 403
+- `apps/web/src/hooks/use-role-management.ts` — raw-fetch `useAssignPropertyManager` → typed `AssignPropertyManagerError`
+- `apps/web/src/components/settings/RolesAccessClient.tsx` — Settings → Roles `MembersSection` upsell banner
+- Tests: `role-management-service.test.ts`, `roles-access-client.test.tsx`, `use-role-management.test.tsx`
 
-- [x] **Step 1: Count admin-tier roles** (`root_manager` + `property_manager`) before assign
-- [x] **Step 2: Throw `ForbiddenError`** with upsell copy when `count >= PLAN_FEATURES[planId].maxAdmins`
-- [ ] **Step 3: Surface error in UI** — “Essentials includes up to 3 administrators”
+- [x] **Step 1: Count admin-tier roles** (`root_manager` + `property_manager`) before assign — `b16bb533`
+- [x] **Step 2: Throw `ForbiddenError`** with upsell copy when `count >= PLAN_FEATURES[planId].maxAdmins` — tagged `ADMIN_LIMIT_REACHED` + `{ maxAdmins }` — `24525af2`
+- [x] **Step 3: Surface error in UI** — plan-driven “Your plan includes up to N administrators” + **View billing & upgrade** link (non-capacity failures keep a plain error) — `24525af2`
 
 ### Verify
 
@@ -189,17 +192,17 @@ pnpm --filter @propertypro/web exec vitest run __tests__/services/role-managemen
 
 ### GA checklist (track here)
 
-- [ ] Marketing ↔ Stripe ↔ emails consistent
+- [ ] Marketing ↔ Stripe ↔ emails consistent (in-app trialing/grace banners done C1; full signup→Stripe E2E deferred)
 - [x] Lifecycle matrix documented
 - [x] Mutation guard inventory reviewed
 - [ ] Signup→provision→aha E2E (seeded path; signup flow documented/deferred)
 - [x] Public host transparency loads
 - [x] Zero orphan registry links
-- [ ] Soft lock enforced + UI banners (C1 partial — trialing/grace/lock/past_due)
+- [x] Soft lock enforced + UI banners — shared `SubscriptionBillingBanners` (trialing/grace/lock/past_due) on desktop + mobile (C1 `b16bb533`); mobile compliance CTA parity (C3 `ebb2e861`)
 - [x] `/login` redirect
-- [ ] Slim nav + Essentials craft pass signed off
-- [ ] `maxAdmins: 3` verified (API done; UI open)
-- [ ] Tenant isolation CI green
+- [x] Slim nav + Essentials craft pass signed off — slim nav (Wave 2) + 8-route craft pass (C2 `e38419f8`…`f294d740`) + mobile polish (C3 `ebb2e861`)
+- [x] `maxAdmins: 3` verified — API enforcement (C1 `b16bb533`) + UI surfacing/upsell (C5 `24525af2`)
+- [ ] Tenant isolation CI green (verified on PR CI — `pnpm lint` DB guard + integration)
 - [x] Support runbook published
 
 ### Final verification gate
