@@ -169,6 +169,13 @@
       "when": 1782989861837,
       "tag": "0023_fix_wrong_guc_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782991000000,
+      "tag": "0024_subscription_current_period_end",
+      "breakpoints": true
     }
   ]
 }

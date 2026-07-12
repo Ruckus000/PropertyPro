@@ -41,18 +41,10 @@
 - Modify: `apps/web/src/lib/services/stripe-webhook-service.ts` — `updateCommunitySubscriptionFromStripe`
 - Modify: `apps/web/src/app/api/v1/webhooks/stripe/route.ts` — pass period end from `retrieveSubscription`
 
-- [ ] **Step 1: Add migration**
-
-```sql
-ALTER TABLE communities
-  ADD COLUMN IF NOT EXISTS subscription_current_period_end_at timestamptz;
-```
-
-- [ ] **Step 2: Extend webhook update helper** — accept optional `subscriptionCurrentPeriodEndAt: Date | null`
-
-- [ ] **Step 3: On `customer.subscription.updated` / checkout complete** — set from `subscription.current_period_end` (Unix seconds → Date)
-
-- [ ] **Step 4: Run migration** — `pnpm --filter @propertypro/db db:migrate`
+- [x] **Step 1: Add migration**
+- [x] **Step 2: Extend webhook update helper** — accept optional `subscriptionCurrentPeriodEndAt: Date | null`
+- [x] **Step 3: On `customer.subscription.updated` / checkout complete** — set from `subscription.current_period_end`
+- [x] **Step 4: Run migration** — `pnpm --filter @propertypro/db db:migrate`
 
 ### C1.2 Shell context + shared banners
 
@@ -65,11 +57,9 @@ ALTER TABLE communities
 - Modify: `apps/web/src/app/mobile/layout.tsx` — render shared banners for admins
 - Test: `apps/web/__tests__/billing/subscription-billing-banners.test.tsx`
 
-- [ ] **Step 1: Write failing tests** — trialing shows days left; grace/lock/past_due unchanged; demo suppresses paid trialing banner
-
-- [ ] **Step 2: Implement `TrialingBanner`** — `differenceInCalendarDays(periodEnd, now)` + link to `/settings/billing` or portal
-
-- [ ] **Step 3: Wire through layout props**
+- [x] **Step 1: Write failing tests** — trialing shows days left; grace/lock/past_due unchanged; demo suppresses paid trialing banner
+- [x] **Step 2: Implement `TrialingBanner`**
+- [x] **Step 3: Wire through layout props**
 
 ### Verify
 
@@ -141,7 +131,7 @@ pnpm test
 - `apps/web/src/app/mobile/**/page.tsx` — audit “More” menu rows for dead links
 - `apps/web/e2e/mobile-billing-banner.spec.ts` (new, optional)
 
-- [ ] Subscription banners visible on mobile for billing admins
+- [x] Subscription banners visible on mobile for billing admins
 - [ ] Founding aha CTA reachable from mobile dashboard (link to compliance / transparency flow)
 - [ ] No `href`-less “Coming soon” rows without `aria-disabled` + explanation
 
@@ -160,8 +150,8 @@ pnpm --filter @propertypro/web exec playwright test -c playwright.config.ts e2e/
 - `apps/web/src/app/(authenticated)/dashboard/page.tsx` — apartment branch
 - Apartment onboarding wizard (existing)
 
-- [ ] Post-provision apartment community lands on apartment dashboard (not condo compliance aha)
-- [ ] Marketing homepage remains board-first (no apartment hero regression — `marketing-smoke.spec.ts`)
+- [x] Post-provision apartment community lands on apartment dashboard (not condo compliance aha) — `dashboard/page.tsx` redirects to `/dashboard/apartment`
+- [x] Marketing homepage remains board-first (no apartment hero regression — `marketing-smoke.spec.ts`)
 
 ### Verify
 
@@ -179,10 +169,8 @@ pnpm --filter @propertypro/web exec playwright test -c playwright.config.ts e2e/
 - Modify: Settings team UI (locate via `role-assignments` consumer)
 - Test: `apps/web/__tests__/services/role-management-max-admins.test.ts`
 
-- [ ] **Step 1: Count admin-tier roles** (`root_manager` + `property_manager`) before assign
-
-- [ ] **Step 2: Throw `ForbiddenError`** with upsell copy when `count >= PLAN_FEATURES[planId].maxAdmins`
-
+- [x] **Step 1: Count admin-tier roles** (`root_manager` + `property_manager`) before assign
+- [x] **Step 2: Throw `ForbiddenError`** with upsell copy when `count >= PLAN_FEATURES[planId].maxAdmins`
 - [ ] **Step 3: Surface error in UI** — “Essentials includes up to 3 administrators”
 
 ### Verify
@@ -202,17 +190,17 @@ pnpm --filter @propertypro/web exec vitest run __tests__/services/role-managemen
 ### GA checklist (track here)
 
 - [ ] Marketing ↔ Stripe ↔ emails consistent
-- [ ] Lifecycle matrix documented
-- [ ] Mutation guard inventory reviewed
+- [x] Lifecycle matrix documented
+- [x] Mutation guard inventory reviewed
 - [ ] Signup→provision→aha E2E (seeded path; signup flow documented/deferred)
-- [ ] Public host transparency loads
-- [ ] Zero orphan registry links
-- [ ] Soft lock enforced + UI banners
-- [ ] `/login` redirect
+- [x] Public host transparency loads
+- [x] Zero orphan registry links
+- [ ] Soft lock enforced + UI banners (C1 partial — trialing/grace/lock/past_due)
+- [x] `/login` redirect
 - [ ] Slim nav + Essentials craft pass signed off
-- [ ] `maxAdmins: 3` verified
+- [ ] `maxAdmins: 3` verified (API done; UI open)
 - [ ] Tenant isolation CI green
-- [ ] Support runbook published
+- [x] Support runbook published
 
 ### Final verification gate
 

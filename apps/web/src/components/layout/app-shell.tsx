@@ -21,9 +21,6 @@ import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import {
-  ADMIN_ROLES,
-  isWithinPaidGrace,
-  paidGraceEndsAt,
   PM_SCOPE_DB_ROLES,
 } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
@@ -34,8 +31,8 @@ import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
 import { HelpDeepLinkHandler } from '@/components/help/help-deep-link-handler';
 import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
-import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
+import { SubscriptionBillingBanners } from '@/components/billing/subscription-billing-banners';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
@@ -89,57 +86,6 @@ export interface AppShellCommunity {
   plan: string | null;
 }
 
-const LOCKED_SUBSCRIPTION_STATUSES = new Set([
-  'canceled',
-  'expired',
-  'unpaid',
-  'incomplete_expired',
-]);
-
-function GraceBanner({
-  gracePeriodEndsAt,
-  billingPortalHref,
-}: {
-  gracePeriodEndsAt: Date;
-  billingPortalHref: string;
-}) {
-  return (
-    <AlertBanner
-      status="warning"
-      variant="filled"
-      title="Your subscription was canceled."
-      description={`Full access until ${gracePeriodEndsAt.toLocaleDateString()}. Update payment to keep access active.`}
-      action={
-        <a
-          href={billingPortalHref}
-          className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        >
-          Update Payment
-        </a>
-      }
-    />
-  );
-}
-
-function SoftLockBanner({ billingPortalHref }: { billingPortalHref: string }) {
-  return (
-    <AlertBanner
-      status="danger"
-      variant="filled"
-      title="Access paused."
-      description="Reactivate your subscription to restore administrative access."
-      action={
-        <a
-          href={billingPortalHref}
-          className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        >
-          Reactivate Subscription
-        </a>
-      }
-    />
-  );
-}
-
 interface AppShellProps {
   children: ReactNode;
   user: AppShellUser | null;
@@ -151,29 +97,16 @@ interface AppShellProps {
   resourceAccess: ResourceAccessMap | null;
   subscriptionStatus?: string | null;
   subscriptionCanceledAt?: Date | null;
+  subscriptionCurrentPeriodEndAt?: Date | null;
+  isDemo?: boolean;
   freeAccessExpiresAt?: Date | null;
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
-  const now = new Date();
-  const isInGrace =
-    subscriptionStatus === 'canceled' &&
-    subscriptionCanceledAt !== null &&
-    subscriptionCanceledAt !== undefined &&
-    isWithinPaidGrace(subscriptionCanceledAt, now);
-  const freeAccessActive =
-    freeAccessExpiresAt !== null &&
-    freeAccessExpiresAt !== undefined &&
-    freeAccessExpiresAt > now;
-  const isSoftLocked =
-    LOCKED_SUBSCRIPTION_STATUSES.has(subscriptionStatus ?? '') &&
-    !isInGrace &&
-    !freeAccessActive;
-  const billingPortalHref = `/billing/portal${community ? `?communityId=${community.id}` : ''}`;
 
   // Close mobile drawer on escape
   useEffect(() => {
@@ -299,37 +232,15 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
             <span className="text-sm font-medium text-content">{community.name}</span>
           </div>
         )}
-        {isInGrace && subscriptionCanceledAt && (
-          <div className="px-6 pt-4 lg:px-8">
-            <GraceBanner
-              gracePeriodEndsAt={paidGraceEndsAt(subscriptionCanceledAt)}
-              billingPortalHref={billingPortalHref}
-            />
-          </div>
-        )}
-        {isSoftLocked && (
-          <div className="px-6 pt-4 lg:px-8">
-            <SoftLockBanner billingPortalHref={billingPortalHref} />
-          </div>
-        )}
-        {subscriptionStatus === 'past_due' && role && (ADMIN_ROLES as readonly string[]).includes(role) && (
-          <div className="px-6 pt-4 lg:px-8">
-            <AlertBanner
-              status="warning"
-              variant="filled"
-              title="Your subscription payment failed."
-              description="Please update your payment method to avoid service interruption."
-              action={
-                <a
-                  href={`/billing/portal${community ? `?communityId=${community.id}` : ''}`}
-                  className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  Update Payment Method
-                </a>
-              }
-            />
-          </div>
-        )}
+        <SubscriptionBillingBanners
+          role={role}
+          communityId={community?.id ?? null}
+          subscriptionStatus={subscriptionStatus ?? null}
+          subscriptionCanceledAt={subscriptionCanceledAt ?? null}
+          subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt ?? null}
+          freeAccessExpiresAt={freeAccessExpiresAt ?? null}
+          isDemo={isDemo ?? false}
+        />
         {freeAccessExpiresAt && (
           <div className="px-6 pt-4 lg:px-8">
             <FreeAccessBanner expiresAt={freeAccessExpiresAt} />

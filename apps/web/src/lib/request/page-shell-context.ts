@@ -36,6 +36,7 @@ export interface PageShellContext {
   resourceAccess: ResourceAccessMap | null;
   subscriptionStatus: string | null;
   subscriptionCanceledAt: Date | null;
+  subscriptionCurrentPeriodEndAt: Date | null;
   freeAccessExpiresAt: Date | null;
   isDemo: boolean;
   trialEndsAt: Date | null;
@@ -52,6 +53,7 @@ const EMPTY_PAGE_SHELL_CONTEXT: PageShellContext = {
   resourceAccess: null,
   subscriptionStatus: null,
   subscriptionCanceledAt: null,
+  subscriptionCurrentPeriodEndAt: null,
   freeAccessExpiresAt: null,
   isDemo: false,
   trialEndsAt: null,
@@ -83,6 +85,7 @@ const getPageActiveCommunityShellContextCached = cache(
         resourceAccess: getMembershipResourceAccess(membership),
         subscriptionStatus: membership.subscriptionStatus,
         subscriptionCanceledAt: membership.subscriptionCanceledAt,
+        subscriptionCurrentPeriodEndAt: membership.subscriptionCurrentPeriodEndAt,
         freeAccessExpiresAt: membership.freeAccessExpiresAt,
         isDemo: membership.isDemo,
         trialEndsAt: membership.trialEndsAt,

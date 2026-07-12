@@ -6,20 +6,25 @@ const {
   createScopedClientMock,
   logAuditEventMock,
   scopedQueryWhereMock,
+  scopedSelectFromMock,
   scopedUpdateMock,
   userRolesTable,
+  communitiesTable,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   scopedQueryWhereMock: vi.fn(),
+  scopedSelectFromMock: vi.fn(),
   scopedUpdateMock: vi.fn().mockResolvedValue(undefined),
   userRolesTable: Symbol('user_roles'),
+  communitiesTable: Symbol('communities'),
 }));
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
   userRoles: userRolesTable,
+  communities: communitiesTable,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -36,8 +41,25 @@ import {
 function scopedClient() {
   return {
     queryWhere: scopedQueryWhereMock,
+    selectFrom: scopedSelectFromMock,
     update: scopedUpdateMock,
   };
+}
+
+function mockEssentialsAdminCapacity(currentAdmins: number) {
+  scopedSelectFromMock.mockImplementation((table: unknown) => {
+    if (table === communitiesTable) {
+      return Promise.resolve([{ subscriptionPlan: 'essentials' }]);
+    }
+    if (table === userRolesTable) {
+      return Promise.resolve(
+        Array.from({ length: currentAdmins }, (_, index) => ({
+          role: index === 0 ? 'root_manager' : 'property_manager',
+        })),
+      );
+    }
+    return Promise.resolve([]);
+  });
 }
 
 describe('role-management-service', () => {
@@ -55,6 +77,7 @@ describe('role-management-service', () => {
       scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: false },
       ]);
+      mockEssentialsAdminCapacity(1);
 
       const result = await assignPropertyManager(7, 'target-user', 'actor-user');
 
@@ -77,6 +100,7 @@ describe('role-management-service', () => {
       scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: true, designation: 'board_member' },
       ]);
+      mockEssentialsAdminCapacity(1);
 
       await assignPropertyManager(7, 'target-user', 'actor-user');
 
@@ -118,6 +142,18 @@ describe('role-management-service', () => {
       ).rejects.toBeInstanceOf(ValidationError);
       expect(scopedUpdateMock).not.toHaveBeenCalled();
       expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects assign when Essentials admin cap is reached', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([
+        { role: 'resident', isUnitOwner: false },
+      ]);
+      mockEssentialsAdminCapacity(3);
+
+      await expect(
+        assignPropertyManager(7, 'target-user', 'actor-user'),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+      expect(scopedUpdateMock).not.toHaveBeenCalled();
     });
   });
 

@@ -8,10 +8,11 @@
  * Phase 2c of the role-simplification program.
  */
 
-import { createScopedClient, logAuditEvent, userRoles } from '@propertypro/db';
+import { createScopedClient, logAuditEvent, userRoles, communities } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import type { CommunityType } from '@propertypro/shared';
+import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
 // Exported error class
@@ -57,9 +58,39 @@ async function roleOf(
   };
 }
 
-// ---------------------------------------------------------------------------
-// assignPropertyManager
-// ---------------------------------------------------------------------------
+const ADMIN_ASSIGNMENT_ROLES = ['root_manager', 'property_manager'] as const;
+
+async function countAdminRoles(scoped: ReturnType<typeof createScopedClient>): Promise<number> {
+  const rows = await scoped.selectFrom(userRoles, {}) as Array<Record<string, unknown>>;
+  return rows.filter((row) =>
+    ADMIN_ASSIGNMENT_ROLES.includes(row['role'] as typeof ADMIN_ASSIGNMENT_ROLES[number]),
+  ).length;
+}
+
+async function assertAdminCapacity(
+  scoped: ReturnType<typeof createScopedClient>,
+  communityId: number,
+): Promise<void> {
+  const communityRows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId)) as Array<Record<string, unknown>>;
+  const community = communityRows[0];
+  const planId = resolvePlanId(
+    typeof community?.['subscriptionPlan'] === 'string' ? community['subscriptionPlan'] : null,
+  );
+  if (!planId) {
+    return;
+  }
+  const maxAdmins = PLAN_FEATURES[planId].maxAdmins;
+  if (!Number.isFinite(maxAdmins)) {
+    return;
+  }
+  const currentCount = await countAdminRoles(scoped);
+  if (currentCount >= maxAdmins) {
+    throw new ForbiddenError(
+      `This plan includes up to ${maxAdmins} administrators. Upgrade your plan or remove an administrator before adding another.`,
+    );
+  }
+}
+
 
 /**
  * Promote `targetUserId` to `property_manager` within `communityId`.
@@ -87,6 +118,8 @@ export async function assignPropertyManager(
   if (current.role === 'property_manager') {
     return { assigned: true, alreadyAssigned: true };
   }
+
+  await assertAdminCapacity(scoped, communityId);
 
   await scoped.update(
     userRoles,

@@ -183,6 +183,7 @@ export async function updateCommunitySubscriptionFromStripe(input: {
   subscriptionStatus: string;
   subscriptionPlan: string | null;
   paymentFailedAt?: Date;
+  subscriptionCurrentPeriodEndAt?: Date | null;
 }): Promise<void> {
   const db = createUnscopedClient();
   const updates: Record<string, unknown> = {
@@ -192,6 +193,9 @@ export async function updateCommunitySubscriptionFromStripe(input: {
   };
   if (input.paymentFailedAt) {
     updates['paymentFailedAt'] = input.paymentFailedAt;
+  }
+  if (input.subscriptionCurrentPeriodEndAt !== undefined) {
+    updates['subscriptionCurrentPeriodEndAt'] = input.subscriptionCurrentPeriodEndAt;
   }
 
   await db
