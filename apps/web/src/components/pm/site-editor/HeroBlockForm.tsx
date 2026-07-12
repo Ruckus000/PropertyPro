@@ -1,5 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 import type { HeroBlockContent } from '@propertypro/shared';
 import { useUpdateHeroBlock } from '@/hooks/use-hero-block';
 
@@ -31,6 +32,7 @@ export function HeroBlockForm({ communityId, initial }: Props) {
     } as HeroBlockContent;
     try {
       await mutation.mutateAsync(payload);
+      toast.success('Welcome section saved.');
     } catch (err) {
       setServerError(err instanceof Error ? err.message : 'Save failed.');
     }

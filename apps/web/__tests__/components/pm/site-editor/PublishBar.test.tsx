@@ -47,6 +47,23 @@ describe('<PublishBar>', () => {
     await waitFor(() => expect(badge).toHaveTextContent(/all changes published/i));
   });
 
+  it('renders "Not published yet" when nothing has been published', async () => {
+    // No blocks at all → nothing live. Must NOT read "All changes published".
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url) => {
+      if (typeof url === 'string' && url.includes('/blocks')) {
+        return { ok: true, status: 200, json: async () => ({ data: { blocks: [] } }) } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/hero')) {
+        return { ok: true, status: 200, json: async () => ({ data: { hero: null } }) } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    });
+    render(wrap(<PublishBar communityId={42} />));
+    const badge = await screen.findByTestId('pending-changes-badge');
+    await waitFor(() => expect(badge).toHaveTextContent(/not published yet/i));
+    expect(badge).not.toHaveTextContent(/all changes published/i);
+  });
+
   it('renders a draft count when any block has isDraft=true', async () => {
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url) => {
       if (typeof url === 'string' && url.includes('/blocks')) {

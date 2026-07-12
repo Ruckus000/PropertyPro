@@ -22,6 +22,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { useHeroBlock } from '@/hooks/use-hero-block';
 import { usePublishSite, PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
@@ -74,6 +75,15 @@ export function PublishBar({ communityId }: Props) {
     return blocksQ.data.filter((b) => b.isDraft).length;
   }, [blocksQ.data]);
 
+  // Whether anything is actually live yet. Without this, a never-published or
+  // empty site (pendingCount === 0) would misleadingly read "All changes
+  // published". Only published (non-draft) rows count — correct under both the
+  // current straight-to-prod model and the future draft/publish model.
+  const hasPublished = useMemo(
+    () => blocksQ.data?.some((b) => !b.isDraft) ?? false,
+    [blocksQ.data],
+  );
+
   const isLoading = blocksQ.isLoading || publish.isPending;
 
   async function onPublish() {
@@ -83,6 +93,9 @@ export function PublishBar({ communityId }: Props) {
         expectedPublishedAt: deriveExpectedPublishedAt(blocksQ.data),
       });
       setOutcome(classifyOutcome(result));
+      if (result.published) {
+        toast.success(classifyOutcome(result));
+      }
     } catch (err) {
       if (err instanceof PublishConflictError) {
         setOutcome(`Conflict: ${err.message}`);
@@ -106,12 +119,16 @@ export function PublishBar({ communityId }: Props) {
             className={
               pendingCount > 0
                 ? 'inline-flex items-center rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent'
-                : 'inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs text-content-secondary'
+                : hasPublished
+                  ? 'inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs text-content-secondary'
+                  : 'inline-flex items-center rounded-full bg-status-warning-bg px-2 py-0.5 text-xs font-medium text-status-warning'
             }
           >
             {pendingCount > 0
               ? `${pendingCount} draft section${pendingCount === 1 ? '' : 's'}`
-              : 'All changes published'}
+              : hasPublished
+                ? 'All changes published'
+                : 'Not published yet'}
           </span>
         </div>
         <div className="flex items-center gap-3 min-w-0">

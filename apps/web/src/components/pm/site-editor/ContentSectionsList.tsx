@@ -95,7 +95,7 @@ function parseGalleryBlock(content: unknown): GalleryBlockContent | null {
 }
 
 export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }: Props) {
-  const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
+  const { data: blocks, isLoading, isError, error, refetch } = useContentBlocks(communityId);
   const reorder = useReorderBlocks(communityId);
   const [adding, setAdding] = useState<
     | 'text'
@@ -115,8 +115,15 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
   }
   if (isError) {
     return (
-      <div role="alert" className="rounded-sm border border-danger bg-danger/10 px-3 py-2 text-sm text-danger">
-        Failed to load content sections: {error instanceof Error ? error.message : 'unknown error'}
+      <div role="alert" className="rounded-sm border border-danger bg-danger/10 px-3 py-3 text-sm text-danger">
+        <p>Failed to load content sections: {error instanceof Error ? error.message : 'unknown error'}</p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="mt-2 inline-flex items-center rounded-md border border-danger px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        >
+          Try again
+        </button>
       </div>
     );
   }
