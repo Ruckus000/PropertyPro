@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { requestJson } from '@/lib/api/request-json';
 
 const ANNOUNCEMENTS_KEY = (communityId: number) =>
@@ -18,6 +19,7 @@ export function useDeleteAnnouncement(communityId: number) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ANNOUNCEMENTS_KEY(communityId) });
+      toast.success('Announcement deleted.');
     },
   });
 }
@@ -34,6 +36,7 @@ export function useRestoreAnnouncement(communityId: number) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ANNOUNCEMENTS_KEY(communityId) });
+      toast.success('Announcement restored.');
     },
   });
 }
