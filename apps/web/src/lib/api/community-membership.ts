@@ -14,6 +14,8 @@ export interface CommunityMembership {
   subscriptionPlan: string | null;
   subscriptionStatus: string | null;
   subscriptionCanceledAt: Date | null;
+  /** Stripe current_period_end — trial end or next renewal. */
+  subscriptionCurrentPeriodEndAt: Date | null;
   freeAccessExpiresAt: Date | null;
   timezone: string;
   /** True if this resident is a unit owner (only meaningful when role = 'resident'). */
@@ -121,6 +123,10 @@ export async function requireCommunityMembership(
     subscriptionCanceledAt:
       community['subscriptionCanceledAt'] instanceof Date
         ? community['subscriptionCanceledAt']
+        : null,
+    subscriptionCurrentPeriodEndAt:
+      community['subscriptionCurrentPeriodEndAt'] instanceof Date
+        ? community['subscriptionCurrentPeriodEndAt']
         : null,
     freeAccessExpiresAt:
       community['freeAccessExpiresAt'] instanceof Date ? community['freeAccessExpiresAt'] : null,

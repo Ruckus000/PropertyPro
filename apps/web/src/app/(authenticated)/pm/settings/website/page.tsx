@@ -8,6 +8,7 @@
  * PR #8 ships the full 5-tab editor + draft/preview/publish workflow.
  */
 import { redirect } from 'next/navigation';
+import { CheckCircle2, Clock } from 'lucide-react';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
@@ -72,6 +73,11 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   // published version.
   const reader = getPublicCommunityScopedReader(communityId);
   const blocks = await reader.listSiteBlocks({ includeDrafts: true });
+  // A site is "live" once it has at least one published (non-draft) block.
+  // Safe under both the current publish-straight-to-prod model and the future
+  // draft/publish model — only published rows count either way — and keeps this
+  // header pill in lockstep with the PublishBar badge (same signal).
+  const hasPublishedContent = blocks.some((b) => !b.isDraft);
   const heroRaw = blocks.find((b) => b.blockType === 'hero')?.content;
   let initial: HeroBlockContent | null = null;
   if (heroRaw != null) {
@@ -109,7 +115,20 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
       {showWizardBanner && <WizardEntryBanner communityId={communityId} />}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-content">Website</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold text-content">Website</h1>
+            {hasPublishedContent ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-status-success-bg px-2.5 py-1 text-xs font-medium text-status-success">
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                Live
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-status-warning-bg px-2.5 py-1 text-xs font-medium text-status-warning">
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                Not published yet
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-content-secondary">
             Customize the welcome panel that visitors see at{' '}
             <code className="rounded bg-surface-muted px-1 py-0.5 text-xs">

@@ -183,21 +183,33 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
   });
 
-  it('renders the loading indicator when data is loading', () => {
+  it('renders the loading skeleton when data is loading', () => {
     mockChecklistReturn = { data: undefined, isLoading: true, error: null };
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
     );
-    expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(
+      screen.getByRole('status', { name: /loading compliance dashboard/i }),
+    ).toBeInTheDocument();
   });
 
-  it('renders the error message when the checklist fails to load', () => {
+  it('renders an error banner with a retry action when the checklist fails to load', () => {
     mockChecklistReturn = { data: undefined, isLoading: false, error: new Error('boom') };
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={false} />,
     );
+    expect(screen.getByText("Couldn't load compliance records")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('renders an empty state with an upload CTA when there are no checklist items', () => {
+    mockChecklistReturn = { data: [], isLoading: false, error: null };
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
+    );
+    expect(screen.getByText('Your compliance tracker is ready')).toBeInTheDocument();
     expect(
-      screen.getByText("We couldn't load compliance records. Please try again."),
+      screen.getByRole('link', { name: 'Upload First Document' }),
     ).toBeInTheDocument();
   });
 

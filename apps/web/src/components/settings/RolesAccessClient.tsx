@@ -14,6 +14,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -34,6 +35,7 @@ import {
   useRevokePropertyManager,
   useTransferRoot,
   useSetDesignation,
+  ADMIN_LIMIT_REACHED,
   type RosterMember,
   type BoardDesignation,
 } from '@/hooks/use-role-management';
@@ -487,6 +489,42 @@ function MembersSection({
             </li>
           ))}
         </ul>
+      )}
+
+      {assign.isError && (
+        <div className="mt-4">
+          {assign.error?.code === ADMIN_LIMIT_REACHED ? (
+            // Plan admin cap hit — this is a billing decision, not a failure.
+            // Offer the upgrade path (or remove-an-admin) rather than a red error.
+            <AlertBanner
+              status="warning"
+              variant="subtle"
+              title={
+                assign.error.maxAdmins
+                  ? `Your plan includes up to ${assign.error.maxAdmins} administrators`
+                  : 'Administrator limit reached'
+              }
+              description="Remove a property manager above, or upgrade your plan to add another administrator."
+              action={
+                <Link
+                  href={`/settings/billing?communityId=${communityId}`}
+                  className="text-sm font-medium text-content-link underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  data-testid="admin-limit-upgrade-link"
+                >
+                  View billing &amp; upgrade
+                </Link>
+              }
+              data-testid="admin-limit-banner"
+            />
+          ) : (
+            <AlertBanner
+              status="danger"
+              variant="subtle"
+              title="We couldn’t promote that member. Please try again."
+              description={assign.error?.message ?? undefined}
+            />
+          )}
+        </div>
       )}
     </Section>
   );

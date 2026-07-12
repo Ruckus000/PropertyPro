@@ -268,6 +268,23 @@ async function handleCheckoutSessionCompleted(
   });
 }
 
+/** Resolve Stripe period end for trial/renewal banners (API version tolerant). */
+function resolveSubscriptionPeriodEndAt(subscription: Stripe.Subscription): Date | null {
+  if (typeof subscription.trial_end === 'number') {
+    return new Date(subscription.trial_end * 1000);
+  }
+  const itemPeriodEnd = subscription.items.data[0]?.current_period_end;
+  if (typeof itemPeriodEnd === 'number') {
+    return new Date(itemPeriodEnd * 1000);
+  }
+  const legacyPeriodEnd = (subscription as Stripe.Subscription & { current_period_end?: number })
+    .current_period_end;
+  if (typeof legacyPeriodEnd === 'number') {
+    return new Date(legacyPeriodEnd * 1000);
+  }
+  return null;
+}
+
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
   // Fetch fresh state [AGENTS #28]
   const fresh = await retrieveSubscription(subscription.id);
@@ -306,6 +323,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
       subscriptionStatus: fresh.status,
       subscriptionPlan: resolvedPlan,
       paymentFailedAt: fresh.status === 'past_due' ? now : undefined,
+      subscriptionCurrentPeriodEndAt: resolveSubscriptionPeriodEndAt(fresh),
     });
     return;
   }

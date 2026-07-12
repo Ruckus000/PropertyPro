@@ -183,6 +183,7 @@ export async function updateCommunitySubscriptionFromStripe(input: {
   subscriptionStatus: string;
   subscriptionPlan: string | null;
   paymentFailedAt?: Date;
+  subscriptionCurrentPeriodEndAt?: Date | null;
 }): Promise<void> {
   const db = createUnscopedClient();
   const updates: Record<string, unknown> = {
@@ -192,6 +193,22 @@ export async function updateCommunitySubscriptionFromStripe(input: {
   };
   if (input.paymentFailedAt) {
     updates['paymentFailedAt'] = input.paymentFailedAt;
+  } else if (
+    input.subscriptionStatus === 'active' ||
+    input.subscriptionStatus === 'trialing'
+  ) {
+    // Clear the payment-failure marker only when the subscription genuinely
+    // RECOVERS (active/trialing). The billing page's payment-failed block is
+    // gated on paymentFailedAt while the shell's past_due banner is gated on
+    // subscriptionStatus — without this, a subscription.updated → active event
+    // (which carries no paymentFailedAt) would let the page block outlive the
+    // shell banner. Deliberately NOT cleared on escalation to worse statuses
+    // (past_due, unpaid, incomplete_expired) — those are still-failed states
+    // that must keep the reminder ladder and payment-failed UI alive.
+    updates['paymentFailedAt'] = null;
+  }
+  if (input.subscriptionCurrentPeriodEndAt !== undefined) {
+    updates['subscriptionCurrentPeriodEndAt'] = input.subscriptionCurrentPeriodEndAt;
   }
 
   await db

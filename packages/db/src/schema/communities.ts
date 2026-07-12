@@ -58,6 +58,8 @@ export const communities = pgTable('communities', {
   nextReminderAt: timestamp('next_reminder_at', { withTimezone: true }),
   /** P2-34a: When the subscription was canceled (start of 30-day grace period). Null = not canceled. */
   subscriptionCanceledAt: timestamp('subscription_canceled_at', { withTimezone: true }),
+  /** Stripe subscription current_period_end — trial end or renewal date for in-app banners. */
+  subscriptionCurrentPeriodEndAt: timestamp('subscription_current_period_end_at', { withTimezone: true }),
   /** Admin metrics: why the community canceled (e.g. 'price', 'missing_feature', 'switching'). Validated at API boundary. */
   cancellationReason: text('cancellation_reason'),
   /** Admin metrics: free-text elaboration on the cancellation reason. */

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import * as Dialog from '@radix-ui/react-dialog';
+import { toast } from 'sonner';
 import { Badge, Button, Card } from '@propertypro/ui';
 import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -63,6 +64,7 @@ export function MeetingDetailModal({
     setErrorMessage(null);
     try {
       await deleteMutation.mutateAsync(meetingId);
+      toast.success('Meeting deleted.');
       onDeleted?.();
       onClose();
     } catch (error) {

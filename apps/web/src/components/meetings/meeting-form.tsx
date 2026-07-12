@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { Button, Card } from '@propertypro/ui';
 import { cn } from '@/lib/utils';
@@ -172,9 +173,11 @@ export function MeetingForm({
       if (isEditing && meetingId) {
         await updateMutation.mutateAsync({ id: meetingId, ...payload });
         setSuccessMessage('Meeting updated.');
+        toast.success('Meeting updated.');
       } else {
         await createMutation.mutateAsync(payload);
         setSuccessMessage('Meeting created.');
+        toast.success('Meeting created.');
       }
 
       window.setTimeout(() => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type DragEvent, type ChangeEvent } from 'react';
+import { toast } from 'sonner';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import {
@@ -111,6 +112,7 @@ export function DocumentUploadArea({
       setSelectedCategoryId(initialCategoryId ?? null);
       setCategoryError(null);
 
+      toast.success('Document uploaded.');
       onUploaded?.(result);
     } catch {
       // Error is handled by the hook

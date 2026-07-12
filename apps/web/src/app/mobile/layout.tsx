@@ -17,7 +17,9 @@ import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { MotionProvider } from '@/components/providers/motion-provider';
 import { AppQueryProvider } from '@/components/providers/query-provider';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
+import { SubscriptionBillingBannersMobile } from '@/components/billing/subscription-billing-banners';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
+import type { TransitionRole } from '@propertypro/shared';
 import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
@@ -44,6 +46,11 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
   let communityType: CommunityType = 'condo_718';
   let isDemo = false;
   let userId = '';
+  let role: TransitionRole | null = null;
+  let subscriptionStatus: string | null = null;
+  let subscriptionCanceledAt: Date | null = null;
+  let subscriptionCurrentPeriodEndAt: Date | null = null;
+  let freeAccessExpiresAt: Date | null = null;
 
   try {
     const user = await requireAuthenticatedUser();
@@ -52,6 +59,11 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
     communityType = membership.communityType;
     communityName = membership.communityName;
     isDemo = membership.isDemo;
+    role = membership.role;
+    subscriptionStatus = membership.subscriptionStatus;
+    subscriptionCanceledAt = membership.subscriptionCanceledAt;
+    subscriptionCurrentPeriodEndAt = membership.subscriptionCurrentPeriodEndAt;
+    freeAccessExpiresAt = membership.freeAccessExpiresAt;
   } catch {
     redirect('/auth/login');
   }
@@ -71,6 +83,15 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
       <div className="mobile-shell" style={cssVars as React.CSSProperties}>
         <AppQueryProvider>
           <MotionProvider>
+            <SubscriptionBillingBannersMobile
+              role={role}
+              communityId={communityId}
+              subscriptionStatus={subscriptionStatus}
+              subscriptionCanceledAt={subscriptionCanceledAt}
+              subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt}
+              freeAccessExpiresAt={freeAccessExpiresAt}
+              isDemo={isDemo}
+            />
             <main id="main-content" className="mobile-content">
               {children}
             </main>

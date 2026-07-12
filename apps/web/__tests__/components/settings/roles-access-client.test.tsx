@@ -32,6 +32,9 @@ vi.mock('@/hooks/use-role-management', () => ({
   useRevokePropertyManager: useRevokePropertyManagerMock,
   useTransferRoot: useTransferRootMock,
   useSetDesignation: useSetDesignationMock,
+  // The component branches on this constant; the real module exports it, so the
+  // mock must too (otherwise the code === ADMIN_LIMIT_REACHED check is dead).
+  ADMIN_LIMIT_REACHED: 'ADMIN_LIMIT_REACHED',
 }));
 
 import { RolesAccessClient } from '@/components/settings/RolesAccessClient';
@@ -176,5 +179,39 @@ describe('RolesAccessClient', () => {
     });
     renderClient('condo_718');
     expect(screen.getByText(/couldn’t load the community roster/i)).toBeInTheDocument();
+  });
+
+  it('surfaces an upgrade affordance when the plan admin cap is reached', () => {
+    useAssignPropertyManagerMock.mockReturnValue(
+      mutationStub({
+        isError: true,
+        error: {
+          code: 'ADMIN_LIMIT_REACHED',
+          maxAdmins: 3,
+          message: 'This plan includes up to 3 administrators.',
+        },
+      }),
+    );
+    renderClient('condo_718');
+
+    expect(screen.getByTestId('admin-limit-banner')).toBeInTheDocument();
+    expect(
+      screen.getByText(/plan includes up to 3 administrators/i),
+    ).toBeInTheDocument();
+    const link = screen.getByTestId('admin-limit-upgrade-link');
+    expect(link).toHaveAttribute('href', '/settings/billing?communityId=42');
+  });
+
+  it('shows a plain error (no upgrade link) for a non-capacity promote failure', () => {
+    useAssignPropertyManagerMock.mockReturnValue(
+      mutationStub({
+        isError: true,
+        error: { code: 'FORBIDDEN', message: 'Only the root manager can manage roles.' },
+      }),
+    );
+    renderClient('condo_718');
+
+    expect(screen.queryByTestId('admin-limit-banner')).not.toBeInTheDocument();
+    expect(screen.getByText(/couldn’t promote that member/i)).toBeInTheDocument();
   });
 });
