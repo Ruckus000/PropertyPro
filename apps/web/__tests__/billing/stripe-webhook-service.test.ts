@@ -344,7 +344,7 @@ describe('stripe-webhook-service', () => {
   });
 
   describe('updateCommunitySubscriptionFromStripe', () => {
-    it('clears paymentFailedAt when the subscription is no longer past_due', async () => {
+    it('clears paymentFailedAt when the subscription recovers to active', async () => {
       const db = setupDb();
 
       await updateCommunitySubscriptionFromStripe({
@@ -362,6 +362,21 @@ describe('stripe-webhook-service', () => {
         }),
       );
       expect(eqMock).toHaveBeenCalledWith(communitiesTable.id, 7);
+    });
+
+    it('preserves paymentFailedAt when the subscription escalates to unpaid', async () => {
+      // unpaid/incomplete_expired are worse-than-past_due states, not recovery —
+      // the payment-failure marker (and its reminder ladder + UI) must survive.
+      const db = setupDb();
+
+      await updateCommunitySubscriptionFromStripe({
+        communityId: 7,
+        subscriptionStatus: 'unpaid',
+        subscriptionPlan: 'essentials',
+      });
+
+      const payload = db.setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect('paymentFailedAt' in payload).toBe(false);
     });
 
     it('sets paymentFailedAt when a past_due update carries one', async () => {

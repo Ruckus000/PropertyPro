@@ -47,6 +47,10 @@ export function ComplianceCommandCenter({
   const storageKey = `compliance.audienceView.${communityId}`;
 
   const [view, setView] = useState<ViewMode>(() => {
+    // Guard SSR: this client component is server-rendered for the initial HTML,
+    // where `window` is undefined. Matches the codebase's typeof-window pattern
+    // (e.g. ViewToggle, query-provider) — reads persisted state only in the browser.
+    if (typeof window === 'undefined') return defaultView(designation);
     const stored = window.localStorage.getItem(storageKey);
     if (stored === 'cam' || stored === 'board') return stored;
     return defaultView(designation);
