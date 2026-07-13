@@ -261,6 +261,32 @@ describe('getPublicCommunityScopedReader', () => {
     ]);
   });
 
+  it('listSiteBlocks({ includeDrafts: true }) drops a tombstoned slot — the tombstone wins the merge over its published row, then is filtered (slice 8f)', async () => {
+    queueQueryResults([
+      { id: 1, blockType: 'text', blockOrder: 2, content: { v: 'published' }, isDraft: false },
+      { id: 2, blockType: 'tombstone', blockOrder: 2, content: {}, isDraft: true },
+      { id: 3, blockType: 'docs', blockOrder: 3, content: { v: 'kept' }, isDraft: false },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks({ includeDrafts: true });
+    // The staged deletion at order 2 renders as ABSENT in preview — neither
+    // the published row (shadowed) nor the tombstone (filtered) appears.
+    expect(results).toHaveLength(1);
+    expect(results[0]?.id).toBe(3);
+  });
+
+  it('listSiteBlocks({ includeDrafts: true, includeTombstones: true }) surfaces the tombstone for the editor', async () => {
+    queueQueryResults([
+      { id: 1, blockType: 'text', blockOrder: 2, content: { v: 'published' }, isDraft: false },
+      { id: 2, blockType: 'tombstone', blockOrder: 2, content: {}, isDraft: true, publishedAt: null },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.blockType).toBe('tombstone');
+    expect(results[0]?.isDraft).toBe(true);
+  });
+
   it('listSiteBlocks default returns rows unchanged when no draft option supplied', async () => {
     const publishedAt = new Date('2026-05-01T00:00:00Z');
     queueQueryResults([

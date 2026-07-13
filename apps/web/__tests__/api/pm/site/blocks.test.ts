@@ -8,6 +8,7 @@ import { AppError } from '@/lib/api/errors/AppError';
 
 const {
   upsertPublishedBlockMock,
+  removeSiteBlockMock,
   requireAuthMock,
   requireMembershipMock,
   resolveEffectiveCommunityIdMock,
@@ -15,6 +16,7 @@ const {
   listSiteBlocksMock,
 } = vi.hoisted(() => ({
   upsertPublishedBlockMock: vi.fn().mockResolvedValue(undefined),
+  removeSiteBlockMock: vi.fn().mockResolvedValue({ staged: true }),
   requireAuthMock: vi.fn(),
   requireMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
@@ -24,6 +26,7 @@ const {
 
 vi.mock('@/lib/services/site-blocks-service', () => ({
   upsertPublishedBlock: upsertPublishedBlockMock,
+  removeSiteBlock: removeSiteBlockMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -55,7 +58,7 @@ vi.mock('@/lib/db/public-community-reader', () => ({
 // NOTE: @propertypro/shared is NOT mocked — the real Zod schemas run so that
 // invalid-content tests genuinely fail at validation.
 
-import { GET, PATCH } from '@/app/api/v1/pm/site/blocks/route';
+import { DELETE, GET, PATCH } from '@/app/api/v1/pm/site/blocks/route';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,10 +112,10 @@ describe('GET /api/v1/pm/site/blocks', () => {
     });
   });
 
-  it('passes includeDrafts: true to the reader so the editor sees the merged view', async () => {
+  it('passes includeDrafts + includeTombstones to the reader so the editor sees the merged view incl. staged deletions', async () => {
     listSiteBlocksMock.mockResolvedValueOnce([]);
     await GET(makeGetRequest());
-    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true });
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true, includeTombstones: true });
   });
 
   it('200s and returns empty blocks array when no blocks exist', async () => {
@@ -475,5 +478,95 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     const res = await PATCH(makePatchRequest(VALID_TEXT_BODY));
     expect(res.status).toBe(403);
     expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/v1/pm/site/blocks (slice 8f)
+// ---------------------------------------------------------------------------
+
+describe('DELETE /api/v1/pm/site/blocks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthMock.mockResolvedValue('user-1');
+    requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
+    resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
+    requirePlanFeatureMock.mockResolvedValue(undefined);
+    removeSiteBlockMock.mockResolvedValue({ staged: true });
+  });
+
+  function makeDeleteRequest(body: unknown): NextRequest {
+    return new NextRequest('http://localhost/api/v1/pm/site/blocks', {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  it('200s and surfaces staged=true when the removal is staged as a tombstone', async () => {
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 3 }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { ok: true, staged: true } });
+    expect(removeSiteBlockMock).toHaveBeenCalledWith({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockOrder: 3,
+    });
+  });
+
+  it('200s and surfaces staged=false when a draft-only section is discarded immediately', async () => {
+    removeSiteBlockMock.mockResolvedValueOnce({ staged: false });
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 5 }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { ok: true, staged: false } });
+  });
+
+  it('does NOT enforce hasSitePolishBlocks — removing a Pro block is core editing', async () => {
+    await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 8 }));
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(42, 'hasSiteEditor');
+    expect(requirePlanFeatureMock).not.toHaveBeenCalledWith(42, 'hasSitePolishBlocks');
+  });
+
+  it('400s when blockOrder=1 (the hero cannot be deleted)', async () => {
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 1 }));
+    expect(res.status).toBe(400);
+    expect(removeSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s when blockOrder is missing', async () => {
+    const res = await DELETE(makeDeleteRequest({ communityId: 42 }));
+    expect(res.status).toBe(400);
+    expect(removeSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('404s when the service finds no section at the order', async () => {
+    removeSiteBlockMock.mockRejectedValueOnce(
+      new AppError('Content section not found for this community', 404, 'NOT_FOUND'),
+    );
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 9 }));
+    expect(res.status).toBe(404);
+  });
+
+  it('403s when caller does not hold a PM manager role', async () => {
+    requireMembershipMock.mockResolvedValueOnce({ role: 'owner', communityId: 42 });
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 3 }));
+    expect(res.status).toBe(403);
+    expect(removeSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('401s when unauthenticated', async () => {
+    requireAuthMock.mockRejectedValueOnce(new AppError('Unauthorized', 401, 'UNAUTHORIZED'));
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 3 }));
+    expect(res.status).toBe(401);
+    expect(removeSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('403s when plan does not include hasSiteEditor', async () => {
+    requirePlanFeatureMock.mockRejectedValueOnce(
+      new AppError('This feature requires a higher plan.', 403, 'PLAN_UPGRADE_REQUIRED'),
+    );
+    const res = await DELETE(makeDeleteRequest({ communityId: 42, blockOrder: 3 }));
+    expect(res.status).toBe(403);
+    expect(removeSiteBlockMock).not.toHaveBeenCalled();
   });
 });

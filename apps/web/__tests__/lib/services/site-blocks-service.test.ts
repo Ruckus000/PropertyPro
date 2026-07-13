@@ -140,7 +140,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
-import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks, reorderSiteBlock } from '@/lib/services/site-blocks-service';
+import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks, reorderSiteBlock, removeSiteBlock, discardSiteDrafts } from '@/lib/services/site-blocks-service';
 import { createScopedClient } from '@propertypro/db';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 
@@ -332,6 +332,7 @@ describe('publishCommunitySite', () => {
     setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]); // draft block_orders
     setUpdateReturnQueue([
       [{ id: 1 }, { id: 2 }, { id: 3 }], // retire
+      [], // tombstone sweep (slice 8f)
       [{ id: 10 }, { id: 11 }], // promote
     ]);
 
@@ -347,6 +348,7 @@ describe('publishCommunitySite', () => {
     setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]);
     setUpdateReturnQueue([
       [{ id: 1 }, { id: 2 }, { id: 3 }], // 3 retired
+      [], // tombstone sweep (slice 8f)
       [{ id: 10 }, { id: 11 }], // 2 promoted
     ]);
 
@@ -388,13 +390,14 @@ describe('publishCommunitySite', () => {
     setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]);
     setUpdateReturnQueue([
       [{ id: 100 }, { id: 101 }], // retired (slots 2,3)
+      [], // tombstone sweep (slice 8f)
       [{ id: 200 }, { id: 201 }], // promoted
     ]);
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
     const updateCalls = getUpdateCalls();
-    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls).toHaveLength(3);
     // First UPDATE = retire. Its predicate must include an inArray over the
     // draft block_orders [2, 3].
     const retireWhere = updateCalls[0].where;
@@ -403,14 +406,16 @@ describe('publishCommunitySite', () => {
       | undefined;
     expect(inArrayClause).toBeDefined();
     expect(inArrayClause!.__inArray.vals).toEqual([2, 3]);
-    // First UPDATE soft-deletes (sets deletedAt); second promotes (is_draft=false).
+    // First UPDATE soft-deletes (sets deletedAt); the tombstone sweep also
+    // soft-deletes (scoped to blockType=tombstone); the final UPDATE promotes.
     expect(updateCalls[0].set).toHaveProperty('deletedAt');
-    expect(updateCalls[1].set).toMatchObject({ isDraft: false });
+    expect(updateCalls[1].set).toHaveProperty('deletedAt');
+    expect(updateCalls[2].set).toMatchObject({ isDraft: false });
   });
 
   it('de-duplicates draft block_orders before building the retire predicate', async () => {
     setSelectQueue([[{ blockOrder: 4 }, { blockOrder: 4 }, { blockOrder: 7 }]]);
-    setUpdateReturnQueue([[{ id: 1 }], [{ id: 2 }]]);
+    setUpdateReturnQueue([[{ id: 1 }], [], [{ id: 2 }]]);
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
@@ -446,6 +451,7 @@ describe('publishCommunitySite', () => {
     ]);
     setUpdateReturnQueue([
       [{ id: 1 }], // retire
+      [], // tombstone sweep (slice 8f)
       [{ id: 10 }, { id: 11 }], // promote
     ]);
 
@@ -461,6 +467,7 @@ describe('publishCommunitySite', () => {
     setSelectQueue([[{ blockOrder: 2 }]]);
     setUpdateReturnQueue([
       [], // 0 retired
+      [], // tombstone sweep (slice 8f)
       [{ id: 10 }, { id: 11 }, { id: 12 }], // 3 promoted
     ]);
 
@@ -824,5 +831,273 @@ describe('reorderSiteBlock', () => {
     await expect(
       reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 20, direction: 'up' }),
     ).rejects.toBeInstanceOf(ValidationError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeSiteBlock — staged deletion via tombstone drafts (slice 8f)
+// ---------------------------------------------------------------------------
+
+describe('removeSiteBlock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSelectQueue([]);
+    setUpdateReturnQueue([]);
+    resetUpdateCalls();
+  });
+
+  it('published slot: clears any draft at the order and stages a tombstone draft (staged=true)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    // Slot 3 has a published row AND an edited draft.
+    setSelectQueue([[
+      { id: 30, blockType: 'text', isDraft: false },
+      { id: 31, blockType: 'text', isDraft: true },
+    ]]);
+
+    const result = await removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 3 });
+
+    expect(result).toEqual({ staged: true });
+    expect(scopedClient.softDelete).toHaveBeenCalledTimes(1);
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        communityId: 42,
+        blockType: 'tombstone',
+        blockOrder: 3,
+        isDraft: true,
+        publishedAt: null,
+        content: {},
+      }),
+    );
+  });
+
+  it('draft-only slot: soft-deletes the draft immediately, no tombstone (staged=false)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[{ id: 40, blockType: 'faq', isDraft: true }]]);
+
+    const result = await removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 8 });
+
+    expect(result).toEqual({ staged: false });
+    expect(scopedClient.softDelete).toHaveBeenCalledTimes(1);
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundError when the slot has no live rows', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[]]);
+
+    await expect(
+      removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 5 }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(scopedClient.softDelete).not.toHaveBeenCalled();
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundError when the slot holds only a tombstone draft (nothing visible)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[{ id: 50, blockType: 'tombstone', isDraft: true }]]);
+
+    await expect(
+      removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 6 }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('throws ValidationError for the hero slot (blockOrder < 2) without opening a transaction', async () => {
+    await expect(
+      removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 1 }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(createUnscopedClientMock).not.toHaveBeenCalled();
+  });
+
+  it('acquires the community FOR UPDATE lock (serializes with publish/reorder)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[{ id: 30, blockType: 'text', isDraft: false }]]);
+
+    await removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 3 });
+
+    const sqlArg = txExecuteMock.mock.calls[0][0];
+    const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
+    expect(sqlText).toContain('FOR UPDATE');
+  });
+
+  it('writes an inline audit row with action=delete and the staged flag', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[{ id: 30, blockType: 'meetings', isDraft: false }]]);
+
+    await removeSiteBlock({ communityId: 42, actorUserId: 'user-1', blockOrder: 4 });
+
+    expect(txAuditValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        communityId: 42,
+        userId: 'user-1',
+        action: 'delete',
+        resourceType: 'site_block',
+        resourceId: '4',
+        metadata: expect.objectContaining({ blockOrder: 4, staged: true, removedBlockType: 'meetings' }),
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// discardSiteDrafts — escape hatch for pending drafts (slice 8f)
+// ---------------------------------------------------------------------------
+
+describe('discardSiteDrafts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSelectQueue([]);
+    setUpdateReturnQueue([]);
+    resetUpdateCalls();
+  });
+
+  it('soft-deletes every live draft and returns the count', async () => {
+    setUpdateReturnQueue([[{ id: 1 }, { id: 2 }, { id: 3 }]]);
+
+    const result = await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
+
+    expect(result).toEqual({ discardedCount: 3 });
+    const updateCalls = getUpdateCalls();
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0].set).toHaveProperty('deletedAt');
+  });
+
+  it('acquires the community FOR UPDATE lock before discarding', async () => {
+    setUpdateReturnQueue([[{ id: 1 }]]);
+    await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
+    const sqlArg = txExecuteMock.mock.calls[0][0];
+    const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
+    expect(sqlText).toContain('FOR UPDATE');
+  });
+
+  it('returns 0 and writes no audit row when there is nothing to discard', async () => {
+    setUpdateReturnQueue([[]]);
+    const result = await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
+    expect(result).toEqual({ discardedCount: 0 });
+    expect(txAuditValuesMock).not.toHaveBeenCalled();
+  });
+
+  it('writes an inline audit row with action=delete, resourceType=community_site_drafts', async () => {
+    setUpdateReturnQueue([[{ id: 1 }, { id: 2 }]]);
+    await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
+    expect(txAuditValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        communityId: 42,
+        userId: 'user-1',
+        action: 'delete',
+        resourceType: 'community_site_drafts',
+        resourceId: '42',
+        metadata: { discardedCount: 2 },
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// publishCommunitySite × tombstones (slice 8f)
+// ---------------------------------------------------------------------------
+
+describe('publishCommunitySite with tombstone drafts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSelectQueue([]);
+    setUpdateReturnQueue([]);
+    resetUpdateCalls();
+  });
+
+  it('sweeps tombstone drafts between retire and promote so they are never published', async () => {
+    // One tombstone draft at slot 3 (staged deletion of a published block).
+    setSelectQueue([[{ blockOrder: 3 }]]);
+    setUpdateReturnQueue([
+      [{ id: 100 }], // retire: the published row at slot 3
+      [{ id: 101 }], // tombstone sweep: the tombstone draft itself
+      [], // promote: nothing left to promote
+    ]);
+
+    const result = await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    expect(result).toMatchObject({ published: true, retiredCount: 1, promotedCount: 0 });
+    const updateCalls = getUpdateCalls();
+    expect(updateCalls).toHaveLength(3);
+    // The sweep (second UPDATE) soft-deletes and its predicate pins
+    // blockType=tombstone + isDraft=true.
+    expect(updateCalls[1].set).toHaveProperty('deletedAt');
+    const sweepClauses = updateCalls[1].where?.__and ?? [];
+    const eqClauses = sweepClauses.filter((c) => '__eq' in c) as Array<{ __eq: { val: unknown } }>;
+    expect(eqClauses.some((c) => c.__eq.val === 'tombstone')).toBe(true);
+    expect(eqClauses.some((c) => c.__eq.val === true)).toBe(true);
+  });
+
+  it('a tombstone counts as a draft for the nothing-to-publish check (staged deletions are publishable)', async () => {
+    // draftOrders select returns the tombstone's order — publish proceeds
+    // rather than short-circuiting.
+    setSelectQueue([[{ blockOrder: 5 }]]);
+    setUpdateReturnQueue([[{ id: 1 }], [{ id: 2 }], []]);
+
+    const result = await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+    expect(result).toMatchObject({ published: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reorderSiteBlock × tombstones (slice 8f)
+// ---------------------------------------------------------------------------
+
+describe('reorderSiteBlock with tombstone drafts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setSelectQueue([]);
+    setUpdateReturnQueue([]);
+    resetUpdateCalls();
+  });
+
+  it('skips tombstoned slots in neighbor math — swap happens across the staged deletion', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    // Slot 3 is tombstoned (draft tombstone wins the merge over its published
+    // row). Visible blocks are A@2 and C@4 — moving A down must swap with C,
+    // not the tombstone.
+    setSelectQueue([[
+      { id: 12, blockType: 'text', blockOrder: 2, content: { body: 'A' }, isDraft: false },
+      { id: 13, blockType: 'image', blockOrder: 3, content: { imagePath: '42/c/b.webp', altText: 'B' }, isDraft: false },
+      { id: 90, blockType: 'tombstone', blockOrder: 3, content: {}, isDraft: true },
+      { id: 14, blockType: 'text', blockOrder: 4, content: { body: 'C' }, isDraft: false },
+    ]]);
+
+    const result = await reorderSiteBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockId: 12,
+      direction: 'down',
+    });
+
+    expect(result).toEqual({ movedBlockId: 12, fromOrder: 2, toOrder: 4 });
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 4, content: { body: 'A' } }),
+    );
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 2, content: { body: 'C' } }),
+    );
+  });
+
+  it('a tombstone itself is not reorderable (NotFound by id)', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([[
+      { id: 12, blockType: 'text', blockOrder: 2, content: { body: 'A' }, isDraft: false },
+      { id: 90, blockType: 'tombstone', blockOrder: 3, content: {}, isDraft: true },
+    ]]);
+
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 90, direction: 'up' }),
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

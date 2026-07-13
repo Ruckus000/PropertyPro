@@ -27,6 +27,29 @@ export const blocksListContract = defineRoute({
   permission: { resource: 'settings', action: 'read' },
 });
 
+export const blocksDeleteContract = defineRoute({
+  method: 'DELETE',
+  path: '/api/v1/pm/site/blocks',
+  request: {
+    body: z.object({
+      communityId: z.number().int().positive(),
+      // Content blocks only — order 1 is the hero, which every layout
+      // requires and which therefore cannot be deleted.
+      blockOrder: z.number().int().min(2).max(99),
+    }),
+  },
+  response: z.object({
+    ok: z.literal(true),
+    /**
+     * true — the section is published; removal was staged as a draft and
+     * takes effect on the next publish. false — the section was an
+     * unpublished draft and is gone immediately.
+     */
+    staged: z.boolean(),
+  }),
+  permission: { resource: 'settings', action: 'write' },
+});
+
 export const blocksUpsertContract = defineRoute({
   method: 'PATCH',
   path: '/api/v1/pm/site/blocks',

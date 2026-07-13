@@ -29,7 +29,7 @@ import { announcements, communities, documentCategories, documents, meetings, si
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
-import { BOARD_DESIGNATIONS, isBoardPresident } from '@propertypro/shared';
+import { BOARD_DESIGNATIONS, TOMBSTONE_BLOCK_TYPE, isBoardPresident } from '@propertypro/shared';
 
 export interface PublicAnnouncement {
   id: number;
@@ -110,7 +110,17 @@ export interface PublicScopedReader {
    * unique index permits one draft + one published per slot to coexist;
    * the dedupe runs in JS after fetch.
    */
-  listSiteBlocks(opts?: { includeDrafts?: boolean }): Promise<PublicSiteBlock[]>;
+  listSiteBlocks(opts?: {
+    includeDrafts?: boolean;
+    /**
+     * Slice 8f — include tombstone drafts (staged deletions) in the result.
+     * Only the PM editor's blocks GET sets this (the PublishBar counts them
+     * as pending changes); renderers leave it unset so a tombstoned slot is
+     * simply absent. No effect without includeDrafts (tombstones are never
+     * published).
+     */
+    includeTombstones?: boolean;
+  }): Promise<PublicSiteBlock[]>;
 
   /** PR #3 — published, non-expired announcements. */
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
@@ -163,6 +173,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
 
     async listSiteBlocks(opts) {
       const includeDrafts = opts?.includeDrafts === true;
+      const includeTombstones = opts?.includeTombstones === true;
       const conditions = [
         eq(siteBlocks.communityId, communityId),
         isNull(siteBlocks.deletedAt),
@@ -194,7 +205,15 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             byOrder.set(row.blockOrder, row);
           }
         }
+        // Tombstone drafts (staged deletions, slice 8f) participate in the
+        // merge — the tombstone WINS over the published row it shadows — and
+        // are then dropped, so a staged deletion renders as an absent
+        // section in preview. The PM editor's blocks GET opts in via
+        // includeTombstones so the pending-changes count covers staged
+        // deletions. Tombstones are never published, so the published-only
+        // branch below needs no filter.
         return [...byOrder.values()]
+          .filter((r) => includeTombstones || r.blockType !== TOMBSTONE_BLOCK_TYPE)
           .sort((a, b) => a.blockOrder - b.blockOrder)
           .map((r) => ({
             id: r.id,
