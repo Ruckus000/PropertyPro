@@ -162,8 +162,10 @@ describe('marketing landing page', () => {
     it('includes the pricing anchor id and signup CTA', () => {
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('id="pricing"');
-      // Essentials/Professional "Start free trial" CTAs still point to signup.
-      expect(html).toContain('href="/signup"');
+      // B5: Essentials/Professional "Start free trial" CTAs deep-link the chosen
+      // plan + community type into signup (form seeds planKey from ?plan=).
+      expect(html).toContain('href="/signup?plan=essentials&amp;communityType=condo_718"');
+      expect(html).toContain('href="/signup?plan=professional&amp;communityType=condo_718"');
     });
 
     it('points the Property Manager "Talk to sales" CTA at a mailto', () => {
