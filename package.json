@@ -43,6 +43,7 @@
     "guard:tenant-scope": "tsx scripts/verify-tenant-scope.ts",
     "guard:help-content": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-help-content.ts",
     "guard:legacy-roles": "tsx scripts/verify-legacy-roles.ts",
+    "guard:token-coverage": "tsx scripts/verify-token-coverage.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",
