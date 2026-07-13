@@ -51,6 +51,11 @@ When secrets are available, run once:
    external seams noted in `helpers/stripe-e2e.ts` — the Stripe embedded-checkout iframe selectors, and the Supabase
    admin `email_confirm` call — and adjust if Stripe's markup or the SDK shape differs.
 
+> **Prod safety:** the spec creates real auth users + communities, so it **fails fast** (`assertSafeStripeE2eTarget`)
+> if `NEXT_PUBLIC_SUPABASE_URL` points at a known-production project (`KNOWN_PROD_SUPABASE_REFS`, extendable via
+> `E2E_BLOCKED_SUPABASE_REFS`). Point Supabase/`DATABASE_URL` at a **dev/test** project — Stripe test mode alone does
+> not make a prod database safe.
+
 Manual fallback (no spec): visit `/signup` → complete details → email verify → Stripe Checkout (`4242…`) →
 `/signup/checkout/return` → confirm `trialing` in DB + dashboard access.
 
