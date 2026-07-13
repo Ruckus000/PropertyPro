@@ -47,9 +47,17 @@ describe("Token parity", () => {
   });
 
   it("uses two-space indentation matching UI tokens.css format", () => {
-    const lines = cssContent.split("\n").filter((l) => l.includes("--"));
+    // Scope to custom-property *declarations* only (lines that start with
+    // `--`, ignoring leading whitespace) — not every line that merely
+    // references a var(--x) in a property value. The generated file is now
+    // the full tokens.css (colors + spacing/radius/typography/motion/sizing/
+    // focus/elevation/nav + structural CSS), so nested rules (e.g. the
+    // responsive-density media query) legitimately indent one level deeper
+    // than top-level :root declarations — each nesting level still adds a
+    // full two-space increment.
+    const lines = cssContent.split("\n").filter((l) => l.trim().startsWith("--"));
     for (const line of lines) {
-      expect(line).toMatch(/^  --/);
+      expect(line).toMatch(/^(  )+--/);
     }
   });
 
