@@ -697,9 +697,17 @@ export async function reconcileLostCheckoutSignups(
     .from(pendingSignups)
     .where(
       and(
-        eq(pendingSignups.status, 'checkout_started'),
+        // `checkout_started` is the lost-webhook case. `payment_completed` /
+        // `provisioning` WITHOUT a job row can only arise if a prior reconcile
+        // marked the signup paid but then failed before/while inserting the job
+        // fence — recoverStuckProvisioningJobs INNER-JOINs jobs so it can't see
+        // those. Re-scanning them here makes the reconciler self-healing across
+        // its own partial failures (the steps below are all idempotent).
+        inArray(pendingSignups.status, ['checkout_started', 'payment_completed', 'provisioning']),
         lt(pendingSignups.updatedAt, staleBefore),
-        // The whole point: NO provisioning_jobs row exists (webhook never ran).
+        // The whole point: NO provisioning_jobs row exists (webhook never ran, or
+        // the fence insert failed). A signup that already has a job is handled by
+        // recoverStuckProvisioningJobs, so NOT EXISTS keeps the two passes disjoint.
         sql`NOT EXISTS (SELECT 1 FROM ${provisioningJobs} WHERE ${provisioningJobs.signupRequestId} = ${pendingSignups.signupRequestId})`,
       ),
     )

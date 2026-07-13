@@ -697,6 +697,14 @@ describe('reconcileLostCheckoutSignups', () => {
     expect(summary.scanned).toBe(1);
     expect(summary.recovered).toBe(1);
     expect(summary.failed).toBe(0);
+    // Self-heals its own partial failures: the scan covers not just
+    // checkout_started but also payment_completed/provisioning rows that lack a
+    // job (a prior reconcile that marked paid but failed to insert the fence).
+    expect(inArrayMock).toHaveBeenCalledWith(pendingSignupsTable.status, [
+      'checkout_started',
+      'payment_completed',
+      'provisioning',
+    ]);
     expect(markPendingSignupPaymentCompletedMock).toHaveBeenCalledWith({
       signupRequestId: 'req_lost',
       stripeCustomerId: 'cus_lost',
