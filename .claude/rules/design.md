@@ -29,6 +29,17 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 - Radius: sm(6px) inputs, md(10px) cards/buttons, lg(16px) modals, full badges/avatars.
 - Status: NEVER color alone. Always icon + text + color. Use `getStatusConfig()` from `docs/design-system/constants/status.ts`.
 
+## Token enforcement
+
+- `pnpm guard:design-tokens` bans raw hex, raw Tailwind palette classes
+  (`bg-blue-500`), arbitrary colors (`bg-[#…]`), arbitrary font sizes
+  (`text-[13px]`), and arbitrary pixel spacing (`p-[13px]`) in `apps/*/src`.
+- Existing violations are frozen in `scripts/design-token-baseline.json`
+  (shrink-only; per-file, per-rule ceilings). New code must be clean.
+- Escape hatch: `// design-tokens:exempt — <reason>` on the offending line
+  (email-template hex, chart/canvas internals).
+- Renamed/moved files must arrive clean or update the baseline in the same PR.
+
 ## Component Dimensions
 
 - Buttons: sm(36px) md(40px) lg(48px). Radius md. Variants: primary/secondary/ghost/danger/link.
