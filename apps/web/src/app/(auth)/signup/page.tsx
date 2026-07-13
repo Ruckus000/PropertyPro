@@ -26,6 +26,7 @@ function parseCommunityType(value: string | undefined): CommunityType {
 export default async function SignupPage({ searchParams }: SignupPageProps) {
   const params = await searchParams;
   const requestedType = pickFirst(params.communityType) ?? pickFirst(params.type);
+  const requestedPlan = pickFirst(params.plan);
   const signupRequestId = pickFirst(params.signupRequestId);
   const verified = pickFirst(params.verified) === '1';
 
@@ -64,6 +65,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
         <SignupForm
           initialCommunityType={parseCommunityType(requestedType)}
+          initialPlanId={requestedPlan}
           initialSignupRequestId={signupRequestId}
           verificationReturn={verified}
         />

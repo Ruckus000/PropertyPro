@@ -244,6 +244,8 @@ describe('stripe-webhook-service', () => {
           JSON.stringify({
             stripeCustomerId: 'cus_abc',
             stripeSubscriptionId: 'sub_abc',
+            subscriptionStatus: null,
+            subscriptionCurrentPeriodEndAt: null,
           }),
         ],
       },
@@ -252,6 +254,35 @@ describe('stripe-webhook-service', () => {
     expect(eqMock).toHaveBeenCalledWith(
       pendingSignupsTable.signupRequestId,
       'signup_abc',
+    );
+  });
+
+  it('merges trial status + period end into the payload when provided (A2)', async () => {
+    const db = setupDb();
+    const periodEnd = new Date('2026-08-12T00:00:00.000Z');
+
+    await markPendingSignupPaymentCompleted({
+      signupRequestId: 'signup_trial',
+      stripeCustomerId: 'cus_t',
+      stripeSubscriptionId: 'sub_t',
+      subscriptionStatus: 'trialing',
+      subscriptionCurrentPeriodEndAt: periodEnd,
+    });
+
+    expect(db.setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          values: [
+            pendingSignupsTable.payload,
+            JSON.stringify({
+              stripeCustomerId: 'cus_t',
+              stripeSubscriptionId: 'sub_t',
+              subscriptionStatus: 'trialing',
+              subscriptionCurrentPeriodEndAt: periodEnd.toISOString(),
+            }),
+          ],
+        }),
+      }),
     );
   });
 

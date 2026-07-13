@@ -25,7 +25,7 @@ const TIERS: Tier[] = [
       'Owner portal',
       'Compliance dashboard',
     ],
-    cta: { label: 'Start free trial', href: '/signup' },
+    cta: { label: 'Start free trial', href: '/signup?plan=essentials&communityType=condo_718' },
   },
   {
     name: 'Professional',
@@ -39,7 +39,7 @@ const TIERS: Tier[] = [
       'Maintenance & violations',
       'Advanced reporting',
     ],
-    cta: { label: 'Start free trial', href: '/signup' },
+    cta: { label: 'Start free trial', href: '/signup?plan=professional&communityType=condo_718' },
   },
   {
     name: 'Property Manager',

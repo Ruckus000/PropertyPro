@@ -185,6 +185,9 @@ describe('GET /api/v1/compliance', () => {
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(55, USER_ID);
     expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'compliance', 'read');
     expect(tryAutoCompleteMock).toHaveBeenCalledWith(55, USER_ID, 'review_compliance');
+    // B2: board/owner/tenant checklists carry `check_compliance` — fire it on read
+    // so those roles can actually reach 100%.
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(55, USER_ID, 'check_compliance');
   });
 
   it('does not fire auto-complete when there are zero rows', async () => {

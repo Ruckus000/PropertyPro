@@ -5,20 +5,26 @@ import { FoundingAhaPanel } from '@/components/onboarding/founding-aha-panel';
 
 const updateMutateMock = vi.fn();
 
+const { checklistMock } = vi.hoisted(() => ({ checklistMock: vi.fn() }));
+
 vi.mock('@/hooks/useComplianceChecklist', () => ({
-  useComplianceChecklist: () => ({
-    data: [
-      {
-        id: 1,
-        title: 'Governing Documents',
-        status: 'unsatisfied',
-        category: 'governing_documents',
-        templateKey: '718_governing_docs',
-      },
-    ],
-    isLoading: false,
-  }),
+  useComplianceChecklist: () => checklistMock(),
 }));
+
+const DEFAULT_CHECKLIST = {
+  data: [
+    {
+      id: 1,
+      title: 'Governing Documents',
+      status: 'unsatisfied',
+      category: 'governing_documents',
+      templateKey: '718_governing_docs',
+    },
+  ],
+  isLoading: false,
+  isError: false,
+  refetch: vi.fn(),
+};
 
 vi.mock('@/hooks/use-transparency', () => ({
   useTransparencySettings: () => ({
@@ -49,6 +55,21 @@ function renderPanel() {
 describe('FoundingAhaPanel', () => {
   beforeEach(() => {
     updateMutateMock.mockReset();
+    checklistMock.mockReset();
+    checklistMock.mockReturnValue(DEFAULT_CHECKLIST);
+  });
+
+  it('shows an error + retry (not a false "all on file") when the compliance query errors (B3)', () => {
+    const refetch = vi.fn();
+    checklistMock.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch });
+
+    renderPanel();
+
+    expect(screen.getByText(/couldn't load your compliance status/i)).toBeInTheDocument();
+    expect(screen.queryByText(/all applicable records are on file/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(refetch).toHaveBeenCalled();
   });
 
   it('renders readiness percentage and transparency CTA for founding admin', () => {

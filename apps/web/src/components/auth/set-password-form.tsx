@@ -90,12 +90,20 @@ export function SetPasswordForm({ token, communityId }: Props) {
   }
 
   if (success) {
+    // B1: send invited residents to their role-tailored welcome screen (not the
+    // bare dashboard). A full-page <a> load ensures the freshly-set Supabase auth
+    // cookies are present when the /welcome server component authenticates; the
+    // welcome page redirects to the dashboard once its checklist is bootstrapped,
+    // so this only shows on first arrival.
     return (
       <div className="text-center" data-testid="invite-success">
         <h2 className="mb-2 text-xl font-semibold text-content">Welcome aboard!</h2>
         <p className="mb-4 text-content-secondary">Your account is ready.</p>
-        <a href="/" className="inline-block text-content-link underline hover:text-content-link">
-          Go to dashboard
+        <a
+          href={`/welcome?communityId=${communityId}`}
+          className="inline-block text-content-link underline hover:text-content-link"
+        >
+          Continue
         </a>
       </div>
     );

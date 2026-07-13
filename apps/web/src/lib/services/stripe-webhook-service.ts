@@ -106,6 +106,11 @@ export async function markPendingSignupPaymentCompleted(input: {
   signupRequestId: string;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  // A2: carry the trial status + period end so stepCommunityCreated can stamp
+  // them onto the community — otherwise the trialing banner is absent during
+  // onboarding until a later subscription.updated event happens to arrive.
+  subscriptionStatus?: string | null;
+  subscriptionCurrentPeriodEndAt?: Date | null;
 }): Promise<void> {
   const db = createUnscopedClient();
   await db
@@ -115,6 +120,10 @@ export async function markPendingSignupPaymentCompleted(input: {
       payload: sql`coalesce(${pendingSignups.payload}, '{}'::jsonb) || ${JSON.stringify({
         stripeCustomerId: input.stripeCustomerId,
         stripeSubscriptionId: input.stripeSubscriptionId,
+        subscriptionStatus: input.subscriptionStatus ?? null,
+        subscriptionCurrentPeriodEndAt: input.subscriptionCurrentPeriodEndAt
+          ? input.subscriptionCurrentPeriodEndAt.toISOString()
+          : null,
       })}::jsonb`,
       updatedAt: new Date(),
     })

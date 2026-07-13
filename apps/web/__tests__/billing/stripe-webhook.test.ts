@@ -148,6 +148,18 @@ vi.mock('@/lib/services/stripe-service', () => ({
   retrieveSubscription: retrieveSubscriptionMock,
   retrieveInvoice: retrieveInvoiceMock,
   resolvePlanIdFromStripePriceId: resolvePlanIdFromStripePriceIdMock,
+  // Real-ish pure impl so subscription.updated/created period-end resolves.
+  resolveSubscriptionPeriodEndAt: (sub: {
+    trial_end?: number | null;
+    items?: { data?: Array<{ current_period_end?: number }> };
+    current_period_end?: number;
+  }) => {
+    if (typeof sub?.trial_end === 'number') return new Date(sub.trial_end * 1000);
+    const item = sub?.items?.data?.[0]?.current_period_end;
+    if (typeof item === 'number') return new Date(item * 1000);
+    if (typeof sub?.current_period_end === 'number') return new Date(sub.current_period_end * 1000);
+    return null;
+  },
 }));
 
 vi.mock('@/lib/services/payment-alert-scheduler', () => ({

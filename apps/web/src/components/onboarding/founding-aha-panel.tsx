@@ -19,7 +19,12 @@ export function FoundingAhaPanel({
   communitySlug,
   communityName,
 }: FoundingAhaPanelProps) {
-  const { data: items = [], isLoading: checklistLoading } = useComplianceChecklist(communityId);
+  const {
+    data: items = [],
+    isLoading: checklistLoading,
+    isError: checklistError,
+    refetch: refetchChecklist,
+  } = useComplianceChecklist(communityId);
   const summary = useMemo(() => buildComplianceSummary(items), [items]);
   const settingsQuery = useTransparencySettings(communityId);
   const updateSettings = useUpdateTransparencySettings(communityId);
@@ -70,17 +75,34 @@ export function FoundingAhaPanel({
             <Card.Subtitle>
               {checklistLoading
                 ? 'Loading checklist...'
-                : `${summary.readiness.satisfied} of ${summary.readiness.applicableTotal} records on file`}
+                : checklistError
+                  ? "Couldn't load compliance status"
+                  : `${summary.readiness.satisfied} of ${summary.readiness.applicableTotal} records on file`}
             </Card.Subtitle>
           </Card.Header>
           <Card.Body className="space-y-4">
             <div className="flex items-end gap-3">
               <p className="text-4xl font-semibold tabular-nums text-content">
-                {checklistLoading ? '—' : `${readinessPct}%`}
+                {checklistLoading || checklistError ? '—' : `${readinessPct}%`}
               </p>
               <p className="pb-1 text-sm text-content-secondary">ready</p>
             </div>
-            {firstActionItem ? (
+            {/* B3: error, action-needed, complete, and genuinely-empty are now
+                distinct — an errored query no longer masquerades as "all on file". */}
+            {checklistError ? (
+              <div className="space-y-2">
+                <p className="text-sm text-status-danger">
+                  We couldn&apos;t load your compliance status.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchChecklist()}
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-edge bg-surface-card px-4 text-sm font-medium text-content transition-colors hover:bg-surface-muted"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : firstActionItem ? (
               <div className="space-y-2">
                 <p className="text-sm text-content-secondary">
                   Next: link or upload <span className="font-medium text-content">{firstActionItem.title}</span>
@@ -92,8 +114,10 @@ export function FoundingAhaPanel({
                   Update compliance records
                 </Link>
               </div>
-            ) : (
+            ) : items.length > 0 ? (
               <p className="text-sm text-status-success">All applicable records are on file.</p>
+            ) : (
+              <p className="text-sm text-content-secondary">No compliance items yet.</p>
             )}
           </Card.Body>
         </Card>

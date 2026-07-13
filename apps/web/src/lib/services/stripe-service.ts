@@ -168,6 +168,29 @@ export async function retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice
   return getStripe().invoices.retrieve(invoiceId);
 }
 
+/**
+ * Resolve the Stripe period end for trial/renewal banners (Stripe API-version
+ * tolerant). Prefers `trial_end` (so a trialing sub reports its trial end),
+ * then the first item's `current_period_end`, then the legacy top-level field.
+ * Shared by the webhook, the trial-stamping step, and the lost-checkout
+ * reconciler so all three compute the same value.
+ */
+export function resolveSubscriptionPeriodEndAt(subscription: Stripe.Subscription): Date | null {
+  if (typeof subscription.trial_end === 'number') {
+    return new Date(subscription.trial_end * 1000);
+  }
+  const itemPeriodEnd = subscription.items?.data?.[0]?.current_period_end;
+  if (typeof itemPeriodEnd === 'number') {
+    return new Date(itemPeriodEnd * 1000);
+  }
+  const legacyPeriodEnd = (subscription as Stripe.Subscription & { current_period_end?: number })
+    .current_period_end;
+  if (typeof legacyPeriodEnd === 'number') {
+    return new Date(legacyPeriodEnd * 1000);
+  }
+  return null;
+}
+
 /** Create a Stripe Billing Portal session for the given customer. */
 export async function createBillingPortalSession(
   customerId: string,

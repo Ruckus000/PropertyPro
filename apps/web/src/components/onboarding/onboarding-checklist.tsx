@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
 import { ChecklistCelebration } from './checklist-celebration';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 type ChecklistAction = {
@@ -38,7 +40,7 @@ export function OnboardingChecklist({
   variant = 'primary',
 }: OnboardingChecklistProps) {
   const router = useRouter();
-  const { data: items, isLoading } = useOnboardingChecklist(communityId);
+  const { data: items, isLoading, isError, refetch } = useOnboardingChecklist(communityId);
   const storageKey = `onboarding-checklist-dismissed-${communityId}`;
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -50,7 +52,50 @@ export function OnboardingChecklist({
     try { localStorage.setItem(storageKey, 'true'); } catch { /* quota */ }
   };
 
-  if (isLoading || !items || items.length === 0) return null;
+  // B3: distinct loading / error affordances (previously all collapsed to null).
+  // A dismissed card stays hidden through loading/error — it only reappears for
+  // the celebration once data loads below.
+  if (isLoading) {
+    if (dismissed) return null;
+    return (
+      <section
+        role="status"
+        aria-label="Loading setup checklist"
+        className="rounded-md border border-edge bg-surface-card p-5 shadow-sm"
+      >
+        <Skeleton className="h-5 w-56" />
+        <Skeleton className="mt-3 h-2 w-full" />
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </section>
+    );
+  }
+
+  if (isError) {
+    if (dismissed) return null;
+    return (
+      <AlertBanner
+        status="danger"
+        variant="subtle"
+        title="We couldn't load your setup checklist"
+        description="Please try again."
+        action={
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            Retry
+          </button>
+        }
+      />
+    );
+  }
+
+  if (!items || items.length === 0) return null;
 
   const completedCount = items.filter((i) => i.completedAt != null).length;
   const totalCount = items.length;

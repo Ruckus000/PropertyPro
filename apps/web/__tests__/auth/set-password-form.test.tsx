@@ -3,8 +3,9 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { signInWithPasswordMock } = vi.hoisted(() => ({
+const { signInWithPasswordMock, acceptInvitationMutateAsyncMock } = vi.hoisted(() => ({
   signInWithPasswordMock: vi.fn(),
+  acceptInvitationMutateAsyncMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/supabase/client', () => ({
@@ -13,6 +14,10 @@ vi.mock('@propertypro/db/supabase/client', () => ({
       signInWithPassword: signInWithPasswordMock,
     },
   }),
+}));
+
+vi.mock('@/hooks/use-invitations', () => ({
+  useAcceptInvitation: () => ({ mutateAsync: acceptInvitationMutateAsyncMock }),
 }));
 
 import { SetPasswordForm } from '../../src/components/auth/set-password-form';
@@ -32,6 +37,28 @@ describe('SetPasswordForm', () => {
   beforeEach(() => {
     signInWithPasswordMock.mockReset();
     signInWithPasswordMock.mockResolvedValue({ error: null });
+    acceptInvitationMutateAsyncMock.mockReset();
+    acceptInvitationMutateAsyncMock.mockResolvedValue('invited@example.com');
+  });
+
+  it('routes to the community welcome screen on success (B1)', async () => {
+    render(
+      <Wrapper>
+        <SetPasswordForm token="invite-token" communityId={7} />
+      </Wrapper>,
+    );
+    const form = screen.getByTestId('set-password-form');
+
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Abcdefg1!' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'Abcdefg1!' } });
+
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    const success = await screen.findByTestId('invite-success');
+    const link = success.querySelector('a');
+    expect(link).toHaveAttribute('href', '/welcome?communityId=7');
   });
 
   it('clears stale password validation errors when the password changes', async () => {
