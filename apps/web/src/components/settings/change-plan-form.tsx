@@ -166,7 +166,7 @@ export function ChangePlanForm({
                   'relative rounded-[10px] border-2 p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ' +
                   (isSelected
                     ? 'border-[var(--interactive-primary)] bg-surface-card'
-                    : 'border-edge bg-surface-card hover:border-[var(--border-hover)]')
+                    : 'border-edge bg-surface-card hover:border-[var(--border-strong)]')
                 }
                 aria-pressed={isSelected}
               >

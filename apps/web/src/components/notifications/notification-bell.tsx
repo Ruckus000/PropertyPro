@@ -52,7 +52,7 @@ export function NotificationBell({ communityId }: NotificationBellProps) {
           <Bell size={18} aria-hidden="true" />
           {count > 0 && (
             <span
-              className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--status-error)] px-1 text-[10px] font-semibold leading-none text-white lg:right-0.5 lg:top-0.5"
+              className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--status-danger)] px-1 text-[10px] font-semibold leading-none text-white lg:right-0.5 lg:top-0.5"
               aria-live="polite"
               aria-atomic="true"
             >

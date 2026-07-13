@@ -56,7 +56,7 @@ export function PreviewPanel({
         {empty && (
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 px-8 py-10">
-              <p className="text-center text-sm text-[var(--text-muted)]">
+              <p className="text-center text-sm text-[var(--text-tertiary)]">
                 {emptyMessage}
               </p>
             </div>

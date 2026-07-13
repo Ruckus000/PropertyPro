@@ -118,7 +118,7 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
   const entrySection = (
     <div
       className="w-full max-w-md rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-card)] p-8 text-center"
-      style={{ boxShadow: 'var(--shadow-e0)' }}
+      style={{ boxShadow: 'var(--elevation-e0)' }}
     >
       {logoUrl ? (
         <img
@@ -181,10 +181,10 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
 
   if (isExpired) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-[var(--surface-base)] px-4">
+      <main className="min-h-screen flex items-center justify-center bg-[var(--surface-page)] px-4">
         <div
           className="w-full max-w-md rounded-[10px] border border-[var(--border-default)] bg-[var(--surface-card)] p-8 text-center"
-          style={{ boxShadow: 'var(--shadow-e0)' }}
+          style={{ boxShadow: 'var(--elevation-e0)' }}
         >
           {logoUrl && (
             <img
@@ -206,7 +206,7 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[var(--surface-base)] px-4">
+    <main className="min-h-screen flex items-center justify-center bg-[var(--surface-page)] px-4">
       {fontLinks.map((href) => (
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />

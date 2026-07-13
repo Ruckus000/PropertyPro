@@ -152,7 +152,7 @@ export function MeetingsPageShell({
                 Manage reminder timing in{' '}
                 <Link
                   href={`/settings?communityId=${communityId}`}
-                  className="font-medium text-[var(--interactive)] underline-offset-2 hover:underline"
+                  className="font-medium text-[var(--interactive-primary)] underline-offset-2 hover:underline"
                 >
                   Settings
                 </Link>

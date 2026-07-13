@@ -140,9 +140,9 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
           className="mb-4 rounded-[6px] border px-4 py-3 text-sm"
           role="alert"
           style={{
-            background: 'var(--surface-danger-subtle)',
-            borderColor: 'var(--border-danger)',
-            color: 'var(--text-danger)',
+            background: 'var(--status-danger-bg)',
+            borderColor: 'var(--status-danger-border)',
+            color: 'var(--status-danger)',
           }}
         >
           {serverError}
@@ -203,10 +203,10 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
               aria-describedby={fieldErrors.otp ? 'otp-error' : undefined}
-              className={cn(fieldErrors.otp && 'border-[color:var(--border-danger)]')}
+              className={cn(fieldErrors.otp && 'border-[color:var(--status-danger-border)]')}
             />
             {fieldErrors.otp && (
-              <p id="otp-error" className="text-xs" style={{ color: 'var(--text-danger)' }}>
+              <p id="otp-error" className="text-xs" style={{ color: 'var(--status-danger)' }}>
                 {fieldErrors.otp}
               </p>
             )}
@@ -241,7 +241,7 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
           {/* Full name */}
           <div className="space-y-2">
             <Label htmlFor="fullName" style={{ color: 'var(--text-primary)' }}>
-              Full name <span aria-hidden="true" style={{ color: 'var(--text-danger)' }}>*</span>
+              Full name <span aria-hidden="true" style={{ color: 'var(--status-danger)' }}>*</span>
             </Label>
             <Input
               id="fullName"
@@ -252,10 +252,10 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
               onChange={(e) => setFullName(e.target.value)}
               aria-required="true"
               aria-describedby={fieldErrors.fullName ? 'fullName-error' : undefined}
-              className={cn(fieldErrors.fullName && 'border-[color:var(--border-danger)]')}
+              className={cn(fieldErrors.fullName && 'border-[color:var(--status-danger-border)]')}
             />
             {fieldErrors.fullName && (
-              <p id="fullName-error" className="text-xs" style={{ color: 'var(--text-danger)' }}>
+              <p id="fullName-error" className="text-xs" style={{ color: 'var(--status-danger)' }}>
                 {fieldErrors.fullName}
               </p>
             )}
@@ -264,7 +264,7 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
           {/* Email */}
           <div className="space-y-2">
             <Label htmlFor="email" style={{ color: 'var(--text-primary)' }}>
-              Email address <span aria-hidden="true" style={{ color: 'var(--text-danger)' }}>*</span>
+              Email address <span aria-hidden="true" style={{ color: 'var(--status-danger)' }}>*</span>
             </Label>
             <Input
               id="email"
@@ -275,10 +275,10 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
               onChange={(e) => setEmail(e.target.value)}
               aria-required="true"
               aria-describedby={fieldErrors.email ? 'email-error' : undefined}
-              className={cn(fieldErrors.email && 'border-[color:var(--border-danger)]')}
+              className={cn(fieldErrors.email && 'border-[color:var(--status-danger-border)]')}
             />
             {fieldErrors.email && (
-              <p id="email-error" className="text-xs" style={{ color: 'var(--text-danger)' }}>
+              <p id="email-error" className="text-xs" style={{ color: 'var(--status-danger)' }}>
                 {fieldErrors.email}
               </p>
             )}
@@ -300,10 +300,10 @@ export function RequestAccessForm({ communityId, communitySlug, communityName, r
               value={unitNumber}
               onChange={(e) => setUnitNumber(e.target.value)}
               aria-describedby={fieldErrors.unitNumber ? 'unitNumber-error' : undefined}
-              className={cn(fieldErrors.unitNumber && 'border-[color:var(--border-danger)]')}
+              className={cn(fieldErrors.unitNumber && 'border-[color:var(--status-danger-border)]')}
             />
             {fieldErrors.unitNumber && (
-              <p id="unitNumber-error" className="text-xs" style={{ color: 'var(--text-danger)' }}>
+              <p id="unitNumber-error" className="text-xs" style={{ color: 'var(--status-danger)' }}>
                 {fieldErrors.unitNumber}
               </p>
             )}

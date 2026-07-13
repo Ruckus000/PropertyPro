@@ -142,13 +142,13 @@ export function ComplianceCommandCenter({
             type="button"
             aria-pressed={view === 'cam'}
             onClick={() => setView('cam')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'cam' ? 'bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'cam' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >CAM view</button>
           <button
             type="button"
             aria-pressed={view === 'board'}
             onClick={() => setView('board')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'board' ? 'bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'board' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >Board view</button>
         </div>
       )}
