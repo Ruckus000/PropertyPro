@@ -179,7 +179,7 @@ export function resolveSubscriptionPeriodEndAt(subscription: Stripe.Subscription
   if (typeof subscription.trial_end === 'number') {
     return new Date(subscription.trial_end * 1000);
   }
-  const itemPeriodEnd = subscription.items.data[0]?.current_period_end;
+  const itemPeriodEnd = subscription.items?.data?.[0]?.current_period_end;
   if (typeof itemPeriodEnd === 'number') {
     return new Date(itemPeriodEnd * 1000);
   }
