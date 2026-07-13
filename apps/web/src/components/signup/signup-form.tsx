@@ -37,6 +37,8 @@ function maskEmail(email: string): string {
 
 interface SignupFormProps {
   initialCommunityType?: CommunityType;
+  /** Plan pre-selected via a pricing-page deep link (`?plan=`); validated below. */
+  initialPlanId?: string;
   initialSignupRequestId?: string;
   verificationReturn?: boolean;
 }
@@ -49,14 +51,19 @@ type VerificationState =
 
 export function SignupForm({
   initialCommunityType = 'condo_718',
+  initialPlanId,
   initialSignupRequestId,
   verificationReturn = false,
 }: SignupFormProps) {
   const router = useRouter();
   const [communityType, setCommunityType] = useState<CommunityType>(initialCommunityType);
-  const [planKey, setPlanKey] = useState<SignupPlanId>(
-    getSignupPlansForCommunityType(initialCommunityType)[0]!.id,
-  );
+  const [planKey, setPlanKey] = useState<SignupPlanId>(() => {
+    const available = getSignupPlansForCommunityType(initialCommunityType);
+    // Honor a valid ?plan= deep link; the effect below self-corrects if the
+    // community type later changes to one this plan isn't offered for.
+    const preselected = available.find((p) => p.id === initialPlanId);
+    return preselected?.id ?? available[0]!.id;
+  });
   const [signupRequestId, setSignupRequestId] = useState<string | undefined>(
     initialSignupRequestId,
   );
@@ -291,6 +298,12 @@ export function SignupForm({
         </div>
       ) : null}
 
+      {/* B4 (regroup increment): the previously-ungrouped 12-field form is now
+          chunked into three labeled sections so it scans as progressive steps.
+          The full Next/Back step wizard is a follow-up. */}
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-content-tertiary">
+        1 · Your account
+      </h2>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
@@ -321,6 +334,13 @@ export function SignupForm({
             onChange={(event) => {
               clearFieldFeedback('email');
               setEmail(event.target.value);
+              // A6: if the user returned via "Wrong email? Go back" and is now
+              // editing the email, don't reuse the original signupRequestId — the
+              // server rejects a reused id with a changed email (hijack guard).
+              // Dropping it makes the corrected email start a fresh signup.
+              if (initialSignupRequestId && signupRequestId === initialSignupRequestId) {
+                setSignupRequestId(undefined);
+              }
             }}
             className={`w-full rounded-md border px-3 py-2 text-sm ${fieldErrors.email ? 'border-status-danger' : 'border-edge-strong'}`}
             required
@@ -358,6 +378,10 @@ export function SignupForm({
           hideOnEmpty
         />
       </div>
+
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-content-tertiary">
+        2 · Your community
+      </h2>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
@@ -518,6 +542,10 @@ export function SignupForm({
         }}
         disabled={isSubmitting}
       />
+
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-content-tertiary">
+        3 · Your plan
+      </h2>
 
       <div>
         <h2 className="mb-2 text-sm font-medium text-content-secondary">Plan Selection</h2>

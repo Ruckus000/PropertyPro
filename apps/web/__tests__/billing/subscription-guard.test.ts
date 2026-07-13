@@ -115,6 +115,35 @@ describe('requireActiveSubscriptionForMutation', () => {
   });
 
   // -------------------------------------------------------------------------
+  // A3 — resident self-service carve-out
+  //
+  // Dues/rent collection flows through the community's Stripe Connect account,
+  // unrelated to the community's own PropertyPro subscription. A soft-lock of the
+  // platform subscription must NOT stop residents from paying what they owe.
+  // -------------------------------------------------------------------------
+
+  describe('resident self-service carve-out (A3)', () => {
+    it('does not throw for a soft-locked community when allowResidentSelfService is true', async () => {
+      setupDb('expired');
+      await expect(
+        requireActiveSubscriptionForMutation(30, { allowResidentSelfService: true }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('still throws for a soft-locked community when allowResidentSelfService is false', async () => {
+      setupDb('expired');
+      await expect(
+        requireActiveSubscriptionForMutation(31, { allowResidentSelfService: false }),
+      ).rejects.toThrow(AppError);
+    });
+
+    it('still throws for a soft-locked community when no options are passed (admin path)', async () => {
+      setupDb('canceled');
+      await expect(requireActiveSubscriptionForMutation(32)).rejects.toThrow(AppError);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Blocked statuses — must throw AppError(403, 'SUBSCRIPTION_REQUIRED')
   // -------------------------------------------------------------------------
 

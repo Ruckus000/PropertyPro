@@ -299,7 +299,10 @@ describe('WS66 finance mutation routes', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
+    // Admin-initiated charge: full guard applies (A3 carve-out is off).
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId, {
+      allowResidentSelfService: false,
+    });
     expect(createPaymentIntentForLineItemMock).toHaveBeenCalledWith(
       communityId,
       expect.objectContaining({
@@ -326,7 +329,11 @@ describe('WS66 finance mutation routes', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
+    // Resident paying their own unit: A3 carve-out lets the payment through even
+    // if the community's platform subscription is soft-locked.
+    expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId, {
+      allowResidentSelfService: true,
+    });
     expect(listActorUnitIdsForFinanceMock).toHaveBeenCalledWith(communityId, 'user-finance-1');
     expect(createPaymentIntentForLineItemMock).toHaveBeenCalledWith(
       communityId,

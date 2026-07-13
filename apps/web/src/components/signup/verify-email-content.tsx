@@ -10,6 +10,9 @@ import {
 
 const POLL_INTERVAL_MS = 5000;
 const DEFAULT_COOLDOWN_SECONDS = 120;
+// B8: stop the auto-poll after ~5 minutes so it can't run unbounded; the user
+// can still resend / continue manually from the surfaced hint.
+const MAX_POLLS = 60;
 
 export function VerifyEmailContent() {
   const searchParams = useSearchParams();
@@ -23,8 +26,10 @@ export function VerifyEmailContent() {
   const [showResent, setShowResent] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [verified, setVerified] = useState(false);
+  const [pollingStopped, setPollingStopped] = useState(false);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollCountRef = useRef(0);
 
   // TanStack's mutateAsync is referentially stable, so depend on it directly
   // in the effect/callback dep arrays (no render-phase ref writes).
@@ -56,9 +61,20 @@ export function VerifyEmailContent() {
     }
 
     // Check immediately on mount (in case already verified)
+    pollCountRef.current = 0;
+    setPollingStopped(false);
     checkVerification();
 
-    pollRef.current = setInterval(checkVerification, POLL_INTERVAL_MS);
+    pollRef.current = setInterval(() => {
+      pollCountRef.current += 1;
+      if (pollCountRef.current >= MAX_POLLS) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setPollingStopped(true);
+        return;
+      }
+      checkVerification();
+    }, POLL_INTERVAL_MS);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -220,6 +236,17 @@ export function VerifyEmailContent() {
           )}
           Click the link to verify your email, then you'll continue to checkout.
         </p>
+
+        {/* B8: surfaced once auto-polling stops (~5 min) so the page doesn't
+            appear to hang silently. */}
+        {pollingStopped && !verified && (
+          <p
+            role="status"
+            className="mt-4 rounded-md bg-status-warning-subtle px-4 py-2 text-center text-sm text-status-warning"
+          >
+            Still waiting? Check your spam folder, or resend the verification email below.
+          </p>
+        )}
 
         {/* Resend button */}
         <div className="mt-6 flex flex-col items-center">

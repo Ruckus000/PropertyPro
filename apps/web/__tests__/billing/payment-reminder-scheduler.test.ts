@@ -131,7 +131,7 @@ describe('processPaymentReminders', () => {
 
     const summary = await processPaymentReminders(new Date());
 
-    expect(summary).toEqual({ communitiesScanned: 0, emailsSent: 0, errors: 0 });
+    expect(summary).toEqual({ communitiesScanned: 0, emailsSent: 0, emailsFailed: 0, errors: 0 });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -431,6 +431,105 @@ describe('processPaymentReminders', () => {
     expect(summary.communitiesScanned).toBe(0);
     expect(summary.emailsSent).toBe(0);
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: A5 — advance/clear schedule only on confirmed send
+// ---------------------------------------------------------------------------
+
+describe('processPaymentReminders — send-failure retry (A5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (sendEmail as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  it('preserves nextReminderAt when the final lock-warning send fails (retry next run)', async () => {
+    const community = {
+      id: 20,
+      name: 'Retry HOA',
+      communityType: 'hoa_720',
+      paymentFailedAt: daysAgo(30),
+      subscriptionCanceledAt: daysAgo(5),
+    };
+    const recipients = [{ email: 'p@hoa.com', fullName: 'P' }];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+    (sendEmail as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('resend down'));
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(0);
+    expect(summary.emailsFailed).toBe(1);
+    // Schedule must NOT be cleared — the warning would otherwise be lost forever.
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not advance the reminder schedule when the Day-3 send fails', async () => {
+    const community = {
+      id: 21,
+      name: 'Retry Villas',
+      communityType: 'apartment',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+    const recipients = [{ email: 'a@v.com', fullName: 'A' }];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+    (sendEmail as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('resend down'));
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(0);
+    expect(summary.emailsFailed).toBe(1);
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it('counts sent and failed separately on partial failure and still advances the schedule', async () => {
+    const community = {
+      id: 22,
+      name: 'Partial',
+      communityType: 'apartment',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+    const recipients = [
+      { email: 'ok@x.com', fullName: 'OK' },
+      { email: 'bad@x.com', fullName: 'Bad' },
+    ];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+    (sendEmail as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('one bounced'));
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(1);
+    expect(summary.emailsFailed).toBe(1);
+    // At least one delivered → schedule advances to Day 7.
+    expect(mockDbSet).toHaveBeenCalledWith(
+      expect.objectContaining({ nextReminderAt: expect.anything() }),
+    );
+  });
+
+  it('clears the schedule for a canceled community with no admin recipients (nothing to retry)', async () => {
+    const community = {
+      id: 23,
+      name: 'No Admins HOA',
+      communityType: 'hoa_720',
+      paymentFailedAt: daysAgo(30),
+      subscriptionCanceledAt: daysAgo(5),
+    };
+    const db = buildMockDb([community], []); // no recipients
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(summary.emailsSent).toBe(0);
+    // No one to notify → clear so the cron doesn't scan this row forever.
+    expect(mockDbSet).toHaveBeenCalledWith(expect.objectContaining({ nextReminderAt: null }));
   });
 });
 

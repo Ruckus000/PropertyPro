@@ -3,11 +3,13 @@ import { NextRequest } from 'next/server';
 
 const {
   recoverStuckProvisioningJobsMock,
+  reconcileLostCheckoutSignupsMock,
   captureExceptionMock,
   captureMessageMock,
   withScopeMock,
 } = vi.hoisted(() => ({
   recoverStuckProvisioningJobsMock: vi.fn(),
+  reconcileLostCheckoutSignupsMock: vi.fn(),
   captureExceptionMock: vi.fn(),
   captureMessageMock: vi.fn(),
   withScopeMock: vi.fn((cb: (scope: { setTag: ReturnType<typeof vi.fn>; setUser: ReturnType<typeof vi.fn> }) => void) =>
@@ -23,6 +25,7 @@ vi.mock('@sentry/nextjs', () => ({
 
 vi.mock('@/lib/services/provisioning-service', () => ({
   recoverStuckProvisioningJobs: recoverStuckProvisioningJobsMock,
+  reconcileLostCheckoutSignups: reconcileLostCheckoutSignupsMock,
 }));
 
 import { GET, POST } from '../../src/app/api/v1/internal/provisioning-watchdog/route';
@@ -41,6 +44,13 @@ describe('provisioning watchdog cron route', () => {
       failed: 0,
       failures: [],
       orphans: [],
+    });
+    reconcileLostCheckoutSignupsMock.mockResolvedValue({
+      scanned: 0,
+      recovered: 0,
+      skippedNotComplete: 0,
+      failed: 0,
+      failures: [],
     });
   });
 
@@ -66,9 +76,17 @@ describe('provisioning watchdog cron route', () => {
         failed: 0,
         failures: [],
         orphans: [],
+        reconcile: {
+          scanned: 0,
+          recovered: 0,
+          skippedNotComplete: 0,
+          failed: 0,
+          failures: [],
+        },
       },
     });
     expect(recoverStuckProvisioningJobsMock).toHaveBeenCalledOnce();
+    expect(reconcileLostCheckoutSignupsMock).toHaveBeenCalledOnce();
     expect(captureMessageMock).toHaveBeenCalledWith(
       'provisioning_watchdog_recovered_jobs',
       expect.objectContaining({ level: 'warning' }),

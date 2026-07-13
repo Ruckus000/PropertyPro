@@ -135,6 +135,51 @@ describe('stripe-service', () => {
   });
 
   // -----------------------------------------------------------------------
+  // resolveSubscriptionPeriodEndAt (A1/A2 — shared trial/renewal period end)
+  // -----------------------------------------------------------------------
+  describe('resolveSubscriptionPeriodEndAt', () => {
+    it('prefers trial_end (trialing subscription)', async () => {
+      const svc = await importService();
+      const trialEnd = Math.floor(Date.UTC(2026, 7, 12) / 1000);
+      const result = svc.resolveSubscriptionPeriodEndAt({
+        trial_end: trialEnd,
+        items: { data: [{ current_period_end: 999 }] },
+      } as never);
+      expect(result?.getTime()).toBe(trialEnd * 1000);
+    });
+
+    it('falls back to the item current_period_end when there is no trial', async () => {
+      const svc = await importService();
+      const periodEnd = Math.floor(Date.UTC(2026, 8, 1) / 1000);
+      const result = svc.resolveSubscriptionPeriodEndAt({
+        trial_end: null,
+        items: { data: [{ current_period_end: periodEnd }] },
+      } as never);
+      expect(result?.getTime()).toBe(periodEnd * 1000);
+    });
+
+    it('falls back to the legacy top-level current_period_end', async () => {
+      const svc = await importService();
+      const periodEnd = Math.floor(Date.UTC(2026, 9, 1) / 1000);
+      const result = svc.resolveSubscriptionPeriodEndAt({
+        trial_end: null,
+        items: { data: [] },
+        current_period_end: periodEnd,
+      } as never);
+      expect(result?.getTime()).toBe(periodEnd * 1000);
+    });
+
+    it('returns null when no period end is resolvable', async () => {
+      const svc = await importService();
+      const result = svc.resolveSubscriptionPeriodEndAt({
+        trial_end: null,
+        items: { data: [] },
+      } as never);
+      expect(result).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // createEmbeddedCheckoutSession
   // -----------------------------------------------------------------------
   describe('createEmbeddedCheckoutSession', () => {

@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { differenceInCalendarDays } from 'date-fns';
 import type { AnyCommunityRole } from '@propertypro/shared';
 import {
+  billingDaysRemainingUTC,
   canManageBilling,
+  formatBillingDateUTC,
   inferCanonicalRoleFromMembership,
   isWithinPaidGrace,
   paidGraceEndsAt,
@@ -32,16 +33,31 @@ export interface SubscriptionBillingBannerProps {
 function GraceBanner({
   gracePeriodEndsAt,
   billingPortalHref,
+  isBillingAdmin,
 }: {
   gracePeriodEndsAt: Date;
   billingPortalHref: string;
+  isBillingAdmin: boolean;
 }) {
+  // UTC long-form so this string is byte-identical to the dunning email and the
+  // paid-grace lock boundary (all UTC). See formatBillingDateUTC.
+  const untilDate = formatBillingDateUTC(gracePeriodEndsAt);
+  if (!isBillingAdmin) {
+    return (
+      <AlertBanner
+        status="warning"
+        variant="filled"
+        title="Your community's subscription was canceled."
+        description={`Access continues until ${untilDate}. Contact your community administrator to restore it.`}
+      />
+    );
+  }
   return (
     <AlertBanner
       status="warning"
       variant="filled"
       title="Your subscription was canceled."
-      description={`Full access until ${gracePeriodEndsAt.toLocaleDateString()}. Update payment to keep access active.`}
+      description={`Full access until ${untilDate}. Update payment to keep access active.`}
       action={
         <a
           href={billingPortalHref}
@@ -54,7 +70,23 @@ function GraceBanner({
   );
 }
 
-function SoftLockBanner({ billingPortalHref }: { billingPortalHref: string }) {
+function SoftLockBanner({
+  billingPortalHref,
+  isBillingAdmin,
+}: {
+  billingPortalHref: string;
+  isBillingAdmin: boolean;
+}) {
+  if (!isBillingAdmin) {
+    return (
+      <AlertBanner
+        status="danger"
+        variant="filled"
+        title="Access paused."
+        description="Contact your community administrator to restore access."
+      />
+    );
+  }
   return (
     <AlertBanner
       status="danger"
@@ -80,7 +112,7 @@ function TrialingBanner({
   periodEndAt: Date;
   billingHref: string;
 }) {
-  const daysLeft = Math.max(0, differenceInCalendarDays(periodEndAt, new Date()));
+  const daysLeft = billingDaysRemainingUTC(periodEndAt);
   const dayLabel = daysLeft === 1 ? 'day' : 'days';
 
   return (
@@ -114,6 +146,7 @@ export function resolveSubscriptionBillingBannerState(
   showPastDue: boolean;
   isInGrace: boolean;
   isSoftLocked: boolean;
+  isBillingAdmin: boolean;
   billingPortalHref: string;
   billingSettingsHref: string;
 } {
@@ -149,6 +182,7 @@ export function resolveSubscriptionBillingBannerState(
     showPastDue: props.subscriptionStatus === 'past_due' && isBillingAdmin,
     isInGrace,
     isSoftLocked,
+    isBillingAdmin,
     billingPortalHref,
     billingSettingsHref,
   };
@@ -172,12 +206,16 @@ export function SubscriptionBillingBanners(props: SubscriptionBillingBannerProps
           <GraceBanner
             gracePeriodEndsAt={paidGraceEndsAt(props.subscriptionCanceledAt)}
             billingPortalHref={state.billingPortalHref}
+            isBillingAdmin={state.isBillingAdmin}
           />
         </div>
       )}
       {state.showSoftLock && (
         <div className="px-6 pt-4 lg:px-8">
-          <SoftLockBanner billingPortalHref={state.billingPortalHref} />
+          <SoftLockBanner
+            billingPortalHref={state.billingPortalHref}
+            isBillingAdmin={state.isBillingAdmin}
+          />
         </div>
       )}
       {state.showPastDue && (
@@ -218,9 +256,15 @@ export function SubscriptionBillingBannersMobile(props: SubscriptionBillingBanne
         <GraceBanner
           gracePeriodEndsAt={paidGraceEndsAt(props.subscriptionCanceledAt)}
           billingPortalHref={state.billingPortalHref}
+          isBillingAdmin={state.isBillingAdmin}
         />
       )}
-      {state.showSoftLock && <SoftLockBanner billingPortalHref={state.billingPortalHref} />}
+      {state.showSoftLock && (
+        <SoftLockBanner
+          billingPortalHref={state.billingPortalHref}
+          isBillingAdmin={state.isBillingAdmin}
+        />
+      )}
       {state.showPastDue && (
         <AlertBanner
           status="warning"

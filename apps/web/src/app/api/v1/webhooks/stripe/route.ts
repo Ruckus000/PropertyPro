@@ -15,6 +15,7 @@ import type Stripe from 'stripe';
 import {
   getStripeClient,
   resolvePlanIdFromStripePriceId,
+  resolveSubscriptionPeriodEndAt,
   retrieveCheckoutSession,
   retrieveSubscription,
 } from '@/lib/services/stripe-service';
@@ -241,10 +242,25 @@ async function handleCheckoutSessionCompleted(
       ? freshSession.subscription
       : (freshSession.subscription as { id: string } | null)?.id ?? null;
 
+  // A2: retrieveCheckoutSession expands `subscription`, so when this is a
+  // subscription-mode checkout we have the full object here. Capture the trial
+  // status + period end so provisioning stamps the community and the trialing
+  // banner renders during onboarding.
+  const subscriptionObject =
+    freshSession.subscription && typeof freshSession.subscription !== 'string'
+      ? (freshSession.subscription as Stripe.Subscription)
+      : null;
+  const subscriptionStatus = subscriptionObject?.status ?? null;
+  const subscriptionCurrentPeriodEndAt = subscriptionObject
+    ? resolveSubscriptionPeriodEndAt(subscriptionObject)
+    : null;
+
   await markPendingSignupPaymentCompleted({
     signupRequestId,
     stripeCustomerId,
     stripeSubscriptionId,
+    subscriptionStatus,
+    subscriptionCurrentPeriodEndAt,
   });
 
   // Insert provisioning job stub — onConflictDoNothing handles idempotent re-delivery.
@@ -266,23 +282,6 @@ async function handleCheckoutSessionCompleted(
     outcome: 'success',
     payloadSnippet: { signupRequestId, sessionId: session.id },
   });
-}
-
-/** Resolve Stripe period end for trial/renewal banners (API version tolerant). */
-function resolveSubscriptionPeriodEndAt(subscription: Stripe.Subscription): Date | null {
-  if (typeof subscription.trial_end === 'number') {
-    return new Date(subscription.trial_end * 1000);
-  }
-  const itemPeriodEnd = subscription.items.data[0]?.current_period_end;
-  if (typeof itemPeriodEnd === 'number') {
-    return new Date(itemPeriodEnd * 1000);
-  }
-  const legacyPeriodEnd = (subscription as Stripe.Subscription & { current_period_end?: number })
-    .current_period_end;
-  if (typeof legacyPeriodEnd === 'number') {
-    return new Date(legacyPeriodEnd * 1000);
-  }
-  return null;
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
@@ -422,6 +421,46 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
   await markCommunityPaymentSucceeded(subscriptionId);
 }
 
+/**
+ * A8: a subscription renewal requires off-session SCA/3DS authentication. Stripe
+ * fires `invoice.payment_action_required` BEFORE the payment ultimately fails to
+ * `past_due`. Previously unhandled — so the customer only saw a generic
+ * "payment failed" later with no authenticate affordance. We resolve the
+ * community and notify billing admins so they can authenticate in time.
+ *
+ * Fast-follow: a dedicated "authenticate your card" email template linking
+ * `invoice.hosted_invoice_url` (this reuses the payment-failed notification infra).
+ */
+async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Promise<void> {
+  const rawSub = invoice.parent?.subscription_details?.subscription;
+  const subscriptionId = typeof rawSub === 'string' ? rawSub : rawSub?.id ?? null;
+  if (!subscriptionId) return;
+
+  const community = await getCommunityByStripeSubscriptionId(subscriptionId);
+  if (!community) {
+    logStripeWebhookEvent('warn', 'invoice.payment_action_required has no matching community', {
+      eventType: 'invoice.payment_action_required',
+      category: 'validation',
+      metricName: 'stripe_webhook_event',
+      outcome: 'skipped',
+      payloadSnippet: { subscriptionId },
+    });
+    return;
+  }
+
+  const amountDue = invoice.amount_due
+    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+        invoice.amount_due / 100,
+      )
+    : 'your subscription payment';
+
+  await sendPaymentFailedEmail(community.id, {
+    amountDue,
+    lastFourDigits: null,
+    communityName: community.name,
+  });
+}
+
 async function handleCheckoutSessionExpired(
   session: Stripe.Checkout.Session,
   eventId: string,
@@ -453,11 +492,22 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
     case 'checkout.session.expired':
       await handleCheckoutSessionExpired(event.data.object as Stripe.Checkout.Session, event.id, event.created);
       break;
+    case 'customer.subscription.created':
+      // A2(b): belt-and-suspenders for the trial stamp. The non-canceled path of
+      // handleSubscriptionUpdated stamps status/plan/period-end via
+      // updateCommunitySubscriptionFromStripe, and no-ops when the community isn't
+      // linked yet (out-of-order delivery before stepCommunityCreated). Self-heals
+      // self-serve subscribes and any late-arriving stamps.
+      await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+      break;
     case 'customer.subscription.updated':
       await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
       break;
     case 'customer.subscription.deleted':
       await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+      break;
+    case 'invoice.payment_action_required':
+      await handleInvoicePaymentActionRequired(event.data.object as Stripe.Invoice);
       break;
     case 'invoice.payment_failed':
       await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);

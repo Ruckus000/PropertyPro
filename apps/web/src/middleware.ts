@@ -64,6 +64,7 @@ import {
  */
 const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
+  '/welcome',
   '/help',
   '/select-community',
   '/settings',

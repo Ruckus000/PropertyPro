@@ -10,6 +10,11 @@
  *   past_due               → allowed (banner shown at UI level only)
  *   free_access_expires_at > now → allowed (overrides locked status, see spec §4.2)
  *   canceled (after seven-day grace) / expired / unpaid → throws 403 SUBSCRIPTION_REQUIRED
+ *
+ * A3 carve-out: `allowResidentSelfService` short-circuits the guard for
+ * resident-initiated dues/rent payments. Those flow through the community's
+ * Stripe Connect account, not the community's PropertyPro subscription, so a
+ * platform-billing soft-lock must not block a resident from paying what they owe.
  */
 import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
@@ -24,9 +29,22 @@ const LOCKED_STATUSES = new Set(['canceled', 'expired', 'unpaid', 'incomplete_ex
  * Verify that the community's subscription allows admin mutations.
  * Throws AppError(403, 'SUBSCRIPTION_REQUIRED') if locked.
  */
+export interface SubscriptionGuardOptions {
+  /**
+   * When true, bypass the platform-subscription lock for a resident paying their
+   * own dues/rent (dues run through Stripe Connect, not the PropertyPro sub).
+   */
+  allowResidentSelfService?: boolean;
+}
+
 export async function requireActiveSubscriptionForMutation(
   communityId: number,
+  options: SubscriptionGuardOptions = {},
 ): Promise<void> {
+  if (options.allowResidentSelfService) {
+    return;
+  }
+
   const db = createUnscopedClient();
   const rows = await db
     .select({
