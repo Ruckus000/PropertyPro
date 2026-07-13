@@ -14,6 +14,8 @@
  * same PR (the diff makes this reviewable). Baseline only shrinks over time.
  *
  * Escape hatch: a line containing `design-tokens:exempt` is skipped (append a reason).
+ * Comment-leading lines (`//`, `/*`, JSDoc `*`) are exempt from raw-hex ONLY
+ * (PR-number refs like `#172` false-positive as hex); all other rules still scan them.
  * `--selftest` checks the rules against embedded fixtures (also runs first always).
  * `--report` prints violations; `--write-baseline` rewrites the baseline
  * (initial adoption / reviewed shrinks only).
@@ -44,20 +46,20 @@ const RULES: Record<string, RegExp> = {
 
 type Counts = Record<string, number>;
 
-// Comment-leading lines (JSDoc `*`, `//`, `/*`) are skipped entirely: PR/issue
-// references and drain-batch notes (`#172`, `(#107 / #146 precedent)`) are
-// digit-only strings 3+ chars long that pass as valid hex under the raw-hex
-// rule, and this codebase's comment style puts nearly all of them on
-// comment-only lines. Real color literals live in code (quoted strings, CSS
-// declarations), never on a comment-only line.
+// Comment-leading lines (JSDoc `*`, `//`, `/*`) are exempt from raw-hex ONLY:
+// PR/issue references and drain-batch notes (`#172`, `(#107 / #146 precedent)`)
+// are digit-only strings 3+ chars long that pass as valid hex, and this
+// codebase's comment style puts nearly all of them on comment-only lines.
+// All other rules still scan comment-marker lines — a class string on a line
+// that merely starts with `/** @deprecated */` is real code and must count.
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
 
 function scanContent(src: string): Counts {
   const counts: Counts = {};
   for (const line of src.split('\n')) {
     if (line.includes('design-tokens:exempt')) continue;
-    if (COMMENT_LINE.test(line)) continue;
     for (const [rule, re] of Object.entries(RULES)) {
+      if (rule === 'raw-hex' && COMMENT_LINE.test(line)) continue;
       const n = (line.match(re) ?? []).length;
       if (n > 0) counts[rule] = (counts[rule] ?? 0) + n;
     }
@@ -90,6 +92,9 @@ function selftest(): void {
     ['raw-hex', ` * Plan A1 drain #172. See (#107 / #146 precedent).`, 0],
     ['raw-hex', `// fixed in #123, follow-up #4567`, 0],
     ['raw-hex', `/* legacy note #a1b2c3 */`, 0],
+    // The raw-hex comment-line skip must NOT blind the other rules.
+    ['raw-palette', `/** @deprecated */ const legacyClass = "bg-blue-500";`, 1],
+    ['arbitrary-font', `/** @deprecated */ const legacySize = "text-[13px]";`, 1],
   ];
   for (const [rule, input, expected] of cases) {
     const got = scanContent(input)[rule] ?? 0;
