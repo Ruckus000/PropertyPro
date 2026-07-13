@@ -25,6 +25,7 @@
 import { expect, test } from '@playwright/test';
 import {
   STRIPE_E2E_SKIP_REASON,
+  assertSafeStripeE2eTarget,
   buildSignupInputs,
   confirmSupabaseEmail,
   fillStripeEmbeddedCheckout,
@@ -39,6 +40,11 @@ test.describe('Signup → Stripe Checkout → trialing (GA gate)', () => {
     page,
     request,
   }) => {
+    // Blast-radius guard: this test creates real auth users + communities, so
+    // refuse to run against a known-production Supabase project (Stripe test
+    // mode does NOT make a prod database safe). Fails fast before any write.
+    assertSafeStripeE2eTarget();
+
     // Provisioning polls a Stripe webhook round-trip, and the assertions below
     // budget up to ~150s combined — set an explicit per-test timeout that
     // comfortably exceeds them (test.slow() would only give 90s).

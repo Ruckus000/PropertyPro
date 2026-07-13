@@ -32,6 +32,54 @@ export function isStripeTestModeKey(key: string | undefined): key is string {
   return typeof key === 'string' && key.startsWith('sk_test_');
 }
 
+/**
+ * Supabase project refs known to be PRODUCTION. This spec creates real auth
+ * users + communities and mutates auth via the service-role key, so it must
+ * NEVER point at any of these. `isStripeTestModeKey` only proves Stripe is in
+ * test mode — it does nothing to protect the database/auth backend, which is
+ * the actual blast radius. Extend this list, or add more via the
+ * comma-separated `E2E_BLOCKED_SUPABASE_REFS` env, as new prod projects appear.
+ */
+export const KNOWN_PROD_SUPABASE_REFS: readonly string[] = ['vbqobyagjzvlfpfozvmx'];
+
+function blockedSupabaseRefs(): string[] {
+  const extra = (process.env.E2E_BLOCKED_SUPABASE_REFS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...KNOWN_PROD_SUPABASE_REFS, ...extra];
+}
+
+/** The first blocked (prod) Supabase ref the configured URL matches, or null. */
+export function matchedProdSupabaseRef(url: string | undefined): string | null {
+  if (!url) return null;
+  return blockedSupabaseRefs().find((ref) => ref.length > 0 && url.includes(ref)) ?? null;
+}
+
+/**
+ * Fail fast BEFORE any write if the configured Supabase target is a known
+ * production project. Call this at the very top of the test so a misconfigured
+ * run errors loudly instead of creating real signup/community/auth records.
+ *
+ * Scope: this checks the Supabase URL as seen by the Playwright RUNNER. The
+ * actual signup write is performed by the `next dev` webServer, which loads its
+ * own env — in the documented single-`.env.local` setup both share one target,
+ * so this guard covers it. If you deliberately run the runner and an already-up
+ * dev server against different projects, also point the server at a dev/test DB.
+ */
+export function assertSafeStripeE2eTarget(): void {
+  const hit = matchedProdSupabaseRef(STRIPE_E2E_ENV.supabaseUrl);
+  if (hit) {
+    throw new Error(
+      `Refusing to run the signup→trialing E2E: NEXT_PUBLIC_SUPABASE_URL points at a ` +
+        `known PRODUCTION Supabase project (ref "${hit}"). This spec creates real auth ` +
+        `users + communities — point NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / ` +
+        `DATABASE_URL at a dev/test project first. (Stripe test mode does NOT make a prod ` +
+        `database safe.)`,
+    );
+  }
+}
+
 /** True only when every prerequisite for a real run is present (else the spec skips). */
 export function stripeE2eConfigured(): boolean {
   return (
