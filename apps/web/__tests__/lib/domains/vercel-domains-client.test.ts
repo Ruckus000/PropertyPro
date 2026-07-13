@@ -89,22 +89,29 @@ describe('checkDomainAvailability (guided purchase)', () => {
   it('returns available with price + period when both calls succeed', async () => {
     const spy = mockFetchSequence([
       { status: 200, body: { available: true } },
-      { status: 200, body: { price: 12, period: 1 } },
+      { status: 200, body: { purchasePrice: 12, years: 1 } },
     ]);
     const res = await checkDomainAvailability('foo.com');
     expect(res).toEqual({ available: true, price: 12, period: 1 });
-    // Regression for the teamQuery gotcha: these endpoints already carry
-    // ?name=, so teamId must be appended with & (URLSearchParams), never a
-    // second '?'.
+    // Registrar API (the old /v4/domains/status + /price were sunsetted
+    // 2025-11-09). Price query is built with URLSearchParams so teamId is
+    // appended with &, never a second '?'.
     const statusUrl = String(spy.mock.calls[0]![0]);
-    expect(statusUrl).toContain('/v4/domains/status?');
-    expect(statusUrl).toContain('name=foo.com');
+    expect(statusUrl).toContain('/v1/registrar/domains/foo.com/availability');
     expect(statusUrl).toContain('teamId=team_y');
-    expect(statusUrl.match(/\?/g)).toHaveLength(1);
     const priceUrl = String(spy.mock.calls[1]![0]);
-    expect(priceUrl).toContain('/v4/domains/price?');
-    expect(priceUrl).toContain('type=new');
+    expect(priceUrl).toContain('/v1/registrar/domains/foo.com/price?');
+    expect(priceUrl).toContain('years=1');
     expect(priceUrl.match(/\?/g)).toHaveLength(1);
+  });
+
+  it("accepts the docs' string form of available ('true')", async () => {
+    mockFetchSequence([
+      { status: 200, body: { available: 'true' } },
+      { status: 400, body: {} },
+    ]);
+    const res = await checkDomainAvailability('foo.com');
+    expect(res.available).toBe(true);
   });
 
   it('returns taken without calling the price endpoint', async () => {
@@ -121,6 +128,12 @@ describe('checkDomainAvailability (guided purchase)', () => {
     ]);
     const res = await checkDomainAvailability('foo.dev');
     expect(res).toEqual({ available: true, price: null, period: null });
+  });
+
+  it('URL-encodes the domain into the registrar path', async () => {
+    const spy = mockFetchSequence([{ status: 200, body: { available: false } }]);
+    await checkDomainAvailability('xn--caf-dma.com');
+    expect(String(spy.mock.calls[0]![0])).toContain('/v1/registrar/domains/xn--caf-dma.com/availability');
   });
 
   it('throws DomainProviderRateLimitedError on a 429 from the status call', async () => {
