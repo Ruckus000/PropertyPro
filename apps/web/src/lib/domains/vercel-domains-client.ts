@@ -22,6 +22,8 @@ export class DomainProvisioningUnavailableError extends Error {}
 export class DomainProviderError extends Error {
   constructor(message: string, readonly providerCode?: string) { super(message); }
 }
+/** Vercel returned 429 — surface as our own 429 rather than a 502. */
+export class DomainProviderRateLimitedError extends DomainProviderError {}
 
 export type DomainStatus = 'pending' | 'active' | 'error';
 export interface DnsRecord { type: string; name: string; value: string; }
@@ -82,6 +84,62 @@ export async function getDomainStatus(host: string): Promise<DomainStatusResult>
   const { status, body } = await call(`/v9/projects/${projectId}/domains/${host}${teamQuery(teamId)}`, { method: 'GET' });
   if (status >= 400) return { status: 'error', records: [], reason: body?.error?.message ?? `Vercel error ${status}` };
   return { status: mapStatus(body), records: toRecords(body?.verification) };
+}
+
+export interface DomainAvailabilityResult {
+  available: boolean;
+  /** Vercel's registration price in USD, or null when unknown/unreliable. */
+  price: number | null;
+  /** Registration period in years the price covers, or null when unknown. */
+  period: number | null;
+}
+
+/**
+ * Availability + best-effort price for a domain the PM might buy elsewhere
+ * (guided-purchase flow — we never call the buy endpoint).
+ *
+ *   GET /v4/domains/status?name=…  → { available: boolean }
+ *   GET /v4/domains/price?name=…&type=new → { price, period }
+ *
+ * These endpoints already carry a query string, so the query is built with
+ * URLSearchParams — `teamQuery()` emits a leading `?` and would corrupt it.
+ * The price call is best-effort: any failure degrades to price=null rather
+ * than failing the availability answer.
+ */
+export async function checkDomainAvailability(name: string): Promise<DomainAvailabilityResult> {
+  const { teamId } = config();
+
+  const statusParams = new URLSearchParams({ name });
+  if (teamId) statusParams.set('teamId', teamId);
+  const { status, body } = await call(`/v4/domains/status?${statusParams.toString()}`, { method: 'GET' });
+  if (status === 429) {
+    throw new DomainProviderRateLimitedError(
+      'Too many domain checks right now — try again in a minute.',
+      body?.error?.code,
+    );
+  }
+  if (status >= 400) {
+    throw new DomainProviderError(body?.error?.message ?? `Vercel error ${status}`, body?.error?.code);
+  }
+  if (body?.available !== true) {
+    return { available: false, price: null, period: null };
+  }
+
+  try {
+    const priceParams = new URLSearchParams({ name, type: 'new' });
+    if (teamId) priceParams.set('teamId', teamId);
+    const priceRes = await call(`/v4/domains/price?${priceParams.toString()}`, { method: 'GET' });
+    if (priceRes.status < 400 && typeof priceRes.body?.price === 'number') {
+      return {
+        available: true,
+        price: priceRes.body.price,
+        period: typeof priceRes.body?.period === 'number' ? priceRes.body.period : null,
+      };
+    }
+  } catch {
+    // Price is decorative — never fail the availability answer over it.
+  }
+  return { available: true, price: null, period: null };
 }
 
 export async function removeProjectDomain(host: string): Promise<void> {
