@@ -5,25 +5,24 @@
  *
  * Surfaces:
  *  - Pending-changes badge ("N draft sections" — count of is_draft=true
- *    blocks loaded via use-content-blocks).
+ *    blocks loaded via use-content-blocks, including tombstone drafts,
+ *    i.e. staged deletions).
  *  - Publish button that fires usePublishSite with the loaded
  *    expectedPublishedAt token. Disabled while loading or in-flight.
+ *  - Discard-drafts button (slice 8f) — appears only when drafts are
+ *    pending; reverts the editor to the live site's state.
  *  - Inline status — success ("Published N sections"), nothing-to-publish
  *    ("No changes to publish"), or error message (including the 409
  *    "another editor published" copy from PublishConflictError).
  *
- * Until slice 8e ships (editor refactor to write is_draft=true), every
- * block is published-straight-to-prod, so the badge always reads 0 and
- * the Publish button is effectively decorative. The button still works
- * — clicking it produces a `nothing-to-publish` response. Wiring it up
- * now lets the API surface, the styling, and the optimistic-concurrency
- * plumbing all ship + be reviewed before the user-visible behavior
- * change lands.
+ * Slice 8e is live: the editor's block/hero/reorder writes all land in the
+ * draft layer, so the badge counts real pending changes and Publish promotes
+ * them atomically (publishCommunitySite).
  */
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { useContentBlocks, useDiscardDrafts, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { useHeroBlock } from '@/hooks/use-hero-block';
 import { usePublishSite, PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
 
@@ -68,6 +67,7 @@ export function PublishBar({ communityId }: Props) {
   useHeroBlock(communityId);
 
   const publish = usePublishSite(communityId);
+  const discard = useDiscardDrafts(communityId);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const pendingCount = useMemo(() => {
@@ -84,7 +84,27 @@ export function PublishBar({ communityId }: Props) {
     [blocksQ.data],
   );
 
-  const isLoading = blocksQ.isLoading || publish.isPending;
+  const isLoading = blocksQ.isLoading || publish.isPending || discard.isPending;
+
+  function onDiscard() {
+    const confirmed = window.confirm(
+      'Discard all pending drafts? Your live site is untouched; unpublished edits, reorders, and staged removals will be lost.',
+    );
+    if (!confirmed) return;
+    setOutcome(null);
+    discard.mutate(undefined, {
+      onSuccess: ({ discardedCount }) => {
+        toast.success(
+          discardedCount > 0
+            ? `Discarded ${discardedCount} pending change${discardedCount === 1 ? '' : 's'}.`
+            : 'Nothing to discard.',
+        );
+      },
+      onError: (err) => {
+        setOutcome(err instanceof Error ? err.message : 'Discard failed.');
+      },
+    });
+  }
 
   async function onPublish() {
     setOutcome(null);
@@ -139,6 +159,17 @@ export function PublishBar({ communityId }: Props) {
             >
               {outcome}
             </span>
+          )}
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={onDiscard}
+              disabled={isLoading}
+              data-testid="discard-drafts-button"
+              className="inline-flex items-center rounded-md border border-default px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+            >
+              {discard.isPending ? 'Discarding…' : 'Discard Drafts'}
+            </button>
           )}
           <button
             type="button"

@@ -13,6 +13,19 @@
  *                         in the body; invalidates the GET query on success so
  *                         the editor reflects the newly-saved state.
  *
+ * useDeleteContentBlock — DELETE /api/v1/pm/site/blocks (slice 8f)
+ *                         Removes the section at blockOrder. Published
+ *                         sections are staged as a tombstone draft (removed on
+ *                         next publish); draft-only sections vanish
+ *                         immediately. Resolves { staged } so callers can pick
+ *                         the right toast copy.
+ *
+ * useDiscardDrafts      — DELETE /api/v1/pm/site/drafts (slice 8f)
+ *                         Discards every pending draft (edits, reorders, and
+ *                         staged deletions). Invalidates the whole
+ *                         ['pm','site'] prefix — a discard can drop the hero
+ *                         draft too, which lives under its own query key.
+ *
  * Both routes use the canonical { data: T } success envelope and
  * { error: { code, message } } error envelope (B1 canonical). Raw fetch is
  * kept to preserve the exact error-literal behaviour; migration to
@@ -87,6 +100,58 @@ export function useUpsertContentBlock(communityId: number) {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: blocksKey(communityId) });
+    },
+  });
+}
+
+export interface DeleteContentBlockResult {
+  /**
+   * true — the section is live; removal was staged and applies on the next
+   * publish. false — the section was an unpublished draft, gone immediately.
+   */
+  staged: boolean;
+}
+
+export function useDeleteContentBlock(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<DeleteContentBlockResult, Error, { blockOrder: number }>({
+    mutationFn: async ({ blockOrder }) => {
+      const res = await fetch('/api/v1/pm/site/blocks', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, blockOrder }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { data: { ok: true; staged: boolean } };
+      return { staged: body.data.staged };
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: blocksKey(communityId) });
+    },
+  });
+}
+
+export interface DiscardDraftsResult {
+  discardedCount: number;
+}
+
+export function useDiscardDrafts(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<DiscardDraftsResult, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/pm/site/drafts', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { data: { ok: true; discardedCount: number } };
+      return { discardedCount: body.data.discardedCount };
+    },
+    onSuccess: async () => {
+      // Broad prefix on purpose: a discard can drop the hero draft
+      // (['pm','site','hero',id]) as well as the content blocks.
+      await qc.invalidateQueries({ queryKey: ['pm', 'site'] });
     },
   });
 }

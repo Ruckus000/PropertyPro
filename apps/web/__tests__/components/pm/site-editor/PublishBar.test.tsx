@@ -221,3 +221,83 @@ describe('<PublishBar>', () => {
     });
   });
 });
+
+describe('<PublishBar> — discard drafts (slice 8f)', () => {
+  function mockWithDrafts() {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url, init) => {
+      if (typeof url === 'string' && url.includes('/drafts') && init?.method === 'DELETE') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { ok: true, discardedCount: 2 } }),
+        } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/blocks')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              blocks: [
+                { id: 1, blockType: 'text', blockOrder: 2, content: { body: 'x' }, isDraft: true, publishedAt: null },
+                { id: 90, blockType: 'tombstone', blockOrder: 3, content: {}, isDraft: true, publishedAt: null },
+              ],
+            },
+          }),
+        } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/hero')) {
+        return { ok: true, status: 200, json: async () => ({ data: { hero: null } }) } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    });
+  }
+
+  it('hides the Discard button when no drafts are pending', async () => {
+    render(wrap(<PublishBar communityId={42} />));
+    const badge = await screen.findByTestId('pending-changes-badge');
+    await waitFor(() => expect(badge).toHaveTextContent(/all changes published/i));
+    expect(screen.queryByTestId('discard-drafts-button')).not.toBeInTheDocument();
+  });
+
+  it('counts tombstone drafts (staged deletions) in the pending badge', async () => {
+    mockWithDrafts();
+    render(wrap(<PublishBar communityId={42} />));
+    const badge = await screen.findByTestId('pending-changes-badge');
+    await waitFor(() => expect(badge).toHaveTextContent(/2 draft sections/i));
+  });
+
+  it('confirms, then DELETEs /api/v1/pm/site/drafts', async () => {
+    mockWithDrafts();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(wrap(<PublishBar communityId={42} />));
+    const discardBtn = await screen.findByTestId('discard-drafts-button');
+    await waitFor(() => expect(discardBtn).not.toBeDisabled());
+
+    fireEvent.click(discardBtn);
+    expect(confirmSpy).toHaveBeenCalled();
+
+    await waitFor(() => {
+      const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => typeof c[0] === 'string' && c[0].includes('/drafts') && c[1]?.method === 'DELETE',
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(call![1].body as string)).toEqual({ communityId: 42 });
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it('does not DELETE when the confirm dialog is cancelled', async () => {
+    mockWithDrafts();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(wrap(<PublishBar communityId={42} />));
+    const discardBtn = await screen.findByTestId('discard-drafts-button');
+    fireEvent.click(discardBtn);
+
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => typeof c[0] === 'string' && c[0].includes('/drafts') && c[1]?.method === 'DELETE',
+    );
+    expect(call).toBeUndefined();
+    confirmSpy.mockRestore();
+  });
+});
