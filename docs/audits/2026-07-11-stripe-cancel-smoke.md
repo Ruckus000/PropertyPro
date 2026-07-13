@@ -37,13 +37,21 @@ stripe trigger customer.subscription.deleted
 
 ## Signup → trialing E2E
 
-**Deferred** unless Stripe test keys and checkout return URLs are configured in `.env.local`. CI and default local shells do not include Stripe secrets.
+**Automated (guarded):** `apps/web/e2e/signup-trialing.spec.ts` (+ `e2e/helpers/stripe-e2e.ts`).
+It **skips** in CI and default shells (no Stripe/Supabase secrets) and runs the full
+`signup → Stripe Embedded Checkout (test card 4242…) → trialing` flow when secrets are present.
 
-When secrets are available, run once manually:
+When secrets are available, run once:
 
-1. Visit `/signup` → complete community details
-2. Finish Stripe Checkout (test card `4242…`)
-3. Land on `/signup/checkout/return?session_id=…`
-4. Confirm community is `trialing` in DB and dashboard access works
+1. In `apps/web/.env.local`: `STRIPE_SECRET_KEY=sk_test_…`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_…`,
+   `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+2. `stripe listen --forward-to 127.0.0.1:3000/api/v1/webhooks/stripe` (so the webhook provisions the community).
+3. `E2E_STRIPE=1 pnpm --filter @propertypro/web exec playwright test -c playwright.config.ts e2e/signup-trialing.spec.ts`
+4. The spec asserts the community lands `trialing` (the "Free trial active" banner). **First run:** validate the two
+   external seams noted in `helpers/stripe-e2e.ts` — the Stripe embedded-checkout iframe selectors, and the Supabase
+   admin `email_confirm` call — and adjust if Stripe's markup or the SDK shape differs.
+
+Manual fallback (no spec): visit `/signup` → complete details → email verify → Stripe Checkout (`4242…`) →
+`/signup/checkout/return` → confirm `trialing` in DB + dashboard access.
 
 Record screenshots or notes in the PR test plan when performed.
