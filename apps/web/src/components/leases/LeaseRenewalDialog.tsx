@@ -30,9 +30,6 @@ export function LeaseRenewalDialog({
   open,
   onOpenChange,
 }: LeaseRenewalDialogProps) {
-  // Month-to-month leases (no end date) cannot be renewed
-  if (lease !== null && !lease.endDate) return null;
-
   const createLease = useCreateLease(communityId);
 
   const [newStartDate, setNewStartDate] = useState('');
@@ -51,6 +48,10 @@ export function LeaseRenewalDialog({
       setNewEndDate('');
     }
   }, [lease, open]);
+
+  // Month-to-month leases (no end date) cannot be renewed. Checked after the
+  // hooks so hook order stays stable across renders (rules-of-hooks).
+  if (lease !== null && !lease.endDate) return null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

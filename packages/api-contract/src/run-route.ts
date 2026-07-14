@@ -28,7 +28,8 @@ export type AnyRouteContract = RouteContract<
  * distribution (an optional member reads as `TScope | undefined`).
  */
 type CommunityIdOf<C extends AnyRouteContract> = [C['tenantScope']] extends [undefined]
-  ? {}
+  ? // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentional intersection identity; must stay byte-identical to the pre-B2 shape
+    {}
   : { communityId: number };
 
 /**

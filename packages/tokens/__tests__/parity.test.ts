@@ -49,7 +49,7 @@ describe("Token parity", () => {
   it("uses two-space indentation matching UI tokens.css format", () => {
     const lines = cssContent.split("\n").filter((l) => l.includes("--"));
     for (const line of lines) {
-      expect(line).toMatch(/^  --/);
+      expect(line).toMatch(/^ {2}--/);
     }
   });
 

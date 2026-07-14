@@ -8,9 +8,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "@propertypro/eslint-config": "workspace:*",
+    "eslint": "^9.39.0",
     "typescript": "^5.0.0"
   }
 }
