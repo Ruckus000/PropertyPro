@@ -44,7 +44,7 @@ export function SupportBanner() {
       <button
         type="button"
         onClick={handleEndSession}
-        className="flex items-center gap-1.5 rounded-md border border-content-inverse/30 px-3 py-1 text-xs font-semibold text-content-inverse hover:bg-content-inverse/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-interactive"
+        className="flex items-center gap-1.5 rounded-md border border-status-warning-border px-3 py-1 text-xs font-semibold text-content-inverse hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-interactive"
       >
         <X size={12} aria-hidden="true" />
         End Session
