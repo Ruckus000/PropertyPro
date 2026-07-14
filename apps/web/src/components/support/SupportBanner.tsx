@@ -35,7 +35,7 @@ export function SupportBanner() {
     <div
       role="alert"
       aria-live="polite"
-      className="fixed left-0 right-0 top-0 z-[9999] flex items-center justify-between bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950"
+      className="fixed left-0 right-0 top-0 z-[9999] flex items-center justify-between bg-status-warning px-4 py-2 text-sm font-medium text-content-inverse"
     >
       <div className="flex items-center gap-2">
         <Eye size={16} aria-hidden="true" />
@@ -44,7 +44,7 @@ export function SupportBanner() {
       <button
         type="button"
         onClick={handleEndSession}
-        className="flex items-center gap-1.5 rounded-md border border-amber-700/30 px-3 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-900"
+        className="flex items-center gap-1.5 rounded-md border border-content-inverse/30 px-3 py-1 text-xs font-semibold text-content-inverse hover:bg-content-inverse/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-interactive"
       >
         <X size={12} aria-hidden="true" />
         End Session
