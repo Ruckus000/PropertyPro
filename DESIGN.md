@@ -134,7 +134,16 @@ Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table);
 
 **Radius scale:** `sm` (6px) inputs → `md` (10px) cards/buttons → `lg` (16px) modals → `xl`/`2xl` (20/24px) → `full` badges/avatars
 
-Source: `packages/ui/src/tokens/shadows.ts`, `packages/ui/src/tokens/radius.ts`
+Shadows are slate-tinted (`rgba(15,23,42,…)`, never pure black) and single-sourced from `--elevation-e0..e3` (defined in `packages/tokens/src/static.ts`). Tailwind's `shadow-sm`/`shadow` map to E1, `shadow-md` to E2, and `shadow-lg`/`xl`/`2xl` to E3 — so the ladder holds even for stock utility classes.
+
+Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tokens/radius.ts`
+
+### Accent Scarcity
+
+- **One filled primary button per view region.** Everything else in that region is `outline`, `ghost`, or `link`. A "region" is a card, modal, page header, or form footer. (Review-checklist rule — not lint-enforceable.)
+- Brand blue appears only on primary actions, focus rings, and active nav.
+- Ink, not black: `--text-primary` is deep slate (`#111827`) by design — never introduce pure-black text.
+- Data tables run dense with tabular figures (`tabular-nums` is built into the canonical Table) while page chrome keeps generous macro-spacing — "dense data, generous chrome."
 
 ---
 
