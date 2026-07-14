@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge, Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import {
   addDays,
   addMonths,
@@ -72,9 +73,9 @@ export function MonthGrid({
             <Button
               variant="ghost"
               size="sm"
-              leftIcon={<ChevronLeft />}
               onClick={() => onMonthChange(subMonths(currentMonth, 1))}
             >
+              <ChevronLeft aria-hidden="true" />
               Previous
             </Button>
             <div className="min-w-[11rem] text-sm font-semibold text-[var(--text-primary)]">
@@ -83,14 +84,14 @@ export function MonthGrid({
             <Button
               variant="ghost"
               size="sm"
-              rightIcon={<ChevronRight />}
               onClick={() => onMonthChange(addMonths(currentMonth, 1))}
             >
               Next
+              <ChevronRight aria-hidden="true" />
             </Button>
           </div>
           <Button
-            variant="secondary"
+            variant="outline"
             size="sm"
             onClick={() => {
               onMonthChange(startOfMonth(today));

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Button, Card, StatusBadge } from '@propertypro/ui';
+import { Card, StatusBadge } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import {
   useTransparencySettings,
   useUpdateTransparencySettings,

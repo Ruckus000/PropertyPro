@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -75,14 +75,14 @@ export function DocumentViewerModal({
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => {
                     void query.refetch();
                   }}
                 >
                   Try again
                 </Button>
-                <Button type="button" variant="primary" onClick={() => onOpenChange(false)}>
+                <Button type="button" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
               </div>

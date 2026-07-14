@@ -11,7 +11,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import {
   ESIGN_CONSENT_TEXT,
   type EsignFieldDefinition,
@@ -622,7 +622,7 @@ export default function SigningPage() {
                     Go back
                   </Button>
                   <Button
-                    variant="danger"
+                    variant="destructive"
                     className="flex-1"
                     onClick={handleDecline}
                     disabled={declineMutation.isPending}

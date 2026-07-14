@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Button, Card } from '@propertypro/ui';
+import { Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
 import { useTransparencySettings, useUpdateTransparencySettings } from '@/hooks/use-transparency';
 import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';

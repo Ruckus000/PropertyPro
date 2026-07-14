@@ -7,7 +7,8 @@
 
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge, Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
@@ -344,7 +345,7 @@ export function SubmissionDetail({
                           </Button>
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             data-testid={`esign-open-signing-link-${signer.id}`}
                             onClick={() =>
@@ -431,7 +432,7 @@ export function SubmissionDetail({
 
           {data.downloadUrl && (
             <Button
-              variant="secondary"
+              variant="outline"
               className="w-full"
               onClick={() => openDownload(data.downloadUrl!)}
             >

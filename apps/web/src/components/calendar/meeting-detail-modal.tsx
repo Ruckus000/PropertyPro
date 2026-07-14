@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge, Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
@@ -239,7 +240,7 @@ export function MeetingDetailModal({
         </Card.Body>
         {canWrite ? (
           <Card.Footer bordered>
-            <Button variant="danger" onClick={handleDelete} loading={deleteMutation.isPending}>
+            <Button variant="destructive" onClick={handleDelete} loading={deleteMutation.isPending}>
               Delete
             </Button>
             <Link
@@ -249,7 +250,7 @@ export function MeetingDetailModal({
               <FilePlus2 size={16} aria-hidden="true" />
               Author Minutes
             </Link>
-            <Button variant="secondary" onClick={() => onEdit(meetingId)}>
+            <Button variant="outline" onClick={() => onEdit(meetingId)}>
               Edit
             </Button>
           </Card.Footer>

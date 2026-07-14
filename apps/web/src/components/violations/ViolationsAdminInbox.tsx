@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { AnyCommunityRole, TransitionRole } from '@propertypro/shared';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
 import { ViolationDetailPanel } from './ViolationDetailPanel';
@@ -153,7 +153,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
         }
         actions={canCreateViolation ? (
           <Link href={`/violations/report?communityId=${communityId}`}>
-            <Button variant="primary" size="md">
+            <Button>
               New violation
             </Button>
           </Link>

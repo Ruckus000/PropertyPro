@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SignaturePad from 'signature_pad';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { Undo2, Trash2, Pencil, Type, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -243,7 +243,7 @@ export function SignatureCapture({
                   />
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant="outline"
                     onClick={() => onCapture(cachedValue)}
                   >
                     Use previous

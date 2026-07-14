@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
-import { Button, Card } from '@propertypro/ui';
+import { Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCreateMeeting, useMeeting, useUpdateMeeting } from '@/hooks/use-meetings';
 import {

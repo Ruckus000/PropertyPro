@@ -1,6 +1,7 @@
 'use client';
 
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge, Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import type { CalendarAssessmentEvent, CalendarEvent, CalendarMeetingEvent, CalendarMyAssessmentEvent } from '@/lib/calendar/event-types';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';

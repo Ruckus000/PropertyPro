@@ -3,7 +3,8 @@
 import { startTransition, useDeferredValue, useState } from 'react';
 import Link from 'next/link';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
-import { Button, Card } from '@propertypro/ui';
+import { Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { MonthGrid } from '@/components/calendar/month-grid';

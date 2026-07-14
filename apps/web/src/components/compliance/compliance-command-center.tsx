@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -154,7 +154,7 @@ export function ComplianceCommandCenter({
       )}
       {canWrite && (
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={selectedItem === null}
           onClick={() => {
             if (selectedItem) setUploadItem(selectedItem);
