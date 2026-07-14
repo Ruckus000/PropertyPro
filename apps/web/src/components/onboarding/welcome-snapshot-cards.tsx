@@ -177,7 +177,7 @@ function ArrowRightIcon() {
 
 function getComplianceLabel(score: number): { text: string; color: string } {
   if (score >= 90) return { text: 'Excellent', color: 'text-status-success' };
-  if (score >= 70) return { text: 'Good', color: 'text-status-warning' };
+  if (score >= 70) return { text: 'Good', color: 'text-status-brand' };
   if (score >= 50) return { text: 'Needs attention', color: 'text-status-warning' };
   return { text: 'Critical', color: 'text-status-danger' };
 }
