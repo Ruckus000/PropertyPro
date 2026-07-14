@@ -20,7 +20,7 @@ import {
   FileSignature,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ESIGN_STATUS_CONFIG } from './esign-status-config';
+import { ESIGN_STATUS_DISPLAY } from './esign-status-config';
 import type { EsignStatusConfigEntry } from './esign-status-config';
 
 interface SubmissionListProps {
@@ -36,7 +36,7 @@ const STATUS_FILTERS = [
   { value: 'expired', label: 'Expired' },
 ] as const;
 
-const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_CONFIG['pending']!;
+const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_DISPLAY['pending']!;
 
 function formatDate(date: Date | string | null): string {
   if (!date) return '\u2014';
@@ -145,7 +145,7 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
               <tbody>
                 {submissions.map((submission) => {
                   const effectiveStatus = submission.effectiveStatus ?? submission.status;
-                  const config = ESIGN_STATUS_CONFIG[effectiveStatus] ??
+                  const config = ESIGN_STATUS_DISPLAY[effectiveStatus] ??
                     DEFAULT_STATUS;
                   const Icon = config.icon;
 

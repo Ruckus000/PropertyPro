@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ESIGN_STATUS_CONFIG, EVENT_ICONS } from './esign-status-config';
+import { ESIGN_STATUS_DISPLAY, EVENT_ICONS } from './esign-status-config';
 import type { EsignStatusConfigEntry } from './esign-status-config';
 import { ESIGN_MAX_REMINDERS } from '@propertypro/shared';
 import {
@@ -53,7 +53,7 @@ interface SubmissionDetailProps {
   submissionId: number;
 }
 
-const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_CONFIG['pending']!
+const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_DISPLAY['pending']!
 
 function formatDateTime(date: Date | string | null): string {
   if (!date) return '\u2014';
@@ -178,7 +178,7 @@ export function SubmissionDetail({
 
   const { submission, signers, events } = data;
   const effectiveStatus = submission.effectiveStatus ?? submission.status;
-  const submissionConfig = ESIGN_STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
+  const submissionConfig = ESIGN_STATUS_DISPLAY[effectiveStatus] ?? DEFAULT_STATUS;
   const SubIcon = submissionConfig.icon;
   const isPending = effectiveStatus === 'pending';
 
@@ -277,7 +277,7 @@ export function SubmissionDetail({
             <div className="space-y-3">
               {signers.map((signer: EsignSignerRecord) => {
                 const signerConfig =
-                  ESIGN_STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
+                  ESIGN_STATUS_DISPLAY[signer.status] ?? DEFAULT_STATUS;
                 const SIcon = signerConfig.icon;
                 const blockedBySequence = signerIsBlockedBySequence(
                   submission.signingOrder,

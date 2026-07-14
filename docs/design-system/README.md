@@ -106,6 +106,11 @@ Rules:
 - never communicate status by color alone
 - critical (overdue) items must be visible without scrolling on dashboard views
 
+**Status config:** canonical source is `packages/ui/src/constants/status.ts`,
+re-exported to apps via `apps/web/src/lib/constants/status.ts`. The copy
+formerly at `docs/design-system/constants/status.ts` was removed 2026-07 —
+do not recreate it.
+
 ## Responsive Density
 
 Density is viewport-driven, not user-toggle-driven.
