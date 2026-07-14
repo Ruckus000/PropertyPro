@@ -2,6 +2,21 @@
 
 Reliable compliance tooling for Florida condominium operations, designed for mixed-age users and mixed-device workflows.
 
+## Where the code actually lives (canonical paths)
+
+This folder is documentation only. The reference implementations (`.tsx` /
+`.css` / `.ts`) formerly duplicated here were removed (2026-07) — they had
+drifted from the real app code. Everything below is a pointer, not a copy.
+
+| Thing | Canonical source |
+|---|---|
+| Tokens (all) | `packages/tokens/` → generated `packages/ui/src/styles/tokens.css` |
+| Buttons, Cards, inputs, dialogs… | `apps/web/src/components/ui/` (shadcn/CVA — canonical) |
+| StatusBadge / Badge (status family) | `packages/ui/src/components/Badge.tsx` |
+| Status config | `packages/ui/src/constants/status.ts` |
+| EmptyState / AlertBanner / PageHeader | `apps/web/src/components/shared/` |
+| Empty-state copy configs | `apps/web/src/lib/constants/empty-states.ts` |
+
 ## Design Philosophy
 
 PropertyPro is a production compliance system, not a marketing site. Visual decisions prioritize:

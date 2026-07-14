@@ -1,8 +1,10 @@
 /**
  * AlertBanner — Contextual alert messages with semantic token styling.
  *
- * Tailwind-based implementation of the pattern from
- * docs/design-system/patterns/AlertBanner.tsx.
+ * Tailwind-based implementation of the pattern documented at
+ * docs/design-system/patterns/ (see docs/design-system/README.md). This
+ * component is the canonical implementation — the docs folder no longer
+ * carries a duplicate .tsx copy.
  *
  * Always renders with role="alert" for accessibility.
  * Always includes icon + text (never color alone).
