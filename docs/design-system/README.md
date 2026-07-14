@@ -148,7 +148,7 @@ V2 accessibility baseline includes:
 
 | Component | Key V2 Values |
 |---|---|
-| `Button` | heights: `sm 36`, `md 40`, `lg 48`; radius `md (10px)` |
+| `Button` | see the Component Dimensions table in `/DESIGN.md` (canonical: `apps/web/src/components/ui/button.tsx`) |
 | `Input` (token contract) | heights: `40 desktop / 48 mobile density`; radius `sm (6px)` |
 | `Card` | radius `md (10px)`; elevation `E0` rest, `E1` hover/interactive |
 | `Modal` | radius `lg (16px)`; elevation `E3` |

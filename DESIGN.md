@@ -94,12 +94,12 @@ the offending line (email-template hex, chart/canvas internals).
 
 ## Component System
 
-Three layers, each with a specific role:
+Four layers, each with a specific role:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
 | **shadcn/ui** | `apps/web/src/components/ui/` | **Canonical layer for standard controls** — form controls, dialogs, tables, tabs, buttons, cards — Tailwind + CVA |
-| **Design system** | `packages/ui/src/components/` | Status Badge family, NavRail, PhoneFrame, TipTap editor, and layout primitives. `Button`/`Card` here are `@deprecated` for web — admin-only until its migration; do not add new `apps/web` imports |
+| **Design system** | `packages/ui/src/components/` | Status Badge family, NavRail, PhoneFrame, TipTap editor. `Button`/`Card` here are `@deprecated` for web — admin-only until its migration; do not add new `apps/web` imports |
 | **Primitives** | `packages/ui/src/primitives/` | Layout building blocks (Stack, Text, Box) — polymorphic `as` prop |
 | **Domain patterns** | `apps/web/src/components/shared/` | App-specific compositions (AlertBanner, EmptyState, PageHeader, DataTable, KpiCard, StatusBadge, Breadcrumbs, …). Documented (not implemented) at `docs/design-system/README.md` |
 
@@ -117,7 +117,7 @@ Three layers, each with a specific role:
 | NavRail item | 44 | md (10px) | Rail: 64px collapsed, 240px expanded |
 | Table row | 52 (body) / 40 (header) | — | Cell padding: 12px |
 
-Source: `packages/ui/src/tokens/components.ts`
+Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table); Button dimensions live in `apps/web/src/components/ui/button.tsx`'s CVA (the deprecated packages/ui Button keeps the old 36/40/48 scale for admin).
 
 ---
 

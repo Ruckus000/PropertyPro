@@ -103,4 +103,4 @@ Domain-specific rules are in `.claude/rules/` and load automatically when releva
 - `docs/00-DEMO-PLATFORM-TECH-SPEC.md` — Full technical specification
 - `docs/adr/` — Architecture Decision Records
 - `docs/audits/` — Gate verification evidence
-- `docs/design-system/` — Design system documentation (V2 spec, patterns, constants)
+- `docs/design-system/` — Design system documentation, docs only (V2 spec README, DESIGN_LAWS, public-site block specs, layout templates, custom CSS overrides); implementations live in the canonical code paths listed in its README
