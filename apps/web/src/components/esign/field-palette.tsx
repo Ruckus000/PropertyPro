@@ -68,7 +68,7 @@ export function FieldPalette({
         </h3>
         <div className="flex flex-col gap-1">
           {signerRoles.map((role) => {
-            const color = signerRoleColors[role] ?? '#6b7280'; // design-tokens:exempt — defensive fallback (gray-500) when a role has no assigned palette color, not itself a palette entry
+            const color = signerRoleColors[role] ?? 'var(--text-tertiary)';
             const isActive = role === activeRole;
             const count = fieldCounts[role] ?? 0;
 
