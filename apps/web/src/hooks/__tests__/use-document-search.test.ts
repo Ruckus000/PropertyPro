@@ -100,7 +100,6 @@ describe('useDocumentSearch', () => {
 
   it('non-Error throw falls back to "Search failed"', async () => {
     fetchMock.mockImplementationOnce(() => {
-      // eslint-disable-next-line @typescript-eslint/no-throw-literal
       throw 'boom';
     });
     const { result } = renderHook(() => useDocumentSearch(1));
