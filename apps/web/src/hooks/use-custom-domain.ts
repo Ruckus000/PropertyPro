@@ -12,6 +12,11 @@
  *                    Re-checks DNS/verification, returns the refreshed state.
  * useRemoveDomain  — DELETE /api/v1/pm/site/domain { communityId }
  *                    Detaches the domain; resets the cache to the empty state.
+ * useCheckDomainAvailability — GET /api/v1/pm/site/domain/check
+ *                    Guided-purchase availability + indicative-price check.
+ *                    A useMutation (explicit button trigger, no caching) —
+ *                    the app never buys the domain; the UI links out to a
+ *                    registrar.
  *
  * All routes use the canonical { data: T } success envelope and
  * { error: { code, message } } error envelope (B1 canonical). Raw fetch is kept
@@ -107,6 +112,30 @@ export function useVerifyDomain(communityId: number) {
     },
     onSuccess: (data) => {
       qc.setQueryData(domainQueryKey(communityId), data);
+    },
+  });
+}
+
+export interface DomainAvailability {
+  name: string;
+  available: boolean;
+  price: number | null;
+  period: number | null;
+}
+
+export function useCheckDomainAvailability(communityId: number) {
+  return useMutation<DomainAvailability, Error, string>({
+    mutationFn: async (name: string) => {
+      const params = new URLSearchParams({
+        communityId: String(communityId),
+        name,
+      });
+      const res = await fetch(`/api/v1/pm/site/domain/check?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error(await readJsonError(res));
+      }
+      const body = (await res.json()) as { data: DomainAvailability };
+      return body.data;
     },
   });
 }

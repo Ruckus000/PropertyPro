@@ -22,6 +22,8 @@ export class DomainProvisioningUnavailableError extends Error {}
 export class DomainProviderError extends Error {
   constructor(message: string, readonly providerCode?: string) { super(message); }
 }
+/** Vercel returned 429 — surface as our own 429 rather than a 502. */
+export class DomainProviderRateLimitedError extends DomainProviderError {}
 
 export type DomainStatus = 'pending' | 'active' | 'error';
 export interface DnsRecord { type: string; name: string; value: string; }
@@ -82,6 +84,77 @@ export async function getDomainStatus(host: string): Promise<DomainStatusResult>
   const { status, body } = await call(`/v9/projects/${projectId}/domains/${host}${teamQuery(teamId)}`, { method: 'GET' });
   if (status >= 400) return { status: 'error', records: [], reason: body?.error?.message ?? `Vercel error ${status}` };
   return { status: mapStatus(body), records: toRecords(body?.verification) };
+}
+
+export interface DomainAvailabilityResult {
+  available: boolean;
+  /** Vercel's registration price in USD, or null when unknown/unreliable. */
+  price: number | null;
+  /** Registration period in years the price covers, or null when unknown. */
+  period: number | null;
+}
+
+/**
+ * Availability + best-effort price for a domain the PM might buy elsewhere
+ * (guided-purchase flow — we never call any buy endpoint).
+ *
+ * Uses the Registrar API (the older /v4/domains/status + /v4/domains/price
+ * were sunsetted 2025-11-09 — confirmed against a live probe):
+ *
+ *   GET /v1/registrar/domains/{domain}/availability → { available: boolean }
+ *   GET /v1/registrar/domains/{domain}/price?years=1 → purchase price data
+ *
+ * The price call is best-effort: any failure degrades to price=null rather
+ * than failing the availability answer.
+ */
+export async function checkDomainAvailability(name: string): Promise<DomainAvailabilityResult> {
+  const { teamId } = config();
+  const encoded = encodeURIComponent(name);
+
+  const { status, body } = await call(
+    `/v1/registrar/domains/${encoded}/availability${teamQuery(teamId)}`,
+    { method: 'GET' },
+  );
+  if (status === 429) {
+    throw new DomainProviderRateLimitedError(
+      'Too many domain checks right now — try again in a minute.',
+      body?.error?.code ?? body?.code,
+    );
+  }
+  if (status >= 400) {
+    throw new DomainProviderError(
+      body?.error?.message ?? body?.message ?? `Vercel error ${status}`,
+      body?.error?.code ?? body?.code,
+    );
+  }
+  // Docs declare a boolean but the response example shows "true" — accept both.
+  const available = body?.available === true || body?.available === 'true';
+  if (!available) {
+    return { available: false, price: null, period: null };
+  }
+
+  try {
+    const priceParams = new URLSearchParams({ years: '1' });
+    if (teamId) priceParams.set('teamId', teamId);
+    const priceRes = await call(`/v1/registrar/domains/${encoded}/price?${priceParams.toString()}`, {
+      method: 'GET',
+    });
+    const price = extractPurchasePrice(priceRes.body);
+    if (priceRes.status < 400 && price !== null) {
+      const years = Number(priceRes.body?.years);
+      return { available: true, price, period: Number.isFinite(years) && years > 0 ? years : 1 };
+    }
+  } catch {
+    // Price is decorative — never fail the availability answer over it.
+  }
+  return { available: true, price: null, period: null };
+}
+
+/** Pull a usable USD purchase price out of the Registrar price payload. */
+function extractPurchasePrice(body: any): number | null {
+  const candidate = body?.purchasePrice ?? body?.price;
+  const n = typeof candidate === 'string' ? Number(candidate) : candidate;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export async function removeProjectDomain(host: string): Promise<void> {

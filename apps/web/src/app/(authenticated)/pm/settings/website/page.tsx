@@ -73,10 +73,9 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   // published version.
   const reader = getPublicCommunityScopedReader(communityId);
   const blocks = await reader.listSiteBlocks({ includeDrafts: true });
-  // A site is "live" once it has at least one published (non-draft) block.
-  // Safe under both the current publish-straight-to-prod model and the future
-  // draft/publish model — only published rows count either way — and keeps this
-  // header pill in lockstep with the PublishBar badge (same signal).
+  // A site is "live" once it has at least one published (non-draft) block —
+  // only published rows count, which keeps this header pill in lockstep with
+  // the PublishBar badge (same signal).
   const hasPublishedContent = blocks.some((b) => !b.isDraft);
   const heroRaw = blocks.find((b) => b.blockType === 'hero')?.content;
   let initial: HeroBlockContent | null = null;
