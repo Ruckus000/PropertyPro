@@ -4,6 +4,11 @@
  * Card — Container for grouped content.
  *
  * Compound component with Header, Body, Footer, and Section slots.
+ *
+ * @deprecated Web app: use `@/components/ui/card` (canonical shadcn layer).
+ * This component remains ONLY for apps/admin until its migration program.
+ * Do not add new imports in apps/web — PR review enforces this.
+ * See docs/superpowers/specs/2026-07-13-design-system-standardization-design.md.
  */
 
 import React, {
