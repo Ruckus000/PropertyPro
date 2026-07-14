@@ -15,9 +15,9 @@ export interface CommandItemProps {
 }
 
 const BADGE_STYLES: Record<string, string> = {
-  Page: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
-  Action: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-  Setting: 'bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-400',
+  Page: 'bg-status-info-subtle text-status-info dark:bg-blue-950 dark:text-blue-300',
+  Action: 'bg-status-warning-subtle text-status-warning dark:bg-amber-950 dark:text-amber-300',
+  Setting: 'bg-surface-muted text-content-secondary dark:bg-gray-900 dark:text-gray-400',
 };
 
 export function CommandItem({
@@ -53,8 +53,8 @@ export function CommandItem({
       {badge && (
         <span
           className={cn(
-            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight',
-            BADGE_STYLES[badge] ?? 'bg-gray-50 text-gray-600',
+            'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium leading-tight',
+            BADGE_STYLES[badge] ?? 'bg-surface-muted text-content-secondary',
           )}
         >
           {badge}

@@ -210,7 +210,7 @@ export function AppSidebar({
                 <PlanBadge label={PLAN_FEATURES[resolvedPlanId].displayName} />
               ) : (
                 <span
-                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--surface-muted)] px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)] ring-1 ring-inset ring-[var(--border-default)]"
+                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--surface-muted)] px-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)] ring-1 ring-inset ring-[var(--border-default)]"
                   aria-label="No plan"
                 >
                   No plan

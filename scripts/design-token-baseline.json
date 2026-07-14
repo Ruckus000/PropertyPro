@@ -193,12 +193,8 @@
     "raw-hex": 6,
     "arbitrary-color": 6
   },
-  "apps/web/src/components/command-palette/CommandInput.tsx": {
-    "arbitrary-font": 1
-  },
   "apps/web/src/components/command-palette/CommandItem.tsx": {
-    "raw-palette": 14,
-    "arbitrary-font": 1
+    "raw-palette": 6
   },
   "apps/web/src/components/demo/DemoBanner.tsx": {
     "raw-palette": 1
@@ -214,12 +210,6 @@
   },
   "apps/web/src/components/help/mdx-components.tsx": {
     "raw-palette": 3
-  },
-  "apps/web/src/components/layout/app-sidebar.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/layout/command-palette.tsx": {
-    "arbitrary-font": 1
   },
   "apps/web/src/components/marketing/footer.tsx": {
     "raw-hex": 1
@@ -289,20 +279,8 @@
     "raw-palette": 18,
     "arbitrary-font": 10
   },
-  "apps/web/src/components/notifications/cross-community-dropdown.tsx": {
-    "arbitrary-font": 2
-  },
-  "apps/web/src/components/notifications/notification-bell.tsx": {
-    "arbitrary-font": 1
-  },
   "apps/web/src/components/onboarding/welcome-snapshot-cards.tsx": {
     "raw-palette": 4
-  },
-  "apps/web/src/components/shared/checklist-stepper.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/shared/quick-filter-tabs.tsx": {
-    "arbitrary-font": 1
   },
   "apps/web/src/lib/documents/render-authored-html.ts": {
     "raw-hex": 23
