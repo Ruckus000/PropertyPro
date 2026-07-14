@@ -462,6 +462,9 @@ importers:
 
   packages/email:
     dependencies:
+      '@propertypro/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@propertypro/tokens':
         specifier: workspace:*
         version: link:../tokens

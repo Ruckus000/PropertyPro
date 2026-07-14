@@ -1,5 +1,9 @@
 /* PropertyPro Design System — CSS Custom Properties */
 
+/* GENERATED FILE — do not edit directly.
+   Source: packages/tokens/src/primitives.ts, semantic.ts, static.ts
+   Regenerate: pnpm -F @propertypro/tokens generate */
+
 /* ═══════════════════════════════════════════════════════════════════════════
    PRIMITIVES
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -119,8 +123,7 @@
   /* Typography */
   font-size: 16px;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-size-xs: 0.75rem;      /* 12px */
   --font-size-sm: 0.875rem;     /* 14px */
   --font-size-base: 1rem;       /* 16px */
@@ -354,9 +357,7 @@
   /* Light/neutral sidebar (Cloudflare-style). All values resolve to existing
      semantic tokens — no raw hex. Active state = neutral bg + themed left bar
      + bold label (never color-alone), so a non-blue community theme never
-     produces a themed-bar/blue-bg mismatch.
-     NOTE: this block is hand-maintained — the token generator (build.ts) only
-     patches the primitive + semantic color regions higher up in this file. */
+     produces a themed-bar/blue-bg mismatch. */
   --nav-surface: var(--surface-card);
   --nav-text-active: var(--text-primary);
   --nav-text-inactive: var(--text-secondary);

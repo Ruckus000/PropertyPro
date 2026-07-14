@@ -1,2 +1,2 @@
-export { STATUS_CONFIG, getStatusConfig } from "./status";
-export type { StatusKey, StatusIconKey } from "./status";
+export { STATUS_CONFIG, getStatusConfig, getStatusClasses } from "./status";
+export type { StatusKey, StatusIconKey, StatusConfigEntry } from "./status";

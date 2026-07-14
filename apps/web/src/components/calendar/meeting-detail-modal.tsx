@@ -4,7 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
@@ -104,13 +106,13 @@ export function MeetingDetailModal({
             }
           }}
         >
-      <Card className="w-full max-w-2xl overflow-hidden bg-[var(--surface-card)] shadow-[var(--elevation-e3)]" noPadding>
-        <Card.Header bordered>
+      <Card className="w-full max-w-2xl overflow-hidden bg-[var(--surface-card)] shadow-[var(--elevation-e3)]">
+        <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
           <div className="flex w-full items-start justify-between gap-4">
             <div className="space-y-2">
               {meetingToken ? <Badge variant={meetingToken.badgeVariant}>{meetingToken.label}</Badge> : null}
               <Dialog.Title asChild>
-                <Card.Title>{meeting?.title ?? 'Loading meeting…'}</Card.Title>
+                <CardTitle>{meeting?.title ?? 'Loading meeting…'}</CardTitle>
               </Dialog.Title>
             </div>
             <Dialog.Close asChild>
@@ -122,8 +124,8 @@ export function MeetingDetailModal({
               </button>
             </Dialog.Close>
           </div>
-        </Card.Header>
-        <Card.Body className="space-y-4">
+        </CardHeader>
+        <CardContent className="space-y-4">
           {detailQuery.isLoading || !meeting || !startsAt || !endsAt ? (
             <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
               Loading meeting details...
@@ -236,10 +238,10 @@ export function MeetingDetailModal({
               {errorMessage}
             </div>
           ) : null}
-        </Card.Body>
+        </CardContent>
         {canWrite ? (
-          <Card.Footer bordered>
-            <Button variant="danger" onClick={handleDelete} loading={deleteMutation.isPending}>
+          <CardFooter className="justify-end gap-3 border-t border-edge-subtle">
+            <Button variant="destructive" onClick={handleDelete} loading={deleteMutation.isPending}>
               Delete
             </Button>
             <Link
@@ -249,10 +251,10 @@ export function MeetingDetailModal({
               <FilePlus2 size={16} aria-hidden="true" />
               Author Minutes
             </Link>
-            <Button variant="secondary" onClick={() => onEdit(meetingId)}>
+            <Button variant="outline" onClick={() => onEdit(meetingId)}>
               Edit
             </Button>
-          </Card.Footer>
+          </CardFooter>
         ) : null}
       </Card>
         </Dialog.Content>

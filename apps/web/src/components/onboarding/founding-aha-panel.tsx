@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Button, Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
 import { useTransparencySettings, useUpdateTransparencySettings } from '@/hooks/use-transparency';
 import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';
@@ -70,17 +71,17 @@ export function FoundingAhaPanel({
 
       <div className="grid gap-4 p-5 lg:grid-cols-2">
         <Card className="border-edge bg-surface-page">
-          <Card.Header>
-            <Card.Title>Compliance readiness</Card.Title>
-            <Card.Subtitle>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle>Compliance readiness</CardTitle>
+            <CardDescription>
               {checklistLoading
                 ? 'Loading checklist...'
                 : checklistError
                   ? "Couldn't load compliance status"
                   : `${summary.readiness.satisfied} of ${summary.readiness.applicableTotal} records on file`}
-            </Card.Subtitle>
-          </Card.Header>
-          <Card.Body className="space-y-4">
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="flex items-end gap-3">
               <p className="text-4xl font-semibold tabular-nums text-content">
                 {checklistLoading || checklistError ? '—' : `${readinessPct}%`}
@@ -119,19 +120,19 @@ export function FoundingAhaPanel({
             ) : (
               <p className="text-sm text-content-secondary">No compliance items yet.</p>
             )}
-          </Card.Body>
+          </CardContent>
         </Card>
 
         <Card className="border-edge bg-surface-page">
-          <Card.Header>
-            <Card.Title>Public transparency</Card.Title>
-            <Card.Subtitle>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <CardTitle>Public transparency</CardTitle>
+            <CardDescription>
               {transparencyEnabled
                 ? 'Your transparency page is live on your community host.'
                 : 'One click publishes your compliance transparency page.'}
-            </Card.Subtitle>
-          </Card.Header>
-          <Card.Body className="space-y-4">
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {error ? (
               <p className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger">
                 {error}
@@ -182,7 +183,7 @@ export function FoundingAhaPanel({
                 </Button>
               </>
             )}
-          </Card.Body>
+          </CardContent>
         </Card>
       </div>
     </section>

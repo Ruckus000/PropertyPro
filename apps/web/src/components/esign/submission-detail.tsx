@@ -7,7 +7,9 @@
 
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
@@ -20,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ESIGN_STATUS_CONFIG, EVENT_ICONS } from './esign-status-config';
+import { ESIGN_STATUS_DISPLAY, EVENT_ICONS } from './esign-status-config';
 import type { EsignStatusConfigEntry } from './esign-status-config';
 import { ESIGN_MAX_REMINDERS } from '@propertypro/shared';
 import {
@@ -51,7 +53,7 @@ interface SubmissionDetailProps {
   submissionId: number;
 }
 
-const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_CONFIG['pending']!
+const DEFAULT_STATUS: EsignStatusConfigEntry = ESIGN_STATUS_DISPLAY['pending']!
 
 function formatDateTime(date: Date | string | null): string {
   if (!date) return '\u2014';
@@ -176,7 +178,7 @@ export function SubmissionDetail({
 
   const { submission, signers, events } = data;
   const effectiveStatus = submission.effectiveStatus ?? submission.status;
-  const submissionConfig = ESIGN_STATUS_CONFIG[effectiveStatus] ?? DEFAULT_STATUS;
+  const submissionConfig = ESIGN_STATUS_DISPLAY[effectiveStatus] ?? DEFAULT_STATUS;
   const SubIcon = submissionConfig.icon;
   const isPending = effectiveStatus === 'pending';
 
@@ -275,7 +277,7 @@ export function SubmissionDetail({
             <div className="space-y-3">
               {signers.map((signer: EsignSignerRecord) => {
                 const signerConfig =
-                  ESIGN_STATUS_CONFIG[signer.status] ?? DEFAULT_STATUS;
+                  ESIGN_STATUS_DISPLAY[signer.status] ?? DEFAULT_STATUS;
                 const SIcon = signerConfig.icon;
                 const blockedBySequence = signerIsBlockedBySequence(
                   submission.signingOrder,
@@ -344,7 +346,7 @@ export function SubmissionDetail({
                           </Button>
                           <Button
                             type="button"
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
                             data-testid={`esign-open-signing-link-${signer.id}`}
                             onClick={() =>
@@ -431,7 +433,7 @@ export function SubmissionDetail({
 
           {data.downloadUrl && (
             <Button
-              variant="secondary"
+              variant="outline"
               className="w-full"
               onClick={() => openDownload(data.downloadUrl!)}
             >

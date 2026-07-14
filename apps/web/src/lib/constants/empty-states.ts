@@ -1,7 +1,9 @@
 /**
  * Empty state configuration — reusable copy + icon mapping.
  *
- * Source: docs/design-system/constants/empty-states.ts
+ * This is the canonical implementation (the duplicate formerly at
+ * docs/design-system/constants/empty-states.ts was removed 2026-07 —
+ * do not recreate it). See docs/design-system/README.md.
  */
 
 export type EmptyStateIconKey =

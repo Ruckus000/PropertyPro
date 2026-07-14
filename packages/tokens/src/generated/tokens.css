@@ -1,5 +1,15 @@
+/* PropertyPro Design System — CSS Custom Properties */
+
+/* GENERATED FILE — do not edit directly.
+   Source: packages/tokens/src/primitives.ts, semantic.ts, static.ts
+   Regenerate: pnpm -F @propertypro/tokens generate */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRIMITIVES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
-  /* Primitive Colors */
+  /* Colors */
   --blue-50: #EFF6FF;
   --blue-100: #DBEAFE;
   --blue-200: #BFDBFE;
@@ -90,6 +100,80 @@
   --yellow-800: #854D0E;
   --yellow-900: #713F12;
 
+  /* Spacing (4px base unit) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  font-size: 16px;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-size-xs: 0.75rem;      /* 12px */
+  --font-size-sm: 0.875rem;     /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;     /* 18px */
+  --font-size-xl: 1.25rem;      /* 20px */
+  --font-size-2xl: 1.5rem;      /* 24px */
+  --font-size-3xl: 1.875rem;    /* 30px */
+
+  /* Motion */
+  --motion-duration-instant: 0ms;
+  --motion-duration-micro: 100ms;
+  --motion-duration-quick: 150ms;
+  --motion-duration-standard: 250ms;
+  --motion-duration-slow: 350ms;
+  --motion-duration-expressive: 500ms;
+
+  --duration-instant: var(--motion-duration-instant);
+  --duration-micro: var(--motion-duration-micro);
+  --duration-quick: var(--motion-duration-quick);
+  --duration-standard: var(--motion-duration-standard);
+  --duration-slow: var(--motion-duration-slow);
+  --duration-expressive: var(--motion-duration-expressive);
+
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Sizing — responsive density */
+  --touch-target-min: 44px;
+  --pointer-target-min: 36px;
+  --component-padding: var(--space-4);
+  --component-gap: var(--space-3);
+  --input-height: 48px;
+  --button-height: 48px;
+
+  /* Focus */
+  --focus-ring-color: var(--blue-500);
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 2px;
+  --focus-ring-style: solid;
+  --focus-ring-color-danger: var(--red-500);
+  --focus-ring-color-inverse: var(--gray-0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEMANTIC TOKENS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
   /* Text */
   --text-primary: var(--gray-900);
   --text-secondary: var(--gray-600);
@@ -172,4 +256,133 @@
   --status-board-bg: var(--pink-50);
   --status-board-border: var(--pink-200);
   --status-board-subtle: var(--pink-100);
+
+  /* Elevation */
+  --elevation-e0: none;
+  --elevation-e1: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --elevation-e2: 0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02);
+  --elevation-e3: 0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE DENSITY
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 768px) {
+  :root {
+    --component-padding: var(--space-3);
+    --component-gap: var(--space-2);
+    --input-height: 40px;
+    --button-height: 40px;
+    --touch-target-min: 36px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FOCUS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:focus-visible {
+  outline: var(--focus-ring-width) var(--focus-ring-style) var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: inherit;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  padding: 8px 16px;
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 16px;
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 3px solid CanvasText;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTION — REDUCED MOTION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-micro: 0ms;
+    --motion-duration-quick: 0ms;
+    --motion-duration-standard: 0ms;
+    --motion-duration-slow: 0ms;
+    --motion-duration-expressive: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in {
+    animation: fadeIn var(--duration-standard) var(--ease-enter);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAVIGATION — SIDEBAR SEMANTIC TOKENS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Light/neutral sidebar (Cloudflare-style). All values resolve to existing
+     semantic tokens — no raw hex. Active state = neutral bg + themed left bar
+     + bold label (never color-alone), so a non-blue community theme never
+     produces a themed-bar/blue-bg mismatch. */
+  --nav-surface: var(--surface-card);
+  --nav-text-active: var(--text-primary);
+  --nav-text-inactive: var(--text-secondary);
+  --nav-text-muted: var(--text-tertiary);
+  --nav-bg-active: var(--surface-muted);
+  --nav-bg-hover: var(--surface-hover);
+  --nav-divider: var(--border-subtle);
+  --nav-border-divider: var(--border-default);
+  --nav-badge-bg: var(--surface-muted);
+  --nav-badge-border: var(--surface-card);
+  --nav-indicator: var(--interactive-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LARGE TEXT MODE — Accessibility
+   Activated by adding .large-text class to <html>.
+   Scales all typography tokens up for users with poor vision.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.large-text {
+  --font-size-xs: 0.875rem;    /* 14px (default 12px) */
+  --font-size-sm: 1rem;        /* 16px (default 14px) */
+  --font-size-base: 1.125rem;  /* 18px (default 16px) */
+  --font-size-lg: 1.25rem;     /* 20px (default 18px) */
+  --font-size-xl: 1.5rem;      /* 24px (default 20px) */
+  --font-size-2xl: 1.75rem;    /* 28px (default 24px) */
+  --font-size-3xl: 2.125rem;   /* 34px (default 30px) */
 }

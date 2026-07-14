@@ -21,9 +21,16 @@ Source: `docs/design-system/README.md`, `docs/design-system/DESIGN_LAWS.md`
 
 Three-tier system. **Never use primitive tokens directly** — always go through semantic or component layers.
 
+Tokens are DEFINED in `packages/tokens` (`src/primitives.ts` / `src/semantic.ts` /
+`src/static.ts`) and GENERATED into `packages/ui/src/styles/tokens.css`. That
+CSS file is never hand-edited — a sync test
+(`packages/tokens/__tests__/sync.test.ts`) and `pnpm guard:token-freshness`
+both fail the build if it drifts from source. Component-specific dimension
+contracts live in `packages/ui/src/tokens/components.ts`.
+
 ```
-Primitive (raw scales)  →  Semantic (purpose-driven)  →  Component (specific contracts)
-packages/ui/src/tokens/    packages/ui/src/styles/tokens.css   packages/ui/src/tokens/components.ts
+Primitive (raw scales)     →  Semantic (purpose-driven)                →  Component (specific contracts)
+packages/tokens/src/          generated packages/ui/src/styles/tokens.css   packages/ui/src/tokens/components.ts
 ```
 
 ### Key Semantic Tokens
@@ -54,6 +61,17 @@ packages/ui/src/tokens/    packages/ui/src/styles/tokens.css   packages/ui/src/t
 - **Macro** (layout composition): `section` (24–64px), `page` (48–80px)
 - Macro spacing is constant across viewports. Only micro spacing adapts by breakpoint.
 
+### Token Enforcement
+
+`pnpm guard:design-tokens` bans raw hex, raw Tailwind palette classes
+(`bg-blue-500`), arbitrary colors (`bg-[#…]`), functional color literals
+(`rgba(…)`, `hsl(…)`, `oklch(…)`), arbitrary font sizes (`text-[13px]`), and
+arbitrary pixel spacing (`p-[13px]`) in `apps/*/src`. Existing violations are
+frozen in `scripts/design-token-baseline.json` on a shrink-only, per-file
+ceiling — new files must be clean, and baselined files can't exceed their
+frozen count. Escape hatch: a `// design-tokens:exempt — <reason>` comment on
+the offending line (email-template hex, chart/canvas internals).
+
 ---
 
 ## Typography
@@ -76,30 +94,30 @@ packages/ui/src/tokens/    packages/ui/src/styles/tokens.css   packages/ui/src/t
 
 ## Component System
 
-Three layers, each with a specific role:
+Four layers, each with a specific role:
 
 | Layer | Location | Purpose |
 |-------|----------|---------|
-| **shadcn/ui** | `apps/web/src/components/ui/` | Standard form controls, dialogs, tables, tabs — Tailwind + CVA |
-| **Design system** | `packages/ui/src/components/` | Token-driven branded components (Button, Card, Badge, NavRail) |
+| **shadcn/ui** | `apps/web/src/components/ui/` | **Canonical layer for standard controls** — form controls, dialogs, tables, tabs, buttons, cards — Tailwind + CVA |
+| **Design system** | `packages/ui/src/components/` | Status Badge family, NavRail, PhoneFrame, TipTap editor. `Button`/`Card` here are `@deprecated` for web — admin-only until its migration; do not add new `apps/web` imports |
 | **Primitives** | `packages/ui/src/primitives/` | Layout building blocks (Stack, Text, Box) — polymorphic `as` prop |
-| **Patterns** | `docs/design-system/patterns/` | Domain compositions (SectionHeader, DataRow, AlertBanner, EmptyState, StatusPills) |
+| **Domain patterns** | `apps/web/src/components/shared/` | App-specific compositions (AlertBanner, EmptyState, PageHeader, DataTable, KpiCard, StatusBadge, Breadcrumbs, …). Documented (not implemented) at `docs/design-system/README.md` |
 
-**When to use which:** shadcn/ui for standard controls. Design system components for branded/token-driven elements. Primitives for layout. Patterns for domain-specific compositions.
+**When to use which:** shadcn/ui for standard controls. `packages/ui` for the non-deprecated branded/token-driven elements listed above. Primitives for layout. `apps/web/src/components/shared/` for domain-specific compositions.
 
 ### Component Dimensions
 
-| Component | Heights (sm/md/lg) | Radius | Notes |
-|-----------|-------------------|--------|-------|
-| Button | 36 / 40 / 48 | md (10px) | Variants: primary, secondary, ghost, danger, link |
-| Input | 36 / 40 / 48 | sm (6px) | 1px border, 2px on focus |
+| Component | Heights | Radius | Notes |
+|-----------|---------|--------|-------|
+| Button | sm 32 / default 36 / lg 40 / icon 36 | md (10px) | Denser scale adopted 2026-07 (Wave 2); canonical component: `apps/web/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
+| Input | sm/md/lg 36 / 40 / 48 | sm (6px) | 1px border, 2px on focus |
 | Card | — | md (10px) | Padding: 16/20/24px. E0 rest, E1 hover |
 | Modal | — | lg (16px) | E3. Widths: 400/560/720/960px |
 | Badge | 20 / 24 / 28 | full | Status indicators |
 | NavRail item | 44 | md (10px) | Rail: 64px collapsed, 240px expanded |
 | Table row | 52 (body) / 40 (header) | — | Cell padding: 12px |
 
-Source: `packages/ui/src/tokens/components.ts`
+Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table); Button dimensions live in `apps/web/src/components/ui/button.tsx`'s CVA (the deprecated packages/ui Button keeps the old 36/40/48 scale for admin).
 
 ---
 
@@ -125,7 +143,7 @@ Source: `packages/ui/src/tokens/shadows.ts`, `packages/ui/src/tokens/radius.ts`
 ### Every Data View Must Handle Four States
 
 1. **Loading** — Skeleton placeholders for content areas, Spinner for in-progress actions, Button `loading` prop for submits
-2. **Empty** — EmptyState pattern: icon + encouraging title + description + action. Use configs from `docs/design-system/constants/empty-states.ts`
+2. **Empty** — EmptyState pattern: icon + encouraging title + description + action. Use configs from `apps/web/src/lib/constants/empty-states.ts`
 3. **Error** — AlertBanner `status="danger"` with actionable recovery ("We couldn't load this data. Please try again." + Retry button)
 4. **Success** — The actual content, rendered with proper hierarchy
 
@@ -140,7 +158,7 @@ Source: `packages/ui/src/tokens/shadows.ts`, `packages/ui/src/tokens/radius.ts`
 | Urgent | 1–7 days | Prominent warning |
 | Critical | Overdue | Persistent danger |
 
-**Rule:** NEVER communicate status by color alone. Always pair with icon + text label. Critical items must be visible without scrolling on dashboard. Use `getStatusConfig()` from `docs/design-system/constants/status.ts`.
+**Rule:** NEVER communicate status by color alone. Always pair with icon + text label. Critical items must be visible without scrolling on dashboard. Use `getStatusConfig()` from `packages/ui/src/constants/status.ts` (re-exported via `apps/web/src/lib/constants/status.ts`).
 
 ### Form Design
 

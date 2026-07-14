@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -142,19 +142,19 @@ export function ComplianceCommandCenter({
             type="button"
             aria-pressed={view === 'cam'}
             onClick={() => setView('cam')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'cam' ? 'bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'cam' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >CAM view</button>
           <button
             type="button"
             aria-pressed={view === 'board'}
             onClick={() => setView('board')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'board' ? 'bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'board' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >Board view</button>
         </div>
       )}
       {canWrite && (
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={selectedItem === null}
           onClick={() => {
             if (selectedItem) setUploadItem(selectedItem);

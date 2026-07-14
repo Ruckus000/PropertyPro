@@ -106,7 +106,7 @@ export function CancelCommunityDialog({
 
           {/* Mutation error */}
           {cancel.error && (
-            <p className="text-sm" style={{ color: 'var(--text-error)' }}>
+            <p className="text-sm" style={{ color: 'var(--status-danger)' }}>
               {cancel.error.message}
             </p>
           )}
