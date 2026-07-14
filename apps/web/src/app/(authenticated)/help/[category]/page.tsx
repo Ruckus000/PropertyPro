@@ -131,7 +131,7 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
             {article.roles.length > 0 && (
               <div className="mt-2 flex gap-1.5">
                 {article.roles.slice(0, 3).map((r) => (
-                  <span key={r} className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] text-content-tertiary capitalize">
+                  <span key={r} className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-content-tertiary capitalize">
                     {r.replace(/_/g, ' ')}
                   </span>
                 ))}

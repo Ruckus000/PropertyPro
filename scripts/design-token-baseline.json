@@ -161,12 +161,6 @@
   "apps/admin/src/lib/utils/stale-badge.ts": {
     "raw-palette": 6
   },
-  "apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx": {
-    "raw-palette": 3
-  },
-  "apps/web/src/app/(authenticated)/help/[category]/page.tsx": {
-    "arbitrary-font": 1
-  },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
     "raw-palette": 6
   },
@@ -207,9 +201,6 @@
   },
   "apps/web/src/components/finance/payment-dialog.tsx": {
     "raw-hex": 1
-  },
-  "apps/web/src/components/help/mdx-components.tsx": {
-    "raw-palette": 3
   },
   "apps/web/src/components/marketing/footer.tsx": {
     "raw-hex": 1
@@ -278,9 +269,6 @@
   "apps/web/src/components/mobile/TenantDashboardMockup.tsx": {
     "raw-palette": 18,
     "arbitrary-font": 10
-  },
-  "apps/web/src/components/onboarding/welcome-snapshot-cards.tsx": {
-    "raw-palette": 4
   },
   "apps/web/src/lib/documents/render-authored-html.ts": {
     "raw-hex": 23

@@ -122,7 +122,7 @@ export default async function HelpArticlePage({
                 <Link
                   key={statute}
                   href={`/help/statutes/${encodeURIComponent(statute)}?communityId=${context.communityId}`}
-                  className="rounded-full bg-purple-50 px-2 py-0.5 text-purple-900 transition-colors hover:bg-purple-100"
+                  className="rounded-full bg-status-brand-bg px-2 py-0.5 text-status-brand transition-colors hover:bg-status-brand-subtle"
                   aria-label={`See all articles tagged with ${statute}`}
                 >
                   {statute}

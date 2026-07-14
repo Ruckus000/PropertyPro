@@ -176,10 +176,10 @@ function ArrowRightIcon() {
 // ─── Compliance score helper ──────────────────────────────────
 
 function getComplianceLabel(score: number): { text: string; color: string } {
-  if (score >= 90) return { text: 'Excellent', color: 'text-green-600' };
-  if (score >= 70) return { text: 'Good', color: 'text-yellow-600' };
-  if (score >= 50) return { text: 'Needs attention', color: 'text-orange-600' };
-  return { text: 'Critical', color: 'text-red-600' };
+  if (score >= 90) return { text: 'Excellent', color: 'text-status-success' };
+  if (score >= 70) return { text: 'Good', color: 'text-status-warning' };
+  if (score >= 50) return { text: 'Needs attention', color: 'text-status-warning' };
+  return { text: 'Critical', color: 'text-status-danger' };
 }
 
 function formatDate(dateStr: string): string {
