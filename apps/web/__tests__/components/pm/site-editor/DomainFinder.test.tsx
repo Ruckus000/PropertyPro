@@ -106,6 +106,19 @@ describe('<DomainFinder>', () => {
     expect(alert).toHaveTextContent(/not configured/i);
   });
 
+  it('clears a stale verdict + registrar links when the input changes', async () => {
+    mockCheck({ data: { name: 'foo.com', available: true, price: 12, period: 1 } });
+    render(wrap(<DomainFinder communityId={42} />));
+    await openAndCheck('foo.com');
+    await screen.findByTestId('domain-finder-available');
+
+    // Editing the domain drops the previous result so it can't linger next to
+    // a now-different value.
+    fireEvent.change(screen.getByLabelText(/domain to check/i), { target: { value: 'bar.com' } });
+    expect(screen.queryByTestId('domain-finder-available')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /buy at namecheap/i })).not.toBeInTheDocument();
+  });
+
   it('URL-encodes the domain in registrar links', async () => {
     mockCheck({ data: { name: 'xn--foo-bar.com', available: true, price: null, period: null } });
     render(wrap(<DomainFinder communityId={42} />));

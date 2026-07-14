@@ -70,7 +70,12 @@ export function DomainFinder({ communityId }: DomainFinderProps) {
                 id="domain-finder-name"
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  // Drop the previous verdict + registrar links so they can't
+                  // linger next to a now-different domain until re-checked.
+                  if (check.data || check.error) check.reset();
+                }}
                 disabled={check.isPending}
                 placeholder="yourcommunity.com"
                 className="w-full rounded-sm border border-default px-3 py-2 text-base focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50"
