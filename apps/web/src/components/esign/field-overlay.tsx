@@ -283,7 +283,7 @@ export function FieldOverlay({
   // Filter to current page
   const pageFields = fields.filter((f) => f.page === currentPage);
 
-  const getColor = (role: string) => signerRoleColors[role] ?? '#6b7280'; // design-tokens:exempt — defensive fallback (gray-500) when a role has no assigned palette color, not itself a palette entry
+  const getColor = (role: string) => signerRoleColors[role] ?? '#6b7280'; // design-tokens:exempt — must stay literal hex; feeds "${color}20"/"15"/"30" alpha-suffix string interpolation below, so var(--text-tertiary) (used in field-palette.tsx) isn't usable here
 
   // Deselect when clicking empty area
   const handleBackgroundClick = useCallback(() => {

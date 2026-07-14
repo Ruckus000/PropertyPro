@@ -10,6 +10,10 @@
  *
  * Consumers (template-builder-client.tsx, template-detail-client.tsx) index
  * into this array by signer-role order, cycling with `% ESIGN_FIELD_COLORS.length`.
+ *
+ * Every entry must be plain 6-digit #rrggbb hex — field-overlay.tsx appends
+ * 2-digit alpha suffixes (`${color}20`) directly onto these strings, so CSS
+ * variables, 3-digit shorthand, or already-alpha'd values will break.
  */
 export const ESIGN_FIELD_COLORS = [
   '#2563eb', // blue — design-tokens:exempt — PDF field-overlay palette (single source)
