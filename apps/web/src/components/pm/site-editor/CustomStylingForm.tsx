@@ -12,9 +12,9 @@ interface Props {
 }
 
 const COLOR_DEFAULTS = {
-  primaryColor: '#2563eb',
-  secondaryColor: '#6b7280',
-  accentColor: '#dbeafe',
+  primaryColor: '#2563eb', // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  secondaryColor: '#6b7280', // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  accentColor: '#dbeafe', // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
 } as const;
 
 const hexInputClass =

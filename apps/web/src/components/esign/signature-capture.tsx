@@ -68,8 +68,8 @@ export function SignatureCapture({
     if (ctx) ctx.scale(ratio, ratio);
 
     const pad = new SignaturePad(canvas, {
-      backgroundColor: 'rgb(255, 255, 255)',
-      penColor: 'rgb(0, 0, 0)',
+      backgroundColor: 'rgb(255, 255, 255)', // design-tokens:exempt — signature-pad canvas ink colors
+      penColor: 'rgb(0, 0, 0)', // design-tokens:exempt — signature-pad canvas ink colors
     });
     padRef.current = pad;
 
@@ -126,9 +126,9 @@ export function SignatureCapture({
       canvas.width = 400;
       canvas.height = 100;
       const ctx = canvas.getContext('2d')!;
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#fff'; // design-tokens:exempt — canvas 2d drawing context; signature bitmap must be literal white/black ink
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = '#000'; // design-tokens:exempt — canvas 2d drawing context; signature bitmap must be literal white/black ink
       ctx.font = `${fontSize}px ${CURSIVE_FONT_STACK}`;
       ctx.textBaseline = 'middle';
       ctx.fillText(text, 16, canvas.height / 2);
@@ -301,7 +301,7 @@ export function SignatureCapture({
                       style={{
                         fontFamily: CURSIVE_FONT_STACK,
                         fontSize: mode === 'initials' ? '48px' : '36px',
-                        color: '#000',
+                        color: '#000', // design-tokens:exempt — preview must match the literal black ink written to the signature canvas
                       }}
                     >
                       {typedText}

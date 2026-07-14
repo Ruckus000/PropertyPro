@@ -183,14 +183,8 @@
     "raw-hex": 50,
     "raw-color-fn": 12
   },
-  "apps/web/src/app/demo/[slug]/page.tsx": {
-    "raw-hex": 1
-  },
   "apps/web/src/app/dev/site-preview/page.tsx": {
     "raw-palette": 4
-  },
-  "apps/web/src/app/global-error.tsx": {
-    "raw-hex": 5
   },
   "apps/web/src/app/layout.tsx": {
     "raw-palette": 2
@@ -231,10 +225,6 @@
   "apps/web/src/components/esign/field-palette.tsx": {
     "raw-hex": 1,
     "arbitrary-font": 1
-  },
-  "apps/web/src/components/esign/signature-capture.tsx": {
-    "raw-color-fn": 2,
-    "raw-hex": 3
   },
   "apps/web/src/components/finance/payment-dialog.tsx": {
     "raw-hex": 1
@@ -325,18 +315,6 @@
   "apps/web/src/components/onboarding/welcome-snapshot-cards.tsx": {
     "raw-palette": 4
   },
-  "apps/web/src/components/pm/BrandingForm.tsx": {
-    "raw-hex": 3
-  },
-  "apps/web/src/components/pm/BrandingPreview.tsx": {
-    "raw-hex": 2
-  },
-  "apps/web/src/components/pm/reports/chart-configs.ts": {
-    "raw-color-fn": 19
-  },
-  "apps/web/src/components/pm/site-editor/CustomStylingForm.tsx": {
-    "raw-hex": 3
-  },
   "apps/web/src/components/settings/SupportAccessSettings.tsx": {
     "raw-palette": 21
   },
@@ -348,15 +326,6 @@
   },
   "apps/web/src/components/support/SupportBanner.tsx": {
     "raw-palette": 6
-  },
-  "apps/web/src/components/ui/chart.tsx": {
-    "raw-hex": 5
-  },
-  "apps/web/src/hooks/__tests__/use-branding-form.test.ts": {
-    "raw-hex": 12
-  },
-  "apps/web/src/hooks/__tests__/use-pm-branding.test.tsx": {
-    "raw-hex": 4
   },
   "apps/web/src/lib/documents/render-authored-html.ts": {
     "raw-hex": 23

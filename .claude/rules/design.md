@@ -46,6 +46,11 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Escape hatch: `// design-tokens:exempt — <reason>` on the offending line
   (email-template hex, chart/canvas internals).
 - Renamed/moved files must arrive clean or update the baseline in the same PR.
+- Intentionally-literal files kept frozen in the baseline (do not drain):
+  `apps/web/src/app/(marketing)/marketing-theme.css` (marketing palette),
+  `apps/web/src/lib/documents/render-authored-html.ts` (authored-doc export styling),
+  `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/` + `apps/admin/`
+  (out of standardization scope until their own migration programs).
 
 ## Component Dimensions
 

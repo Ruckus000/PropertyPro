@@ -7,15 +7,15 @@ import type { ChartConfig } from '@/components/ui/chart';
 export const maintenanceChartConfig: ChartConfig = {
   open: {
     label: 'Open',
-    color: 'hsl(0, 84%, 60%)',       // red-500
+    color: 'hsl(0, 84%, 60%)',       // red-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   inProgress: {
     label: 'In Progress',
-    color: 'hsl(38, 92%, 50%)',      // amber-500
+    color: 'hsl(38, 92%, 50%)',      // amber-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   resolved: {
     label: 'Resolved',
-    color: 'hsl(142, 71%, 45%)',     // green-500
+    color: 'hsl(142, 71%, 45%)',     // green-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
 };
 
@@ -26,15 +26,15 @@ export const maintenanceChartConfig: ChartConfig = {
 export const complianceChartConfig: ChartConfig = {
   satisfied: {
     label: 'Satisfied',
-    color: 'hsl(142, 71%, 45%)',     // green-500
+    color: 'hsl(142, 71%, 45%)',     // green-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   overdue: {
     label: 'Overdue',
-    color: 'hsl(38, 92%, 50%)',      // amber-500
+    color: 'hsl(38, 92%, 50%)',      // amber-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   missing: {
     label: 'Missing',
-    color: 'hsl(0, 84%, 60%)',       // red-500
+    color: 'hsl(0, 84%, 60%)',       // red-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
 };
 
@@ -43,12 +43,12 @@ export const complianceChartConfig: ChartConfig = {
 // ---------------------------------------------------------------------------
 
 const OCCUPANCY_COLORS = [
-  'hsl(221, 83%, 53%)',  // blue-600
-  'hsl(262, 83%, 58%)',  // violet-500
-  'hsl(142, 71%, 45%)',  // green-500
-  'hsl(38, 92%, 50%)',   // amber-500
-  'hsl(0, 84%, 60%)',    // red-500
-  'hsl(199, 89%, 48%)',  // sky-500
+  'hsl(221, 83%, 53%)',  // blue-600  // design-tokens:exempt — chart series palette; charts render literal colors
+  'hsl(262, 83%, 58%)',  // violet-500  // design-tokens:exempt — chart series palette; charts render literal colors
+  'hsl(142, 71%, 45%)',  // green-500  // design-tokens:exempt — chart series palette; charts render literal colors
+  'hsl(38, 92%, 50%)',   // amber-500  // design-tokens:exempt — chart series palette; charts render literal colors
+  'hsl(0, 84%, 60%)',    // red-500  // design-tokens:exempt — chart series palette; charts render literal colors
+  'hsl(199, 89%, 48%)',  // sky-500  // design-tokens:exempt — chart series palette; charts render literal colors
 ];
 
 export function buildOccupancyChartConfig(communityNames: string[]): ChartConfig {
@@ -69,15 +69,15 @@ export function buildOccupancyChartConfig(communityNames: string[]): ChartConfig
 export const violationChartConfig: ChartConfig = {
   open: {
     label: 'Open',
-    color: 'hsl(0, 84%, 60%)',       // red-500
+    color: 'hsl(0, 84%, 60%)',       // red-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   fined: {
     label: 'Fined',
-    color: 'hsl(38, 92%, 50%)',      // amber-500
+    color: 'hsl(38, 92%, 50%)',      // amber-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   resolved: {
     label: 'Resolved',
-    color: 'hsl(142, 71%, 45%)',     // green-500
+    color: 'hsl(142, 71%, 45%)',     // green-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
 };
 
@@ -88,18 +88,18 @@ export const violationChartConfig: ChartConfig = {
 export const delinquencyChartConfig: ChartConfig = {
   days0to30: {
     label: '0-30 days',
-    color: 'hsl(142, 71%, 45%)',     // green-500
+    color: 'hsl(142, 71%, 45%)',     // green-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   days31to60: {
     label: '31-60 days',
-    color: 'hsl(48, 96%, 53%)',      // yellow-400
+    color: 'hsl(48, 96%, 53%)',      // yellow-400  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   days61to90: {
     label: '61-90 days',
-    color: 'hsl(25, 95%, 53%)',      // orange-500
+    color: 'hsl(25, 95%, 53%)',      // orange-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
   days90plus: {
     label: '90+ days',
-    color: 'hsl(0, 84%, 60%)',       // red-500
+    color: 'hsl(0, 84%, 60%)',       // red-500  // design-tokens:exempt — chart series palette; charts render literal colors
   },
 };

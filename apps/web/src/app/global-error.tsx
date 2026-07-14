@@ -32,7 +32,11 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           }}
         >
           <h1 style={{ marginBottom: '1rem' }}>Something went wrong</h1>
-          <p style={{ marginBottom: '1.5rem', color: '#4b5563' }}>
+          {/* This boundary replaces the root layout entirely, so tokens.css
+              (and Tailwind) may not be loaded — every color/size below must
+              be a literal inline value. design-tokens:exempt applies to each
+              flagged line individually. */}
+          <p style={{ marginBottom: '1.5rem', color: '#4b5563' }}> {/* design-tokens:exempt — root layout (and tokens.css) may not be loaded here */}
             An unexpected error occurred. Please try again.
           </p>
           <div
@@ -49,8 +53,8 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               style={{
                 padding: '0.5rem 1.5rem',
                 borderRadius: '0.375rem',
-                border: '1px solid #d1d5db',
-                backgroundColor: '#fff',
+                border: '1px solid #d1d5db', // design-tokens:exempt — root layout (and tokens.css) may not be loaded here
+                backgroundColor: '#fff', // design-tokens:exempt — root layout (and tokens.css) may not be loaded here
                 cursor: 'pointer',
                 fontSize: '0.875rem',
               }}
@@ -66,8 +70,8 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               style={{
                 padding: '0.5rem 1.5rem',
                 borderRadius: '0.375rem',
-                border: '1px solid #d1d5db',
-                backgroundColor: '#fff',
+                border: '1px solid #d1d5db', // design-tokens:exempt — root layout (and tokens.css) may not be loaded here
+                backgroundColor: '#fff', // design-tokens:exempt — root layout (and tokens.css) may not be loaded here
                 color: 'inherit',
                 textDecoration: 'none',
                 fontSize: '0.875rem',

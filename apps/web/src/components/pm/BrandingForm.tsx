@@ -52,9 +52,9 @@ interface BrandingFormProps {
 }
 
 export function BrandingForm({ communityId, initialBranding }: BrandingFormProps) {
-  const [primaryColor, setPrimaryColor] = useState(initialBranding.primaryColor ?? '#2563eb');
-  const [secondaryColor, setSecondaryColor] = useState(initialBranding.secondaryColor ?? '#6b7280');
-  const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE');
+  const [primaryColor, setPrimaryColor] = useState(initialBranding.primaryColor ?? '#2563eb'); // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  const [secondaryColor, setSecondaryColor] = useState(initialBranding.secondaryColor ?? '#6b7280'); // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE'); // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
   const [fontHeading, setFontHeading] = useState(initialBranding.fontHeading ?? 'Inter');
   const [fontBody, setFontBody] = useState(initialBranding.fontBody ?? 'Inter');
   const [customEmailFooter, setCustomEmailFooter] = useState(initialBranding.customEmailFooter ?? '');
