@@ -23,7 +23,13 @@ export const blocksListContract = defineRoute({
       communityId: z.coerce.number().int().positive(),
     }),
   },
-  response: z.object({ blocks: z.array(siteBlockSchema) }),
+  response: z.object({
+    blocks: z.array(siteBlockSchema),
+    // Authoritative optimistic-concurrency token (max published_at over all
+    // published rows). The editor echoes it back on publish. Null before the
+    // first publish.
+    latestPublishedAt: z.string().nullable(),
+  }),
   permission: { resource: 'settings', action: 'read' },
 });
 

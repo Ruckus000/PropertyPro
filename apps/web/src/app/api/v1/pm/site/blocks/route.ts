@@ -57,7 +57,13 @@ export const GET = withErrorHandler(
     // continues to use the default published-only read. Tombstones (staged
     // deletions, slice 8f) are included so the PublishBar's pending count
     // covers them — the editor list itself filters them from display.
-    const rows = await reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true });
+    // latestPublishedAt is the authoritative publish token (max over ALL
+    // published rows, incl. those shadowed in the merge) so the editor never
+    // derives a stale-low token from the merged list.
+    const [rows, latestPublishedAt] = await Promise.all([
+      reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true }),
+      reader.getLatestPublishedAt(),
+    ]);
     const blocks = rows.map((r) => ({
       id: r.id,
       blockType: r.blockType,
@@ -66,7 +72,7 @@ export const GET = withErrorHandler(
       isDraft: r.isDraft,
       publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
     }));
-    return { blocks };
+    return { blocks, latestPublishedAt: latestPublishedAt ? latestPublishedAt.toISOString() : null };
   }),
 );
 

@@ -122,6 +122,15 @@ export interface PublicScopedReader {
     includeTombstones?: boolean;
   }): Promise<PublicSiteBlock[]>;
 
+  /**
+   * Authoritative optimistic-concurrency token for the site: the max
+   * `published_at` across ALL published, non-deleted blocks — including any
+   * shadowed by a draft/tombstone in the merged editor view. The PM editor
+   * echoes this back on publish; deriving it from the merged block list would
+   * miss shadowed rows and spuriously 409. Returns null before first publish.
+   */
+  getLatestPublishedAt(): Promise<Date | null>;
+
   /** PR #3 — published, non-expired announcements. */
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
 
@@ -233,6 +242,26 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         isDraft: r.isDraft,
         publishedAt: r.publishedAt,
       }));
+    },
+
+    async getLatestPublishedAt() {
+      // Max published_at over ALL published, non-deleted rows — the same set
+      // publishCommunitySite checks its optimistic-concurrency token against.
+      // Unlike listSiteBlocks' merged view, this never drops a published row
+      // shadowed by a draft/tombstone, so the token can't undershoot.
+      const rows = await db
+        .select({ publishedAt: siteBlocks.publishedAt })
+        .from(siteBlocks)
+        .where(
+          and(
+            eq(siteBlocks.communityId, communityId),
+            eq(siteBlocks.isDraft, false),
+            isNull(siteBlocks.deletedAt),
+          ),
+        )
+        .orderBy(desc(siteBlocks.publishedAt))
+        .limit(1);
+      return rows[0]?.publishedAt ?? null;
     },
 
     async listAnnouncements(opts) {

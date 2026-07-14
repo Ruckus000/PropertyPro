@@ -14,6 +14,7 @@ const {
   resolveEffectiveCommunityIdMock,
   requirePlanFeatureMock,
   listSiteBlocksMock,
+  getLatestPublishedAtMock,
 } = vi.hoisted(() => ({
   upsertPublishedBlockMock: vi.fn().mockResolvedValue(undefined),
   removeSiteBlockMock: vi.fn().mockResolvedValue({ staged: true }),
@@ -22,6 +23,7 @@ const {
   resolveEffectiveCommunityIdMock: vi.fn(),
   requirePlanFeatureMock: vi.fn(),
   listSiteBlocksMock: vi.fn(),
+  getLatestPublishedAtMock: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('@/lib/services/site-blocks-service', () => ({
@@ -48,6 +50,7 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
 vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: () => ({
     listSiteBlocks: listSiteBlocksMock,
+    getLatestPublishedAt: getLatestPublishedAtMock,
     listAnnouncements: vi.fn().mockResolvedValue([]),
     listDocuments: vi.fn().mockResolvedValue([]),
     listMeetings: vi.fn().mockResolvedValue([]),
@@ -87,9 +90,10 @@ describe('GET /api/v1/pm/site/blocks', () => {
     requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
+    getLatestPublishedAtMock.mockResolvedValue(null);
   });
 
-  it('200s and returns the ordered block list', async () => {
+  it('200s and returns the ordered block list plus the publish token', async () => {
     const publishedAt = new Date('2026-05-15T10:00:00Z');
     // PR #8e — reader now returns isDraft + publishedAt on every row.
     const rawBlocks = [
@@ -98,6 +102,7 @@ describe('GET /api/v1/pm/site/blocks', () => {
       { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt },
     ];
     listSiteBlocksMock.mockResolvedValueOnce(rawBlocks);
+    getLatestPublishedAtMock.mockResolvedValueOnce(publishedAt);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
     // Route serializes publishedAt to ISO string (null preserved).
@@ -108,6 +113,7 @@ describe('GET /api/v1/pm/site/blocks', () => {
           { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
           { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
         ],
+        latestPublishedAt: publishedAt.toISOString(),
       },
     });
   });
@@ -118,11 +124,21 @@ describe('GET /api/v1/pm/site/blocks', () => {
     expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true, includeTombstones: true });
   });
 
-  it('200s and returns empty blocks array when no blocks exist', async () => {
+  it('surfaces the authoritative publish token (latestPublishedAt) from getLatestPublishedAt', async () => {
+    const token = new Date('2026-07-01T09:00:00Z');
     listSiteBlocksMock.mockResolvedValueOnce([]);
+    getLatestPublishedAtMock.mockResolvedValueOnce(token);
+    const res = await GET(makeGetRequest());
+    const body = await res.json();
+    expect(body.data.latestPublishedAt).toBe(token.toISOString());
+  });
+
+  it('200s and returns empty blocks array with null token when no blocks exist', async () => {
+    listSiteBlocksMock.mockResolvedValueOnce([]);
+    getLatestPublishedAtMock.mockResolvedValueOnce(null);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ data: { blocks: [] } });
+    expect(await res.json()).toEqual({ data: { blocks: [], latestPublishedAt: null } });
   });
 
   it('400s when communityId query param is missing', async () => {
