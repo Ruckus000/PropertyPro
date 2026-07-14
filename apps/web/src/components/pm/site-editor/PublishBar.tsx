@@ -22,7 +22,7 @@
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { useContentBlocks, useDiscardDrafts, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { useContentBlocks, useDiscardDrafts, useSitePublishToken } from '@/hooks/use-content-blocks';
 import { useHeroBlock } from '@/hooks/use-hero-block';
 import { usePublishSite, PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
 
@@ -30,36 +30,33 @@ interface Props {
   communityId: number;
 }
 
-/**
- * Optimistic-concurrency token: the latest `publishedAt` across the loaded
- * blocks. The publish endpoint compares this against the row-level lock it
- * acquires on the community; a mid-flight publish by another PM bumps every
- * published row's `publishedAt`, the tokens no longer match, and the API
- * returns 409. Returns null when no published rows exist yet (first publish).
- *
- * Only published rows contribute — draft rows carry `publishedAt = null`.
- */
-function deriveExpectedPublishedAt(blocks: SiteBlockSummary[] | undefined): string | null {
-  if (!blocks) return null;
-  let latest: string | null = null;
-  for (const b of blocks) {
-    if (b.isDraft) continue;
-    if (b.publishedAt && (!latest || b.publishedAt > latest)) {
-      latest = b.publishedAt;
-    }
-  }
-  return latest;
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
+/**
+ * Human-readable publish outcome. A publish can promote drafts, retire
+ * sections (staged deletions), or both, so the message reflects whichever
+ * happened — a deletion-only publish (promotedCount 0, retiredCount > 0) must
+ * not read as "0 sections live" / a no-op.
+ */
 function classifyOutcome(result: PublishSiteResult): string {
-  if (result.published) {
-    return `Published — ${result.promotedCount} section${result.promotedCount === 1 ? '' : 's'} live.`;
+  if (!result.published) return 'No changes to publish.';
+  const { promotedCount, retiredCount } = result;
+  if (promotedCount > 0 && retiredCount > 0) {
+    return `Published — ${plural(promotedCount, 'section')} live, ${plural(retiredCount, 'removed')}.`;
   }
-  return 'No changes to publish.';
+  if (promotedCount === 0 && retiredCount > 0) {
+    return `Published — ${plural(retiredCount, 'section')} removed.`;
+  }
+  return `Published — ${plural(promotedCount, 'section')} live.`;
 }
 
 export function PublishBar({ communityId }: Props) {
   const blocksQ = useContentBlocks(communityId);
+  // Authoritative publish token from the same blocks query (server-computed
+  // over ALL published rows). Shares the query key, so no extra request.
+  const publishToken = useSitePublishToken(communityId);
   // useHeroBlock isn't read for its value here — the hook subscription
   // just primes the cache so invalidation on publish has something to
   // refetch in this view. It will also matter when 8e flips the hero
@@ -110,7 +107,7 @@ export function PublishBar({ communityId }: Props) {
     setOutcome(null);
     try {
       const result = await publish.mutateAsync({
-        expectedPublishedAt: deriveExpectedPublishedAt(blocksQ.data),
+        expectedPublishedAt: publishToken.data ?? null,
       });
       setOutcome(classifyOutcome(result));
       if (result.published) {
