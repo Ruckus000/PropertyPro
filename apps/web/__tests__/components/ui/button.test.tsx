@@ -17,4 +17,14 @@ describe('Button loading', () => {
     expect(btn).not.toBeDisabled();
     expect(btn.querySelector('svg.animate-spin')).toBeNull();
   });
+
+  it('passes children through untouched and does not render a spinner when asChild + loading', () => {
+    render(
+      <Button asChild loading>
+        <a href="/x">Save</a>
+      </Button>
+    );
+    const link = screen.getByRole('link');
+    expect(link.querySelector('svg.animate-spin')).toBeNull();
+  });
 });

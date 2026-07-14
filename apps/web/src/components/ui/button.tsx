@@ -41,8 +41,9 @@ export interface ButtonProps
   asChild?: boolean
   /**
    * Shows a spinner and disables the button while a submit/action is
-   * in-flight. Ignored when `asChild` is set (Slot requires exactly one
-   * child, so children are passed through untouched in that path).
+   * in-flight. Under `asChild`, the spinner is skipped (Slot requires
+   * exactly one child) but `disabled`/`data-loading` are still applied
+   * to the wrapped element.
    */
   loading?: boolean
 }
