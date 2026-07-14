@@ -108,13 +108,12 @@ describe('<PublishBar>', () => {
     expect(publishCall).toBeDefined();
     expect(JSON.parse((publishCall![1] as RequestInit).body as string)).toMatchObject({
       communityId: 42,
-      // The default blocks fixture has isDraft=false but no publishedAt
-      // field, so the token derives to null.
+      // The default blocks fixture omits latestPublishedAt, so the token is null.
       expectedPublishedAt: null,
     });
   });
 
-  it('threads the latest published-block publishedAt as the optimistic-concurrency token', async () => {
+  it('threads the server-authoritative latestPublishedAt as the optimistic-concurrency token', async () => {
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url) => {
       if (typeof url === 'string' && url.includes('/blocks')) {
         return {
@@ -123,13 +122,13 @@ describe('<PublishBar>', () => {
           json: async () => ({
             data: {
               blocks: [
-                // older published
+                // A published row is SHADOWED by a tombstone here; deriving the
+                // token from this merged list would miss its timestamp. The
+                // authoritative token comes from latestPublishedAt instead.
+                { id: 90, blockType: 'tombstone', blockOrder: 3, content: {}, isDraft: true, publishedAt: null },
                 { id: 1, blockType: 'text', blockOrder: 2, content: {}, isDraft: false, publishedAt: '2026-05-10T10:00:00Z' },
-                // latest published — should be the token
-                { id: 2, blockType: 'image', blockOrder: 3, content: {}, isDraft: false, publishedAt: '2026-05-15T11:30:00Z' },
-                // draft — ignored even with a later (non-null) publishedAt
-                { id: 3, blockType: 'announcements', blockOrder: 4, content: {}, isDraft: true, publishedAt: null },
               ],
+              latestPublishedAt: '2026-05-15T11:30:00Z',
             },
           }),
         } as Response;
@@ -161,6 +160,44 @@ describe('<PublishBar>', () => {
     expect(JSON.parse((publishCall![1] as RequestInit).body as string)).toMatchObject({
       expectedPublishedAt: '2026-05-15T11:30:00Z',
     });
+  });
+
+  it('reports a deletion-only publish as "N sections removed", not "0 sections live"', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url) => {
+      if (typeof url === 'string' && url.includes('/blocks')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              blocks: [{ id: 90, blockType: 'tombstone', blockOrder: 2, content: {}, isDraft: true, publishedAt: null }],
+              latestPublishedAt: '2026-05-15T11:30:00Z',
+            },
+          }),
+        } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/hero')) {
+        return { ok: true, status: 200, json: async () => ({ data: { hero: null } }) } as Response;
+      }
+      if (typeof url === 'string' && url.endsWith('/publish')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { published: true, publishedAt: '2026-05-16T09:00:00Z', promotedCount: 0, retiredCount: 1 } }),
+        } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    });
+    render(wrap(<PublishBar communityId={42} />));
+    await screen.findByTestId('pending-changes-badge');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /publish website/i })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /publish website/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/1 section removed/i);
+    });
+    expect(screen.getByRole('status')).not.toHaveTextContent(/0 sections live/i);
   });
 
   it('renders the no-op message on { published: false } responses', async () => {
@@ -219,5 +256,85 @@ describe('<PublishBar>', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(/Conflict.*another editor published/i);
     });
+  });
+});
+
+describe('<PublishBar> — discard drafts (slice 8f)', () => {
+  function mockWithDrafts() {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url, init) => {
+      if (typeof url === 'string' && url.includes('/drafts') && init?.method === 'DELETE') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { ok: true, discardedCount: 2 } }),
+        } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/blocks')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              blocks: [
+                { id: 1, blockType: 'text', blockOrder: 2, content: { body: 'x' }, isDraft: true, publishedAt: null },
+                { id: 90, blockType: 'tombstone', blockOrder: 3, content: {}, isDraft: true, publishedAt: null },
+              ],
+            },
+          }),
+        } as Response;
+      }
+      if (typeof url === 'string' && url.includes('/hero')) {
+        return { ok: true, status: 200, json: async () => ({ data: { hero: null } }) } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    });
+  }
+
+  it('hides the Discard button when no drafts are pending', async () => {
+    render(wrap(<PublishBar communityId={42} />));
+    const badge = await screen.findByTestId('pending-changes-badge');
+    await waitFor(() => expect(badge).toHaveTextContent(/all changes published/i));
+    expect(screen.queryByTestId('discard-drafts-button')).not.toBeInTheDocument();
+  });
+
+  it('counts tombstone drafts (staged deletions) in the pending badge', async () => {
+    mockWithDrafts();
+    render(wrap(<PublishBar communityId={42} />));
+    const badge = await screen.findByTestId('pending-changes-badge');
+    await waitFor(() => expect(badge).toHaveTextContent(/2 draft sections/i));
+  });
+
+  it('confirms, then DELETEs /api/v1/pm/site/drafts', async () => {
+    mockWithDrafts();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(wrap(<PublishBar communityId={42} />));
+    const discardBtn = await screen.findByTestId('discard-drafts-button');
+    await waitFor(() => expect(discardBtn).not.toBeDisabled());
+
+    fireEvent.click(discardBtn);
+    expect(confirmSpy).toHaveBeenCalled();
+
+    await waitFor(() => {
+      const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => typeof c[0] === 'string' && c[0].includes('/drafts') && c[1]?.method === 'DELETE',
+      );
+      expect(call).toBeDefined();
+      expect(JSON.parse(call![1].body as string)).toEqual({ communityId: 42 });
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it('does not DELETE when the confirm dialog is cancelled', async () => {
+    mockWithDrafts();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(wrap(<PublishBar communityId={42} />));
+    const discardBtn = await screen.findByTestId('discard-drafts-button');
+    fireEvent.click(discardBtn);
+
+    const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => typeof c[0] === 'string' && c[0].includes('/drafts') && c[1]?.method === 'DELETE',
+    );
+    expect(call).toBeUndefined();
+    confirmSpy.mockRestore();
   });
 });
