@@ -1,6 +1,7 @@
 'use client';
 
-import { Badge, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
+import { Card, CardContent } from '@/components/ui/card';
 import type { TransparencyPageData } from '@/lib/services/transparency-service';
 import { ScopeNotice } from './scope-notice';
 import { DocumentChecklistSection } from './document-checklist-section';
@@ -80,10 +81,10 @@ export function TransparencyPage({ data }: Props) {
       </section>
 
       <Card className="hidden print:block print:border-black print:bg-surface-card">
-        <Card.Body>
+        <CardContent>
           <p className="text-sm font-semibold">Printed from PropertyPro Transparency Page</p>
           <p className="text-xs">Printed at {new Date().toLocaleString('en-US')}</p>
-        </Card.Body>
+        </CardContent>
       </Card>
 
       <TransparencyFooter

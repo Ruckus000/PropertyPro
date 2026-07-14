@@ -3,8 +3,8 @@
 import { startTransition, useDeferredValue, useState } from 'react';
 import Link from 'next/link';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
-import { Card } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { MonthGrid } from '@/components/calendar/month-grid';
@@ -58,7 +58,7 @@ export function MeetingsPageShell({
   return (
     <div className="space-y-6">
       <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
-        <Card.Body className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <CardContent className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               Meetings & Calendar
@@ -73,7 +73,7 @@ export function MeetingsPageShell({
           {canWrite ? (
             <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button>
           ) : null}
-        </Card.Body>
+        </CardContent>
       </Card>
 
       {eventsQuery.isError ? (
@@ -106,7 +106,7 @@ export function MeetingsPageShell({
 
       {!eventsQuery.isError && !eventsQuery.isLoading && events.length === 0 ? (
         <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
-          <Card.Body>
+          <CardContent>
             <EmptyState
               preset="no_meetings"
               action={
@@ -115,7 +115,7 @@ export function MeetingsPageShell({
                 ) : undefined
               }
             />
-          </Card.Body>
+          </CardContent>
         </Card>
       ) : selectedDate ? (
         <DayDetailPanel
@@ -131,15 +131,15 @@ export function MeetingsPageShell({
       ) : null}
 
       <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
-        <Card.Header bordered>
+        <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
           <div className="space-y-1">
-            <Card.Title>Email Calendar Reminders</Card.Title>
-            <Card.Subtitle>
+            <CardTitle>Email Calendar Reminders</CardTitle>
+            <CardDescription>
               Choose which scheduled events send reminder emails and how far ahead they arrive.
-            </Card.Subtitle>
+            </CardDescription>
           </div>
-        </Card.Header>
-        <Card.Body className="space-y-4">
+        </CardHeader>
+        <CardContent className="space-y-4">
           <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3">
             <div className="space-y-2">
               <div className="text-sm font-medium text-[var(--text-primary)]">
@@ -161,7 +161,7 @@ export function MeetingsPageShell({
               </div>
             </div>
           </div>
-        </Card.Body>
+        </CardContent>
       </Card>
 
       {showCreateForm ? (

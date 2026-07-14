@@ -1,11 +1,11 @@
 'use client';
 
-import { Card } from '@propertypro/ui';
+import { Card, CardContent } from '@/components/ui/card';
 
 export function ScopeNotice() {
   return (
-    <Card className="border-edge bg-surface-page print:bg-surface-card" size="md">
-      <Card.Body className="space-y-3">
+    <Card className="border-edge bg-surface-page print:bg-surface-card">
+      <CardContent className="space-y-3">
         <p className="text-sm font-semibold text-content">
           This page shows document posting data tracked in PropertyPro. It is not a legal compliance audit.
         </p>
@@ -25,7 +25,7 @@ export function ScopeNotice() {
             </p>
           </div>
         </details>
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

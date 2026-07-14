@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Badge, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import {
   addDays,
   addMonths,
@@ -67,7 +68,7 @@ export function MonthGrid({
 
   return (
     <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
-      <Card.Header bordered>
+      <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
         <div className="flex w-full flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
             <Button
@@ -101,8 +102,8 @@ export function MonthGrid({
             Today
           </Button>
         </div>
-      </Card.Header>
-      <Card.Body className="space-y-4">
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)]">
           {WEEKDAY_LABELS.map((label) => (
             <div key={label}>{label}</div>
@@ -213,7 +214,7 @@ export function MonthGrid({
             <span className="text-[var(--text-tertiary)]">Refreshing month…</span>
           ) : null}
         </div>
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

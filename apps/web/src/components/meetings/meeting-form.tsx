@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
-import { Card } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useCreateMeeting, useMeeting, useUpdateMeeting } from '@/hooks/use-meetings';
 import {
@@ -244,18 +244,17 @@ export function MeetingForm({
         >
       <Card
         className="w-full max-w-2xl overflow-hidden bg-[var(--surface-card)] shadow-[var(--elevation-e3)]"
-        noPadding
       >
-        <Card.Header bordered>
+        <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
           <div className="flex items-center justify-between gap-4">
             <div>
               <Dialog.Title asChild>
-                <Card.Title>{isEditing ? 'Edit Meeting' : 'Create Meeting'}</Card.Title>
+                <CardTitle>{isEditing ? 'Edit Meeting' : 'Create Meeting'}</CardTitle>
               </Dialog.Title>
               <Dialog.Description asChild>
-                <Card.Subtitle>
+                <CardDescription>
                   Meetings are stored in UTC and shown in {communityTimezone}.
-                </Card.Subtitle>
+                </CardDescription>
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -268,8 +267,8 @@ export function MeetingForm({
               </button>
             </Dialog.Close>
           </div>
-        </Card.Header>
-        <Card.Body>
+        </CardHeader>
+        <CardContent>
           {isEditing && detailQuery.isLoading ? (
             <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-subtle)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
               Loading meeting details...
@@ -372,7 +371,7 @@ export function MeetingForm({
               </div>
             </form>
           )}
-        </Card.Body>
+        </CardContent>
       </Card>
         </Dialog.Content>
       </Dialog.Portal>
