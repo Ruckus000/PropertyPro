@@ -196,7 +196,7 @@ function StaticField({ field, color }: StaticFieldProps) {
 
   return (
     <div
-      className="absolute flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium"
+      className="absolute flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs font-medium"
       style={{
         left: `${field.x}%`,
         top: `${field.y}%`,
@@ -283,7 +283,7 @@ export function FieldOverlay({
   // Filter to current page
   const pageFields = fields.filter((f) => f.page === currentPage);
 
-  const getColor = (role: string) => signerRoleColors[role] ?? '#6b7280';
+  const getColor = (role: string) => signerRoleColors[role] ?? '#6b7280'; // design-tokens:exempt — defensive fallback (gray-500) when a role has no assigned palette color, not itself a palette entry
 
   // Deselect when clicking empty area
   const handleBackgroundClick = useCallback(() => {

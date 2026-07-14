@@ -30,6 +30,7 @@ import {
 } from '@/hooks/use-esign-templates';
 import { useEsignTemplatePdfUrl } from '@/hooks/use-esign-template-pdf';
 import { FieldOverlay } from '@/components/esign/field-overlay';
+import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
 
 const PdfViewer = dynamic(
   () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
@@ -53,17 +54,6 @@ interface PageDimension {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const SIGNER_ROLE_COLORS = [
-  '#2563eb',
-  '#dc2626',
-  '#16a34a',
-  '#9333ea',
-  '#ea580c',
-  '#0891b2',
-  '#be185d',
-  '#854d0e',
-];
 
 const TYPE_LABELS: Record<string, string> = {
   proxy: 'Proxy',
@@ -125,7 +115,7 @@ export function TemplateDetailClient({
   const signerRoleColors = useMemo(() => {
     const map: Record<string, string> = {};
     signerRoles.forEach((role, i) => {
-      map[role] = SIGNER_ROLE_COLORS[i % SIGNER_ROLE_COLORS.length]!;
+      map[role] = ESIGN_FIELD_COLORS[i % ESIGN_FIELD_COLORS.length]!;
     });
     return map;
   }, [signerRoles]);

@@ -161,12 +161,6 @@
   "apps/admin/src/lib/utils/stale-badge.ts": {
     "raw-palette": 6
   },
-  "apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx": {
-    "raw-hex": 8
-  },
-  "apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx": {
-    "raw-hex": 8
-  },
   "apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx": {
     "raw-palette": 3
   },
@@ -217,14 +211,6 @@
   },
   "apps/web/src/components/ErrorBoundary.tsx": {
     "raw-hex": 3
-  },
-  "apps/web/src/components/esign/field-overlay.tsx": {
-    "arbitrary-font": 1,
-    "raw-hex": 1
-  },
-  "apps/web/src/components/esign/field-palette.tsx": {
-    "raw-hex": 1,
-    "arbitrary-font": 1
   },
   "apps/web/src/components/finance/payment-dialog.tsx": {
     "raw-hex": 1
