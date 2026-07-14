@@ -78,7 +78,7 @@ vi.mock('@/lib/db/access-control', () => ({
 }));
 
 vi.mock('@/lib/api/error-handler', () => ({
-  withErrorHandler: (fn: Function) => fn,
+  withErrorHandler: (fn: (...args: unknown[]) => unknown) => fn,
 }));
 
 vi.mock('@/lib/api/errors', () => ({

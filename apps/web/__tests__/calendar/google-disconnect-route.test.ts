@@ -40,7 +40,7 @@ vi.mock('@/lib/services/calendar-sync-service', () => ({
 }));
 
 vi.mock('@/lib/api/error-handler', () => ({
-  withErrorHandler: (fn: Function) =>
+  withErrorHandler: (fn: (...args: unknown[]) => unknown) =>
     async (...args: unknown[]) => {
       try {
         return await fn(...args);
