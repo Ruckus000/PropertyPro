@@ -23,10 +23,12 @@ import { assertCustomDomainAllowed, CustomDomainNotAllowedError } from '@propert
 import { AppError, ConflictError, ValidationError } from '@/lib/api/errors';
 import {
   addProjectDomain,
+  checkDomainAvailability,
   getDomainStatus,
   removeProjectDomain,
   DomainProvisioningUnavailableError,
   DomainProviderError,
+  DomainProviderRateLimitedError,
 } from '@/lib/domains/vercel-domains-client';
 
 const ROOT_DOMAIN = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com';
@@ -59,6 +61,10 @@ function translateProviderError(e: unknown): never {
       503,
       'DOMAIN_PROVISIONING_UNAVAILABLE',
     );
+  }
+  // Order matters: RateLimited extends DomainProviderError.
+  if (e instanceof DomainProviderRateLimitedError) {
+    throw new AppError(e.message, 429, 'DOMAIN_CHECK_RATE_LIMITED');
   }
   if (e instanceof DomainProviderError) {
     throw new AppError(e.message, 502, 'DOMAIN_PROVIDER_ERROR');
@@ -206,6 +212,40 @@ export async function verifyDomain(communityId: number, userId: string): Promise
     records: result.records,
     reason: result.reason ?? null,
   };
+}
+
+export interface PurchasableDomainCheck {
+  name: string;
+  available: boolean;
+  /** Provider registration price (USD) — indicative only; null when unknown. */
+  price: number | null;
+  /** Years the price covers — null when unknown. */
+  period: number | null;
+}
+
+/**
+ * Guided-purchase check: is `rawName` available to register, and roughly what
+ * does it cost? Pure read — no DB writes, no audit row, and we NEVER register
+ * the domain ourselves; the PM buys it at their registrar and comes back to
+ * the connect flow (`setDomain`).
+ */
+export async function checkPurchasableDomain(rawName: string): Promise<PurchasableDomainCheck> {
+  let name: string;
+  try {
+    name = assertCustomDomainAllowed(rawName, ROOT_DOMAIN);
+  } catch (e) {
+    if (e instanceof CustomDomainNotAllowedError) {
+      throw new ValidationError(e.message);
+    }
+    throw e;
+  }
+
+  try {
+    const result = await checkDomainAvailability(name);
+    return { name, available: result.available, price: result.price, period: result.period };
+  } catch (e) {
+    translateProviderError(e);
+  }
 }
 
 /** Release the domain at the provider and clear the persisted columns. */

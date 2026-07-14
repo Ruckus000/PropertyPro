@@ -28,6 +28,7 @@ import {
   useRemoveDomain,
   type DomainState,
 } from '@/hooks/use-custom-domain';
+import { DomainFinder } from './DomainFinder';
 
 interface CustomDomainCardProps {
   communityId: number;
@@ -186,6 +187,9 @@ export function CustomDomainCard({
             {setDomain.isPending ? 'Adding…' : 'Add domain'}
           </button>
         </form>
+        {/* Guided purchase — only in the empty state, collapsed by default so
+            the connect flow stays uncluttered. */}
+        <DomainFinder communityId={communityId} />
       </div>
     );
   }
