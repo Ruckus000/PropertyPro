@@ -9,7 +9,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Badge, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
+import { Card } from '@/components/ui/card';
 import {
   useEsignSubmissions,
 } from '@/hooks/use-esign-submissions';

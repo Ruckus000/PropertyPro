@@ -7,8 +7,9 @@
 
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { Badge, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
