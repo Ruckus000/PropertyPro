@@ -2,15 +2,16 @@
 
 # Design System Rules
 
-Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages/ui/src/styles/tokens.css`.
+Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/primitives.ts` / `src/semantic.ts` / `src/static.ts`) and GENERATED into `packages/ui/src/styles/tokens.css` — never hand-edit that file.
 
 ## Component Tooling
 
 - Use `cn()` from `@/lib/utils` (clsx + tailwind-merge) for all class composition
-- shadcn/ui components: `apps/web/src/components/ui/` — standard controls, Tailwind + CVA
-- Design system components: `packages/ui/src/components/` — token-driven (Button, Card, Badge, NavRail)
+- shadcn/ui components: `apps/web/src/components/ui/` — canonical layer for standard controls, Tailwind + CVA
+- Design system components: `packages/ui/src/components/` — status Badge family, NavRail, PhoneFrame, TipTap editor. `Button`/`Card` here are `@deprecated` for web (admin-only until its migration) — use the shadcn `apps/web/src/components/ui/` versions instead
 - Layout primitives: `packages/ui/src/primitives/` — Stack (HStack/VStack/Center), Text, Box with polymorphic `as` prop
-- Domain patterns: `docs/design-system/patterns/` — SectionHeader, DataRow, AlertBanner, EmptyState, StatusPills
+- Domain patterns: implemented in `apps/web/src/components/shared/` (AlertBanner, EmptyState, PageHeader, DataTable, KpiCard, StatusBadge, Breadcrumbs, …); documented (not implemented) at `docs/design-system/README.md`
+- Status config: canonical source `packages/ui/src/constants/status.ts`, re-exported via `apps/web/src/lib/constants/status.ts`
 - New components: Tailwind classes + CVA variants. Own the source (shadcn model), never install as a dependency.
 
 ## Spacing
@@ -27,7 +28,7 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 - Borders first, shadows second. Use `--border-default` before reaching for elevation.
 - Elevation: E0 (cards) → E1 (hover/sticky) → E2 (dropdowns/popovers) → E3 (modals). E2/E3 are ONLY for overlays.
 - Radius: sm(6px) inputs, md(10px) cards/buttons, lg(16px) modals, full badges/avatars.
-- Status: NEVER color alone. Always icon + text + color. Use `getStatusConfig()` from `docs/design-system/constants/status.ts`.
+- Status: NEVER color alone. Always icon + text + color. Use `getStatusConfig()` from `packages/ui/src/constants/status.ts` (re-exported via `apps/web/src/lib/constants/status.ts`).
 
 ## Token enforcement
 
@@ -47,7 +48,7 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 
 ## Component Dimensions
 
-- Buttons: sm(36px) md(40px) lg(48px). Radius md. Variants: primary/secondary/ghost/danger/link.
+- Buttons: sm(32px) default(36px) lg(40px) icon(36px). Radius md. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `apps/web/src/components/ui/button.tsx`.
 - Inputs: sm(36px) md(40px) lg(48px). Radius sm. 1px border, 2px on focus.
 - Cards: radius md. Padding sm(16) md(20) lg(24). E0 rest, E1 hover.
 - Modals: radius lg. E3. Widths: sm(400) md(560) lg(720) xl(960).
@@ -57,7 +58,7 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 ## State Handling
 
 - Every data-dependent view MUST handle: loading (Skeleton), empty (EmptyState), error (AlertBanner danger), and success states.
-- Empty states: use configs from `docs/design-system/constants/empty-states.ts`. Always include a constructive action.
+- Empty states: use configs from `apps/web/src/lib/constants/empty-states.ts`. Always include a constructive action.
 - Compliance escalation: calm(>30d) / aware(8-30d) / urgent(1-7d) / critical(overdue). See `packages/ui/src/tokens/compliance.ts`.
 - Form states: focus (ring), disabled (muted bg + disabled text), error (border-error + danger text), required (asterisk).
 - Button states: normal, hover, focused, pressed, disabled, loading.
@@ -74,7 +75,7 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 - Empty state titles: encouraging, action-oriented ("Let's get you compliant", not "No data found")
 - Error messages: what happened + what to do ("We couldn't load this data. Please try again.")
 - Button labels: verb-first ("Upload Document", "Add Owners", "Export Report")
-- Status labels: use `STATUS_CONFIG` from `docs/design-system/constants/status.ts` for consistent naming
+- Status labels: use `STATUS_CONFIG` from `packages/ui/src/constants/status.ts` for consistent naming
 
 ## Page Navigation & Breadcrumbs
 
