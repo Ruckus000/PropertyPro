@@ -104,7 +104,7 @@ const BLOCK_META: Record<BlockType, BlockMeta> = {
   },
 };
 
-const DOC_BASE = 'docs/design-system/patterns';
+const DOC_BASE = 'docs/design-system/blocks';
 
 /**
  * Describe the top-level fields of a block content schema. Reads the public
@@ -150,7 +150,7 @@ export function getBlockRegistry(): BlockRegistryEntry[] {
       label: meta.label,
       tier: meta.tier,
       rendererPath: meta.rendererPath,
-      docHref: `${DOC_BASE}/${type}-block.md`,
+      docHref: `${DOC_BASE}/${type}.md`,
       summary: meta.summary,
       fields: describeBlockFields(blockSchemaRegistry[type]),
     };
