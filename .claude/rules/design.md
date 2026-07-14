@@ -26,7 +26,8 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 - ALWAYS use semantic CSS variables: `--text-primary`, `--surface-card`, `--border-default`, `--interactive-primary`. Never raw hex.
 - Borders first, shadows second. Use `--border-default` before reaching for elevation.
-- Elevation: E0 (cards) → E1 (hover/sticky) → E2 (dropdowns/popovers) → E3 (modals). E2/E3 are ONLY for overlays.
+- Elevation: E0 (cards) → E1 (hover/sticky) → E2 (dropdowns/popovers) → E3 (modals). E2/E3 are ONLY for overlays. Shadows are slate-tinted and single-sourced from `--elevation-*`; Tailwind `shadow-sm`/`shadow`→E1, `shadow-md`→E2, `shadow-lg`/`xl`/`2xl`→E3.
+- One filled primary button per view region (card/modal/page header/form footer); everything else `outline`/`ghost`/`link`.
 - Radius: sm(6px) inputs, md(10px) cards/buttons, lg(16px) modals, full badges/avatars.
 - Status: NEVER color alone. Always icon + text + color. Use `getStatusConfig()` from `packages/ui/src/constants/status.ts` (re-exported via `apps/web/src/lib/constants/status.ts`).
 
