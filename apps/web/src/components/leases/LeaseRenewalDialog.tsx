@@ -59,15 +59,20 @@ export function LeaseRenewalDialog({
 
     const parsedRent = parseRentInput(newRentAmount);
 
-    await createLease.mutateAsync({
-      unitId: lease.unitId,
-      residentId: lease.residentId,
-      startDate: newStartDate,
-      endDate: newEndDate || null,
-      rentAmount: parsedRent,
-      isRenewal: true,
-      previousLeaseId: lease.id,
-    });
+    try {
+      await createLease.mutateAsync({
+        unitId: lease.unitId,
+        residentId: lease.residentId,
+        startDate: newStartDate,
+        endDate: newEndDate || null,
+        rentAmount: parsedRent,
+        isRenewal: true,
+        previousLeaseId: lease.id,
+      });
+    } catch {
+      // Error surfaced via createLease.isError below; keep the dialog open.
+      return;
+    }
 
     onOpenChange(false);
   }

@@ -35,7 +35,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo",
-    "lint": "eslint ."
+    "lint": "eslint . --cache --cache-location .turbo/eslint-cache"
   },
   "dependencies": {
     "@propertypro/tokens": "workspace:*",

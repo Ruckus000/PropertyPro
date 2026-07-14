@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FlatCompat } from '@eslint/eslintrc';
+import { ratchetRules, sharedIgnores } from './base.js';
 
 const configDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,11 +19,8 @@ const compat = new FlatCompat({ baseDirectory: configDir });
 export const nextConfig = [
   {
     ignores: [
-      '**/node_modules/**',
+      ...sharedIgnores,
       '**/.next/**',
-      '**/.turbo/**',
-      '**/dist/**',
-      '**/coverage/**',
       '**/playwright-report/**',
       '**/test-results/**',
       'next-env.d.ts',
@@ -33,19 +31,8 @@ export const nextConfig = [
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
   {
     rules: {
-      // Ratchet baseline: the codebase predates ESLint. Correctness rules
-      // (react-hooks/rules-of-hooks, @next/next/*) stay at their preset
-      // severity; high-volume looseness/stylistic rules start as warnings.
-      // Tighten over time rather than loosening further.
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-        },
-      ],
+      // Shared warn-severity baseline — see base.js for the rationale.
+      ...ratchetRules,
       // Converting existing <a href="/…"> to next/link changes navigation
       // behavior (client-side transitions) — with subdomain-per-tenant
       // routing, full page loads can be intentional. Review case by case.

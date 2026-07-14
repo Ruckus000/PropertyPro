@@ -20,7 +20,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo",
-    "lint": "eslint ."
+    "lint": "eslint . --cache --cache-location .turbo/eslint-cache"
   },
   "dependencies": {
     "zod": "^4.3.6"

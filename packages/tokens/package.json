@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist .turbo",
-    "lint": "eslint ."
+    "lint": "eslint . --cache --cache-location .turbo/eslint-cache"
   },
   "devDependencies": {
     "@propertypro/eslint-config": "workspace:*",

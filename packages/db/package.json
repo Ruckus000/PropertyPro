@@ -76,7 +76,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "lint": "eslint ."
+    "lint": "eslint . --cache --cache-location .turbo/eslint-cache"
   },
   "peerDependencies": {
     "next": ">=14.0.0"

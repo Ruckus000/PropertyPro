@@ -2,6 +2,31 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 /**
+ * Build-artifact ignores shared by every workspace config (next.js extends
+ * this list with app-specific entries). node_modules and .git are already
+ * ignored by ESLint's defaults and are deliberately not repeated here.
+ */
+export const sharedIgnores = ['**/dist/**', '**/.turbo/**', '**/coverage/**'];
+
+/**
+ * Severity baseline shared by base and next configs. The codebase predates
+ * ESLint, so these high-volume looseness rules start as warnings. Warnings
+ * are advisory (nothing gates on warning count today — `eslint .` exits 0);
+ * the intent is to tighten them to errors over time, not to loosen further.
+ */
+export const ratchetRules = {
+  '@typescript-eslint/no-explicit-any': 'warn',
+  '@typescript-eslint/no-unused-vars': [
+    'warn',
+    {
+      argsIgnorePattern: '^_',
+      varsIgnorePattern: '^_',
+      caughtErrorsIgnorePattern: '^_',
+    },
+  ],
+};
+
+/**
  * Base flat config for TypeScript workspace packages (non-Next.js).
  *
  * Uses the non-type-checked typescript-eslint preset so lint stays fast and
@@ -9,33 +34,8 @@ import tseslint from 'typescript-eslint';
  * `^build` dependency).
  */
 export const baseConfig = tseslint.config(
-  {
-    // Build output and vendored artifacts. `.next`/`e2e` don't exist in
-    // packages/* but keeping one shared list avoids per-package drift.
-    ignores: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/.next/**',
-      '**/.turbo/**',
-      '**/coverage/**',
-    ],
-  },
+  { ignores: sharedIgnores },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  {
-    rules: {
-      // Ratchet baseline (see docs in the PR that introduced linting): the
-      // codebase predates ESLint, so stylistic/looseness rules start as
-      // warnings while correctness rules stay errors. Tighten over time.
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        {
-          argsIgnorePattern: '^_',
-          varsIgnorePattern: '^_',
-          caughtErrorsIgnorePattern: '^_',
-        },
-      ],
-    },
-  },
+  { rules: ratchetRules },
 );

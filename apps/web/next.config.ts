@@ -5,6 +5,11 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   // Point to monorepo root so Next.js doesn't pick up ~/package-lock.json
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // Lint runs in the dedicated CI lint job (`pnpm lint`). Without this flag,
+  // the presence of eslint.config.mjs re-arms Next's build-time lint pass,
+  // slowing every build and turning error-severity findings into a second,
+  // unintended deploy gate inside `vercel build --prod`.
+  eslint: { ignoreDuringBuilds: true },
   // Tenant subdomain Playwright (localtest.me) fetches /_next/* from a different
   // dev host than the document; Next 15 requires this allowlist in development.
   allowedDevOrigins: [
