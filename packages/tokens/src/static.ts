@@ -2,9 +2,10 @@
  * Static (non-color) design tokens — spacing, radius, typography, motion,
  * sizing, focus, elevation, and navigation.
  *
- * These values are transcribed 1:1 from packages/ui/src/styles/tokens.css
- * and are the source of truth consumed by scripts/build.ts to regenerate
- * that file. Color tokens live in primitives.ts / semantic.ts instead.
+ * These values are the source of truth consumed by scripts/build.ts to
+ * regenerate packages/ui/src/styles/tokens.css (originally transcribed 1:1
+ * from that file; deliberate value changes happen HERE). Color tokens live
+ * in primitives.ts / semantic.ts instead.
  */
 
 export const staticTokens = {
@@ -88,10 +89,12 @@ export const staticTokens = {
     "focus-ring-color-inverse": "var(--gray-0)",
   },
   elevation: {
+    // Slate-tinted (#0F172A base) rather than pure-black shadows — Stripe-style
+    // warmth; alpha nudged up slightly to compensate for the tint (Wave 3).
     e0: "none",
-    e1: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)",
-    e2: "0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02)",
-    e3: "0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03)",
+    e1: "0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)",
+    e2: "0 4px 6px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04)",
+    e3: "0 10px 15px rgba(15,23,42,0.08), 0 4px 6px rgba(15,23,42,0.05)",
   },
   nav: {
     "nav-surface": "var(--surface-card)",
