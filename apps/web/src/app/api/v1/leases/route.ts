@@ -286,7 +286,7 @@ export const POST = withErrorHandler(
     const effectiveRentAmount = payload.rentAmount ?? unitRentAmount;
 
     // Handle renewal logic
-    let previousLeaseId = payload.previousLeaseId ?? null;
+    const previousLeaseId = payload.previousLeaseId ?? null;
     if (payload.isRenewal || previousLeaseId !== null) {
       if (!previousLeaseId) {
         throw new ValidationError('previousLeaseId is required when creating a renewal lease');

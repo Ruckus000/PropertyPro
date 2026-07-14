@@ -31,7 +31,7 @@ export const blockSchemaRegistry = {
   amenities: amenitiesBlockSchema,
 } satisfies Record<BlockType, z.ZodType>;
 
-export { BLOCK_TYPES, blockTypeSchema } from './types';
+export { BLOCK_TYPES, blockTypeSchema, TOMBSTONE_BLOCK_TYPE } from './types';
 export type { BlockType } from './types';
 export { heroBlockSchema, type HeroBlockContent } from './hero';
 export { textBlockSchema, type TextBlockContent } from './text';

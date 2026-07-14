@@ -57,7 +57,7 @@ describe("Token parity", () => {
     // full two-space increment.
     const lines = cssContent.split("\n").filter((l) => l.trim().startsWith("--"));
     for (const line of lines) {
-      expect(line).toMatch(/^(  )+--/);
+      expect(line).toMatch(/^( {2})+--/);
     }
   });
 

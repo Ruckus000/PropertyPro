@@ -107,6 +107,7 @@ export type AnyCommunityRole = CommunityRole | NewCommunityRole;
 export {
   BLOCK_TYPES,
   blockTypeSchema,
+  TOMBSTONE_BLOCK_TYPE,
   blockSchemaRegistry,
   heroBlockSchema,
   textBlockSchema,
