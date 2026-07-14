@@ -50,7 +50,15 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   `apps/web/src/app/(marketing)/marketing-theme.css` (marketing palette),
   `apps/web/src/lib/documents/render-authored-html.ts` (authored-doc export styling),
   `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/` + `apps/admin/`
-  (out of standardization scope until their own migration programs).
+  (out of standardization scope until their own migration programs). Also frozen:
+  `dark:` raw-palette variants layered on semantic base classes
+  (select-community/page.tsx, app/layout.tsx, CommandItem.tsx,
+  announcement-feed/toolbar.tsx, ui/chart.tsx) — dark mode is explicitly out of
+  scope per the spec
+  (docs/superpowers/specs/2026-07-13-design-system-standardization-design.md,
+  "the token layer must not pretend to theme"); these are the app's only
+  dark-mode story and must not be mapped to non-theming tokens or deleted
+  without a product decision.
 
 ## Component Dimensions
 
