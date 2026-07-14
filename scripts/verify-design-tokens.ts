@@ -3,15 +3,25 @@
  *
  * Rules (per line, in .ts/.tsx/.css under apps/{web,admin}/src):
  *   raw-hex          #RRGGBB / #RGB[A] color literals
- *   raw-palette      Tailwind palette classes (bg-blue-500, text-gray-600, …)
- *   arbitrary-color  bg-[#…] / text-[#…] / border-[…rgb…] etc.
+ *   raw-palette      Tailwind palette classes (bg-blue-500, placeholder-gray-400, …)
+ *   arbitrary-color  bg-[#…] / text-[…rgb…] / shadow-[0_4px_6px_rgba(…)] etc.
  *   arbitrary-font   text-[NNpx]
  *   arbitrary-space  p-[NNpx] / m-[NNpx] / gap-[NNpx] etc.
+ *   raw-color-fn     rgb()/rgba()/hsl()/hsla()/oklch() functional color literals
+ *
+ * Rules deliberately overlap on some lines (a `from-[#3B82F6]` literal counts
+ * under raw-hex AND arbitrary-color; a bracketed rgba() counts under
+ * arbitrary-color AND raw-color-fn) — each rule stays simple and the baseline
+ * absorbs the double-count.
  *
  * Baseline: scripts/design-token-baseline.json — { file: { rule: count } }.
  * A file may not exceed its baselined count per rule; unbaselined files must be
  * clean. Renamed/moved files must arrive clean OR update the baseline in the
  * same PR (the diff makes this reviewable). Baseline only shrinks over time.
+ * Caveat: the ceiling is a per-file/per-rule COUNT, not a pinned set of lines —
+ * a baselined file whose current count sits below its ceiling can absorb a new
+ * violation without failing. Ratchet ceilings down (--write-baseline in a
+ * reviewed PR) whenever a drain lands to keep that window small.
  *
  * Escape hatch: a line containing `design-tokens:exempt` is skipped (append a reason).
  * Comment-leading lines (`//`, `/*`, JSDoc `*`) are exempt from raw-hex ONLY
@@ -28,8 +38,11 @@ const BASELINE_PATH = 'scripts/design-token-baseline.json';
 
 const PALETTE_NAMES =
   'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
+// Longer alternatives sharing a stem come BEFORE the shorter stem
+// (ring-offset before ring, border-t/… before border, divide-x/y before
+// divide) so the full prefix is consumed and the palette name follows.
 const CLASS_PREFIXES =
-  'bg|text|border|ring|fill|stroke|divide|outline|decoration|accent|caret|shadow|from|via|to';
+  'bg|text|placeholder|border-t|border-r|border-b|border-l|border-x|border-y|border-s|border-e|border|ring-offset|ring|fill|stroke|divide-x|divide-y|divide|outline|decoration|accent|caret|shadow|from|via|to';
 
 const RULES: Record<string, RegExp> = {
   // Negative lookbehind excludes URL-fragment / anchor hrefs (href="#abc") that
@@ -39,20 +52,27 @@ const RULES: Record<string, RegExp> = {
     `\\b(?:${CLASS_PREFIXES})-(?:${PALETTE_NAMES})-(?:25|50|100|200|300|400|500|600|700|800|900|950)\\b`,
     'g',
   ),
-  'arbitrary-color': new RegExp(`\\b(?:${CLASS_PREFIXES})-\\[(?:#|rgb|hsl|oklch)`, 'g'),
+  // Color function may appear anywhere inside the brackets
+  // (shadow-[0_4px_6px_rgba(0,0,0,.1)]), not only at the start.
+  // Overlaps intentionally with raw-hex (bg-[#…]) and raw-color-fn (bracketed rgba).
+  'arbitrary-color': new RegExp(`\\b(?:${CLASS_PREFIXES})-\\[[^\\]]*(?:#|rgb|hsl|oklch)`, 'g'),
   'arbitrary-font': /\btext-\[\d+(?:\.\d+)?px\]/g,
   'arbitrary-space': /\b(?:p|px|py|ps|pe|pt|pr|pb|pl|m|mx|my|ms|me|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y)-\[\d+(?:\.\d+)?px\]/g,
+  // Functional color literals in plain CSS/TS. Intentionally also fires on
+  // bracketed Tailwind values already counted by arbitrary-color (see header).
+  'raw-color-fn': /\b(?:rgba?|hsla?|oklch)\(/g,
 };
 
 type Counts = Record<string, number>;
 
-// Comment-leading lines (JSDoc `*`, `//`, `/*`) are exempt from raw-hex ONLY:
-// PR/issue references and drain-batch notes (`#172`, `(#107 / #146 precedent)`)
-// are digit-only strings 3+ chars long that pass as valid hex, and this
-// codebase's comment style puts nearly all of them on comment-only lines.
-// All other rules still scan comment-marker lines — a class string on a line
-// that merely starts with `/** @deprecated */` is real code and must count.
-const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*)/;
+// Comment-leading lines (JSDoc `*`, `//`, `/*`, JSX `{/*`) are exempt from
+// raw-hex ONLY: PR/issue references and drain-batch notes (`#172`,
+// `(#107 / #146 precedent)`) are digit-only strings 3+ chars long that pass
+// as valid hex, and this codebase's comment style puts nearly all of them on
+// comment-only lines. All other rules still scan comment-marker lines — a
+// class string on a line that merely starts with `/** @deprecated */` is real
+// code and must count.
+const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|\{\/\*)/;
 
 function scanContent(src: string): Counts {
   const counts: Counts = {};
@@ -95,6 +115,15 @@ function selftest(): void {
     // The raw-hex comment-line skip must NOT blind the other rules.
     ['raw-palette', `/** @deprecated */ const legacyClass = "bg-blue-500";`, 1],
     ['arbitrary-font', `/** @deprecated */ const legacySize = "text-[13px]";`, 1],
+    // JSX comment lines ({/* … */}) are also covered by the raw-hex skip.
+    ['raw-hex', `{/* see #123 */}`, 0],
+    // Coverage-gap fixtures (quality review 2026-07-13).
+    ['raw-hex', `const white = '#FFFFFF';`, 1],
+    ['raw-palette', `className="placeholder-gray-400"`, 1],
+    ['raw-palette', `className="focus-visible:ring-offset-red-900"`, 1],
+    ['raw-palette', `className="border-t-red-500"`, 1],
+    ['arbitrary-color', `className="shadow-[0_4px_6px_rgba(0,0,0,.1)]"`, 1],
+    ['raw-color-fn', `background: rgba(0,0,0,.5)`, 1],
   ];
   for (const [rule, input, expected] of cases) {
     const got = scanContent(input)[rule] ?? 0;

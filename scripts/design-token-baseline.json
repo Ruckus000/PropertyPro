@@ -9,7 +9,7 @@
     "raw-hex": 3
   },
   "apps/admin/src/app/auth/login/page.tsx": {
-    "raw-palette": 23
+    "raw-palette": 25
   },
   "apps/admin/src/app/communities/rootless/page.tsx": {
     "raw-palette": 28
@@ -108,9 +108,11 @@
   },
   "apps/admin/src/components/demo/PillStepper.tsx": {
     "arbitrary-font": 2,
-    "raw-hex": 1
+    "raw-hex": 1,
+    "arbitrary-color": 1
   },
   "apps/admin/src/components/demo/PreviewModal.tsx": {
+    "arbitrary-color": 1,
     "raw-hex": 3
   },
   "apps/admin/src/components/demo/PreviewPanel.tsx": {
@@ -119,11 +121,12 @@
     "raw-hex": 3
   },
   "apps/admin/src/components/demo/ProspectEditSection.tsx": {
-    "raw-palette": 23
+    "raw-palette": 26
   },
   "apps/admin/src/components/demo/ReviewStep.tsx": {
     "arbitrary-font": 7,
-    "raw-hex": 2
+    "raw-hex": 2,
+    "arbitrary-color": 2
   },
   "apps/admin/src/components/loading/AdminPageLoading.tsx": {
     "raw-palette": 2
@@ -177,7 +180,8 @@
     "raw-palette": 17
   },
   "apps/web/src/app/(marketing)/marketing-theme.css": {
-    "raw-hex": 50
+    "raw-hex": 50,
+    "raw-color-fn": 12
   },
   "apps/web/src/app/demo/[slug]/page.tsx": {
     "raw-hex": 1
@@ -215,7 +219,7 @@
     "raw-palette": 1
   },
   "apps/web/src/components/demo/DemoTrialBanner.tsx": {
-    "raw-palette": 10
+    "raw-palette": 12
   },
   "apps/web/src/components/ErrorBoundary.tsx": {
     "raw-hex": 3
@@ -229,6 +233,7 @@
     "arbitrary-font": 1
   },
   "apps/web/src/components/esign/signature-capture.tsx": {
+    "raw-color-fn": 2,
     "raw-hex": 3
   },
   "apps/web/src/components/finance/payment-dialog.tsx": {
@@ -325,6 +330,9 @@
   },
   "apps/web/src/components/pm/BrandingPreview.tsx": {
     "raw-hex": 2
+  },
+  "apps/web/src/components/pm/reports/chart-configs.ts": {
+    "raw-color-fn": 19
   },
   "apps/web/src/components/pm/site-editor/CustomStylingForm.tsx": {
     "raw-hex": 3

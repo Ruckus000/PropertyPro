@@ -32,10 +32,15 @@ Full reference: `/DESIGN.md`. Token source: `packages/ui/src/tokens/`, `packages
 ## Token enforcement
 
 - `pnpm guard:design-tokens` bans raw hex, raw Tailwind palette classes
-  (`bg-blue-500`), arbitrary colors (`bg-[#…]`), arbitrary font sizes
-  (`text-[13px]`), and arbitrary pixel spacing (`p-[13px]`) in `apps/*/src`.
+  (`bg-blue-500`), arbitrary colors (`bg-[#…]`, `shadow-[…rgba(…)]`),
+  functional color literals (`rgba(…)`, `hsl(…)`, `oklch(…)`), arbitrary font
+  sizes (`text-[13px]`), and arbitrary pixel spacing (`p-[13px]`) in `apps/*/src`.
 - Existing violations are frozen in `scripts/design-token-baseline.json`
-  (shrink-only; per-file, per-rule ceilings). New code must be clean.
+  (shrink-only; per-file, per-rule ceilings). New files must be clean; existing
+  baselined files cannot exceed their frozen per-rule counts. Caveat: ceilings
+  are counts, not pinned lines — a baselined file with slack below its ceiling
+  can absorb a new violation undetected, so ratchet ceilings down
+  (`--write-baseline` in a reviewed PR) whenever a drain lands.
 - Escape hatch: `// design-tokens:exempt — <reason>` on the offending line
   (email-template hex, chart/canvas internals).
 - Renamed/moved files must arrive clean or update the baseline in the same PR.
