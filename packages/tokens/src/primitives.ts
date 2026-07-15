@@ -10,6 +10,14 @@ export const primitiveColors = {
     600: '#4B5563', 700: '#374151', 800: '#1F2937', 900: '#111827',
     950: '#0D1117',
   },
+  // Warm-neutral ("sand") ramp — a restrained echo of the marketing cream
+  // palette (marketing-theme.css) brought into the app so surfaces read warm
+  // instead of clinical-cool. Only the light steps used by surface/border
+  // tokens are defined; text/interactive stay on the cool `gray` ramp.
+  sand: {
+    0: '#FFFEFC', 25: '#FDFAF6', 50: '#FBF7F1', 100: '#F6EFE6',
+    200: '#EFE7DC', 300: '#E3D8C9',
+  },
   green: {
     50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0',
     500: '#10B981', 600: '#059669', 700: '#047857',

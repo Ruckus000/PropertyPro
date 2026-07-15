@@ -65,22 +65,27 @@ export const tokenDefinitions = {
     link:        prim('blue', 600),
     linkHover:   prim('blue', 700),
   },
+  // Surfaces warm to the `sand` ramp so the app canvas/cards feel consistent
+  // with the marketing cream palette instead of clinical-cool. Inverse
+  // (dark) surfaces stay on `gray`.
   surface: {
-    page:          prim('gray', 50),
-    card:          prim('gray', 0),
-    subtle:        prim('gray', 25),
-    muted:         prim('gray', 100),
-    elevated:      prim('gray', 0),
-    sunken:        prim('gray', 50),
-    hover:         prim('gray', 50),
+    page:          prim('sand', 50),
+    card:          prim('sand', 0),
+    subtle:        prim('sand', 25),
+    muted:         prim('sand', 100),
+    elevated:      prim('sand', 0),
+    sunken:        prim('sand', 50),
+    hover:         prim('sand', 50),
     inverse:       prim('gray', 950),
     inverseSubtle: prim('gray', 900),
   },
+  // Borders warm to `sand` to match the warmed surfaces; focus/error keep
+  // their semantic hues.
   border: {
-    default: prim('gray', 200),
-    subtle:  prim('gray', 100),
-    strong:  prim('gray', 300),
-    muted:   prim('gray', 50),
+    default: prim('sand', 200),
+    subtle:  prim('sand', 100),
+    strong:  prim('sand', 300),
+    muted:   prim('sand', 50),
     focus:   prim('blue', 500),
     error:   prim('red', 500),
   },
