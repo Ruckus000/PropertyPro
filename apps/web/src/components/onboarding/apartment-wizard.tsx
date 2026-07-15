@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getComplianceTemplate } from '@propertypro/shared';
-import { ProgressIndicator } from './progress-indicator';
+import { WizardShell, type WizardStepDef, type WizardIntro } from './wizard-shell';
 import { ProfileStep } from './steps';
 import { CompliancePreview } from './compliance-preview';
 import type {
@@ -28,7 +28,16 @@ interface ApartmentWizardProps {
   initialState?: ApartmentWizardStatePayload;
 }
 
-const STEP_TITLES = ['Community Profile', 'Compliance Preview'];
+const STEPS: WizardStepDef[] = [
+  { title: 'Community Profile', description: 'Tell us about your property.' },
+  { title: 'Compliance Preview', description: 'Review your setup essentials.' },
+];
+
+const INTRO: WizardIntro = {
+  title: "Let's get your community set up.",
+  subtitle: 'A quick setup to launch your resident portal and start managing your property.',
+  trust: 'Built for Florida property managers',
+};
 
 function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>): WizardStepData {
   return {
@@ -43,7 +52,7 @@ function mergeStepData(previous: WizardStepData, patch: Partial<WizardStepData>)
 
 export function ApartmentWizard({ communityId, communityType, initialState }: ApartmentWizardProps) {
   const router = useRouter();
-  const initialStep = Math.max(0, Math.min(initialState?.nextStep ?? 0, STEP_TITLES.length - 1));
+  const initialStep = Math.max(0, Math.min(initialState?.nextStep ?? 0, STEPS.length - 1));
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const [stepData, setStepData] = useState<WizardStepData>(initialState?.stepData ?? {});
   const [isSaving, setIsSaving] = useState(false);
@@ -69,7 +78,7 @@ export function ApartmentWizard({ communityId, communityType, initialState }: Ap
       await saveStepMutation.mutateAsync({ step, patch });
 
       setStepData((previous) => mergeStepData(previous, patch));
-      setCurrentStep(Math.min(step + 1, STEP_TITLES.length - 1));
+      setCurrentStep(Math.min(step + 1, STEPS.length - 1));
     } finally {
       setIsSaving(false);
     }
@@ -105,44 +114,28 @@ export function ApartmentWizard({ communityId, communityType, initialState }: Ap
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-content">Welcome to PropertyPro</h1>
-        <p className="mt-2 text-content-secondary">Set up your community profile and review compliance requirements.</p>
-      </div>
-
-      <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
-
-      {error && (
-        <div className="my-4 rounded-md bg-status-danger-bg p-4">
-          <p className="text-sm text-status-danger">{error}</p>
-        </div>
+    <WizardShell
+      activeStep={Math.min(currentStep + 1, STEPS.length)}
+      steps={STEPS}
+      intro={INTRO}
+      error={error}
+    >
+      {currentStep === 0 && (
+        <ProfileStep
+          communityId={communityId}
+          onNext={handleProfileNext}
+          initialData={stepData.profile}
+        />
       )}
 
-      {isSaving && (
-        <div className="my-4 rounded-md bg-interactive-subtle p-4">
-          <p className="text-sm text-content-link">Saving progress...</p>
-        </div>
+      {currentStep === 1 && (
+        <CompliancePreview
+          communityType={communityType as 'condo_718' | 'hoa_720' | 'apartment'}
+          categories={complianceCategories}
+          onContinue={handleComplianceContinue}
+          isLoading={isSaving}
+        />
       )}
-
-      <div className="mt-8">
-        {currentStep === 0 && (
-          <ProfileStep
-            communityId={communityId}
-            onNext={handleProfileNext}
-            initialData={stepData.profile}
-          />
-        )}
-
-        {currentStep === 1 && (
-          <CompliancePreview
-            communityType={communityType as 'condo_718' | 'hoa_720' | 'apartment'}
-            categories={complianceCategories}
-            onContinue={handleComplianceContinue}
-            isLoading={isSaving}
-          />
-        )}
-      </div>
-    </div>
+    </WizardShell>
   );
 }
