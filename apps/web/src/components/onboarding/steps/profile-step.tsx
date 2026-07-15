@@ -258,7 +258,6 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
                 Community logo <span className="font-normal normal-case tracking-normal text-content-tertiary">(optional)</span>
               </p>
               <label
-                htmlFor="logo"
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
