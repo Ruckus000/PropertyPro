@@ -37,13 +37,25 @@ describe("Token parity", () => {
     }
   });
 
-  it("emailColors values match toHex() for their corresponding tokens", () => {
+  it("emailColors mirror toHex() for tokens still shared with the app", () => {
     expect(emailColors.textPrimary).toBe(toHex(tokenDefinitions.text.primary));
-    expect(emailColors.surfacePage).toBe(toHex(tokenDefinitions.surface.page));
     expect(emailColors.interactivePrimary).toBe(toHex(tokenDefinitions.interactive.primary));
     expect(emailColors.successForeground).toBe(toHex(tokenDefinitions.status.success.foreground));
     expect(emailColors.dangerForeground).toBe(toHex(tokenDefinitions.status.danger.foreground));
     expect(emailColors.warningBackground).toBe(toHex(tokenDefinitions.status.warning.background));
+  });
+
+  it("email surfaces/borders stay on the cool gray ramp (decoupled from the warmed app surface tokens)", () => {
+    // The app's surface.*/border.* tokens warmed to the `sand` ramp for
+    // landing-consistency; transactional emails deliberately stay neutral-cool,
+    // so these are pinned to `gray` and must NOT follow surface.*/border.*.
+    expect(emailColors.surfacePage).toBe(primitiveColors.gray[50]);
+    expect(emailColors.surfaceCard).toBe(primitiveColors.gray[0]);
+    expect(emailColors.surfaceMuted).toBe(primitiveColors.gray[100]);
+    expect(emailColors.borderDefault).toBe(primitiveColors.gray[200]);
+    expect(emailColors.borderStrong).toBe(primitiveColors.gray[300]);
+    // Explicitly diverged from the now-warm app surface token:
+    expect(emailColors.surfacePage).not.toBe(toHex(tokenDefinitions.surface.page));
   });
 
   it("uses two-space indentation matching UI tokens.css format", () => {

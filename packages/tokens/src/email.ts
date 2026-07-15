@@ -1,8 +1,9 @@
 import { tokenDefinitions as t, toHex } from './semantic';
+import { primitiveColors } from './primitives';
 
 // Re-export primitives so email templates can reference one-off colors
 // without needing a semantic token for every shade.
-export { primitiveColors } from './primitives';
+export { primitiveColors };
 
 /**
  * Resolved color values for email inline styles.
@@ -26,14 +27,17 @@ export const emailColors = {
   textBrand:       toHex(t.text.brand),            // #2563EB
   textLink:        toHex(t.text.link),             // #2563EB
 
-  // Surfaces
-  surfacePage:     toHex(t.surface.page),          // #F9FAFB
-  surfaceCard:     toHex(t.surface.card),          // #FFFFFF
-  surfaceMuted:    toHex(t.surface.muted),         // #F3F4F6
+  // Surfaces — pinned to the cool `gray` ramp. The app's surface.* tokens
+  // warmed to the `sand` ramp for landing-consistency, but transactional
+  // emails stay neutral-cool (out of that scope), so these intentionally do
+  // NOT follow surface.* anymore.
+  surfacePage:     primitiveColors.gray[50],       // #F9FAFB
+  surfaceCard:     primitiveColors.gray[0],         // #FFFFFF
+  surfaceMuted:    primitiveColors.gray[100],       // #F3F4F6
 
-  // Borders
-  borderDefault:   toHex(t.border.default),        // #E5E7EB
-  borderStrong:    toHex(t.border.strong),         // #D1D5DB
+  // Borders — likewise pinned to cool `gray` (see Surfaces note above).
+  borderDefault:   primitiveColors.gray[200],       // #E5E7EB
+  borderStrong:    primitiveColors.gray[300],       // #D1D5DB
 
   // Interactive (default fallback — overridden by branding.accentColor at runtime)
   interactivePrimary:      toHex(t.interactive.primary),      // #2563EB

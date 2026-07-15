@@ -36,6 +36,13 @@
   --gray-900: #111827;
   --gray-950: #0D1117;
 
+  --sand-0: #FFFEFC;
+  --sand-25: #FDFAF6;
+  --sand-50: #FBF7F1;
+  --sand-100: #F6EFE6;
+  --sand-200: #EFE7DC;
+  --sand-300: #E3D8C9;
+
   --green-50: #ECFDF5;
   --green-100: #D1FAE5;
   --green-200: #A7F3D0;
@@ -186,21 +193,21 @@
   --text-link-hover: var(--blue-700);
 
   /* Surfaces */
-  --surface-page: var(--gray-50);
-  --surface-card: var(--gray-0);
-  --surface-subtle: var(--gray-25);
-  --surface-muted: var(--gray-100);
-  --surface-elevated: var(--gray-0);
-  --surface-sunken: var(--gray-50);
-  --surface-hover: var(--gray-50);
+  --surface-page: var(--sand-50);
+  --surface-card: var(--sand-0);
+  --surface-subtle: var(--sand-25);
+  --surface-muted: var(--sand-100);
+  --surface-elevated: var(--sand-0);
+  --surface-sunken: var(--sand-50);
+  --surface-hover: var(--sand-50);
   --surface-inverse: var(--gray-950);
   --surface-inverse-subtle: var(--gray-900);
 
   /* Borders */
-  --border-default: var(--gray-200);
-  --border-subtle: var(--gray-100);
-  --border-strong: var(--gray-300);
-  --border-muted: var(--gray-50);
+  --border-default: var(--sand-200);
+  --border-subtle: var(--sand-100);
+  --border-strong: var(--sand-300);
+  --border-muted: var(--sand-50);
   --border-focus: var(--blue-500);
   --border-error: var(--red-500);
 
