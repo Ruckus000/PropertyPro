@@ -13,6 +13,19 @@
  *                         in the body; invalidates the GET query on success so
  *                         the editor reflects the newly-saved state.
  *
+ * useDeleteContentBlock — DELETE /api/v1/pm/site/blocks (slice 8f)
+ *                         Removes the section at blockOrder. Published
+ *                         sections are staged as a tombstone draft (removed on
+ *                         next publish); draft-only sections vanish
+ *                         immediately. Resolves { staged } so callers can pick
+ *                         the right toast copy.
+ *
+ * useDiscardDrafts      — DELETE /api/v1/pm/site/drafts (slice 8f)
+ *                         Discards every pending draft (edits, reorders, and
+ *                         staged deletions). Invalidates the whole
+ *                         ['pm','site'] prefix — a discard can drop the hero
+ *                         draft too, which lives under its own query key.
+ *
  * Both routes use the canonical { data: T } success envelope and
  * { error: { code, message } } error envelope (B1 canonical). Raw fetch is
  * kept to preserve the exact error-literal behaviour; migration to
@@ -20,6 +33,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 
 export interface SiteBlockSummary {
   id: number;
@@ -44,18 +58,42 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
+interface BlocksPayload {
+  blocks: SiteBlockSummary[];
+  /** Authoritative publish token — max published_at over all published rows. */
+  latestPublishedAt: string | null;
+}
+
+async function fetchBlocks(communityId: number, signal?: AbortSignal): Promise<BlocksPayload> {
+  const res = await fetch(`/api/v1/pm/site/blocks?communityId=${communityId}`, { signal });
+  if (!res.ok) throw new Error(await readError(res));
+  const body = (await res.json()) as { data: BlocksPayload };
+  return { blocks: body.data.blocks, latestPublishedAt: body.data.latestPublishedAt ?? null };
+}
+
 export function useContentBlocks(communityId: number) {
-  return useQuery<SiteBlockSummary[]>({
+  // `select` keeps every existing consumer's `.data` a SiteBlockSummary[]
+  // while the cached payload also carries the publish token for
+  // useSitePublishToken (same queryKey → one fetch, shared cache).
+  return useQuery<BlocksPayload, Error, SiteBlockSummary[]>({
     queryKey: blocksKey(communityId),
-    queryFn: async ({ signal }) => {
-      const res = await fetch(
-        `/api/v1/pm/site/blocks?communityId=${communityId}`,
-        { signal },
-      );
-      if (!res.ok) throw new Error(await readError(res));
-      const body = (await res.json()) as { data: { blocks: SiteBlockSummary[] } };
-      return body.data.blocks;
-    },
+    queryFn: ({ signal }) => fetchBlocks(communityId, signal),
+    select: (payload) => payload.blocks,
+  });
+}
+
+/**
+ * The site's authoritative optimistic-concurrency token (max published_at
+ * across ALL published rows, including any shadowed by a draft/tombstone).
+ * PublishBar echoes this back on publish rather than deriving it from the
+ * merged block list, which would drop shadowed rows and spuriously 409.
+ * Shares the blocks query key, so it adds no extra request.
+ */
+export function useSitePublishToken(communityId: number) {
+  return useQuery<BlocksPayload, Error, string | null>({
+    queryKey: blocksKey(communityId),
+    queryFn: ({ signal }) => fetchBlocks(communityId, signal),
+    select: (payload) => payload.latestPublishedAt,
   });
 }
 
@@ -91,6 +129,58 @@ export function useUpsertContentBlock(communityId: number) {
   });
 }
 
+export interface DeleteContentBlockResult {
+  /**
+   * true — the section is live; removal was staged and applies on the next
+   * publish. false — the section was an unpublished draft, gone immediately.
+   */
+  staged: boolean;
+}
+
+export function useDeleteContentBlock(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<DeleteContentBlockResult, Error, { blockOrder: number }>({
+    mutationFn: async ({ blockOrder }) => {
+      const res = await fetch('/api/v1/pm/site/blocks', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, blockOrder }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { data: { ok: true; staged: boolean } };
+      return { staged: body.data.staged };
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: blocksKey(communityId) });
+    },
+  });
+}
+
+export interface DiscardDraftsResult {
+  discardedCount: number;
+}
+
+export function useDiscardDrafts(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<DiscardDraftsResult, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch('/api/v1/pm/site/drafts', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { data: { ok: true; discardedCount: number } };
+      return { discardedCount: body.data.discardedCount };
+    },
+    onSuccess: async () => {
+      // Broad prefix on purpose: a discard can drop the hero draft
+      // (['pm','site','hero',id]) as well as the content blocks.
+      await qc.invalidateQueries({ queryKey: ['pm', 'site'] });
+    },
+  });
+}
+
 /**
  * Content blocks occupy block_order 2..99; the hero is reserved at order 1
  * and is not reorderable. Mirrors the server-side MIN_CONTENT_BLOCK_ORDER.
@@ -115,7 +205,10 @@ function swapAdjacent(
   direction: 'up' | 'down',
 ): SiteBlockSummary[] {
   const content = [...blocks]
-    .filter((b) => b.blockOrder >= MIN_CONTENT_BLOCK_ORDER)
+    // Exclude tombstones (staged deletions) — they're hidden from the editor
+    // list and the server's reorderSiteBlock skips them too, so the optimistic
+    // swap must not treat one as a neighbor (else the visible order desyncs).
+    .filter((b) => b.blockOrder >= MIN_CONTENT_BLOCK_ORDER && b.blockType !== TOMBSTONE_BLOCK_TYPE)
     .sort((a, b) => a.blockOrder - b.blockOrder);
   const index = content.findIndex((b) => b.id === blockId);
   if (index === -1) return blocks;
@@ -142,7 +235,7 @@ function swapAdjacent(
  */
 export function useReorderBlocks(communityId: number) {
   const qc = useQueryClient();
-  return useMutation<void, Error, ReorderBlockInput, { previous?: SiteBlockSummary[] }>({
+  return useMutation<void, Error, ReorderBlockInput, { previous?: BlocksPayload }>({
     mutationFn: async ({ blockId, direction }) => {
       const res = await fetch('/api/v1/pm/site/blocks/reorder', {
         method: 'POST',
@@ -153,12 +246,14 @@ export function useReorderBlocks(communityId: number) {
     },
     onMutate: async ({ blockId, direction }) => {
       await qc.cancelQueries({ queryKey: blocksKey(communityId) });
-      const previous = qc.getQueryData<SiteBlockSummary[]>(blocksKey(communityId));
+      // The cache holds the full BlocksPayload; swap within its `blocks` and
+      // preserve latestPublishedAt (a reorder never changes the publish token).
+      const previous = qc.getQueryData<BlocksPayload>(blocksKey(communityId));
       if (previous) {
-        qc.setQueryData<SiteBlockSummary[]>(
-          blocksKey(communityId),
-          swapAdjacent(previous, blockId, direction),
-        );
+        qc.setQueryData<BlocksPayload>(blocksKey(communityId), {
+          ...previous,
+          blocks: swapAdjacent(previous.blocks, blockId, direction),
+        });
       }
       return { previous };
     },

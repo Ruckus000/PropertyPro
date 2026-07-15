@@ -7,8 +7,18 @@ import {
   useContentBlocks,
   useUpsertContentBlock,
   useReorderBlocks,
+  useSitePublishToken,
   type SiteBlockSummary,
 } from '@/hooks/use-content-blocks';
+
+interface BlocksPayload {
+  blocks: SiteBlockSummary[];
+  latestPublishedAt: string | null;
+}
+const payload = (blocks: SiteBlockSummary[], latestPublishedAt: string | null = null): BlocksPayload => ({
+  blocks,
+  latestPublishedAt,
+});
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -31,15 +41,39 @@ describe('useContentBlocks', () => {
     ];
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: { blocks } }),
+      json: async () => ({ data: { blocks, latestPublishedAt: '2026-05-01T00:00:00.000Z' } }),
     });
     const { result } = renderHook(() => useContentBlocks(7), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // `select` exposes just the blocks array to this hook's consumers.
     expect(result.current.data).toEqual(blocks);
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/pm/site/blocks?communityId=7'),
       expect.anything(),
     );
+  });
+
+  it('useSitePublishToken exposes latestPublishedAt from the same query (one fetch, shared cache)', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { blocks: [], latestPublishedAt: '2026-06-15T12:00:00.000Z' } }),
+    });
+    const wrapper = makeWrapper();
+    const blocksHook = renderHook(() => useContentBlocks(7), { wrapper });
+    const tokenHook = renderHook(() => useSitePublishToken(7), { wrapper });
+    await waitFor(() => expect(tokenHook.result.current.isSuccess).toBe(true));
+    expect(tokenHook.result.current.data).toBe('2026-06-15T12:00:00.000Z');
+    expect(blocksHook.result.current.data).toEqual([]);
+  });
+
+  it('useSitePublishToken yields null before the first publish', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { blocks: [], latestPublishedAt: null } }),
+    });
+    const { result } = renderHook(() => useSitePublishToken(7), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
   });
 
   it('surfaces server error message on failure', async () => {
@@ -224,11 +258,11 @@ describe('useReorderBlocks', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-    client.setQueryData<SiteBlockSummary[]>(blocksKey(7), [
+    client.setQueryData<BlocksPayload>(blocksKey(7), payload([
       block({ id: 1, blockType: 'hero', blockOrder: 1 }),
       block({ id: 12, blockOrder: 2 }),
       block({ id: 13, blockType: 'image', blockOrder: 3 }),
-    ]);
+    ]));
 
     const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
     act(() => {
@@ -236,12 +270,42 @@ describe('useReorderBlocks', () => {
     });
 
     await waitFor(() => {
-      const cached = client.getQueryData<SiteBlockSummary[]>(blocksKey(7))!;
+      const cached = client.getQueryData<BlocksPayload>(blocksKey(7))!.blocks;
       // Block 12 now sits at order 3, block 13 at order 2 — order-sorted, the
       // hero (1) stays first.
       expect(cached.map((b) => b.id)).toEqual([1, 13, 12]);
       expect(cached.find((b) => b.id === 12)!.blockOrder).toBe(3);
       expect(cached.find((b) => b.id === 13)!.blockOrder).toBe(2);
+    });
+  });
+
+  it('optimistic swap skips tombstones (staged deletions) as neighbors', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise(() => {}));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    // text@2, tombstone@3 (hidden staged deletion), contact@4. Moving text
+    // down must swap with contact (order 4), not the invisible tombstone.
+    client.setQueryData<BlocksPayload>(blocksKey(7), payload([
+      block({ id: 12, blockOrder: 2 }),
+      block({ id: 90, blockType: 'tombstone', blockOrder: 3, isDraft: true }),
+      block({ id: 14, blockType: 'contact', blockOrder: 4 }),
+    ]));
+
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
+    act(() => {
+      result.current.mutate({ blockId: 12, direction: 'down' });
+    });
+
+    await waitFor(() => {
+      const cached = client.getQueryData<BlocksPayload>(blocksKey(7))!.blocks;
+      expect(cached.find((b) => b.id === 12)!.blockOrder).toBe(4);
+      expect(cached.find((b) => b.id === 14)!.blockOrder).toBe(2);
+      // The tombstone is untouched at order 3.
+      expect(cached.find((b) => b.id === 90)!.blockOrder).toBe(3);
     });
   });
 
@@ -258,18 +322,18 @@ describe('useReorderBlocks', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-    const original = [
+    const original = payload([
       block({ id: 12, blockOrder: 2 }),
       block({ id: 13, blockType: 'image', blockOrder: 3 }),
-    ];
-    client.setQueryData<SiteBlockSummary[]>(blocksKey(7), original);
+    ]);
+    client.setQueryData<BlocksPayload>(blocksKey(7), original);
 
     const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
     await act(async () => {
       await expect(result.current.mutateAsync({ blockId: 12, direction: 'down' })).rejects.toThrow(/already last/);
     });
 
-    const cached = client.getQueryData<SiteBlockSummary[]>(blocksKey(7))!;
+    const cached = client.getQueryData<BlocksPayload>(blocksKey(7))!.blocks;
     expect(cached.map((b) => b.id)).toEqual([12, 13]);
     expect(cached.find((b) => b.id === 12)!.blockOrder).toBe(2);
   });
@@ -285,10 +349,10 @@ describe('useReorderBlocks', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-    client.setQueryData<SiteBlockSummary[]>(blocksKey(7), [
+    client.setQueryData<BlocksPayload>(blocksKey(7), payload([
       block({ id: 12, blockOrder: 2 }),
       block({ id: 13, blockType: 'image', blockOrder: 3 }),
-    ]);
+    ]));
 
     const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
     await act(async () => {

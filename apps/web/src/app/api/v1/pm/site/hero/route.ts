@@ -1,14 +1,14 @@
 /**
  * PR #1b: PM site editor — hero block endpoint.
  *
- * GET  /api/v1/pm/site/hero?communityId=X   — read current published hero
- * PATCH /api/v1/pm/site/hero                — replace published hero
+ * GET  /api/v1/pm/site/hero?communityId=X   — read current hero (draft wins)
+ * PATCH /api/v1/pm/site/hero                — upsert the hero draft
  *
  * Authorization: caller must hold pm_admin or cam in the target community and the
  * community's subscription plan must include `hasSiteEditor`.
  *
- * PR #1b writes directly to the published row. The full draft/preview/publish
- * workflow ships in PR #8.
+ * Slice 8e is live: PATCH writes a draft row; the public site keeps serving
+ * the last-published hero until POST /api/v1/pm/site/publish promotes it.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';

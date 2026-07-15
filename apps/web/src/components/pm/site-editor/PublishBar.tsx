@@ -5,25 +5,24 @@
  *
  * Surfaces:
  *  - Pending-changes badge ("N draft sections" — count of is_draft=true
- *    blocks loaded via use-content-blocks).
+ *    blocks loaded via use-content-blocks, including tombstone drafts,
+ *    i.e. staged deletions).
  *  - Publish button that fires usePublishSite with the loaded
  *    expectedPublishedAt token. Disabled while loading or in-flight.
+ *  - Discard-drafts button (slice 8f) — appears only when drafts are
+ *    pending; reverts the editor to the live site's state.
  *  - Inline status — success ("Published N sections"), nothing-to-publish
  *    ("No changes to publish"), or error message (including the 409
  *    "another editor published" copy from PublishConflictError).
  *
- * Until slice 8e ships (editor refactor to write is_draft=true), every
- * block is published-straight-to-prod, so the badge always reads 0 and
- * the Publish button is effectively decorative. The button still works
- * — clicking it produces a `nothing-to-publish` response. Wiring it up
- * now lets the API surface, the styling, and the optimistic-concurrency
- * plumbing all ship + be reviewed before the user-visible behavior
- * change lands.
+ * Slice 8e is live: the editor's block/hero/reorder writes all land in the
+ * draft layer, so the badge counts real pending changes and Publish promotes
+ * them atomically (publishCommunitySite).
  */
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { useContentBlocks, useDiscardDrafts, useSitePublishToken } from '@/hooks/use-content-blocks';
 import { useHeroBlock } from '@/hooks/use-hero-block';
 import { usePublishSite, PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
 
@@ -31,36 +30,33 @@ interface Props {
   communityId: number;
 }
 
-/**
- * Optimistic-concurrency token: the latest `publishedAt` across the loaded
- * blocks. The publish endpoint compares this against the row-level lock it
- * acquires on the community; a mid-flight publish by another PM bumps every
- * published row's `publishedAt`, the tokens no longer match, and the API
- * returns 409. Returns null when no published rows exist yet (first publish).
- *
- * Only published rows contribute — draft rows carry `publishedAt = null`.
- */
-function deriveExpectedPublishedAt(blocks: SiteBlockSummary[] | undefined): string | null {
-  if (!blocks) return null;
-  let latest: string | null = null;
-  for (const b of blocks) {
-    if (b.isDraft) continue;
-    if (b.publishedAt && (!latest || b.publishedAt > latest)) {
-      latest = b.publishedAt;
-    }
-  }
-  return latest;
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
+/**
+ * Human-readable publish outcome. A publish can promote drafts, retire
+ * sections (staged deletions), or both, so the message reflects whichever
+ * happened — a deletion-only publish (promotedCount 0, retiredCount > 0) must
+ * not read as "0 sections live" / a no-op.
+ */
 function classifyOutcome(result: PublishSiteResult): string {
-  if (result.published) {
-    return `Published — ${result.promotedCount} section${result.promotedCount === 1 ? '' : 's'} live.`;
+  if (!result.published) return 'No changes to publish.';
+  const { promotedCount, retiredCount } = result;
+  if (promotedCount > 0 && retiredCount > 0) {
+    return `Published — ${plural(promotedCount, 'section')} live, ${plural(retiredCount, 'removed')}.`;
   }
-  return 'No changes to publish.';
+  if (promotedCount === 0 && retiredCount > 0) {
+    return `Published — ${plural(retiredCount, 'section')} removed.`;
+  }
+  return `Published — ${plural(promotedCount, 'section')} live.`;
 }
 
 export function PublishBar({ communityId }: Props) {
   const blocksQ = useContentBlocks(communityId);
+  // Authoritative publish token from the same blocks query (server-computed
+  // over ALL published rows). Shares the query key, so no extra request.
+  const publishToken = useSitePublishToken(communityId);
   // useHeroBlock isn't read for its value here — the hook subscription
   // just primes the cache so invalidation on publish has something to
   // refetch in this view. It will also matter when 8e flips the hero
@@ -68,6 +64,7 @@ export function PublishBar({ communityId }: Props) {
   useHeroBlock(communityId);
 
   const publish = usePublishSite(communityId);
+  const discard = useDiscardDrafts(communityId);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const pendingCount = useMemo(() => {
@@ -84,13 +81,33 @@ export function PublishBar({ communityId }: Props) {
     [blocksQ.data],
   );
 
-  const isLoading = blocksQ.isLoading || publish.isPending;
+  const isLoading = blocksQ.isLoading || publish.isPending || discard.isPending;
+
+  function onDiscard() {
+    const confirmed = window.confirm(
+      'Discard all pending drafts? Your live site is untouched; unpublished edits, reorders, and staged removals will be lost.',
+    );
+    if (!confirmed) return;
+    setOutcome(null);
+    discard.mutate(undefined, {
+      onSuccess: ({ discardedCount }) => {
+        toast.success(
+          discardedCount > 0
+            ? `Discarded ${discardedCount} pending change${discardedCount === 1 ? '' : 's'}.`
+            : 'Nothing to discard.',
+        );
+      },
+      onError: (err) => {
+        setOutcome(err instanceof Error ? err.message : 'Discard failed.');
+      },
+    });
+  }
 
   async function onPublish() {
     setOutcome(null);
     try {
       const result = await publish.mutateAsync({
-        expectedPublishedAt: deriveExpectedPublishedAt(blocksQ.data),
+        expectedPublishedAt: publishToken.data ?? null,
       });
       setOutcome(classifyOutcome(result));
       if (result.published) {
@@ -139,6 +156,17 @@ export function PublishBar({ communityId }: Props) {
             >
               {outcome}
             </span>
+          )}
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={onDiscard}
+              disabled={isLoading}
+              data-testid="discard-drafts-button"
+              className="inline-flex items-center rounded-md border border-default px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+            >
+              {discard.isPending ? 'Discarding…' : 'Discard Drafts'}
+            </button>
           )}
           <button
             type="button"
