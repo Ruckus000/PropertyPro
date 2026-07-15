@@ -316,7 +316,12 @@ export function TemplateDetailClient({
             </PdfViewer>
           </div>
         ) : pdfIsLoading || pdfIsFetching ? (
-          <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6">
+          <div
+            role="status"
+            aria-label="Loading PDF preview"
+            data-testid="pdf-preview-loading"
+            className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6"
+          >
             <Skeleton className="h-[600px] w-full" />
           </div>
         ) : (
