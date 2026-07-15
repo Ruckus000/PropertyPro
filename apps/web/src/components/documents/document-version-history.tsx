@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { DocumentListItem } from './document-list';
 import { DocumentViewerModal } from './DocumentViewerModal';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentVersions, type DocumentVersionItem } from '@/hooks/use-documents';
 
 interface DocumentVersionHistoryProps {
@@ -81,9 +82,13 @@ export function DocumentVersionHistory({
 
       <div className="flex-1 overflow-auto">
         {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
-            <span className="ml-2 text-sm text-content-secondary">Loading versions...</span>
+          <div className="divide-y divide-edge" data-testid="document-version-history-loading">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-2 p-4">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ))}
           </div>
         )}
 

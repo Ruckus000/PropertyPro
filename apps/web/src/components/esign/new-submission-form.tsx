@@ -499,19 +499,10 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                   <Button
                     className="flex-1"
                     onClick={handleSubmit}
-                    disabled={createMutation.isPending}
+                    loading={createMutation.isPending}
                   >
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4 mr-2" />
-                        Send for Signing
-                      </>
-                    )}
+                    {!createMutation.isPending && <Send className="h-4 w-4 mr-2" />}
+                    {createMutation.isPending ? 'Sending...' : 'Send for Signing'}
                   </Button>
                 </div>
 
