@@ -156,7 +156,10 @@ export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSucces
                 appearance: {
                   theme: 'stripe',
                   variables: {
-                    colorPrimary: '#4f46e5',
+                    // Stripe Elements render inside a cross-origin iframe, so
+                    // CSS custom properties from this document (var(--x)) are
+                    // not resolvable there — the SDK requires a static color.
+                    colorPrimary: '#4f46e5', // design-tokens:exempt — Stripe Elements appearance API requires a static color; the iframe can't resolve host-page CSS vars
                   },
                 },
               }}

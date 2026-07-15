@@ -33,7 +33,11 @@ export function DemoBanner({ isDemoMode, currentRole, slug }: DemoBannerProps) {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-50 flex h-10 items-center justify-center gap-4 bg-gray-900/90 px-4 text-sm text-white backdrop-blur-sm"
+      // Translucent dark scrim + backdrop-blur (matches the app's overlay
+      // convention, e.g. modal scrims using bg-black/40-50): raw `black` isn't
+      // a numbered palette shade, and semantic surface tokens don't support
+      // slash-opacity (var()-based, no <alpha-value> placeholder).
+      className="fixed inset-x-0 bottom-0 z-50 flex h-10 items-center justify-center gap-4 bg-black/90 px-4 text-sm text-white backdrop-blur-sm"
       role="status"
       aria-label="Demo session banner"
     >

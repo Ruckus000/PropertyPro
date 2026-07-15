@@ -23,7 +23,7 @@ export function MarketingFooter({
       <div className="mk-wrap">
         <div className="mk-foot-grid">
           <div>
-            <div className="mk-logo" style={{ color: '#fff' }}>
+            <div className="mk-logo" style={{ color: '#fff' /* design-tokens:exempt — marketing-theme.css is frozen and already uses bare #fff for footer text (.mk-footer h5, .mk-logo-dot); matches that convention */ }}>
               <span className="mk-logo-dot" aria-hidden="true">
                 ◐
               </span>

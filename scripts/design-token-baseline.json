@@ -168,9 +168,6 @@
     "raw-hex": 50,
     "raw-color-fn": 12
   },
-  "apps/web/src/app/dev/site-preview/page.tsx": {
-    "raw-palette": 4
-  },
   "apps/web/src/app/layout.tsx": {
     "raw-palette": 2
   },
@@ -183,30 +180,8 @@
   "apps/web/src/components/announcements/announcement-toolbar.tsx": {
     "raw-palette": 5
   },
-  "apps/web/src/components/billing/feature-hero.tsx": {
-    "raw-hex": 6,
-    "arbitrary-color": 6
-  },
   "apps/web/src/components/command-palette/CommandItem.tsx": {
     "raw-palette": 6
-  },
-  "apps/web/src/components/demo/DemoBanner.tsx": {
-    "raw-palette": 1
-  },
-  "apps/web/src/components/demo/DemoTrialBanner.tsx": {
-    "raw-palette": 12
-  },
-  "apps/web/src/components/ErrorBoundary.tsx": {
-    "raw-hex": 3
-  },
-  "apps/web/src/components/finance/payment-dialog.tsx": {
-    "raw-hex": 1
-  },
-  "apps/web/src/components/marketing/footer.tsx": {
-    "raw-hex": 1
-  },
-  "apps/web/src/components/marketing/portfolio-card.tsx": {
-    "raw-hex": 4
   },
   "apps/web/src/components/mobile/FeatureCard.tsx": {
     "raw-palette": 41,
