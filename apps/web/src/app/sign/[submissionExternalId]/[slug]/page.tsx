@@ -31,7 +31,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Loader2,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -586,21 +585,11 @@ export default function SigningPage() {
                 </Button>
                 <Button
                   className="flex-1"
-                  disabled={
-                    !allRequiredDone ||
-                    !consentChecked ||
-                    submitMutation.isPending
-                  }
+                  disabled={!allRequiredDone || !consentChecked}
+                  loading={submitMutation.isPending}
                   onClick={handleFinish}
                 >
-                  {submitMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    'Finish'
-                  )}
+                  {submitMutation.isPending ? 'Submitting...' : 'Finish'}
                 </Button>
               </>
             ) : (
@@ -625,16 +614,9 @@ export default function SigningPage() {
                     variant="destructive"
                     className="flex-1"
                     onClick={handleDecline}
-                    disabled={declineMutation.isPending}
+                    loading={declineMutation.isPending}
                   >
-                    {declineMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Declining...
-                      </>
-                    ) : (
-                      'Confirm Decline'
-                    )}
+                    {declineMutation.isPending ? 'Declining...' : 'Confirm Decline'}
                   </Button>
                 </div>
               </div>

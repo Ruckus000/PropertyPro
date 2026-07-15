@@ -21,6 +21,7 @@ import {
 import { Badge } from '@propertypro/ui';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
@@ -154,8 +155,9 @@ export function TemplateDetailClient({
   // -----------------------------------------------------------------------
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
@@ -314,11 +316,8 @@ export function TemplateDetailClient({
             </PdfViewer>
           </div>
         ) : pdfIsLoading || pdfIsFetching ? (
-          <div className="flex items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
-              <p className="text-sm text-[var(--text-tertiary)]">Loading PDF preview...</p>
-            </div>
+          <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6">
+            <Skeleton className="h-[600px] w-full" />
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12">

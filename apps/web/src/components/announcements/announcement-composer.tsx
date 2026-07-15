@@ -8,7 +8,6 @@
 
 import { useCallback, useState, type FormEvent } from 'react';
 import dynamic from 'next/dynamic';
-import { Loader2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -190,8 +189,7 @@ export function AnnouncementComposer({
             Cancel
           </Button>
         ) : null}
-        <Button type="submit" className="h-11 md:h-9" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+        <Button type="submit" className="h-11 md:h-9" loading={isSubmitting}>
           {submitLabel}
         </Button>
       </div>
