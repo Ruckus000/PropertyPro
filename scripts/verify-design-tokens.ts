@@ -8,6 +8,11 @@
  *   arbitrary-font   text-[NNpx]
  *   arbitrary-space  p-[NNpx] / m-[NNpx] / gap-[NNpx] etc.
  *   raw-color-fn     rgb()/rgba()/hsl()/hsla()/oklch() functional color literals
+ *   slash-opacity-semantic  bg-interactive/10, hover:bg-status-danger/90, …
+ *                    (slash-opacity on the app's SEMANTIC tokens compiles to
+ *                    ZERO CSS — the tokens are plain `var(--x)` with no
+ *                    `<alpha-value>` channel, so Tailwind emits nothing.
+ *                    Built-in palette alpha like `bg-white/20` is fine.)
  *
  * Rules deliberately overlap on some lines (a `from-[#3B82F6]` literal counts
  * under raw-hex AND arbitrary-color; a bracketed rgba() counts under
@@ -61,6 +66,13 @@ const RULES: Record<string, RegExp> = {
   // Functional color literals in plain CSS/TS. Intentionally also fires on
   // bracketed Tailwind values already counted by arbitrary-color (see header).
   'raw-color-fn': /\b(?:rgba?|hsla?|oklch)\(/g,
+  // Slash-opacity on the app's semantic tokens (content/surface/edge/
+  // interactive/status) is a no-op: those tokens are defined as bare
+  // `var(--x)` with no `<alpha-value>` channel, so Tailwind 3.4 generates
+  // NOTHING. Use a solid token (…-subtle / …-bg / …-hover) or built-in
+  // `white`/`black` alpha for genuine translucency instead.
+  'slash-opacity-semantic':
+    /\b(?:bg|text|border|ring|from|via|to|divide|outline|placeholder|fill|stroke|ring-offset|decoration|accent|caret)-(?:content|surface|edge|interactive|status)[a-z-]*\/\d+/g,
 };
 
 type Counts = Record<string, number>;
@@ -124,6 +136,11 @@ function selftest(): void {
     ['raw-palette', `className="border-t-red-500"`, 1],
     ['arbitrary-color', `className="shadow-[0_4px_6px_rgba(0,0,0,.1)]"`, 1],
     ['raw-color-fn', `background: rgba(0,0,0,.5)`, 1],
+    // slash-opacity on semantic tokens is a no-op (compiles to zero CSS);
+    // built-in palette alpha (white/black) is fine and must NOT be flagged.
+    ['slash-opacity-semantic', 'className="bg-interactive/10 hover:bg-status-danger/90"', 2],
+    ['slash-opacity-semantic', 'className="bg-interactive-subtle text-content"', 0],
+    ['slash-opacity-semantic', 'className="bg-white/20 bg-black/50"', 0],
   ];
   for (const [rule, input, expected] of cases) {
     const got = scanContent(input)[rule] ?? 0;
