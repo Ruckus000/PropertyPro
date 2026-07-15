@@ -67,7 +67,21 @@ pnpm playwright:install         # Install browsers
 pnpm guard:breadcrumbs          # Breadcrumb coverage
 pnpm guard:tenant-scope         # tenantScope contract well-formedness
 pnpm guard:legacy-roles         # Legacy-role vocabulary floor
+pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)
+pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 ```
+
+> **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette
+> classes (`bg-blue-500`), arbitrary color/font/spacing values, and
+> **slash-opacity on semantic tokens** (`bg-interactive/10`,
+> `hover:bg-status-danger/90`) — the app's semantic colors are bare `var(--x)`
+> with no `<alpha-value>`, so Tailwind emits ZERO CSS for the modifier and the
+> color silently renders as nothing. Use a solid `-subtle`/`-bg`/`-hover`/`-border`
+> token, or built-in `white`/`black` alpha (`bg-white/20`) for genuine
+> translucency. Existing violations are frozen in
+> `scripts/design-token-baseline.json` (shrink-only); new files must be clean;
+> escape hatch `// design-tokens:exempt — <reason>`. Full rules in
+> `.claude/rules/design.md`.
 
 > The list above is representative, not exhaustive. See the root `package.json`
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,
