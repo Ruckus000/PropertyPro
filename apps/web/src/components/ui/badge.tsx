@@ -11,7 +11,7 @@ const badgeVariants = cva(
         default:
           "border-transparent bg-interactive text-content-inverse shadow hover:bg-interactive-hover",
         secondary:
-          "border-transparent bg-surface-muted text-content hover:bg-surface-subtle",
+          "border-transparent bg-surface-muted text-content hover:bg-surface-hover",
         destructive:
           "border-transparent bg-status-danger text-content-inverse shadow hover:bg-[var(--red-900)]",
         outline: "text-content",
