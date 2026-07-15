@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getComplianceTemplate } from '@propertypro/shared';
-import { ProgressIndicator } from './progress-indicator';
+import { WizardShell, type WizardStepDef, type WizardIntro } from './wizard-shell';
 import { ProfileStep } from './steps';
 import { CompliancePreview } from './compliance-preview';
 import type {
@@ -25,7 +25,16 @@ interface CondoWizardProps {
     initialState?: CondoWizardStatePayload;
 }
 
-const STEP_TITLES = ['Community Profile', 'Compliance Preview'];
+const STEPS: WizardStepDef[] = [
+    { title: 'Community Profile', description: 'Tell us about your association.' },
+    { title: 'Compliance Preview', description: 'Review what Florida requires of you.' },
+];
+
+const INTRO: WizardIntro = {
+    title: "Let's get your community compliant.",
+    subtitle: "A quick setup — then we'll map exactly what Florida law requires, no guesswork.",
+    trust: 'Built for Florida §718 & §720 associations',
+};
 
 function mergeStepData(previous: CondoWizardStepData, patch: Partial<CondoWizardStepData>): CondoWizardStepData {
     return {
@@ -40,7 +49,7 @@ function mergeStepData(previous: CondoWizardStepData, patch: Partial<CondoWizard
 
 export function CondoWizard({ communityId, communityType, initialState }: CondoWizardProps) {
     const router = useRouter();
-    const initialStep = Math.max(0, Math.min(initialState?.nextStep ?? 0, STEP_TITLES.length - 1));
+    const initialStep = Math.max(0, Math.min(initialState?.nextStep ?? 0, STEPS.length - 1));
     const [currentStep, setCurrentStep] = useState<number>(initialStep);
     const [stepData, setStepData] = useState<CondoWizardStepData>(initialState?.stepData ?? {});
     const [isSaving, setIsSaving] = useState(false);
@@ -66,7 +75,7 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
             await saveStepMutation.mutateAsync({ step, patch });
 
             setStepData((previous) => mergeStepData(previous, patch));
-            setCurrentStep(Math.min(step + 1, STEP_TITLES.length - 1));
+            setCurrentStep(Math.min(step + 1, STEPS.length - 1));
         } finally {
             setIsSaving(false);
         }
@@ -103,44 +112,28 @@ export function CondoWizard({ communityId, communityType, initialState }: CondoW
     }
 
     return (
-        <div className="mx-auto max-w-4xl px-6 py-8">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-content">Welcome to PropertyPro</h1>
-                <p className="mt-2 text-content-secondary">Set up your community profile and review compliance requirements.</p>
-            </div>
-
-            <ProgressIndicator currentStep={Math.min(currentStep + 1, STEP_TITLES.length)} stepTitles={STEP_TITLES} />
-
-            {error && (
-                <div className="my-4 rounded-md bg-status-danger-bg p-4">
-                    <p className="text-sm text-status-danger">{error}</p>
-                </div>
+        <WizardShell
+            activeStep={Math.min(currentStep + 1, STEPS.length)}
+            steps={STEPS}
+            intro={INTRO}
+            error={error}
+        >
+            {currentStep === 0 && (
+                <ProfileStep
+                    communityId={communityId}
+                    onNext={handleProfileNext}
+                    initialData={stepData.profile}
+                />
             )}
 
-            {isSaving && (
-                <div className="my-4 rounded-md bg-interactive-subtle p-4">
-                    <p className="text-sm text-content-link">Saving progress...</p>
-                </div>
+            {currentStep === 1 && (
+                <CompliancePreview
+                    communityType={communityType as 'condo_718' | 'hoa_720' | 'apartment'}
+                    categories={complianceCategories}
+                    onContinue={handleComplianceContinue}
+                    isLoading={isSaving}
+                />
             )}
-
-            <div className="mt-8">
-                {currentStep === 0 && (
-                    <ProfileStep
-                        communityId={communityId}
-                        onNext={handleProfileNext}
-                        initialData={stepData.profile}
-                    />
-                )}
-
-                {currentStep === 1 && (
-                    <CompliancePreview
-                        communityType={communityType as 'condo_718' | 'hoa_720' | 'apartment'}
-                        categories={complianceCategories}
-                        onContinue={handleComplianceContinue}
-                        isLoading={isSaving}
-                    />
-                )}
-            </div>
-        </div>
+        </WizardShell>
     );
 }
