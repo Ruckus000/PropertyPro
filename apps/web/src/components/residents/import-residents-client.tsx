@@ -268,7 +268,7 @@ function UploadStep({
         className={cn(
           'flex flex-col items-center justify-center gap-4 rounded-md border-2 border-dashed p-12 transition-colors',
           dragOver
-            ? 'border-interactive bg-interactive/5'
+            ? 'border-interactive bg-interactive-subtle'
             : 'border-border-default bg-surface-card',
           isLoading && 'pointer-events-none opacity-60',
         )}
@@ -439,7 +439,7 @@ function PreviewStep({
                 key={row.rowNumber}
                 className={cn(
                   'h-[52px] border-b border-border-default last:border-b-0',
-                  row.status === 'error' && 'bg-status-danger/5',
+                  row.status === 'error' && 'bg-status-danger-bg',
                 )}
               >
                 <td className="px-3">

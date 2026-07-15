@@ -39,7 +39,7 @@ export const CommandInput = forwardRef<HTMLInputElement, CommandInputProps>(
         <kbd
           className={cn(
             'hidden shrink-0 rounded-md border border-edge bg-surface-page',
-            'px-2 py-0.5 text-[11px] font-medium text-content-disabled sm:inline-block',
+            'px-2 py-0.5 text-xs font-medium text-content-disabled sm:inline-block',
           )}
         >
           ESC

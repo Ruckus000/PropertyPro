@@ -44,7 +44,7 @@ const secondaryButtonClass =
   'inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content disabled:opacity-50 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
 
 const inputClass =
-  'w-full max-w-md rounded-sm border border-default px-3 py-2 text-base focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50';
+  'w-full max-w-md rounded-sm border border-default px-3 py-2 text-base focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50';
 
 function InlineAlert({ message }: { message: string }) {
   return (

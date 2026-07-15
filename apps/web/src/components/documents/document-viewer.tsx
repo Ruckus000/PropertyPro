@@ -5,6 +5,7 @@ import { Maximize2, Pencil } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PdfViewer } from '@/components/pdf/pdf-viewer';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
   isImageMimeType,
@@ -113,8 +114,8 @@ function DocumentViewerInner({
   function renderPreviewBody() {
     if (preview.state === 'loading') {
       return (
-        <div className="flex h-full min-h-[320px] items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
+        <div className="h-full min-h-[320px]">
+          <Skeleton className="h-full min-h-[320px] w-full" />
         </div>
       );
     }

@@ -127,7 +127,7 @@ export function SubmissionList({ communityId }: SubmissionListProps) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-surface-page/50">
+                <tr className="border-b bg-surface-subtle">
                   <th className="text-left py-3 px-4 font-medium text-content-tertiary">
                     Document
                   </th>

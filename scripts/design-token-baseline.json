@@ -161,36 +161,12 @@
   "apps/admin/src/lib/utils/stale-badge.ts": {
     "raw-palette": 6
   },
-  "apps/web/src/app/(authenticated)/esign/templates/[id]/template-detail-client.tsx": {
-    "raw-hex": 8
-  },
-  "apps/web/src/app/(authenticated)/esign/templates/new/template-builder-client.tsx": {
-    "raw-hex": 8
-  },
-  "apps/web/src/app/(authenticated)/help/[category]/[slug]/page.tsx": {
-    "raw-palette": 3
-  },
-  "apps/web/src/app/(authenticated)/help/[category]/page.tsx": {
-    "arbitrary-font": 1
-  },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
     "raw-palette": 6
-  },
-  "apps/web/src/app/(authenticated)/settings/page.tsx": {
-    "raw-palette": 17
   },
   "apps/web/src/app/(marketing)/marketing-theme.css": {
     "raw-hex": 50,
     "raw-color-fn": 12
-  },
-  "apps/web/src/app/demo/[slug]/page.tsx": {
-    "raw-hex": 1
-  },
-  "apps/web/src/app/dev/site-preview/page.tsx": {
-    "raw-palette": 4
-  },
-  "apps/web/src/app/global-error.tsx": {
-    "raw-hex": 5
   },
   "apps/web/src/app/layout.tsx": {
     "raw-palette": 2
@@ -204,55 +180,8 @@
   "apps/web/src/components/announcements/announcement-toolbar.tsx": {
     "raw-palette": 5
   },
-  "apps/web/src/components/billing/feature-hero.tsx": {
-    "raw-hex": 6,
-    "arbitrary-color": 6
-  },
-  "apps/web/src/components/command-palette/CommandInput.tsx": {
-    "arbitrary-font": 1
-  },
   "apps/web/src/components/command-palette/CommandItem.tsx": {
-    "raw-palette": 14,
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/demo/DemoBanner.tsx": {
-    "raw-palette": 1
-  },
-  "apps/web/src/components/demo/DemoTrialBanner.tsx": {
-    "raw-palette": 12
-  },
-  "apps/web/src/components/ErrorBoundary.tsx": {
-    "raw-hex": 3
-  },
-  "apps/web/src/components/esign/field-overlay.tsx": {
-    "arbitrary-font": 1,
-    "raw-hex": 1
-  },
-  "apps/web/src/components/esign/field-palette.tsx": {
-    "raw-hex": 1,
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/esign/signature-capture.tsx": {
-    "raw-color-fn": 2,
-    "raw-hex": 3
-  },
-  "apps/web/src/components/finance/payment-dialog.tsx": {
-    "raw-hex": 1
-  },
-  "apps/web/src/components/help/mdx-components.tsx": {
-    "raw-palette": 3
-  },
-  "apps/web/src/components/layout/app-sidebar.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/layout/command-palette.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/marketing/footer.tsx": {
-    "raw-hex": 1
-  },
-  "apps/web/src/components/marketing/portfolio-card.tsx": {
-    "raw-hex": 4
+    "raw-palette": 6
   },
   "apps/web/src/components/mobile/FeatureCard.tsx": {
     "raw-palette": 41,
@@ -302,7 +231,8 @@
     "arbitrary-font": 10
   },
   "apps/web/src/components/mobile/MobileSearchContent.tsx": {
-    "arbitrary-font": 1
+    "arbitrary-font": 1,
+    "slash-opacity-semantic": 1
   },
   "apps/web/src/components/mobile/MobileSecurityContent.tsx": {
     "raw-palette": 23,
@@ -315,48 +245,6 @@
   "apps/web/src/components/mobile/TenantDashboardMockup.tsx": {
     "raw-palette": 18,
     "arbitrary-font": 10
-  },
-  "apps/web/src/components/notifications/cross-community-dropdown.tsx": {
-    "arbitrary-font": 2
-  },
-  "apps/web/src/components/notifications/notification-bell.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/onboarding/welcome-snapshot-cards.tsx": {
-    "raw-palette": 4
-  },
-  "apps/web/src/components/pm/BrandingForm.tsx": {
-    "raw-hex": 3
-  },
-  "apps/web/src/components/pm/BrandingPreview.tsx": {
-    "raw-hex": 2
-  },
-  "apps/web/src/components/pm/reports/chart-configs.ts": {
-    "raw-color-fn": 19
-  },
-  "apps/web/src/components/pm/site-editor/CustomStylingForm.tsx": {
-    "raw-hex": 3
-  },
-  "apps/web/src/components/settings/SupportAccessSettings.tsx": {
-    "raw-palette": 21
-  },
-  "apps/web/src/components/shared/checklist-stepper.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/shared/quick-filter-tabs.tsx": {
-    "arbitrary-font": 1
-  },
-  "apps/web/src/components/support/SupportBanner.tsx": {
-    "raw-palette": 6
-  },
-  "apps/web/src/components/ui/chart.tsx": {
-    "raw-hex": 5
-  },
-  "apps/web/src/hooks/__tests__/use-branding-form.test.ts": {
-    "raw-hex": 12
-  },
-  "apps/web/src/hooks/__tests__/use-pm-branding.test.tsx": {
-    "raw-hex": 4
   },
   "apps/web/src/lib/documents/render-authored-html.ts": {
     "raw-hex": 23

@@ -23,9 +23,9 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const baseInput: Omit<SaveBrandingInput, 'logoFile'> = {
   communityId: 42,
-  primaryColor: '#2563eb',
-  secondaryColor: '#6b7280',
-  accentColor: '#DBEAFE',
+  primaryColor: '#2563eb', // design-tokens:exempt — branding hex round-trip test fixture
+  secondaryColor: '#6b7280', // design-tokens:exempt — branding hex round-trip test fixture
+  accentColor: '#DBEAFE', // design-tokens:exempt — branding hex round-trip test fixture
   fontHeading: 'Inter',
   fontBody: 'Inter',
   customEmailFooter: 'Contact us',
@@ -60,9 +60,9 @@ describe('useSaveBranding', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         communityId: 42,
-        primaryColor: '#2563eb',
-        secondaryColor: '#6b7280',
-        accentColor: '#DBEAFE',
+        primaryColor: '#2563eb', // design-tokens:exempt — branding hex round-trip test fixture
+        secondaryColor: '#6b7280', // design-tokens:exempt — branding hex round-trip test fixture
+        accentColor: '#DBEAFE', // design-tokens:exempt — branding hex round-trip test fixture
         fontHeading: 'Inter',
         fontBody: 'Inter',
         customEmailFooter: 'Contact us',
@@ -83,9 +83,9 @@ describe('useSaveBranding', () => {
     expect(patchInit.body).toBe(
       JSON.stringify({
         communityId: 42,
-        primaryColor: '#2563eb',
-        secondaryColor: '#6b7280',
-        accentColor: '#DBEAFE',
+        primaryColor: '#2563eb', // design-tokens:exempt — branding hex round-trip test fixture
+        secondaryColor: '#6b7280', // design-tokens:exempt — branding hex round-trip test fixture
+        accentColor: '#DBEAFE', // design-tokens:exempt — branding hex round-trip test fixture
         fontHeading: 'Inter',
         fontBody: 'Inter',
         customEmailFooter: undefined,
@@ -142,9 +142,9 @@ describe('useSaveBranding', () => {
     expect(patchInit.body).toBe(
       JSON.stringify({
         communityId: 42,
-        primaryColor: '#2563eb',
-        secondaryColor: '#6b7280',
-        accentColor: '#DBEAFE',
+        primaryColor: '#2563eb', // design-tokens:exempt — branding hex round-trip test fixture
+        secondaryColor: '#6b7280', // design-tokens:exempt — branding hex round-trip test fixture
+        accentColor: '#DBEAFE', // design-tokens:exempt — branding hex round-trip test fixture
         fontHeading: 'Inter',
         fontBody: 'Inter',
         customEmailFooter: 'Contact us',

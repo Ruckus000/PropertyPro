@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentDownloadUrl } from '@/hooks/use-documents';
 
 interface DocumentViewerModalProps {
@@ -59,9 +60,7 @@ export function DocumentViewerModal({
 
         <div className="h-[80vh]">
           {query.isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
-            </div>
+            <Skeleton className="h-full w-full" />
           ) : null}
 
           {query.isError ? (

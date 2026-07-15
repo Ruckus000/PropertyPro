@@ -16,7 +16,7 @@
  *                fallback if it ever does.
  */
 import * as React from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check } from 'lucide-react';
 import {
   PLAN_FEATURES,
   findCheapestPlanForFeature,
@@ -307,8 +307,7 @@ function DialogFooterActions({
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             Maybe later
           </Button>
-          <Button onClick={onNotify} disabled={pending}>
-            {pending && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+          <Button onClick={onNotify} loading={pending}>
             Notify your board
           </Button>
         </div>
@@ -321,8 +320,7 @@ function DialogFooterActions({
       <Button variant="ghost" onClick={onClose} disabled={pending}>
         Maybe later
       </Button>
-      <Button onClick={onUpgrade} disabled={pending || !canUpgrade}>
-        {pending && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+      <Button onClick={onUpgrade} disabled={!canUpgrade} loading={pending}>
         Upgrade now
       </Button>
     </div>

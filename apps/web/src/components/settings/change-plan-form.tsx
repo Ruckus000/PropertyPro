@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Check, Loader2 } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { useReauth } from '@/hooks/use-reauth';
 import { useChangePlan } from '@/hooks/use-change-plan';
@@ -250,9 +250,8 @@ export function ChangePlanForm({
             <Button
               type="button"
               onClick={submit}
-              disabled={isSubmitting}
+              loading={isSubmitting}
             >
-              {isSubmitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
               Confirm change
             </Button>
           </DialogFooter>

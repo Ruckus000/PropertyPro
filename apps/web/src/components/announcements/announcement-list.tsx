@@ -359,7 +359,7 @@ export function AnnouncementList({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleteBusy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
+              className="bg-status-danger text-content-inverse hover:bg-[var(--red-900)]"
               disabled={isDeleteBusy || pendingDeleteId === null}
               onClick={(event) => {
                 event.preventDefault();

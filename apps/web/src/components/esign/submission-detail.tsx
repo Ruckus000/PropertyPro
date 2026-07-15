@@ -421,7 +421,7 @@ export function SubmissionDetail({
               <AlertDialogFooter>
                 <AlertDialogCancel>Go back</AlertDialogCancel>
                 <AlertDialogAction
-                  className="bg-status-danger hover:bg-status-danger/90"
+                  className="bg-status-danger hover:bg-[var(--red-900)]"
                   onClick={handleCancel}
                   disabled={cancelMutation.isPending}
                 >

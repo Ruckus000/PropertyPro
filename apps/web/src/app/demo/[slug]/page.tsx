@@ -60,7 +60,7 @@ function buildLogoUrl(logoPath: string): string {
 function legacyThemeFromInstance(instance: NonNullable<Awaited<ReturnType<typeof getDemoInstance>>>) {
   const theme = (instance.theme ?? {}) as DemoTheme;
   return {
-    primaryColor: theme.primaryColor ?? '#2563eb',
+    primaryColor: theme.primaryColor ?? '#2563eb', // design-tokens:exempt — theme color-picker default; feature product IS choosing a hex value
     logoUrl: theme.logoPath ? buildLogoUrl(theme.logoPath) : null,
   };
 }

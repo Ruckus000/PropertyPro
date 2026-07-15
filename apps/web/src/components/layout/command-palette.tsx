@@ -181,7 +181,7 @@ export function CommandPalette({
               placeholder="Search pages, actions..."
               className="flex-1 border-0 bg-transparent px-3 py-4 text-sm outline-none placeholder:text-content-disabled"
             />
-            <kbd className="hidden shrink-0 rounded-md border border-edge bg-surface-page px-2 py-0.5 text-[11px] font-medium text-content-disabled sm:inline-block">
+            <kbd className="hidden shrink-0 rounded-md border border-edge bg-surface-page px-2 py-0.5 text-xs font-medium text-content-disabled sm:inline-block">
               ESC
             </kbd>
           </div>

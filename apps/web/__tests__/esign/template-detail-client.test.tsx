@@ -97,13 +97,15 @@ describe('TemplateDetailClient', () => {
   it('renders the loading PDF state while the hook is loading', () => {
     setPdf({ isLoading: true });
     render(<TemplateDetailClient communityId={1} templateId={5} />);
-    expect(screen.getByText('Loading PDF preview...')).toBeDefined();
+    expect(screen.getByTestId('pdf-preview-loading')).toBeDefined();
+    expect(screen.getByRole('status', { name: 'Loading PDF preview' })).toBeDefined();
   });
 
   it('renders the loading PDF state while the hook is refetching', () => {
     setPdf({ isFetching: true });
     render(<TemplateDetailClient communityId={1} templateId={5} />);
-    expect(screen.getByText('Loading PDF preview...')).toBeDefined();
+    expect(screen.getByTestId('pdf-preview-loading')).toBeDefined();
+    expect(screen.getByRole('status', { name: 'Loading PDF preview' })).toBeDefined();
   });
 
   it('renders the exact error fallback literal and Retry triggers refetch', () => {

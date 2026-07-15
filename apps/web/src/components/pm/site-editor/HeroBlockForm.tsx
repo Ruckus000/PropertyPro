@@ -52,7 +52,7 @@ export function HeroBlockForm({ communityId, initial }: Props) {
           value={headline}
           onChange={(e) => setHeadline(e.target.value)}
           required
-          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
         />
       </div>
       <div>
@@ -64,7 +64,7 @@ export function HeroBlockForm({ communityId, initial }: Props) {
           value={subtitle}
           onChange={(e) => setSubtitle(e.target.value)}
           rows={3}
-          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
         />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -77,7 +77,7 @@ export function HeroBlockForm({ communityId, initial }: Props) {
             maxLength={40}
             value={ctaText}
             onChange={(e) => setCtaText(e.target.value)}
-            className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+            className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
           />
         </div>
         <div>
@@ -90,7 +90,7 @@ export function HeroBlockForm({ communityId, initial }: Props) {
             placeholder="/auth/login"
             value={ctaTarget}
             onChange={(e) => setCtaTarget(e.target.value)}
-            className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+            className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
           />
         </div>
       </div>

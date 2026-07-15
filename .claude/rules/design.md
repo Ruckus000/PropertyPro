@@ -37,6 +37,18 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   (`bg-blue-500`), arbitrary colors (`bg-[#…]`, `shadow-[…rgba(…)]`),
   functional color literals (`rgba(…)`, `hsl(…)`, `oklch(…)`), arbitrary font
   sizes (`text-[13px]`), and arbitrary pixel spacing (`p-[13px]`) in `apps/*/src`.
+- It also bans slash-opacity on the app's SEMANTIC tokens
+  (`slash-opacity-semantic`: `bg-interactive/10`, `hover:bg-status-danger/90`,
+  `focus:ring-interactive/40`, `border-edge/50`, …). Those tokens are declared
+  as bare `var(--x)` with no `<alpha-value>` channel, so Tailwind emits ZERO
+  CSS for the modifier — the color silently renders as nothing. Fix by reaching
+  for a solid token that already encodes the tint (`-subtle` / `-bg` / `-hover` /
+  `-border`, e.g. `bg-interactive-subtle`, `bg-status-danger-bg`,
+  `hover:bg-interactive-hover`). For a real darken with no darker semantic token,
+  use the raw palette var (`hover:bg-[var(--red-900)]`). For GENUINE
+  translucency (glass over a photo), use built-in `white`/`black` alpha
+  (`bg-white/20`, `bg-black/40`) — Tailwind's built-in palette IS defined with
+  rgb channels, so those compile.
 - Existing violations are frozen in `scripts/design-token-baseline.json`
   (shrink-only; per-file, per-rule ceilings). New files must be clean; existing
   baselined files cannot exceed their frozen per-rule counts. Caveat: ceilings
@@ -46,6 +58,19 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Escape hatch: `// design-tokens:exempt — <reason>` on the offending line
   (email-template hex, chart/canvas internals).
 - Renamed/moved files must arrive clean or update the baseline in the same PR.
+- Intentionally-literal files kept frozen in the baseline (do not drain):
+  `apps/web/src/app/(marketing)/marketing-theme.css` (marketing palette),
+  `apps/web/src/lib/documents/render-authored-html.ts` (authored-doc export styling),
+  `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/` + `apps/admin/`
+  (out of standardization scope until their own migration programs). Also frozen:
+  `dark:` raw-palette variants layered on semantic base classes
+  (select-community/page.tsx, app/layout.tsx, CommandItem.tsx,
+  announcement-feed/toolbar.tsx, ui/chart.tsx) — dark mode is explicitly out of
+  scope per the spec
+  (docs/superpowers/specs/2026-07-13-design-system-standardization-design.md,
+  "the token layer must not pretend to theme"); these are the app's only
+  dark-mode story and must not be mapped to non-theming tokens or deleted
+  without a product decision.
 
 ## Component Dimensions
 

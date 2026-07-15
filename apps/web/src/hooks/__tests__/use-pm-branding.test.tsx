@@ -37,7 +37,7 @@ describe('useCopyBranding', () => {
 
     result.current.mutate({
       sourceBranding: {
-        primaryColor: '#fff',
+        primaryColor: '#fff', // design-tokens:exempt — branding hex round-trip test fixture
         logoPath: 'logos/a.webp',
         fontHeading: undefined,
       },
@@ -54,8 +54,8 @@ describe('useCopyBranding', () => {
     );
     // logoPath maps to logoStoragePath; undefined fontHeading omitted.
     expect(bodies).toEqual([
-      { communityId: 11, primaryColor: '#fff', logoStoragePath: 'logos/a.webp' },
-      { communityId: 22, primaryColor: '#fff', logoStoragePath: 'logos/a.webp' },
+      { communityId: 11, primaryColor: '#fff', logoStoragePath: 'logos/a.webp' }, // design-tokens:exempt — branding hex round-trip test fixture
+      { communityId: 22, primaryColor: '#fff', logoStoragePath: 'logos/a.webp' }, // design-tokens:exempt — branding hex round-trip test fixture
     ]);
     for (const c of fetchMock.mock.calls) {
       expect(c[0]).toBe('/api/v1/pm/branding');
@@ -73,7 +73,7 @@ describe('useCopyBranding', () => {
     });
 
     result.current.mutate({
-      sourceBranding: { primaryColor: '#abc' },
+      sourceBranding: { primaryColor: '#abc' }, // design-tokens:exempt — branding hex round-trip test fixture
       properties: ['primaryColor'],
       communityIds: [1, 2],
     });
