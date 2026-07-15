@@ -126,7 +126,7 @@ export function AnnouncementDetailActions({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
+              className="bg-status-danger text-content-inverse hover:bg-[var(--red-900)]"
               disabled={deleteMutation.isPending}
               onClick={(event) => {
                 event.preventDefault();

@@ -461,7 +461,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 Review & Send
               </Button>
             ) : (
-              <Card className="p-5 border-status-info-border bg-interactive-subtle/50">
+              <Card className="p-5 border-status-info-border bg-interactive-subtle">
                 <h3 className="text-sm font-medium text-content mb-2">
                   Confirm & Send
                 </h3>

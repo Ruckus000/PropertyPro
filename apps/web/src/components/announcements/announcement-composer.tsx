@@ -162,7 +162,7 @@ export function AnnouncementComposer({
           </Select>
         </div>
 
-        <div className="flex items-center gap-3 rounded-md border border-edge-subtle bg-surface-muted/40 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-md border border-edge-subtle bg-surface-subtle px-4 py-3">
           <Checkbox
             id="announcement-pinned"
             checked={isPinned}

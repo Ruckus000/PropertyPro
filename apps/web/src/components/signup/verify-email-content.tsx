@@ -201,7 +201,7 @@ export function VerifyEmailContent() {
       <div className="rounded-md border border-edge bg-surface-card p-8 shadow-e0">
         {/* Mail icon */}
         <div className="mb-6 flex items-center justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-interactive/10">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-interactive-subtle">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"

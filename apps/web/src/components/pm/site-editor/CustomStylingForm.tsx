@@ -18,7 +18,7 @@ const COLOR_DEFAULTS = {
 } as const;
 
 const hexInputClass =
-  'w-28 rounded-sm border border-default px-2 py-1.5 font-mono text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50';
+  'w-28 rounded-sm border border-default px-2 py-1.5 font-mono text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50';
 
 export function CustomStylingForm({ communityId, initial, hasSiteCustomCss }: Props) {
   const [primaryOn, setPrimaryOn] = useState(initial?.primaryColor != null);
@@ -135,7 +135,7 @@ export function CustomStylingForm({ communityId, initial, hasSiteCustomCss }: Pr
               value={bodyFont}
               disabled={disabled}
               onChange={(e) => setBodyFont(e.target.value)}
-              className="w-full max-w-xs rounded-sm border border-default px-2 py-1.5 text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50"
+              className="w-full max-w-xs rounded-sm border border-default px-2 py-1.5 text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50"
             >
               {ALLOWED_FONTS.map((font) => (
                 <option key={font} value={font}>

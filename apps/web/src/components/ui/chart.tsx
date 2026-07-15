@@ -52,7 +52,7 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-content-secondary [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-edge/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-edge [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-edge [&_.recharts-radial-bar-background-sector]:fill-surface-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-surface-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-edge [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none", // design-tokens:exempt — shadcn chart internals; attribute selectors match recharts' own hardcoded inline stroke colors, not app UI
+          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-content-secondary [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-edge [&_.recharts-curve.recharts-tooltip-cursor]:stroke-edge [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-none [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-edge [&_.recharts-radial-bar-background-sector]:fill-surface-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-surface-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-edge [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-sector]:outline-none [&_.recharts-surface]:outline-none", // design-tokens:exempt — shadcn chart internals; attribute selectors match recharts' own hardcoded inline stroke colors, not app UI
           className
         )}
         {...props}
@@ -179,7 +179,7 @@ const ChartTooltipContent = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-edge/50 bg-surface-card px-2.5 py-1.5 text-xs shadow-xl",
+          "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-edge-subtle bg-surface-card px-2.5 py-1.5 text-xs shadow-xl",
           className
         )}
       >

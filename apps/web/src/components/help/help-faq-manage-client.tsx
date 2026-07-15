@@ -141,7 +141,7 @@ export function HelpFaqManageClient({
         </div>
         <div className="mt-5 space-y-4">
           {errorMessage && (
-            <div className="rounded-xl border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">
+            <div className="rounded-xl border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger">
               {errorMessage}
             </div>
           )}

@@ -104,7 +104,7 @@ export function LayoutChooser({ communityId, initialLayoutId, onContinue, onSkip
               data-testid={`layout-card-${layout.slug}`}
               className={`relative cursor-pointer rounded-md border p-4 transition-colors ${
                 isSelected
-                  ? 'border-interactive bg-interactive/5 ring-2 ring-interactive'
+                  ? 'border-interactive bg-interactive-subtle ring-2 ring-interactive'
                   : 'border-default bg-surface-card hover:border-interactive-hover'
               }`}
             >

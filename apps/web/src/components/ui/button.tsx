@@ -13,11 +13,11 @@ const buttonVariants = cva(
         default:
           "bg-interactive text-content-inverse shadow hover:bg-interactive-hover",
         destructive:
-          "bg-status-danger text-content-inverse shadow-sm hover:bg-status-danger/90",
+          "bg-status-danger text-content-inverse shadow-sm hover:bg-[var(--red-900)]",
         outline:
           "border border-edge bg-surface-card shadow-sm hover:bg-surface-hover hover:text-content",
         secondary:
-          "bg-surface-muted text-content shadow-sm hover:bg-surface-muted/80",
+          "bg-surface-muted text-content shadow-sm hover:bg-surface-subtle",
         ghost: "hover:bg-surface-hover hover:text-content",
         link: "text-interactive underline-offset-4 hover:underline",
       },

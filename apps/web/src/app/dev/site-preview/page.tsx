@@ -87,7 +87,7 @@ export default async function PreviewPage({
               <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
                 {community.name}
               </h1>
-              <p className="mt-4 text-lg text-content-inverse/80">
+              <p className="mt-4 text-lg text-content-inverse">
                 Your community portal for documents, meetings, and more.
               </p>
               <div className="mt-8">

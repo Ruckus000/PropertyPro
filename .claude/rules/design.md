@@ -37,6 +37,18 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   (`bg-blue-500`), arbitrary colors (`bg-[#…]`, `shadow-[…rgba(…)]`),
   functional color literals (`rgba(…)`, `hsl(…)`, `oklch(…)`), arbitrary font
   sizes (`text-[13px]`), and arbitrary pixel spacing (`p-[13px]`) in `apps/*/src`.
+- It also bans slash-opacity on the app's SEMANTIC tokens
+  (`slash-opacity-semantic`: `bg-interactive/10`, `hover:bg-status-danger/90`,
+  `focus:ring-interactive/40`, `border-edge/50`, …). Those tokens are declared
+  as bare `var(--x)` with no `<alpha-value>` channel, so Tailwind emits ZERO
+  CSS for the modifier — the color silently renders as nothing. Fix by reaching
+  for a solid token that already encodes the tint (`-subtle` / `-bg` / `-hover` /
+  `-border`, e.g. `bg-interactive-subtle`, `bg-status-danger-bg`,
+  `hover:bg-interactive-hover`). For a real darken with no darker semantic token,
+  use the raw palette var (`hover:bg-[var(--red-900)]`). For GENUINE
+  translucency (glass over a photo), use built-in `white`/`black` alpha
+  (`bg-white/20`, `bg-black/40`) — Tailwind's built-in palette IS defined with
+  rgb channels, so those compile.
 - Existing violations are frozen in `scripts/design-token-baseline.json`
   (shrink-only; per-file, per-rule ceilings). New files must be clean; existing
   baselined files cannot exceed their frozen per-rule counts. Caveat: ceilings

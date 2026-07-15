@@ -278,7 +278,7 @@ export function ForumThreadDetail({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteReply.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
+              className="bg-status-danger text-content-inverse hover:bg-[var(--red-900)]"
               disabled={deleteReply.isPending || replyPendingRemoval === null}
               onClick={(event) => {
                 event.preventDefault();
