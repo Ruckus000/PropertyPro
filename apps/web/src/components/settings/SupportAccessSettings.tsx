@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Loader2, ShieldCheck, Eye } from 'lucide-react';
+import { ShieldCheck, Eye } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   useSupportAccess,
   useToggleSupportAccess,
@@ -71,8 +72,15 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
 
   if (loading) {
     return (
-      <div className="flex h-24 items-center justify-center">
-        <Loader2 size={18} className="animate-spin text-content-disabled" />
+      <div
+        className="flex items-start justify-between gap-4 rounded-lg border border-edge bg-surface-card p-5"
+        data-testid="support-access-settings-loading"
+      >
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-64" />
+        </div>
+        <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
       </div>
     );
   }
