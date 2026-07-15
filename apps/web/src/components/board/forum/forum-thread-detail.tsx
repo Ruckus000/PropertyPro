@@ -119,7 +119,7 @@ export function ForumThreadDetail({
               type="button"
               variant="outline"
               className="h-11 md:h-9"
-              loading={updateThread.isPending}
+              loading={updateThread.isPending && updateThread.variables?.isPinned !== undefined}
               onClick={() => void updateThread.mutateAsync({ isPinned: !thread.isPinned })}
             >
               {thread.isPinned ? 'Unpin' : 'Pin'} Thread
@@ -128,7 +128,7 @@ export function ForumThreadDetail({
               type="button"
               variant="outline"
               className="h-11 md:h-9"
-              loading={updateThread.isPending}
+              loading={updateThread.isPending && updateThread.variables?.isLocked !== undefined}
               onClick={() => void updateThread.mutateAsync({ isLocked: !thread.isLocked })}
             >
               {thread.isLocked ? 'Unlock' : 'Lock'} Thread
