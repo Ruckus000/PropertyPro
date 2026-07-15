@@ -52,7 +52,7 @@ export function WizardShell({ activeStep, steps, intro, error, children }: Wizar
         </div>
 
         <div className="relative mt-12 lg:mt-16">
-          <p className="max-w-[14ch] text-[1.75rem] font-bold leading-tight tracking-tight text-balance">
+          <p className="max-w-[14ch] text-2xl font-bold leading-tight tracking-tight text-balance lg:text-3xl">
             {intro.title}
           </p>
           <p className="mt-3 hidden max-w-[34ch] text-sm leading-relaxed text-white/70 sm:block">
@@ -96,7 +96,7 @@ export function WizardShell({ activeStep, steps, intro, error, children }: Wizar
                     >
                       {step.title}
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-white/55">{step.description}</p>
+                    <p className="mt-1 hidden text-xs leading-relaxed text-white/55 lg:block">{step.description}</p>
                   </div>
                 </li>
               );
