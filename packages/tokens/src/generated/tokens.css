@@ -43,6 +43,39 @@
   --sand-200: #EFE7DC;
   --sand-300: #E3D8C9;
 
+  --coral-50: #FCF1ED;
+  --coral-100: #F7DCD2;
+  --coral-200: #EDB9A6;
+  --coral-300: #E19478;
+  --coral-400: #D4744F;
+  --coral-500: #CB6047;
+  --coral-600: #C2533A;
+  --coral-700: #A8412C;
+  --coral-800: #87331F;
+  --coral-900: #68291B;
+
+  --teal-50: #ECF6F4;
+  --teal-100: #CFE8E3;
+  --teal-200: #A6D5CD;
+  --teal-300: #6FBAAF;
+  --teal-400: #3E9C8F;
+  --teal-500: #2F8F83;
+  --teal-600: #237066;
+  --teal-700: #1C5A52;
+  --teal-800: #164841;
+  --teal-900: #123A34;
+
+  --gold-50: #FDF6E7;
+  --gold-100: #FAE9C2;
+  --gold-200: #F3D488;
+  --gold-300: #EBC25A;
+  --gold-400: #E3A93C;
+  --gold-500: #CE9126;
+  --gold-600: #B07A1C;
+  --gold-700: #8E6216;
+  --gold-800: #6F4C13;
+  --gold-900: #5A3E12;
+
   --green-50: #ECFDF5;
   --green-100: #D1FAE5;
   --green-200: #A7F3D0;
@@ -168,7 +201,7 @@
   --button-height: 48px;
 
   /* Focus */
-  --focus-ring-color: var(--blue-500);
+  --focus-ring-color: var(--coral-500);
   --focus-ring-offset: 2px;
   --focus-ring-width: 2px;
   --focus-ring-style: solid;
@@ -188,9 +221,9 @@
   --text-disabled: var(--gray-400);
   --text-placeholder: var(--gray-400);
   --text-inverse: var(--gray-0);
-  --text-brand: var(--blue-600);
-  --text-link: var(--blue-600);
-  --text-link-hover: var(--blue-700);
+  --text-brand: var(--coral-600);
+  --text-link: var(--coral-600);
+  --text-link-hover: var(--coral-700);
 
   /* Surfaces */
   --surface-page: var(--sand-50);
@@ -208,20 +241,20 @@
   --border-subtle: var(--sand-100);
   --border-strong: var(--sand-300);
   --border-muted: var(--sand-50);
-  --border-focus: var(--blue-500);
+  --border-focus: var(--coral-500);
   --border-error: var(--red-500);
 
   /* Brand-overridable — resolve to community theme vars when injected */
-  --brand-accent: var(--theme-accent, var(--blue-200));
+  --brand-accent: var(--theme-accent, var(--coral-200));
 
   /* Interactive */
-  --interactive-primary: var(--theme-primary, var(--blue-600));
-  --interactive-primary-hover: var(--theme-primary-hover, var(--blue-700));
-  --interactive-primary-active: var(--blue-800);
+  --interactive-primary: var(--theme-primary, var(--coral-600));
+  --interactive-primary-hover: var(--theme-primary-hover, var(--coral-700));
+  --interactive-primary-active: var(--coral-800);
   --interactive-disabled: var(--gray-300);
-  --interactive-subtle: var(--blue-50);
-  --interactive-subtle-hover: var(--blue-100);
-  --interactive-muted: var(--blue-100);
+  --interactive-subtle: var(--coral-50);
+  --interactive-subtle-hover: var(--coral-100);
+  --interactive-muted: var(--coral-100);
 
   /* Status */
   --status-success: var(--green-700);
@@ -229,10 +262,10 @@
   --status-success-border: var(--green-200);
   --status-success-subtle: var(--green-100);
 
-  --status-brand: var(--theme-primary, var(--blue-600));
-  --status-brand-bg: var(--blue-50);
-  --status-brand-border: var(--blue-200);
-  --status-brand-subtle: var(--blue-100);
+  --status-brand: var(--theme-primary, var(--coral-600));
+  --status-brand-bg: var(--coral-50);
+  --status-brand-border: var(--coral-200);
+  --status-brand-subtle: var(--coral-100);
 
   --status-warning: var(--amber-700);
   --status-warning-bg: var(--amber-50);
@@ -244,10 +277,10 @@
   --status-danger-border: var(--red-200);
   --status-danger-subtle: var(--red-100);
 
-  --status-info: var(--blue-700);
-  --status-info-bg: var(--blue-50);
-  --status-info-border: var(--blue-200);
-  --status-info-subtle: var(--blue-100);
+  --status-info: var(--teal-700);
+  --status-info-bg: var(--teal-50);
+  --status-info-border: var(--teal-200);
+  --status-info-subtle: var(--teal-100);
 
   --status-neutral: var(--gray-600);
   --status-neutral-bg: var(--gray-100);

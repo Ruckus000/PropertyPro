@@ -39,10 +39,24 @@ describe("Token parity", () => {
 
   it("emailColors mirror toHex() for tokens still shared with the app", () => {
     expect(emailColors.textPrimary).toBe(toHex(tokenDefinitions.text.primary));
-    expect(emailColors.interactivePrimary).toBe(toHex(tokenDefinitions.interactive.primary));
     expect(emailColors.successForeground).toBe(toHex(tokenDefinitions.status.success.foreground));
     expect(emailColors.dangerForeground).toBe(toHex(tokenDefinitions.status.danger.foreground));
     expect(emailColors.warningBackground).toBe(toHex(tokenDefinitions.status.warning.background));
+  });
+
+  it("email brand/interactive/info stay on the cool blue ramp (decoupled from the app's coral/teal rebrand)", () => {
+    // The app rebranded interactive.*/text.brand to "Florida Modern" coral and
+    // status.info to teal for landing-consistency; transactional emails
+    // deliberately stay on the prior blue, so these are pinned to `blue` and
+    // must NOT follow the now-coral/teal app tokens.
+    expect(emailColors.interactivePrimary).toBe(primitiveColors.blue[600]);
+    expect(emailColors.interactivePrimaryHover).toBe(primitiveColors.blue[700]);
+    expect(emailColors.textBrand).toBe(primitiveColors.blue[600]);
+    expect(emailColors.textLink).toBe(primitiveColors.blue[600]);
+    expect(emailColors.infoForeground).toBe(primitiveColors.blue[700]);
+    // Explicitly diverged from the now-coral/teal app tokens:
+    expect(emailColors.interactivePrimary).not.toBe(toHex(tokenDefinitions.interactive.primary));
+    expect(emailColors.infoForeground).not.toBe(toHex(tokenDefinitions.status.info.foreground));
   });
 
   it("email surfaces/borders stay on the cool gray ramp (decoupled from the warmed app surface tokens)", () => {

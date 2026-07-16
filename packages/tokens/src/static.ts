@@ -81,7 +81,7 @@ export const staticTokens = {
     "touch-target-min": "36px",
   },
   focus: {
-    "focus-ring-color": "var(--blue-500)",
+    "focus-ring-color": "var(--coral-500)",
     "focus-ring-offset": "2px",
     "focus-ring-width": "2px",
     "focus-ring-style": "solid",

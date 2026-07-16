@@ -141,7 +141,7 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 ### Accent Scarcity
 
 - **One filled primary button per view region.** Everything else in that region is `outline`, `ghost`, or `link`. A "region" is a card, modal, page header, or form footer. (Review-checklist rule — not lint-enforceable.)
-- Brand blue appears only on primary actions, focus rings, and active nav.
+- Brand coral (the "Florida Modern" primary, matching the marketing landing page) appears only on primary actions, focus rings, and active nav. Per-community branding may override the primary via `--theme-primary`.
 - Ink, not black: `--text-primary` is deep slate (`#111827`) by design — never introduce pure-black text.
 - Data tables run dense with tabular figures (`tabular-nums` is built into the canonical Table) while page chrome keeps generous macro-spacing — "dense data, generous chrome."
 

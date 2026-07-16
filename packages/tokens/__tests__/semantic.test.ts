@@ -48,22 +48,22 @@ describe("tokenDefinitions", () => {
   it("interactive.primary is theme-aware", () => {
     expect(tokenDefinitions.interactive.primary.kind).toBe("theme");
     expect(toCssValue(tokenDefinitions.interactive.primary)).toBe(
-      "var(--theme-primary, var(--blue-600))"
+      "var(--theme-primary, var(--coral-600))"
     );
-    expect(toHex(tokenDefinitions.interactive.primary)).toBe("#2563EB");
+    expect(toHex(tokenDefinitions.interactive.primary)).toBe("#C2533A");
   });
 
   it("status.brand.foreground is theme-aware", () => {
     expect(tokenDefinitions.status.brand.foreground.kind).toBe("theme");
     expect(toCssValue(tokenDefinitions.status.brand.foreground)).toBe(
-      "var(--theme-primary, var(--blue-600))"
+      "var(--theme-primary, var(--coral-600))"
     );
   });
 
   it("brandAccent is theme-aware", () => {
     expect(tokenDefinitions.brandAccent.kind).toBe("theme");
     expect(toCssValue(tokenDefinitions.brandAccent)).toBe(
-      "var(--theme-accent, var(--blue-200))"
+      "var(--theme-accent, var(--coral-200))"
     );
   });
 
