@@ -1,10 +1,12 @@
 /**
- * Sentry client-side configuration.
+ * Client-side instrumentation for apps/admin.
  *
- * This is loaded in the browser. Uses NEXT_PUBLIC_SENTRY_DSN.
- * Disabled entirely when DSN is not set (local development).
+ * Replaces the legacy sentry.client.config.ts: Sentry stays a deferred
+ * dynamic import (kept out of the critical bundle), and the
+ * `onRouterTransitionStart` hook drives the global navigation progress bar.
+ * Uses NEXT_PUBLIC_SENTRY_DSN; Sentry is disabled entirely when unset.
  */
-import { dispatchNavigationStart } from '@/lib/navigation/navigation-progress-event';
+import { dispatchNavigationStart } from '@/lib/navigation-progress-event';
 
 type SentryBrowserModule = typeof import('@sentry/nextjs');
 
@@ -36,13 +38,9 @@ async function initClientInstrumentation(): Promise<void> {
 
       // Performance tracing
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-
-      // Session replay
-      replaysSessionSampleRate: 0,
-      replaysOnErrorSampleRate: process.env.NODE_ENV === 'production' ? 1.0 : 0,
     });
   } catch (error) {
-    console.error('[Sentry] Failed to initialize client instrumentation', error);
+    console.error('[Sentry] Failed to initialize admin client instrumentation', error);
   }
 }
 

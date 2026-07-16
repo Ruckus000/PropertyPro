@@ -1,6 +1,12 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 import type { DocumentListItem } from '@/components/documents/document-list';
@@ -74,17 +80,40 @@ function normalizeDownloadError(error: unknown): Error {
   return new Error(DOCUMENT_DOWNLOAD_FALLBACK_ERROR);
 }
 
+function fetchDocuments(
+  communityId: number,
+  categoryId: number | null | undefined,
+  signal?: AbortSignal,
+): Promise<DocumentListItem[]> {
+  const baseParams: Record<string, string> = {
+    communityId: String(communityId),
+  };
+  if (categoryId != null) baseParams.categoryId = String(categoryId);
+  return walkPaginated<DocumentListItem>('/api/v1/documents', baseParams, { signal });
+}
+
 export function useDocuments({ communityId, categoryId, enabled = true }: UseDocumentsOptions) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: documentsKey(communityId, categoryId),
-    queryFn: ({ signal }) => {
-      const baseParams: Record<string, string> = {
-        communityId: String(communityId),
-      };
-      if (categoryId != null) baseParams.categoryId = String(categoryId);
-      return walkPaginated<DocumentListItem>('/api/v1/documents', baseParams, { signal });
-    },
+    queryFn: ({ signal }) => fetchDocuments(communityId, categoryId, signal),
     enabled: enabled && communityId > 0,
+  });
+}
+
+/**
+ * Warm the default (all-categories) documents list ahead of navigation —
+ * wired to sidebar hover/focus via `prefetchNavData`. Uses the same key and
+ * fetcher as `useDocuments`, so the page mounts against a warm cache.
+ */
+export function prefetchDocuments(queryClient: QueryClient, communityId: number): Promise<void> {
+  if (communityId <= 0) {
+    return Promise.resolve();
+  }
+  return queryClient.prefetchQuery({
+    queryKey: documentsKey(communityId, undefined),
+    queryFn: ({ signal }) => fetchDocuments(communityId, undefined, signal),
   });
 }
 
