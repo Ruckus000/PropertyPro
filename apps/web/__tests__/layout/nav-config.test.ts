@@ -6,6 +6,7 @@ import {
   getVisibleItems,
   getActiveItemId,
   resolveDashboardHref,
+  resolveNavItemHref,
   PAGE_TITLES,
 } from '../../src/components/layout/nav-config';
 import type { CommunityFeatures } from '@propertypro/shared';
@@ -228,6 +229,29 @@ describe('resolveDashboardHref', () => {
 
   it('falls back to the generic dashboard when features are unknown', () => {
     expect(resolveDashboardHref(42, null)).toBe('/dashboard?communityId=42');
+  });
+});
+
+describe('resolveNavItemHref', () => {
+  it('resolves every PM item to its real /pm/... destination when communityId is null', () => {
+    // Regression: the PM portal renders with community = null (cross-community
+    // context, no tenant header), and the old sidebar logic sent EVERY PM nav
+    // item to the /select-community fallback — a fully dead PM nav.
+    for (const item of PM_NAV_ITEMS) {
+      const href = resolveNavItemHref(item, null, true);
+      expect(href, `PM item "${item.id}"`).toBe(item.href(0));
+      expect(href.startsWith('/pm/'), `PM item "${item.id}" resolves to ${href}`).toBe(true);
+    }
+  });
+
+  it('keeps the community-scoped href when communityId is present', () => {
+    const documents = NAV_ITEMS.find((item) => item.id === 'documents')!;
+    expect(resolveNavItemHref(documents, 42, false)).toBe('/communities/42/documents');
+  });
+
+  it('falls back to the community picker for community items without tenant context', () => {
+    const documents = NAV_ITEMS.find((item) => item.id === 'documents')!;
+    expect(resolveNavItemHref(documents, null, false)).toBe('/select-community');
   });
 });
 

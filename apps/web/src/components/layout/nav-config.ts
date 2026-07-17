@@ -370,6 +370,27 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
 ];
 
 /**
+ * Resolve a sidebar item's destination href.
+ *
+ * PM portfolio routes (PM_NAV_ITEMS) are cross-community — their href
+ * builders ignore the communityId argument — so they must NEVER fall back to
+ * /select-community just because the shell has no tenant context (the PM
+ * portal routinely renders with community = null). Only community-scoped
+ * items use the picker fallback, which exists so a tenant-less shell doesn't
+ * render dead `href={undefined}` links (see the www-subdomain incident).
+ */
+export function resolveNavItemHref(
+  item: Pick<NavItemConfig, 'href'>,
+  communityId: number | null,
+  isPmContext: boolean,
+): string {
+  if (isPmContext) {
+    return item.href(communityId ?? 0);
+  }
+  return communityId ? item.href(communityId) : '/select-community';
+}
+
+/**
  * Filter nav items by user role and community features.
  */
 export function getVisibleItems(
