@@ -11,6 +11,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
   inferCanonicalRoleFromMembership,
@@ -28,6 +30,7 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  resolveDashboardHref,
   resolveNavItemHref,
   shouldUseSlimNav,
   buildSlimNavSections,
@@ -75,6 +78,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { expanded, toggleExpanded, sectionOpen, toggleSection } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
@@ -131,7 +135,13 @@ export function AppSidebar({
     icon: item.icon,
     href: item.planLocked
       ? undefined
-      : resolveNavItemHref(item, communityId, isPmContext),
+      // One-hop destination for the dashboard item: avoids the /dashboard →
+      // /dashboard/apartment server redirect for lease-tracking communities.
+      // Everything else goes through resolveNavItemHref, which keeps PM
+      // portfolio items working with communityId = null.
+      : !isPmContext && communityId && item.id === 'dashboard'
+        ? resolveDashboardHref(communityId, features)
+        : resolveNavItemHref(item, communityId, isPmContext),
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
     trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
   });
@@ -253,6 +263,8 @@ export function AppSidebar({
               onClick?.();
               onNavigate?.();
             }}
+            onPointerEnter={() => prefetchNavData(queryClient, href, communityId)}
+            onFocus={() => prefetchNavData(queryClient, href, communityId)}
             {...props}
           >
             {children}

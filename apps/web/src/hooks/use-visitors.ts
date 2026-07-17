@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
@@ -81,6 +81,8 @@ export const VISITOR_KEYS = {
 
 export function useVisitors(communityId: number, filters?: VisitorFilters) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: VISITOR_KEYS.list(communityId, filters),
     queryFn: async ({ signal }) => {
       const params: Record<string, string> = { communityId: String(communityId) };
@@ -96,6 +98,8 @@ export function useVisitors(communityId: number, filters?: VisitorFilters) {
 
 export function useMyVisitors(communityId: number, filter?: MyVisitorFilter) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: VISITOR_KEYS.my(communityId, filter),
     queryFn: async () => {
       const params = new URLSearchParams({ communityId: String(communityId) });

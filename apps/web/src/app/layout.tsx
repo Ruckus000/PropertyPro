@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Toaster } from 'sonner';
+import { NavigationProgress } from '@/components/navigation/navigation-progress';
 import "./globals.css";
 
 const inter = Inter({
@@ -30,6 +31,7 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-surface-card text-content dark:bg-gray-950 dark:text-gray-100">
+        <NavigationProgress />
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-surface-card focus:px-4 focus:py-2 focus:text-content-link focus:underline"

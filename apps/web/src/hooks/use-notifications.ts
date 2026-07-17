@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NotificationCategory } from '@propertypro/db';
 import { requestJson } from '@/lib/api/request-json';
 
@@ -58,6 +58,8 @@ function buildListUrl(communityId: number, filters: NotificationFilters): string
 
 export function useNotifications(communityId: number, filters: NotificationFilters = {}) {
   return useQuery<NotificationsPage>({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: NOTIFICATION_KEYS.list(communityId, filters),
     queryFn: () => requestJson<NotificationsPage>(buildListUrl(communityId, filters)),
     enabled: communityId > 0,

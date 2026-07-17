@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
@@ -47,6 +47,8 @@ export const PACKAGE_KEYS = {
 
 export function usePackages(communityId: number, filters?: PackageFilters) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: PACKAGE_KEYS.list(communityId, filters),
     queryFn: async ({ signal }) => {
       const baseParams: Record<string, string> = {

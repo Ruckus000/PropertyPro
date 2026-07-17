@@ -6,6 +6,7 @@
  *
  * [AGENTS #34] Always gates via CommunityFeatures, never via direct community_type check.
  */
+import { Suspense } from 'react';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getFeaturesForCommunity } from '@propertypro/shared';
@@ -19,6 +20,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { DashboardWelcome } from '@/components/dashboard/dashboard-welcome';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { ApartmentDashboard } from '@/components/dashboard/apartment-dashboard';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface ApartmentDashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -53,7 +55,6 @@ export default async function ApartmentDashboardPage({
     redirect(`/onboarding/apartment?communityId=${context.communityId}`);
   }
 
-  const metrics = await loadApartmentMetrics(context.communityId, userId, membership);
   const canWriteAnnouncements = checkPermissionV2(
     membership.role,
     membership.communityType,
@@ -64,16 +65,54 @@ export default async function ApartmentDashboardPage({
     },
   );
 
+  // Started (not awaited) so the metrics resolve inside the Suspense
+  // boundary — the route shell flushes immediately and panels stream in.
+  const metricsPromise = loadApartmentMetrics(context.communityId, userId, membership);
+
+  return (
+    <Suspense fallback={<ApartmentDashboardSkeleton />}>
+      <ApartmentDashboardPanels
+        metricsPromise={metricsPromise}
+        communityId={context.communityId}
+        canWriteAnnouncements={canWriteAnnouncements}
+      />
+    </Suspense>
+  );
+}
+
+function ApartmentDashboardSkeleton() {
+  return (
+    <div className="space-y-6" role="status" aria-label="Loading dashboard">
+      <Skeleton className="h-16 w-full rounded-md" />
+      <Skeleton className="h-10 w-[200px]" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Skeleton className="h-64 w-full rounded-md" />
+        <Skeleton className="h-64 w-full rounded-md" />
+      </div>
+    </div>
+  );
+}
+
+interface ApartmentDashboardPanelsProps {
+  metricsPromise: ReturnType<typeof loadApartmentMetrics>;
+  communityId: number;
+  canWriteAnnouncements: boolean;
+}
+
+async function ApartmentDashboardPanels({
+  metricsPromise,
+  communityId,
+  canWriteAnnouncements,
+}: ApartmentDashboardPanelsProps) {
+  const metrics = await metricsPromise;
+
   return (
     <div className="space-y-6">
-      <OnboardingChecklist
-        communityId={context.communityId}
-        communityName={metrics.communityName}
-      />
+      <OnboardingChecklist communityId={communityId} communityName={metrics.communityName} />
       <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
       <ApartmentDashboard
         metrics={metrics}
-        communityId={context.communityId}
+        communityId={communityId}
         canWriteAnnouncements={canWriteAnnouncements}
       />
     </div>

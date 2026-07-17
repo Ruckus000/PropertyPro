@@ -104,7 +104,7 @@ interface SeededData {
 
 interface MiddlewareUser {
   id: string;
-  email_confirmed_at: string | null;
+  emailVerified: boolean;
 }
 
 interface MiddlewareConfig {
@@ -450,12 +450,16 @@ function configureMiddlewareClient(config: MiddlewareConfig): { getRequestedSlug
     data: { user: config.user },
   });
 
+  // createMiddlewareClient resolves the user itself (getClaims) and returns
+  // it directly — middleware no longer calls supabase.auth.getUser.
   createMiddlewareClientMock.mockResolvedValue({
     supabase: {
       auth: { getUser: getUserMock },
       from: fromMock,
     },
     response: NextResponse.next(),
+    user: config.user,
+    authChecked: config.user != null,
   });
 
   return {
@@ -877,7 +881,7 @@ describe('p2-43 middleware tenant precedence and header sanitization', () => {
       },
       user: {
         id: 'middleware-user-a',
-        email_confirmed_at: '2026-02-01T00:00:00.000Z',
+        emailVerified: true,
       },
     });
 
@@ -903,7 +907,7 @@ describe('p2-43 middleware tenant precedence and header sanitization', () => {
       },
       user: {
         id: 'middleware-user-b',
-        email_confirmed_at: '2026-02-01T00:00:00.000Z',
+        emailVerified: true,
       },
     });
 
