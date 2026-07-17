@@ -190,6 +190,13 @@
       "when": 1784292702597,
       "tag": "0027_wind_mitigation_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784306505498,
+      "tag": "0028_snowbird_digest",
+      "breakpoints": true
     }
   ]
 }

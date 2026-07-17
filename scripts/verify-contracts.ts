@@ -104,6 +104,11 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/internal/generate-assessments/route.ts',
   'apps/web/src/app/api/v1/internal/late-fee-processor/route.ts',
   'apps/web/src/app/api/v1/internal/notification-digests/process/route.ts',
+  // Snowbird digest: Bearer-token cron (no tenant/session) + no-login token-auth
+  // unsubscribe that returns an HTML page — neither fits the tenant-scoped
+  // runRoute/JSON-envelope model, same as the digest/webhook crons above.
+  'apps/web/src/app/api/v1/internal/snowbird-digest/route.ts',
+  'apps/web/src/app/api/v1/snowbird-digest/unsubscribe/route.ts',
   'apps/web/src/app/api/v1/internal/payment-reminders/route.ts',
   'apps/web/src/app/api/v1/internal/provision/route.ts',
   'apps/web/src/app/api/v1/internal/provisioning-watchdog/route.ts',

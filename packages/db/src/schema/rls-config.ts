@@ -75,6 +75,11 @@ export const RLS_TENANT_TABLES = [
     notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
   },
   {
+    tableName: 'snowbird_digest_subscriptions',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'Self-service digest cadence/opt-out. A user reads and mutates only their own row (auth.uid()); admin-tier sees all for support. The cron reads cross-tenant via the privileged client.',
+  },
+  {
     tableName: 'wind_mitigation_reports',
     policyFamily: 'tenant_admin_write',
     notes: 'Building-level wind-mitigation inspection records. SELECT open to all community members (owners retrieve the report for their own insurer); writes restricted to ADMIN_ROLES via requirePermission(insurance, write) in the wind-mitigation route.',
@@ -301,7 +306,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 55;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 56;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

@@ -75,4 +75,11 @@ export interface CommunityFeatures {
    * and every owner can retrieve for their own HO-6/wind insurer.
    */
   readonly hasInsuranceHub: boolean;
+  /**
+   * Snowbird digest — an auto-generated periodic email recap of community
+   * activity (board decisions, new documents, upcoming deadlines) for seasonal
+   * and out-of-state owners. Compiled from data already in the platform; zero
+   * board effort. Available to every community type.
+   */
+  readonly hasSnowbirdDigest: boolean;
 }

@@ -58,6 +58,7 @@ export * from './maintenance-comments';
 export * from './contracts';
 export * from './contract-bids';
 export * from './wind-mitigation-reports';
+export * from './snowbird-digest-subscriptions';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
@@ -130,6 +131,7 @@ import type { maintenanceComments } from './maintenance-comments';
 import type { contracts } from './contracts';
 import type { contractBids } from './contract-bids';
 import type { windMitigationReports } from './wind-mitigation-reports';
+import type { snowbirdDigestSubscriptions } from './snowbird-digest-subscriptions';
 import type { ledgerEntries } from './ledger-entries';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
@@ -334,6 +336,10 @@ export type NewContractBid = typeof contractBids.$inferInsert;
 // Wind-Mitigation Reports (Wave 1 insurance hub)
 export type WindMitigationReport = typeof windMitigationReports.$inferSelect;
 export type NewWindMitigationReport = typeof windMitigationReports.$inferInsert;
+
+// Snowbird Digest Subscriptions (Wave 1)
+export type SnowbirdDigestSubscription = typeof snowbirdDigestSubscriptions.$inferSelect;
+export type NewSnowbirdDigestSubscription = typeof snowbirdDigestSubscriptions.$inferInsert;
 
 // Ledger Entries
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;

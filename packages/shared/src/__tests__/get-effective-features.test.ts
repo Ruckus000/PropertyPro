@@ -37,6 +37,7 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'hasSiteCustomDomain',
   'hasSitePortfolioTemplates',
   'hasInsuranceHub',
+  'hasSnowbirdDigest',
 ] as const;
 
 describe('getEffectiveFeatures', () => {
@@ -138,7 +139,7 @@ describe('getEffectiveFeatures', () => {
     expect(getEffectiveFeatures('condo_718', 'essentials').hasSitePortfolioTemplates).toBe(false);
   });
 
-  it('result has all 30 CommunityFeatures keys', () => {
+  it('result has all 31 CommunityFeatures keys', () => {
     const features = getEffectiveFeatures('condo_718', 'essentials');
     const resultKeys = Object.keys(features).sort();
     const expectedKeys = [...ALL_FEATURE_KEYS].sort();

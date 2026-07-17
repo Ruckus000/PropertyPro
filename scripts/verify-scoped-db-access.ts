@@ -255,6 +255,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // PR #1a: Public-site community reader — unauthenticated /_site context, no TenantContext
   // available. Applies explicit community_id + deletedAt predicates on every read.
   resolve(repoRoot, 'apps/web/src/lib/db/public-community-reader.ts'),
+  // Snowbird digest cron — by-design cross-tenant scan of communities with the
+  // digest enabled; per-community reads then use a scoped client. Same posture
+  // as notification-digest-processor.
+  resolve(repoRoot, 'apps/web/src/lib/services/snowbird-digest-processor.ts'),
+  // Snowbird digest no-login unsubscribe write — token-authenticated, no session
+  // to establish tenant context; the signed token confines the write to the
+  // exact (communityId, userId) it encodes.
+  resolve(repoRoot, 'apps/web/src/lib/services/snowbird-digest-unsubscribe-service.ts'),
   // PR #2: Site asset quota lookup — communities is the root tenant table (no communityId column);
   // plan resolution requires unscoped read. Routes calling these helpers MUST have already
   // verified caller's pm_admin membership in the target community.

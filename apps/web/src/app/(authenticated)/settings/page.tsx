@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
+import { SnowbirdDigestCard } from '@/components/settings/snowbird-digest-card';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
@@ -11,6 +12,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { PageHeader } from '@/components/shared/page-header';
 import { checkPermissionV2 } from '@/lib/db/access-control';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 
 /**
  * Settings page — exposes Notification Preferences (P1-26).
@@ -102,6 +104,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             communityAssessments: canReadFinances && membership.isAdmin,
           }}
         />
+        {getEffectiveFeatures(membership.communityType, resolvePlanId(membership.subscriptionPlan))
+          .hasSnowbirdDigest && (
+          <div className="mt-4">
+            <SnowbirdDigestCard communityId={context.communityId} canManage={membership.isAdmin} />
+          </div>
+        )}
       </div>
       <AccessibilitySettings />
       {membership.isAdmin && (
