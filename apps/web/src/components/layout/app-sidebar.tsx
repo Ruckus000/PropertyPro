@@ -11,6 +11,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
   inferCanonicalRoleFromMembership,
@@ -75,6 +77,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { expanded, toggleExpanded, sectionOpen, toggleSection } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
@@ -259,6 +262,8 @@ export function AppSidebar({
               onClick?.();
               onNavigate?.();
             }}
+            onPointerEnter={() => prefetchNavData(queryClient, href, communityId)}
+            onFocus={() => prefetchNavData(queryClient, href, communityId)}
             {...props}
           >
             {children}

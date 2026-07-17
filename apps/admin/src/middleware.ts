@@ -138,10 +138,8 @@ export async function middleware(request: NextRequest): Promise<Response> {
 
   // 3. Refresh Supabase session
   const {
-    supabase,
     response,
     user: middlewareUser,
-    authChecked,
   } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
 
   // 4. Allow public paths through immediately (no admin check)
@@ -168,16 +166,8 @@ export async function middleware(request: NextRequest): Promise<Response> {
     }
   }
 
-  // 6. Verify Supabase user (server-side JWT revalidation)
-  const user = authChecked === undefined
-    ? (
-        middlewareUser ??
-        (
-          await supabase.auth.getUser()
-        ).data.user ??
-        null
-      )
-    : middlewareUser;
+  // 6. Verify Supabase user (JWT verified in createMiddlewareClient)
+  const user = middlewareUser;
 
   if (!user) {
     const loginUrl = new URL('/auth/login', request.url);

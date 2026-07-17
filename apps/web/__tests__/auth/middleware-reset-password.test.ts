@@ -44,15 +44,8 @@ describe('middleware: /auth/reset-password exclusion from authenticated-redirect
 
     // Simulate the production condition: the user has a valid Supabase
     // recovery session (PKCE exchange completed on page load).
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'recovery-session-user',
-          email_confirmed_at: '2026-01-01T00:00:00.000Z',
-        },
-      },
-    });
-
+    // createMiddlewareClient resolves the user itself (getClaims) and returns
+    // it directly — middleware no longer calls supabase.auth.getUser.
     createMiddlewareClientMock.mockImplementation(async () => ({
       supabase: {
         auth: {
@@ -60,6 +53,11 @@ describe('middleware: /auth/reset-password exclusion from authenticated-redirect
         },
       },
       response: NextResponse.next(),
+      user: {
+        id: 'recovery-session-user',
+        emailVerified: true,
+      },
+      authChecked: true,
     }));
   });
 
