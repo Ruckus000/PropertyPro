@@ -44,19 +44,24 @@ describe("Token parity", () => {
     expect(emailColors.warningBackground).toBe(toHex(tokenDefinitions.status.warning.background));
   });
 
-  it("email brand/interactive/info stay on the cool blue ramp (decoupled from the app's coral/teal rebrand)", () => {
-    // The app rebranded interactive.*/text.brand to "Florida Modern" coral and
-    // status.info to teal for landing-consistency; transactional emails
-    // deliberately stay on the prior blue, so these are pinned to `blue` and
-    // must NOT follow the now-coral/teal app tokens.
-    expect(emailColors.interactivePrimary).toBe(primitiveColors.blue[600]);
-    expect(emailColors.interactivePrimaryHover).toBe(primitiveColors.blue[700]);
-    expect(emailColors.textBrand).toBe(primitiveColors.blue[600]);
-    expect(emailColors.textLink).toBe(primitiveColors.blue[600]);
-    expect(emailColors.infoForeground).toBe(primitiveColors.blue[700]);
-    // Explicitly diverged from the now-coral/teal app tokens:
-    expect(emailColors.interactivePrimary).not.toBe(toHex(tokenDefinitions.interactive.primary));
-    expect(emailColors.infoForeground).not.toBe(toHex(tokenDefinitions.status.info.foreground));
+  it("email brand/interactive/info follow the app's coral/teal rebrand", () => {
+    // Emails now join the "Florida Modern" palette: brand text/links + the
+    // interactive token move to coral (700 for text, AA-safe), and status.info
+    // + info alerts move to teal — matching the in-app tokens.
+    expect(emailColors.textBrand).toBe(primitiveColors.coral[700]);
+    expect(emailColors.textLink).toBe(primitiveColors.coral[700]);
+    expect(emailColors.interactivePrimary).toBe(primitiveColors.coral[600]);
+    expect(emailColors.interactivePrimaryHover).toBe(primitiveColors.coral[700]);
+    expect(emailColors.accentBrand).toBe(primitiveColors.coral[600]);
+    expect(emailColors.infoForeground).toBe(primitiveColors.teal[700]);
+    expect(emailColors.alertInfoText).toBe(primitiveColors.teal[800]);
+  });
+
+  it("email CTA buttons stay on the zinc-neutral v2 system (accent-only rebrand)", () => {
+    // The email coral extension is accent-only: the primary CTA button keeps its
+    // deliberate zinc-neutral v2 styling, so buttonDefault must NOT be coral.
+    expect(emailColors.buttonDefault).toBe("#18181B"); // zinc-900
+    expect(emailColors.buttonDefault).not.toBe(primitiveColors.coral[600]);
   });
 
   it("email surfaces/borders stay on the cool gray ramp (decoupled from the warmed app surface tokens)", () => {

@@ -154,7 +154,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
             placeholder="Search by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-md border border-gray-300 py-1.5 pl-8 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 py-1.5 pl-8 pr-3 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -163,7 +163,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           >
             <option value="all">All types</option>
             <option value="condo_718">Condo §718</option>
@@ -178,7 +178,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <select
             value={complianceFilter}
             onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'at-risk' | 'healthy')}
-            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           >
             <option value="all">All compliance</option>
             <option value="at-risk">At risk (&lt;70%)</option>
@@ -192,7 +192,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
-            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           >
             <option value="name-asc">Name (A–Z)</option>
             <option value="name-desc">Name (Z–A)</option>

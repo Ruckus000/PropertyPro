@@ -62,7 +62,13 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   `apps/web/src/app/(marketing)/marketing-theme.css` (marketing palette),
   `apps/web/src/lib/documents/render-authored-html.ts` (authored-doc export styling),
   `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/` + `apps/admin/`
-  (out of standardization scope until their own migration programs). Also frozen:
+  (out of standardization scope until their own migration programs — admin still
+  uses its own Tailwind `blue`/`gray`/`coral` ramps + raw palette classes, not the
+  semantic tokens). **Exception:** admin's *brand* hue was migrated tech-blue →
+  "Florida Modern" coral for cross-surface brand consistency (`coral-*` classes,
+  which the guard does not count; informational blue status badges — Trial,
+  Cancelled, Converted, community-type/plan chips — intentionally kept blue), and
+  the admin baseline was ratcheted down to lock in that drain. Also frozen:
   `dark:` raw-palette variants layered on semantic base classes
   (select-community/page.tsx, app/layout.tsx, CommandItem.tsx,
   announcement-feed/toolbar.tsx, ui/chart.tsx) — dark mode is explicitly out of

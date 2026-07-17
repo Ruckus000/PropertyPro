@@ -285,7 +285,7 @@ export function CommunityWebsiteEditor({
               key={preset.id}
               type="button"
               onClick={() => handlePresetClick(preset.id)}
-              className="group rounded-md border border-gray-200 p-2.5 text-left transition-colors hover:border-blue-400 hover:bg-blue-50/40"
+              className="group rounded-md border border-gray-200 p-2.5 text-left transition-colors hover:border-coral-400 hover:bg-coral-50/40"
             >
               <div className="mb-1.5 flex gap-1">
                 <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.primaryColor }} />
@@ -326,7 +326,7 @@ export function CommunityWebsiteEditor({
                       onChange={(e) => handleChange(key, e.target.value)}
                       pattern="^#[0-9a-fA-F]{6}$"
                       maxLength={7}
-                      className="w-full rounded-md border border-gray-300 px-3 py-1.5 font-mono text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full rounded-md border border-gray-300 px-3 py-1.5 font-mono text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
                     />
                   </div>
                 </div>
@@ -347,7 +347,7 @@ export function CommunityWebsiteEditor({
                   <select
                     value={form[key]}
                     onChange={(e) => handleChange(key, e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
                   >
                     {ALLOWED_FONTS.map((font) => (
                       <option key={font} value={font}>{font}</option>
@@ -379,7 +379,7 @@ export function CommunityWebsiteEditor({
                 </div>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 transition-colors hover:border-blue-400 hover:bg-blue-50/30">
+              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 transition-colors hover:border-coral-400 hover:bg-coral-50/30">
                 <Upload size={20} className="text-gray-400" />
                 <span className="text-xs text-gray-500">
                   PNG, JPEG, or WebP &middot; max 5 MB
@@ -517,7 +517,7 @@ export function CommunityWebsiteEditor({
         <button
           type="submit"
           disabled={saving || uploading}
-          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           Save Branding

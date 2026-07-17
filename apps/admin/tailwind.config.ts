@@ -52,6 +52,21 @@ const config: Config = {
         e3: '0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03)',
       },
       colors: {
+        // "Florida Modern" brand ramp — mirrors packages/tokens coral. Admin
+        // uses coral-* for brand/interactive/CTA/focus; the `blue` ramp below is
+        // retained for informational status badges (Trial, Cancelled, etc.).
+        coral: {
+          50: '#FCF1ED',
+          100: '#F7DCD2',
+          200: '#EDB9A6',
+          300: '#E19478',
+          400: '#D4744F',
+          500: '#CB6047',
+          600: '#C2533A',
+          700: '#A8412C',
+          800: '#87331F',
+          900: '#68291B',
+        },
         blue: {
           50: '#EFF6FF',
           100: '#DBEAFE',

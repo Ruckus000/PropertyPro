@@ -46,9 +46,9 @@ function getInitialConfig(communityType: CommunityType = 'condo_718') {
     mobileTemplateId: getDefaultTemplate(communityType, 'mobile')?.id ?? '',
     contentStrategy: getDefaultStrategy(communityType).id,
     branding: {
-      primaryColor: '#2563EB',
-      secondaryColor: '#1E40AF',
-      accentColor: '#DBEAFE',
+      primaryColor: '#C2533A',
+      secondaryColor: '#6B7280',
+      accentColor: '#F7DCD2',
       fontHeading: 'Inter',
       fontBody: 'Inter',
       logoPath: '',

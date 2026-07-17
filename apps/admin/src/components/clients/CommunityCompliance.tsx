@@ -158,7 +158,7 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
               type="button"
               onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
               className={`rounded-lg border p-4 text-center transition-colors ${
-                statusFilter === status ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                statusFilter === status ? 'border-coral-300 bg-coral-50' : 'border-gray-200 bg-white hover:bg-gray-50'
               } shadow-e1`}
             >
               <div className="flex items-center justify-center gap-1.5">
@@ -190,7 +190,7 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
           <button
             type="button"
             onClick={() => { setStatusFilter('all'); setCategoryFilter('all'); }}
-            className="text-xs text-blue-600 hover:text-blue-700"
+            className="text-xs text-coral-700 hover:text-coral-700"
           >
             Clear filters
           </button>

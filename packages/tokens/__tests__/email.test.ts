@@ -14,8 +14,8 @@ describe("emailColors", () => {
     expect(emailColors.surfacePage).toBe("#F9FAFB");
   });
 
-  it("interactivePrimary is blue-600", () => {
-    expect(emailColors.interactivePrimary).toBe("#2563EB");
+  it("interactivePrimary is coral-600 (Florida Modern rebrand)", () => {
+    expect(emailColors.interactivePrimary).toBe("#C2533A");
   });
 
   it("all status groups have foreground/background/border/subtle", () => {
