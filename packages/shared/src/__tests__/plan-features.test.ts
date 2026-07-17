@@ -37,6 +37,7 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'hasSiteCustomCss',
   'hasSiteCustomDomain',
   'hasSitePortfolioTemplates',
+  'hasInsuranceHub',
 ] as const;
 
 describe('PLAN_FEATURES config', () => {

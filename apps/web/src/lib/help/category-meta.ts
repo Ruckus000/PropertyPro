@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Siren,
   TriangleAlert,
+  Umbrella,
   UserCircle,
   Users,
   Vote,
@@ -46,6 +47,9 @@ export const HELP_CATEGORY_META: Record<string, HelpCategoryMeta> = {
   compliance: { label: 'Compliance', icon: ShieldCheck, chipClass: BRAND_CHIP },
   contracts: { label: 'Contracts', icon: ScrollText, chipClass: NEUTRAL_CHIP },
   documents: { label: 'Documents', icon: FileText, chipClass: BRAND_CHIP },
+  // Umbrella, not ShieldCheck — Compliance already owns the shield, and two
+  // categories sharing an icon defeats at-a-glance scanning.
+  insurance: { label: 'Insurance', icon: Umbrella, chipClass: BRAND_CHIP },
   elections: { label: 'Elections', icon: Vote, chipClass: BRAND_CHIP },
   emergency: { label: 'Emergency', icon: Siren, chipClass: DANGER_CHIP },
   esign: { label: 'E-Sign', icon: FileSignature, chipClass: NEUTRAL_CHIP },

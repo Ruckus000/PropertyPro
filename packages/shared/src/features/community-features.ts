@@ -51,6 +51,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomCss: true,
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
+    hasInsuranceHub: true,
   },
   hoa_720: {
     hasCompliance: true,
@@ -82,6 +83,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomCss: true,
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
+    hasInsuranceHub: true,
   },
   apartment: {
     hasCompliance: false,
@@ -113,5 +115,8 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomCss: true,
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
+    // Apartments have no owner-occupied units and no association master
+    // policy to share — the insurance hub is condo/HOA only.
+    hasInsuranceHub: false,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;

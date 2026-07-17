@@ -57,6 +57,7 @@ export * from './maintenance-requests';
 export * from './maintenance-comments';
 export * from './contracts';
 export * from './contract-bids';
+export * from './wind-mitigation-reports';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
@@ -128,6 +129,7 @@ import type { maintenanceRequests } from './maintenance-requests';
 import type { maintenanceComments } from './maintenance-comments';
 import type { contracts } from './contracts';
 import type { contractBids } from './contract-bids';
+import type { windMitigationReports } from './wind-mitigation-reports';
 import type { ledgerEntries } from './ledger-entries';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
@@ -328,6 +330,10 @@ export type NewContract = typeof contracts.$inferInsert;
 // Contract Bids (P3-52)
 export type ContractBid = typeof contractBids.$inferSelect;
 export type NewContractBid = typeof contractBids.$inferInsert;
+
+// Wind-Mitigation Reports (Wave 1 insurance hub)
+export type WindMitigationReport = typeof windMitigationReports.$inferSelect;
+export type NewWindMitigationReport = typeof windMitigationReports.$inferInsert;
 
 // Ledger Entries
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;

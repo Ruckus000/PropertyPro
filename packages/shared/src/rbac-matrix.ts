@@ -51,6 +51,7 @@ export const RBAC_RESOURCES = [
   'esign',
   'emergency_broadcasts',
   'units',
+  'insurance',
 ] as const;
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number];
@@ -86,6 +87,7 @@ const PHASE5_DEFAULT_RESOURCES = [
   'esign',
   'emergency_broadcasts',
   'units',
+  'insurance',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
@@ -470,6 +472,23 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
       board_member:           { read: true,  write: false },
+      board_president:        { read: true,  write: true  },
+      cam:                    { read: true,  write: true  },
+      site_manager:           { read: true,  write: true  },
+      property_manager_admin: { read: true,  write: true  },
+    },
+  },
+  // Insurance hub: wind-mitigation reports and master-policy summary.
+  // Read is open to every role — the whole point is that owners retrieve the
+  // building's wind-mit report to hand to their own insurer. Write is
+  // admin-tier (same shape as contracts): only the board posts building-level
+  // insurance records. Apartments are excluded at the feature-flag layer
+  // (hasInsuranceHub), so the matrix stays uniform across community types.
+  insurance: {
+    policy: {
+      owner:                  { read: true,  write: false },
+      tenant:                 { read: true,  write: false },
+      board_member:           { read: true,  write: true  },
       board_president:        { read: true,  write: true  },
       cam:                    { read: true,  write: true  },
       site_manager:           { read: true,  write: true  },

@@ -69,4 +69,10 @@ export interface CommunityFeatures {
   readonly hasSiteCustomDomain: boolean;
   /** Portfolio templates + bulk apply across communities (PM/Enterprise, Phase 2). */
   readonly hasSitePortfolioTemplates: boolean;
+  /**
+   * Insurance hub — wind-mitigation report locker and master-policy summary
+   * (condo/HOA only). Building-level insurance records the board posts once
+   * and every owner can retrieve for their own HO-6/wind insurer.
+   */
+  readonly hasInsuranceHub: boolean;
 }

@@ -92,6 +92,10 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": false
       }
     },
     "tenant": {
@@ -184,6 +188,10 @@
         "write": false
       },
       "units": {
+        "read": true,
+        "write": false
+      },
+      "insurance": {
         "read": true,
         "write": false
       }
@@ -280,6 +288,10 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": true
       }
     },
     "board_president": {
@@ -372,6 +384,10 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
         "read": true,
         "write": true
       }
@@ -468,6 +484,10 @@
       "units": {
         "read": true,
         "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -562,6 +582,10 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -654,6 +678,10 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
         "read": true,
         "write": true
       }
@@ -752,6 +780,10 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": false
       }
     },
     "tenant": {
@@ -844,6 +876,10 @@
         "write": false
       },
       "units": {
+        "read": true,
+        "write": false
+      },
+      "insurance": {
         "read": true,
         "write": false
       }
@@ -940,6 +976,10 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": true
       }
     },
     "board_president": {
@@ -1032,6 +1072,10 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
         "read": true,
         "write": true
       }
@@ -1128,6 +1172,10 @@
       "units": {
         "read": true,
         "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -1222,6 +1270,10 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
       }
     },
     "property_manager_admin": {
@@ -1314,6 +1366,10 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
         "read": true,
         "write": true
       }
@@ -1412,6 +1468,10 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
       }
     },
     "tenant": {
@@ -1504,6 +1564,10 @@
         "write": false
       },
       "units": {
+        "read": true,
+        "write": false
+      },
+      "insurance": {
         "read": true,
         "write": false
       }
@@ -1600,6 +1664,10 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
       }
     },
     "board_president": {
@@ -1692,6 +1760,10 @@
         "write": false
       },
       "units": {
+        "read": false,
+        "write": false
+      },
+      "insurance": {
         "read": false,
         "write": false
       }
@@ -1788,6 +1860,10 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
       }
     },
     "site_manager": {
@@ -1882,6 +1958,10 @@
       "units": {
         "read": true,
         "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
       }
     },
     "property_manager_admin": {
@@ -1974,6 +2054,10 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
         "read": true,
         "write": true
       }
