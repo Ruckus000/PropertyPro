@@ -319,6 +319,23 @@ describe('wind-mitigation route', () => {
       expect(createWindMitigationReportForCommunityMock).not.toHaveBeenCalled();
     });
 
+    // Legal review #7: a board cannot record an implausible multi-year validity
+    // window the UI would render as authoritative "Expires" fact.
+    it('400s when the validity window exceeds the ~5-year cap', async () => {
+      const res = await POST(
+        jsonReq('POST', { ...VALID_CREATE_BODY, inspectedAt: '2026-01-10', expiresAt: '2040-01-10' }),
+      );
+      expect(res.status).toBe(400);
+      expect(createWindMitigationReportForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts the standard 5-year window', async () => {
+      const res = await POST(
+        jsonReq('POST', { ...VALID_CREATE_BODY, inspectedAt: '2026-01-10', expiresAt: '2031-01-10' }),
+      );
+      expect(res.status).toBe(200);
+    });
+
     it('400s on a malformed date', async () => {
       const res = await POST(jsonReq('POST', { ...VALID_CREATE_BODY, inspectedAt: '01/10/2026' }));
       expect(res.status).toBe(400);

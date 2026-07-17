@@ -51,7 +51,7 @@ export default async function InsurancePage({ params }: PageProps) {
       <PageHeader
         breadcrumb={<Breadcrumbs currentLabel="Insurance" />}
         title="Insurance"
-        description="Building insurance records your association shares with every owner."
+        description="Wind-mitigation inspection reports for your building. These are inspection records, not the association's insurance policy, and say nothing about whether coverage is adequate."
       />
 
       <div className="mt-8">
