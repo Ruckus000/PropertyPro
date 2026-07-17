@@ -11,6 +11,7 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "SF Mono", "ui-monospace", "monospace"],
+        display: ["var(--font-display)", "Fraunces", "Georgia", "serif"],
         heading: ["var(--theme-font-heading, Inter)", "var(--font-sans)", "sans-serif"],
         body: ["var(--theme-font-body, Inter)", "var(--font-sans)", "sans-serif"],
       },
