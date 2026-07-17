@@ -24,12 +24,11 @@ export const emailColors = {
   textTertiary:    toHex(t.text.tertiary),         // #4B5563
   textDisabled:    toHex(t.text.disabled),         // #9CA3AF
   textInverse:     toHex(t.text.inverse),          // #FFFFFF
-  // Brand text pinned to the cool `blue` ramp. The app rebranded text.brand/
-  // link to "Florida Modern" coral for landing-consistency, but transactional
-  // emails stay on the prior blue (out of that scope — same reasoning as the
-  // Surfaces/Borders notes above).
-  textBrand:       primitiveColors.blue[600],      // #2563EB
-  textLink:        primitiveColors.blue[600],      // #2563EB
+  // Brand text follows the app's "Florida Modern" coral rebrand. Uses the
+  // DARKER coral (700) so brand text / links clear WCAG AA on white email
+  // backgrounds (coral 600 is only ~4.6:1) — matches text.brand/link in the app.
+  textBrand:       primitiveColors.coral[700],     // #A8412C
+  textLink:        primitiveColors.coral[700],     // #A8412C
 
   // Surfaces — pinned to the cool `gray` ramp. The app's surface.* tokens
   // warmed to the `sand` ramp for landing-consistency, but transactional
@@ -44,11 +43,11 @@ export const emailColors = {
   borderStrong:    primitiveColors.gray[300],       // #D1D5DB
 
   // Interactive (default fallback — overridden by branding.accentColor at runtime).
-  // Pinned to the cool `blue` ramp: the app rebranded interactive.* to coral for
-  // landing-consistency, but transactional emails stay on the prior blue (out of
-  // that scope; per-community branding still overrides via accentColor).
-  interactivePrimary:      primitiveColors.blue[600], // #2563EB
-  interactivePrimaryHover: primitiveColors.blue[700], // #1D4ED8
+  // Follows the app's coral rebrand. NOTE: the v2 email CTA button renders with
+  // `buttonDefault` (zinc-900), NOT this token, so email buttons stay neutral;
+  // this is kept coral for any legacy/primary use and app-consistency.
+  interactivePrimary:      primitiveColors.coral[600], // #C2533A
+  interactivePrimaryHover: primitiveColors.coral[700], // #A8412C
 
   // Status — success
   successForeground: toHex(t.status.success.foreground), // #047857
@@ -68,13 +67,12 @@ export const emailColors = {
   dangerBorder:     toHex(t.status.danger.border),       // #FECACA
   dangerSubtle:     toHex(t.status.danger.subtle),       // #FEE2E2
 
-  // Status — info. Pinned to the cool `blue` ramp: the app moved status.info to
-  // teal for landing-consistency, but transactional emails keep the prior blue
-  // (out of that scope — same reasoning as the notes above).
-  infoForeground: primitiveColors.blue[700],             // #1D4ED8
-  infoBackground: primitiveColors.blue[50],              // #EFF6FF
-  infoBorder:     primitiveColors.blue[200],             // #BFDBFE
-  infoSubtle:     primitiveColors.blue[100],             // #DBEAFE
+  // Status — info follows the app's move to teal (status.info), keeping emails
+  // consistent with the in-app informational accent.
+  infoForeground: primitiveColors.teal[700],             // #1C5A52
+  infoBackground: primitiveColors.teal[50],              // #ECF6F4
+  infoBorder:     primitiveColors.teal[200],             // #A6D5CD
+  infoSubtle:     primitiveColors.teal[100],             // #CFE8E3
 
   // Status — neutral
   neutralForeground: toHex(t.status.neutral.foreground), // #4B5563
@@ -101,8 +99,9 @@ export const emailColors = {
   buttonSuccess:     '#16A34A',  // green-600
   buttonViolet:      '#7C3AED',  // violet-600
 
-  // Accent stripe colors (top of email card)
-  accentBlue:    '#2563EB',
+  // Accent stripe colors (top of email card). The default/brand stripe is the
+  // "Florida Modern" coral (renamed from accentBlue); the rest stay semantic.
+  accentBrand:   primitiveColors.coral[600], // #C2533A
   accentGreen:   '#16A34A',
   accentRed:     '#DC2626',
   accentViolet:  '#7C3AED',
@@ -120,7 +119,7 @@ export const emailColors = {
   alertSuccessBg:    '#F0FDF4',
   alertSuccessBorder:'#BBF7D0',
   alertSuccessText:  '#166534',  // green-800
-  alertInfoBg:       '#DBEAFE',
-  alertInfoBorder:   '#93C5FD',  // blue-300
-  alertInfoText:     '#1E40AF',  // blue-800
+  alertInfoBg:       primitiveColors.teal[100], // #CFE8E3
+  alertInfoBorder:   primitiveColors.teal[300], // #6FBAAF
+  alertInfoText:     primitiveColors.teal[800], // #164841
 } as const;

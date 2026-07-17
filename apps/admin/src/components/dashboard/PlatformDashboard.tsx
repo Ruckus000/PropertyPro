@@ -40,7 +40,7 @@ export function PlatformDashboard({ stats }: PlatformDashboardProps) {
           </div>
           <div className="space-y-3">
             <BillingRow label="Active" count={stats.billing.active} className="text-green-600" />
-            <BillingRow label="Trialing" count={stats.billing.trialing} className="text-blue-600" />
+            <BillingRow label="Trialing" count={stats.billing.trialing} className="text-coral-700" />
             <BillingRow label="Past Due" count={stats.billing.past_due} className="text-yellow-600" highlight={stats.billing.past_due > 0} />
             <BillingRow label="Canceled" count={stats.billing.canceled} className="text-gray-500" />
             {stats.billing.none > 0 && (
@@ -114,21 +114,21 @@ export function PlatformDashboard({ stats }: PlatformDashboardProps) {
         <div className="grid gap-3 sm:grid-cols-3">
           <Link
             href="/clients"
-            className="rounded-lg border border-gray-200 bg-white p-4 text-center hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-e1"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-center hover:border-coral-300 hover:bg-coral-50 transition-colors shadow-e1"
           >
             <Building2 size={20} className="mx-auto mb-2 text-gray-500" />
             <p className="text-sm font-medium text-gray-700">View Clients</p>
           </Link>
           <Link
             href="/demo/new"
-            className="rounded-lg border border-gray-200 bg-white p-4 text-center hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-e1"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-center hover:border-coral-300 hover:bg-coral-50 transition-colors shadow-e1"
           >
             <MonitorPlay size={20} className="mx-auto mb-2 text-gray-500" />
             <p className="text-sm font-medium text-gray-700">Create Demo</p>
           </Link>
           <Link
             href="/settings"
-            className="rounded-lg border border-gray-200 bg-white p-4 text-center hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-e1"
+            className="rounded-lg border border-gray-200 bg-white p-4 text-center hover:border-coral-300 hover:bg-coral-50 transition-colors shadow-e1"
           >
             <Users size={20} className="mx-auto mb-2 text-gray-500" />
             <p className="text-sm font-medium text-gray-700">Manage Admins</p>
@@ -151,7 +151,7 @@ function StatCard({
   href?: string;
 }) {
   const content = (
-    <div className={`rounded-lg border border-gray-200 bg-white p-5 shadow-e1 ${href ? 'hover:border-blue-300 hover:bg-blue-50 transition-colors' : ''}`}>
+    <div className={`rounded-lg border border-gray-200 bg-white p-5 shadow-e1 ${href ? 'hover:border-coral-300 hover:bg-coral-50 transition-colors' : ''}`}>
       <div className="flex items-center gap-2 text-gray-500 mb-1">
         <Icon size={16} />
         <span className="text-xs font-medium uppercase tracking-wide">{label}</span>

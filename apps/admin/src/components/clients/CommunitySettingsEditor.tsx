@@ -223,7 +223,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
               type="text"
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
               required
             />
           </div>
@@ -232,7 +232,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
             <select
               value={form.timezone}
               onChange={(e) => handleChange('timezone', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             >
               {US_TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>{tz.replace('America/', '').replace('Pacific/', '').replace(/_/g, ' ')}</option>
@@ -246,7 +246,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
               value={form.address_line1}
               onChange={(e) => handleChange('address_line1', e.target.value)}
               placeholder="Street address"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             />
           </div>
           <div>
@@ -255,7 +255,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
               type="text"
               value={form.city}
               onChange={(e) => handleChange('city', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -267,7 +267,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
                 onChange={(e) => handleChange('state', e.target.value)}
                 maxLength={2}
                 placeholder="FL"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
               />
             </div>
             <div>
@@ -277,7 +277,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
                 value={form.zip_code}
                 onChange={(e) => handleChange('zip_code', e.target.value)}
                 maxLength={10}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
               />
             </div>
           </div>
@@ -293,7 +293,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
             <select
               value={form.subscription_plan}
               onChange={(e) => handleChange('subscription_plan', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             >
               <option value="">Not set</option>
               {PLAN_IDS.map((planId) => (
@@ -306,7 +306,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
             <select
               value={form.subscription_status}
               onChange={(e) => handleChange('subscription_status', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             >
               <option value="">Not set</option>
               {SUBSCRIPTION_OPTIONS.map((s) => (
@@ -330,7 +330,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
             type="button"
             onClick={() => handleAttorneyReviewChange(!form.community_settings.electionsAttorneyReviewed)}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              form.community_settings.electionsAttorneyReviewed ? 'bg-blue-600' : 'bg-gray-200'
+              form.community_settings.electionsAttorneyReviewed ? 'bg-coral-600' : 'bg-gray-200'
             }`}
           >
             <span
@@ -366,7 +366,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
                     onClick={() => handleWriteLevel(key, 'all_members')}
                     className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
                       value === 'all_members'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-coral-600 text-white'
                         : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'
                     }`}
                   >
@@ -403,7 +403,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
             type="button"
             onClick={() => handleChange('transparency_enabled', !form.transparency_enabled)}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              form.transparency_enabled ? 'bg-blue-600' : 'bg-gray-200'
+              form.transparency_enabled ? 'bg-coral-600' : 'bg-gray-200'
             }`}
           >
             <span
@@ -420,7 +420,7 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           Save Changes

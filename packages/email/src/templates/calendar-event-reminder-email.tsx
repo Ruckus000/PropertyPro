@@ -35,7 +35,7 @@ export function CalendarEventReminderEmail({
     <EmailLayout
       branding={branding}
       previewText={previewText ?? `${eventLabel}: ${eventTitle} on ${eventDateLabel}`}
-      accentColor={emailColors.accentBlue}
+      accentColor={emailColors.accentBrand}
     >
       <Heading as="h1" style={styles.heading}>
         {eventLabel} reminder

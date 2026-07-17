@@ -117,7 +117,7 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
             <button
               type="button"
               onClick={() => setShowGrant(true)}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-2 text-sm font-medium text-white hover:bg-coral-700 transition-colors"
             >
               <Plus size={14} aria-hidden="true" />
               Grant Free Access
@@ -253,7 +253,7 @@ function AccessStatusCard({
           <button
             type="button"
             onClick={onGrant}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-2 text-sm font-medium text-white hover:bg-coral-700 transition-colors"
           >
             <Plus size={14} aria-hidden="true" />
             Grant Free Access
@@ -367,7 +367,7 @@ function GrantAccessDialog({
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -382,7 +382,7 @@ function GrantAccessDialog({
             max="90"
             value={graceDays}
             onChange={(e) => setGraceDays(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -396,7 +396,7 @@ function GrantAccessDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes about this access grant..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -417,7 +417,7 @@ function GrantAccessDialog({
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
             Grant Access
@@ -488,7 +488,7 @@ function RevokeAccessDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Optional reason for revoking access..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -583,7 +583,7 @@ function ExtendAccessDialog({
             value={months}
             onChange={(e) => setMonths(e.target.value)}
             required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -597,7 +597,7 @@ function ExtendAccessDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes about this extension..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -618,7 +618,7 @@ function ExtendAccessDialog({
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
             Extend Access
