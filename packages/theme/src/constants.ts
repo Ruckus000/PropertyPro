@@ -1,9 +1,11 @@
 import type { CommunityTheme } from './types';
 
 export const THEME_DEFAULTS: Omit<CommunityTheme, 'communityName' | 'communityType'> = {
-  primaryColor: '#2563EB',
+  // "Florida Modern" coral — the platform default brand (matches the marketing
+  // landing page). Communities may still override via branding.primaryColor.
+  primaryColor: '#C2533A',
   secondaryColor: '#6B7280',
-  accentColor: '#DBEAFE',
+  accentColor: '#F7DCD2',
   fontHeading: 'Inter',
   fontBody: 'Inter',
   logoUrl: null,

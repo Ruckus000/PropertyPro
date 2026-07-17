@@ -18,6 +18,26 @@ export const primitiveColors = {
     0: '#FFFEFC', 25: '#FDFAF6', 50: '#FBF7F1', 100: '#F6EFE6',
     200: '#EFE7DC', 300: '#E3D8C9',
   },
+  // "Florida Modern" brand ramps — the app's primary/accent palette, anchored
+  // on the marketing landing page (marketing-theme.css) so the product reads
+  // warm-coral instead of clinical tech-blue. Coral is the primary brand;
+  // teal carries informational/cool accents; gold is a highlight accent.
+  // 600 = the exact marketing anchor for each hue.
+  coral: {
+    50: '#FCF1ED', 100: '#F7DCD2', 200: '#EDB9A6', 300: '#E19478',
+    400: '#D4744F', 500: '#CB6047', 600: '#C2533A', 700: '#A8412C',
+    800: '#87331F', 900: '#68291B',
+  },
+  teal: {
+    50: '#ECF6F4', 100: '#CFE8E3', 200: '#A6D5CD', 300: '#6FBAAF',
+    400: '#3E9C8F', 500: '#2F8F83', 600: '#237066', 700: '#1C5A52',
+    800: '#164841', 900: '#123A34',
+  },
+  gold: {
+    50: '#FDF6E7', 100: '#FAE9C2', 200: '#F3D488', 300: '#EBC25A',
+    400: '#E3A93C', 500: '#CE9126', 600: '#B07A1C', 700: '#8E6216',
+    800: '#6F4C13', 900: '#5A3E12',
+  },
   green: {
     50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0',
     500: '#10B981', 600: '#059669', 700: '#047857',

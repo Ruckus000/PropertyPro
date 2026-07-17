@@ -78,6 +78,26 @@ export interface NavSection {
   items: readonly NavItemConfig[];
 }
 
+/**
+ * Resolve the dashboard destination for a community in ONE hop.
+ *
+ * /dashboard server-redirects lease-tracking (apartment) communities to
+ * /dashboard/apartment on every visit — a permanent extra round-trip through
+ * the middleware for every apartment-community click. Nav surfaces that
+ * already know the community's features should link straight to the final
+ * destination. (The onboarding-wizard redirects are deliberately kept
+ * server-side: they depend on a DB read and only affect pre-onboarding
+ * users.)
+ */
+export function resolveDashboardHref(
+  communityId: number,
+  features: CommunityFeatures | null,
+): string {
+  return features?.hasLeaseTracking
+    ? `/dashboard/apartment?communityId=${communityId}`
+    : `/dashboard?communityId=${communityId}`;
+}
+
 export const NAV_ITEMS: readonly NavItemConfig[] = [
   // ── Main ──
   {

@@ -24,8 +24,12 @@ export const emailColors = {
   textTertiary:    toHex(t.text.tertiary),         // #4B5563
   textDisabled:    toHex(t.text.disabled),         // #9CA3AF
   textInverse:     toHex(t.text.inverse),          // #FFFFFF
-  textBrand:       toHex(t.text.brand),            // #2563EB
-  textLink:        toHex(t.text.link),             // #2563EB
+  // Brand text pinned to the cool `blue` ramp. The app rebranded text.brand/
+  // link to "Florida Modern" coral for landing-consistency, but transactional
+  // emails stay on the prior blue (out of that scope — same reasoning as the
+  // Surfaces/Borders notes above).
+  textBrand:       primitiveColors.blue[600],      // #2563EB
+  textLink:        primitiveColors.blue[600],      // #2563EB
 
   // Surfaces — pinned to the cool `gray` ramp. The app's surface.* tokens
   // warmed to the `sand` ramp for landing-consistency, but transactional
@@ -39,9 +43,12 @@ export const emailColors = {
   borderDefault:   primitiveColors.gray[200],       // #E5E7EB
   borderStrong:    primitiveColors.gray[300],       // #D1D5DB
 
-  // Interactive (default fallback — overridden by branding.accentColor at runtime)
-  interactivePrimary:      toHex(t.interactive.primary),      // #2563EB
-  interactivePrimaryHover: toHex(t.interactive.primaryHover), // #1D4ED8
+  // Interactive (default fallback — overridden by branding.accentColor at runtime).
+  // Pinned to the cool `blue` ramp: the app rebranded interactive.* to coral for
+  // landing-consistency, but transactional emails stay on the prior blue (out of
+  // that scope; per-community branding still overrides via accentColor).
+  interactivePrimary:      primitiveColors.blue[600], // #2563EB
+  interactivePrimaryHover: primitiveColors.blue[700], // #1D4ED8
 
   // Status — success
   successForeground: toHex(t.status.success.foreground), // #047857
@@ -61,11 +68,13 @@ export const emailColors = {
   dangerBorder:     toHex(t.status.danger.border),       // #FECACA
   dangerSubtle:     toHex(t.status.danger.subtle),       // #FEE2E2
 
-  // Status — info
-  infoForeground: toHex(t.status.info.foreground),       // #1D4ED8
-  infoBackground: toHex(t.status.info.background),       // #EFF6FF
-  infoBorder:     toHex(t.status.info.border),           // #BFDBFE
-  infoSubtle:     toHex(t.status.info.subtle),           // #DBEAFE
+  // Status — info. Pinned to the cool `blue` ramp: the app moved status.info to
+  // teal for landing-consistency, but transactional emails keep the prior blue
+  // (out of that scope — same reasoning as the notes above).
+  infoForeground: primitiveColors.blue[700],             // #1D4ED8
+  infoBackground: primitiveColors.blue[50],              // #EFF6FF
+  infoBorder:     primitiveColors.blue[200],             // #BFDBFE
+  infoSubtle:     primitiveColors.blue[100],             // #DBEAFE
 
   // Status — neutral
   neutralForeground: toHex(t.status.neutral.foreground), // #4B5563

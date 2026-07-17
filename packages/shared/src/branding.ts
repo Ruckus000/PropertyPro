@@ -76,8 +76,10 @@ export interface CustomCssOverrides {
   bodyFont?: string;
 }
 
-/** Default branding colors used when no community branding is configured. */
-export const DEFAULT_PRIMARY_COLOR = '#2563EB';
+/** Default branding colors used when no community branding is configured.
+ *  Primary is the "Florida Modern" coral that matches the marketing landing
+ *  page (see packages/theme THEME_DEFAULTS). */
+export const DEFAULT_PRIMARY_COLOR = '#C2533A';
 export const DEFAULT_SECONDARY_COLOR = '#6B7280';
 
 /** Validates a string is a 6-digit hex color (with leading #). */

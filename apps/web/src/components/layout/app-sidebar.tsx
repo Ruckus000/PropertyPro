@@ -11,6 +11,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
   inferCanonicalRoleFromMembership,
@@ -28,6 +30,7 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  resolveDashboardHref,
   shouldUseSlimNav,
   buildSlimNavSections,
   type NavSection,
@@ -74,6 +77,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { expanded, toggleExpanded, sectionOpen, toggleSection } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
@@ -131,7 +135,11 @@ export function AppSidebar({
     href: item.planLocked
       ? undefined
       : communityId
-        ? item.href(communityId)
+        ? item.id === 'dashboard'
+          // One-hop destination: avoids the /dashboard → /dashboard/apartment
+          // server redirect for lease-tracking communities.
+          ? resolveDashboardHref(communityId, features)
+          : item.href(communityId)
         : '/select-community',
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
     trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
@@ -254,6 +262,8 @@ export function AppSidebar({
               onClick?.();
               onNavigate?.();
             }}
+            onPointerEnter={() => prefetchNavData(queryClient, href, communityId)}
+            onFocus={() => prefetchNavData(queryClient, href, communityId)}
             {...props}
           >
             {children}
