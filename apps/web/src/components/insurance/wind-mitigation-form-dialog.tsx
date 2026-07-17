@@ -22,6 +22,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useDocuments } from '@/hooks/use-documents';
+import { useDocumentCategories } from '@/hooks/useDocumentCategories';
 import {
   useCreateWindMitigationReport,
   useUpdateWindMitigationReport,
@@ -74,6 +75,22 @@ export function WindMitigationFormDialog({
     communityId,
     enabled: open,
   });
+  // Wind-mitigation inspections realistically land in one of two seeded
+  // categories — "Inspection Reports" (where a structural/milestone PDF
+  // naturally goes) or "Insurance" — so the picker defaults to showing both
+  // rather than every board-minutes document. "All documents" stays reachable
+  // so nothing a board filed elsewhere is ever hidden.
+  const { resolveCategoryId } = useDocumentCategories(communityId);
+  const relevantCategoryIds = React.useMemo(
+    () =>
+      new Set(
+        [resolveCategoryId('Inspection Reports'), resolveCategoryId('Insurance')].filter(
+          (id): id is number => id !== null,
+        ),
+      ),
+    [resolveCategoryId],
+  );
+
   const createReport = useCreateWindMitigationReport(communityId);
   const updateReport = useUpdateWindMitigationReport(communityId);
 
@@ -87,12 +104,38 @@ export function WindMitigationFormDialog({
   const [inspectorLicense, setInspectorLicense] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
+  const [docScope, setDocScope] = React.useState<'relevant' | 'all'>('relevant');
+
+  const allDocuments = React.useMemo(() => documents ?? [], [documents]);
+  // Show the relevant-category documents by default; fall back to the full list
+  // when the board hasn't filed the inspection in either category (so the
+  // "relevant" view is never a dead end), or when they explicitly pick "all".
+  const relevantDocuments = React.useMemo(
+    () =>
+      allDocuments.filter(
+        (doc) => doc.categoryId !== null && relevantCategoryIds.has(doc.categoryId),
+      ),
+    [allDocuments, relevantCategoryIds],
+  );
+  const visibleDocuments =
+    docScope === 'all' || relevantDocuments.length === 0 ? allDocuments : relevantDocuments;
+  // The currently-selected document (edit mode, or after a pick then a scope
+  // switch) must stay in the list even if the active scope would filter it
+  // out — otherwise the Select renders blank and the value looks lost.
+  const pickerOptions = React.useMemo(() => {
+    if (!documentId || visibleDocuments.some((doc) => String(doc.id) === documentId)) {
+      return visibleDocuments;
+    }
+    const selected = allDocuments.find((doc) => String(doc.id) === documentId);
+    return selected ? [selected, ...visibleDocuments] : visibleDocuments;
+  }, [documentId, visibleDocuments, allDocuments]);
 
   // Reset the form whenever the dialog opens, so a create never inherits the
   // previously-edited record's values.
   React.useEffect(() => {
     if (!open) return;
     setError(null);
+    setDocScope('relevant');
     setDocumentId(editing ? String(editing.documentId) : '');
     setFormType(editing?.formType ?? 'oir_b1_1802');
     setFormVersion(editing?.formVersion ?? '2026_04');
@@ -171,7 +214,21 @@ export function WindMitigationFormDialog({
           {error && <AlertBanner status="danger" title={error} />}
 
           <div className="space-y-2">
-            <Label htmlFor="wm-document">Inspection report *</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="wm-document">Inspection report *</Label>
+              {/* Only offer the scope toggle once it can change the list: there
+                  are relevant-category docs AND other docs it would otherwise
+                  hide. */}
+              {relevantDocuments.length > 0 && relevantDocuments.length < allDocuments.length && (
+                <button
+                  type="button"
+                  className="text-sm font-medium text-interactive hover:underline"
+                  onClick={() => setDocScope((s) => (s === 'relevant' ? 'all' : 'relevant'))}
+                >
+                  {docScope === 'relevant' ? 'Show all documents' : 'Show insurance documents only'}
+                </button>
+              )}
+            </div>
             <Select value={documentId} onValueChange={setDocumentId}>
               <SelectTrigger id="wm-document">
                 <SelectValue
@@ -179,14 +236,14 @@ export function WindMitigationFormDialog({
                 />
               </SelectTrigger>
               <SelectContent>
-                {(documents ?? []).map((doc) => (
+                {pickerOptions.map((doc) => (
                   <SelectItem key={doc.id} value={String(doc.id)}>
                     {doc.title}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {!documentsLoading && (documents ?? []).length === 0 && (
+            {!documentsLoading && allDocuments.length === 0 && (
               <p className="text-sm text-content-tertiary">
                 No documents yet — upload the inspection PDF to your document library first.
               </p>
