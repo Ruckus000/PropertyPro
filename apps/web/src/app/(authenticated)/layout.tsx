@@ -7,7 +7,6 @@ import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppShell } from '@/components/layout/app-shell';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import { AppQueryProvider } from '@/components/providers/query-provider';
-import { MotionProvider } from '@/components/providers/motion-provider';
 import { SupportBanner } from '@/components/support/SupportBanner';
 import { getPageShellBranding, getPageShellContext } from '@/lib/request/page-shell-context';
 
@@ -64,11 +63,9 @@ export default async function AuthenticatedLayout({
         <AuthSessionSync />
         <IdleSessionManager role={role} />
         <AppQueryProvider>
-          <MotionProvider>
-            <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
-              {children}
-            </AppShell>
-          </MotionProvider>
+          <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
+            {children}
+          </AppShell>
         </AppQueryProvider>
       </div>
     </>

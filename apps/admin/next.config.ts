@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
     '@propertypro/theme',
     '@propertypro/tokens',
   ],
+  experimental: {
+    // Tree-shake barrel imports from the workspace packages (lucide-react
+    // et al. are already in Next 15.5's built-in default list).
+    optimizePackageImports: ['@propertypro/ui', '@propertypro/shared'],
+  },
   env: {
     NEXT_PUBLIC_APP_ROLE: 'admin',
   },

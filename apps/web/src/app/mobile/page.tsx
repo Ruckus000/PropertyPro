@@ -13,7 +13,6 @@ import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
-import { TenantDashboardMockup } from '@/components/mobile/TenantDashboardMockup';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -50,7 +49,11 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
   // block-model render contract.
   // No published template — preview shows branded mockup, auth'd shows real dashboard
   if (isPreview) {
-    const [branding, community] = await Promise.all([
+    // Lazy import: the preview-only mockup must not ship in the authed
+    // mobile-home client bundle (it is only rendered inside the admin
+    // preview iframe).
+    const [{ TenantDashboardMockup }, branding, community] = await Promise.all([
+      import('@/components/mobile/TenantDashboardMockup'),
       getBrandingForCommunity(communityId),
       getCommunityPublicInfo(communityId),
     ]);
