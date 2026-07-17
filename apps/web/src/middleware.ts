@@ -94,6 +94,10 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/signup', method: 'POST' },
   { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
   { path: '/api/v1/internal/calendar-event-reminders', method: 'POST' },
+  // Snowbird digest cron: Bearer-token-authenticated, called by the scheduled job
+  { path: '/api/v1/internal/snowbird-digest', method: 'POST' },
+  // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
+  { path: '/api/v1/snowbird-digest/unsubscribe', method: 'GET' },
   // Stripe webhook: signature-verified by handler, no session required [P2-34]
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
