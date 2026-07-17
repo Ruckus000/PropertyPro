@@ -98,8 +98,8 @@ export const semanticColors = {
     },
     // NOTE: `premium` (gold accent) is deliberately NOT a StatusVariant — it has
     // no status icon and isn't a domain status. Its --status-premium* CSS vars
-    // are generated from tokens (semantic.ts) and consumed via Tailwind classes
-    // (bg-status-premium-subtle / text-status-premium) by ProBadge.
+    // are generated from tokens (semantic.ts) and consumed via the
+    // --status-premium* var()s by PlanBadge (the plan-gate pill).
   },
 } as const;
 

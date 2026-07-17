@@ -50,7 +50,7 @@ packages/tokens/src/          generated packages/ui/src/styles/tokens.css   pack
 | Interactive | `--interactive-primary` | Primary actions (theme-overridable) |
 | Interactive | `--interactive-primary-hover` | Primary hover state |
 | Status | `--status-success-*` / `--status-danger-*` / `--status-warning-*` | fg/bg/border per status |
-| Accent | `--status-premium-*` | "Florida Modern" gold — Professional-tier / premium markers (see `ProBadge`). Not a status variant (no icon); consumed via `bg-status-premium-subtle` / `text-status-premium`. |
+| Accent | `--status-premium-*` | "Florida Modern" gold — Professional-tier / premium markers (see `PlanBadge`). Not a status variant (no icon); consumed via `bg-status-premium-subtle` / `text-status-premium` (or `var()` refs in shared UI). |
 
 `--surface-page-warm` is a purpose-named primitive for the page surface, not the start of a new neutral scale family. The project still uses `--gray-*` as its only neutral scale.
 
