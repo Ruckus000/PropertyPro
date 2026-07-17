@@ -60,9 +60,9 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
     return (
       <TenantDashboardMockup
         communityName={community?.name ?? 'Community'}
-        primaryColor={branding?.primaryColor ?? '#2563EB'}
-        secondaryColor={branding?.secondaryColor ?? '#1E40AF'}
-        accentColor={branding?.accentColor ?? '#DBEAFE'}
+        primaryColor={branding?.primaryColor ?? '#C2533A'}
+        secondaryColor={branding?.secondaryColor ?? '#A8412C'}
+        accentColor={branding?.accentColor ?? '#F7DCD2'}
         fontHeading={branding?.fontHeading ?? 'Inter'}
         fontBody={branding?.fontBody ?? 'Inter'}
       />
