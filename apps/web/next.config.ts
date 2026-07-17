@@ -44,6 +44,13 @@ const nextConfig: NextConfig = {
     "@propertypro/theme",
     "@propertypro/tokens",
   ],
+  experimental: {
+    // Tree-shake barrel imports from the workspace packages so importing one
+    // component doesn't pull the whole barrel into every route chunk.
+    // (lucide-react, date-fns, and recharts are already in Next 15.5's
+    // built-in default list — do not re-add them here.)
+    optimizePackageImports: ["@propertypro/ui", "@propertypro/shared"],
+  },
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",
   },
