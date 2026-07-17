@@ -68,7 +68,13 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   "Florida Modern" coral for cross-surface brand consistency (`coral-*` classes,
   which the guard does not count; informational blue status badges — Trial,
   Cancelled, Converted, community-type/plan chips — intentionally kept blue), and
-  the admin baseline was ratcheted down to lock in that drain. Also frozen:
+  the admin baseline was ratcheted down to lock in that drain. **Mobile** got the
+  same scoped brand exception: its demo-preview mockup brand defaults
+  (`app/mobile/page.tsx`) were swapped tech-blue → coral (hex→hex, baseline counts
+  unchanged); mobile chrome stays warm-stone neutral (`mobile.css`) with
+  status-blue badges kept — no other mobile de-blueing was needed since its
+  brand hue already flows through the coral `--interactive-primary`/`--theme-primary`
+  tokens. Also frozen:
   `dark:` raw-palette variants layered on semantic base classes
   (select-community/page.tsx, app/layout.tsx, CommandItem.tsx,
   announcement-feed/toolbar.tsx, ui/chart.tsx) — dark mode is explicitly out of

@@ -155,5 +155,14 @@ export const tokenDefinitions = {
       border:     prim('pink', 200),
       subtle:     prim('pink', 100),
     },
+    // "Florida Modern" gold accent — marks Professional-tier / premium features
+    // (the reserved gold ramp's semantic home). Foreground on gold 800 (not 700)
+    // so small "Pro" badge text clears WCAG AA on the gold-100 subtle tint.
+    premium: {
+      foreground: prim('gold', 800),
+      background: prim('gold', 50),
+      border:     prim('gold', 200),
+      subtle:     prim('gold', 100),
+    },
   },
 } as const;
