@@ -101,6 +101,8 @@ export const communities = pgTable('communities', {
   transparencyEnabled: boolean('transparency_enabled').notNull().default(false),
   /** Timestamp when transparency scope disclosure was acknowledged by an authorized user. */
   transparencyAcknowledgedAt: timestamp('transparency_acknowledged_at', { withTimezone: true }),
+  /** Snowbird digest board opt-in — when true, owners receive the periodic recap unless they opt out. */
+  snowbirdDigestEnabled: boolean('snowbird_digest_enabled').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -52,6 +52,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
     hasInsuranceHub: true,
+    hasSnowbirdDigest: true,
   },
   hoa_720: {
     hasCompliance: true,
@@ -84,6 +85,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
     hasInsuranceHub: true,
+    hasSnowbirdDigest: true,
   },
   apartment: {
     hasCompliance: false,
@@ -118,5 +120,8 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     // Apartments have no owner-occupied units and no association master
     // policy to share — the insurance hub is condo/HOA only.
     hasInsuranceHub: false,
+    // Seasonal/absentee residents exist in every community type, so the digest
+    // is available everywhere (the board still enables it per community).
+    hasSnowbirdDigest: true,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;
