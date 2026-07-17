@@ -61,9 +61,13 @@ export const tokenDefinitions = {
     disabled:    prim('gray', 400),
     placeholder: prim('gray', 400),
     inverse:     prim('gray', 0),
-    brand:       prim('blue', 600),
-    link:        prim('blue', 600),
-    linkHover:   prim('blue', 700),
+    // Text uses the DARKER coral (700 = the landing page's --mk-coral-d, used
+    // there for text/links) so brand text/links clear WCAG AA 4.5:1 on the warm
+    // off-white surfaces and the coral status tint. Button FILLS stay on coral
+    // 600 (interactive.primary) where white text needs the mid step.
+    brand:       prim('coral', 700),
+    link:        prim('coral', 700),
+    linkHover:   prim('coral', 800),
   },
   // Surfaces warm to the `sand` ramp so the app canvas/cards feel consistent
   // with the marketing cream palette instead of clinical-cool. Inverse
@@ -86,18 +90,18 @@ export const tokenDefinitions = {
     subtle:  prim('sand', 100),
     strong:  prim('sand', 300),
     muted:   prim('sand', 50),
-    focus:   prim('blue', 500),
+    focus:   prim('coral', 500),
     error:   prim('red', 500),
   },
-  brandAccent: theme('--theme-accent', 'blue', 200),
+  brandAccent: theme('--theme-accent', 'coral', 200),
   interactive: {
-    primary:      theme('--theme-primary', 'blue', 600),
-    primaryHover: theme('--theme-primary-hover', 'blue', 700),
-    primaryActive: prim('blue', 800),
+    primary:      theme('--theme-primary', 'coral', 600),
+    primaryHover: theme('--theme-primary-hover', 'coral', 700),
+    primaryActive: prim('coral', 800),
     disabled:      prim('gray', 300),
-    subtle:        prim('blue', 50),
-    subtleHover:   prim('blue', 100),
-    muted:         prim('blue', 100),
+    subtle:        prim('coral', 50),
+    subtleHover:   prim('coral', 100),
+    muted:         prim('coral', 100),
   },
   status: {
     success: {
@@ -107,10 +111,13 @@ export const tokenDefinitions = {
       subtle:     prim('green', 100),
     },
     brand: {
-      foreground: theme('--theme-primary', 'blue', 600),
-      background: prim('blue', 50),
-      border:     prim('blue', 200),
-      subtle:     prim('blue', 100),
+      // Fallback on coral 700 (not 600): this foreground renders as TEXT on the
+      // coral-50 tint (alert-banner brand variant, community cards), where 600
+      // is only ~4.1:1. 700 clears AA. Community --theme-primary still overrides.
+      foreground: theme('--theme-primary', 'coral', 700),
+      background: prim('coral', 50),
+      border:     prim('coral', 200),
+      subtle:     prim('coral', 100),
     },
     warning: {
       foreground: prim('amber', 700),
@@ -125,10 +132,10 @@ export const tokenDefinitions = {
       subtle:     prim('red', 100),
     },
     info: {
-      foreground: prim('blue', 700),
-      background: prim('blue', 50),
-      border:     prim('blue', 200),
-      subtle:     prim('blue', 100),
+      foreground: prim('teal', 700),
+      background: prim('teal', 50),
+      border:     prim('teal', 200),
+      subtle:     prim('teal', 100),
     },
     neutral: {
       foreground: prim('gray', 600),

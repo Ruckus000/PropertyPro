@@ -12,12 +12,12 @@ import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 describe('Mobile theme injection — resolveTheme', () => {
   it('returns default primary color when branding is null', () => {
     const theme = resolveTheme(null, 'Sunset Condos', 'condo_718');
-    expect(theme.primaryColor).toBe('#2563EB');
+    expect(theme.primaryColor).toBe('#C2533A');
   });
 
   it('returns default primary color when branding is undefined', () => {
     const theme = resolveTheme(undefined, 'Palm Shores HOA', 'hoa_720');
-    expect(theme.primaryColor).toBe('#2563EB');
+    expect(theme.primaryColor).toBe('#C2533A');
   });
 
   it('picks up custom primaryColor from branding', () => {
@@ -35,7 +35,7 @@ describe('Mobile theme injection — resolveTheme', () => {
       'Bad Actor HOA',
       'hoa_720',
     );
-    expect(theme.primaryColor).toBe('#2563EB');
+    expect(theme.primaryColor).toBe('#C2533A');
   });
 
   it('rejects invalid font names and falls back to Inter', () => {
@@ -74,7 +74,7 @@ describe('Mobile theme injection — toCssVars', () => {
   it('includes default --theme-primary when no custom branding', () => {
     const theme = resolveTheme(null, 'Default Community', 'condo_718');
     const cssVars = toCssVars(theme);
-    expect(cssVars['--theme-primary']).toBe('#2563EB');
+    expect(cssVars['--theme-primary']).toBe('#C2533A');
   });
 
   it('includes all required CSS variable keys', () => {
