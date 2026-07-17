@@ -30,6 +30,7 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  resolveDashboardHref,
   shouldUseSlimNav,
   buildSlimNavSections,
   type NavSection,
@@ -134,7 +135,11 @@ export function AppSidebar({
     href: item.planLocked
       ? undefined
       : communityId
-        ? item.href(communityId)
+        ? item.id === 'dashboard'
+          // One-hop destination: avoids the /dashboard → /dashboard/apartment
+          // server redirect for lease-tracking communities.
+          ? resolveDashboardHref(communityId, features)
+          : item.href(communityId)
         : '/select-community',
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
     trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
