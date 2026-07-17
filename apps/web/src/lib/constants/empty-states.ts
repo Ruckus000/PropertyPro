@@ -146,6 +146,19 @@ export const EMPTY_STATE_CONFIGS = {
     description: "No items currently require your attention.",
     icon: "check",
   },
+  wind_mitigation_empty_admin: {
+    title: "Share your wind-mitigation report",
+    description:
+      "Upload the building's inspection once — every owner can then hand it to their insurer to ask about wind-mitigation credits.",
+    actionLabel: "Add Report",
+    icon: "shield-check",
+  },
+  wind_mitigation_empty_resident: {
+    title: "No wind-mitigation report yet",
+    description:
+      "Your board hasn't posted the building's wind-mitigation inspection. Ask them about it — the report can help you ask your insurer about wind-mitigation credits.",
+    icon: "shield-check",
+  },
 } as const satisfies Record<string, EmptyStateConfig>;
 
 export type EmptyStateKey = keyof typeof EMPTY_STATE_CONFIGS;

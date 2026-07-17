@@ -14,6 +14,7 @@ import {
   Vote,
   BriefcaseBusiness,
   Shield,
+  Umbrella,
   History,
   Building2,
   Paintbrush,
@@ -247,6 +248,22 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/contracts'],
   },
   {
+    id: 'insurance',
+    label: 'Insurance',
+    icon: Umbrella,
+    // Path-scoped tenancy: the [id] segment is authoritative, no query param.
+    href: (cid) => `/communities/${cid}/insurance`,
+    // Intentionally NO `roles` gate — every owner needs to reach the building's
+    // wind-mitigation report to share it with their own insurer. Management
+    // controls inside the page are admin-gated.
+    featureKey: 'hasInsuranceHub',
+    navTier: 'more',
+    // Bare segment, matching the `documents`/`meetings` convention: active-state
+    // matching is endsWith/includes-based, so '/communities/' would light this
+    // item up on every nested community route.
+    matchPrefixes: ['/insurance'],
+  },
+  {
     id: 'esign',
     label: 'E-Sign',
     icon: FileSignature,
@@ -320,7 +337,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // also live in a section so `AppSidebar` has a fallback top-level placement when
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
-  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations']),
+  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance']),
   navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
   navSection('Admin', [
     'compliance',
@@ -623,6 +640,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   operations: { title: 'Operations', subtitle: 'Requests, work orders, and reservations' },
   compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
+  insurance: { title: 'Insurance', subtitle: 'Building policies & wind mitigation' },
   esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
   'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
   'violations-inbox': { title: 'Violations', subtitle: 'Review & manage violations' },

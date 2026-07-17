@@ -75,6 +75,9 @@ describe('buildSlimNavSections', () => {
     expect(moreIds).toEqual([
       'board',
       'operations',
+      // Insurance hub ships on Essentials (it's a retention feature, not an
+      // upsell), so it is visible-but-demoted rather than plan-gated away.
+      'insurance',
       'packages',
       'visitors',
       'payments',

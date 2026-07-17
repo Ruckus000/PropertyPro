@@ -46,6 +46,7 @@ export const COMMUNITY_FEATURE_KEYS = [
   'hasSiteCustomCss',
   'hasSiteCustomDomain',
   'hasSitePortfolioTemplates',
+  'hasInsuranceHub',
 ] as const;
 
 export type CommunityFeatureKey = (typeof COMMUNITY_FEATURE_KEYS)[number];

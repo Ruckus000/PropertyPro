@@ -47,6 +47,9 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasAnnouncements: true,
       hasEmergencyNotifications: true,
       hasSiteEditor: true,
+      // Insurance hub ships on every condo/HOA plan including the entry tier:
+      // it is a differentiation/retention feature, not an upsell lever.
+      hasInsuranceHub: true,
     },
     maxAdmins: 3,
     displayName: 'Essentials',
@@ -86,6 +89,7 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSitePolishBlocks: true,
       hasSiteCustomCss: true,
       hasSiteCustomDomain: true,
+      hasInsuranceHub: true,
     },
     maxAdmins: Infinity,
     displayName: 'Professional',
