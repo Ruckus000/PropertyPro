@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useDocuments } from '@/hooks/use-documents';
 import { useDocumentCategories } from '@/hooks/useDocumentCategories';
@@ -30,6 +31,8 @@ import {
 import {
   WIND_MITIGATION_EXPIRY_HINT,
   WIND_MITIGATION_FORM_FAMILY_HINT,
+  WIND_MITIGATION_NOTES_REDACTION_HINT,
+  WIND_MITIGATION_REDACTION_ATTESTATION,
 } from '@/lib/constants/insurance-disclaimers';
 import {
   WIND_MITIGATION_FORM_LABELS,
@@ -105,6 +108,9 @@ export function WindMitigationFormDialog({
   const [notes, setNotes] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [docScope, setDocScope] = React.useState<'relevant' | 'all'>('relevant');
+  // Redaction attestation must be re-confirmed on every open — including edits,
+  // since the notes/PDF may have changed (legal review blocker #3).
+  const [redactionConfirmed, setRedactionConfirmed] = React.useState(false);
 
   const allDocuments = React.useMemo(() => documents ?? [], [documents]);
   // Show the relevant-category documents by default; fall back to the full list
@@ -136,6 +142,7 @@ export function WindMitigationFormDialog({
     if (!open) return;
     setError(null);
     setDocScope('relevant');
+    setRedactionConfirmed(false);
     setDocumentId(editing ? String(editing.documentId) : '');
     setFormType(editing?.formType ?? 'oir_b1_1802');
     setFormVersion(editing?.formVersion ?? '2026_04');
@@ -355,13 +362,27 @@ export function WindMitigationFormDialog({
               maxLength={2000}
               rows={3}
             />
+            {/* Members-wide records surface — no resident personal data
+                (legal review blocker #3, §718.111(12)(c)/§720.303(5)). */}
+            <p className="text-xs text-content-tertiary">{WIND_MITIGATION_NOTES_REDACTION_HINT}</p>
           </div>
+
+          {/* Upload-time redaction attestation (legal review blocker #3). */}
+          <label htmlFor="wm-redaction" className="flex items-start gap-2 text-sm text-content-secondary">
+            <Checkbox
+              id="wm-redaction"
+              checked={redactionConfirmed}
+              onCheckedChange={(v) => setRedactionConfirmed(v === true)}
+              className="mt-0.5"
+            />
+            <span>{WIND_MITIGATION_REDACTION_ATTESTATION}</span>
+          </label>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || !redactionConfirmed}>
               {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Report'}
             </Button>
           </DialogFooter>

@@ -479,15 +479,17 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     },
   },
   // Insurance hub: wind-mitigation reports and master-policy summary.
-  // Read is open to every role — the whole point is that owners retrieve the
-  // building's wind-mit report to hand to their own insurer. Write is
-  // admin-tier (same shape as contracts): only the board posts building-level
-  // insurance records. Apartments are excluded at the feature-flag layer
-  // (hasInsuranceHub), so the matrix stays uniform across community types.
+  // Read is open to OWNERS (they retrieve the building's report for their own
+  // insurer) and admin-tier; TENANTS are excluded. Legal review (2026-07-17)
+  // ruled tenant read a §718.111(12)(c)/(g) breach — that records section is
+  // statutorily "unit owners and employees only", and the report carries an
+  // unredacted notes field + inspector license number. Write is admin-tier
+  // (same shape as contracts). Apartments are excluded at the feature-flag
+  // layer (hasInsuranceHub), so the matrix stays uniform across community types.
   insurance: {
     policy: {
       owner:                  { read: true,  write: false },
-      tenant:                 { read: true,  write: false },
+      tenant:                 { read: false, write: false },
       board_member:           { read: true,  write: true  },
       board_president:        { read: true,  write: true  },
       cam:                    { read: true,  write: true  },

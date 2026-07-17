@@ -14,6 +14,9 @@ import {
 } from '@/hooks/use-wind-mitigation';
 import {
   WIND_MITIGATION_DISCLAIMER,
+  WIND_MITIGATION_CARD_DISCLAIMER,
+  WIND_MITIGATION_EXPIRED_WARNING,
+  WIND_MITIGATION_EXPIRY_CAPTION,
   buildWindMitigationAgentEmail,
 } from '@/lib/constants/insurance-disclaimers';
 import {
@@ -83,15 +86,32 @@ function ReportCard({
   const deleteReport = useDeleteWindMitigationReport(communityId);
   const badge = expiryBadge(report.expiryBand, report.daysUntilExpiry);
 
+  const isExpired = report.expiryBand === 'expired';
+
   // The owner mails their own agent from their own client: PropertyPro hands
   // them a pre-written message rather than contacting an insurer on their
-  // behalf. Copy is attorney-reviewed (insurance-disclaimers.ts).
+  // behalf. Copy is attorney-reviewed (insurance-disclaimers.ts). The email now
+  // carries the validity/expiry date and an expired-form warning (legal
+  // review #1/#5) so the caveat travels with the transmission, not just the
+  // on-screen badge.
   const agentEmail = buildWindMitigationAgentEmail({
     communityName,
     buildingLabel: report.buildingLabel,
     inspectedAt: formatIsoDate(report.inspectedAt),
+    expiresAt: formatIsoDate(report.expiresAt),
+    isExpired,
   });
   const mailtoHref = `mailto:?subject=${encodeURIComponent(agentEmail.subject)}&body=${encodeURIComponent(agentEmail.body)}`;
+  const downloadHref = `/api/v1/documents/${report.documentId}/download?communityId=${communityId}&attachment=true`;
+
+  // Legal-review blocker #1: gate Download + Send behind an expiry interstitial
+  // when the form is expired, so the owner is warned at the point of
+  // transmission. For a current form the plain links are used unchanged.
+  const guardExpired = (proceed: () => void) => {
+    if (!isExpired || window.confirm(WIND_MITIGATION_EXPIRED_WARNING(formatIsoDate(report.expiresAt)))) {
+      proceed();
+    }
+  };
 
   return (
     <Card>
@@ -112,7 +132,9 @@ function ReportCard({
       <CardContent className="space-y-4">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <div className="flex justify-between gap-2 sm:block">
-            <dt className="text-content-tertiary">Valid until</dt>
+            {/* 'Expires' not 'Valid until' — the latter asserts insurer-acceptance
+                fact (legal review #7). Caption reframes the date as a guideline. */}
+            <dt className="text-content-tertiary">Expires</dt>
             <dd className="text-content">{formatIsoDate(report.expiresAt)}</dd>
           </div>
           {report.inspectorName && (
@@ -125,26 +147,24 @@ function ReportCard({
             </div>
           )}
         </dl>
+        <p className="text-xs text-content-tertiary">{WIND_MITIGATION_EXPIRY_CAPTION}</p>
 
         {report.notes && <p className="text-sm text-content-secondary">{report.notes}</p>}
 
         <div className="flex flex-wrap gap-2">
           {/* Reuses the existing signed-URL download route — 1-hour TTL, audited.
-              communityId is required by that route's contract (it 400s without
-              it), matching every other download caller in the app. */}
-          <Button asChild size="sm">
-            <a
-              href={`/api/v1/documents/${report.documentId}/download?communityId=${communityId}&attachment=true`}
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Download Report
-            </a>
+              An expired report interstitials both actions (legal review #1). */}
+          <Button size="sm" onClick={() => guardExpired(() => { window.location.href = downloadHref; })}>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Download Report
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <a href={mailtoHref}>
-              <Mail className="h-4 w-4" aria-hidden="true" />
-              Send to My Insurance Agent
-            </a>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => guardExpired(() => { window.location.href = mailtoHref; })}
+          >
+            <Mail className="h-4 w-4" aria-hidden="true" />
+            Send to My Insurance Agent
           </Button>
 
           {canManage && (
@@ -160,7 +180,7 @@ function ReportCard({
                 onClick={() => {
                   if (
                     window.confirm(
-                      'Remove this report from the locker? Owners will no longer see it. The uploaded document stays in your document library.',
+                      'Remove this report from the wind-mitigation locker? Owners will no longer see it here. The uploaded document remains in your document library and part of your association records — removing it here does not affect your record-retention or records-request obligations.',
                     )
                   ) {
                     deleteReport.mutate(report.id);
@@ -173,6 +193,10 @@ function ReportCard({
             </>
           )}
         </div>
+
+        {/* Per-card no-advice / no-promise hedge travels with the actions
+            (legal review #6), not just the section header. */}
+        <p className="text-xs text-content-tertiary">{WIND_MITIGATION_CARD_DISCLAIMER}</p>
       </CardContent>
     </Card>
   );

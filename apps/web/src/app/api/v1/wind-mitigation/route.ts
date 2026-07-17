@@ -62,15 +62,30 @@ function requireInsuranceHubCommunity(communityType: CommunityType): void {
 }
 
 /**
+ * The maximum validity span a board may record, in days. Wind-mitigation forms
+ * are generally accepted for ~5 years; this caps the window slightly above that
+ * so a board cannot render an implausible multi-year "Expires" date the UI
+ * would present as authoritative fact (legal review #7). A shorter window is
+ * always allowed — the exact period is the insurer's call.
+ */
+const MAX_INSPECTION_WINDOW_DAYS = 366 * 6; // ~6 years, leap-safe headroom over the 5-year norm
+
+/**
  * A report's validity window must be coherent, or the expiry banding and the
- * board's re-inspection alerts are meaningless. Deliberately NOT enforcing a
- * 5-year span: the exact validity period is the insurer's call, and boards
- * occasionally record a shorter window on purpose.
+ * board's re-inspection alerts are meaningless.
  */
 function validateInspectionWindow(inspectedAt: string, expiresAt: string): void {
   if (expiresAt <= inspectedAt) {
     // ISO YYYY-MM-DD strings compare lexicographically — no Date needed.
     throw new ValidationError('expiresAt must be after inspectedAt');
+  }
+  const spanDays = Math.round(
+    (Date.parse(`${expiresAt}T00:00:00Z`) - Date.parse(`${inspectedAt}T00:00:00Z`)) / 86_400_000,
+  );
+  if (spanDays > MAX_INSPECTION_WINDOW_DAYS) {
+    throw new ValidationError(
+      'expiresAt is too far after inspectedAt — wind-mitigation forms are generally valid about five years',
+    );
   }
 }
 
