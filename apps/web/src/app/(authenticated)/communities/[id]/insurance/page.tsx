@@ -18,6 +18,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { PageHeader } from '@/components/shared/page-header';
+import { InsuranceSummarySection } from '@/components/insurance/insurance-summary-section';
 import { WindMitigationSection } from '@/components/insurance/wind-mitigation-section';
 
 interface PageProps {
@@ -51,10 +52,14 @@ export default async function InsurancePage({ params }: PageProps) {
       <PageHeader
         breadcrumb={<Breadcrumbs currentLabel="Insurance" />}
         title="Insurance"
-        description="Wind-mitigation inspection reports for your building. These are inspection records, not the association's insurance policy, and say nothing about whether coverage is adequate."
+        description="Your association's master-policy summary and wind-mitigation reports. These are records for your reference — the insurer's policy and agent-issued documents control, and nothing here says whether coverage is adequate."
       />
 
-      <div className="mt-8">
+      <div className="mt-8 space-y-12">
+        <InsuranceSummarySection
+          communityId={communityId}
+          canManage={isAdminRole(membership.role)}
+        />
         <WindMitigationSection
           communityId={communityId}
           communityName={membership.communityName}

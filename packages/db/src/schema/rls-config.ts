@@ -80,6 +80,16 @@ export const RLS_TENANT_TABLES = [
     notes: 'Self-service digest cadence/opt-out. A user reads and mutates only their own row (auth.uid()); admin-tier sees all for support. The cron reads cross-tenant via the privileged client.',
   },
   {
+    tableName: 'insurance_policies',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Per-community master-policy summary. SELECT open to community members (owners retrieve it for lender verification); the insurance:read RBAC gate excludes tenants at the route layer. Writes are admin-tier via requirePermission(insurance, write).',
+  },
+  {
+    tableName: 'insurance_certificate_requests',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'Owner-submitted certificate-request relays. SELECT/UPDATE/DELETE scoped to requested_by = auth.uid() for non-admins; admin-tier sees all. INSERT is community-membership-scoped so owners can create; the route gates on insurance:read + rate-limits.',
+  },
+  {
     tableName: 'wind_mitigation_reports',
     policyFamily: 'tenant_admin_write',
     notes: 'Building-level wind-mitigation inspection records. SELECT open to all community members (owners retrieve the report for their own insurer); writes restricted to ADMIN_ROLES via requirePermission(insurance, write) in the wind-mitigation route.',
@@ -306,7 +316,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 56;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 58;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

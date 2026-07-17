@@ -45,6 +45,9 @@ export type {
   SnowbirdDigestItem,
 } from "./templates/snowbird-digest-email";
 
+export { CertificateRequestEmail } from "./templates/certificate-request-email";
+export type { CertificateRequestEmailProps } from "./templates/certificate-request-email";
+
 export { SignupVerificationEmail } from "./templates/signup-verification-email";
 export type { SignupVerificationEmailProps } from "./templates/signup-verification-email";
 
