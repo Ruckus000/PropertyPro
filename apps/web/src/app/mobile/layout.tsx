@@ -14,7 +14,6 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { type CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
-import { MotionProvider } from '@/components/providers/motion-provider';
 import { AppQueryProvider } from '@/components/providers/query-provider';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import { SubscriptionBillingBannersMobile } from '@/components/billing/subscription-billing-banners';
@@ -82,31 +81,29 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
       ))}
       <div className="mobile-shell" style={cssVars as React.CSSProperties}>
         <AppQueryProvider>
-          <MotionProvider>
-            <SubscriptionBillingBannersMobile
-              role={role}
-              communityId={communityId}
-              subscriptionStatus={subscriptionStatus}
-              subscriptionCanceledAt={subscriptionCanceledAt}
-              subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt}
-              freeAccessExpiresAt={freeAccessExpiresAt}
-              isDemo={isDemo}
+          <SubscriptionBillingBannersMobile
+            role={role}
+            communityId={communityId}
+            subscriptionStatus={subscriptionStatus}
+            subscriptionCanceledAt={subscriptionCanceledAt}
+            subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt}
+            freeAccessExpiresAt={freeAccessExpiresAt}
+            isDemo={isDemo}
+          />
+          <main id="main-content" className="mobile-content">
+            {children}
+          </main>
+          {demoInfo && (
+            <DemoTrialBanner
+              isDemoMode={demoInfo.isDemoMode}
+              currentRole={demoInfo.currentRole}
+              slug={demoInfo.slug}
+              status={demoInfo.status}
+              trialEndsAt={demoInfo.trialEndsAt}
+              demoExpiresAt={demoInfo.demoExpiresAt}
+              communityType={demoInfo.communityType}
             />
-            <main id="main-content" className="mobile-content">
-              {children}
-            </main>
-            {demoInfo && (
-              <DemoTrialBanner
-                isDemoMode={demoInfo.isDemoMode}
-                currentRole={demoInfo.currentRole}
-                slug={demoInfo.slug}
-                status={demoInfo.status}
-                trialEndsAt={demoInfo.trialEndsAt}
-                demoExpiresAt={demoInfo.demoExpiresAt}
-                communityType={demoInfo.communityType}
-              />
-            )}
-          </MotionProvider>
+          )}
         </AppQueryProvider>
       </div>
     </>
