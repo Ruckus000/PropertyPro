@@ -41,13 +41,12 @@ export default async function AuthenticatedLayout({
   }
 
   const features = shellContext.features;
-  const demoInfo = await detectDemoInfo(
-    shellContext.isDemo,
-    user?.id ?? '',
-    community?.id ?? 0,
-  );
-
-  const branding = community ? await getPageShellBranding(community.id) : null;
+  // Independent lookups — run them concurrently; this layout re-renders on
+  // every authenticated navigation, so serial awaits here tax every click.
+  const [demoInfo, branding] = await Promise.all([
+    detectDemoInfo(shellContext.isDemo, user?.id ?? '', community?.id ?? 0),
+    community ? getPageShellBranding(community.id) : Promise.resolve(null),
+  ]);
   const theme = community
     ? resolveTheme(branding, community.name, community.type)
     : resolveTheme(null, '', 'condo_718');
