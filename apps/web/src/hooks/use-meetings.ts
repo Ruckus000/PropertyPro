@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarEvent } from '@/lib/calendar/event-types';
 import type { MeetingDeadlines } from '@/lib/meetings/meeting-response';
 import { requestJson } from '@/lib/api/request-json';
@@ -47,6 +47,8 @@ export function useMeetings(
   options?: { start?: string; end?: string },
 ) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: MEETING_KEYS.list(communityId, options?.start, options?.end),
     queryFn: async () => {
       const params = new URLSearchParams({ communityId: String(communityId) });
@@ -79,6 +81,8 @@ export function useCalendarEvents(
   end: string,
 ) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: MEETING_KEYS.calendarEvents(communityId, start, end),
     queryFn: async () =>
       requestJson<CalendarEvent[]>(
