@@ -21,6 +21,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Clock, AlertCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ProBadge } from '@/components/shared/pro-badge';
 import {
   useCustomDomain,
   useSetDomain,
@@ -96,7 +97,7 @@ export function CustomDomainCard({
 
   const heading = (
     <h2 className="text-lg font-medium text-content">
-      Custom Domain{!hasSiteCustomDomain && ' (Pro)'}
+      Custom Domain{!hasSiteCustomDomain && <ProBadge className="ml-2" />}
     </h2>
   );
 

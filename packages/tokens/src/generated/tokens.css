@@ -164,6 +164,7 @@
   font-size: 16px;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --font-size-xs: 0.75rem;      /* 12px */
   --font-size-sm: 0.875rem;     /* 14px */
   --font-size-base: 1rem;       /* 16px */
@@ -296,6 +297,11 @@
   --status-board-bg: var(--pink-50);
   --status-board-border: var(--pink-200);
   --status-board-subtle: var(--pink-100);
+
+  --status-premium: var(--gold-800);
+  --status-premium-bg: var(--gold-50);
+  --status-premium-border: var(--gold-200);
+  --status-premium-subtle: var(--gold-100);
 
   /* Elevation */
   --elevation-e0: none;

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { ProBadge } from '@/components/shared/pro-badge';
 import { toast } from 'sonner';
 import {
   useContentBlocks,
@@ -452,7 +453,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add FAQ section
-          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+          {!hasSitePolishBlocks && <ProBadge className="ml-1" />}
         </button>
         <button
           type="button"
@@ -462,7 +463,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add gallery section
-          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+          {!hasSitePolishBlocks && <ProBadge className="ml-1" />}
         </button>
         <button
           type="button"
@@ -472,7 +473,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add amenities section
-          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+          {!hasSitePolishBlocks && <ProBadge className="ml-1" />}
         </button>
       </div>
     </section>

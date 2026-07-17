@@ -143,6 +143,7 @@ function buildTypographyBlock(): string {
     "  font-size: 16px;",
     `  --font-sans: ${staticTokens.fontFamily.sans};`,
     `  --font-mono: ${staticTokens.fontFamily.mono};`,
+    `  --font-display: ${staticTokens.fontFamily.display};`,
   ];
   for (const [key, { value, px }] of Object.entries(staticTokens.fontSize)) {
     const decl = `  --font-size-${key}: ${value};`;

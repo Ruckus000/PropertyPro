@@ -32,6 +32,9 @@ export const staticTokens = {
   fontFamily: {
     sans: `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
     mono: `"JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+    // "Florida Modern" display serif for page titles. next/font sets the real
+    // --font-display at runtime (app/layout.tsx); this is the static fallback.
+    display: `"Fraunces", Georgia, "Times New Roman", serif`,
   },
   fontSize: {
     xs: { value: "0.75rem", px: "12px" },

@@ -191,6 +191,11 @@ const config: Config = {
           'brand-bg': 'var(--status-brand-bg)',
           'brand-border': 'var(--status-brand-border)',
           'brand-subtle': 'var(--status-brand-subtle)',
+
+          premium: 'var(--status-premium)',
+          'premium-bg': 'var(--status-premium-bg)',
+          'premium-border': 'var(--status-premium-border)',
+          'premium-subtle': 'var(--status-premium-subtle)',
         },
 
         // ── Semantic: Navigation ──
