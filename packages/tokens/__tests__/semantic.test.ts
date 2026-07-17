@@ -56,7 +56,7 @@ describe("tokenDefinitions", () => {
   it("status.brand.foreground is theme-aware", () => {
     expect(tokenDefinitions.status.brand.foreground.kind).toBe("theme");
     expect(toCssValue(tokenDefinitions.status.brand.foreground)).toBe(
-      "var(--theme-primary, var(--coral-600))"
+      "var(--theme-primary, var(--coral-700))"
     );
   });
 
