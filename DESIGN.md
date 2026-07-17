@@ -50,6 +50,7 @@ packages/tokens/src/          generated packages/ui/src/styles/tokens.css   pack
 | Interactive | `--interactive-primary` | Primary actions (theme-overridable) |
 | Interactive | `--interactive-primary-hover` | Primary hover state |
 | Status | `--status-success-*` / `--status-danger-*` / `--status-warning-*` | fg/bg/border per status |
+| Accent | `--status-premium-*` | "Florida Modern" gold — Professional-tier / premium markers (see `PlanBadge`). Not a status variant (no icon); consumed via `bg-status-premium-subtle` / `text-status-premium` (or `var()` refs in shared UI). |
 
 `--surface-page-warm` is a purpose-named primitive for the page surface, not the start of a new neutral scale family. The project still uses `--gray-*` as its only neutral scale.
 
@@ -76,7 +77,7 @@ the offending line (email-template hex, chart/canvas internals).
 
 ## Typography
 
-**Fonts:** Inter (sans-serif), JetBrains Mono (monospace)
+**Fonts:** Inter (sans-serif, body/data), JetBrains Mono (monospace), Fraunces (display serif — `--font-display`, applied to page-title `h1`s via `globals.css` to echo the marketing landing page; body, tables, and section headings stay on Inter)
 
 | Token | Size | Usage |
 |-------|------|-------|

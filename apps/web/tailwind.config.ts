@@ -11,6 +11,7 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "SF Mono", "ui-monospace", "monospace"],
+        display: ["var(--font-display)", "Fraunces", "Georgia", "serif"],
         heading: ["var(--theme-font-heading, Inter)", "var(--font-sans)", "sans-serif"],
         body: ["var(--theme-font-body, Inter)", "var(--font-sans)", "sans-serif"],
       },
@@ -190,6 +191,11 @@ const config: Config = {
           'brand-bg': 'var(--status-brand-bg)',
           'brand-border': 'var(--status-brand-border)',
           'brand-subtle': 'var(--status-brand-subtle)',
+
+          premium: 'var(--status-premium)',
+          'premium-bg': 'var(--status-premium-bg)',
+          'premium-border': 'var(--status-premium-border)',
+          'premium-subtle': 'var(--status-premium-subtle)',
         },
 
         // ── Semantic: Navigation ──

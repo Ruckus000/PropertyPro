@@ -8,6 +8,15 @@
  * without re-review. They live here — not inline in components — so the
  * reviewed wording cannot drift per-page.
  *
+ * REVISED 2026-07-17 per the attorney-panel legal review (verdict:
+ * enable-after-required-redlines). These strings now implement the panel's
+ * redlines for findings #2/#4/#5/#6: statute-tracking §627.0629 language,
+ * the structural-scope (master-policy vs HO-6/renters) fact, a broadened
+ * no-advice clause naming both parties, a non-prescriptive form-family hint,
+ * and an agent email that carries the validity/expiry date. The redlines are
+ * decision-support and still require confirmation by licensed Florida counsel
+ * before the feature is enabled.
+ *
  * The constraints these strings encode (from the feature research):
  *
  * 1. NO SAVINGS PROMISES. Wind-mitigation credits are insurer- and
@@ -30,10 +39,13 @@
  * "may qualify" / "may reduce", no amounts, no guarantee of acceptance.
  */
 export const WIND_MITIGATION_DISCLAIMER =
-  'This report describes the building as inspected on the date shown. Florida insurers must offer ' +
-  'wind-mitigation discounts, so sharing it with your insurer may reduce the wind portion of your ' +
-  'premium — but any credit depends on your own policy and insurer. PropertyPro does not provide ' +
-  'insurance advice.';
+  "This report describes the association's building as inspected on the date shown. Florida law " +
+  'requires insurers to file wind-mitigation discounts for qualifying construction features ' +
+  '(§627.0629). Those credits generally apply to the policy that insures the building’s ' +
+  'structure — often the association’s master policy. Whether sharing this report affects your ' +
+  'own HO-6 or renters premium depends on what your policy insures, and some policies see little or ' +
+  'no credit. Neither PropertyPro nor your association provides insurance, legal, or financial ' +
+  'advice, or can promise any premium reduction.';
 
 /**
  * Shown next to the form-family picker. This is documentation-in-the-interface:
@@ -41,8 +53,14 @@ export const WIND_MITIGATION_DISCLAIMER =
  * the wrong one) is where the board makes the choice, not in a help article.
  */
 export const WIND_MITIGATION_FORM_FAMILY_HINT =
-  'Buildings 1–3 stories use the Florida OIR uniform form (OIR-B1-1802). Buildings 4+ stories use ' +
-  'the Citizens MIT-BT forms, which a home inspector cannot complete.';
+  'This is general information, not legal, engineering, or insurance advice — requirements depend ' +
+  'on your building and insurer. Buildings 1–3 stories generally use the Florida OIR uniform form ' +
+  '(OIR-B1-1802); a licensed home inspector may complete it only if licensed under §468.8314 with ' +
+  'the required hurricane-mitigation training and proficiency exam (contractors, building-code ' +
+  'inspectors, architects, and engineers may also sign). If your building is insured by Citizens, ' +
+  '4+ story buildings use the Citizens MIT-BT II & III form (which a home inspector cannot ' +
+  'complete); other insurers may require a different high-rise form or accept the OIR-B1-1802. ' +
+  'Confirm the correct form and a qualified inspector with your insurer before ordering an inspection.';
 
 /**
  * Shown where a board sets the expiry date. Explains the default without
@@ -64,6 +82,9 @@ export function buildWindMitigationAgentEmail(params: {
   communityName: string;
   buildingLabel: string | null;
   inspectedAt: string;
+  expiresAt: string;
+  /** When 'expired', the body carries an explicit staleness warning. */
+  isExpired: boolean;
 }): { subject: string; body: string } {
   const building = params.buildingLabel ? ` (${params.buildingLabel})` : '';
 
@@ -73,9 +94,17 @@ export function buildWindMitigationAgentEmail(params: {
       `Hello,`,
       ``,
       `My association, ${params.communityName}${building}, has a wind-mitigation inspection report ` +
-        `for our building, inspected on ${params.inspectedAt}. I've attached it to this email.`,
+        `for our building. It reflects an inspection dated ${params.inspectedAt} and shows a ` +
+        `validity date of ${params.expiresAt}. I've attached it to this email.`,
+      ...(params.isExpired
+        ? ['', `NOTE: this report expired on ${params.expiresAt}. Insurers may not accept an expired form.`]
+        : []),
       ``,
-      `Please review it and let me know whether any wind-mitigation credits apply to my policy.`,
+      `Please let me know whether this building report affects any wind-mitigation credit on the ` +
+        `policy insuring the structure, and whether it has any bearing on my own policy's premium. ` +
+        `Please also confirm the report is current for underwriting.`,
+      ``,
+      `Any wind-mitigation credit depends on your own policy and insurer.`,
       ``,
       `Thank you.`,
       ``,
@@ -92,3 +121,46 @@ export function buildWindMitigationAgentEmail(params: {
 export const WIND_MITIGATION_REINSPECTION_NOTE =
   'When this form expires, a new inspection lets every owner ask their insurer about ' +
   'wind-mitigation credits again.';
+
+/**
+ * One-line disclaimer repeated inside each report card so the no-advice /
+ * no-promise hedge travels with the download + send actions, not just the
+ * section header (legal-review finding #6).
+ */
+export const WIND_MITIGATION_CARD_DISCLAIMER =
+  'Neither PropertyPro nor your association provides insurance advice or can promise a premium ' +
+  'reduction. Any credit depends on your own policy and insurer.';
+
+/**
+ * Interstitial shown before Download / Send when a report is expired
+ * (legal-review blocker #1). The warning must reach the user at the point of
+ * transmission — the on-screen badge alone does not travel with the PDF/email.
+ */
+export const WIND_MITIGATION_EXPIRED_WARNING = (expiresAt: string): string =>
+  `This inspection report expired on ${expiresAt}. Insurers may not accept an expired form — ` +
+  `confirm with your inspector whether a current inspection is needed before sending. Continue anyway?`;
+
+/**
+ * Caption under the expiry date. 'Valid until' asserted insurer-acceptance
+ * fact; this reframes the date as a guideline, not a rule (finding #7).
+ */
+export const WIND_MITIGATION_EXPIRY_CAPTION =
+  'Insurers decide whether to accept a form — dates shown are a typical guideline, not a rule.';
+
+/**
+ * Inline helper under the free-text notes field. The notes are shown to every
+ * owner, so board authors must not enter resident personal data
+ * (legal-review blocker #3, §718.111(12)(c) / §720.303(5)).
+ */
+export const WIND_MITIGATION_NOTES_REDACTION_HINT =
+  'This note is visible to everyone who can see this report. Do not enter personal information ' +
+  'about owners or residents (SSNs, driver-license or account numbers, phone numbers, e-mail ' +
+  'addresses, or home addresses), as required by Fla. Stat. §718.111(12)(c) / §720.303(5).';
+
+/**
+ * Upload-time attestation the board must confirm before posting a report
+ * members-wide (legal-review blocker #3, behavior change).
+ */
+export const WIND_MITIGATION_REDACTION_ATTESTATION =
+  'I have removed personal information about owners and residents from this report and its notes ' +
+  'before posting it where members can see it.';
