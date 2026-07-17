@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   EsignSubmissionRecord,
   EsignSignerRecord,
@@ -21,6 +21,8 @@ export function useEsignSubmissions(
   filters?: { status?: string },
 ) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: ESIGN_SUBMISSION_KEYS.list(communityId, filters as Record<string, string>),
     queryFn: async () => {
       const params = new URLSearchParams({ communityId: String(communityId) });

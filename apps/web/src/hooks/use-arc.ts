@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
 /* ─────── Types ─────── */
@@ -50,6 +50,8 @@ export const ARC_KEYS = {
 
 export function useArcSubmissions(communityId: number, filters?: ArcFilters) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: ARC_KEYS.list(communityId, filters),
     queryFn: ({ signal }) => {
       const baseParams: Record<string, string> = {

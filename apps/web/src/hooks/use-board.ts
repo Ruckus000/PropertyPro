@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
@@ -168,6 +168,8 @@ export function useBoardPolls(
   const includeEnded = options?.includeEnded ?? false;
 
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: BOARD_KEYS.polls.list(communityId, includeEnded),
     queryFn: ({ signal }) =>
       walkPaginated<BoardPollListItem>(
@@ -191,6 +193,8 @@ export function useBoardForumThreads(
   const offset = Math.max(options?.offset ?? 0, 0);
 
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: BOARD_KEYS.forum.list(communityId, limit, offset),
     queryFn: async ({ signal }) => {
       const threads = await walkPaginated<BoardForumThreadListItem>(
@@ -212,6 +216,8 @@ export function useBoardElections(
   const limit = Math.min(options?.limit ?? 25, 25);
 
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: BOARD_KEYS.elections.list(communityId, limit),
     queryFn: async () => {
       const params = new URLSearchParams({
