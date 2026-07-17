@@ -12,11 +12,18 @@ import { NextRequest, NextResponse } from 'next/server';
  * 3. When no community context on '/', pass through normally (marketing page).
  */
 
-// Mock dependencies before importing middleware
+// Mock dependencies before importing middleware.
+// createMiddlewareClient resolves the user itself (getClaims) and returns it
+// directly — middleware no longer calls supabase.auth.getUser. Tests set
+// authState.user to control the authenticated identity.
 const {
+  authState,
   mockGetUser,
   mockSupabaseFrom,
 } = vi.hoisted(() => ({
+  authState: {
+    user: null as { id: string; email?: string | null; emailVerified: boolean } | null,
+  },
   mockGetUser: vi.fn(),
   mockSupabaseFrom: vi.fn(),
 }));
@@ -27,7 +34,12 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
       auth: { getUser: mockGetUser },
       from: mockSupabaseFrom,
     };
-    return { supabase, response: NextResponse.next() };
+    return {
+      supabase,
+      response: NextResponse.next(),
+      user: authState.user,
+      authChecked: authState.user != null,
+    };
   }),
 }));
 
@@ -100,7 +112,7 @@ describe('public site auth-split middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: no user
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    authState.user = null;
     // Default: slug lookup returns community ID
     mockSupabaseFrom.mockReturnValue({
       select: () => ({
@@ -115,7 +127,7 @@ describe('public site auth-split middleware', () => {
   });
 
   it('lets unauthenticated user through to public site on community subdomain root', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    authState.user = null;
 
     const request = createRequest('http://sunset-condos.getpropertypro.com/', {
       host: 'sunset-condos.getpropertypro.com',
@@ -130,15 +142,11 @@ describe('public site auth-split middleware', () => {
   });
 
   it('redirects authenticated user to /dashboard on community subdomain root', async () => {
-    mockGetUser.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email: 'test@example.com',
-          email_confirmed_at: '2026-01-01T00:00:00Z',
-        },
-      },
-    });
+    authState.user = {
+      id: 'user-1',
+      email: 'test@example.com',
+      emailVerified: true,
+    };
 
     const request = createRequest('http://sunset-condos.getpropertypro.com/', {
       host: 'sunset-condos.getpropertypro.com',
@@ -152,15 +160,11 @@ describe('public site auth-split middleware', () => {
   });
 
   it('keeps authenticated user on public site when preview=true is present', async () => {
-    mockGetUser.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email: 'test@example.com',
-          email_confirmed_at: '2026-01-01T00:00:00Z',
-        },
-      },
-    });
+    authState.user = {
+      id: 'user-1',
+      email: 'test@example.com',
+      emailVerified: true,
+    };
 
     const request = createRequest('http://sunset-condos.getpropertypro.com/?preview=true', {
       host: 'sunset-condos.getpropertypro.com',
@@ -196,7 +200,7 @@ describe('public site auth-split middleware', () => {
   });
 
   it('does not affect protected paths like /dashboard', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    authState.user = null;
 
     const request = createRequest('http://sunset-condos.getpropertypro.com/dashboard', {
       host: 'sunset-condos.getpropertypro.com',

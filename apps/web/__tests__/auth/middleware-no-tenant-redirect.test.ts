@@ -40,25 +40,29 @@ function makeRequest(host: string, pathAndSearch: string, method: string = 'GET'
   });
 }
 
+// createMiddlewareClient resolves the user itself (getClaims) and returns it
+// directly — middleware no longer calls supabase.auth.getUser.
+function mockAuthState(
+  user: { id: string; emailVerified: boolean; email?: string | null } | null,
+) {
+  createMiddlewareClientMock.mockImplementation(async () => ({
+    supabase: { auth: { getUser: getUserMock } },
+    response: NextResponse.next(),
+    user,
+    authChecked: user != null,
+  }));
+}
+
 describe('middleware: missing-tenant redirect for authenticated users on protected paths', () => {
   beforeEach(() => {
     resetGlobalRateLimiter();
     vi.clearAllMocks();
 
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-with-no-tenant-context',
-          email: 'ruckus@example.com',
-          email_confirmed_at: '2026-01-01T00:00:00.000Z',
-        },
-      },
+    mockAuthState({
+      id: 'user-with-no-tenant-context',
+      email: 'ruckus@example.com',
+      emailVerified: true,
     });
-
-    createMiddlewareClientMock.mockImplementation(async () => ({
-      supabase: { auth: { getUser: getUserMock } },
-      response: NextResponse.next(),
-    }));
   });
 
   afterEach(() => {
@@ -120,6 +124,12 @@ describe('middleware: missing-tenant redirect for authenticated users on protect
         }),
       },
       response: NextResponse.next(),
+      user: {
+        id: 'user-with-no-tenant-context',
+        email: 'ruckus@example.com',
+        emailVerified: true,
+      },
+      authChecked: true,
     }));
 
     const response = await middleware(
@@ -155,7 +165,7 @@ describe('middleware: missing-tenant redirect for authenticated users on protect
     // When the user isn't logged in at all, the existing auth redirect wins —
     // we don't want to leak the existence of /select-community to anonymous
     // visitors via a redirect chain.
-    getUserMock.mockResolvedValue({ data: { user: null } });
+    mockAuthState(null);
 
     const response = await middleware(makeRequest('www.getpropertypro.com', '/settings'));
 
@@ -169,14 +179,10 @@ describe('middleware: missing-tenant redirect for authenticated users on protect
     // ladder. An authenticated-but-unverified user hitting a protected path on
     // www. must land on /auth/verify-email, NOT /select-community — otherwise
     // the picker would render an unverified session.
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'unverified-user',
-          email: 'unverified@example.com',
-          email_confirmed_at: null,
-        },
-      },
+    mockAuthState({
+      id: 'unverified-user',
+      email: 'unverified@example.com',
+      emailVerified: false,
     });
 
     const response = await middleware(makeRequest('www.getpropertypro.com', '/settings'));
