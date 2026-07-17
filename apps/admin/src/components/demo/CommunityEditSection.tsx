@@ -150,7 +150,7 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
           value={form.name}
           onChange={(e) => handleChange('name', e.target.value)}
           maxLength={200}
-          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
@@ -163,7 +163,7 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
           onChange={(e) => handleChange('address_line1', e.target.value)}
           maxLength={500}
           placeholder="Street address"
-          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
@@ -175,7 +175,7 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
             value={form.city}
             onChange={(e) => handleChange('city', e.target.value)}
             maxLength={100}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
         <div>
@@ -185,7 +185,7 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
             value={form.state}
             onChange={(e) => handleChange('state', e.target.value.toUpperCase())}
             maxLength={2}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
         <div className="col-span-2">
@@ -195,7 +195,7 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
             value={form.zip_code}
             onChange={(e) => handleChange('zip_code', e.target.value)}
             maxLength={10}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
       </div>
@@ -205,7 +205,7 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-coral-700 disabled:opacity-50"
         >
           {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
           Save

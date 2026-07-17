@@ -162,7 +162,7 @@ export function TabbedPreviewClient({
                 disabled={isDisabled}
                 className={`relative px-4 py-2.5 text-xs font-medium transition-colors ${
                   isActive
-                    ? 'text-blue-600'
+                    ? 'text-coral-700'
                     : isDisabled
                       ? 'cursor-not-allowed text-gray-300'
                       : 'text-gray-500 hover:text-gray-700'
@@ -170,7 +170,7 @@ export function TabbedPreviewClient({
               >
                 {tab.label}
                 {isActive && (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-blue-600" />
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 bg-coral-600" />
                 )}
               </button>
             );
@@ -301,7 +301,7 @@ export function TabbedPreviewClient({
         {isPublicWebsiteTab(activeTab) && <button
           type="button"
           onClick={() => setDrawerOpen((prev) => !prev)}
-          className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-blue-700 hover:shadow-xl ${
+          className={`absolute bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full bg-coral-600 text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-coral-700 hover:shadow-xl ${
             drawerOpen ? 'rotate-0' : ''
           }`}
           title={drawerOpen ? 'Close editor' : 'Edit demo'}

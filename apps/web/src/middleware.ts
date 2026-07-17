@@ -460,6 +460,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   // Refresh Supabase session (reads + writes cookies)
+  const authStartedAt = performance.now();
   const {
     supabase,
     response,
@@ -468,6 +469,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   } = await createMiddlewareClient(
     request as unknown as Parameters<typeof createMiddlewareClient>[0],
   );
+  if (process.env.MIDDLEWARE_TIMING === '1') {
+    console.log(
+      `[mw-auth] ${(performance.now() - authStartedAt).toFixed(1)}ms authChecked=${authChecked} ${pathname}`,
+    );
+  }
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
   const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
 
@@ -547,15 +553,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Only enforce auth checks on protected paths
   if (isProtectedPath(pathname)) {
     const isTokenAuthRoute = isTokenAuthenticatedApiRoute(request);
-    const user = authChecked === undefined
-      ? (
-          middlewareUser ??
-          (
-            await supabase.auth.getUser()
-          ).data.user ??
-          null
-        )
-      : middlewareUser;
+    const user = middlewareUser;
 
     stampForwardedUserHeaders(forwardedHeaders, user);
 
@@ -599,7 +597,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (user && !isTokenAuthRoute && !user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
+    if (user && !isTokenAuthRoute && !user.emailVerified && pathname !== VERIFY_EMAIL_PATH) {
       if (isApiPath(pathname)) {
         return finaliseResponse(
           response as unknown as NextResponse,
@@ -744,15 +742,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       }
 
       // Check auth: authenticated users go to dashboard, unauthenticated see public site
-      const publicSiteUser = authChecked === undefined
-        ? (
-            middlewareUser ??
-            (
-              await supabase.auth.getUser()
-            ).data.user ??
-            null
-          )
-        : middlewareUser;
+      const publicSiteUser = middlewareUser;
 
       if (publicSiteUser && !isPreviewRequest) {
         const dashboardUrl = request.nextUrl.clone();
@@ -879,18 +869,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     pathname !== VERIFY_EMAIL_PATH &&
     pathname !== RESET_PASSWORD_PATH
   ) {
-    const user = authChecked === undefined
-      ? (
-          middlewareUser ??
-          (
-            await supabase.auth.getUser()
-          ).data.user ??
-          null
-        )
-      : middlewareUser;
+    const user = middlewareUser;
 
     if (user) {
-      if (!user.email_confirmed_at) {
+      if (!user.emailVerified) {
         const verifyUrl = request.nextUrl.clone();
         verifyUrl.pathname = VERIFY_EMAIL_PATH;
         const returnTo = request.nextUrl.searchParams.get('returnTo');

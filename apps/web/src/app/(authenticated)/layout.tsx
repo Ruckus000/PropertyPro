@@ -7,7 +7,6 @@ import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppShell } from '@/components/layout/app-shell';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import { AppQueryProvider } from '@/components/providers/query-provider';
-import { MotionProvider } from '@/components/providers/motion-provider';
 import { SupportBanner } from '@/components/support/SupportBanner';
 import { getPageShellBranding, getPageShellContext } from '@/lib/request/page-shell-context';
 
@@ -41,13 +40,12 @@ export default async function AuthenticatedLayout({
   }
 
   const features = shellContext.features;
-  const demoInfo = await detectDemoInfo(
-    shellContext.isDemo,
-    user?.id ?? '',
-    community?.id ?? 0,
-  );
-
-  const branding = community ? await getPageShellBranding(community.id) : null;
+  // Independent lookups — run them concurrently; this layout re-renders on
+  // every authenticated navigation, so serial awaits here tax every click.
+  const [demoInfo, branding] = await Promise.all([
+    detectDemoInfo(shellContext.isDemo, user?.id ?? '', community?.id ?? 0),
+    community ? getPageShellBranding(community.id) : Promise.resolve(null),
+  ]);
   const theme = community
     ? resolveTheme(branding, community.name, community.type)
     : resolveTheme(null, '', 'condo_718');
@@ -64,11 +62,9 @@ export default async function AuthenticatedLayout({
         <AuthSessionSync />
         <IdleSessionManager role={role} />
         <AppQueryProvider>
-          <MotionProvider>
-            <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
-              {children}
-            </AppShell>
-          </MotionProvider>
+          <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
+            {children}
+          </AppShell>
         </AppQueryProvider>
       </div>
     </>

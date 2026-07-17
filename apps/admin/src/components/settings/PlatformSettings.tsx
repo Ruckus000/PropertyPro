@@ -84,7 +84,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
   }
 
   const statCards = [
-    { label: 'Communities', value: stats.communityCount, icon: Building2, color: 'text-blue-600' },
+    { label: 'Communities', value: stats.communityCount, icon: Building2, color: 'text-coral-700' },
     { label: 'Demo Instances', value: stats.demoCount, icon: MonitorPlay, color: 'text-violet-600' },
     { label: 'Platform Admins', value: admins.length, icon: Shield, color: 'text-emerald-600' },
   ];
@@ -125,7 +125,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
           {!showAddForm && (
             <button
               onClick={() => setShowAddForm(true)}
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-coral-700 transition-colors"
             >
               <Plus size={14} />
               Add Admin
@@ -143,7 +143,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
                 value={addEmail}
                 onChange={(e) => setAddEmail(e.target.value)}
                 required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
               />
               {addError && (
                 <p className="mt-1 text-xs text-red-600">{addError}</p>
@@ -152,7 +152,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
             <button
               type="submit"
               disabled={addLoading}
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-md bg-coral-600 px-3 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50 transition-colors"
             >
               {addLoading && <Loader2 size={14} className="animate-spin" />}
               Add
@@ -192,7 +192,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
                 return (
                   <tr
                     key={admin.userId}
-                    className={isSelf ? 'bg-blue-50/50' : 'hover:bg-gray-50'}
+                    className={isSelf ? 'bg-coral-50/50' : 'hover:bg-gray-50'}
                   >
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
                       {admin.email}

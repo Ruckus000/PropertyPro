@@ -30,6 +30,8 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  resolveDashboardHref,
+  resolveNavItemHref,
   shouldUseSlimNav,
   buildSlimNavSections,
   type NavSection,
@@ -133,9 +135,13 @@ export function AppSidebar({
     icon: item.icon,
     href: item.planLocked
       ? undefined
-      : communityId
-        ? item.href(communityId)
-        : '/select-community',
+      // One-hop destination for the dashboard item: avoids the /dashboard →
+      // /dashboard/apartment server redirect for lease-tracking communities.
+      // Everything else goes through resolveNavItemHref, which keeps PM
+      // portfolio items working with communityId = null.
+      : !isPmContext && communityId && item.id === 'dashboard'
+        ? resolveDashboardHref(communityId, features)
+        : resolveNavItemHref(item, communityId, isPmContext),
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
     trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
   });

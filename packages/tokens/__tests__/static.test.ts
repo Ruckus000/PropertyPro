@@ -13,7 +13,7 @@ describe("static tokens", () => {
     expect(staticTokens.radius.full).toBe("9999px");
   });
   it("focus ring references primitive vars, not raw hex", () => {
-    expect(staticTokens.focus["focus-ring-color"]).toBe("var(--blue-500)");
+    expect(staticTokens.focus["focus-ring-color"]).toBe("var(--coral-500)");
     expect(staticTokens.focus["focus-ring-color-danger"]).toBe("var(--red-500)");
   });
   it("elevation ladder is E0-none through E3", () => {

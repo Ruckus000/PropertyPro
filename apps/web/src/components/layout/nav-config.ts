@@ -79,6 +79,26 @@ export interface NavSection {
   items: readonly NavItemConfig[];
 }
 
+/**
+ * Resolve the dashboard destination for a community in ONE hop.
+ *
+ * /dashboard server-redirects lease-tracking (apartment) communities to
+ * /dashboard/apartment on every visit — a permanent extra round-trip through
+ * the middleware for every apartment-community click. Nav surfaces that
+ * already know the community's features should link straight to the final
+ * destination. (The onboarding-wizard redirects are deliberately kept
+ * server-side: they depend on a DB read and only affect pre-onboarding
+ * users.)
+ */
+export function resolveDashboardHref(
+  communityId: number,
+  features: CommunityFeatures | null,
+): string {
+  return features?.hasLeaseTracking
+    ? `/dashboard/apartment?communityId=${communityId}`
+    : `/dashboard?communityId=${communityId}`;
+}
+
 export const NAV_ITEMS: readonly NavItemConfig[] = [
   // ── Main ──
   {
@@ -365,6 +385,27 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/pm/reports'],
   },
 ];
+
+/**
+ * Resolve a sidebar item's destination href.
+ *
+ * PM portfolio routes (PM_NAV_ITEMS) are cross-community — their href
+ * builders ignore the communityId argument — so they must NEVER fall back to
+ * /select-community just because the shell has no tenant context (the PM
+ * portal routinely renders with community = null). Only community-scoped
+ * items use the picker fallback, which exists so a tenant-less shell doesn't
+ * render dead `href={undefined}` links (see the www-subdomain incident).
+ */
+export function resolveNavItemHref(
+  item: Pick<NavItemConfig, 'href'>,
+  communityId: number | null,
+  isPmContext: boolean,
+): string {
+  if (isPmContext) {
+    return item.href(communityId ?? 0);
+  }
+  return communityId ? item.href(communityId) : '/select-community';
+}
 
 /**
  * Filter nav items by user role and community features.

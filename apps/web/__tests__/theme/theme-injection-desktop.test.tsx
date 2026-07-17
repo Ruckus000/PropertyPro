@@ -28,7 +28,7 @@ describe('Desktop theme injection — resolveTheme with community types', () => 
 
   it('falls back gracefully when branding is an empty object', () => {
     const theme = resolveTheme({}, 'Minimal Community', 'condo_718');
-    expect(theme.primaryColor).toBe('#2563EB');
+    expect(theme.primaryColor).toBe('#C2533A');
     expect(theme.fontHeading).toBe('Inter');
     expect(theme.fontBody).toBe('Inter');
   });
@@ -71,9 +71,9 @@ describe('Desktop theme injection — toCssVars', () => {
   it('falls back to defaults when no community branding is set', () => {
     const theme = resolveTheme(null, 'Unbranded Community', 'hoa_720');
     const cssVars = toCssVars(theme);
-    expect(cssVars['--theme-primary']).toBe('#2563EB');
+    expect(cssVars['--theme-primary']).toBe('#C2533A');
     expect(cssVars['--theme-secondary']).toBe('#6B7280');
-    expect(cssVars['--theme-accent']).toBe('#DBEAFE');
+    expect(cssVars['--theme-accent']).toBe('#F7DCD2');
   });
 });
 

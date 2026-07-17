@@ -19,10 +19,17 @@ const mockAdminDb = {
   })),
 };
 
+// createMiddlewareClient resolves the user itself (getClaims) and returns it
+// directly — the admin middleware no longer calls supabase.auth.getUser.
+// Tests set `middlewareUser` to control the authenticated identity.
+let middlewareUser: { id: string; email: string | null; emailVerified: boolean } | null = null;
+
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async () => ({
     supabase: { auth: { getUser: mockGetUser } },
     response: { headers: new Headers(), status: 200 },
+    user: middlewareUser,
+    authChecked: middlewareUser != null,
   })),
 }));
 
@@ -33,13 +40,16 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 describe('cross-subdomain session', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    middlewareUser = null;
   });
 
   it('accepts session from a platform_admin_users member', async () => {
     const adminUserId = 'platform-admin-uuid';
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: adminUserId, email: 'admin@getpropertypro.com' } },
-    });
+    middlewareUser = {
+      id: adminUserId,
+      email: 'admin@getpropertypro.com',
+      emailVerified: true,
+    };
     mockSingle.mockResolvedValue({ data: { user_id: adminUserId } });
 
     const { middleware } = await import('@/middleware');
@@ -53,9 +63,11 @@ describe('cross-subdomain session', () => {
 
   it('rejects session for user not in platform_admin_users', async () => {
     const nonAdminId = 'regular-user-uuid';
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: nonAdminId, email: 'user@sunset-condos.getpropertypro.com' } },
-    });
+    middlewareUser = {
+      id: nonAdminId,
+      email: 'user@sunset-condos.getpropertypro.com',
+      emailVerified: true,
+    };
     mockSingle.mockResolvedValue({ data: null }); // No platform_admin_users row
 
     const { middleware } = await import('@/middleware');
@@ -68,7 +80,7 @@ describe('cross-subdomain session', () => {
   });
 
   it('rejects request with no session at all', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    middlewareUser = null;
 
     const { middleware } = await import('@/middleware');
     const req = new NextRequest('http://admin.getpropertypro.com/clients');
