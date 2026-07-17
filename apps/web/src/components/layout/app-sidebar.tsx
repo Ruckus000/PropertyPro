@@ -28,6 +28,7 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  resolveNavItemHref,
   shouldUseSlimNav,
   buildSlimNavSections,
   type NavSection,
@@ -130,9 +131,7 @@ export function AppSidebar({
     icon: item.icon,
     href: item.planLocked
       ? undefined
-      : communityId
-        ? item.href(communityId)
-        : '/select-community',
+      : resolveNavItemHref(item, communityId, isPmContext),
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
     trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
   });
