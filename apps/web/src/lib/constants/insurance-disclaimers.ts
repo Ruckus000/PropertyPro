@@ -194,6 +194,62 @@ export const INSURANCE_POLICY_EXPIRED_BANNER = (expiresAt: string): string =>
   `coverage with the agent of record.`;
 
 /**
+ * Copy for the board-facing renewal/expiry alert email (the insurance-alerts
+ * cron). Kept here under the same attorney gate as every other insurance string.
+ *
+ * Deliberately factual: it reports a date and a next step, makes no premium
+ * promise, and gives no advice — the same posture as the section disclaimers it
+ * reuses. `daysUntilExpiry < 0` means already expired.
+ *
+ * NOTE (counsel): the subject/heading strings below are NEW wording introduced
+ * with the alerts cron; they must ride the same Florida-counsel review pass as
+ * the rest of this file before `hasInsuranceHub` alert emails are enabled.
+ */
+export type InsuranceAlertKind = 'wind_mitigation' | 'master_policy';
+
+export function buildInsuranceAlertEmail(params: {
+  kind: InsuranceAlertKind;
+  communityName: string;
+  /** Human label for the expiring item, e.g. 'OIR-B1-1802 (Building A)' or 'Citizens property policy'. */
+  itemLabel: string;
+  expiresAtLabel: string;
+  daysUntilExpiry: number;
+}): { subject: string; heading: string; intro: string; body: string[]; disclaimer: string } {
+  const expired = params.daysUntilExpiry < 0;
+
+  if (params.kind === 'wind_mitigation') {
+    return {
+      subject: expired
+        ? `Wind-mitigation report expired — ${params.communityName}`
+        : `Wind-mitigation report expiring soon — ${params.communityName}`,
+      heading: expired ? 'A wind-mitigation report has expired' : 'A wind-mitigation report is expiring',
+      intro: expired
+        ? `The association's wind-mitigation report (${params.itemLabel}) expired on ${params.expiresAtLabel}.`
+        : `The association's wind-mitigation report (${params.itemLabel}) is set to expire on ${params.expiresAtLabel}.`,
+      body: [
+        WIND_MITIGATION_REINSPECTION_NOTE,
+        'Boards typically schedule a re-inspection before the form expires — inspectors and insurers set their own timelines.',
+      ],
+      disclaimer: WIND_MITIGATION_CARD_DISCLAIMER,
+    };
+  }
+
+  return {
+    subject: expired
+      ? `Master-policy summary expired — ${params.communityName}`
+      : `Master policy renewing soon — ${params.communityName}`,
+    heading: expired ? 'The master-policy summary has expired' : 'The master policy is renewing soon',
+    intro: expired
+      ? `The master-policy summary on file (${params.itemLabel}) expired on ${params.expiresAtLabel}, so owners may be viewing out-of-date coverage.`
+      : `The master-policy summary on file (${params.itemLabel}) expires on ${params.expiresAtLabel}.`,
+    body: [
+      'When the policy renews, update the summary and upload the new declarations page so owners see current coverage and can still request certificates.',
+    ],
+    disclaimer: INSURANCE_SUMMARY_DISCLAIMER,
+  };
+}
+
+/**
  * Build the certificate-request relay email (to the agent of record) plus the
  * requester's confirmation copy.
  *

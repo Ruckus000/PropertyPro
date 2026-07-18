@@ -62,6 +62,7 @@ export const patchNotificationPreferencesContract = defineRoute({
       calendarReminderPersonalAssessments: z.boolean().optional(),
       calendarReminderCommunityAssessments: z.boolean().optional(),
       inAppEnabled: z.boolean().optional(),
+      emailInsuranceAlerts: z.boolean().optional(),
       smsEnabled: z.boolean().optional(),
       smsEmergencyOnly: z.boolean().optional(),
     }),

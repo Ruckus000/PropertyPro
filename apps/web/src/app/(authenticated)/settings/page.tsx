@@ -103,6 +103,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               canReadFinances && membership.role === 'resident' && membership.isUnitOwner,
             communityAssessments: canReadFinances && membership.isAdmin,
           }}
+          showInsuranceAlerts={
+            membership.isAdmin
+            && getEffectiveFeatures(
+              membership.communityType,
+              resolvePlanId(membership.subscriptionPlan),
+            ).hasInsuranceHub
+          }
         />
         {getEffectiveFeatures(membership.communityType, resolvePlanId(membership.subscriptionPlan))
           .hasSnowbirdDigest && (

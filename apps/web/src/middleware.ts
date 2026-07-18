@@ -98,6 +98,12 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/internal/snowbird-digest', method: 'POST' },
   // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
   { path: '/api/v1/snowbird-digest/unsubscribe', method: 'GET' },
+  // Insurance alerts cron: Bearer-token-authenticated, called by the scheduled job
+  { path: '/api/v1/internal/insurance-alerts', method: 'POST' },
+  // Insurance alerts unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM);
+  // GET backs the human-clicked link, POST is the RFC 8058 one-click target.
+  { path: '/api/v1/insurance-alerts/unsubscribe', method: 'GET' },
+  { path: '/api/v1/insurance-alerts/unsubscribe', method: 'POST' },
   // Stripe webhook: signature-verified by handler, no session required [P2-34]
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]

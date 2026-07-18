@@ -1,0 +1,34 @@
+name: Insurance Alerts Processor
+
+# Daily. Alerts fire on expiry-band transitions (60/30/expired for policies,
+# 180/30/expired for wind-mit reports) and dedupe per row, so a single daily
+# run is sufficient. 13:10 UTC ≈ 08:10 US-Eastern.
+on:
+  schedule:
+    - cron: '10 13 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-insurance-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke insurance alerts processor route
+        env:
+          DIGEST_CRON_BASE_URL: ${{ secrets.DIGEST_CRON_BASE_URL }}
+          INSURANCE_ALERTS_CRON_SECRET: ${{ secrets.INSURANCE_ALERTS_CRON_SECRET }}
+        run: |
+          if [ -z "$DIGEST_CRON_BASE_URL" ]; then
+            echo "Missing DIGEST_CRON_BASE_URL secret"
+            exit 1
+          fi
+
+          if [ -z "$INSURANCE_ALERTS_CRON_SECRET" ]; then
+            echo "Missing INSURANCE_ALERTS_CRON_SECRET secret"
+            exit 1
+          fi
+
+          curl -fsS \
+            -X POST \
+            "$DIGEST_CRON_BASE_URL/api/v1/internal/insurance-alerts" \
+            -H "Authorization: Bearer $INSURANCE_ALERTS_CRON_SECRET" \
+            -H "Content-Type: application/json"
