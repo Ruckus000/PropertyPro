@@ -39,9 +39,21 @@ function labelForSegment(segment: string): string {
 }
 
 /**
- * Build a breadcrumb trail from a pathname alone (no query string, no entity
- * names). This is the fallback the shell renders when a page hasn't published
- * a richer trail via `<Breadcrumbs/>`.
+ * A crumb href is "path-scoped" when the tenant is encoded in the URL path
+ * (`/communities/{id}/…`, or the `/pm/…` portal). These MUST NOT carry a
+ * `?communityId=` query param (the path segment is authoritative). Every other
+ * (top-level) route resolves its tenant from the query on non-subdomain hosts,
+ * so those crumbs must keep `?communityId=` — otherwise clicking one drops
+ * tenant context and bounces to /select-community. See .claude/rules/design.md.
+ */
+function isPathScoped(href: string): boolean {
+  return href.startsWith('/communities/') || href === '/pm' || href.startsWith('/pm/');
+}
+
+/**
+ * Build a breadcrumb trail from a pathname (and the active community, so
+ * top-level crumb hrefs keep their `?communityId=` tenant context). This is
+ * what the shell renders for the parent crumbs.
  *
  * Returns `null` for the bare root and for the user's home dashboard, so the
  * shell shows only the (role-aware) Home crumb — which it then hides.
@@ -50,7 +62,10 @@ function labelForSegment(segment: string): string {
  * roots) stay in the accumulated href so nested links resolve, but do not emit
  * their own crumb — the Home crumb already covers "root".
  */
-export function buildAutoTrail(pathname: string): AutoTrail | null {
+export function buildAutoTrail(
+  pathname: string,
+  communityId?: number | null,
+): AutoTrail | null {
   if (DASHBOARD_HOME_PATHS.has(pathname)) return null;
 
   const segments = pathname.split('/').filter(Boolean);
@@ -72,7 +87,9 @@ export function buildAutoTrail(pathname: string): AutoTrail | null {
     if (seg === 'pm' && i === 0) continue; // PM portal root → covered by Home crumb
     if (seg === 'dashboard' && (i === 0 || segments[i - 1] === 'pm')) continue; // dashboard root
 
-    crumbs.push({ label: labelForSegment(seg), href });
+    const finalHref =
+      communityId != null && !isPathScoped(href) ? `${href}?communityId=${communityId}` : href;
+    crumbs.push({ label: labelForSegment(seg), href: finalHref });
     lastSeg = seg;
   }
 

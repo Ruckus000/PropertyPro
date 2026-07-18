@@ -46,6 +46,26 @@ interface ShellBreadcrumbsProps {
 /** Orientation/picker pages with no ancestor — never show a trail. */
 const HIDE_PATHS = new Set(['/select-community', '/welcome']);
 
+/**
+ * Resolve the page-title text to use as the leaf label. Prefer the canonical
+ * PageHeader title (`[data-page-header] h1`) — that is unambiguously the page
+ * name and never an overlay or MDX content heading. Fall back to the first
+ * <h1> that isn't inside a portaled overlay (dialog / aria-hidden), for pages
+ * that render a custom header without PageHeader (e.g. help articles).
+ */
+function readPageTitle(): string | undefined {
+  const pageHeaderTitle = document.querySelector('[data-page-header] h1')?.textContent?.trim();
+  if (pageHeaderTitle) return pageHeaderTitle;
+
+  for (const h of Array.from(document.querySelectorAll('h1'))) {
+    if (!h.closest('[role="dialog"], [aria-hidden="true"]')) {
+      const text = h.textContent?.trim();
+      if (text) return text;
+    }
+  }
+  return undefined;
+}
+
 export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbsProps) {
   const pathname = usePathname();
 
@@ -61,16 +81,21 @@ export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbs
 
   // The page's <h1> gives the real leaf label (entity name). Read it after
   // mount / on navigation — never during render — so the initial client render
-  // matches the server and there is no hydration mismatch. The authenticated
-  // shell renders no <h1> of its own, so the page's title is the only <h1>.
-  // A MutationObserver catches h1s that stream in late (Suspense boundaries).
+  // matches the server and there is no hydration mismatch. A MutationObserver
+  // catches h1s that stream in late (Suspense boundaries).
   const [h1, setH1] = useState<{ path: string; label: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
     const read = () => {
       if (cancelled) return;
-      const label = document.querySelector('h1')?.textContent?.trim();
-      if (label) setH1({ path: pathname, label });
+      const label = readPageTitle();
+      if (!label) return;
+      // Only update when the resolved title actually changes — the observer
+      // fires on every DOM mutation, so a new object each time would re-render
+      // the trail on unrelated changes.
+      setH1((prev) =>
+        prev && prev.path === pathname && prev.label === label ? prev : { path: pathname, label },
+      );
     };
     read();
     const observer = new MutationObserver(read);
@@ -87,7 +112,7 @@ export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbs
   if (HIDE_PATHS.has(pathname)) return null;
 
   const homeItems = buildHomeCrumbs({ pathname, role, community, features, homeFallbackHref });
-  const trail = buildAutoTrail(pathname);
+  const trail = buildAutoTrail(pathname, community?.id ?? null);
   const h1Label = h1 && h1.path === pathname ? h1.label : null;
 
   let items: BreadcrumbLink[];
