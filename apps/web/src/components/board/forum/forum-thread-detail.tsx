@@ -6,7 +6,6 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,15 +90,6 @@ export function ForumThreadDetail({
       <PageHeader
         title={thread.title}
         description={`Started by ${getName(thread.authorUserId)} · ${new Date(thread.createdAt).toLocaleString()}`}
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              { label: 'Board', href: `/communities/${communityId}/board/polls` },
-              { label: 'Forum', href: `/communities/${communityId}/board/forum` },
-            ]}
-            currentLabel={thread.title}
-          />
-        }
         actions={
           thread.isPinned || thread.isLocked ? (
             <div className="flex flex-wrap gap-2">

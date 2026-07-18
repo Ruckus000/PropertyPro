@@ -23,7 +23,6 @@ import type { EsignFieldsSchema } from '@propertypro/shared';
 import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   useEsignTemplate,
   useArchiveEsignTemplate,
@@ -187,12 +186,6 @@ export function TemplateDetailClient({
       <PageHeader
         title={template.name}
         description={template.description ?? undefined}
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
-            currentLabel={template.name}
-          />
-        }
         actions={
           <div className="flex items-center gap-2">
             <Badge

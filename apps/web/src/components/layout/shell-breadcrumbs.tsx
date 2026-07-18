@@ -27,7 +27,7 @@ import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
-import type { BreadcrumbLink } from '@/components/shared/breadcrumbs';
+import type { BreadcrumbLink } from '@/lib/breadcrumbs/types';
 import { resolveDashboardHref } from './nav-config';
 import { resolveHomeDestination } from '@/lib/utils/home-destination';
 import { buildAutoTrail } from '@/lib/breadcrumbs/build-auto-trail';

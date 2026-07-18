@@ -7,7 +7,6 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { requirePermission } from '@/lib/db/access-control';
 import { AnnouncementAuthoringForm } from '@/components/announcements/announcement-authoring-form';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -37,12 +36,6 @@ export default async function NewAnnouncementPage({ searchParams }: PageProps) {
       <PageHeader
         title="New Announcement"
         description="Share a community update with the right audience."
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Announcements', href: `/announcements?communityId=${context.communityId}` }]}
-            currentLabel="New announcement"
-          />
-        }
       />
 
       <AnnouncementAuthoringForm communityId={context.communityId} />

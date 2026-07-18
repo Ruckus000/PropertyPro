@@ -12,7 +12,6 @@ import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
 import { ViolationDetailPanel } from './ViolationDetailPanel';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 const STATUS_OPTIONS: { value: ViolationStatus | ''; label: string }[] = [
   { value: '', label: 'All Statuses' },
@@ -145,12 +144,6 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
       <PageHeader
         title="Violations"
         description="Review, track, and manage violation cases for the community."
-        breadcrumb={
-          <Breadcrumbs
-            items={[]}
-            currentLabel="Violations"
-          />
-        }
         actions={canCreateViolation ? (
           <Link href={`/violations/report?communityId=${communityId}`}>
             <Button>

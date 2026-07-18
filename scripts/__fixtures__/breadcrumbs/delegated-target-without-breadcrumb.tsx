@@ -1,5 +1,4 @@
-import { PageHeader } from '@/components/shared/page-header';
-
 export function Target() {
-  return <PageHeader title="Test" />;
+  // A delegated target that renders no page title — should fail the guard.
+  return <div>No title here</div>;
 }

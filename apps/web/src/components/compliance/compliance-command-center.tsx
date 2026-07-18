@@ -126,14 +126,6 @@ export function ComplianceCommandCenter({
     );
   }
 
-  const breadcrumb = (
-    <ol className="flex items-center gap-2 text-sm text-content-secondary">
-      <li><Link href="/dashboard">Communities</Link></li>
-      <li aria-hidden="true">/</li>
-      <li aria-current="page" className="text-content">Compliance</li>
-    </ol>
-  );
-
   const actions = (
     <div className="flex items-center gap-2">
       {showToggle(isAdmin, designation) && (
@@ -169,7 +161,6 @@ export function ComplianceCommandCenter({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        breadcrumb={breadcrumb}
         title="Compliance"
         description="Records and statutory requirements"
         actions={actions}
