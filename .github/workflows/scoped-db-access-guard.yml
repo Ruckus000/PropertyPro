@@ -8,7 +8,11 @@ on:
       - scripts/verify-scoped-db-access.ts
       - package.json
       - pnpm-lock.yaml
+  # Only re-run on pushes to main (post-merge). Feature-branch pushes are
+  # already covered by the pull_request trigger, so an unfiltered push trigger
+  # just doubled every guard run on the same commit (INF-04).
   push:
+    branches: [main]
     paths:
       - apps/web/src/**
       - packages/db/src/**
@@ -16,6 +20,10 @@ on:
       - package.json
       - pnpm-lock.yaml
   workflow_dispatch:
+
+concurrency:
+  group: scoped-db-access-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify-scoped-db-access:
