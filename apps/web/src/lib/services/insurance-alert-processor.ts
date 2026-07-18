@@ -70,6 +70,19 @@ export interface InsuranceAlertRunResult {
 }
 
 type Row = Record<string, unknown>;
+type ScopedClient = ReturnType<typeof createScopedClient>;
+
+/**
+ * Who counts as the "board/admin" audience for these alerts under ADR-006:
+ * staff roles (property_manager / root_manager) via isAdminRole, PLUS elected
+ * board members — which are `resident` rows carrying an orthogonal `designation`
+ * (board_president / board_member), NOT a distinct `role`. Filtering on role
+ * alone silently drops every self-managed board (the feature's core audience).
+ */
+function isBoardOrAdminRecipient(role: string, designation: string | null): boolean {
+  if (isAdminRole(role as CommunityRole)) return true;
+  return designation === 'board_president' || designation === 'board_member';
+}
 
 interface AdminRecipient {
   userId: string;
@@ -112,9 +125,8 @@ export function formatCommunityPostalAddress(community: {
   return lines;
 }
 
-/** Admin-tier members with a deliverable email who have NOT opted out. */
-async function resolveAdminRecipients(communityId: number): Promise<AdminRecipient[]> {
-  const scoped = createScopedClient(communityId);
+/** Board/admin members with a deliverable email who have NOT opted out. */
+async function resolveAdminRecipients(scoped: ScopedClient): Promise<AdminRecipient[]> {
   const [roleRows, userRows, prefRows] = await Promise.all([
     scoped.query(userRoles) as Promise<Row[]>,
     scoped.query(users) as Promise<Row[]>,
@@ -136,7 +148,9 @@ async function resolveAdminRecipients(communityId: number): Promise<AdminRecipie
     const userId = r.userId;
     const role = r.role;
     if (typeof userId !== 'string' || typeof role !== 'string') continue;
-    if (!isAdminRole(role as CommunityRole) || seen.has(userId) || optedOut.has(userId)) continue;
+    if (seen.has(userId) || optedOut.has(userId)) continue;
+    const designation = typeof r.designation === 'string' ? r.designation : null;
+    if (!isBoardOrAdminRecipient(role, designation)) continue;
 
     const u = usersById.get(userId);
     const email = u?.email;
@@ -162,8 +176,7 @@ interface DueItem {
 }
 
 /** Reports + policies in this community that have crossed into a fresh alert band. */
-async function collectDueItems(communityId: number, now: Date): Promise<DueItem[]> {
-  const scoped = createScopedClient(communityId);
+async function collectDueItems(scoped: ScopedClient, now: Date): Promise<DueItem[]> {
   const [reports, policies] = await Promise.all([
     scoped.query(windMitigationReports) as Promise<Row[]>,
     scoped.query(insurancePolicies) as Promise<Row[]>,
@@ -251,7 +264,8 @@ export async function processInsuranceAlerts(
   for (const community of hubCommunities) {
     if (result.emailsSent >= budget) break;
 
-    const due = await collectDueItems(community.id, now);
+    const scoped = createScopedClient(community.id);
+    const due = await collectDueItems(scoped, now);
     if (due.length === 0) continue;
 
     // Something is due — a valid postal address is now required to send.
@@ -263,14 +277,18 @@ export async function processInsuranceAlerts(
       continue;
     }
 
-    const recipients = await resolveAdminRecipients(community.id);
+    const recipients = await resolveAdminRecipients(scoped);
     if (recipients.length === 0) continue;
 
     result.communitiesProcessed += 1;
-    const scoped = createScopedClient(community.id);
 
     for (const item of due) {
-      if (result.emailsSent >= budget) break;
+      // The per-item dedupe band is shared by all of this item's recipients, so
+      // an item is sent ATOMICALLY w.r.t. the budget: either every recipient is
+      // emailed this run (then the band advances) or the item is deferred whole
+      // to the next run (band untouched). Truncating mid-item would advance the
+      // band and permanently drop the un-emailed board members.
+      if (result.emailsSent + recipients.length > budget) return result;
 
       const copy = buildInsuranceAlertEmail({
         kind: item.kind,
@@ -280,40 +298,44 @@ export async function processInsuranceAlerts(
         daysUntilExpiry: item.daysUntilExpiry,
       });
 
-      let sentAny = false;
+      let sentCount = 0;
       for (const recipient of recipients) {
-        if (result.emailsSent >= budget) break;
-
         const token = signInsuranceAlertUnsubscribeToken({
           communityId: community.id,
           userId: recipient.userId,
         });
         const unsubscribeUrl = `${baseUrl}/api/v1/insurance-alerts/unsubscribe?token=${encodeURIComponent(token)}`;
 
-        await sendEmail({
-          to: recipient.email,
-          subject: copy.subject,
-          react: createElement(InsuranceAlertEmail, {
-            branding: { communityName: community.name },
-            recipientName: recipient.fullName,
-            heading: copy.heading,
-            intro: copy.intro,
-            body: copy.body,
-            disclaimer: copy.disclaimer,
-            portalUrl: `${baseUrl}/communities/${community.id}/insurance`,
-            senderAddressLines: addressLines,
+        try {
+          await sendEmail({
+            to: recipient.email,
+            subject: copy.subject,
+            react: createElement(InsuranceAlertEmail, {
+              branding: { communityName: community.name },
+              recipientName: recipient.fullName,
+              heading: copy.heading,
+              intro: copy.intro,
+              body: copy.body,
+              disclaimer: copy.disclaimer,
+              portalUrl: `${baseUrl}/communities/${community.id}/insurance`,
+              senderAddressLines: addressLines,
+              unsubscribeUrl,
+            }),
+            category: 'non-transactional',
             unsubscribeUrl,
-          }),
-          category: 'non-transactional',
-          unsubscribeUrl,
-        });
-        result.emailsSent += 1;
-        sentAny = true;
+          });
+          result.emailsSent += 1;
+          sentCount += 1;
+        } catch {
+          // Best-effort: one undeliverable address must not abort the whole
+          // cron run (which would wedge every later community behind it).
+        }
       }
 
-      if (!sentAny) continue;
+      // Total failure ⇒ leave the band untouched so the item retries next run.
+      if (sentCount === 0) continue;
 
-      // Advance the per-row dedupe band only after a successful send.
+      // Advance the per-row dedupe band after the item was delivered.
       const table = item.kind === 'wind_mitigation' ? windMitigationReports : insurancePolicies;
       await scoped.update(table, { lastAlertBand: item.band }, eq(table.id, item.rowId));
       result.itemsAlerted += 1;
@@ -324,7 +346,7 @@ export async function processInsuranceAlerts(
         resourceType: item.kind === 'wind_mitigation' ? 'wind_mitigation_report' : 'insurance_policy',
         resourceId: String(item.rowId),
         communityId: community.id,
-        newValues: { alertBand: item.band, recipients: recipients.length },
+        newValues: { alertBand: item.band, recipients: sentCount },
       });
     }
   }

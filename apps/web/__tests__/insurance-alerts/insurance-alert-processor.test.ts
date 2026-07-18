@@ -68,11 +68,10 @@ vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
   InsuranceAlertEmail: (props: unknown) => props,
 }));
+// ADR-006: user_roles.role is the 3-value enum; board members are `resident`
+// rows with an orthogonal designation. isAdminRole is true ONLY for staff roles.
 vi.mock('@propertypro/shared', () => ({
-  isAdminRole: (role: string) =>
-    ['board_president', 'board_member', 'cam', 'site_manager', 'property_manager_admin', 'property_manager', 'root_manager'].includes(
-      role,
-    ),
+  isAdminRole: (role: string) => ['property_manager', 'root_manager'].includes(role),
 }));
 
 import { processInsuranceAlerts } from '../../src/lib/services/insurance-alert-processor';
@@ -91,20 +90,22 @@ const COMMUNITIES = [
 
 const ROLE_ROWS: Record<number, Array<Record<string, unknown>>> = {
   1: [
-    { userId: 'admin1', role: 'board_president' },
-    { userId: 'admin2', role: 'cam' }, // opted out below
-    { userId: 'res1', role: 'resident', isUnitOwner: true }, // non-admin
+    { userId: 'board1', role: 'resident', designation: 'board_president' }, // elected board → via designation
+    { userId: 'pm1', role: 'property_manager' }, // staff → via isAdminRole
+    { userId: 'optout1', role: 'resident', designation: 'board_member' }, // board but opted out below
+    { userId: 'res1', role: 'resident', designation: null }, // plain owner → excluded
   ],
 };
 const USER_ROWS: Record<number, Array<Record<string, unknown>>> = {
   1: [
-    { id: 'admin1', email: 'a1@example.com', fullName: 'Ann Admin' },
-    { id: 'admin2', email: 'a2@example.com', fullName: 'Cam Manager' },
-    { id: 'res1', email: 'r1@example.com', fullName: 'Rose Resident' },
+    { id: 'board1', email: 'board1@example.com', fullName: 'Bea Board' },
+    { id: 'pm1', email: 'pm1@example.com', fullName: 'Pat Manager' },
+    { id: 'optout1', email: 'optout1@example.com', fullName: 'Ollie Optout' },
+    { id: 'res1', email: 'res1@example.com', fullName: 'Rose Resident' },
   ],
 };
 const PREF_ROWS: Record<number, Array<Record<string, unknown>>> = {
-  1: [{ userId: 'admin2', emailInsuranceAlerts: false }], // admin2 opted out
+  1: [{ userId: 'optout1', emailInsuranceAlerts: false }], // opted out
 };
 const WIND_ROWS: Record<number, Array<Record<string, unknown>>> = {
   1: [{ id: 11, formType: 'oir_b1_1802', buildingLabel: null, expiresAt: '2026-08-05', lastAlertBand: null }],
@@ -140,19 +141,21 @@ describe('processInsuranceAlerts', () => {
     });
   });
 
-  it('emails only opted-in admins, non-transactional with a one-click unsubscribe', async () => {
+  it('emails board (via designation) + staff admins, non-transactional with one-click unsubscribe', async () => {
     const result = await processInsuranceAlerts(NOW);
 
-    // Only admin1 gets it: admin2 opted out, res1 is not admin-tier.
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    // board1 (resident + board_president designation) and pm1 (property_manager)
+    // are in; optout1 opted out; res1 is a plain resident.
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
+    const tos = sendEmailMock.mock.calls.map((c) => c[0].to).sort();
+    expect(tos).toEqual(['board1@example.com', 'pm1@example.com']);
     const call = sendEmailMock.mock.calls[0][0];
-    expect(call.to).toBe('a1@example.com');
     expect(call.category).toBe('non-transactional');
     expect(call.unsubscribeUrl).toContain('/api/v1/insurance-alerts/unsubscribe?token=');
     // CAN-SPAM: the sender postal address (community's own) is passed to the template.
     expect(call.react.props.senderAddressLines).toEqual(['1 A St', 'Miami, FL 33139']);
 
-    expect(result.emailsSent).toBe(1);
+    expect(result.emailsSent).toBe(2);
   });
 
   it('advances the fired row lastAlertBand exactly once (dedupe)', async () => {
@@ -166,7 +169,26 @@ describe('processInsuranceAlerts', () => {
     expect(logAuditEventMock.mock.calls[0][0]).toMatchObject({
       action: 'notification_sent',
       resourceType: 'wind_mitigation_report',
+      newValues: { alertBand: '30_days', recipients: 2 },
     });
+  });
+
+  it('defers an item whole when it will not fit the send budget (atomic; band untouched)', async () => {
+    // Community 1's item has 2 recipients; a budget of 1 cannot fit it.
+    const result = await processInsuranceAlerts(NOW, { emailsPerTick: 1 });
+
+    expect(result.emailsSent).toBe(0);
+    expect(sendEmailMock).not.toHaveBeenCalled(); // no partial send
+    expect(updateMock).not.toHaveBeenCalled(); // band not advanced
+  });
+
+  it('a total send failure neither throws nor advances the band', async () => {
+    sendEmailMock.mockRejectedValue(new Error('bad address'));
+
+    const result = await processInsuranceAlerts(NOW); // must resolve, not reject
+    expect(result.emailsSent).toBe(0);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('skips a community with an incomplete postal address without sending or advancing', async () => {
