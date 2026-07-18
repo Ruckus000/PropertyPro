@@ -7,7 +7,6 @@ const {
   requireCommunityMembershipMock,
   requireActiveSubscriptionForMutationMock,
   createAssessmentForCommunityMock,
-  listAssessmentsForCommunityMock,
   paginateAssessmentsForCommunityMock,
   updateAssessmentForCommunityMock,
   deleteAssessmentForCommunityMock,
@@ -26,7 +25,6 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn(),
   createAssessmentForCommunityMock: vi.fn(),
-  listAssessmentsForCommunityMock: vi.fn(),
   paginateAssessmentsForCommunityMock: vi.fn(),
   updateAssessmentForCommunityMock: vi.fn(),
   deleteAssessmentForCommunityMock: vi.fn(),
@@ -75,7 +73,6 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 vi.mock('@/lib/services/finance-service', () => ({
   createAssessmentForCommunity: createAssessmentForCommunityMock,
-  listAssessmentsForCommunity: listAssessmentsForCommunityMock,
   paginateAssessmentsForCommunity: paginateAssessmentsForCommunityMock,
   updateAssessmentForCommunity: updateAssessmentForCommunityMock,
   deleteAssessmentForCommunity: deleteAssessmentForCommunityMock,
@@ -127,7 +124,6 @@ describe('WS66 finance mutation routes', () => {
     requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
 
     createAssessmentForCommunityMock.mockResolvedValue({ id: 11 });
-    listAssessmentsForCommunityMock.mockResolvedValue([]);
     paginateAssessmentsForCommunityMock.mockResolvedValue({
       data: [{ id: 11, title: 'Monthly Dues' }],
       pagination: { nextCursor: null, hasMore: false, pageSize: 50 },

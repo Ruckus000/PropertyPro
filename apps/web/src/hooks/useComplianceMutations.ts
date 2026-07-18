@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { COMPLIANCE_QUERY_KEY } from "./useComplianceChecklist";
+import { COMPLIANCE_QUERY_KEY } from "./use-compliance-checklist";
 import type { ChecklistItemData } from "@/components/compliance/compliance-checklist-item";
 
 type PatchAction =

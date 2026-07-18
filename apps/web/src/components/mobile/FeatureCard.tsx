@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Check, ChevronRight } from "lucide-react";
-import { useComplianceChecklist } from "@/hooks/useComplianceChecklist";
+import { useComplianceChecklist } from "@/hooks/use-compliance-checklist";
 import { formatShortDate } from "@/lib/utils/format-date";
 
 // ── Compliance Card (admin roles when hasCompliance is true) ──
