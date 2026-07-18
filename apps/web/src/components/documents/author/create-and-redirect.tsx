@@ -7,7 +7,7 @@
  */
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateDocumentDraft } from '@/hooks/useDocumentDraft';
+import { useCreateDocumentDraft } from '@/hooks/use-document-draft';
 
 interface CreateAndRedirectProps {
   communityId: number;

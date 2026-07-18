@@ -53,11 +53,12 @@ export function PageHeader({
       className={cn("flex flex-col gap-2 pb-6", className)}
       {...props}
     >
-      {breadcrumb && (
-        <nav aria-label="Breadcrumb" className="text-sm text-content-tertiary">
-          {breadcrumb}
-        </nav>
-      )}
+      {/* Breadcrumbs are no longer rendered inline here. The <Breadcrumbs/>
+          node publishes its trail into the shell-level breadcrumb store, which
+          renders the single global trail below AppTopBar (see
+          components/layout/shell-breadcrumbs.tsx). We still mount the node so
+          its publisher effect fires; it renders null, so nothing shows here. */}
+      {breadcrumb}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1">

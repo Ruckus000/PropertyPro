@@ -34,14 +34,14 @@ vi.mock('@/hooks/use-compliance-checklist', () => ({
   COMPLIANCE_QUERY_KEY: 'compliance-checklist',
 }));
 
-vi.mock('@/hooks/useComplianceMutations', () => ({
+vi.mock('@/hooks/use-compliance-mutations', () => ({
   useComplianceMutations: () => ({
     linkDocument: { mutate: vi.fn() },
     markApplicable: { mutate: vi.fn() },
   }),
 }));
 
-vi.mock('@/hooks/useDocumentCategories', () => ({
+vi.mock('@/hooks/use-document-categories', () => ({
   useDocumentCategories: () => ({
     categories: [{ id: 10, name: 'Insurance' }],
     isLoading: false,
@@ -50,7 +50,7 @@ vi.mock('@/hooks/useDocumentCategories', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useDocumentUpload', () => ({
+vi.mock('@/hooks/use-document-upload', () => ({
   useDocumentUpload: () => ({
     isUploading: false,
     progress: 0,
@@ -94,12 +94,15 @@ beforeEach(() => {
 });
 
 describe('ComplianceCommandCenter', () => {
-  it('renders the page header with breadcrumb and title', () => {
+  it('renders the page header and title', () => {
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Compliance' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Breadcrumb')).toBeInTheDocument();
+    // The breadcrumb trail is now rendered by the app shell (ShellBreadcrumbs),
+    // not inline in PageHeader, so it isn't present when this component renders
+    // in isolation. Assert the PageHeader itself is present instead.
+    expect(document.querySelector('[data-page-header]')).toBeInTheDocument();
   });
 
   it('shows all four KPI labels', () => {

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
-import { useRecentPages } from '@/hooks/useRecentPages';
+import { useRecentPages } from '@/hooks/use-recent-pages';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { NAV_ITEMS, PM_NAV_ITEMS, PAGE_TITLES, getActiveItemId, getVisibleItems } from './nav-config';
 

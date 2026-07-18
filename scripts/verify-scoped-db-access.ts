@@ -265,6 +265,18 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Routes calling this helper MUST have already verified pm_admin / cam membership
   // in the target community and the `hasSiteEditor` plan feature.
   resolve(repoRoot, 'apps/web/src/lib/db/theme-preset-catalog.ts'),
+  // DBB-01: createAdminClient (service-role, RLS-bypassing) is no longer
+  // re-exported from the root @propertypro/db barrel — callers now import it
+  // from the guarded @propertypro/db/supabase/admin subpath, which brings them
+  // under this allowlist. Each of these uses the admin client for a legitimate
+  // pre-tenant/auth-provider operation (auth user_metadata, Storage cleanup,
+  // PDF/image finalize, authored-doc + esign PDF generation).
+  resolve(repoRoot, 'apps/web/src/lib/documents/create-authored-document.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/services/esign-pdf-service.ts'),
+  resolve(repoRoot, 'apps/web/src/lib/site-assets/cleanup.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/site/images/finalize/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/account/profile/route.ts'),
+  resolve(repoRoot, 'apps/web/src/app/api/v1/documents/drafts/[id]/images/route.ts'),
 ]);
 
 const APP_CONFIGS: AppGuardConfig[] = [

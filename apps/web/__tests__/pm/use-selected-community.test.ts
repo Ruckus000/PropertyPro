@@ -7,7 +7,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-import { useSelectedCommunity } from '../../src/hooks/useSelectedCommunity';
+import { useSelectedCommunity } from '../../src/hooks/use-selected-community';
 
 const STORAGE_KEY = 'propertypro.pm.recentCommunityIds';
 

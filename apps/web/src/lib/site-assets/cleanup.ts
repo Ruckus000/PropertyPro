@@ -5,7 +5,7 @@
  * Uses the service-role admin client to bypass RLS (which would otherwise
  * require the deleting user's membership to still exist).
  */
-import { createAdminClient } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { SITE_ASSETS_BUCKET } from './storage-paths';
 
 /**

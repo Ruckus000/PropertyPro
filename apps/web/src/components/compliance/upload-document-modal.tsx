@@ -5,8 +5,8 @@ import { X, Upload, FileUp } from "lucide-react";
 import { Button } from "@propertypro/ui";
 import { AlertBanner } from "@/components/shared/alert-banner";
 import { EmptyState } from "@/components/shared/empty-state";
-import { useDocumentCategories } from "@/hooks/useDocumentCategories";
-import { useDocumentUpload } from "@/hooks/useDocumentUpload";
+import { useDocumentCategories } from "@/hooks/use-document-categories";
+import { useDocumentUpload } from "@/hooks/use-document-upload";
 
 interface UploadDocumentModalProps {
   communityId: number;

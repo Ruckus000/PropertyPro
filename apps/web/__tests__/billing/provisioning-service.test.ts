@@ -110,8 +110,11 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
-vi.mock('@propertypro/db', () => ({
+vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
+}));
+
+vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
   complianceChecklistItems: complianceChecklistItemsTable,
   documentCategories: documentCategoriesTable,

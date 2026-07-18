@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@/hooks/useSelectedCommunity', () => ({
+vi.mock('@/hooks/use-selected-community', () => ({
   useSelectedCommunity: () => ({
     recentCommunityIds: recentCommunityIdsMock.current,
     selectCommunity: selectCommunityMock,
