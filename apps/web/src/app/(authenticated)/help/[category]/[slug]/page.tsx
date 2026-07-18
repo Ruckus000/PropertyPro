@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { compileMDX } from 'next-mdx-remote/rsc';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { ArticleFeedback } from '@/components/help/article-feedback';
 import { ArticleViewTracker } from '@/components/help/article-view-tracker';
 import { TableOfContents, helpMdxComponents } from '@/components/help/mdx-components';
@@ -73,20 +72,6 @@ export default async function HelpArticlePage({
       <PageHeader
         title={article.metadata.title}
         description={article.metadata.description}
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              { label: 'Help Center', href: `/help?communityId=${context.communityId}` },
-              {
-                label: article.metadata.category
-                  .replace(/-/g, ' ')
-                  .replace(/\b\w/g, (c) => c.toUpperCase()),
-                href: `/help/${article.metadata.category}?communityId=${context.communityId}`,
-              },
-            ]}
-            currentLabel={article.metadata.title}
-          />
-        }
       />
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-content-tertiary">

@@ -9,7 +9,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Clock } from 'lucide-react';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
@@ -51,21 +50,6 @@ export default async function StatuteDetailPage({
     <div className="space-y-6">
       <PageHeader
         title={decodedRef}
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              {
-                label: 'Help Center',
-                href: `/help?communityId=${context.communityId}`,
-              },
-              {
-                label: 'Statutes & bills',
-                href: `/help/statutes?communityId=${context.communityId}`,
-              },
-            ]}
-            currentLabel={decodedRef}
-          />
-        }
         description={`${articles.length} ${articles.length === 1 ? 'article' : 'articles'} reference this statute.`}
       />
 

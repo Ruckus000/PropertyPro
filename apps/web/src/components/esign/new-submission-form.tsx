@@ -15,7 +15,6 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 import { useCreateEsignSubmission } from '@/hooks/use-esign-submissions';
@@ -179,12 +178,6 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
       <PageHeader
         title="Send Document for Signing"
         description="Select a template, add signers, and send."
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
-            currentLabel="New submission"
-          />
-        }
       />
 
       <div className="space-y-6">

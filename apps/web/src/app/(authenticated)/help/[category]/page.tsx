@@ -14,7 +14,6 @@ import {
 } from '@/lib/services/help-article-service';
 import { HelpSearchInput } from '@/components/help/help-search-input';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 interface CategoryPageProps {
   params: Promise<{ category: string }>;
@@ -87,12 +86,6 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
     <div className="mx-auto max-w-4xl px-4 py-8 lg:px-6">
       <PageHeader
         title={categoryLabel}
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Help Center', href: `/help?communityId=${membership.communityId}` }]}
-            currentLabel={categoryLabel}
-          />
-        }
         description={`${sorted.length} ${sorted.length === 1 ? 'article' : 'articles'}`}
       />
 
