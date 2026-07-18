@@ -245,6 +245,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // to establish tenant context; the signed token confines the write to the
   // exact (communityId, userId) it encodes.
   resolve(repoRoot, 'apps/web/src/lib/services/snowbird-digest-unsubscribe-service.ts'),
+  // Insurance-alerts cron — by-design cross-tenant scan of insurance-hub
+  // communities; per-community reads/writes then use a scoped client. Same
+  // posture as the snowbird + notification-digest processors.
+  resolve(repoRoot, 'apps/web/src/lib/services/insurance-alert-processor.ts'),
+  // Insurance-alerts no-login unsubscribe write — token-authenticated, no
+  // session; the signed token confines the write to the exact (communityId,
+  // userId) it encodes (the notification_preferences.email_insurance_alerts flag).
+  resolve(repoRoot, 'apps/web/src/lib/services/insurance-alert-unsubscribe-service.ts'),
   // PR #2: Site asset quota lookup — communities is the root tenant table (no communityId column);
   // plan resolution requires unscoped read. Routes calling these helpers MUST have already
   // verified caller's pm_admin membership in the target community.
