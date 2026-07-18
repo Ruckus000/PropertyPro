@@ -1,6 +1,6 @@
 'use client';
 
-import { useLargeText } from '@/hooks/useLargeText';
+import { useLargeText } from '@/hooks/use-large-text';
 
 export function AccessibilitySettings() {
   const { largeText, setLargeText } = useLargeText();

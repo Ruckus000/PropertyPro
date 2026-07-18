@@ -15,7 +15,7 @@ import { DocumentViewer } from './document-viewer';
 import { DocumentVersionHistory } from './document-version-history';
 import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentSearch } from './document-search';
-import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
+import type { UploadDocumentResult } from '@/hooks/use-document-upload';
 
 interface DocumentLibraryProps {
   communityId: number;

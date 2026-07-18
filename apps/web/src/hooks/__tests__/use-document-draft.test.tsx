@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
-import { useAutosave } from '../useDocumentDraft';
+import { useAutosave } from '../use-document-draft';
 
 function wrapper(qc: QueryClient) {
   return ({ children }: { children: React.ReactNode }) => (

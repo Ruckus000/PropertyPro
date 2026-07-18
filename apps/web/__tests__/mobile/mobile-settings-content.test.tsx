@@ -21,7 +21,7 @@ vi.mock('@/components/mobile/MobileBackHeader', () => ({
   MobileBackHeader: ({ title }: { title: string }) => <div>{title}</div>,
 }));
 
-vi.mock('@/hooks/useLargeText', () => ({
+vi.mock('@/hooks/use-large-text', () => ({
   useLargeText: () => ({ largeText: false, toggleLargeText: vi.fn() }),
 }));
 

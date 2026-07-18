@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
-import { useComplianceMutations } from '@/hooks/useComplianceMutations';
+import { useComplianceMutations } from '@/hooks/use-compliance-mutations';
 import { buildComplianceSummary, sortByPriority } from '@/lib/utils/compliance-calculator';
 import { ComplianceDetailPanel } from './compliance-detail-panel';
 import { ComplianceOnboarding } from './compliance-onboarding';

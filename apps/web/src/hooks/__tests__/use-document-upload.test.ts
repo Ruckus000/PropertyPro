@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useDocumentUpload, type UploadRequest } from '../useDocumentUpload';
+import { useDocumentUpload, type UploadRequest } from '../use-document-upload';
 
 // ---------------------------------------------------------------------------
 // Mock fetch globally

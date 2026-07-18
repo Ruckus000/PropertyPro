@@ -20,7 +20,7 @@ import {
   useDeleteDocumentDraft,
   useSaveDocumentDraft,
   type DocumentLinkPickerResult,
-} from '@/hooks/useDocumentDraft';
+} from '@/hooks/use-document-draft';
 
 // The editor pulls TipTap onto the page; gate it behind next/dynamic with
 // ssr:false so it only ships on these author routes.

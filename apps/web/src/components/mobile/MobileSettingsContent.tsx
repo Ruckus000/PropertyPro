@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Save, Check, AlertCircle, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useLargeText } from '@/hooks/useLargeText';
+import { useLargeText } from '@/hooks/use-large-text';
 import { useUpdateMobileSettings } from '@/hooks/use-mobile-settings';
 import { MobileBackHeader } from '@/components/mobile/MobileBackHeader';
 import { PageTransition, SlideUp } from '@/components/motion';
