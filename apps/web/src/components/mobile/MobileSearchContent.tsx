@@ -14,7 +14,7 @@ import type { AnyCommunityRole, TransitionRole, CommunityFeatures } from '@prope
 import { isAdminRole } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
-import { useRecentPages } from '@/hooks/useRecentPages';
+import { useRecentPages } from '@/hooks/use-recent-pages';
 import { useFilteredRegistry, type ResolvedRegistryItem } from '@/lib/constants/feature-registry';
 
 // ---------------------------------------------------------------------------

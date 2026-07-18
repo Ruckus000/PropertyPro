@@ -34,14 +34,14 @@ vi.mock('@/hooks/use-compliance-checklist', () => ({
   COMPLIANCE_QUERY_KEY: 'compliance-checklist',
 }));
 
-vi.mock('@/hooks/useComplianceMutations', () => ({
+vi.mock('@/hooks/use-compliance-mutations', () => ({
   useComplianceMutations: () => ({
     linkDocument: { mutate: vi.fn() },
     markApplicable: { mutate: vi.fn() },
   }),
 }));
 
-vi.mock('@/hooks/useDocumentCategories', () => ({
+vi.mock('@/hooks/use-document-categories', () => ({
   useDocumentCategories: () => ({
     categories: [{ id: 10, name: 'Insurance' }],
     isLoading: false,
@@ -50,7 +50,7 @@ vi.mock('@/hooks/useDocumentCategories', () => ({
   }),
 }));
 
-vi.mock('@/hooks/useDocumentUpload', () => ({
+vi.mock('@/hooks/use-document-upload', () => ({
   useDocumentUpload: () => ({
     isUploading: false,
     progress: 0,

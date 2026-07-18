@@ -11,11 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
   useDocumentUpload,
   type UploadDocumentResult,
-} from '@/hooks/useDocumentUpload';
+} from '@/hooks/use-document-upload';
 
 interface DocumentUploadAreaProps {
   communityId: number;

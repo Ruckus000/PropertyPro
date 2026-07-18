@@ -23,7 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useDocuments } from '@/hooks/use-documents';
-import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
   useCreateWindMitigationReport,
   useUpdateWindMitigationReport,
