@@ -159,6 +159,19 @@ export const EMPTY_STATE_CONFIGS = {
       "Your board hasn't posted the building's wind-mitigation inspection. Ask them about it — the report can help you ask your insurer about wind-mitigation credits.",
     icon: "shield-check",
   },
+  insurance_policy_empty_admin: {
+    title: "Add the master policy",
+    description:
+      "Post the declarations page once — owners get the summary, the download, and a one-click certificate request at every sale or refi.",
+    actionLabel: "Add Policy",
+    icon: "shield-check",
+  },
+  insurance_policy_empty_resident: {
+    title: "No master-policy summary yet",
+    description:
+      "Your board hasn't posted the association's master policy. Ask them about it — you'll need it for lender verification when you sell or refinance.",
+    icon: "shield-check",
+  },
 } as const satisfies Record<string, EmptyStateConfig>;
 
 export type EmptyStateKey = keyof typeof EMPTY_STATE_CONFIGS;
