@@ -16,16 +16,12 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
 import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
-import {
-  PM_SCOPE_DB_ROLES,
-} from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
+import { ShellBreadcrumbs } from './shell-breadcrumbs';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
@@ -218,20 +214,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
         />
-        {role && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role) && community && (
-          <div className="flex items-center gap-1.5 border-b border-edge bg-surface-page px-6 py-2 lg:px-8">
-            <Link
-              href="/pm/dashboard/communities"
-              className="flex items-center gap-1 text-sm text-content-secondary transition-colors duration-quick hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              aria-label="Back to portfolio"
-            >
-              <ChevronLeft size={14} aria-hidden="true" />
-              <span>Portfolio</span>
-            </Link>
-            <span className="text-sm text-content-tertiary" aria-hidden="true">/</span>
-            <span className="text-sm font-medium text-content">{community.name}</span>
-          </div>
-        )}
+        <ShellBreadcrumbs role={role} community={community} features={features} />
         <SubscriptionBillingBanners
           role={role}
           communityId={community?.id ?? null}
