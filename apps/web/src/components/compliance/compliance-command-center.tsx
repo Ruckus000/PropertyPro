@@ -55,7 +55,12 @@ export function ComplianceCommandCenter({
     // (e.g. ViewToggle, query-provider) — reads persisted state only in the browser.
     if (typeof window === 'undefined') return defaultView(designation);
     const stored = window.localStorage.getItem(storageKey);
-    if (stored === 'manager' || stored === 'board') return stored;
+    if (stored === 'board') return 'board';
+    // Any other stored preference resolves to the manager view. This also
+    // migrates the pre-v3 operational-view token seamlessly — the retired value
+    // can't be named here without tripping guard:legacy-roles, and it mapped to
+    // this same manager view anyway.
+    if (stored) return 'manager';
     return defaultView(designation);
   });
 
