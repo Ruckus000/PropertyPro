@@ -12,7 +12,8 @@
  * The .pdf path is recorded in documents.file_path; the .html path is
  * derived by extension swap on read.
  */
-import { createAdminClient, createScopedClient, documents, logAuditEvent } from '@propertypro/db';
+import { createScopedClient, documents, logAuditEvent } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AppError } from '@/lib/api/errors';
 import { queuePdfExtraction } from '@/lib/workers/pdf-extraction';
 import { createNotificationsForEvent, queueNotificationDetailed } from '@/lib/services/notification-service';
