@@ -184,15 +184,17 @@ function buildHomeCrumbs({
 }): BreadcrumbLink[] {
   const isPm = role != null && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role);
 
-  // On the PM portal itself, the root is always the portfolio.
+  // On the PM portal itself, the root is always the communities list. Label
+  // matches the PM sidebar entry for /pm/dashboard/communities ('Communities',
+  // not 'Portfolio') per .claude/rules/design.md canonical mappings.
   if (pathname.startsWith('/pm')) {
-    return [{ label: 'Portfolio', href: '/pm/dashboard/communities' }];
+    return [{ label: 'Communities', href: '/pm/dashboard/communities' }];
   }
 
-  // PM viewing a specific community: portfolio → community dashboard.
+  // PM viewing a specific community: communities list → community dashboard.
   if (isPm && community) {
     return [
-      { label: 'Portfolio', href: '/pm/dashboard/communities' },
+      { label: 'Communities', href: '/pm/dashboard/communities' },
       { label: community.name, href: resolveDashboardHref(community.id, features) },
     ];
   }
