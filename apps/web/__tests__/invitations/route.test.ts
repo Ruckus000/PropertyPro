@@ -69,10 +69,25 @@ vi.mock('@/lib/services/invitations-service', () => ({
 
 import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
 
+// requirePermission (from @/lib/db/access-control) is NOT mocked — it runs for
+// real against the static RBAC matrix — so the mocked membership must be a
+// realistic management-tier row for the happy path to clear residents:write.
+const adminMembership = {
+  communityId: 99,
+  userId: 'inviter-uuid',
+  role: 'property_manager' as const,
+  communityType: 'condo_718' as const,
+  isUnitOwner: false,
+  isAdmin: true,
+  roleTitle: 'Property Manager',
+  designation: null,
+};
+
 describe('p1-20 invitation auth flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('inviter-uuid');
+    requireCommunityMembershipMock.mockResolvedValue(adminMembership);
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
   });
 
@@ -128,6 +143,29 @@ describe('p1-20 invitation auth flow', () => {
 
     const res = await POST(req);
     expect(res.status).toBe(403);
+  });
+
+  it('POST returns 403 for a non-admin member (residents:write gate)', async () => {
+    // A member with a resident (tenant) role must not be able to invite (AZ-01).
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      ...adminMembership,
+      role: 'resident' as const,
+      isUnitOwner: false,
+      isAdmin: false,
+      roleTitle: 'Resident',
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ communityId: 99, userId: 'user-1', ttlDays: 7 }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+    // The invitation must not be created or emailed when the gate rejects.
+    expect(createInvitationMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('PATCH consumes token, creates auth user, and returns email', async () => {

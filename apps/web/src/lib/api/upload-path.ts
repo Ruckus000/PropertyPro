@@ -13,17 +13,23 @@ import { ValidationError } from '@/lib/api/errors';
  *
  * Call this in route handlers AFTER `resolveEffectiveCommunityId()` —
  * never in the Zod schema, where the authoritative id is not yet known.
+ *
+ * `bucketPrefix` is the storage namespace the path must live under; it
+ * defaults to `communities` (documents/violations evidence) but callers on
+ * other buckets pass their own (e.g. `maintenance`) so every upload path gets
+ * the same traversal + cross-tenant checks instead of a divergent inline one.
  */
 export function validateUploadFilePath(
   filePath: string,
   effectiveCommunityId: number,
+  bucketPrefix = 'communities',
 ): void {
   if (filePath.includes('..')) {
     throw new ValidationError('Invalid file path', {
       fields: [{ field: 'filePath', message: 'Path traversal is not allowed' }],
     });
   }
-  const expectedPrefix = `communities/${effectiveCommunityId}/`;
+  const expectedPrefix = `${bucketPrefix}/${effectiveCommunityId}/`;
   if (!filePath.startsWith(expectedPrefix)) {
     throw new ValidationError('Invalid file path', {
       fields: [{ field: 'filePath', message: `filePath must start with ${expectedPrefix}` }],

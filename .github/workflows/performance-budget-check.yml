@@ -21,6 +21,12 @@ on:
       - .github/workflows/performance-budget-check.yml
   workflow_dispatch:
 
+# Cancel a superseded run when a new commit is pushed (INF-04) — a force-push
+# rebase otherwise leaves the old full-build run churning to completion.
+concurrency:
+  group: perf-budget-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   perf-budget:
     runs-on: ubuntu-latest

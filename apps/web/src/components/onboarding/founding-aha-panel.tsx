@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
+import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
 import { useTransparencySettings, useUpdateTransparencySettings } from '@/hooks/use-transparency';
 import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';
 import { buildCommunityUrl } from '@/lib/utils/community-url';

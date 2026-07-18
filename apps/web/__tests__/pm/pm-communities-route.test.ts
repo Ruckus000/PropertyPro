@@ -20,8 +20,13 @@ vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(),
 }));
 
+// The PM gate now resolves through requirePmPortfolioAccess, which reads
+// isPmAdminInAnyCommunity from the pm-communities module (its re-export), so the
+// mock must expose it here. The db/unsafe mock is retained for the underlying
+// re-export path.
 vi.mock('@/lib/api/pm-communities', () => ({
   listManagedCommunitiesForPm: listManagedCommunitiesForPmMock,
+  isPmAdminInAnyCommunity: isPmAdminInAnyCommunityMock,
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({

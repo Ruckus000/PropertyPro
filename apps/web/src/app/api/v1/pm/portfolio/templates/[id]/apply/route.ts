@@ -6,18 +6,16 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { AppError, ForbiddenError } from '@/lib/api/errors';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { isPmAdminInAnyCommunity } from '@/lib/api/pm-communities';
+import { AppError } from '@/lib/api/errors';
+import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import * as svc from '@/lib/services/site-portfolio-template-service';
 import { templateApplyContract } from './contract';
 
 /** PM + plan-feature gate (mirrors the templates CRUD route). Returns the actor's userId. */
 async function gateUser(): Promise<string> {
-  const userId = await requireAuthenticatedUserId();
-  if (!(await isPmAdminInAnyCommunity(userId))) {
-    throw new ForbiddenError('Only property managers can manage portfolio templates');
-  }
+  const userId = await requirePmPortfolioAccess(
+    'Only property managers can manage portfolio templates',
+  );
   if (!(await svc.userHasPortfolioTemplatesAccess(userId))) {
     throw new AppError(
       'Portfolio templates require the Operations Plus plan.',
