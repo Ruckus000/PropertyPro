@@ -20,15 +20,15 @@ describe('Operations nav entry visibility — feature matrix', () => {
     expect(visible).toHaveLength(1);
   });
 
-  it('condo_718 + professional + cam → visible (has maintenance)', () => {
+  it('condo_718 + professional + property_manager → visible (has maintenance)', () => {
     const features = featuresFor('condo_718', 'professional');
-    const visible = getVisibleItems([operationsEntry!], 'cam', features);
+    const visible = getVisibleItems([operationsEntry!], 'property_manager', features);
     expect(visible).toHaveLength(1);
   });
 
-  it('apartment + operations_plus + site_manager → visible (has work orders + amenities)', () => {
+  it('apartment + operations_plus + property_manager → visible (has work orders + amenities)', () => {
     const features = featuresFor('apartment', 'operations_plus');
-    const visible = getVisibleItems([operationsEntry!], 'site_manager', features);
+    const visible = getVisibleItems([operationsEntry!], 'property_manager', features);
     expect(visible).toHaveLength(1);
   });
 
@@ -51,7 +51,7 @@ describe('Operations nav entry visibility — feature matrix', () => {
       hasWorkOrders: false,
       hasAmenities: false,
     };
-    const visible = getVisibleItems([operationsEntry!], 'cam', features);
+    const visible = getVisibleItems([operationsEntry!], 'property_manager', features);
     expect(visible).toHaveLength(0);
   });
 
@@ -70,7 +70,7 @@ describe('Operations nav entry visibility — feature matrix', () => {
     const features = featuresFor('condo_718', 'essentials');
     const visible = getVisibleItemsWithPlanGate(
       [operationsEntry!],
-      'cam',
+      'property_manager',
       features,
       'condo_718',
       resolvePlanId('essentials'),

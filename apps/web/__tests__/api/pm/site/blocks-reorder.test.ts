@@ -57,7 +57,7 @@ describe('POST /api/v1/pm/site/blocks/reorder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthMock.mockResolvedValue('user-1');
-    requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
+    requireMembershipMock.mockResolvedValue({ role: 'property_manager', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     reorderSiteBlockMock.mockResolvedValue({ movedBlockId: 12, fromOrder: 2, toOrder: 3 });

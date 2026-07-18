@@ -24,7 +24,6 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
-  inferCanonicalRoleFromMembership,
   resolvePlanId,
   PLAN_FEATURES,
   type CommunityFeatures,
@@ -47,11 +46,6 @@ export async function FeatureGate({
   // requirePageCommunityMembership reads tenant context from forwarded
   // request headers (set by middleware) when no communityId is passed.
   const membership = await requirePageCommunityMembership(communityIdOverride);
-  const role = inferCanonicalRoleFromMembership({
-    role: membership.role,
-    isUnitOwner: membership.isUnitOwner,
-    designation: membership.designation ?? null,
-  });
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
 
   // Allowed if the resolved plan unlocks this feature.
@@ -62,14 +56,15 @@ export async function FeatureGate({
     return <>{children}</>;
   }
 
-  if (getLockedFeatureBehavior(role) === 'hidden') {
+  if (getLockedFeatureBehavior(membership.role, membership.isUnitOwner) === 'hidden') {
     redirect(`/dashboard?communityId=${membership.communityId}`);
   }
 
   return (
     <LockedFeatureScreen
       featureKey={feature}
-      role={role}
+      role={membership.role}
+      isUnitOwner={membership.isUnitOwner}
       currentPlanId={planId}
       currentPlanRaw={membership.subscriptionPlan ?? null}
       communityId={membership.communityId}

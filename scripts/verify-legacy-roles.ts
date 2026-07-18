@@ -20,9 +20,10 @@
  * The ALLOWLIST is a CEILING per file: exceeding it fails (no growth); dropping
  * below it only warns (tighten opportunistically on the next drain). The long-term
  * structural sites (rbac-matrix / access-policies / DB enum) are removed when the
- * RBAC_MATRIX/CommunityRole 7→3 collapse lands (a later phase); the bridge-display
+ * RBAC_MATRIX/CommunityRole 7→3 collapse lands (a later phase). The bridge-display
  * sites (nav-config / feature-registry / role-guard aliases / esign / compliance /
- * invitations) drain in Phase 4.4 with the inferCanonicalRoleFromMembership removal.
+ * invitations) were drained in Phase 4.4 alongside the
+ * inferCanonicalRoleFromMembership removal — the BRIDGE bucket is now empty.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,8 +32,9 @@ const ROOTS = ['apps/web/src', 'apps/admin/src', 'packages/shared/src', 'package
 const LITERAL = /'(cam|site_manager|property_manager_admin)'/g;
 const V2_CAST = /'resident'\s*\|\s*'manager'\s*\|\s*'pm_admin'/g;
 const EXEMPT = new Set([
+  // The v3 source-of-truth module — holds the guard-exempt HELP_FRONTMATTER_ROLES
+  // content vocabulary (help-article frontmatter, not runtime roles).
   'packages/shared/src/role-transition.ts',
-  'packages/shared/src/billing/permissions.ts', // the inferCanonicalRoleFromMembership shim — deleted at Phase 4.4
 ]);
 
 // Per-file CEILING of legitimate dead-legacy-role literals (pinned 2026-06-22, Phase 4.3).
@@ -43,18 +45,12 @@ const EXEMPT = new Set([
 //   DEV         — dev-only portal login aliases (404 in prod).
 //   TEST        — co-located *.test fixtures under src asserting the v3↔legacy mapping.
 const ALLOWLIST = new Map<string, number>([
-  // STRUCTURAL
+  // STRUCTURAL (removed at the RBAC_MATRIX/CommunityRole 7→3 collapse, PR2)
   ['packages/shared/src/rbac-matrix.ts', 16],
   ['packages/shared/src/access-policies.ts', 7],
   ['packages/db/src/schema/enums.ts', 3],
   ['apps/web/src/lib/db/access-control.ts', 1],
-  // BRIDGE (Phase 4.4 drain targets)
-  ['apps/web/src/components/compliance/compliance-command-center.tsx', 6],
-  ['apps/web/src/components/layout/nav-config.ts', 5],
-  ['apps/web/src/lib/api/role-guard.ts', 3],
-  ['apps/web/src/lib/constants/feature-registry.ts', 3],
-  ['packages/shared/src/esign-constants.ts', 2],
-  ['apps/web/src/lib/services/invitations-service.ts', 1],
+  // BRIDGE — drained to zero in Phase 4.4 (this PR). Bucket intentionally empty.
   // HELP
   ['packages/shared/src/default-faqs.ts', 3],
   ['apps/web/src/lib/help/aliases.ts', 1],
@@ -63,7 +59,6 @@ const ALLOWLIST = new Map<string, number>([
   ['apps/web/src/app/dev/login/route.ts', 2],
   // TEST
   ['packages/shared/src/__tests__/rbac-parity.test.ts', 6],
-  ['apps/web/src/components/layout/__tests__/nav-operations-gate.test.ts', 4],
   ['apps/web/src/hooks/__tests__/use-residents.test.tsx', 3],
   ['apps/web/src/lib/help/__tests__/viewer-role.test.ts', 3],
   ['apps/web/src/lib/services/__tests__/help-article-service.test.ts', 1],

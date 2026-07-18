@@ -28,32 +28,27 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import {
-  ADMIN_ROLES,
   isAdminRole,
-  isCommunityRole,
   getFeaturesForCommunity,
   PLAN_FEATURES,
   findCheapestPlanForFeature,
-  getLockedFeatureBehavior,
   type AnyCommunityRole,
-  type CommunityRole,
   type CommunityFeatures,
   type CommunityType,
   type PlanId,
   type TransitionRole,
 } from '@propertypro/shared';
 
-const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
-  'owner',
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-];
-
 /** Essentials slim-nav placement. Ignored outside slim-nav mode. */
 export type NavTier = 'default' | 'more';
+
+/**
+ * Role-based visibility for a nav item (v3-native, ADR-006).
+ * - `'admin'`: management tier only (`property_manager` / `root_manager`).
+ * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
+ * Omit to make an item visible to all roles.
+ */
+export type NavVisibility = 'admin' | 'owner_or_admin';
 
 export interface NavItemConfig {
   id: string;
@@ -64,8 +59,8 @@ export interface NavItemConfig {
   navTier?: NavTier;
   /** Optional child item IDs for nested sidebar disclosure groups. */
   children?: readonly string[];
-  /** Restrict to these roles. Omit = visible to all roles. */
-  roles?: readonly CommunityRole[];
+  /** Role-based visibility gate. Omit = visible to all roles. */
+  visibility?: NavVisibility;
   /** Only show when this community feature is enabled. */
   featureKey?: keyof CommunityFeatures;
   /** Visible when ANY of these features is enabled (any-of semantics). Evaluated alongside featureKey. */
@@ -181,22 +176,23 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Payments',
     icon: CreditCard,
     href: (cid) => `/communities/${cid}/payments`,
-    roles: FINANCE_READ_NAV_ROLES,
+    visibility: 'owner_or_admin',
     featureKey: 'hasFinance',
     navTier: 'more',
     matchPrefixes: ['/payments'],
   },
   {
     // Launcher into the public-site / landing-page editor (which lives under
-    // /pm/settings/website). Surfaced in the community sidebar so single-
-    // community admins (cam) and PM admins can reach it without first going to
-    // the PM portal. Gated to the same roles the editor route allows
-    // (property_manager_admin + cam) so the link never lands on a redirect.
+    // /pm/settings/website). Surfaced in the community sidebar so management-tier
+    // members can reach it without first going to the PM portal. Gated to the
+    // management tier the editor route allows so the link never lands on a
+    // redirect. (v3: `designation` is orthogonal — a manager who also holds a
+    // board seat still sees this, unlike the old legacy-name gate.)
     id: 'website',
     label: 'Website',
     icon: Paintbrush,
     href: (cid) => `/pm/settings/website?communityId=${cid}`,
-    roles: ['property_manager_admin', 'cam'],
+    visibility: 'admin',
     featureKey: 'hasSiteEditor',
     matchPrefixes: ['/pm/settings'],
   },
@@ -217,7 +213,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Compliance',
     icon: Shield,
     href: (cid) => `/communities/${cid}/compliance`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasCompliance',
     matchPrefixes: ['/compliance'],
   },
@@ -226,7 +222,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Residents',
     icon: Users,
     href: (cid) => `/dashboard/residents?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     matchPrefixes: ['/dashboard/residents'],
   },
   {
@@ -234,7 +230,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Units',
     icon: Building2,
     href: (cid) => `/dashboard/units?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     matchPrefixes: ['/dashboard/units'],
   },
   {
@@ -242,7 +238,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Contracts',
     icon: FileText,
     href: (cid) => `/contracts?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasCompliance',
     navTier: 'more',
     matchPrefixes: ['/contracts'],
@@ -268,7 +264,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'E-Sign',
     icon: FileSignature,
     href: (cid) => `/esign?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasEsign',
     navTier: 'more',
     matchPrefixes: ['/esign'],
@@ -278,7 +274,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Violations',
     icon: AlertTriangle,
     href: (cid) => `/violations?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasViolations',
     navTier: 'more',
     matchPrefixes: ['/violations'],
@@ -288,7 +284,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'ARC Requests',
     icon: ClipboardCheck,
     href: (cid) => `/arc-requests?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasARC',
     navTier: 'more',
     matchPrefixes: ['/arc-requests'],
@@ -299,7 +295,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: ClipboardCheck,
     href: (cid) => `/dashboard/move-in-out?communityId=${cid}`,
     featureKey: 'hasLeaseTracking',
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     navTier: 'more',
     matchPrefixes: ['/dashboard/move-in-out'],
   },
@@ -308,7 +304,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Audit Trail',
     icon: History,
     href: (cid) => `/audit-trail?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     navTier: 'more',
     matchPrefixes: ['/audit-trail'],
   },
@@ -408,22 +404,36 @@ export function resolveNavItemHref(
 }
 
 /**
+ * v3-native role gate for a nav item (ADR-006). A null role skips the gate
+ * (matches the pre-v3 behavior where a role-less shell saw every item).
+ * `designation` is never consulted — management status comes from the role.
+ */
+function itemVisibleForRole(
+  item: NavItemConfig,
+  role: AnyCommunityRole | null,
+  isUnitOwner?: boolean,
+): boolean {
+  if (!item.visibility || !role) return true;
+  const admin = isAdminRole(role);
+  if (item.visibility === 'owner_or_admin') return admin || isUnitOwner === true;
+  return admin; // 'admin'
+}
+
+/**
  * Filter nav items by user role and community features.
+ *
+ * `isUnitOwner` distinguishes unit owners from tenants for `owner_or_admin`
+ * items (finance-read surfaces). Omit it to gate those items on management tier
+ * only — the command palette does this deliberately.
  */
 export function getVisibleItems(
   items: readonly NavItemConfig[],
   role: AnyCommunityRole | null,
   features: CommunityFeatures | null,
+  isUnitOwner?: boolean,
 ): NavItemConfig[] {
   return items.filter((item) => {
-    if (item.roles && role) {
-      if (isCommunityRole(role)) {
-        if (!item.roles.includes(role)) return false;
-      } else {
-        // New roles: all role-gated nav items are currently admin-gated
-        if (!isAdminRole(role)) return false;
-      }
-    }
+    if (!itemVisibleForRole(item, role, isUnitOwner)) return false;
     if (item.featureKey && features && !features[item.featureKey]) return false;
     if (item.featureKeys && features) {
       const anyEnabled = item.featureKeys.some((key) => features[key]);
@@ -465,23 +475,19 @@ export function getVisibleItemsWithPlanGate(
   features: CommunityFeatures | null,
   communityType: CommunityType | null,
   planId: PlanId | null,
+  isUnitOwner?: boolean,
 ): NavItemWithGateStatus[] {
   // Raw type-level features (before plan intersection)
   const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
-  // Tenants don't see plan-gated marketing surfaces — for them, plan-locked
-  // items behave like type-gated ones: filtered out completely.
-  const hideLockedEntirely = getLockedFeatureBehavior(role) === 'hidden';
+  // Tenants (resident, not a unit owner) don't see plan-gated marketing
+  // surfaces — for them, plan-locked items behave like type-gated ones:
+  // filtered out completely. Designation is never read (ADR-006 §2).
+  const hideLockedEntirely = role === 'resident' && isUnitOwner !== true;
 
   return items
     .filter((item) => {
       // Role gate — same logic as getVisibleItems
-      if (item.roles && role) {
-        if (isCommunityRole(role)) {
-          if (!item.roles.includes(role)) return false;
-        } else {
-          if (!isAdminRole(role)) return false;
-        }
-      }
+      if (!itemVisibleForRole(item, role, isUnitOwner)) return false;
       // Community-type gate: if the TYPE doesn't support it, hide entirely
       if (item.featureKey && typeFeatures && !typeFeatures[item.featureKey]) return false;
       if (item.featureKeys && typeFeatures) {

@@ -6,7 +6,6 @@ import {
   billingDaysRemainingUTC,
   canManageBilling,
   formatBillingDateUTC,
-  inferCanonicalRoleFromMembership,
   isWithinPaidGrace,
   paidGraceEndsAt,
 } from '@propertypro/shared';
@@ -165,10 +164,8 @@ export function resolveSubscriptionBillingBannerState(
   const billingSettingsHref = props.communityId
     ? `/settings/billing?communityId=${props.communityId}`
     : '/settings/billing';
-  const canonicalRole = props.role
-    ? inferCanonicalRoleFromMembership({ role: props.role })
-    : null;
-  const isBillingAdmin = canManageBilling(canonicalRole);
+  // props.role is the v3 runtime role; canManageBilling reads it directly.
+  const isBillingAdmin = canManageBilling(props.role);
   const showTrialing =
     !props.isDemo &&
     props.subscriptionStatus === 'trialing' &&

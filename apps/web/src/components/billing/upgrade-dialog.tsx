@@ -51,6 +51,8 @@ export interface UpgradeDialogProps {
   /** Raw plan string from the community row, used as a fallback for resolution. */
   currentPlanRaw: string | null;
   role: AnyCommunityRole | null;
+  /** Distinguishes unit owner (request) from tenant (hidden) among residents. */
+  isUnitOwner?: boolean;
   /**
    * Tenant id, threaded through to the fetch URLs. Without it,
    * `resolveEffectiveCommunityId` on the API side can't pick a tenant when
@@ -67,6 +69,7 @@ export function UpgradeDialog({
   currentPlanId,
   currentPlanRaw,
   role,
+  isUnitOwner,
   communityId,
 }: UpgradeDialogProps) {
   const [pending, setPending] = React.useState(false);
@@ -82,7 +85,7 @@ export function UpgradeDialog({
     }
   }, [open]);
 
-  const behavior = getLockedFeatureBehavior(role);
+  const behavior = getLockedFeatureBehavior(role, isUnitOwner);
   const copy = featureKey ? getPlanFeatureCopy(featureKey) : null;
 
   const resolvedCurrentPlan: PlanId | null =
