@@ -7,7 +7,7 @@ const updateMutateMock = vi.fn();
 
 const { checklistMock } = vi.hoisted(() => ({ checklistMock: vi.fn() }));
 
-vi.mock('@/hooks/useComplianceChecklist', () => ({
+vi.mock('@/hooks/use-compliance-checklist', () => ({
   useComplianceChecklist: () => checklistMock(),
 }));
 
