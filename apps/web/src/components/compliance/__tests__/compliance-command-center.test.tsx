@@ -29,7 +29,7 @@ let mockChecklistReturn: {
   error: null,
 };
 
-vi.mock('@/hooks/useComplianceChecklist', () => ({
+vi.mock('@/hooks/use-compliance-checklist', () => ({
   useComplianceChecklist: () => mockChecklistReturn,
   COMPLIANCE_QUERY_KEY: 'compliance-checklist',
 }));

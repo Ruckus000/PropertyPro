@@ -10,7 +10,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import { useComplianceMutations } from '../useComplianceMutations';
-import { COMPLIANCE_QUERY_KEY } from '../useComplianceChecklist';
+import { COMPLIANCE_QUERY_KEY } from '../use-compliance-checklist';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 
 // ---------------------------------------------------------------------------
