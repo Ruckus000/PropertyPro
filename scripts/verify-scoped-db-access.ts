@@ -68,8 +68,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
   // P3-PRE-03: PM portfolio cross-community read boundary
   resolve(repoRoot, 'apps/web/src/lib/api/pm-communities.ts'),
-  // P3-PRE-03: PM role gate (isPmAdminInAnyCommunity) at route layer
-  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/communities/route.ts'),
   // P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
   resolve(repoRoot, 'apps/web/src/lib/pm/create-community.ts'),
   // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
@@ -225,8 +223,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Pricing preview — queries all communities in a billing group; authorized by billing group ownership
   // Cancel preview — queries communities in a billing group; authorized by billing group ownership
   // Community cancel — soft-deletes community + triggers tier recalc; authorized by billing group ownership
-  // Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
-  resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/mine/route.ts'),
   // Self-service community linking: pre-tenant eligibility checks + cross-community lookups
   // authorization contract: caller authenticates userId before invoking these helpers
   resolve(repoRoot, 'apps/web/src/lib/join-requests/eligibility.ts'),

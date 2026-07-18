@@ -15,13 +15,10 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 // AUTHZ: PM portfolio route — cross-community aggregation by design.
-import {
-  isPmAdminInAnyCommunity,
-  findManagedCommunitiesPortfolioUnscoped,
-} from '@propertypro/db/unsafe';
+import { findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError } from '@/lib/api/errors';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { insertBulkDocumentsForCommunity } from '@/lib/pm/bulk-document-upload';
 import { pmBulkDocumentsPostContract } from './contract';
@@ -36,12 +33,9 @@ interface DocumentResult {
 
 export const POST = withErrorHandler(
   runRoute(pmBulkDocumentsPostContract, async ({ body }) => {
-    const userId = await requireAuthenticatedUserId();
-
-    const isPm = await isPmAdminInAnyCommunity(userId);
-    if (!isPm) {
-      throw new ForbiddenError('Only property managers can perform bulk document uploads');
-    }
+    const userId = await requirePmPortfolioAccess(
+      'Only property managers can perform bulk document uploads',
+    );
 
     const { communityIds, documents: docPayloads } = body;
 
