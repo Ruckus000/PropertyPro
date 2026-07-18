@@ -10,10 +10,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import sharp from 'sharp';
-import {
-  createAdminClient,
-  createPresignedDownloadUrl,
-} from '@propertypro/db';
+import { createPresignedDownloadUrl } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

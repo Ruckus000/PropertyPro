@@ -42,9 +42,12 @@ const {
   inArrayMock: vi.fn((...args: unknown[]) => ({ type: 'inArray', args })),
 }));
 
+vi.mock('@propertypro/db/supabase/admin', () => ({
+  createAdminTypedClient: vi.fn(),
+}));
+
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
-  createAdminClient: vi.fn(),
   createPresignedDownloadUrl: vi.fn(),
   esignSigners: esignSignersTable,
   esignSubmissions: esignSubmissionsTable,
