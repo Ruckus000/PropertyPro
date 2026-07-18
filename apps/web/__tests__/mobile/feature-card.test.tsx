@@ -6,7 +6,7 @@ const { useComplianceChecklistMock } = vi.hoisted(() => ({
   useComplianceChecklistMock: vi.fn(),
 }));
 
-vi.mock('@/hooks/useComplianceChecklist', () => ({
+vi.mock('@/hooks/use-compliance-checklist', () => ({
   useComplianceChecklist: useComplianceChecklistMock,
 }));
 

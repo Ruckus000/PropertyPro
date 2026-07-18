@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
@@ -18,6 +18,13 @@ interface AppGuardConfig {
   appDir: string;
   mode: GuardMode;
   unsafeAllowlist: Set<string>;
+  /**
+   * Populated during the scan with allowlisted files that actually import an
+   * unsafe/admin specifier. Any `unsafeAllowlist` entry NOT in here after the
+   * scan is a dead allowlist entry (file deleted, or it no longer reaches for
+   * the unsafe client) and is reported so the ledger stays honest (DBB-03).
+   */
+  usedUnsafe?: Set<string>;
 }
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -61,8 +68,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
   // P3-PRE-03: PM portfolio cross-community read boundary
   resolve(repoRoot, 'apps/web/src/lib/api/pm-communities.ts'),
-  // P3-PRE-03: PM role gate (isPmAdminInAnyCommunity) at route layer
-  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/communities/route.ts'),
   // P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
   resolve(repoRoot, 'apps/web/src/lib/pm/create-community.ts'),
   // P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
@@ -84,7 +89,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // hasSitePortfolioTemplates plan) is verified upstream at the route layer.
   resolve(repoRoot, 'apps/web/src/lib/services/site-portfolio-template-service.ts'),
   // JSX site template — public site queries published template by community_id (root tenant key)
-  resolve(repoRoot, 'apps/web/src/lib/api/site-template.ts'),
   // P4-64: Community data export — residents export joins users table (no community_id column)
   resolve(repoRoot, 'apps/web/src/lib/services/community-export.ts'),
   // Operations reservation cancel transition — atomic transaction uses the unsafe escape hatch
@@ -155,7 +159,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/announcements/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/documents/route.ts'),
   // Phase 2C: Branding settings — communities is root tenant table
-  resolve(repoRoot, 'apps/web/src/app/(authenticated)/pm/settings/branding/page.tsx'),
   // Conversion event emission — global analytics table, not community-scoped
   resolve(repoRoot, 'apps/web/src/lib/services/conversion-events.ts'),
   // Readiness check — global stripe_prices + DB connectivity (no community context)
@@ -164,7 +167,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/demo/detect-demo-info.ts'),
   // Demo lifecycle: landing page, entry, conversion, expiry cron, session helper
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/page.tsx'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/demo/[slug]/convert/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/upgrade/page.tsx'),
   resolve(repoRoot, 'apps/web/src/app/demo/[slug]/converted/page.tsx'),
   // Demo grace period guard — queries communities table (global, no community_id scoping)
@@ -200,24 +202,12 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Platform admin auth guard — queries platform_admin_users (no community_id)
   resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
   // Admin access-plans routes — platform-level CRUD on access_plans table
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/community/[id]/route.ts'),
   // Admin deletion-requests routes — platform-level deletion workflow management
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/deletion-requests/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/deletion-requests/[id]/recover/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/deletion-requests/[id]/intervene/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/[id]/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/access-plans/[id]/extend/route.ts'),
   // User-facing deletion routes — cross-community deletion workflows
-  resolve(repoRoot, 'apps/web/src/app/api/v1/account/delete/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/delete/route.ts'),
   // Subscribe route — Stripe checkout + access plan conversion
-  resolve(repoRoot, 'apps/web/src/app/api/v1/subscribe/route.ts'),
   // Change-plan route — Stripe subscription update for in-app upgrades
-  resolve(repoRoot, 'apps/web/src/app/api/v1/subscribe/change-plan/route.ts'),
   // Account lifecycle cron — cross-community deletion + notification processing
   // Coupon sync retry cron — billing group tier recalculation and Stripe discount sync
-  resolve(repoRoot, 'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts'),
   // Visitor auto-checkout cron — cross-community cleanup of overdue checked-in visitor passes
   resolve(repoRoot, 'apps/web/src/lib/services/visitor-cron-service.ts'),
   // Support access consent — uses createAdminClient for cross-community consent/log queries
@@ -231,13 +221,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Downgrade notifications — queries communities and admins in a billing group for notification dispatch
   resolve(repoRoot, 'apps/web/src/lib/billing/downgrade-notifications.ts'),
   // Pricing preview — queries all communities in a billing group; authorized by billing group ownership
-  resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/[id]/preview/route.ts'),
   // Cancel preview — queries communities in a billing group; authorized by billing group ownership
-  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel-preview/route.ts'),
   // Community cancel — soft-deletes community + triggers tier recalc; authorized by billing group ownership
-  resolve(repoRoot, 'apps/web/src/app/api/v1/communities/[id]/cancel/route.ts'),
-  // Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
-  resolve(repoRoot, 'apps/web/src/app/api/v1/billing-groups/mine/route.ts'),
   // Self-service community linking: pre-tenant eligibility checks + cross-community lookups
   // authorization contract: caller authenticates userId before invoking these helpers
   resolve(repoRoot, 'apps/web/src/lib/join-requests/eligibility.ts'),
@@ -246,10 +231,7 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // returns only minimal non-sensitive metadata (name, city, state, type, rounded member count)
   resolve(repoRoot, 'apps/web/src/lib/services/community-search-service.ts'),
   // Authenticated user's own join requests (own-user scoped, no community context yet)
-  resolve(repoRoot, 'apps/web/src/app/api/v1/account/join-requests/route.ts'),
   // Admin approve/deny endpoints: cross-community service dispatched after permission check
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/approve/route.ts'),
-  resolve(repoRoot, 'apps/web/src/app/api/v1/admin/join-requests/[id]/deny/route.ts'),
   // Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped
   resolve(repoRoot, 'apps/web/src/lib/services/revenue-snapshot-data-service.ts'),
   // PR #1a: Public-site community reader — unauthenticated /_site context, no TenantContext
@@ -282,6 +264,7 @@ const APP_CONFIGS: AppGuardConfig[] = [
     appDir: join(repoRoot, 'apps', 'web', 'src'),
     mode: 'scoped',
     unsafeAllowlist: WEB_UNSAFE_IMPORT_ALLOWLIST,
+    usedUnsafe: new Set<string>(),
   },
   {
     appDir: join(repoRoot, 'apps', 'admin', 'src'),
@@ -406,16 +389,21 @@ function validateSpecifier(
 
   if (
     (specifier === '@propertypro/db/unsafe' || specifier === '@propertypro/db/supabase/admin') &&
-    config.mode === 'scoped' &&
-    !config.unsafeAllowlist.has(file)
+    config.mode === 'scoped'
   ) {
-    violations.push({
-      file,
-      line: lc.line,
-      column: lc.column,
-      code: 'DB004',
-      message: `Unsafe db import is not allowlisted in this file: "${specifier}".`,
-    });
+    if (config.unsafeAllowlist.has(file)) {
+      // Record that this allowlist entry is still earning its place, so the
+      // dead-entry sweep in runAppGuard can flag the ones that aren't.
+      config.usedUnsafe?.add(file);
+    } else {
+      violations.push({
+        file,
+        line: lc.line,
+        column: lc.column,
+        code: 'DB004',
+        message: `Unsafe db import is not allowlisted in this file: "${specifier}".`,
+      });
+    }
   }
 }
 
@@ -517,7 +505,14 @@ function runAppGuard(config: AppGuardConfig): number {
   const files = listRuntimeSourceFiles(config.appDir);
   const violations = files.flatMap((file) => collectViolationsForFile(file, config));
 
-  if (violations.length === 0) {
+  // Dead allowlist entries: allowlisted files that no longer import an
+  // unsafe/admin client (or were deleted). Shrink-only ledger hygiene (DBB-03),
+  // mirroring the sweep in verify-route-table-imports.ts.
+  const deadAllowlistEntries = config.usedUnsafe
+    ? [...config.unsafeAllowlist].filter((entry) => !config.usedUnsafe!.has(entry)).sort()
+    : [];
+
+  if (violations.length === 0 && deadAllowlistEntries.length === 0) {
     // eslint-disable-next-line no-console
     console.log(
       `PASS: DB access guard is clean for ${files.length} runtime files in ${config.appDir} (${config.mode} mode).`,
@@ -531,10 +526,25 @@ function runAppGuard(config: AppGuardConfig): number {
       `${violation.file}:${violation.line}:${violation.column} [${violation.code}] ${violation.message}`,
     );
   }
-  // eslint-disable-next-line no-console
-  console.error(
-    `FAIL: ${violations.length} DB access violation(s) found in ${config.appDir} (${config.mode} mode).`,
-  );
+
+  if (deadAllowlistEntries.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `\n${deadAllowlistEntries.length} dead WEB_UNSAFE_IMPORT_ALLOWLIST entr${deadAllowlistEntries.length === 1 ? 'y' : 'ies'} ` +
+        `(no longer import @propertypro/db/unsafe or /supabase/admin). Remove from the allowlist:`,
+    );
+    for (const entry of deadAllowlistEntries) {
+      // eslint-disable-next-line no-console
+      console.error(`  - ${relative(repoRoot, entry)}`);
+    }
+  }
+
+  if (violations.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `FAIL: ${violations.length} DB access violation(s) found in ${config.appDir} (${config.mode} mode).`,
+    );
+  }
   return 1;
 }
 
