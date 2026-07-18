@@ -44,7 +44,7 @@ describe('buildAutoTrail', () => {
 
   it('flags a numeric entity leaf as dynamic and labels it #id', () => {
     const trail = buildAutoTrail('/communities/2/board/forum/123', 2);
-    expect(trail?.currentLabel).toBe('#123');
+    expect(trail?.currentLabel).toBe('#123'); // design-tokens:exempt — entity-id label, not a hex color
     expect(trail?.leafIsDynamic).toBe(true);
     // Intermediate forum crumb stays path-scoped.
     expect(trail?.items).toEqual([
