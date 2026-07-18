@@ -94,12 +94,15 @@ beforeEach(() => {
 });
 
 describe('ComplianceCommandCenter', () => {
-  it('renders the page header with breadcrumb and title', () => {
+  it('renders the page header and title', () => {
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Compliance' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Breadcrumb')).toBeInTheDocument();
+    // The breadcrumb trail is now rendered by the app shell (ShellBreadcrumbs),
+    // not inline in PageHeader, so it isn't present when this component renders
+    // in isolation. Assert the PageHeader itself is present instead.
+    expect(document.querySelector('[data-page-header]')).toBeInTheDocument();
   });
 
   it('shows all four KPI labels', () => {
