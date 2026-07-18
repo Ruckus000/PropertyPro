@@ -59,6 +59,7 @@ export * from './contracts';
 export * from './contract-bids';
 export * from './wind-mitigation-reports';
 export * from './snowbird-digest-subscriptions';
+export * from './insurance-policies';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
@@ -132,6 +133,7 @@ import type { contracts } from './contracts';
 import type { contractBids } from './contract-bids';
 import type { windMitigationReports } from './wind-mitigation-reports';
 import type { snowbirdDigestSubscriptions } from './snowbird-digest-subscriptions';
+import type { insurancePolicies, insuranceCertificateRequests } from './insurance-policies';
 import type { ledgerEntries } from './ledger-entries';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
@@ -340,6 +342,12 @@ export type NewWindMitigationReport = typeof windMitigationReports.$inferInsert;
 // Snowbird Digest Subscriptions (Wave 1)
 export type SnowbirdDigestSubscription = typeof snowbirdDigestSubscriptions.$inferSelect;
 export type NewSnowbirdDigestSubscription = typeof snowbirdDigestSubscriptions.$inferInsert;
+
+// Insurance Policies + Certificate Requests (Wave 1)
+export type InsurancePolicy = typeof insurancePolicies.$inferSelect;
+export type NewInsurancePolicy = typeof insurancePolicies.$inferInsert;
+export type InsuranceCertificateRequest = typeof insuranceCertificateRequests.$inferSelect;
+export type NewInsuranceCertificateRequest = typeof insuranceCertificateRequests.$inferInsert;
 
 // Ledger Entries
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
