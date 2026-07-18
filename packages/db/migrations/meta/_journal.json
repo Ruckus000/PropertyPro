@@ -197,6 +197,13 @@
       "when": 1784306505498,
       "tag": "0028_snowbird_digest",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784319309801,
+      "tag": "0029_insurance_policies",
+      "breakpoints": true
     }
   ]
 }

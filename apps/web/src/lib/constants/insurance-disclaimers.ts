@@ -164,3 +164,85 @@ export const WIND_MITIGATION_NOTES_REDACTION_HINT =
 export const WIND_MITIGATION_REDACTION_ATTESTATION =
   'I have removed personal information about owners and residents from this report and its notes ' +
   'before posting it where members can see it.';
+
+// ---------------------------------------------------------------------------
+// Insurance summary + certificate request relay (spec #3) — same attorney gate.
+// ---------------------------------------------------------------------------
+
+/**
+ * Standing disclaimer under the master-policy summary. The bright line from the
+ * legal research: PropertyPro shows a factual summary but the agent-issued
+ * documents control, and the summary confers no rights (no reliance).
+ */
+export const INSURANCE_SUMMARY_DISCLAIMER =
+  'This is a summary of the association’s master policy for convenience only. The insurer’s ' +
+  'policy and any certificate your agent issues control — this summary confers no coverage and no ' +
+  'rights, and may not reflect the latest policy. Confirm details with the agent of record.';
+
+/**
+ * Shown on the certificate-request action. Makes clear PropertyPro relays a
+ * request to the agent and does NOT issue certificates (the §626.854
+ * public-adjuster / agent-licensing line).
+ */
+export const INSURANCE_CERTIFICATE_REQUEST_HINT =
+  'PropertyPro sends your request to the association’s insurance agent, who issues all ' +
+  'certificates. We don’t issue certificates or determine coverage.';
+
+/** Danger banner when the posted policy has expired. */
+export const INSURANCE_POLICY_EXPIRED_BANNER = (expiresAt: string): string =>
+  `This summary may be out of date — the policy on file expired ${expiresAt}. Confirm current ` +
+  `coverage with the agent of record.`;
+
+/**
+ * Build the certificate-request relay email (to the agent of record) plus the
+ * requester's confirmation copy.
+ *
+ * Reply-To is the OWNER: the agent replies straight to the owner and
+ * PropertyPro exits the loop. The agent email carries the attorney-reviewed
+ * framing that PropertyPro is relaying a request, not issuing a certificate.
+ */
+export function buildCertificateRequestEmail(params: {
+  communityName: string;
+  carrierName: string;
+  policyNumber: string | null;
+  unitLabel: string;
+  requesterName: string;
+  requesterEmail: string;
+  recipientName: string;
+  recipientEmail: string;
+  loanNumber: string | null;
+}): { agentSubject: string; agentBody: string; confirmationSubject: string; confirmationBody: string } {
+  const policyLine = params.policyNumber
+    ? `${params.carrierName} (policy ${params.policyNumber})`
+    : params.carrierName;
+
+  return {
+    agentSubject: `Certificate of insurance request — ${params.communityName}, unit ${params.unitLabel}`,
+    agentBody: [
+      `Hello,`,
+      ``,
+      `A unit owner at ${params.communityName} requests a certificate of insurance for the ` +
+        `recipient below. PropertyPro is relaying this request on the association’s behalf; ` +
+        `please issue the certificate directly to the recipient.`,
+      ``,
+      `Master policy: ${policyLine}`,
+      `Unit: ${params.unitLabel}`,
+      `Requesting owner: ${params.requesterName} (${params.requesterEmail})`,
+      `Certificate recipient (lender / title): ${params.recipientName} (${params.recipientEmail})`,
+      ...(params.loanNumber ? [`Loan / reference number: ${params.loanNumber}`] : []),
+      ``,
+      `This message was relayed by PropertyPro; reply to reach the owner directly.`,
+    ].join('\n'),
+    confirmationSubject: `We sent your certificate request — ${params.communityName}`,
+    confirmationBody: [
+      `Hi ${params.requesterName},`,
+      ``,
+      `We sent your certificate-of-insurance request to the association’s insurance agent for ` +
+        `unit ${params.unitLabel}. The agent — not PropertyPro — issues the certificate and ` +
+        `typically responds within a few business days; they’ll reply to you directly.`,
+      ``,
+      `Forward the certificate to your lender or title company (${params.recipientName}) once you ` +
+        `receive it.`,
+    ].join('\n'),
+  };
+}
