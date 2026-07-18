@@ -55,6 +55,17 @@ Authorization is enforced at the route/query layer via `requirePermission()` →
 
 ## Transition status (as of this ADR)
 
+> **Addendum (2026-07-18):** Phase 4.1 has **shipped**. Migration `0020`
+> (role-v3 enum rebuild + column drops) is live, and `checkPermissionV2`
+> (`apps/web/src/lib/db/access-control.ts`) now resolves `property_manager` /
+> `root_manager` to the uniform management-tier row — it no longer reads the
+> per-row `permissions` JSONB, so the first "Deferred" bullet below is
+> **done**. Still open: the legacy seven-role `RBAC_MATRIX` collapse (four
+> columns unreachable at the choke point), the Phase 4.4 bridge drain, and the
+> Phase 3.4 root-only billing/deletion cutover (still gated on claim-root
+> adoption). See `docs/audits/2026-07-18-refactor-audit-and-cleanup-roadmap.md`
+> §4.2 (R3-01…R3-07).
+
 The model is delivered in phases (1 → 4) behind a compatibility shim and a `guard:legacy-roles` floor, with no flag day:
 
 - **Live:** the `designation` column + statutory gate (`requireBoardDesignation`), the root claim/transfer/dispute flow, creator-is-root, resident-tier minting lockdown, and the board-targeting + vocabulary drains.
