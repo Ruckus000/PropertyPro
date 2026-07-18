@@ -30,8 +30,10 @@ export const meta = {
   ],
 }
 
-// args shape: { dateIso: 'YYYY-MM-DD' }
-const { dateIso } = args
+// args shape: { dateIso: 'YYYY-MM-DD' } — tolerate a JSON-string args payload,
+// which some invocation paths deliver instead of the parsed object.
+const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+const { dateIso } = parsedArgs ?? {}
 if (!dateIso) throw new Error('args.dateIso is required (workflow sandbox has no clock)')
 
 const ROOT = '/home/user/PropertyPro'
