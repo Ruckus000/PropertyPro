@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { Download, Mail, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,23 +71,30 @@ function formatIsoDate(iso: string): string {
   });
 }
 
-function ReportCard({
+export function ReportCard({
   report,
   communityId,
   communityName,
   canManage,
   onEdit,
+  detailHref,
 }: {
   report: WindMitigationReportRecord;
   communityId: number;
   communityName: string;
   canManage: boolean;
   onEdit: (report: WindMitigationReportRecord) => void;
+  /**
+   * When set, the card title links to the report's detail page. Omitted on the
+   * detail page itself (the card would otherwise link to the page you're on).
+   */
+  detailHref?: string;
 }) {
   const deleteReport = useDeleteWindMitigationReport(communityId);
   const badge = expiryBadge(report.expiryBand, report.daysUntilExpiry);
 
   const isExpired = report.expiryBand === 'expired';
+  const title = `${WIND_MITIGATION_FORM_LABELS[report.formType]}${report.buildingLabel ? ` — ${report.buildingLabel}` : ''}`;
 
   // The owner mails their own agent from their own client: PropertyPro hands
   // them a pre-written message rather than contacting an insurer on their
@@ -118,8 +126,16 @@ function ReportCard({
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1">
           <CardTitle className="text-base">
-            {WIND_MITIGATION_FORM_LABELS[report.formType]}
-            {report.buildingLabel ? ` — ${report.buildingLabel}` : ''}
+            {detailHref ? (
+              <Link
+                href={detailHref}
+                className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                {title}
+              </Link>
+            ) : (
+              title
+            )}
           </CardTitle>
           <p className="text-sm text-content-tertiary">
             {WIND_MITIGATION_VERSION_LABELS[report.formVersion]} · Inspected{' '}
@@ -294,6 +310,7 @@ export function WindMitigationSection({
               communityName={communityName}
               canManage={canManage}
               onEdit={openEdit}
+              detailHref={`/communities/${communityId}/insurance/wind-mitigation/${report.id}`}
             />
           ))}
         </div>
