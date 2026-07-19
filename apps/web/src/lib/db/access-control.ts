@@ -36,7 +36,7 @@ import { RBAC_MATRIX } from '@propertypro/shared';
  * Check permission for the v3 role model.
  *
  * - property_manager / root_manager: uniform full-operational — both resolve
- *   the property_manager_admin row from the static RBAC matrix
+ *   the manager row from the static RBAC matrix
  * - resident + isUnitOwner: uses the owner row from the static RBAC matrix
  * - resident + !isUnitOwner: uses the tenant row from the static RBAC matrix
  */
@@ -52,7 +52,7 @@ export function checkPermissionV2(
     return RBAC_MATRIX[communityType][legacyRole][resource][action];
   }
   // property_manager + root_manager: uniform full-operational
-  return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
+  return RBAC_MATRIX[communityType]['manager'][resource][action];
 }
 
 /**

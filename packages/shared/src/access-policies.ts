@@ -109,9 +109,9 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
  * requirePermission()/checkPermissionV2 (issue #734). Do NOT reuse this
  * predicate to authorize mutations.
  */
-export const ELEVATED_ROLES: readonly CommunityRole[] = [
+export const ELEVATED_ROLES: readonly MatrixRole[] = [
   'owner',
-  'property_manager_admin',
+  'manager',
 ] as const;
 
 /**
@@ -124,13 +124,13 @@ export const ELEVATED_ROLES: readonly CommunityRole[] = [
  * must not grant general permissions — so `board_member`/`board_president` are
  * NOT admin roles here. Management access comes from the v3 role via
  * `isAdminRole` (property_manager / root_manager); this array only covers the
- * legacy `property_manager_admin` analog.
+ * management-tier matrix row.
  */
-export const ADMIN_ROLES: readonly CommunityRole[] = [
-  'property_manager_admin',
+export const ADMIN_ROLES: readonly MatrixRole[] = [
+  'manager',
 ] as const;
 
-export const RESTRICTED_ROLES: readonly CommunityRole[] = [
+export const RESTRICTED_ROLES: readonly MatrixRole[] = [
   'tenant',
 ] as const;
 
@@ -142,22 +142,22 @@ export const BOARD_ROLES: readonly CommunityRole[] = [
 
 // Keyed by the 3 reachable MatrixRole rows only (role-v3 collapse, R3-01). The
 // legacy board_member/board_president/cam/site_manager rows were unreachable —
-// `resolveLegacyRole` only ever yields owner/tenant/property_manager_admin — and
-// were dropped alongside the RBAC_MATRIX collapse.
+// `resolveLegacyRole` only ever yields owner/tenant/manager — and were dropped
+// alongside the RBAC_MATRIX collapse.
 const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<MatrixRole, CategoryAccess>> = {
   condo_718: {
     owner: 'all',
-    property_manager_admin: 'all',
+    manager: 'all',
     tenant: ['declaration', 'rules', 'inspection_reports'],
   },
   hoa_720: {
     owner: 'all',
-    property_manager_admin: 'all',
+    manager: 'all',
     tenant: ['declaration', 'rules', 'inspection_reports'],
   },
   apartment: {
     owner: 'all',
-    property_manager_admin: 'all',
+    manager: 'all',
     tenant: ['lease_docs', 'rules', 'community_handbook', 'move_in_out_docs'],
   },
 };
@@ -196,7 +196,7 @@ export interface DocumentAccessOpts {
  * CommunityRole for policy lookup.
  *
  * v3 (ADR-006): property_manager + root_manager are uniformly elevated and map
- * onto property_manager_admin. resident splits owner/tenant via isUnitOwner.
+ * onto the `manager` matrix row. resident splits owner/tenant via isUnitOwner.
  * A final defensive `return null` remains for exhaustiveness; no live role
  * reaches it.
  */
@@ -204,15 +204,13 @@ function resolveLegacyRole(
   role: CommunityRole | TransitionRole,
   opts?: DocumentAccessOpts,
 ): MatrixRole | null {
-  // Resolve to one of the 3 reachable matrix rows. v3 roles map here; the
-  // owner/tenant/property_manager_admin legacy names pass through. The 4 dropped
-  // legacy admin names (board_member/board_president/cam/site_manager) are
-  // unreachable in production and return null.
-  if (role === 'owner' || role === 'tenant' || role === 'property_manager_admin') {
-    return role;
-  }
-  if (role === 'property_manager' || role === 'root_manager') {
-    return 'property_manager_admin';
+  // Resolve to one of the 3 reachable matrix rows (owner / tenant / manager).
+  // v3 roles map here; the legacy owner/tenant/property_manager_admin names also
+  // resolve. The 4 dropped legacy admin names (board_member/board_president/cam/
+  // site_manager) are unreachable in production and return null.
+  if (role === 'owner' || role === 'tenant') return role;
+  if (role === 'property_manager_admin' || role === 'property_manager' || role === 'root_manager') {
+    return 'manager';
   }
   if (role === 'resident') return opts?.isUnitOwner ? 'owner' : 'tenant';
   return null;
@@ -229,10 +227,12 @@ export function isElevatedRole(
 export function isAdminRole(
   role: CommunityRole | TransitionRole,
 ): boolean {
-  if (role === 'property_manager' || role === 'root_manager') {
-    return true;
-  }
-  return (ADMIN_ROLES as readonly string[]).includes(role);
+  // Resolve to the MatrixRole row first (same path isElevatedRole/isRestrictedRole
+  // take) so the management tier — property_manager / root_manager, plus the legacy
+  // property_manager_admin — collapses onto the single `manager` admin row. owner /
+  // tenant / resident resolve to non-admin rows and correctly return false.
+  const legacy = resolveLegacyRole(role);
+  return legacy ? ADMIN_ROLES.includes(legacy) : false;
 }
 
 export function isRestrictedRole(

@@ -23,12 +23,25 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { CommunityRole } from '../index';
 import { COMMUNITY_TYPES } from '../index';
+import type { TransitionRole } from '../role-transition';
 import { RBAC_RESOURCES, RBAC_ACTIONS, RBAC_MATRIX, MATRIX_ROLES } from '../rbac-matrix';
 import { DOCUMENT_CATEGORY_KEYS, canAccessCategory } from '../access-policies';
 
 import rbacSnapshot from './fixtures/rbac-snapshot.json' with { type: 'json' };
 import docAccessSnapshot from './fixtures/document-access-snapshot.json' with { type: 'json' };
+
+// MATRIX_ROLES ('owner' / 'tenant' / 'manager') is the OUTPUT vocabulary that
+// resolveLegacyRole yields. 'owner'/'tenant' are also valid INPUT roles, but
+// 'manager' is not — it's a row key, never an accepted input. Map each matrix
+// row to a representative input role that resolves to it so the document-access
+// parity can drive canAccessCategory through the same resolution path prod uses.
+const MATRIX_ROLE_INPUT: Record<(typeof MATRIX_ROLES)[number], CommunityRole | TransitionRole> = {
+  owner: 'owner',
+  tenant: 'tenant',
+  manager: 'property_manager',
+};
 
 // Type-safe snapshot accessors
 type SnapshotRbac = Record<string, Record<string, Record<string, Record<string, boolean>>>>;
@@ -70,7 +83,9 @@ describe('Document access parity: reachable roles reproduce the frozen snapshot'
           const expected = docAccess[communityType]![role]![categoryKey]!;
 
           it(`canAccessCategory('${categoryKey}') should be ${expected}`, () => {
-            expect(canAccessCategory(role, communityType, categoryKey)).toBe(expected);
+            expect(
+              canAccessCategory(MATRIX_ROLE_INPUT[role], communityType, categoryKey),
+            ).toBe(expected);
           });
         }
       });
