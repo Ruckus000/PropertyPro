@@ -7,7 +7,7 @@
 
 import type { CommunityRole, CommunityType } from './index';
 import type { TransitionRole } from './role-transition';
-import { COMMUNITY_ROLES } from './index';
+import type { MatrixRole } from './rbac-matrix';
 import {
   KNOWN_DOCUMENT_CATEGORY_KEYS,
   DOCUMENT_CATEGORY_KEYS,
@@ -111,8 +111,6 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
  */
 export const ELEVATED_ROLES: readonly CommunityRole[] = [
   'owner',
-  'board_member',
-  'board_president',
   'property_manager_admin',
 ] as const;
 
@@ -121,19 +119,19 @@ export const ELEVATED_ROLES: readonly CommunityRole[] = [
  * contracts, maintenance inbox). Excludes owner and tenant.
  *
  * Not the same as ELEVATED_ROLES (which includes owner for document access).
+ *
+ * v3 (ADR-006): board status is an orthogonal `designation`, never a role, and
+ * must not grant general permissions — so `board_member`/`board_president` are
+ * NOT admin roles here. Management access comes from the v3 role via
+ * `isAdminRole` (property_manager / root_manager); this array only covers the
+ * legacy `property_manager_admin` analog.
  */
 export const ADMIN_ROLES: readonly CommunityRole[] = [
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
   'property_manager_admin',
 ] as const;
 
 export const RESTRICTED_ROLES: readonly CommunityRole[] = [
   'tenant',
-  'cam',
-  'site_manager',
 ] as const;
 
 /** Board-level roles (fiduciary duty, board-only meeting access). */
@@ -142,32 +140,24 @@ export const BOARD_ROLES: readonly CommunityRole[] = [
   'board_president',
 ] as const;
 
-const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<CommunityRole, CategoryAccess>> = {
+// Keyed by the 3 reachable MatrixRole rows only (role-v3 collapse, R3-01). The
+// legacy board_member/board_president/cam/site_manager rows were unreachable —
+// `resolveLegacyRole` only ever yields owner/tenant/property_manager_admin — and
+// were dropped alongside the RBAC_MATRIX collapse.
+const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<MatrixRole, CategoryAccess>> = {
   condo_718: {
     owner: 'all',
-    board_member: 'all',
-    board_president: 'all',
     property_manager_admin: 'all',
-    cam: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes', 'insurance', 'elections'],
     tenant: ['declaration', 'rules', 'inspection_reports'],
-    site_manager: [],
   },
   hoa_720: {
     owner: 'all',
-    board_member: 'all',
-    board_president: 'all',
     property_manager_admin: 'all',
-    cam: ['rules', 'inspection_reports', 'announcements', 'meeting_minutes', 'insurance', 'elections'],
     tenant: ['declaration', 'rules', 'inspection_reports'],
-    site_manager: [],
   },
   apartment: {
     owner: 'all',
-    board_member: 'all',
-    board_president: 'all',
-    cam: [],
     property_manager_admin: 'all',
-    site_manager: ['rules', 'announcements', 'maintenance_records'],
     tenant: ['lease_docs', 'rules', 'community_handbook', 'move_in_out_docs'],
   },
 };
@@ -213,9 +203,13 @@ export interface DocumentAccessOpts {
 function resolveLegacyRole(
   role: CommunityRole | TransitionRole,
   opts?: DocumentAccessOpts,
-): CommunityRole | null {
-  if ((COMMUNITY_ROLES as readonly string[]).includes(role)) {
-    return role as CommunityRole;
+): MatrixRole | null {
+  // Resolve to one of the 3 reachable matrix rows. v3 roles map here; the
+  // owner/tenant/property_manager_admin legacy names pass through. The 4 dropped
+  // legacy admin names (board_member/board_president/cam/site_manager) are
+  // unreachable in production and return null.
+  if (role === 'owner' || role === 'tenant' || role === 'property_manager_admin') {
+    return role;
   }
   if (role === 'property_manager' || role === 'root_manager') {
     return 'property_manager_admin';

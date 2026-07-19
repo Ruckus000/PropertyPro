@@ -55,9 +55,6 @@ export function checkPermissionV2(
   return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
 }
 
-/** @deprecated Use checkPermissionV2. Kept for backward compatibility during migration. */
-export { checkPermission } from '@propertypro/shared';
-
 /**
  * Throws ForbiddenError (403) if the membership is not permitted to perform
  * the action on the resource.

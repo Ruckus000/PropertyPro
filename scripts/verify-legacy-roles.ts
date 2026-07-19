@@ -45,9 +45,11 @@ const EXEMPT = new Set([
 //   DEV         — dev-only portal login aliases (404 in prod).
 //   TEST        — co-located *.test fixtures under src asserting the v3↔legacy mapping.
 const ALLOWLIST = new Map<string, number>([
-  // STRUCTURAL (removed at the RBAC_MATRIX/CommunityRole 7→3 collapse, PR2)
-  ['packages/shared/src/rbac-matrix.ts', 16],
-  ['packages/shared/src/access-policies.ts', 7],
+  // STRUCTURAL. The RBAC_MATRIX 7→3 collapse (R3-01) drained the 4 unreachable
+  // columns; the residual literals are all the surviving `property_manager_admin`
+  // row key — drained to 0 only when it is renamed to a v3-neutral key (Level 2).
+  ['packages/shared/src/rbac-matrix.ts', 7],
+  ['packages/shared/src/access-policies.ts', 4],
   ['packages/db/src/schema/enums.ts', 3],
   ['apps/web/src/lib/db/access-control.ts', 1],
   // BRIDGE — drained to zero in Phase 4.4 (this PR). Bucket intentionally empty.
@@ -58,7 +60,6 @@ const ALLOWLIST = new Map<string, number>([
   ['apps/web/src/app/dev/agent-login/route.ts', 2],
   ['apps/web/src/app/dev/login/route.ts', 2],
   // TEST
-  ['packages/shared/src/__tests__/rbac-parity.test.ts', 6],
   ['apps/web/src/hooks/__tests__/use-residents.test.tsx', 3],
   ['apps/web/src/lib/help/__tests__/viewer-role.test.ts', 3],
   ['apps/web/src/lib/services/__tests__/help-article-service.test.ts', 1],
