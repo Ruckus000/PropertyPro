@@ -15,7 +15,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
-  inferCanonicalRoleFromMembership,
   toInitials,
   resolvePlanId,
   PLAN_FEATURES,
@@ -89,12 +88,6 @@ export function AppSidebar({
 
   const isPmContext = pathname.startsWith('/pm/');
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
-  // The runtime role is on the v3 model (resident | property_manager | root_manager).
-  // Plan-gate logic operates on the canonical role (owner, tenant, board_president, ...)
-  // so we resolve once here using isUnitOwner + designation.
-  const canonicalRole: AnyCommunityRole | null = role
-    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, designation: designation ?? null })
-    : null;
 
   const allVisible: NavItemWithGateStatus[] = isPmContext
     ? PM_NAV_ITEMS.map((i) => ({
@@ -104,7 +97,7 @@ export function AppSidebar({
         upgradePlanId: null,
         upgradeFeatureKey: null,
       }))
-    : getVisibleItemsWithPlanGate(NAV_ITEMS, canonicalRole, features, communityType, resolvedPlanId);
+    : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId, isUnitOwner);
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
   const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);
@@ -280,7 +273,8 @@ export function AppSidebar({
         upgradePlanId={upgradeFor?.upgradePlanId ?? null}
         currentPlanId={resolvedPlanId}
         currentPlanRaw={plan}
-        role={canonicalRole}
+        role={role}
+        isUnitOwner={isUnitOwner}
         communityId={communityId}
       />
     </>

@@ -15,7 +15,6 @@ import {
 } from '@propertypro/db';
 import {
   canRequestUpgrade,
-  inferCanonicalRoleFromMembership,
   PLAN_FEATURES,
   type PlanId,
 } from '@propertypro/shared';
@@ -41,12 +40,7 @@ export const POST = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, null);
     const membership = await requireCommunityMembership(communityId, userId);
 
-    const inferredCanonicalRole = inferCanonicalRoleFromMembership({
-      role: membership.role,
-      isUnitOwner: membership.isUnitOwner,
-      designation: membership.designation ?? null,
-    });
-    if (!canRequestUpgrade(inferredCanonicalRole)) {
+    if (!canRequestUpgrade(membership.role, membership.isUnitOwner)) {
       throw new ForbiddenError('Tenants cannot request plan upgrades.');
     }
 
