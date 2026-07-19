@@ -111,8 +111,6 @@ const CATEGORY_ALIAS_MAP: Record<string, KnownDocumentCategoryKey> = {
  */
 export const ELEVATED_ROLES: readonly CommunityRole[] = [
   'owner',
-  'board_member',
-  'board_president',
   'property_manager_admin',
 ] as const;
 
@@ -121,10 +119,14 @@ export const ELEVATED_ROLES: readonly CommunityRole[] = [
  * contracts, maintenance inbox). Excludes owner and tenant.
  *
  * Not the same as ELEVATED_ROLES (which includes owner for document access).
+ *
+ * v3 (ADR-006): board status is an orthogonal `designation`, never a role, and
+ * must not grant general permissions — so `board_member`/`board_president` are
+ * NOT admin roles here. Management access comes from the v3 role via
+ * `isAdminRole` (property_manager / root_manager); this array only covers the
+ * legacy `property_manager_admin` analog.
  */
 export const ADMIN_ROLES: readonly CommunityRole[] = [
-  'board_member',
-  'board_president',
   'property_manager_admin',
 ] as const;
 
