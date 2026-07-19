@@ -588,7 +588,7 @@
         "write": false
       }
     },
-    "property_manager_admin": {
+    "manager": {
       "documents": {
         "read": true,
         "write": true
@@ -1276,7 +1276,7 @@
         "write": false
       }
     },
-    "property_manager_admin": {
+    "manager": {
       "documents": {
         "read": true,
         "write": true
@@ -1964,7 +1964,7 @@
         "write": true
       }
     },
-    "property_manager_admin": {
+    "manager": {
       "documents": {
         "read": true,
         "write": true

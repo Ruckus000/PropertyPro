@@ -46,12 +46,14 @@ const EXEMPT = new Set([
 //   TEST        — co-located *.test fixtures under src asserting the v3↔legacy mapping.
 const ALLOWLIST = new Map<string, number>([
   // STRUCTURAL. The RBAC_MATRIX 7→3 collapse (R3-01) drained the 4 unreachable
-  // columns; the residual literals are all the surviving `property_manager_admin`
-  // row key — drained to 0 only when it is renamed to a v3-neutral key (Level 2).
-  ['packages/shared/src/rbac-matrix.ts', 7],
-  ['packages/shared/src/access-policies.ts', 4],
+  // columns; Level 2 then renamed the surviving `property_manager_admin` row key
+  // to the v3-neutral `manager`, draining rbac-matrix.ts and access-control.ts to
+  // ZERO (both removed from this list). access-policies.ts keeps ONE literal: the
+  // legacy `property_manager_admin` INPUT branch in `resolveLegacyRole` — a valid
+  // CommunityRole that must resolve to the manager row until CommunityRole itself
+  // narrows 7→3 (Level 3). enums.ts holds the dead `user_role` pgEnum (R3-06).
+  ['packages/shared/src/access-policies.ts', 1],
   ['packages/db/src/schema/enums.ts', 3],
-  ['apps/web/src/lib/db/access-control.ts', 1],
   // BRIDGE — drained to zero in Phase 4.4 (this PR). Bucket intentionally empty.
   // HELP
   ['packages/shared/src/default-faqs.ts', 3],

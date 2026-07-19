@@ -32,8 +32,8 @@ const CONTEXTS: Array<{
 }> = [
   { role: 'resident', isUnitOwner: true, row: 'owner', label: 'resident(owner)' },
   { role: 'resident', isUnitOwner: false, row: 'tenant', label: 'resident(tenant)' },
-  { role: 'property_manager', row: 'property_manager_admin', label: 'property_manager' },
-  { role: 'root_manager', row: 'property_manager_admin', label: 'root_manager' },
+  { role: 'property_manager', row: 'manager', label: 'property_manager' },
+  { role: 'root_manager', row: 'manager', label: 'root_manager' },
 ];
 
 // ---------------------------------------------------------------------------
