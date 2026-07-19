@@ -39,21 +39,10 @@ import {
   Landmark,
   ClipboardCheck,
 } from 'lucide-react';
-import type { CommunityRole, AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
-import { ADMIN_ROLES, ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
+import type { AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
+import { isAdminRole } from '@propertypro/shared';
 import type { RbacAction, RbacResource } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
-
-const FINANCE_READ_REGISTRY_ROLES: readonly CommunityRole[] = [
-  'owner',
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-];
-
-const ADMIN_TIER_REGISTRY_BRIDGE_ROLES = new Set<string>(ADMIN_TIER_DB_ROLES);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +51,14 @@ const ADMIN_TIER_REGISTRY_BRIDGE_ROLES = new Set<string>(ADMIN_TIER_DB_ROLES);
 export type RegistryCategory = 'page' | 'action' | 'setting';
 export type RegistryAudience = 'resident' | 'admin' | 'all';
 
+/**
+ * Role-based visibility for a registry item (v3-native, ADR-006).
+ * - `'all'`: every role.
+ * - `'admin'`: management tier only (`property_manager` / `root_manager`).
+ * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
+ */
+export type RegistryVisibility = 'all' | 'admin' | 'owner_or_admin';
+
 export interface FeatureRegistryItem {
   id: string;
   label: string;
@@ -69,7 +66,7 @@ export interface FeatureRegistryItem {
   description: string;
   icon: LucideIcon;
   href: string | ((communityId: number) => string);
-  roles: 'all' | readonly CommunityRole[];
+  roles: RegistryVisibility;
   audience: RegistryAudience;
   category: RegistryCategory;
   group: string;
@@ -166,7 +163,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'View balances and make payments',
     icon: CreditCard,
     href: (cid: number) => `/communities/${cid}/payments`,
-    roles: FINANCE_READ_REGISTRY_ROLES,
+    roles: 'owner_or_admin',
     audience: 'all',
     category: 'page',
     group: 'Finance',
@@ -233,7 +230,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Community compliance status and scoring',
     icon: ShieldCheck,
     href: (cid: number) => `/communities/${cid}/compliance`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Compliance',
@@ -246,7 +243,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Review and manage violation cases',
     icon: AlertTriangle,
     href: '/violations',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Compliance',
@@ -260,7 +257,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Manage and assign maintenance work orders',
     icon: Inbox,
     href: (cid: number) => operationsTabHref(cid, 'requests'),
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Operations',
@@ -274,7 +271,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'E-signature templates and submissions',
     icon: PenTool,
     href: '/esign',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Documents',
@@ -287,7 +284,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Vendor contracts and service agreements',
     icon: FileSignature,
     href: '/contracts',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Operations',
@@ -299,7 +296,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Lease tracking and renewal management',
     icon: Home,
     href: '/dashboard/leases',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Operations',
@@ -312,7 +309,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Move-in/out checklists and unit turnover',
     icon: Truck,
     href: '/dashboard/move-in-out',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Operations',
@@ -325,7 +322,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Activity log and compliance audit trail',
     icon: ScrollText,
     href: '/audit-trail',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Compliance',
@@ -337,7 +334,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Financial overview, reports, and analytics',
     icon: BarChart3,
     href: (cid: number) => `/communities/${cid}/payments?tab=overview`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Finance',
@@ -350,7 +347,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Assessment billing and fee schedules',
     icon: DollarSign,
     href: (cid: number) => `/communities/${cid}/payments?tab=assessments`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Finance',
@@ -363,7 +360,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Resident directory and unit assignments',
     icon: Building2,
     href: '/dashboard/residents',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Operations',
@@ -376,7 +373,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Elections, ballots, and voting management',
     icon: Vote,
     href: (cid: number) => `/communities/${cid}/board/elections`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Governance',
@@ -441,7 +438,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Vendor work order dispatch and tracking',
     icon: ClipboardList,
     href: (cid: number) => operationsTabHref(cid, 'work-orders'),
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Operations',
@@ -454,7 +451,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Statutorily required public notice postings',
     icon: BookOpen,
     href: (cid: number) => `/communities/${cid}/public-notices`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'page',
     group: 'Compliance',
@@ -528,7 +525,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Upload a new document to the library',
     icon: Upload,
     href: (cid: number) => `/communities/${cid}/documents`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -541,7 +538,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Send a new announcement to residents',
     icon: Megaphone,
     href: (cid: number) => `/announcements/new?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -554,7 +551,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Create a new meeting with notice',
     icon: CalendarPlus,
     href: (cid: number) => `/communities/${cid}/meetings`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -568,7 +565,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Design a new e-signature template',
     icon: FilePlus,
     href: '/esign/templates/new',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -581,7 +578,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Send a document for electronic signature',
     icon: Send,
     href: '/esign/submissions/new',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -594,7 +591,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Send an urgent notification to all residents',
     icon: Siren,
     href: '/emergency/new',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -607,7 +604,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Create a new violation case against a unit',
     icon: ClipboardList,
     href: '/violations',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -620,7 +617,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Add a new resident to the community',
     icon: UserCheck,
     href: '/dashboard/residents',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -632,7 +629,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Create an informal community poll',
     icon: Columns3,
     href: (cid: number) => `/communities/${cid}/board/polls`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -645,7 +642,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Dispatch a work order to a vendor',
     icon: ClipboardList,
     href: (cid: number) => operationsTabHref(cid, 'work-orders'),
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -658,7 +655,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Generate a community or financial report',
     icon: BarChart3,
     href: (cid: number) => `/communities/${cid}/payments?tab=overview`,
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
@@ -703,7 +700,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Configure payment processing and Stripe',
     icon: CreditCard,
     href: '/settings/payments',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'setting',
     group: 'Administration',
@@ -716,7 +713,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Configure public transparency and SIRS pages',
     icon: CircleGauge,
     href: '/settings/transparency',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'setting',
     group: 'Administration',
@@ -729,7 +726,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Edit community details and branding',
     icon: Building2,
     href: '/settings',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'setting',
     group: 'Administration',
@@ -741,7 +738,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     description: 'Manage user roles and access permissions',
     icon: BookOpen,
     href: '/settings/roles',
-    roles: ADMIN_ROLES,
+    roles: 'admin',
     audience: 'admin',
     category: 'setting',
     group: 'Administration',
@@ -753,30 +750,21 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * Decide whether a membership role satisfies a registry item's `roles` gate.
- *
- * `item.roles` arrays hold **legacy** `CommunityRole` names (e.g.
- * `property_manager_admin`), but the membership role passed in is an
- * `AnyCommunityRole` — which during the hybrid period is the `user_role_v2`
- * enum value (`resident` | `manager` | `pm_admin`). Those v2 values are NOT
- * legacy names, so a bare `includes()` misses them and every manager/pm_admin
- * would be treated as a resident. Bridge the two role vocabularies here:
- *
- * - Exact legacy match still wins (unchanged behavior for legacy memberships).
- * - Transition admin-tier memberships (`manager`/`pm_admin` and role-v3
- *   manager roots) satisfy admin-gated legacy entries whose `roles` include at
- *   least one `ADMIN_ROLES` member. Legacy admin roles still require exact
- *   membership so future role-specific gates stay deny-by-default.
+ * Decide whether a membership role satisfies a registry item's visibility gate
+ * (v3-native, ADR-006). `designation` is never consulted — management status
+ * comes from the role via `isAdminRole` (true for `property_manager` /
+ * `root_manager`). `owner_or_admin` additionally admits unit owners when
+ * `isUnitOwner` is supplied.
  */
 export function roleMatchesRegistryItem(
   role: AnyCommunityRole | TransitionRole,
-  itemRoles: 'all' | readonly CommunityRole[],
+  gate: RegistryVisibility,
+  isUnitOwner?: boolean,
 ): boolean {
-  if (itemRoles === 'all') return true;
-  const names = itemRoles as readonly string[];
-  if (names.includes(role)) return true;
-  if (!ADMIN_TIER_REGISTRY_BRIDGE_ROLES.has(role)) return false;
-  return names.some((r) => (ADMIN_ROLES as readonly string[]).includes(r));
+  if (gate === 'all') return true;
+  const admin = isAdminRole(role);
+  if (gate === 'owner_or_admin') return admin || isUnitOwner === true;
+  return admin; // 'admin'
 }
 
 // ---------------------------------------------------------------------------
@@ -792,6 +780,7 @@ export function useFilteredRegistry(
   features: CommunityFeatures | null,
   communityId: number | null,
   resourceAccess: ResourceAccessMap | null = null,
+  isUnitOwner?: boolean,
 ): ResolvedRegistryItem[] {
   return useMemo(() => {
     return (FEATURE_REGISTRY as readonly FeatureRegistryItem[])
@@ -799,7 +788,7 @@ export function useFilteredRegistry(
         // Role check
         if (item.roles !== 'all') {
           if (!role) return false;
-          if (!roleMatchesRegistryItem(role, item.roles)) return false;
+          if (!roleMatchesRegistryItem(role, item.roles, isUnitOwner)) return false;
         }
         // Feature flag check
         if (item.featureFlag && features) {
@@ -826,5 +815,5 @@ export function useFilteredRegistry(
           resolvedHref,
         };
       });
-  }, [role, features, communityId, resourceAccess]);
+  }, [role, features, communityId, resourceAccess, isUnitOwner]);
 }

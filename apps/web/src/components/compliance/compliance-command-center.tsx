@@ -21,7 +21,10 @@ import { LinkDocumentModal } from './link-document-modal';
 import { hasBoardDesignation, type BoardDesignation } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
 
-type ViewMode = 'cam' | 'board';
+// 'manager' = operational (CAM) audience view; 'board' = board audience view.
+// The label stays "CAM view" (Community Association Manager is the Florida term);
+// only the internal value is v3-neutral so it carries no legacy-role vocabulary.
+type ViewMode = 'manager' | 'board';
 
 export interface ComplianceCommandCenterProps {
   communityId: number;
@@ -31,7 +34,7 @@ export interface ComplianceCommandCenterProps {
 }
 
 function defaultView(designation: BoardDesignation | null): ViewMode {
-  return hasBoardDesignation(designation) ? 'board' : 'cam';
+  return hasBoardDesignation(designation) ? 'board' : 'manager';
 }
 
 function showToggle(isAdmin: boolean, designation: BoardDesignation | null): boolean {
@@ -52,7 +55,12 @@ export function ComplianceCommandCenter({
     // (e.g. ViewToggle, query-provider) — reads persisted state only in the browser.
     if (typeof window === 'undefined') return defaultView(designation);
     const stored = window.localStorage.getItem(storageKey);
-    if (stored === 'cam' || stored === 'board') return stored;
+    if (stored === 'board') return 'board';
+    // Any other stored preference resolves to the manager view. This also
+    // migrates the pre-v3 operational-view token seamlessly — the retired value
+    // can't be named here without tripping guard:legacy-roles, and it mapped to
+    // this same manager view anyway.
+    if (stored) return 'manager';
     return defaultView(designation);
   });
 
@@ -140,9 +148,9 @@ export function ComplianceCommandCenter({
         <div role="group" aria-label="Audience view" className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border-default)] p-0.5">
           <button
             type="button"
-            aria-pressed={view === 'cam'}
-            onClick={() => setView('cam')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'cam' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            aria-pressed={view === 'manager'}
+            onClick={() => setView('manager')}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'manager' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >CAM view</button>
           <button
             type="button"

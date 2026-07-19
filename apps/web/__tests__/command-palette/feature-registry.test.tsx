@@ -16,16 +16,24 @@ function buildAccess(overrides: Partial<Record<string, { read: boolean; write: b
 }
 
 describe('roleMatchesRegistryItem', () => {
-  it('bridges transition admin roles to legacy admin-gated registry entries', () => {
-    expect(roleMatchesRegistryItem('property_manager', ['property_manager_admin'])).toBe(true);
-    expect(roleMatchesRegistryItem('root_manager', ['cam'])).toBe(true);
-    expect(roleMatchesRegistryItem('property_manager', ['board_president'])).toBe(true);
-    expect(roleMatchesRegistryItem('root_manager', ['site_manager'])).toBe(true);
+  it('admits the management tier to admin-gated entries', () => {
+    expect(roleMatchesRegistryItem('property_manager', 'admin')).toBe(true);
+    expect(roleMatchesRegistryItem('root_manager', 'admin')).toBe(true);
   });
 
-  it('does not let legacy admin roles broad-match role-specific registry gates', () => {
-    expect(roleMatchesRegistryItem('board_member', ['property_manager_admin', 'cam'])).toBe(false);
-    expect(roleMatchesRegistryItem('cam', ['property_manager_admin', 'cam'])).toBe(true);
+  it('admits every role to all-gated entries', () => {
+    expect(roleMatchesRegistryItem('resident', 'all')).toBe(true);
+    expect(roleMatchesRegistryItem('property_manager', 'all')).toBe(true);
+  });
+
+  it('denies residents on admin-gated entries', () => {
+    expect(roleMatchesRegistryItem('resident', 'admin')).toBe(false);
+  });
+
+  it('owner_or_admin admits unit owners and the management tier, not tenants', () => {
+    expect(roleMatchesRegistryItem('resident', 'owner_or_admin', true)).toBe(true); // owner
+    expect(roleMatchesRegistryItem('resident', 'owner_or_admin', false)).toBe(false); // tenant
+    expect(roleMatchesRegistryItem('property_manager', 'owner_or_admin')).toBe(true);
   });
 });
 
@@ -79,7 +87,7 @@ describe('useFilteredRegistry', () => {
   it('resolves the post announcement quick action to the routed create page', () => {
     const { result } = renderHook(() =>
       useFilteredRegistry(
-        'board_president',
+        'property_manager',
         {
           hasMeetings: true,
         } as never,
@@ -112,12 +120,12 @@ describe('useFilteredRegistry', () => {
     );
 
     const ids = result.current.map((item) => item.id);
-    // admin-audience pages (roles: ADMIN_ROLES)
+    // admin-audience pages (roles: 'admin')
     expect(ids).toContain('page-compliance');
     expect(ids).toContain('page-violations-inbox');
-    // admin-audience quick action (roles: ADMIN_ROLES)
+    // admin-audience quick action (roles: 'admin')
     expect(ids).toContain('action-upload-document');
-    // finance read set (FINANCE_READ_REGISTRY_ROLES) — admin tier qualifies
+    // finance read (roles: 'owner_or_admin') — management tier qualifies
     expect(ids).toContain('page-payments');
   });
 
@@ -162,7 +170,7 @@ describe('useFilteredRegistry', () => {
   it('resolves the announcements page entry to the scoped announcements list', () => {
     const { result } = renderHook(() =>
       useFilteredRegistry(
-        'board_president',
+        'property_manager',
         {
           hasMeetings: true,
         } as never,

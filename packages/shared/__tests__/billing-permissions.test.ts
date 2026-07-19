@@ -3,142 +3,53 @@ import {
   canManageBilling,
   canRequestUpgrade,
   getLockedFeatureBehavior,
-  inferCanonicalRoleFromMembership,
 } from '../src/billing/permissions';
 import type { AnyCommunityRole } from '../src/index';
+
+// v3 role model (ADR-006): the billing helpers key ONLY on the runtime role
+// (`resident` / `property_manager` / `root_manager`) plus `isUnitOwner` to split
+// owner from tenant. `designation` is NEVER an input — a board seat cannot
+// change a member's billing capability (this is the R3-04 fix; the removed
+// bridge shim let a `board_member` designation strip a manager's billing-admin).
 
 describe('canManageBilling', () => {
   const cases: Array<[AnyCommunityRole | null, boolean]> = [
     [null, false],
-    ['owner', false],
-    ['tenant', false],
-    ['board_member', false],
-    ['board_president', true],
-    ['cam', true],
-    ['site_manager', false],
-    ['property_manager_admin', true],
     ['resident', false],
+    ['property_manager', true],
+    ['root_manager', true],
   ];
   it.each(cases)('role=%s → %s', (role, expected) => {
     expect(canManageBilling(role)).toBe(expected);
   });
+
+  it('R3-04: management tier keeps billing-admin regardless of any board seat', () => {
+    // There is no designation parameter, so a property_manager who also holds a
+    // board designation still manages billing — the shim bug is structurally
+    // impossible now.
+    expect(canManageBilling('property_manager')).toBe(true);
+    expect(canManageBilling('root_manager')).toBe(true);
+  });
 });
 
 describe('canRequestUpgrade', () => {
-  const cases: Array<[AnyCommunityRole | null, boolean]> = [
-    [null, false],
-    ['tenant', false],
-    ['owner', true],
-    ['board_member', true],
-    ['board_president', true],
-    ['cam', true],
-    ['site_manager', true],
-    ['property_manager_admin', true],
-    ['resident', true],
-  ];
-  it.each(cases)('role=%s → %s', (role, expected) => {
-    expect(canRequestUpgrade(role)).toBe(expected);
+  it('management tier and unit owners can request; tenants cannot', () => {
+    expect(canRequestUpgrade('property_manager')).toBe(true);
+    expect(canRequestUpgrade('root_manager')).toBe(true);
+    expect(canRequestUpgrade('resident', true)).toBe(true); // owner
+    expect(canRequestUpgrade('resident', false)).toBe(false); // tenant
+    expect(canRequestUpgrade('resident')).toBe(false); // no isUnitOwner → tenant
+    expect(canRequestUpgrade(null)).toBe(false);
   });
 });
 
 describe('getLockedFeatureBehavior', () => {
-  const cases: Array<[AnyCommunityRole | null, 'upgrade' | 'request' | 'hidden']> = [
-    [null, 'request'],
-    ['tenant', 'hidden'],
-    ['owner', 'request'],
-    ['board_member', 'request'],
-    ['board_president', 'upgrade'],
-    ['cam', 'upgrade'],
-    ['site_manager', 'request'],
-    ['property_manager_admin', 'upgrade'],
-    ['resident', 'request'],
-  ];
-  it.each(cases)('role=%s → %s', (role, expected) => {
-    expect(getLockedFeatureBehavior(role)).toBe(expected);
-  });
-});
-
-describe('inferCanonicalRoleFromMembership — v3 transition values', () => {
-  it('maps root_manager to property_manager_admin', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'root_manager' })).toBe('property_manager_admin');
-  });
-  it('maps designation-less property_manager to cam', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
-  });
-  it('resolves board designation for property_managers', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: 'board_member' })).toBe('board_member');
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: 'board_president' })).toBe('board_president');
-  });
-  it('maps residents by unit ownership', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true })).toBe('owner');
-    expect(inferCanonicalRoleFromMembership({ role: 'resident' })).toBe('tenant');
-  });
-});
-
-describe('inferCanonicalRoleFromMembership', () => {
-  describe('root_manager role', () => {
-    it('always maps to property_manager_admin', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'root_manager' })).toBe('property_manager_admin');
-      expect(inferCanonicalRoleFromMembership({ role: 'root_manager', isUnitOwner: true })).toBe('property_manager_admin');
-      expect(inferCanonicalRoleFromMembership({ role: 'root_manager', designation: 'board_member' })).toBe('property_manager_admin');
-    });
-  });
-
-  describe('property_manager role with board designation', () => {
-    it.each([
-      ['board_president', 'board_president'],
-      ['board_member', 'board_member'],
-    ])('designation=%s → %s', (designation, expected) => {
-      expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation })).toBe(expected);
-    });
-
-    it('null designation defaults to cam', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: null })).toBe('cam');
-    });
-
-    it('missing designation defaults to cam', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
-    });
-  });
-
-  describe('resident role', () => {
-    it('isUnitOwner=true → owner', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true })).toBe('owner');
-    });
-
-    it('isUnitOwner=false → tenant', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: false })).toBe('tenant');
-    });
-
-    it('missing isUnitOwner → tenant (conservative default)', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'resident' })).toBe('tenant');
-    });
-  });
-
-  describe('legacy roles (non-new-model fall-through)', () => {
-    it('legacy role with isUnitOwner=true → owner', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'owner', isUnitOwner: true })).toBe('owner');
-    });
-
-    it('legacy role without isUnitOwner defaults to tenant', () => {
-      expect(inferCanonicalRoleFromMembership({ role: 'board_president' })).toBe('tenant');
-    });
-  });
-});
-
-describe('inferCanonicalRoleFromMembership — designation precedence (3.2)', () => {
-  it('resolves board designation for property_manager rows', () => {
-    expect(inferCanonicalRoleFromMembership({
-      role: 'property_manager', designation: 'board_president',
-    })).toBe('board_president');
-    expect(inferCanonicalRoleFromMembership({
-      role: 'property_manager', designation: 'board_member',
-    })).toBe('board_member');
-  });
-  it('default branches are untouched (LOAD-BEARING: prod null-designation rows)', () => {
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager', designation: null })).toBe('cam');
-    expect(inferCanonicalRoleFromMembership({ role: 'property_manager' })).toBe('cam');
-    expect(inferCanonicalRoleFromMembership({ role: 'root_manager', designation: 'board_president' })).toBe('property_manager_admin');
-    expect(inferCanonicalRoleFromMembership({ role: 'resident', isUnitOwner: true, designation: 'board_member' })).toBe('owner');
+  it('management tier → upgrade, unit owner → request, tenant → hidden', () => {
+    expect(getLockedFeatureBehavior('property_manager')).toBe('upgrade');
+    expect(getLockedFeatureBehavior('root_manager')).toBe('upgrade');
+    expect(getLockedFeatureBehavior('resident', true)).toBe('request'); // owner
+    expect(getLockedFeatureBehavior('resident', false)).toBe('hidden'); // tenant
+    expect(getLockedFeatureBehavior('resident')).toBe('hidden'); // no isUnitOwner → tenant
+    expect(getLockedFeatureBehavior(null)).toBe('request');
   });
 });
