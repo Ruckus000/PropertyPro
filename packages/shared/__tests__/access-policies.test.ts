@@ -19,6 +19,12 @@ function perms(document_categories: ManagerPermissions['document_categories']): 
   return { document_categories } as ManagerPermissions;
 }
 
+// role-v3 collapse (R3-01): the document-access policy is keyed by the 3
+// reachable rows only. Runtime roles are v3 (`resident` / `property_manager` /
+// `root_manager`); the owner/tenant/property_manager_admin legacy names remain
+// valid direct inputs. The dropped legacy admin names (board_member /
+// board_president / cam / site_manager) are unreachable and resolve to no access.
+
 describe('access-policies strict matrix', () => {
   it('normalizes aliases and returns unknown for unmapped values', () => {
     expect(normalizeCategoryName('Rules & Regulations')).toBe('rules');
@@ -36,28 +42,25 @@ describe('access-policies strict matrix', () => {
     expect(normalizeCategoryName(null)).toBe('unknown');
   });
 
-  it('keeps financial_records/contracts visible only to elevated roles (behavior-preserving)', () => {
+  it('keeps financial_records/contracts visible only to elevated roles', () => {
     for (const communityType of ['condo_718', 'hoa_720'] as CommunityType[]) {
       for (const key of ['financial_records', 'contracts'] as const) {
-        // Elevated roles see them...
+        // Elevated: unit owners + the management tier.
         expect(canAccessCategory('owner', communityType, key)).toBe(true);
-        expect(canAccessCategory('board_member', communityType, key)).toBe(true);
         expect(canAccessCategory('property_manager_admin', communityType, key)).toBe(true);
-        // ...restricted roles do not (same as the prior 'unknown' fallthrough).
+        expect(canAccessCategory('property_manager', communityType, key)).toBe(true);
+        // Tenants do not (same as the prior 'unknown' fallthrough).
         expect(canAccessCategory('tenant', communityType, key)).toBe(false);
-        expect(canAccessCategory('cam', communityType, key)).toBe(false);
       }
     }
   });
 
-  it('grants condo/HOA insurance + elections to owners, board, PM-admins, and CAMs (not tenants)', () => {
+  it('grants condo/HOA insurance + elections to owners and the management tier, not tenants', () => {
     for (const communityType of ['condo_718', 'hoa_720'] as CommunityType[]) {
       for (const key of ['insurance', 'elections'] as const) {
         expect(canAccessCategory('owner', communityType, key)).toBe(true);
-        expect(canAccessCategory('board_member', communityType, key)).toBe(true);
         expect(canAccessCategory('property_manager_admin', communityType, key)).toBe(true);
-        // CAMs administer insurance/elections, so they can see these...
-        expect(canAccessCategory('cam', communityType, key)).toBe(true);
+        expect(canAccessCategory('property_manager', communityType, key)).toBe(true);
         // ...but tenants cannot.
         expect(canAccessCategory('tenant', communityType, key)).toBe(false);
       }
@@ -68,7 +71,6 @@ describe('access-policies strict matrix', () => {
     expect(isElevatedRole('owner')).toBe(true);
     expect(isElevatedRole('property_manager_admin')).toBe(true);
     expect(isRestrictedRole('tenant')).toBe(true);
-    expect(isRestrictedRole('cam')).toBe(true);
   });
 
   // role-v3 phase 4.1 (ADR-006): property_manager is uniformly elevated for
@@ -122,15 +124,6 @@ describe('access-policies strict matrix', () => {
       expect(canAccessCategory('tenant', communityType, 'announcements')).toBe(false);
       expect(canAccessCategory('tenant', communityType, 'unknown')).toBe(false);
     });
-
-    it(`permits CAM operational categories only (${communityType})`, () => {
-      expect(canAccessCategory('cam', communityType, 'rules')).toBe(true);
-      expect(canAccessCategory('cam', communityType, 'inspection_reports')).toBe(true);
-      expect(canAccessCategory('cam', communityType, 'announcements')).toBe(true);
-      expect(canAccessCategory('cam', communityType, 'meeting_minutes')).toBe(true);
-      expect(canAccessCategory('cam', communityType, 'declaration')).toBe(false);
-      expect(canAccessCategory('cam', communityType, 'unknown')).toBe(false);
-    });
   }
 
   it('permits apartment tenant categories only', () => {
@@ -143,21 +136,9 @@ describe('access-policies strict matrix', () => {
     expect(canAccessCategory('tenant', 'apartment', 'unknown')).toBe(false);
   });
 
-  it('permits apartment site manager operational categories only', () => {
-    expect(canAccessCategory('site_manager', 'apartment', 'rules')).toBe(true);
-    expect(canAccessCategory('site_manager', 'apartment', 'announcements')).toBe(true);
-    expect(canAccessCategory('site_manager', 'apartment', 'maintenance_records')).toBe(true);
-    expect(canAccessCategory('site_manager', 'apartment', 'lease_docs')).toBe(false);
-    expect(canAccessCategory('site_manager', 'apartment', 'unknown')).toBe(false);
-  });
-
   it('permits elevated roles all known + unknown', () => {
-    const elevated: CommunityRole[] = [
-      'owner',
-      'board_member',
-      'board_president',
-      'property_manager_admin',
-    ];
+    // The reachable elevated rows: unit owner + management tier.
+    const elevated: CommunityRole[] = ['owner', 'property_manager_admin'];
     const communityTypes: CommunityType[] = ['condo_718', 'hoa_720', 'apartment'];
 
     for (const role of elevated) {
@@ -175,10 +156,11 @@ describe('access-policies strict matrix', () => {
       'rules',
       'inspection_reports',
     ]);
-    expect(getAccessibleKnownCategories('site_manager', 'apartment')).toEqual([
+    expect(getAccessibleKnownCategories('tenant', 'apartment')).toEqual([
+      'lease_docs',
       'rules',
-      'announcements',
-      'maintenance_records',
+      'community_handbook',
+      'move_in_out_docs',
     ]);
     expect(getAccessibleKnownCategories('property_manager_admin', 'apartment')).toContain(
       'move_in_out_docs',
