@@ -12,7 +12,6 @@ import { ViolationStatusTransition } from './ViolationStatusTransition';
 import { FinesSummary } from './FinesSummary';
 import type { ViolationItem, ViolationFineItem } from '@/lib/api/violations';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 const STATUS_STYLES: Record<string, string> = {
   reported: 'bg-status-warning-bg text-status-warning',
@@ -126,19 +125,6 @@ export function ViolationDetailView({
       <PageHeader
         title={`Violation #${violation.id}`}
         description={`${CATEGORY_LABELS[violation.category] ?? violation.category} · Unit ${violation.unitId}`}
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              {
-                label: isAdmin ? 'Violations' : 'Your Reports',
-                href: isAdmin
-                  ? `/violations?communityId=${communityId}`
-                  : `/violations/report?communityId=${communityId}`,
-              },
-            ]}
-            currentLabel={`Violation #${violation.id}`}
-          />
-        }
         actions={
           <div className="flex gap-2">
             <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${statusStyle}`}>

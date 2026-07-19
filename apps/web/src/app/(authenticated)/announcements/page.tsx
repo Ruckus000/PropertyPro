@@ -15,7 +15,6 @@ import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { AnnouncementListContainer } from '@/components/announcements/announcement-list-container';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CommunityMembership } from '@/lib/api/community-membership';
@@ -66,7 +65,6 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       <PageHeader
-        breadcrumb={<Breadcrumbs items={[]} currentLabel="Announcements" />}
         title="Announcements"
         description="Community updates, notices, and reminders."
         actions={

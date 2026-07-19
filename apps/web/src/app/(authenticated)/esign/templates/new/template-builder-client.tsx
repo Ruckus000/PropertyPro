@@ -20,7 +20,6 @@ import {
   Upload,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   ESIGN_TEMPLATE_TYPES,
   type EsignFieldDefinition,
@@ -340,12 +339,6 @@ export function TemplateBuilderClient({
       <div className="mx-auto max-w-2xl space-y-6">
         <PageHeader
           title="Create Template"
-          breadcrumb={
-            <Breadcrumbs
-              items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
-              currentLabel="New template"
-            />
-          }
         />
 
         <div className="space-y-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6">

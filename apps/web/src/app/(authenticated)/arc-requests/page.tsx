@@ -6,7 +6,6 @@ import { getFeaturesForCommunity, isAdminRole } from '@propertypro/shared';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { ArcSubmissionsTab } from '@/components/violations/ArcSubmissionsTab';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -45,12 +44,6 @@ export default async function ArcRequestsPage({ searchParams }: PageProps) {
       <PageHeader
         title="ARC Requests"
         description="Review architectural review submissions for your community."
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Compliance', href: `/communities/${communityId}/compliance` }]}
-            currentLabel="ARC Requests"
-          />
-        }
       />
       <ArcSubmissionsTab communityId={communityId} />
     </FeatureGate>

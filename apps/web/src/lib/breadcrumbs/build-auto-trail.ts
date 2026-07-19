@@ -1,4 +1,4 @@
-import type { BreadcrumbLink } from '@/components/shared/breadcrumbs';
+import type { BreadcrumbLink } from './types';
 import { SEGMENT_LABELS, humanize } from './segment-labels';
 
 export interface AutoTrail {

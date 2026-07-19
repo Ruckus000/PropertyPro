@@ -14,7 +14,6 @@ import {
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   useDryRunImport,
   useImportResidents,
@@ -137,12 +136,6 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
     <div className="space-y-6">
       <PageHeader
         title="Import Residents"
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Residents', href: `/dashboard/residents?communityId=${communityId}` }]}
-            currentLabel="Import residents"
-          />
-        }
       />
 
       {/* Step 1: Upload */}

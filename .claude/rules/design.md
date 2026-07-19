@@ -117,36 +117,33 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 ## Page Navigation & Breadcrumbs
 
-- Every authenticated detail/new/edit page MUST render
-  `<PageHeader breadcrumb={<Breadcrumbs items={[...]} currentLabel="..." />}>`.
-- Breadcrumb labels for parent crumbs match the sidebar nav label
-  (`apps/web/src/components/layout/nav-config.ts`) when a sidebar entry exists
-  for that route. When the parent section has no sidebar entry (e.g.,
-  `/emergency`, `/esign/templates`, `/esign/submissions`), use a human-readable
-  section name and keep it consistent across every breadcrumb that links to
-  that section. Canonical mappings: `'Announcements'`, `'Board'`, `'E-Sign'`,
-  `'Violations'`, `'ARC Requests'`, `'Residents'`, `'Communities'` (PM sidebar — not
-  "Portfolio").
-- Breadcrumb hrefs to nested `/communities/[id]/...` routes must NOT append
-  `?communityId=...` — the `[id]` path segment is the authoritative tenant id
-  for those routes. Hrefs to top-level routes keep the `?communityId=` query
-  param as today.
-- Current page label matches the page's `<h1>` title.
-- Pages that delegate chrome to a client component opt out with a top-of-file
-  `// breadcrumbs:exempt — delegated to <path>` comment naming the file that
-  contains the actual `<PageHeader breadcrumb=…>` invocation.
+- Breadcrumbs are **not authored per page.** A single global trail renders in
+  the app shell (`apps/web/src/components/layout/shell-breadcrumbs.tsx`),
+  derived from the URL plus the page's `<h1>`. Pages must NOT render their own
+  breadcrumb, back-link, or inline trail — the shell owns the only back
+  affordance.
+- Every authenticated detail/new/edit page MUST render a page-title `<h1>` so
+  the trail can resolve a real leaf label — via `<PageHeader title="...">` (the
+  canonical header, which renders the `<h1>`) or a literal `<h1>`. The current
+  page label is that `<h1>` title.
+- Parent-crumb labels are derived from route segments in
+  `apps/web/src/lib/breadcrumbs/segment-labels.ts`. Section labels that map to a
+  sidebar nav item are pulled from `nav-config.ts` by id (single source — a
+  sidebar rename flows through automatically); breadcrumb-only sub-segments and
+  intentional divergences live in that file's `SUB_SEGMENT_LABELS`. To relabel a
+  section, edit nav-config (for nav-linked sections) or `segment-labels.ts` (for
+  sub-segments) — never hard-code a crumb on a page.
+- Crumb hrefs are built by `build-auto-trail.ts`: nested `/communities/[id]/...`
+  routes are path-scoped (no `?communityId=`); top-level routes keep
+  `?communityId=` for tenant context. This is handled centrally — pages don't
+  construct crumb hrefs.
+- Pages that delegate chrome to a client component opt out of the page-title
+  check with a top-of-file `// breadcrumbs:exempt — delegated to <path>` comment
+  naming the file that renders the `<PageHeader title=…>`/`<h1>`.
 - Redirect-only pages opt out with a top-of-file
   `// breadcrumbs:exempt — redirect-only page` comment.
-- The CI guard (`pnpm guard:breadcrumbs`) enforces this on the in-scope glob:
-  `**/[<param>]/page.tsx`, `**/new/page.tsx`, `**/[<param>]/edit/page.tsx`
-  under `apps/web/src/app/(authenticated)/`.
-- **On any page that renders `<PageHeader breadcrumb=…>`, the breadcrumb is
-  the only back affordance.** Do not also place a back-link in the `actions`
-  slot or inline above the header. List/static pages that do not render a
-  breadcrumb may still use ad-hoc back affordances when appropriate.
-- **Within `<PageHeader>`, place `breadcrumb=` *before* any JSX-valued prop**
-  (e.g., `actions={<Button>...</Button>}`). The CI guard regex halts at the
-  first `>` between `<PageHeader` and `breadcrumb=`; prop ordering keeps the
-  check valid.
+- The CI guard (`pnpm guard:breadcrumbs`) enforces the page-title requirement on
+  the in-scope glob: `**/[<param>]/page.tsx`, `**/new/page.tsx`,
+  `**/[<param>]/edit/page.tsx` under `apps/web/src/app/(authenticated)/`.
 
 </important>
