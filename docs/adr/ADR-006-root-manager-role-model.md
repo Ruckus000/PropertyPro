@@ -55,6 +55,17 @@ Authorization is enforced at the route/query layer via `requirePermission()` →
 
 ## Transition status (as of this ADR)
 
+> **Addendum (2026-07-20):** role-v3 is now **fully landed.** Since the 07-18 note
+> below, the 7-role `RBAC_MATRIX` collapse (R3-01) + v1 `checkPermission` deletion
+> (R3-07), the bridge drain (R3-02) + billing-admin fix (R3-04), the management-tier
+> matrix-key rename to `manager`, the dead `user_role` pgEnum drop (R3-06 — applied
+> to prod as a verified no-op, both migration ledgers reconciled), the global
+> `CommunityRole` 7→3 narrowing, and the role type/const alias consolidation have all
+> shipped. The runtime role vocabulary is v3-only; the compatibility shim is gone and
+> the `guard:legacy-roles` STRUCTURAL + BRIDGE buckets are empty. The **only**
+> remaining deferred item is Phase 3.4 root-only billing/deletion (last "Deferred"
+> bullet below), still gated on claim-root adoption by design.
+>
 > **Addendum (2026-07-18):** Phase 4.1 has **shipped**. Migration `0020`
 > (role-v3 enum rebuild + column drops) is live, and `checkPermissionV2`
 > (`apps/web/src/lib/db/access-control.ts`) now resolves `property_manager` /

@@ -36,7 +36,7 @@ function buildSourceTypeFilter(
 
 export interface DocumentAccessContext {
   communityId: number;
-  role: CommunityRole | CommunityRole;
+  role: CommunityRole;
   communityType: CommunityType;
   isUnitOwner?: boolean;
 }

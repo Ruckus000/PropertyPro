@@ -757,7 +757,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
  * `isUnitOwner` is supplied.
  */
 export function roleMatchesRegistryItem(
-  role: CommunityRole | CommunityRole,
+  role: CommunityRole,
   gate: RegistryVisibility,
   isUnitOwner?: boolean,
 ): boolean {
@@ -776,7 +776,7 @@ export function roleMatchesRegistryItem(
  * with all `href` functions resolved to concrete strings.
  */
 export function useFilteredRegistry(
-  role: CommunityRole | CommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
   communityId: number | null,
   resourceAccess: ResourceAccessMap | null = null,
