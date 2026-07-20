@@ -38,9 +38,9 @@ describe('Operations nav entry visibility — feature matrix', () => {
     expect(visible).toHaveLength(1);
   });
 
-  it('hoa_720 + professional + board_president → visible', () => {
+  it('hoa_720 + professional + property_manager → visible', () => {
     const features = featuresFor('hoa_720', 'professional');
-    const visible = getVisibleItems([operationsEntry!], 'board_president', features);
+    const visible = getVisibleItems([operationsEntry!], 'property_manager', features);
     expect(visible).toHaveLength(1);
   });
 
