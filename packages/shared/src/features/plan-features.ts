@@ -50,14 +50,13 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       // Insurance hub ships on every condo/HOA plan including the entry tier:
       // it is a differentiation/retention feature, not an upsell lever.
       hasInsuranceHub: true,
-      // Reserve transparency ships on every condo/HOA plan too (same
-      // differentiation/retention rationale). Still dark behind the
-      // hasReserveTransparency flag (false) until attorney-reviewed copy.
-      hasReserveTransparency: false,
+      // Reserve transparency ships on every condo/HOA plan (differentiation/
+      // retention). Enabled 2026-07-20 with attorney-reviewed copy.
+      hasReserveTransparency: true,
       hasSnowbirdDigest: true,
-      // Storm-damage intake ships on every plan as a differentiation/retention
-      // feature (dark: false until attorney-approved copy; type/plan flag, no per-community toggle).
-      hasStormTools: false,
+      // Storm-damage intake ships on every plan (differentiation/retention).
+      // Enabled 2026-07-20 with attorney-reviewed copy; type/plan flag.
+      hasStormTools: true,
     },
     maxAdmins: 3,
     displayName: 'Essentials',
@@ -98,11 +97,11 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSiteCustomCss: true,
       hasSiteCustomDomain: true,
       hasInsuranceHub: true,
-      hasReserveTransparency: false,
+      hasReserveTransparency: true,
       hasSnowbirdDigest: true,
-      // Storm-damage intake ships on every plan as a differentiation/retention
-      // feature (dark: false until attorney-approved copy; type/plan flag, no per-community toggle).
-      hasStormTools: false,
+      // Storm-damage intake ships on every plan (differentiation/retention).
+      // Enabled 2026-07-20 with attorney-reviewed copy; type/plan flag.
+      hasStormTools: true,
     },
     maxAdmins: Infinity,
     displayName: 'Professional',
@@ -136,9 +135,9 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSiteCustomDomain: true,
       hasSitePortfolioTemplates: true,
       hasSnowbirdDigest: true,
-      // Storm-damage intake ships on every plan as a differentiation/retention
-      // feature (dark: false until attorney-approved copy; type/plan flag, no per-community toggle).
-      hasStormTools: false,
+      // Storm-damage intake ships on every plan (differentiation/retention).
+      // Enabled 2026-07-20 with attorney-reviewed copy; type/plan flag.
+      hasStormTools: true,
     },
     maxAdmins: Infinity,
     displayName: 'Operations Plus',
