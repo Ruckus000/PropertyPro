@@ -11,6 +11,7 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { useDeleteReserveAsset, useReserveAssets } from '@/hooks/use-reserve-assets';
 import {
   RESERVE_ASSET_CARD_DISCLAIMER,
+  RESERVE_FUNDING_FIGURES_DISCLAIMER,
   RESERVE_RUL_CAPTION,
   RESERVE_TRANSPARENCY_DISCLAIMER,
 } from '@/lib/constants/reserve-disclaimers';
@@ -30,23 +31,27 @@ interface ReserveTransparencySectionProps {
 /**
  * Map a remaining-useful-life band onto a StatusBadge status + label.
  *
- * Status is never conveyed by color alone (design rule): StatusBadge renders an
- * icon and text alongside the color. Labels state the neutral time-remaining
- * fact — never a judgment about condition or adequacy.
+ * The badge conveys the neutral time-remaining FACT only — never a judgment
+ * about condition or reserve adequacy. Every band therefore maps to a
+ * NON-VALENT StatusBadge key (`neutral`, `open` (info variant), `brand`) so no success/
+ * danger/warning color or icon renders an adequacy traffic-light beside the
+ * dollar figures. At-a-glance urgency is conveyed by the label text (and by
+ * ascending yearsRemaining sort), not by color. Do NOT map any band back onto
+ * `compliant` / `overdue` / `due_soon` (valent keys).
  */
-function rulBadge(band: ReserveAssetRulBand, yearsRemaining: number): { status: string; label: string } {
+export function rulBadge(band: ReserveAssetRulBand, yearsRemaining: number): { status: string; label: string } {
   switch (band) {
     case 'past_life':
-      return { status: 'overdue', label: 'Past expected life' };
+      return { status: 'neutral', label: 'Past expected life' };
     case 'urgent':
       return {
-        status: 'due_soon',
+        status: 'open',
         label: yearsRemaining === 0 ? 'Due this year' : `${yearsRemaining} yr${yearsRemaining === 1 ? '' : 's'} left`,
       };
     case 'aware':
       return { status: 'brand', label: `${yearsRemaining} yrs left` };
     case 'healthy':
-      return { status: 'compliant', label: `${yearsRemaining} yrs left` };
+      return { status: 'neutral', label: `${yearsRemaining} yrs left` };
   }
 }
 
@@ -109,6 +114,13 @@ export function ReserveAssetCard({
           )}
         </dl>
         <p className="text-xs text-content-tertiary">{RESERVE_RUL_CAPTION}</p>
+
+        {/* Funding-figures hedge sits immediately beneath the entered cost pair
+            so no implied shortfall/adequacy inference travels with the two
+            dollar figures. */}
+        {(replacementCost || currentReserve) && (
+          <p className="text-xs text-content-tertiary">{RESERVE_FUNDING_FIGURES_DISCLAIMER}</p>
+        )}
 
         {asset.notes && <p className="text-sm text-content-secondary">{asset.notes}</p>}
 

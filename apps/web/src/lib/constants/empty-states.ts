@@ -6,6 +6,8 @@
  * do not recreate it). See docs/design-system/README.md.
  */
 
+import { RESERVE_TRANSPARENCY_ADMIN_HINT } from "./reserve-disclaimers";
+
 export type EmptyStateIconKey =
   | "upload"
   | "users"
@@ -174,8 +176,10 @@ export const EMPTY_STATE_CONFIGS = {
   },
   reserve_transparency_empty_admin: {
     title: "Build your reserve register",
-    description:
-      "Add each major component with its install year and expected useful life. Owners see a transparent register with a remaining-useful-life countdown. This is a record you enter, not a reserve study.",
+    // Single-sourced from the attorney-reviewed constant so the reserve-funding
+    // / SIRS / milestone warning cannot drift between the empty state and the
+    // admin hint.
+    description: RESERVE_TRANSPARENCY_ADMIN_HINT,
     actionLabel: "Add Asset",
     icon: "building",
   },

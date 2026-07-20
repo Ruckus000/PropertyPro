@@ -134,8 +134,11 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     // Apartments have no owner-occupied units and no association master
     // policy to share — the insurance hub is condo/HOA only.
     hasInsuranceHub: false,
-    // Reserve transparency is a condo/HOA statutory-reserve concept
-    // (HB 913 / SIRS); apartments have no owner reserves to disclose.
+    // Reserve transparency is an owner-reserve disclosure concept for
+    // condos (Ch. 718) and HOAs (Ch. 720); apartments have no owner reserves
+    // to disclose. Note: the structural integrity reserve study (SIRS) /
+    // milestone-inspection regime is condo/cooperative-only (Ch. 718/719 +
+    // §553.899) and does NOT apply to Ch. 720 HOAs — this register is neither.
     hasReserveTransparency: false,
     // Seasonal/absentee residents exist in every community type, so the digest
     // is available everywhere (the board still enables it per community).
