@@ -133,7 +133,10 @@ export const POST = withErrorHandler(
       communityId,
       unitId: body.unitId ?? null,
       reportedBy: actorUserId,
-      occurredAt: body.occurredAt ?? null,
+      // The column is a `mode:'date'` timestamp, so drizzle calls
+      // `.toISOString()` on the value at insert — pass a Date, not the raw ISO
+      // string from the contract (mirrors meetings/route.ts `new Date(startsAt)`).
+      occurredAt: body.occurredAt ? new Date(body.occurredAt) : null,
       locationLabel: body.locationLabel,
       category: body.category,
       severity: body.severity,

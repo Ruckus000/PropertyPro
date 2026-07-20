@@ -160,6 +160,19 @@ describe('POST /api/v1/storm-damage', () => {
     );
   });
 
+  it('forwards a filled occurredAt as a Date (mode:date column) so insert does not throw', async () => {
+    const res = await POST(
+      jsonReq('POST', 'http://localhost/api/v1/storm-damage', {
+        ...VALID_CREATE,
+        occurredAt: '2026-07-18T00:00:00.000Z',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const passed = createStormDamageReportMock.mock.calls[0][1];
+    expect(passed.occurredAt).toBeInstanceOf(Date);
+    expect((passed.occurredAt as Date).toISOString()).toBe('2026-07-18T00:00:00.000Z');
+  });
+
   it('validates a referenced photo document belongs to this community', async () => {
     getStormDamageDocumentByIdMock.mockResolvedValue(null);
     const res = await POST(
