@@ -5,7 +5,7 @@
  * Unknown/unmapped categories remain visible only to elevated roles.
  */
 
-import type { CommunityRole, CommunityType } from './index';
+import type { CommunityType } from './index';
 import type { TransitionRole } from './role-transition';
 import type { MatrixRole } from './rbac-matrix';
 import {
@@ -134,16 +134,8 @@ export const RESTRICTED_ROLES: readonly MatrixRole[] = [
   'tenant',
 ] as const;
 
-/** Board-level roles (fiduciary duty, board-only meeting access). */
-export const BOARD_ROLES: readonly CommunityRole[] = [
-  'board_member',
-  'board_president',
-] as const;
-
-// Keyed by the 3 reachable MatrixRole rows only (role-v3 collapse, R3-01). The
-// legacy board_member/board_president/cam/site_manager rows were unreachable —
-// `resolveLegacyRole` only ever yields owner/tenant/manager — and were dropped
-// alongside the RBAC_MATRIX collapse.
+// Keyed by the 3 MatrixRole rows (role-v3 collapse, R3-01). `resolveMatrixRole`
+// only ever yields owner/tenant/manager from the 3 v3 roles.
 const DOCUMENT_ACCESS_POLICY: Record<CommunityType, Record<MatrixRole, CategoryAccess>> = {
   condo_718: {
     owner: 'all',
@@ -192,24 +184,18 @@ export interface DocumentAccessOpts {
 }
 
 /**
- * Resolve a role (legacy 7-role or v3 TransitionRole) to the legacy
- * CommunityRole for policy lookup.
+ * Resolve a v3 role to the `MatrixRole` row used for document-policy lookup.
  *
  * v3 (ADR-006): property_manager + root_manager are uniformly elevated and map
- * onto the `manager` matrix row. resident splits owner/tenant via isUnitOwner.
- * A final defensive `return null` remains for exhaustiveness; no live role
- * reaches it.
+ * onto the `manager` row; resident splits owner/tenant via `isUnitOwner`. The
+ * three v3 roles are exhaustive, so the defensive `return null` is unreachable —
+ * it exists only to satisfy control-flow analysis for any future enum member.
  */
-function resolveLegacyRole(
-  role: CommunityRole | TransitionRole,
+function resolveMatrixRole(
+  role: TransitionRole,
   opts?: DocumentAccessOpts,
 ): MatrixRole | null {
-  // Resolve to one of the 3 reachable matrix rows (owner / tenant / manager).
-  // v3 roles map here; the legacy owner/tenant/property_manager_admin names also
-  // resolve. The 4 dropped legacy admin names (board_member/board_president/cam/
-  // site_manager) are unreachable in production and return null.
-  if (role === 'owner' || role === 'tenant') return role;
-  if (role === 'property_manager_admin' || role === 'property_manager' || role === 'root_manager') {
+  if (role === 'property_manager' || role === 'root_manager') {
     return 'manager';
   }
   if (role === 'resident') return opts?.isUnitOwner ? 'owner' : 'tenant';
@@ -217,45 +203,44 @@ function resolveLegacyRole(
 }
 
 export function isElevatedRole(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
   opts?: DocumentAccessOpts,
 ): boolean {
-  const legacy = resolveLegacyRole(role, opts);
-  return legacy ? ELEVATED_ROLES.includes(legacy) : false;
+  const matrixRole = resolveMatrixRole(role, opts);
+  return matrixRole ? ELEVATED_ROLES.includes(matrixRole) : false;
 }
 
 export function isAdminRole(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
 ): boolean {
   // Resolve to the MatrixRole row first (same path isElevatedRole/isRestrictedRole
-  // take) so the management tier — property_manager / root_manager, plus the legacy
-  // property_manager_admin — collapses onto the single `manager` admin row. owner /
-  // tenant / resident resolve to non-admin rows and correctly return false.
-  const legacy = resolveLegacyRole(role);
-  return legacy ? ADMIN_ROLES.includes(legacy) : false;
+  // take) so the management tier (property_manager / root_manager) collapses onto
+  // the single `manager` admin row. resident (owner or tenant) is non-admin.
+  const matrixRole = resolveMatrixRole(role);
+  return matrixRole ? ADMIN_ROLES.includes(matrixRole) : false;
 }
 
 export function isRestrictedRole(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
   opts?: DocumentAccessOpts,
 ): boolean {
-  const legacy = resolveLegacyRole(role, opts);
-  if (legacy) return RESTRICTED_ROLES.includes(legacy);
+  const matrixRole = resolveMatrixRole(role, opts);
+  if (matrixRole) return RESTRICTED_ROLES.includes(matrixRole);
   return false;
 }
 
 export function getCategoryAccessForRole(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
 ): CategoryAccess {
-  const legacy = resolveLegacyRole(role, opts);
-  if (legacy) return DOCUMENT_ACCESS_POLICY[communityType][legacy];
+  const matrixRole = resolveMatrixRole(role, opts);
+  if (matrixRole) return DOCUMENT_ACCESS_POLICY[communityType][matrixRole];
   return [];
 }
 
 export function getAccessibleKnownCategories(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
 ): KnownDocumentCategoryKey[] {
@@ -271,7 +256,7 @@ export function getAccessibleKnownCategories(
 }
 
 export function canAccessCategory(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
   communityType: CommunityType,
   categoryKey: DocumentCategoryKey,
   opts?: DocumentAccessOpts,
@@ -293,7 +278,7 @@ export function canAccessCategory(
 }
 
 export function canAccessDocument(
-  role: CommunityRole | TransitionRole,
+  role: TransitionRole,
   communityType: CommunityType,
   categoryName: string | null | undefined,
   opts?: DocumentAccessOpts,

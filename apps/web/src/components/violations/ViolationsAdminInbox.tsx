@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { AnyCommunityRole, TransitionRole } from '@propertypro/shared';
+import { isAdminRole, type AnyCommunityRole, type TransitionRole } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
@@ -137,7 +137,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
   }, [fetchViolations]);
 
   const totalPages = Math.ceil(total / LIMIT);
-  const canCreateViolation = userRole !== 'resident' && userRole !== 'owner' && userRole !== 'tenant';
+  const canCreateViolation = isAdminRole(userRole);
 
   return (
     <div>

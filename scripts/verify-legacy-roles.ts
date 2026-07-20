@@ -39,21 +39,18 @@ const EXEMPT = new Set([
 
 // Per-file CEILING of legitimate dead-legacy-role literals (pinned 2026-06-22, Phase 4.3).
 // Any file NOT listed here must have ZERO such literals. Buckets:
-//   STRUCTURAL  — the RBAC permission authority + DB enum; removed at the 7→3 collapse.
-//   BRIDGE      — canonical-role-bridge display/config; drains in Phase 4.4 with the shim.
+//   STRUCTURAL  — the RBAC permission authority + DB enum; FULLY DRAINED (empty).
+//   BRIDGE      — canonical-role-bridge display/config; FULLY DRAINED (empty).
 //   HELP        — #733 help-frontmatter v1 visibility vocabulary (content, not runtime roles).
 //   DEV         — dev-only portal login aliases (404 in prod).
 //   TEST        — co-located *.test fixtures under src asserting the v3↔legacy mapping.
 const ALLOWLIST = new Map<string, number>([
-  // STRUCTURAL. The RBAC_MATRIX 7→3 collapse (R3-01) drained the 4 unreachable
-  // columns; Level 2 renamed the surviving `property_manager_admin` row key to
-  // the v3-neutral `manager` (draining rbac-matrix.ts + access-control.ts); R3-06
-  // deleted the dead `user_role` pgEnum (draining enums.ts). All three are removed
-  // from this list. access-policies.ts keeps the ONE remaining literal: the legacy
-  // `property_manager_admin` INPUT branch in `resolveLegacyRole` — a valid
-  // CommunityRole that must resolve to the manager row until CommunityRole itself
-  // narrows 7→3 (Level 3).
-  ['packages/shared/src/access-policies.ts', 1],
+  // STRUCTURAL — bucket intentionally EMPTY. The RBAC_MATRIX 7→3 collapse (R3-01)
+  // drained the 4 unreachable columns; Level 2 renamed the management row key to
+  // `manager` (rbac-matrix.ts + access-control.ts); R3-06 dropped the dead
+  // `user_role` pgEnum (enums.ts); Level 3 narrowed `CommunityRole` 7→3 and removed
+  // `resolveLegacyRole`'s last `property_manager_admin` input branch
+  // (access-policies.ts). The runtime role vocabulary is now v3-only.
   // BRIDGE — drained to zero in Phase 4.4. Bucket intentionally empty.
   // HELP
   ['packages/shared/src/default-faqs.ts', 3],

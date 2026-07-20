@@ -1,8 +1,6 @@
 import {
-  isCommunityRole,
   isCommunityType,
   TRANSITION_ROLES,
-  type CommunityRole,
   type CommunityType,
   type TransitionRole,
 } from '@propertypro/shared';
@@ -18,20 +16,6 @@ export function requireCommunityType(
 ): CommunityType {
   if (!isCommunityType(value)) {
     throw new DataIntegrityError(`Invalid community type in ${context}`, {
-      context,
-      value,
-    });
-  }
-
-  return value;
-}
-
-export function requireCommunityRole(
-  value: unknown,
-  context: string,
-): CommunityRole {
-  if (!isCommunityRole(value)) {
-    throw new DataIntegrityError(`Invalid community role in ${context}`, {
       context,
       value,
     });
