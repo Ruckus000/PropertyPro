@@ -14,7 +14,7 @@
  * - 'owner'/'tenant' — too many legitimate uses (ownerUserId, tenant isolation).
  * - 'board_president'/'board_member' — these are first-class v3 `designation`
  *   enum values now (valid on any role), not legacy admin-role names to drain.
- *   `role` is a typed enum (TransitionRole), so misusing a designation value as a
+ *   `role` is a typed enum (CommunityRole), so misusing a designation value as a
  *   role is a tsc error, not something this string guard needs to catch.
  *
  * The ALLOWLIST is a CEILING per file: exceeding it fails (no growth); dropping

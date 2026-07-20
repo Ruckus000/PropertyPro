@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CommunityType, TransitionRole } from '../src';
+import type { CommunityType, CommunityRole } from '../src';
 import type { ManagerPermissions } from '../src/manager-permissions';
 import {
   canAccessCategory,
@@ -137,7 +137,7 @@ describe('access-policies strict matrix', () => {
 
   it('permits elevated roles all known + unknown', () => {
     // The reachable elevated inputs: a unit owner + the management tier.
-    const elevated: Array<{ role: TransitionRole; opts?: { isUnitOwner?: boolean } }> = [
+    const elevated: Array<{ role: CommunityRole; opts?: { isUnitOwner?: boolean } }> = [
       { role: 'resident', opts: OWNER },
       { role: 'property_manager' },
     ];

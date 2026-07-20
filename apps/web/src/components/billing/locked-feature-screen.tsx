@@ -15,7 +15,7 @@ import {
   findCheapestPlanForFeature,
   getLockedFeatureBehavior,
   getPlanFeatureCopy,
-  type AnyCommunityRole,
+  type CommunityRole,
   type CommunityFeatures,
   type PlanId,
 } from '@propertypro/shared';
@@ -26,7 +26,7 @@ import { UpgradeDialog } from './upgrade-dialog';
 
 export interface LockedFeatureScreenProps {
   featureKey: keyof CommunityFeatures;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   /** Distinguishes unit owner (request) from tenant (hidden) among residents. */
   isUnitOwner?: boolean;
   currentPlanId: PlanId | null;

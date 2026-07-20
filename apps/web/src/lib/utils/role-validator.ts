@@ -11,9 +11,9 @@
  */
 import {
   ADMIN_TIER_DB_ROLES,
-  TRANSITION_ROLES,
+  COMMUNITY_ROLES,
   type CommunityType,
-  type TransitionRole,
+  type CommunityRole,
 } from '@propertypro/shared';
 
 /**
@@ -30,7 +30,7 @@ export function isResidentTierRole(role: string): boolean {
 }
 
 /** Roles that require a unit assignment. */
-const UNIT_REQUIRED_ROLES: ReadonlySet<TransitionRole> = new Set([
+const UNIT_REQUIRED_ROLES: ReadonlySet<CommunityRole> = new Set([
   'resident',
 ]);
 
@@ -45,16 +45,16 @@ export interface RoleValidationResult {
  * and any future per-type constraint.
  */
 export function isRoleAllowedForCommunityType(
-  role: TransitionRole,
+  role: CommunityRole,
   _communityType: CommunityType,
 ): boolean {
-  return (TRANSITION_ROLES as readonly string[]).includes(role);
+  return (COMMUNITY_ROLES as readonly string[]).includes(role);
 }
 
 /**
  * Check whether unit_id is required for the given role.
  */
-export function isUnitRequiredForRole(role: TransitionRole): boolean {
+export function isUnitRequiredForRole(role: CommunityRole): boolean {
   return UNIT_REQUIRED_ROLES.has(role);
 }
 
@@ -65,7 +65,7 @@ export function isUnitRequiredForRole(role: TransitionRole): boolean {
  * { valid: false, error: "..." } describing the violation.
  */
 export function validateRoleAssignment(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   unitId: number | null | undefined,
 ): RoleValidationResult {

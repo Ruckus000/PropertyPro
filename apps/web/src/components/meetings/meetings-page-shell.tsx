@@ -13,12 +13,12 @@ import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
 import { MeetingForm } from '@/components/meetings/meeting-form';
 import { useCalendarEvents } from '@/hooks/use-meetings';
 import { getCalendarEventDateKey } from '@/lib/calendar/event-types';
-import type { TransitionRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 
 interface MeetingsPageShellProps {
   communityId: number;
   userId: string;
-  role: TransitionRole;
+  role: CommunityRole;
   timezone: string;
   canWrite: boolean;
 }

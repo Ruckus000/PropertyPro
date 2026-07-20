@@ -33,11 +33,10 @@ import {
   getFeaturesForCommunity,
   PLAN_FEATURES,
   findCheapestPlanForFeature,
-  type AnyCommunityRole,
+  type CommunityRole,
   type CommunityFeatures,
   type CommunityType,
   type PlanId,
-  type TransitionRole,
 } from '@propertypro/shared';
 
 /** Essentials slim-nav placement. Ignored outside slim-nav mode. */
@@ -423,7 +422,7 @@ export function resolveNavItemHref(
  */
 function itemVisibleForRole(
   item: NavItemConfig,
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   isUnitOwner?: boolean,
 ): boolean {
   if (!item.visibility || !role) return true;
@@ -441,7 +440,7 @@ function itemVisibleForRole(
  */
 export function getVisibleItems(
   items: readonly NavItemConfig[],
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
   isUnitOwner?: boolean,
 ): NavItemConfig[] {
@@ -484,7 +483,7 @@ export interface NavItemWithGateStatus extends NavItemConfig {
  */
 export function getVisibleItemsWithPlanGate(
   items: readonly NavItemConfig[],
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
   communityType: CommunityType | null,
   planId: PlanId | null,
@@ -566,7 +565,7 @@ export function getVisibleItemsWithPlanGate(
  * advanced tools collapsed under a "More" section.
  */
 export function shouldUseSlimNav(
-  role: TransitionRole | AnyCommunityRole | null,
+  role: CommunityRole | CommunityRole | null,
   planId: PlanId | null,
 ): boolean {
   return role === 'root_manager' && planId === 'essentials';

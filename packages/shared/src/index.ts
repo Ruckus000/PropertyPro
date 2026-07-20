@@ -69,16 +69,6 @@ export * from './manager-permissions';
 export * from './default-faqs';
 export * from './role-transition';
 
-// v3 simplified-role model types. Post role-v3 collapse these are identical to
-// COMMUNITY_ROLES / CommunityRole — kept as aliases so the many `NewCommunityRole`
-// / `AnyCommunityRole` annotations across the codebase keep resolving. New code
-// should prefer `CommunityRole`.
-export const NEW_COMMUNITY_ROLES = COMMUNITY_ROLES;
-export type NewCommunityRole = CommunityRole;
-
-/** Any community role. Now a single vocabulary; alias retained for call sites. */
-export type AnyCommunityRole = CommunityRole;
-
 // PR #1a — Property Landing Page block schemas (Zod-based)
 // The old flat file at './site-blocks.ts' still exports validateBlockContent
 // and getDefaultBlockContent; those are no longer publicly exported here.

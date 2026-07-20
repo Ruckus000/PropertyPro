@@ -25,7 +25,7 @@ import { Fragment, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import type { BreadcrumbLink } from '@/lib/breadcrumbs/types';
 import { resolveDashboardHref } from './nav-config';
@@ -38,7 +38,7 @@ interface ShellBreadcrumbsCommunity {
 }
 
 interface ShellBreadcrumbsProps {
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   community: ShellBreadcrumbsCommunity | null;
   features: CommunityFeatures | null;
 }
@@ -177,7 +177,7 @@ function buildHomeCrumbs({
   homeFallbackHref,
 }: {
   pathname: string;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   community: ShellBreadcrumbsCommunity | null;
   features: CommunityFeatures | null;
   homeFallbackHref: string;
