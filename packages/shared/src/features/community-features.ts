@@ -52,14 +52,13 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
     hasInsuranceHub: true,
-    hasReserveTransparency: false,
+    hasReserveTransparency: true,
     hasSnowbirdDigest: true,
     // Storms hit every Florida community type — condos, HOAs, and apartment
     // buildings alike — so storm-damage intake is available everywhere. It
-    // is set false here (dark) until its attorney-reviewed copy is approved.
-    // NOTE: type/plan-derived flag, NOT a per-community toggle — flip in
-    // community-features + plan-features to enable.
-    hasStormTools: false,
+    // ENABLED 2026-07-20 (attorney-reviewed copy applied). Type/plan-derived flag,
+    // NOT a per-community toggle — set in community-features + plan-features.
+    hasStormTools: true,
   },
   hoa_720: {
     hasCompliance: true,
@@ -92,14 +91,13 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
     hasInsuranceHub: true,
-    hasReserveTransparency: false,
+    hasReserveTransparency: true,
     hasSnowbirdDigest: true,
     // Storms hit every Florida community type — condos, HOAs, and apartment
     // buildings alike — so storm-damage intake is available everywhere. It
-    // is set false here (dark) until its attorney-reviewed copy is approved.
-    // NOTE: type/plan-derived flag, NOT a per-community toggle — flip in
-    // community-features + plan-features to enable.
-    hasStormTools: false,
+    // ENABLED 2026-07-20 (attorney-reviewed copy applied). Type/plan-derived flag,
+    // NOT a per-community toggle — set in community-features + plan-features.
+    hasStormTools: true,
   },
   apartment: {
     hasCompliance: false,
@@ -145,9 +143,8 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSnowbirdDigest: true,
     // Storms hit every Florida community type — condos, HOAs, and apartment
     // buildings alike — so storm-damage intake is available everywhere. It
-    // is set false here (dark) until its attorney-reviewed copy is approved.
-    // NOTE: type/plan-derived flag, NOT a per-community toggle — flip in
-    // community-features + plan-features to enable.
-    hasStormTools: false,
+    // ENABLED 2026-07-20 (attorney-reviewed copy applied). Type/plan-derived flag,
+    // NOT a per-community toggle — set in community-features + plan-features.
+    hasStormTools: true,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;
