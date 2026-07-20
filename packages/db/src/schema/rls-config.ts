@@ -95,6 +95,11 @@ export const RLS_TENANT_TABLES = [
     notes: 'Building-level wind-mitigation inspection records. SELECT open to all community members (owners retrieve the report for their own insurer); writes restricted to ADMIN_ROLES via requirePermission(insurance, write) in the wind-mitigation route.',
   },
   {
+    tableName: 'reserve_assets',
+    policyFamily: 'tenant_admin_write',
+    notes: "Major physical-asset register (reserve transparency, ships dark behind hasReserveTransparency). SELECT open to all community members (owners see the transparent register + remaining-useful-life countdown); writes restricted to admin-tier via requirePermission(reserve_assets, write) in the reserve-assets route. Factual data only — not a reserve study or adequacy assessment.",
+  },
+  {
     tableName: 'contracts',
     policyFamily: 'tenant_admin_write',
     notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
@@ -316,7 +321,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 58;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 59;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

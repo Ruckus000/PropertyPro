@@ -218,6 +218,13 @@
       "when": 1784507626033,
       "tag": "0031_drop_dead_user_role_enum",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784510894576,
+      "tag": "0033_reserve_assets",
+      "breakpoints": true
     }
   ]
 }

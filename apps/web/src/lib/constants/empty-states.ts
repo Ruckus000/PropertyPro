@@ -172,6 +172,19 @@ export const EMPTY_STATE_CONFIGS = {
       "Your board hasn't posted the association's master policy. Ask them about it — you'll need it for lender verification when you sell or refinance.",
     icon: "shield-check",
   },
+  reserve_transparency_empty_admin: {
+    title: "Build your reserve register",
+    description:
+      "Add each major component with its install year and expected useful life. Owners see a transparent register with a remaining-useful-life countdown. This is a record you enter, not a reserve study.",
+    actionLabel: "Add Asset",
+    icon: "building",
+  },
+  reserve_transparency_empty_resident: {
+    title: "No reserve register yet",
+    description:
+      "Your board hasn't added the association's major components. Ask them about it — a transparent asset register shows what's been reserved and each component's remaining useful life.",
+    icon: "building",
+  },
 } as const satisfies Record<string, EmptyStateConfig>;
 
 export type EmptyStateKey = keyof typeof EMPTY_STATE_CONFIGS;
