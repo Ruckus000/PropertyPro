@@ -1,4 +1,4 @@
-import type { TransitionRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
@@ -46,7 +46,7 @@ export function requireArcSubmitterRole(membership: CommunityMembership): void {
   }
 }
 
-export function isResidentRole(role: TransitionRole): boolean {
+export function isResidentRole(role: CommunityRole): boolean {
   return role === 'resident';
 }
 

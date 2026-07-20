@@ -23,7 +23,7 @@ import {
   getLockedFeatureBehavior,
   getPlanFeatureCopy,
   resolvePlanId,
-  type AnyCommunityRole,
+  type CommunityRole,
   type CommunityFeatures,
   type PlanId,
 } from '@propertypro/shared';
@@ -50,7 +50,7 @@ export interface UpgradeDialogProps {
   currentPlanId: PlanId | null;
   /** Raw plan string from the community row, used as a fallback for resolution. */
   currentPlanRaw: string | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   /** Distinguishes unit owner (request) from tenant (hidden) among residents. */
   isUnitOwner?: boolean;
   /**

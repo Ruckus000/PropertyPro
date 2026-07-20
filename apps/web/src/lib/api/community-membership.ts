@@ -1,15 +1,15 @@
 import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
-import type { CommunityType, TransitionRole, BoardDesignation } from '@propertypro/shared';
+import type { CommunityType, CommunityRole, BoardDesignation } from '@propertypro/shared';
 import { ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS } from '@propertypro/shared';
-import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
+import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
   userId: string;
   communityId: number;
   communityName: string;
-  role: TransitionRole;
+  role: CommunityRole;
   communityType: CommunityType;
   subscriptionPlan: string | null;
   subscriptionStatus: string | null;
@@ -82,7 +82,7 @@ export async function requireCommunityMembership(
     throw new ForbiddenError('User is not a member of this community');
   }
 
-  const role = requireNewCommunityRole(
+  const role = requireCommunityRole(
     membership['role'],
     `requireCommunityMembership(communityId=${communityId}, userId=${userId}) role`,
   );

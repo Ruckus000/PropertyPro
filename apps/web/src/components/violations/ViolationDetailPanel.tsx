@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import DOMPurify from 'isomorphic-dompurify';
-import type { AnyCommunityRole, TransitionRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 import type { ViolationItem } from '@/lib/api/violations';
 import { ViolationStatusTransition } from './ViolationStatusTransition';
 
@@ -57,7 +57,7 @@ interface ViolationDetailPanelProps {
   violation: ViolationItem;
   communityId: number;
   userId: string;
-  userRole: AnyCommunityRole | TransitionRole;
+  userRole: CommunityRole | CommunityRole;
   onActionComplete: () => void;
 }
 

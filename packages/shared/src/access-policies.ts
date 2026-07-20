@@ -5,8 +5,7 @@
  * Unknown/unmapped categories remain visible only to elevated roles.
  */
 
-import type { CommunityType } from './index';
-import type { TransitionRole } from './role-transition';
+import type { CommunityRole, CommunityType } from './index';
 import type { MatrixRole } from './rbac-matrix';
 import {
   KNOWN_DOCUMENT_CATEGORY_KEYS,
@@ -178,7 +177,7 @@ export function normalizeCategoryName(name: string | null | undefined): Document
   return 'unknown';
 }
 
-/** Options for document access functions when using a v3 TransitionRole. */
+/** Options for document access functions when using a v3 CommunityRole. */
 export interface DocumentAccessOpts {
   isUnitOwner?: boolean;
 }
@@ -192,7 +191,7 @@ export interface DocumentAccessOpts {
  * it exists only to satisfy control-flow analysis for any future enum member.
  */
 function resolveMatrixRole(
-  role: TransitionRole,
+  role: CommunityRole,
   opts?: DocumentAccessOpts,
 ): MatrixRole | null {
   if (role === 'property_manager' || role === 'root_manager') {
@@ -203,7 +202,7 @@ function resolveMatrixRole(
 }
 
 export function isElevatedRole(
-  role: TransitionRole,
+  role: CommunityRole,
   opts?: DocumentAccessOpts,
 ): boolean {
   const matrixRole = resolveMatrixRole(role, opts);
@@ -211,7 +210,7 @@ export function isElevatedRole(
 }
 
 export function isAdminRole(
-  role: TransitionRole,
+  role: CommunityRole,
 ): boolean {
   // Resolve to the MatrixRole row first (same path isElevatedRole/isRestrictedRole
   // take) so the management tier (property_manager / root_manager) collapses onto
@@ -221,7 +220,7 @@ export function isAdminRole(
 }
 
 export function isRestrictedRole(
-  role: TransitionRole,
+  role: CommunityRole,
   opts?: DocumentAccessOpts,
 ): boolean {
   const matrixRole = resolveMatrixRole(role, opts);
@@ -230,7 +229,7 @@ export function isRestrictedRole(
 }
 
 export function getCategoryAccessForRole(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
 ): CategoryAccess {
@@ -240,7 +239,7 @@ export function getCategoryAccessForRole(
 }
 
 export function getAccessibleKnownCategories(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   opts?: DocumentAccessOpts,
 ): KnownDocumentCategoryKey[] {
@@ -256,7 +255,7 @@ export function getAccessibleKnownCategories(
 }
 
 export function canAccessCategory(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   categoryKey: DocumentCategoryKey,
   opts?: DocumentAccessOpts,
@@ -278,7 +277,7 @@ export function canAccessCategory(
 }
 
 export function canAccessDocument(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   categoryName: string | null | undefined,
   opts?: DocumentAccessOpts,

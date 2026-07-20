@@ -14,7 +14,7 @@
  * capability — that is why the v3→legacy bridge shim was removed: it let a
  * `board_member` designation strip an operational manager's billing-admin power.
  */
-import type { AnyCommunityRole } from '../index';
+import type { CommunityRole } from '../index';
 
 export type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
 
@@ -23,12 +23,12 @@ export type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
  * (owner or tenant) never do. Runtime roles are always v3 — a legacy string
  * simply falls through to `false`.
  */
-function isManagementTier(role: AnyCommunityRole | null): boolean {
+function isManagementTier(role: CommunityRole | null): boolean {
   return role === 'property_manager' || role === 'root_manager';
 }
 
 /** Management tier can purchase plan upgrades. Never gated on `designation`. */
-export function canManageBilling(role: AnyCommunityRole | null): boolean {
+export function canManageBilling(role: CommunityRole | null): boolean {
   return isManagementTier(role);
 }
 
@@ -37,7 +37,7 @@ export function canManageBilling(role: AnyCommunityRole | null): boolean {
  * Management tier and unit owners → true; tenants (resident, not owner) → false.
  */
 export function canRequestUpgrade(
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   isUnitOwner?: boolean,
 ): boolean {
   if (!role) return false;
@@ -54,7 +54,7 @@ export function canRequestUpgrade(
  * `hidden`  — filter the locked surface entirely (tenants).
  */
 export function getLockedFeatureBehavior(
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   isUnitOwner?: boolean,
 ): LockedFeatureBehavior {
   if (!role) return 'request';

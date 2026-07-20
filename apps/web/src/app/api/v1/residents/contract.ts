@@ -10,8 +10,8 @@
  * applied in-handler after auth on mutations.
  */
 import {
-  NEW_COMMUNITY_ROLES,
-  type NewCommunityRole,
+  COMMUNITY_ROLES,
+  type CommunityRole,
 } from '@propertypro/shared';
 import { defineRoute, z } from '@propertypro/api-contract';
 
@@ -20,7 +20,7 @@ const createResidentBodySchema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1, 'Full name is required'),
   phone: z.string().nullable().optional(),
-  role: z.enum(NEW_COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<NewCommunityRole>,
+  role: z.enum(COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<CommunityRole>,
   unitId: z.number().int().positive().nullable().optional(),
   isUnitOwner: z.boolean().optional().default(false),
 });
@@ -30,7 +30,7 @@ const updateResidentBodySchema = z.object({
   userId: z.string().uuid(),
   fullName: z.string().min(1).optional(),
   phone: z.string().nullable().optional(),
-  role: (z.enum(NEW_COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<NewCommunityRole>).optional(),
+  role: (z.enum(COMMUNITY_ROLES as unknown as [string, ...string[]]) as z.ZodType<CommunityRole>).optional(),
   unitId: z.number().int().positive().nullable().optional(),
   isUnitOwner: z.boolean().optional(),
 });

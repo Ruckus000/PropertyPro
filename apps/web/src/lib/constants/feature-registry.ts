@@ -39,7 +39,7 @@ import {
   Landmark,
   ClipboardCheck,
 } from 'lucide-react';
-import type { AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { isAdminRole } from '@propertypro/shared';
 import type { RbacAction, RbacResource } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
@@ -757,7 +757,7 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
  * `isUnitOwner` is supplied.
  */
 export function roleMatchesRegistryItem(
-  role: AnyCommunityRole | TransitionRole,
+  role: CommunityRole | CommunityRole,
   gate: RegistryVisibility,
   isUnitOwner?: boolean,
 ): boolean {
@@ -776,7 +776,7 @@ export function roleMatchesRegistryItem(
  * with all `href` functions resolved to concrete strings.
  */
 export function useFilteredRegistry(
-  role: AnyCommunityRole | TransitionRole | null,
+  role: CommunityRole | CommunityRole | null,
   features: CommunityFeatures | null,
   communityId: number | null,
   resourceAccess: ResourceAccessMap | null = null,

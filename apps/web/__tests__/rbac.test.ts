@@ -19,13 +19,13 @@ import {
   type RbacResource,
   type RbacAction,
   type CommunityType,
-  type TransitionRole,
+  type CommunityRole,
 } from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 
 // Each reachable v3 role-context and the matrix row checkPermissionV2 resolves.
 const CONTEXTS: Array<{
-  role: TransitionRole;
+  role: CommunityRole;
   isUnitOwner?: boolean;
   row: MatrixRole;
   label: string;

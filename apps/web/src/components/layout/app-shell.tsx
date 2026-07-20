@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
@@ -54,7 +54,7 @@ interface LazyCommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;
@@ -86,7 +86,7 @@ interface AppShellProps {
   children: ReactNode;
   user: AppShellUser | null;
   community: AppShellCommunity | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   isUnitOwner?: boolean;
   designation?: string | null;
   features: CommunityFeatures | null;

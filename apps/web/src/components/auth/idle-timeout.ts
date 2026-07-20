@@ -1,5 +1,5 @@
 import { isAdminRole } from '@propertypro/shared';
-import type { AnyCommunityRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 
 /**
  * Idle-session timeout by role tier (milliseconds).
@@ -10,12 +10,12 @@ import type { AnyCommunityRole } from '@propertypro/shared';
  *
  * NOTE: this previously compared the raw v3 `role` against `ADMIN_ROLES`
  * directly, which never matched — `ADMIN_ROLES` holds the MatrixRole `manager`,
- * not a `CommunityRole`/`TransitionRole` value — so management-tier users
+ * not a `CommunityRole`/`CommunityRole` value — so management-tier users
  * silently fell through to the 60-min resident timeout. Routing through
  * `isAdminRole` (which resolves the management tier onto the `manager` admin
  * row) restores the intended 30-min timeout.
  */
-export function getIdleTimeoutMs(role: AnyCommunityRole | null): number {
+export function getIdleTimeoutMs(role: CommunityRole | null): number {
   if (role && isAdminRole(role)) {
     return 30 * 60 * 1000; // 30 min for admin roles
   }

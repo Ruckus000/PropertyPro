@@ -23,8 +23,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { COMMUNITY_TYPES } from '../index';
-import type { TransitionRole } from '../role-transition';
+import { COMMUNITY_TYPES, type CommunityRole } from '../index';
 import { RBAC_RESOURCES, RBAC_ACTIONS, RBAC_MATRIX, MATRIX_ROLES } from '../rbac-matrix';
 import { DOCUMENT_CATEGORY_KEYS, canAccessCategory, type DocumentAccessOpts } from '../access-policies';
 
@@ -38,7 +37,7 @@ import docAccessSnapshot from './fixtures/document-access-snapshot.json' with { 
 // This drives canAccessCategory through the same resolution path prod uses.
 const MATRIX_ROLE_INPUT: Record<
   (typeof MATRIX_ROLES)[number],
-  { role: TransitionRole; opts?: DocumentAccessOpts }
+  { role: CommunityRole; opts?: DocumentAccessOpts }
 > = {
   owner: { role: 'resident', opts: { isUnitOwner: true } },
   tenant: { role: 'resident', opts: { isUnitOwner: false } },

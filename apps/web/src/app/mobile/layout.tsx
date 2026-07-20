@@ -18,7 +18,7 @@ import { AppQueryProvider } from '@/components/providers/query-provider';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import { SubscriptionBillingBannersMobile } from '@/components/billing/subscription-billing-banners';
 import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
-import type { TransitionRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 import '@/styles/mobile.css';
 
 interface MobileLayoutProps {
@@ -45,7 +45,7 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
   let communityType: CommunityType = 'condo_718';
   let isDemo = false;
   let userId = '';
-  let role: TransitionRole | null = null;
+  let role: CommunityRole | null = null;
   let subscriptionStatus: string | null = null;
   let subscriptionCanceledAt: Date | null = null;
   let subscriptionCurrentPeriodEndAt: Date | null = null;
