@@ -1,11 +1,14 @@
 /**
  * Storm-tools disclaimer copy — SINGLE SOURCE OF TRUTH.
  *
- * ⚠️ ATTORNEY REVIEW REQUIRED before enabling hasStormTools — placeholder copy.
+ * ⚠️ ATTORNEY REVIEW REQUIRED before enabling hasStormTools.
  * ---------------------------------------------------------------------------
- * Every string in this file is PLACEHOLDER wording and must be reviewed by
- * Florida counsel before the storm-damage feature is enabled in production, and
- * must not be edited afterwards without re-review. They live here — not inline
+ * Redlines from the 2026-07-20 legal review applied; final Florida-counsel
+ * sign-off still gates enablement.
+ *
+ * Every string in this file must be reviewed by Florida counsel before the
+ * storm-damage feature is enabled in production, and must not be edited
+ * afterwards without re-review. They live here — not inline
  * in components — so the reviewed wording cannot drift per-page. The feature
  * ships DARK behind the per-community `hasStormTools` flag; enablement is gated
  * on this review plus the flag.
@@ -27,7 +30,10 @@ export const STORM_DAMAGE_DISCLAIMER =
   'claim. PropertyPro does not file, adjust, or settle insurance claims and is not a public ' +
   'adjuster (Fla. Stat. §626.854). Submitting a report here does not notify any insurer or start a ' +
   'claim, and nothing here is insurance, legal, engineering, or financial advice. To start a claim, ' +
-  'contact your own insurer or the association’s agent of record.';
+  'contact your own insurer or the association’s agent of record.' +
+  ' Insurance claims also have strict deadlines under Florida law — generally within 1 year of the ' +
+  'date of loss, and 18 months for a supplemental claim — and this app does not calculate, track, or ' +
+  'remind you of them, so contact your insurer or agent right away.';
 
 /**
  * Shorter one-line version repeated on each report card so the no-claim hedge
@@ -35,7 +41,9 @@ export const STORM_DAMAGE_DISCLAIMER =
  */
 export const STORM_DAMAGE_CARD_DISCLAIMER =
   'A damage record for the association — not an insurance claim. PropertyPro does not file or adjust ' +
-  'claims (§626.854).';
+  'claims (§626.854).' +
+  ' Statuses shown here are the association’s internal tracking only and do not reflect any insurer ' +
+  'decision, coverage, or claim status.';
 
 /**
  * Helper text under the free-text description/location fields. The report is
@@ -43,17 +51,22 @@ export const STORM_DAMAGE_CARD_DISCLAIMER =
  * people’s personal information.
  */
 export const STORM_DAMAGE_DESCRIPTION_HINT =
-  'Describe what you saw and where. This report is visible to your board and management. Do not ' +
-  'enter other people’s personal information (SSNs, account or license numbers). For life-threatening ' +
-  'or emergency damage, call 911 or your local emergency number first.';
+  'Describe what you saw and where. This report is visible to your board and management, so do not ' +
+  'enter anyone’s personal information — no Social Security, driver-license, account, or credit-card ' +
+  'numbers, no contact details (email, phone, or emergency contacts), and no health, medical, or ' +
+  'health-insurance information. For life-threatening or emergency damage, call 911 or your local ' +
+  'emergency number first.';
 
 /**
  * Confirmation shown to the reporter after a report is filed. Reiterates that
  * no claim has been started.
  */
 export const STORM_DAMAGE_SUBMITTED_CONFIRMATION =
-  'Thanks — your damage report was recorded for the association. This does not start an insurance ' +
-  'claim; contact your insurer or the association’s agent to file one.';
+  'Thanks — your damage report was recorded for the association. This is not an insurance claim and ' +
+  'does not notify any insurer. Insurance claims have strict deadlines under Florida law — generally ' +
+  '1 year from the date of loss, and 18 months for a supplemental claim — and PropertyPro does not ' +
+  'track them. To protect your rights, contact your own insurer or the association’s agent of record ' +
+  'to file a claim now.';
 
 /**
  * Board/admin-facing note near the status control. Frames the status as internal

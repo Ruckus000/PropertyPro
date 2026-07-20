@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -25,6 +26,7 @@ import { useCreateStormDamageReport } from '@/hooks/use-storm-damage';
 import {
   STORM_DAMAGE_DESCRIPTION_HINT,
   STORM_DAMAGE_DISCLAIMER,
+  STORM_DAMAGE_SUBMITTED_CONFIRMATION,
 } from '@/lib/constants/storm-disclaimers';
 import {
   STORM_DAMAGE_CATEGORY_LABELS,
@@ -79,10 +81,11 @@ export function StormDamageFormDialog({ communityId, open, onOpenChange }: Props
         occurredAt: occurredAt ? new Date(`${occurredAt}T00:00:00Z`).toISOString() : null,
         description: description.trim(),
       });
+      toast.success(STORM_DAMAGE_SUBMITTED_CONFIRMATION);
       onOpenChange(false);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'We couldn’t file this report. Please try again.',
+        err instanceof Error ? err.message : 'We couldn’t save this report. Please try again.',
       );
     }
   };
@@ -170,7 +173,7 @@ export function StormDamageFormDialog({ communityId, open, onOpenChange }: Props
               Cancel
             </Button>
             <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Filing…' : 'Report Damage'}
+              {create.isPending ? 'Saving…' : 'Report Damage'}
             </Button>
           </DialogFooter>
         </form>
