@@ -78,12 +78,10 @@ describe('buildSlimNavSections', () => {
       // Insurance hub ships on Essentials (it's a retention feature, not an
       // upsell), so it is visible-but-demoted rather than plan-gated away.
       'insurance',
-      // Reserve transparency ships on Essentials too (retention feature), so it
-      // is visible-but-demoted rather than plan-gated away.
-      'reserves',
-      // Storm tools likewise ship on every plan (differentiation/retention),
-      // so they are visible-but-demoted on Essentials.
-      'storm-damage',
+      // NOTE: 'reserves' and 'storm-damage' are intentionally absent — their
+      // flags (hasReserveTransparency / hasStormTools) are false until the
+      // attorney-reviewed copy ships, so the type-gate filters them out
+      // entirely rather than demoting them to More.
       'packages',
       'visitors',
       'payments',

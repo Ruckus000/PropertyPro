@@ -52,12 +52,12 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasInsuranceHub: true,
       // Reserve transparency ships on every condo/HOA plan too (same
       // differentiation/retention rationale). Still dark behind the
-      // per-community hasReserveTransparency flag until attorney-reviewed.
-      hasReserveTransparency: true,
+      // hasReserveTransparency flag (false) until attorney-reviewed copy.
+      hasReserveTransparency: false,
       hasSnowbirdDigest: true,
       // Storm-damage intake ships on every plan as a differentiation/retention
-      // feature (dark behind hasStormTools until the copy is attorney-approved).
-      hasStormTools: true,
+      // feature (dark: false until attorney-approved copy; type/plan flag, no per-community toggle).
+      hasStormTools: false,
     },
     maxAdmins: 3,
     displayName: 'Essentials',
@@ -98,11 +98,11 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSiteCustomCss: true,
       hasSiteCustomDomain: true,
       hasInsuranceHub: true,
-      hasReserveTransparency: true,
+      hasReserveTransparency: false,
       hasSnowbirdDigest: true,
       // Storm-damage intake ships on every plan as a differentiation/retention
-      // feature (dark behind hasStormTools until the copy is attorney-approved).
-      hasStormTools: true,
+      // feature (dark: false until attorney-approved copy; type/plan flag, no per-community toggle).
+      hasStormTools: false,
     },
     maxAdmins: Infinity,
     displayName: 'Professional',
@@ -137,8 +137,8 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSitePortfolioTemplates: true,
       hasSnowbirdDigest: true,
       // Storm-damage intake ships on every plan as a differentiation/retention
-      // feature (dark behind hasStormTools until the copy is attorney-approved).
-      hasStormTools: true,
+      // feature (dark: false until attorney-approved copy; type/plan flag, no per-community toggle).
+      hasStormTools: false,
     },
     maxAdmins: Infinity,
     displayName: 'Operations Plus',
