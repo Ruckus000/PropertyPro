@@ -60,6 +60,7 @@ export * from './contract-bids';
 export * from './wind-mitigation-reports';
 export * from './snowbird-digest-subscriptions';
 export * from './insurance-policies';
+export * from './storm-damage-reports';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
@@ -134,6 +135,7 @@ import type { contractBids } from './contract-bids';
 import type { windMitigationReports } from './wind-mitigation-reports';
 import type { snowbirdDigestSubscriptions } from './snowbird-digest-subscriptions';
 import type { insurancePolicies, insuranceCertificateRequests } from './insurance-policies';
+import type { stormDamageReports } from './storm-damage-reports';
 import type { ledgerEntries } from './ledger-entries';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
@@ -348,6 +350,10 @@ export type InsurancePolicy = typeof insurancePolicies.$inferSelect;
 export type NewInsurancePolicy = typeof insurancePolicies.$inferInsert;
 export type InsuranceCertificateRequest = typeof insuranceCertificateRequests.$inferSelect;
 export type NewInsuranceCertificateRequest = typeof insuranceCertificateRequests.$inferInsert;
+
+// Storm-Damage Reports (Wave 1 differentiation)
+export type StormDamageReport = typeof stormDamageReports.$inferSelect;
+export type NewStormDamageReport = typeof stormDamageReports.$inferInsert;
 
 // Ledger Entries
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;

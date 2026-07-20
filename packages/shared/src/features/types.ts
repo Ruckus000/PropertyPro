@@ -82,4 +82,12 @@ export interface CommunityFeatures {
    * board effort. Available to every community type.
    */
   readonly hasSnowbirdDigest: boolean;
+  /**
+   * Storm-damage intake — post-storm, residents record building/common-area
+   * damage to the association and the board tracks it through a status. A
+   * damage RECORD, not an insurance claim (PropertyPro is not a public
+   * adjuster, §626.854). Available to every community type; ships dark until
+   * the attorney-reviewed copy is approved and the community enables it.
+   */
+  readonly hasStormTools: boolean;
 }

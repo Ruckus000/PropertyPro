@@ -96,6 +96,10 @@
       "insurance": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "tenant": {
@@ -194,6 +198,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -290,6 +298,10 @@
         "write": false
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -390,6 +402,10 @@
       "insurance": {
         "read": true,
         "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "cam": {
@@ -486,6 +502,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -586,6 +606,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "manager": {
@@ -682,6 +706,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -784,6 +812,10 @@
       "insurance": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "tenant": {
@@ -882,6 +914,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -978,6 +1014,10 @@
         "write": false
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1078,6 +1118,10 @@
       "insurance": {
         "read": true,
         "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "cam": {
@@ -1174,6 +1218,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1274,6 +1322,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "manager": {
@@ -1370,6 +1422,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1472,6 +1528,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "tenant": {
@@ -1570,6 +1630,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -1666,6 +1730,10 @@
         "write": false
       },
       "insurance": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
         "read": false,
         "write": false
       }
@@ -1766,6 +1834,10 @@
       "insurance": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "cam": {
@@ -1862,6 +1934,10 @@
         "write": false
       },
       "insurance": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
         "read": false,
         "write": false
       }
@@ -1962,6 +2038,10 @@
       "insurance": {
         "read": true,
         "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "manager": {
@@ -2058,6 +2138,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }

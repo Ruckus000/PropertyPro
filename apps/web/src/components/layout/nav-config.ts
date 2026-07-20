@@ -15,6 +15,7 @@ import {
   BriefcaseBusiness,
   Shield,
   Umbrella,
+  CloudRain,
   History,
   Building2,
   Paintbrush,
@@ -260,6 +261,18 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/insurance'],
   },
   {
+    id: 'storm-damage',
+    label: 'Storm Damage',
+    icon: CloudRain,
+    // Path-scoped tenancy: the [id] segment is authoritative, no query param.
+    href: (cid) => `/communities/${cid}/storm-damage`,
+    // Intentionally NO `roles` gate — every resident can file a report and see
+    // their own. Status controls inside the page are admin-gated.
+    featureKey: 'hasStormTools',
+    navTier: 'more',
+    matchPrefixes: ['/storm-damage'],
+  },
+  {
     id: 'esign',
     label: 'E-Sign',
     icon: FileSignature,
@@ -333,7 +346,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // also live in a section so `AppSidebar` has a fallback top-level placement when
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
-  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance']),
+  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'storm-damage']),
   navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
   navSection('Admin', [
     'compliance',
@@ -647,6 +660,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
   insurance: { title: 'Insurance', subtitle: 'Building policies & wind mitigation' },
+  'storm-damage': { title: 'Storm Damage', subtitle: 'Report & track post-storm damage' },
   esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
   'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
   'violations-inbox': { title: 'Violations', subtitle: 'Review & manage violations' },
