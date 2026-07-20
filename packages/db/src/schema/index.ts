@@ -61,6 +61,7 @@ export * from './wind-mitigation-reports';
 export * from './snowbird-digest-subscriptions';
 export * from './insurance-policies';
 export * from './reserve-assets';
+export * from './storm-damage-reports';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
@@ -136,6 +137,7 @@ import type { windMitigationReports } from './wind-mitigation-reports';
 import type { snowbirdDigestSubscriptions } from './snowbird-digest-subscriptions';
 import type { insurancePolicies, insuranceCertificateRequests } from './insurance-policies';
 import type { reserveAssets } from './reserve-assets';
+import type { stormDamageReports } from './storm-damage-reports';
 import type { ledgerEntries } from './ledger-entries';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
@@ -354,6 +356,10 @@ export type NewInsuranceCertificateRequest = typeof insuranceCertificateRequests
 // Reserve Assets (Wave 1 differentiation — ships dark behind hasReserveTransparency)
 export type ReserveAsset = typeof reserveAssets.$inferSelect;
 export type NewReserveAsset = typeof reserveAssets.$inferInsert;
+
+// Storm-Damage Reports (Wave 1 differentiation)
+export type StormDamageReport = typeof stormDamageReports.$inferSelect;
+export type NewStormDamageReport = typeof stormDamageReports.$inferInsert;
 
 // Ledger Entries
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;

@@ -1,6 +1,6 @@
 {
-  "id": "67e1ac08-5b87-4519-83ce-73a5d23bf638",
-  "prevId": "7a78be75-6db6-4ec9-964d-c31c4b87bbb3",
+  "id": "7a78be75-6db6-4ec9-964d-c31c4b87bbb3",
+  "prevId": "63f4f593-753b-46fa-b6ba-3e113b340691",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -9539,8 +9539,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.reserve_assets": {
-      "name": "reserve_assets",
+    "public.storm_damage_reports": {
+      "name": "storm_damage_reports",
       "schema": "",
       "columns": {
         "id": {
@@ -9555,8 +9555,26 @@
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
+        "unit_id": {
+          "name": "unit_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_by": {
+          "name": "reported_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location_label": {
+          "name": "location_label",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -9567,35 +9585,31 @@
           "primaryKey": false,
           "notNull": true
         },
-        "year_installed": {
-          "name": "year_installed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "useful_life_years": {
-          "name": "useful_life_years",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "replacement_cost_cents": {
-          "name": "replacement_cost_cents",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "current_reserve_cents": {
-          "name": "current_reserve_cents",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
+        "severity": {
+          "name": "severity",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "photo_document_ids": {
+          "name": "photo_document_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'submitted'"
         },
         "created_at": {
           "name": "created_at",
@@ -9619,11 +9633,17 @@
         }
       },
       "indexes": {
-        "reserve_assets_community_idx": {
-          "name": "reserve_assets_community_idx",
+        "storm_damage_reports_community_reported_by_idx": {
+          "name": "storm_damage_reports_community_reported_by_idx",
           "columns": [
             {
               "expression": "community_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reported_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -9636,9 +9656,9 @@
         }
       },
       "foreignKeys": {
-        "reserve_assets_community_id_communities_id_fk": {
-          "name": "reserve_assets_community_id_communities_id_fk",
-          "tableFrom": "reserve_assets",
+        "storm_damage_reports_community_id_communities_id_fk": {
+          "name": "storm_damage_reports_community_id_communities_id_fk",
+          "tableFrom": "storm_damage_reports",
           "tableTo": "communities",
           "columnsFrom": [
             "community_id"
@@ -9647,6 +9667,32 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "storm_damage_reports_unit_id_units_id_fk": {
+          "name": "storm_damage_reports_unit_id_units_id_fk",
+          "tableFrom": "storm_damage_reports",
+          "tableTo": "units",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "storm_damage_reports_reported_by_users_id_fk": {
+          "name": "storm_damage_reports_reported_by_users_id_fk",
+          "tableFrom": "storm_damage_reports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reported_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

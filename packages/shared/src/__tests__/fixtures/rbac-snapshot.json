@@ -100,6 +100,10 @@
       "reserve_assets": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "tenant": {
@@ -202,6 +206,10 @@
       "reserve_assets": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -302,6 +310,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -406,6 +418,10 @@
       "reserve_assets": {
         "read": true,
         "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "cam": {
@@ -506,6 +522,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -610,6 +630,10 @@
       "reserve_assets": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "manager": {
@@ -710,6 +734,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -816,6 +844,10 @@
       "reserve_assets": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "tenant": {
@@ -918,6 +950,10 @@
       "reserve_assets": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -1018,6 +1054,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1122,6 +1162,10 @@
       "reserve_assets": {
         "read": true,
         "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "cam": {
@@ -1222,6 +1266,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1326,6 +1374,10 @@
       "reserve_assets": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "manager": {
@@ -1426,6 +1478,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1532,6 +1588,10 @@
       "reserve_assets": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "tenant": {
@@ -1634,6 +1694,10 @@
       "reserve_assets": {
         "read": true,
         "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -1734,6 +1798,10 @@
         "write": false
       },
       "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
         "read": false,
         "write": false
       }
@@ -1838,6 +1906,10 @@
       "reserve_assets": {
         "read": false,
         "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "cam": {
@@ -1938,6 +2010,10 @@
         "write": false
       },
       "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
         "read": false,
         "write": false
       }
@@ -2042,6 +2118,10 @@
       "reserve_assets": {
         "read": true,
         "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "manager": {
@@ -2142,6 +2222,10 @@
         "write": true
       },
       "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }

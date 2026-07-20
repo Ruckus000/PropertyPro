@@ -55,6 +55,9 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       // per-community hasReserveTransparency flag until attorney-reviewed.
       hasReserveTransparency: true,
       hasSnowbirdDigest: true,
+      // Storm-damage intake ships on every plan as a differentiation/retention
+      // feature (dark behind hasStormTools until the copy is attorney-approved).
+      hasStormTools: true,
     },
     maxAdmins: 3,
     displayName: 'Essentials',
@@ -97,6 +100,9 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasInsuranceHub: true,
       hasReserveTransparency: true,
       hasSnowbirdDigest: true,
+      // Storm-damage intake ships on every plan as a differentiation/retention
+      // feature (dark behind hasStormTools until the copy is attorney-approved).
+      hasStormTools: true,
     },
     maxAdmins: Infinity,
     displayName: 'Professional',
@@ -130,6 +136,9 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSiteCustomDomain: true,
       hasSitePortfolioTemplates: true,
       hasSnowbirdDigest: true,
+      // Storm-damage intake ships on every plan as a differentiation/retention
+      // feature (dark behind hasStormTools until the copy is attorney-approved).
+      hasStormTools: true,
     },
     maxAdmins: Infinity,
     displayName: 'Operations Plus',

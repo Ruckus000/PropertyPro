@@ -42,6 +42,7 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'hasInsuranceHub',
   'hasReserveTransparency',
   'hasSnowbirdDigest',
+  'hasStormTools',
 ] as const;
 
 describe('CommunityFeatures config', () => {

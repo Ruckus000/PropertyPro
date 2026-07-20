@@ -49,6 +49,7 @@ export const COMMUNITY_FEATURE_KEYS = [
   'hasInsuranceHub',
   'hasReserveTransparency',
   'hasSnowbirdDigest',
+  'hasStormTools',
 ] as const;
 
 export type CommunityFeatureKey = (typeof COMMUNITY_FEATURE_KEYS)[number];

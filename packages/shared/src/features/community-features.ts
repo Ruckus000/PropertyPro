@@ -54,6 +54,11 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasInsuranceHub: true,
     hasReserveTransparency: true,
     hasSnowbirdDigest: true,
+    // Storms hit every Florida community type — condos, HOAs, and apartment
+    // buildings alike — so storm-damage intake is available everywhere. It
+    // still ships dark behind the per-community hasStormTools flag until the
+    // attorney-reviewed copy is approved.
+    hasStormTools: true,
   },
   hoa_720: {
     hasCompliance: true,
@@ -88,6 +93,11 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasInsuranceHub: true,
     hasReserveTransparency: true,
     hasSnowbirdDigest: true,
+    // Storms hit every Florida community type — condos, HOAs, and apartment
+    // buildings alike — so storm-damage intake is available everywhere. It
+    // still ships dark behind the per-community hasStormTools flag until the
+    // attorney-reviewed copy is approved.
+    hasStormTools: true,
   },
   apartment: {
     hasCompliance: false,
@@ -128,5 +138,10 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     // Seasonal/absentee residents exist in every community type, so the digest
     // is available everywhere (the board still enables it per community).
     hasSnowbirdDigest: true,
+    // Storms hit every Florida community type — condos, HOAs, and apartment
+    // buildings alike — so storm-damage intake is available everywhere. It
+    // still ships dark behind the per-community hasStormTools flag until the
+    // attorney-reviewed copy is approved.
+    hasStormTools: true,
   },
 } satisfies Record<CommunityType, CommunityFeatures>;

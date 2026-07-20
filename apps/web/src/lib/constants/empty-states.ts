@@ -185,6 +185,20 @@ export const EMPTY_STATE_CONFIGS = {
       "Your board hasn't added the association's major components. Ask them about it — a transparent asset register shows what's been reserved and each component's remaining useful life.",
     icon: "building",
   },
+  storm_damage_empty_resident: {
+    title: "No damage reported yet",
+    description:
+      "After a storm, record any building or common-area damage you noticed so your association has it on file. This is a record for the association — not an insurance claim.",
+    actionLabel: "Report Damage",
+    icon: "shield-check",
+  },
+  storm_damage_empty_admin: {
+    title: "No storm-damage reports yet",
+    description:
+      "When residents report post-storm damage, it shows up here for your board and management to review and track. Records only — nothing here files an insurance claim.",
+    actionLabel: "Report Damage",
+    icon: "shield-check",
+  },
 } as const satisfies Record<string, EmptyStateConfig>;
 
 export type EmptyStateKey = keyof typeof EMPTY_STATE_CONFIGS;

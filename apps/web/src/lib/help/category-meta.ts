@@ -8,6 +8,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  CloudRain,
   FileSignature,
   FileText,
   Landmark,
@@ -62,6 +63,7 @@ export const HELP_CATEGORY_META: Record<string, HelpCategoryMeta> = {
   pm: { label: 'Property management', icon: Briefcase, chipClass: NEUTRAL_CHIP },
   reserves: { label: 'Reserves', icon: Landmark, chipClass: BRAND_CHIP },
   residents: { label: 'Residents', icon: Users, chipClass: NEUTRAL_CHIP },
+  'storm-damage': { label: 'Storm damage', icon: CloudRain, chipClass: WARNING_CHIP },
   transparency: { label: 'Transparency', icon: Scale, chipClass: NEUTRAL_CHIP },
   violations: { label: 'Violations', icon: TriangleAlert, chipClass: WARNING_CHIP },
 };
