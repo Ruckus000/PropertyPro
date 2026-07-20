@@ -50,7 +50,7 @@ export const STORM_DAMAGE_SEVERITY_LABELS: Record<StormDamageSeverity, string> =
 };
 
 export const STORM_DAMAGE_STATUS_LABELS: Record<StormDamageStatus, string> = {
-  submitted: 'Submitted',
-  acknowledged: 'Acknowledged',
-  closed: 'Closed',
+  submitted: 'Logged',
+  acknowledged: 'Reviewed by management',
+  closed: 'Archived',
 };
