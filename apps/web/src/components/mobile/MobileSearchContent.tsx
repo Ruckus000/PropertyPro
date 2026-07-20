@@ -10,7 +10,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Clock, Search } from 'lucide-react';
-import type { AnyCommunityRole, TransitionRole, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { isAdminRole } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
@@ -48,7 +48,7 @@ function categoryToBadge(category: 'page' | 'action' | 'setting'): string {
 // ---------------------------------------------------------------------------
 interface MobileSearchContentProps {
   communityId: number;
-  role: AnyCommunityRole | TransitionRole;
+  role: CommunityRole | CommunityRole;
   features: CommunityFeatures;
   resourceAccess: ResourceAccessMap;
 }

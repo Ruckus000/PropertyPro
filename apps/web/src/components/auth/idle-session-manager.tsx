@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
-import type { AnyCommunityRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 import { getIdleTimeoutMs } from './idle-timeout';
 import {
   AlertDialog,
@@ -32,7 +32,7 @@ const CHANNEL_NAME = 'pp-idle-sync';
 type ChannelMessage = { deadline: number } | { type: 'stay' };
 
 interface IdleSessionManagerProps {
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
 }
 
 export function IdleSessionManager({ role }: IdleSessionManagerProps) {

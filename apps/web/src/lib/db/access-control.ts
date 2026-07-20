@@ -12,7 +12,7 @@
  * authorization layer. The path apps/web/src/lib/db/ is the spec-required
  * location; the file itself has no database access.
  */
-import type { TransitionRole, CommunityType } from '@propertypro/shared';
+import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { RBAC_RESOURCES, type RbacResource, type RbacAction } from '@propertypro/shared';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityMembership } from '@/lib/api/community-membership';
@@ -41,7 +41,7 @@ import { RBAC_MATRIX } from '@propertypro/shared';
  * - resident + !isUnitOwner: uses the tenant row from the static RBAC matrix
  */
 export function checkPermissionV2(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   resource: RbacResource,
   action: RbacAction,

@@ -19,7 +19,7 @@ import {
   Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { useRecentPages } from '@/hooks/use-recent-pages';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { NAV_ITEMS, PM_NAV_ITEMS, PAGE_TITLES, getActiveItemId, getVisibleItems } from './nav-config';
@@ -28,7 +28,7 @@ interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   features: CommunityFeatures | null;
   enableGlobalShortcut?: boolean;
 }
@@ -44,7 +44,7 @@ interface CommandItem {
 
 function getCommandItems(
   communityId: number | null,
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
 ): CommandItem[] {
   const cid = communityId;

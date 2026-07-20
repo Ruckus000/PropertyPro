@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type {
-  AnyCommunityRole,
+  CommunityRole,
   CommunityFeatures,
   CommunityType,
 } from '@propertypro/shared';
@@ -27,7 +27,7 @@ export interface PageShellCommunity {
 export interface PageShellContext {
   user: PageShellUser | null;
   community: PageShellCommunity | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   /** Membership flag — true when the resident is a unit owner. Used to distinguish owner vs tenant. */
   isUnitOwner: boolean;
   /** Board designation (BoardDesignation value); null when not on the board. */
@@ -75,7 +75,7 @@ const getPageActiveCommunityShellContextCached = cache(
           type: membership.communityType as CommunityType,
           plan: membership.subscriptionPlan,
         },
-        role: membership.role as AnyCommunityRole,
+        role: membership.role as CommunityRole,
         isUnitOwner: membership.isUnitOwner,
         designation: membership.designation ?? null,
         features: getEffectiveFeatures(

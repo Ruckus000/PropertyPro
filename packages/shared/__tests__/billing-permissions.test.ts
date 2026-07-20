@@ -4,7 +4,7 @@ import {
   canRequestUpgrade,
   getLockedFeatureBehavior,
 } from '../src/billing/permissions';
-import type { AnyCommunityRole } from '../src/index';
+import type { CommunityRole } from '../src/index';
 
 // v3 role model (ADR-006): the billing helpers key ONLY on the runtime role
 // (`resident` / `property_manager` / `root_manager`) plus `isUnitOwner` to split
@@ -13,7 +13,7 @@ import type { AnyCommunityRole } from '../src/index';
 // bridge shim let a `board_member` designation strip a manager's billing-admin).
 
 describe('canManageBilling', () => {
-  const cases: Array<[AnyCommunityRole | null, boolean]> = [
+  const cases: Array<[CommunityRole | null, boolean]> = [
     [null, false],
     ['resident', false],
     ['property_manager', true],

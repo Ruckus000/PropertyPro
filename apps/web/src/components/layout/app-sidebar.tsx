@@ -18,7 +18,7 @@ import {
   toInitials,
   resolvePlanId,
   PLAN_FEATURES,
-  type AnyCommunityRole,
+  type CommunityRole,
   type CommunityFeatures,
   type CommunityType,
   type PlanId,
@@ -44,7 +44,7 @@ interface AppSidebarProps {
   communityId: number | null;
   communityName: string | null;
   communityType: CommunityType | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   /** True when the current user is a unit owner — used to distinguish owner vs tenant within `resident`. */
   isUnitOwner?: boolean;
   /** Board designation (BoardDesignation value); null when not on the board. */

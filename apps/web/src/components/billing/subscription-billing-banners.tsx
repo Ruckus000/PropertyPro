@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { AnyCommunityRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 import {
   billingDaysRemainingUTC,
   canManageBilling,
@@ -19,7 +19,7 @@ const LOCKED_SUBSCRIPTION_STATUSES = new Set([
 ]);
 
 export interface SubscriptionBillingBannerProps {
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   communityId: number | null;
   subscriptionStatus: string | null;
   subscriptionCanceledAt: Date | null;

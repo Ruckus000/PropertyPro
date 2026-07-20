@@ -30,7 +30,7 @@ import {
   type ResidentImportRole,
 } from "@/lib/utils/csv-validator";
 import { isResidentTierRole, validateRoleAssignment } from "@/lib/utils/role-validator";
-import type { NewCommunityRole } from "@propertypro/shared";
+import type { CommunityRole } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
@@ -50,7 +50,7 @@ import {
 import { importResidentsContract } from "./contract";
 
 interface MappedRole {
-  role: NewCommunityRole;
+  role: CommunityRole;
   isUnitOwner: boolean;
   displayTitle: string;
 }
@@ -98,7 +98,7 @@ export const POST = withErrorHandler(
     const userHasRole = await loadUsersWithExistingRoleForImport(communityId);
 
     const errors = [...parsedCsv.errors];
-    const createdUsers: Array<{ userId: string; email: string; role: NewCommunityRole; legacyRole: ResidentImportRole }> = [];
+    const createdUsers: Array<{ userId: string; email: string; role: CommunityRole; legacyRole: ResidentImportRole }> = [];
     let importedCount = 0;
     let skippedCount = invalidCsvRowNumbers.size; // rows with parse-level errors already skipped
 
