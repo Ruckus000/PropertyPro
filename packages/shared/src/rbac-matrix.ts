@@ -56,6 +56,7 @@ export const RBAC_RESOURCES = [
   'emergency_broadcasts',
   'units',
   'insurance',
+  'storm_damage',
 ] as const;
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number];
@@ -92,6 +93,7 @@ const PHASE5_DEFAULT_RESOURCES = [
   'emergency_broadcasts',
   'units',
   'insurance',
+  'storm_damage',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
@@ -357,6 +359,23 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: false, write: false },
+      manager:                { read: true,  write: true  },
+    },
+  },
+  // Storm-damage intake (Wave 1 differentiation). Two-tier permission model
+  // (same shape as violations/elections):
+  // - write: true for owner + tenant = any resident may FILE a damage report
+  //   (POST /api/v1/storm-damage); RLS scopes their reads/edits to their own
+  //   rows. Admin-tier reads all and updates status.
+  // - The admin-only status transition (PATCH) additionally checks
+  //   isAdminRole() at the route layer, so residents cannot move another
+  //   member's report through the workflow.
+  // Available to every community type (gated per-community by hasStormTools at
+  // the feature-flag layer), so the matrix stays uniform — no exclusions.
+  storm_damage: {
+    policy: {
+      owner:                  { read: true,  write: true  },
+      tenant:                 { read: true,  write: true  },
       manager:                { read: true,  write: true  },
     },
   },
