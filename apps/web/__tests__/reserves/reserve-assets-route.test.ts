@@ -6,9 +6,11 @@
  * register) while `reserve_assets:write` is admin-tier. The feature is also
  * condo/HOA-only (hasReserveTransparency) and returns FACTUAL data only.
  *
- * `requireReserveTransparencyCommunity` uses the REAL `getFeaturesForCommunity`
- * from `@propertypro/shared` (condo_718/hoa_720 → true; apartment → false), so
- * the membership `communityType` drives the gate rather than a mock.
+ * `requireReserveTransparencyCommunity` reads `getFeaturesForCommunity`. The prod
+ * config now keeps hasReserveTransparency dark (false) until counsel signs off,
+ * so this suite mocks getFeaturesForCommunity (see below) to the feature's
+ * logical type-gate — condo_718/hoa_720 → true; apartment → false — so the
+ * membership `communityType` still drives the cases.
  *
  * `vi.hoisted` DATABASE_URL guard: the route imports `@propertypro/db`, whose
  * module load asserts a DB URL is present. We mock the module entirely, but the
@@ -89,6 +91,24 @@ vi.mock('@/lib/services/reserve-asset-service', () => ({
   updateReserveAssetById: updateReserveAssetByIdMock,
   softDeleteReserveAssetById: softDeleteReserveAssetByIdMock,
 }));
+
+// The dark-until-counsel flip set hasReserveTransparency=false in the shared
+// config so the feature stays hidden in prod until its copy clears counsel.
+// This route unit test verifies behavior under the feature's LOGICAL type
+// availability (condo/HOA on, apartment off) — independent of that dark-flag —
+// so we override getFeaturesForCommunity to restore the type-gate the cases
+// below exercise (condo_718 → 200; apartment → 403). Everything else in
+// @propertypro/shared stays real.
+vi.mock('@propertypro/shared', async (importOriginal) => {
+  const actual = (await importOriginal()) as typeof import('@propertypro/shared');
+  return {
+    ...actual,
+    getFeaturesForCommunity: (communityType: Parameters<typeof actual.getFeaturesForCommunity>[0]) => ({
+      ...actual.getFeaturesForCommunity(communityType),
+      hasReserveTransparency: communityType === 'condo_718' || communityType === 'hoa_720',
+    }),
+  };
+});
 
 import { GET, POST, PATCH, DELETE } from '../../src/app/api/v1/reserve-assets/route';
 
