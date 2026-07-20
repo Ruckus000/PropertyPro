@@ -2,7 +2,7 @@
 
 Compliance and community management platform for Florida condominium associations (§718.111(12)(g)).
 
-**Status:** Phase 4 complete (role-v3 / ADR-006). Phase 5 (table-stakes) in progress.
+**Status:** role-v3 / ADR-006 fully landed — the legacy 7-role vocabulary is retired and a single v3 role vocabulary runs end-to-end. Phase 5 (table-stakes) in progress.
 
 ## Tech Stack
 
@@ -37,7 +37,18 @@ docs/                   # Specs, ADRs, audits, design system
 
 **User Roles (v3 / ADR-006):** Community-scoped roles in `user_roles` are `resident`, `property_manager`, and `root_manager` (≤1 per community). `resident.isUnitOwner` distinguishes owner vs. tenant. Board status is an orthogonal `designation` column (`board_president` / `board_member`), read only by statutory features — not general permissions. `super_admin` is system-scoped (`platformAdminRoleEnum`), stored outside `user_roles`.
 
-> Transition note: the legacy seven-role vocabulary (`owner`, `tenant`, `board_member`, `board_president`, `cam`, `site_manager`, `property_manager_admin`) is being retired but is still live in the app/RBAC layer during the shimmed transition (`CommunityRole`, `ADMIN_ROLES`/`BILLING_ADMIN_ROLES` in `packages/shared/src/access-policies.ts`). See `docs/adr/ADR-006-root-manager-role-model.md` (supersedes ADR-001).
+> Role vocabulary: the legacy seven-role names (`owner`, `tenant`, `board_member`,
+> `board_president`, `cam`, `site_manager`, `property_manager_admin`) have been
+> **fully retired** — the compatibility shim, the 7-role `RBAC_MATRIX` columns, and
+> the dead `user_role` pgEnum are all gone. `CommunityRole` (`packages/shared`) is
+> now the 3 v3 roles (`resident`/`property_manager`/`root_manager`); the derived
+> permission layer keys on the `MatrixRole` rows (`owner`/`tenant`/`manager`, e.g.
+> `ADMIN_ROLES = ['manager']` in `access-policies.ts`), which `resolveMatrixRole`
+> maps the v3 roles onto (`resident` splits owner/tenant via `isUnitOwner`). The only
+> residual legacy-name strings are non-runtime content — help-article frontmatter,
+> dev-login aliases, and test fixtures — held to a floor by `guard:legacy-roles`
+> (STRUCTURAL/BRIDGE buckets empty). See `docs/adr/ADR-006-root-manager-role-model.md`
+> (supersedes ADR-001).
 
 ## Development Commands
 

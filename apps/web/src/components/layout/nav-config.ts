@@ -578,7 +578,7 @@ export function getVisibleItemsWithPlanGate(
  * advanced tools collapsed under a "More" section.
  */
 export function shouldUseSlimNav(
-  role: CommunityRole | CommunityRole | null,
+  role: CommunityRole | null,
   planId: PlanId | null,
 ): boolean {
   return role === 'root_manager' && planId === 'essentials';

@@ -48,7 +48,7 @@ function categoryToBadge(category: 'page' | 'action' | 'setting'): string {
 // ---------------------------------------------------------------------------
 interface MobileSearchContentProps {
   communityId: number;
-  role: CommunityRole | CommunityRole;
+  role: CommunityRole;
   features: CommunityFeatures;
   resourceAccess: ResourceAccessMap;
 }

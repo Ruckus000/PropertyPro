@@ -57,7 +57,7 @@ interface ViolationDetailPanelProps {
   violation: ViolationItem;
   communityId: number;
   userId: string;
-  userRole: CommunityRole | CommunityRole;
+  userRole: CommunityRole;
   onActionComplete: () => void;
 }
 

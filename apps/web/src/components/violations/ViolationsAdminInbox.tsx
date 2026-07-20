@@ -71,7 +71,7 @@ const LIMIT = 20;
 interface ViolationsAdminInboxProps {
   communityId: number;
   userId: string;
-  userRole: CommunityRole | CommunityRole;
+  userRole: CommunityRole;
 }
 
 export function ViolationsAdminInbox({ communityId, userId, userRole }: ViolationsAdminInboxProps) {
