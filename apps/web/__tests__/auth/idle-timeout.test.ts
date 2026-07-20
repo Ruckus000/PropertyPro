@@ -18,28 +18,12 @@ describe('getIdleTimeoutMs', () => {
   it('gives the management tier the 30-minute admin timeout', () => {
     expect(getIdleTimeoutMs('property_manager')).toBe(THIRTY_MIN);
     expect(getIdleTimeoutMs('root_manager')).toBe(THIRTY_MIN);
-    // Legacy management name still resolves to the manager admin row.
-    expect(getIdleTimeoutMs('property_manager_admin')).toBe(THIRTY_MIN);
   });
 
-  it('gives residents / owners / tenants the 60-minute timeout', () => {
+  it('gives residents the 60-minute timeout', () => {
+    // resident covers both owner and tenant (distinguished by isUnitOwner, which
+    // does not shorten the idle window — only the management tier does).
     expect(getIdleTimeoutMs('resident')).toBe(SIXTY_MIN);
-    expect(getIdleTimeoutMs('owner')).toBe(SIXTY_MIN);
-    expect(getIdleTimeoutMs('tenant')).toBe(SIXTY_MIN);
-  });
-
-  it('does not treat a board designation as an admin role', () => {
-    // Board status is orthogonal to the role (ADR-006) and must not shorten the
-    // timeout on its own — these legacy names resolve to no matrix row.
-    expect(getIdleTimeoutMs('board_member')).toBe(SIXTY_MIN);
-    expect(getIdleTimeoutMs('board_president')).toBe(SIXTY_MIN);
-  });
-
-  it('falls back to 60 min for the dropped legacy admin names', () => {
-    // cam / site_manager are unreachable in production, but the defensive path
-    // resolves them to no matrix row → the safe 60-min default.
-    expect(getIdleTimeoutMs('cam')).toBe(SIXTY_MIN);
-    expect(getIdleTimeoutMs('site_manager')).toBe(SIXTY_MIN);
   });
 
   it('defaults to the 60-minute timeout for a null (unknown) role', () => {

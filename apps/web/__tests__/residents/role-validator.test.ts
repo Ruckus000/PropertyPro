@@ -5,32 +5,32 @@ import {
   validateRoleAssignment,
 } from '../../src/lib/utils/role-validator';
 
-describe('p1-18 role validator', () => {
-  it('allows apartment-supported roles and rejects condo-only roles', () => {
-    expect(isRoleAllowedForCommunityType('tenant', 'apartment')).toBe(true);
-    expect(isRoleAllowedForCommunityType('owner', 'apartment')).toBe(false);
+describe('p1-18 role validator (v3)', () => {
+  it('allows every v3 role in every community type', () => {
+    expect(isRoleAllowedForCommunityType('resident', 'apartment')).toBe(true);
+    expect(isRoleAllowedForCommunityType('property_manager', 'apartment')).toBe(true);
+    expect(isRoleAllowedForCommunityType('root_manager', 'condo_718')).toBe(true);
   });
 
-  it('requires unit assignment for owner and tenant', () => {
-    expect(isUnitRequiredForRole('owner')).toBe(true);
-    expect(isUnitRequiredForRole('tenant')).toBe(true);
-    expect(isUnitRequiredForRole('board_member')).toBe(false);
+  it('requires a unit assignment only for residents', () => {
+    expect(isUnitRequiredForRole('resident')).toBe(true);
+    expect(isUnitRequiredForRole('property_manager')).toBe(false);
+    expect(isUnitRequiredForRole('root_manager')).toBe(false);
   });
 
-  it('returns invalid for disallowed role/community combinations', () => {
-    const result = validateRoleAssignment('board_member', 'apartment', null);
-    expect(result.valid).toBe(false);
-    expect(result.error).toContain('not allowed');
-  });
-
-  it('returns invalid when required unit is missing', () => {
-    const result = validateRoleAssignment('owner', 'condo_718', null);
+  it('returns invalid when a resident is missing the required unit', () => {
+    const result = validateRoleAssignment('resident', 'condo_718', null);
     expect(result.valid).toBe(false);
     expect(result.error).toContain('requires a unit assignment');
   });
 
-  it('returns valid when role and unit policy are satisfied', () => {
-    const result = validateRoleAssignment('board_president', 'hoa_720', null);
+  it('returns valid for a manager tier without a unit', () => {
+    expect(validateRoleAssignment('property_manager', 'hoa_720', null).valid).toBe(true);
+    expect(validateRoleAssignment('root_manager', 'apartment', null).valid).toBe(true);
+  });
+
+  it('returns valid when a resident has a unit assigned', () => {
+    const result = validateRoleAssignment('resident', 'condo_718', 42);
     expect(result.valid).toBe(true);
   });
 });

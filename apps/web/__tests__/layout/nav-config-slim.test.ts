@@ -15,7 +15,7 @@ const CONDO_ESSENTIALS_FEATURES = getEffectiveFeatures('condo_718', 'essentials'
 const CONDO_PROFESSIONAL_FEATURES = getEffectiveFeatures('condo_718', 'professional');
 
 function visibleIds(
-  role: 'property_manager_admin' | 'owner',
+  role: 'property_manager' | 'resident',
   features: CommunityFeatures,
   planId: 'essentials' | 'professional',
 ): { defaultIds: string[]; moreIds: string[] } {
@@ -48,7 +48,7 @@ describe('shouldUseSlimNav', () => {
 describe('buildSlimNavSections', () => {
   it('places Essentials founding admin defaults in primary sections', () => {
     const { defaultIds } = visibleIds(
-      'property_manager_admin',
+      'property_manager',
       CONDO_ESSENTIALS_FEATURES,
       'essentials',
     );
@@ -67,7 +67,7 @@ describe('buildSlimNavSections', () => {
 
   it('demotes plan-gated tools to More for Essentials', () => {
     const { moreIds } = visibleIds(
-      'property_manager_admin',
+      'property_manager',
       CONDO_ESSENTIALS_FEATURES,
       'essentials',
     );
@@ -97,7 +97,7 @@ describe('buildSlimNavSections', () => {
     expect(shouldUseSlimNav('root_manager', 'professional')).toBe(false);
     const visible = getVisibleItemsWithPlanGate(
       NAV_ITEMS,
-      'property_manager_admin',
+      'property_manager',
       CONDO_PROFESSIONAL_FEATURES,
       'condo_718',
       'professional',

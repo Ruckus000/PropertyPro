@@ -123,6 +123,19 @@ export const POST = withErrorHandler(
         continue;
       }
 
+      // Apartments have no unit owners. Pre-v3 this was enforced by
+      // ROLE_COMMUNITY_CONSTRAINTS rejecting 'owner' for apartment; in v3 it is
+      // an isUnitOwner-vs-community-type rule, preserved explicitly here.
+      if (communityType === "apartment" && mapped.isUnitOwner) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          column: "role",
+          message: `Role '${role}' is not allowed for apartment communities.`,
+        });
+        skippedCount++;
+        continue;
+      }
+
       // Resolve unitId if provided
       let unitId: number | null = null;
       if (unit_number) {
@@ -135,8 +148,8 @@ export const POST = withErrorHandler(
         unitId = found;
       }
 
-      // Validate role assignment vs community type & unit requirement
-      const validation = validateRoleAssignment(role, communityType, unitId);
+      // Validate the v3 role being assigned (resident) against unit-requirement.
+      const validation = validateRoleAssignment(mapped.role, communityType, unitId);
       if (!validation.valid) {
         errors.push({ rowNumber: row.rowNumber, column: "role", message: validation.error ?? "Invalid role assignment" });
         skippedCount++;
