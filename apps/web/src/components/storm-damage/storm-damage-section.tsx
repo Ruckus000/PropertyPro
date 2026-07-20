@@ -41,15 +41,20 @@ interface Props {
 
 const STATUS_OPTIONS = Object.keys(STORM_DAMAGE_STATUS_LABELS) as StormDamageStatus[];
 
+// Map each report status to a StatusBadge visual variant. Labels come from the
+// single-source-of-truth STORM_DAMAGE_STATUS_LABELS so the resident-visible
+// badge can never drift from the attorney-reviewed neutral vocabulary.
+const STATUS_BADGE_VARIANT: Record<StormDamageStatus, string> = {
+  submitted: 'submitted',
+  acknowledged: 'in_progress',
+  closed: 'closed',
+};
+
 function statusBadge(status: StormDamageStatus): { status: string; label: string } {
-  switch (status) {
-    case 'submitted':
-      return { status: 'submitted', label: 'Submitted' };
-    case 'acknowledged':
-      return { status: 'in_progress', label: 'Acknowledged' };
-    case 'closed':
-      return { status: 'closed', label: 'Closed' };
-  }
+  return {
+    status: STATUS_BADGE_VARIANT[status],
+    label: STORM_DAMAGE_STATUS_LABELS[status],
+  };
 }
 
 function formatDateTime(iso: string | null): string {
@@ -129,9 +134,7 @@ export function StormDamageSection({ communityId, canManage }: Props) {
             Storm Damage
           </h2>
           <p className="max-w-2xl text-sm text-content-tertiary">{STORM_DAMAGE_DISCLAIMER}</p>
-          {canManage && (
-            <p className="max-w-2xl text-xs text-content-tertiary">{STORM_DAMAGE_STATUS_NOTE}</p>
-          )}
+          <p className="max-w-2xl text-xs text-content-tertiary">{STORM_DAMAGE_STATUS_NOTE}</p>
         </div>
         <Button onClick={() => setDialogOpen(true)} size="sm">
           <Plus className="h-4 w-4" aria-hidden="true" />
