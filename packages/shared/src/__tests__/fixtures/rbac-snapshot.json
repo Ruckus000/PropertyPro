@@ -97,6 +97,10 @@
         "read": true,
         "write": false
       },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -199,6 +203,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -298,6 +306,10 @@
         "write": false
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },
@@ -403,6 +415,10 @@
         "read": true,
         "write": true
       },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -502,6 +518,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },
@@ -607,6 +627,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
       "storm_damage": {
         "read": false,
         "write": false
@@ -706,6 +730,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },
@@ -813,6 +841,10 @@
         "read": true,
         "write": false
       },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -915,6 +947,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -1014,6 +1050,10 @@
         "write": false
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },
@@ -1119,6 +1159,10 @@
         "read": true,
         "write": true
       },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -1218,6 +1262,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },
@@ -1323,6 +1371,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
       "storm_damage": {
         "read": false,
         "write": false
@@ -1422,6 +1474,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },
@@ -1529,6 +1585,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
       "storm_damage": {
         "read": false,
         "write": false
@@ -1631,6 +1691,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -1730,6 +1794,10 @@
         "write": false
       },
       "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
         "read": false,
         "write": false
       },
@@ -1835,6 +1903,10 @@
         "read": false,
         "write": false
       },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
       "storm_damage": {
         "read": false,
         "write": false
@@ -1934,6 +2006,10 @@
         "write": false
       },
       "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
         "read": false,
         "write": false
       },
@@ -2039,6 +2115,10 @@
         "read": true,
         "write": true
       },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
       "storm_damage": {
         "read": true,
         "write": true
@@ -2138,6 +2218,10 @@
         "write": true
       },
       "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
         "read": true,
         "write": true
       },

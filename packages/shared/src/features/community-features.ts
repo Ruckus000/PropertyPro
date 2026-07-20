@@ -52,6 +52,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
     hasInsuranceHub: true,
+    hasReserveTransparency: true,
     hasSnowbirdDigest: true,
     // Storms hit every Florida community type — condos, HOAs, and apartment
     // buildings alike — so storm-damage intake is available everywhere. It
@@ -90,6 +91,7 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     hasSiteCustomDomain: true,
     hasSitePortfolioTemplates: true,
     hasInsuranceHub: true,
+    hasReserveTransparency: true,
     hasSnowbirdDigest: true,
     // Storms hit every Florida community type — condos, HOAs, and apartment
     // buildings alike — so storm-damage intake is available everywhere. It
@@ -130,6 +132,9 @@ export const COMMUNITY_FEATURES: Record<CommunityType, CommunityFeatures> = {
     // Apartments have no owner-occupied units and no association master
     // policy to share — the insurance hub is condo/HOA only.
     hasInsuranceHub: false,
+    // Reserve transparency is a condo/HOA statutory-reserve concept
+    // (HB 913 / SIRS); apartments have no owner reserves to disclose.
+    hasReserveTransparency: false,
     // Seasonal/absentee residents exist in every community type, so the digest
     // is available everywhere (the board still enables it per community).
     hasSnowbirdDigest: true,

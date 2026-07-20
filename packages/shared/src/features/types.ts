@@ -76,6 +76,14 @@ export interface CommunityFeatures {
    */
   readonly hasInsuranceHub: boolean;
   /**
+   * Reserve transparency — the association's major physical-asset register with
+   * a remaining-useful-life countdown per component (condo/HOA only). Factual
+   * data only: NOT a reserve study and NOT an assessment of reserve adequacy.
+   * Ships DARK — enablement is gated on attorney-reviewed copy plus this
+   * per-community flag.
+   */
+  readonly hasReserveTransparency: boolean;
+  /**
    * Snowbird digest — an auto-generated periodic email recap of community
    * activity (board decisions, new documents, upcoming deadlines) for seasonal
    * and out-of-state owners. Compiled from data already in the platform; zero

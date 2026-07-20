@@ -47,6 +47,7 @@ export const COMMUNITY_FEATURE_KEYS = [
   'hasSiteCustomDomain',
   'hasSitePortfolioTemplates',
   'hasInsuranceHub',
+  'hasReserveTransparency',
   'hasSnowbirdDigest',
   'hasStormTools',
 ] as const;

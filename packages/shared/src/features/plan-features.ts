@@ -50,6 +50,10 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       // Insurance hub ships on every condo/HOA plan including the entry tier:
       // it is a differentiation/retention feature, not an upsell lever.
       hasInsuranceHub: true,
+      // Reserve transparency ships on every condo/HOA plan too (same
+      // differentiation/retention rationale). Still dark behind the
+      // per-community hasReserveTransparency flag until attorney-reviewed.
+      hasReserveTransparency: true,
       hasSnowbirdDigest: true,
       // Storm-damage intake ships on every plan as a differentiation/retention
       // feature (dark behind hasStormTools until the copy is attorney-approved).
@@ -94,6 +98,7 @@ export const PLAN_FEATURES: Record<PlanId, PlanFeatureConfig> = {
       hasSiteCustomCss: true,
       hasSiteCustomDomain: true,
       hasInsuranceHub: true,
+      hasReserveTransparency: true,
       hasSnowbirdDigest: true,
       // Storm-damage intake ships on every plan as a differentiation/retention
       // feature (dark behind hasStormTools until the copy is attorney-approved).

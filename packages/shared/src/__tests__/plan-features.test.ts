@@ -38,6 +38,7 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'hasSiteCustomDomain',
   'hasSitePortfolioTemplates',
   'hasInsuranceHub',
+  'hasReserveTransparency',
   'hasSnowbirdDigest',
   'hasStormTools',
 ] as const;

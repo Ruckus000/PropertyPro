@@ -56,6 +56,7 @@ export const RBAC_RESOURCES = [
   'emergency_broadcasts',
   'units',
   'insurance',
+  'reserve_assets',
   'storm_damage',
 ] as const;
 
@@ -93,6 +94,7 @@ const PHASE5_DEFAULT_RESOURCES = [
   'emergency_broadcasts',
   'units',
   'insurance',
+  'reserve_assets',
   'storm_damage',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
@@ -359,6 +361,20 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: false, write: false },
+      manager:                { read: true,  write: true  },
+    },
+  },
+  // Reserve transparency: the association's major-asset register with a
+  // remaining-useful-life countdown. Read is open to EVERY member (owners AND
+  // tenants) — the whole point is a transparent, factual register; there is no
+  // resident-personal-data concern here (assets, not people), so unlike the
+  // insurance hub tenants are NOT excluded. Write is admin-tier (same shape as
+  // contracts). Apartments are excluded at the feature-flag layer
+  // (hasReserveTransparency), so the matrix stays uniform across community types.
+  reserve_assets: {
+    policy: {
+      owner:                  { read: true,  write: false },
+      tenant:                 { read: true,  write: false },
       manager:                { read: true,  write: true  },
     },
   },

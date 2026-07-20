@@ -225,6 +225,13 @@
       "when": 1784510852484,
       "tag": "0032_storm_damage_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784510894576,
+      "tag": "0033_reserve_assets",
+      "breakpoints": true
     }
   ]
 }
