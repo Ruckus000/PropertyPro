@@ -45,6 +45,7 @@
     "guard:legacy-roles": "tsx scripts/verify-legacy-roles.ts",
     "guard:token-coverage": "tsx scripts/verify-token-coverage.ts",
     "guard:design-tokens": "tsx scripts/verify-design-tokens.ts",
+    "guard:audit-log-trigger-overrides": "tsx scripts/verify-audit-log-trigger-overrides.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",

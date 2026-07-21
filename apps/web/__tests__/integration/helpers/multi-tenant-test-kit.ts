@@ -52,6 +52,12 @@ export interface TestKitState {
   currentActorUserId: string | null;
 }
 
+// `compliance_audit_log_append_only_guard` is a database-wide trigger, so test
+// cleanup must serialize the brief privileged override across parallel Vitest
+// workers. This namespace is reserved for audit-log maintenance only.
+const AUDIT_LOG_MAINTENANCE_LOCK_NAMESPACE = 817;
+const AUDIT_LOG_MAINTENANCE_LOCK_KEY = 1;
+
 // ---------------------------------------------------------------------------
 // Lifecycle: init / teardown
 // ---------------------------------------------------------------------------
@@ -167,35 +173,36 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
 
   try {
     if (communityIds.length > 0) {
-      // Audited mutations during the test write `compliance_audit_log` rows
-      // whose append-only guard trigger + RESTRICT FK block deleting the parent
-      // community. Previously this delete was swallowed, leaking the community
-      // as an `is_demo=false` row that breaks the nightly demo reset. Lift the
-      // guard for the purge, then restore it (mirrors the elections
-      // vote-integration suite's proven pattern).
-      await state.db.execute(
-        sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
-      );
-      try {
+      // Audited mutations write append-only rows with RESTRICT FKs to their
+      // communities. The trigger override is transactional (Postgres rolls it
+      // back on failure) and advisory-locked so parallel test teardowns cannot
+      // re-enable it between another worker's DISABLE and DELETE statements.
+      await state.db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(${AUDIT_LOG_MAINTENANCE_LOCK_NAMESPACE}, ${AUDIT_LOG_MAINTENANCE_LOCK_KEY})`,
+        );
+        await tx.execute(
+          sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
+        );
+
         // Remove the RESTRICT / NO-ACTION children that block the community delete.
-        await state.db
+        await tx
           .delete(state.dbModule.complianceAuditLog)
           .where(inArray(state.dbModule.complianceAuditLog.communityId, communityIds));
-        await state.db
+        await tx
           .delete(state.dbModule.provisioningJobs)
           .where(inArray(state.dbModule.provisioningJobs.communityId, communityIds));
-        await state.db
+        await tx
           .delete(state.dbModule.conversionEvents)
           .where(inArray(state.dbModule.conversionEvents.communityId, communityIds));
         // Remaining children cascade on community delete.
-        await state.db
+        await tx
           .delete(state.dbModule.communities)
           .where(inArray(state.dbModule.communities.id, communityIds));
-      } finally {
-        await state.db.execute(
+        await tx.execute(
           sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`,
         );
-      }
+      });
     }
 
     if (userIds.length > 0) {

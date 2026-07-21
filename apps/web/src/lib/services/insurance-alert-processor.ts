@@ -37,6 +37,7 @@ import { and, eq, inArray, isNull } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { isAdminRole, type CommunityRole } from '@propertypro/shared';
 import { InsuranceAlertEmail, sendEmail } from '@propertypro/email';
+import { captureMessage } from '@sentry/nextjs';
 import { format, parseISO } from 'date-fns';
 import {
   buildInsuranceAlertEmail,
@@ -323,6 +324,9 @@ export async function processInsuranceAlerts(
             }),
             category: 'non-transactional',
             unsubscribeUrl,
+            // Stable for this recipient + alert band, so Resend deduplicates
+            // transport retries while the provider's 24-hour key window lasts.
+            idempotencyKey: `insurance-alert/${community.id}/${item.kind}/${item.rowId}/${item.band}/${recipient.userId}`,
           });
           result.emailsSent += 1;
           sentCount += 1;
@@ -338,7 +342,37 @@ export async function processInsuranceAlerts(
       // Retrying the whole item may duplicate the successful delivery; avoiding
       // that requires durable per-recipient delivery state, which this job does
       // not currently maintain.
-      if (sentCount !== recipients.length) continue;
+      if (sentCount !== recipients.length) {
+        // This event deliberately carries only aggregate delivery counts and
+        // the alert identity. Sentry can alert on repeated occurrences without
+        // exposing recipient email addresses in operational telemetry.
+        captureMessage('insurance_alert_partial_delivery', {
+          level: 'warning',
+          extra: {
+            communityId: community.id,
+            alertKind: item.kind,
+            resourceId: item.rowId,
+            alertBand: item.band,
+            attemptedRecipients: recipients.length,
+            deliveredRecipients: sentCount,
+            failedRecipients: recipients.length - sentCount,
+          },
+        });
+        await logAuditEvent({
+          userId: null,
+          action: 'notification_delivery_partial',
+          resourceType: item.kind === 'wind_mitigation' ? 'wind_mitigation_report' : 'insurance_policy',
+          resourceId: String(item.rowId),
+          communityId: community.id,
+          newValues: {
+            alertBand: item.band,
+            attemptedRecipients: recipients.length,
+            deliveredRecipients: sentCount,
+            failedRecipients: recipients.length - sentCount,
+          },
+        });
+        continue;
+      }
 
       // Advance the per-row dedupe band after the item was delivered.
       const table = item.kind === 'wind_mitigation' ? windMitigationReports : insurancePolicies;

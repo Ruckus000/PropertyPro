@@ -30,6 +30,8 @@ export interface SendEmailOptions {
   from?: string;
   /** Reply-to address. */
   replyTo?: string;
+  /** Stable provider key for safe retry of this single-message send request. */
+  idempotencyKey?: string;
 }
 
 /** Result from the send helper. */
