@@ -191,6 +191,18 @@ describe('processInsuranceAlerts', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
+  it('does not advance the band when only some recipients receive the alert', async () => {
+    sendEmailMock
+      .mockResolvedValueOnce({ id: 'msg-1' })
+      .mockRejectedValueOnce(new Error('temporary provider failure'));
+
+    const result = await processInsuranceAlerts(NOW);
+
+    expect(result.emailsSent).toBe(1);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
   it('skips a community with an incomplete postal address without sending or advancing', async () => {
     const result = await processInsuranceAlerts(NOW);
 

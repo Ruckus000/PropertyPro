@@ -332,8 +332,13 @@ export async function processInsuranceAlerts(
         }
       }
 
-      // Total failure ⇒ leave the band untouched so the item retries next run.
-      if (sentCount === 0) continue;
+      // A shared dedupe band can only advance after every intended recipient
+      // receives the alert. Otherwise a transient failure for one recipient
+      // would permanently suppress their notification once another send passed.
+      // Retrying the whole item may duplicate the successful delivery; avoiding
+      // that requires durable per-recipient delivery state, which this job does
+      // not currently maintain.
+      if (sentCount !== recipients.length) continue;
 
       // Advance the per-row dedupe band after the item was delivered.
       const table = item.kind === 'wind_mitigation' ? windMitigationReports : insurancePolicies;
