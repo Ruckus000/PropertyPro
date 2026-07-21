@@ -21,6 +21,7 @@ const {
   createUnscopedClientMock,
   sendEmailMock,
   logAuditEventMock,
+  captureMessageMock,
   updateMock,
   // Table markers — identity is what the processor switches on. Declared inside
   // vi.hoisted so the hoisted vi.mock factory can reference them (TDZ-safe).
@@ -35,6 +36,7 @@ const {
   createUnscopedClientMock: vi.fn(),
   sendEmailMock: vi.fn(),
   logAuditEventMock: vi.fn(),
+  captureMessageMock: vi.fn(),
   updateMock: vi.fn(),
   communities: {
     id: 'c.id', name: 'c.name', communityType: 'c.type', deletedAt: 'c.del',
@@ -68,6 +70,7 @@ vi.mock('@propertypro/email', () => ({
   sendEmail: sendEmailMock,
   InsuranceAlertEmail: (props: unknown) => props,
 }));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
 // ADR-006: user_roles.role is the 3-value enum; board members are `resident`
 // rows with an orthogonal designation. isAdminRole is true ONLY for staff roles.
 vi.mock('@propertypro/shared', () => ({
@@ -152,6 +155,7 @@ describe('processInsuranceAlerts', () => {
     const call = sendEmailMock.mock.calls[0][0];
     expect(call.category).toBe('non-transactional');
     expect(call.unsubscribeUrl).toContain('/api/v1/insurance-alerts/unsubscribe?token=');
+    expect(call.idempotencyKey).toBe('insurance-alert/1/wind_mitigation/11/30_days/board1');
     // CAN-SPAM: the sender postal address (community's own) is passed to the template.
     expect(call.react.props.senderAddressLines).toEqual(['1 A St', 'Miami, FL 33139']);
 
@@ -188,7 +192,57 @@ describe('processInsuranceAlerts', () => {
     const result = await processInsuranceAlerts(NOW); // must resolve, not reject
     expect(result.emailsSent).toBe(0);
     expect(updateMock).not.toHaveBeenCalled();
-    expect(logAuditEventMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock.mock.calls[0][0]).toMatchObject({
+      action: 'notification_delivery_partial',
+      newValues: {
+        alertBand: '30_days',
+        attemptedRecipients: 2,
+        deliveredRecipients: 0,
+        failedRecipients: 2,
+      },
+    });
+    expect(captureMessageMock).toHaveBeenCalledWith('insurance_alert_partial_delivery', {
+      level: 'warning',
+      extra: expect.objectContaining({
+        alertKind: 'wind_mitigation',
+        resourceId: 11,
+        attemptedRecipients: 2,
+        deliveredRecipients: 0,
+        failedRecipients: 2,
+      }),
+    });
+  });
+
+  it('does not advance the band when only some recipients receive the alert', async () => {
+    sendEmailMock
+      .mockResolvedValueOnce({ id: 'msg-1' })
+      .mockRejectedValueOnce(new Error('temporary provider failure'));
+
+    const result = await processInsuranceAlerts(NOW);
+
+    expect(result.emailsSent).toBe(1);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock.mock.calls[0][0]).toMatchObject({
+      action: 'notification_delivery_partial',
+      newValues: {
+        alertBand: '30_days',
+        attemptedRecipients: 2,
+        deliveredRecipients: 1,
+        failedRecipients: 1,
+      },
+    });
+    expect(captureMessageMock).toHaveBeenCalledWith('insurance_alert_partial_delivery', {
+      level: 'warning',
+      extra: expect.objectContaining({
+        alertKind: 'wind_mitigation',
+        resourceId: 11,
+        attemptedRecipients: 2,
+        deliveredRecipients: 1,
+        failedRecipients: 1,
+      }),
+    });
   });
 
   it('skips a community with an incomplete postal address without sending or advancing', async () => {

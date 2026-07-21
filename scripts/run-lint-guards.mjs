@@ -34,6 +34,7 @@ const GUARDS = [
   'guard:legacy-roles',
   'guard:token-coverage',
   'guard:design-tokens',
+  'guard:audit-log-trigger-overrides',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.
