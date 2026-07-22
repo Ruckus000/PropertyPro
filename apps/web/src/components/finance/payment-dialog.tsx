@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useCreatePaymentIntent, useUpdatePaymentIntentMethod } from '@/hooks/use-payment-intent';
 
 /* ─────── Types ─────── */
@@ -126,9 +127,12 @@ export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSucces
 
           {/* Stripe Payment Element */}
           {intentMutation.isPending && (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-surface-muted border-t-interactive" />
-              <span className="ml-2 text-sm text-content-secondary">Preparing payment form...</span>
+            <div className="space-y-3 py-4">
+              <Skeleton className="h-10 w-full" />
+              <div className="flex gap-3">
+                <Skeleton className="h-10 w-1/2" />
+                <Skeleton className="h-10 w-1/2" />
+              </div>
             </div>
           )}
 
@@ -156,7 +160,10 @@ export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSucces
                 appearance: {
                   theme: 'stripe',
                   variables: {
-                    colorPrimary: '#4f46e5',
+                    // Stripe Elements render inside a cross-origin iframe, so
+                    // CSS custom properties from the host document are not
+                    // resolvable there — the SDK requires a static color.
+                    colorPrimary: '#4f46e5', // design-tokens:exempt — Stripe Elements appearance API requires a static color; the iframe can't resolve host-page CSS vars
                   },
                 },
               }}

@@ -10,7 +10,6 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { DocumentLinkPicker } from '@/components/documents/author/document-link-picker';
 import {
   useDocumentDraft,
@@ -20,7 +19,7 @@ import {
   useDeleteDocumentDraft,
   useSaveDocumentDraft,
   type DocumentLinkPickerResult,
-} from '@/hooks/useDocumentDraft';
+} from '@/hooks/use-document-draft';
 
 // The editor pulls TipTap onto the page; gate it behind next/dynamic with
 // ssr:false so it only ships on these author routes.
@@ -203,12 +202,6 @@ export function AuthorEditorClient({
   return (
     <div className="space-y-4">
       <PageHeader
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: parentLabel, href: breadcrumbHref }]}
-            currentLabel={title || 'Untitled'}
-          />
-        }
         title={title || 'Untitled'}
         description="Author a new document. Drafts autosave every few seconds."
         actions={

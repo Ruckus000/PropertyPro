@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type DragEvent, type ChangeEvent } from 'react';
+import { toast } from 'sonner';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import {
@@ -10,11 +11,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import { useDocumentCategories } from '@/hooks/use-document-categories';
 import {
   useDocumentUpload,
   type UploadDocumentResult,
-} from '@/hooks/useDocumentUpload';
+} from '@/hooks/use-document-upload';
 
 interface DocumentUploadAreaProps {
   communityId: number;
@@ -111,6 +112,7 @@ export function DocumentUploadArea({
       setSelectedCategoryId(initialCategoryId ?? null);
       setCategoryError(null);
 
+      toast.success('Document uploaded.');
       onUploaded?.(result);
     } catch {
       // Error is handled by the hook

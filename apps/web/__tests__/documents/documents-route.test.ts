@@ -187,6 +187,9 @@ describe('GET /api/v1/documents', () => {
         pageSize: undefined,
       }),
     );
+    // B2: owner/tenant checklists carry `access_document` — fire it on list load
+    // so residents can reach 100% (fires unconditionally; a no-op for other roles).
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(42, 'user-admin', 'access_document');
   });
 
   it('forwards cursor, pageSize, and categoryId filter', async () => {

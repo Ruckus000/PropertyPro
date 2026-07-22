@@ -12,7 +12,7 @@
  * authorization layer. The path apps/web/src/lib/db/ is the spec-required
  * location; the file itself has no database access.
  */
-import type { TransitionRole, CommunityType } from '@propertypro/shared';
+import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { RBAC_RESOURCES, type RbacResource, type RbacAction } from '@propertypro/shared';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityMembership } from '@/lib/api/community-membership';
@@ -36,12 +36,12 @@ import { RBAC_MATRIX } from '@propertypro/shared';
  * Check permission for the v3 role model.
  *
  * - property_manager / root_manager: uniform full-operational — both resolve
- *   the property_manager_admin row from the static RBAC matrix
+ *   the manager row from the static RBAC matrix
  * - resident + isUnitOwner: uses the owner row from the static RBAC matrix
  * - resident + !isUnitOwner: uses the tenant row from the static RBAC matrix
  */
 export function checkPermissionV2(
-  role: TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   resource: RbacResource,
   action: RbacAction,
@@ -52,11 +52,8 @@ export function checkPermissionV2(
     return RBAC_MATRIX[communityType][legacyRole][resource][action];
   }
   // property_manager + root_manager: uniform full-operational
-  return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
+  return RBAC_MATRIX[communityType]['manager'][resource][action];
 }
-
-/** @deprecated Use checkPermissionV2. Kept for backward compatibility during migration. */
-export { checkPermission } from '@propertypro/shared';
 
 /**
  * Throws ForbiddenError (403) if the membership is not permitted to perform

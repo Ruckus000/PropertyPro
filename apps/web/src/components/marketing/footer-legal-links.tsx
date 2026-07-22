@@ -3,28 +3,27 @@
 import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import type { LegalDocKey, LegalDocs } from '@/lib/legal-types';
 
-type DocKey = 'terms' | 'privacy';
-
-const DOC_TITLES: Record<DocKey, string> = {
+const DOC_TITLES: Record<LegalDocKey, string> = {
   terms: 'Terms of Service',
   privacy: 'Privacy Policy',
 };
 
-const DOC_HREFS: Record<DocKey, string> = {
+const DOC_HREFS: Record<LegalDocKey, string> = {
   terms: '/legal/terms',
   privacy: '/legal/privacy',
 };
 
 export interface FooterLegalLinksProps {
-  legalDocs?: { terms: string; privacy: string };
+  legalDocs?: LegalDocs;
 }
 
 export function FooterLegalLinks({ legalDocs }: FooterLegalLinksProps) {
-  const [openDoc, setOpenDoc] = useState<DocKey | null>(null);
+  const [openDoc, setOpenDoc] = useState<LegalDocKey | null>(null);
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
-  function handleClick(event: React.MouseEvent<HTMLAnchorElement>, doc: DocKey) {
+  function handleClick(event: React.MouseEvent<HTMLAnchorElement>, doc: LegalDocKey) {
     // No content available (e.g. no-JS fallback / no props) → allow navigation.
     if (!legalDocs) return;
     // Honor modified clicks (open in new tab/window) and non-primary buttons.

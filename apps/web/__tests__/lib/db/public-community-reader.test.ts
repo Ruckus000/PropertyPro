@@ -127,6 +127,7 @@ describe('getPublicCommunityScopedReader', () => {
     mockSelectChain.innerJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.where.mockReturnValue(mockSelectChain);
     mockSelectChain.orderBy.mockReturnValue(mockSelectChain);
+    mockSelectChain.limit.mockReturnValue(mockSelectChain);
     mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
   });
 
@@ -261,6 +262,32 @@ describe('getPublicCommunityScopedReader', () => {
     ]);
   });
 
+  it('listSiteBlocks({ includeDrafts: true }) drops a tombstoned slot — the tombstone wins the merge over its published row, then is filtered (slice 8f)', async () => {
+    queueQueryResults([
+      { id: 1, blockType: 'text', blockOrder: 2, content: { v: 'published' }, isDraft: false },
+      { id: 2, blockType: 'tombstone', blockOrder: 2, content: {}, isDraft: true },
+      { id: 3, blockType: 'docs', blockOrder: 3, content: { v: 'kept' }, isDraft: false },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks({ includeDrafts: true });
+    // The staged deletion at order 2 renders as ABSENT in preview — neither
+    // the published row (shadowed) nor the tombstone (filtered) appears.
+    expect(results).toHaveLength(1);
+    expect(results[0]?.id).toBe(3);
+  });
+
+  it('listSiteBlocks({ includeDrafts: true, includeTombstones: true }) surfaces the tombstone for the editor', async () => {
+    queueQueryResults([
+      { id: 1, blockType: 'text', blockOrder: 2, content: { v: 'published' }, isDraft: false },
+      { id: 2, blockType: 'tombstone', blockOrder: 2, content: {}, isDraft: true, publishedAt: null },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const results = await reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.blockType).toBe('tombstone');
+    expect(results[0]?.isDraft).toBe(true);
+  });
+
   it('listSiteBlocks default returns rows unchanged when no draft option supplied', async () => {
     const publishedAt = new Date('2026-05-01T00:00:00Z');
     queueQueryResults([
@@ -271,6 +298,23 @@ describe('getPublicCommunityScopedReader', () => {
     expect(results).toEqual([
       { id: 1, blockType: 'hero', blockOrder: 0, content: { v: 'p' }, isDraft: false, publishedAt },
     ]);
+  });
+
+  it('getLatestPublishedAt returns the max published_at (authoritative publish token)', async () => {
+    const latest = new Date('2026-07-01T09:00:00Z');
+    queueQueryResults([{ publishedAt: latest }]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.getLatestPublishedAt()).toEqual(latest);
+    // Queries only published (is_draft=false), non-deleted rows, newest first.
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0] as { __and: Array<{ __eq?: { col: unknown; val: unknown } }> };
+    const draftClause = whereCall.__and.find((c) => c.__eq?.col === 'siteBlocks.isDraft');
+    expect(draftClause?.__eq?.val).toBe(false);
+  });
+
+  it('getLatestPublishedAt returns null before the first publish (no published rows)', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.getLatestPublishedAt()).toBeNull();
   });
 
   it('listAnnouncements returns mapped rows with the expected shape', async () => {

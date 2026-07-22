@@ -2,6 +2,11 @@ import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
+  // Lint runs in the dedicated CI lint job (`pnpm lint`). Without this flag,
+  // the presence of eslint.config.mjs re-arms Next's build-time lint pass,
+  // slowing every build and turning error-severity findings into a second,
+  // unintended deploy gate inside `vercel build --prod`.
+  eslint: { ignoreDuringBuilds: true },
   transpilePackages: [
     '@propertypro/db',
     '@propertypro/shared',
@@ -9,6 +14,11 @@ const nextConfig: NextConfig = {
     '@propertypro/theme',
     '@propertypro/tokens',
   ],
+  experimental: {
+    // Tree-shake barrel imports from the workspace packages (lucide-react
+    // et al. are already in Next 15.5's built-in default list).
+    optimizePackageImports: ['@propertypro/ui', '@propertypro/shared'],
+  },
   env: {
     NEXT_PUBLIC_APP_ROLE: 'admin',
   },

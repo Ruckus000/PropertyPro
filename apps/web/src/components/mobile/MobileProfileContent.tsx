@@ -41,8 +41,16 @@ function SettingsRow({ icon: Icon, label, href, isLast }: SettingsRowProps) {
   } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-stone-400`;
 
   if (!href) {
+    // A row with no destination is a placeholder, not a dead link. Mark it
+    // `aria-disabled` and give an explanatory title so assistive tech and
+    // pointer users both understand it is intentionally inert (Wave 3 C3
+    // dead-link audit — no href-less "Coming soon" rows without an explanation).
     return (
-      <div className={`${className} opacity-50`}>
+      <div
+        className={`${className} opacity-50`}
+        aria-disabled="true"
+        title={`${label} isn’t available yet — coming soon`}
+      >
         <Icon size={18} className="shrink-0 text-stone-500" strokeWidth={1.8} aria-hidden="true" />
         <span className="flex-1 text-[15px] font-medium text-stone-900">{label}</span>
         <span className="text-[11px] text-stone-400">Coming soon</span>

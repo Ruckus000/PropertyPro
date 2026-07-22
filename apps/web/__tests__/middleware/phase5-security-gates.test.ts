@@ -28,28 +28,27 @@ function createApiRequest(
   });
 }
 
+// createMiddlewareClient resolves the user itself (getClaims) and returns it
+// directly — middleware no longer calls supabase.auth.getUser.
+function mockAuthState(user: { id: string; emailVerified: boolean } | null) {
+  createMiddlewareClientMock.mockImplementation(async () => ({
+    supabase: {
+      auth: {
+        getUser: getUserMock,
+      },
+    },
+    response: NextResponse.next(),
+    user,
+    authChecked: user != null,
+  }));
+}
+
 describe('WS72 middleware rate-limit and spoofing hardening', () => {
   beforeEach(() => {
     resetGlobalRateLimiter();
     vi.clearAllMocks();
 
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'auth-user-1',
-          email_confirmed_at: '2026-01-01T00:00:00.000Z',
-        },
-      },
-    });
-
-    createMiddlewareClientMock.mockImplementation(async () => ({
-      supabase: {
-        auth: {
-          getUser: getUserMock,
-        },
-      },
-      response: NextResponse.next(),
-    }));
+    mockAuthState({ id: 'auth-user-1', emailVerified: true });
   });
 
   afterEach(() => {
@@ -99,9 +98,7 @@ describe('WS72 middleware rate-limit and spoofing hardening', () => {
   });
 
   it('returns 401 for protected Phase 5 APIs when session is absent, even with spoofed x-user-id', async () => {
-    getUserMock.mockResolvedValue({
-      data: { user: null },
-    });
+    mockAuthState(null);
 
     const response = await middleware(
       createApiRequest('/api/v1/ledger', 'GET', {

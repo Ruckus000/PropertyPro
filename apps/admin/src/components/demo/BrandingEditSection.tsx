@@ -159,7 +159,7 @@ export function BrandingEditSection({ demoId, communityId, onSaved }: BrandingEd
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-raised)]"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]"
         >
           <RotateCcw size={12} />
           Reset

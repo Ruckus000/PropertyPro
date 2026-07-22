@@ -1,103 +1,23 @@
+/**
+ * Route unit tests — `GET /api/v1/auth/provisioning-status`.
+ *
+ * The magic-link token is single-use: the first poll after completion issues a
+ * token and atomically stamps login_token_consumed_at; later polls (and any
+ * leaked-signupRequestId replay) see the consumed marker and get no token.
+ * These tests mock the provisioning-service layer the route delegates to.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-  state,
-  provisioningJobsTable,
-  pendingSignupsTable,
-  eqMock,
-  queryCounter,
-  createUnscopedClientMock,
-  createAdminClientMock,
-  generateLinkMock,
-  updateMock,
-  setMock,
-  whereMockUpdate,
-} = vi.hoisted(() => {
-  interface JobRow {
-    id: number;
-    signupRequestId: string;
-    communityId: number;
-    status: string;
-    lastSuccessfulStatus: string | null;
-  }
+const getProvisioningJobBySignupRequestId = vi.fn();
+const getPendingSignupBySignupRequestId = vi.fn();
+const issueSingleUseLoginToken = vi.fn();
 
-  interface SignupRow {
-    email: string;
-    payload: Record<string, unknown> | null;
-    signupRequestId: string;
-  }
-
-  const state = {
-    jobRows: [] as JobRow[],
-    signupRows: [] as SignupRow[],
-  };
-
-  const queryCounter = { count: 0 };
-  const eqMock = vi.fn(() => Symbol('eq_predicate'));
-
-  // Update chain mocks
-  const whereMockUpdate = vi.fn().mockResolvedValue(undefined);
-  const setMock = vi.fn(() => ({ where: whereMockUpdate }));
-  const updateMock = vi.fn(() => ({ set: setMock }));
-
-  // Select chain — returns different data per call index
-  const limitMock = vi.fn(async () => {
-    const callIndex = queryCounter.count++;
-    return callIndex === 0 ? state.jobRows : state.signupRows;
-  });
-  const whereMock = vi.fn(() => ({ limit: limitMock }));
-  const fromMock = vi.fn(() => ({ where: whereMock }));
-  const selectMock = vi.fn(() => ({ from: fromMock }));
-
-  const createUnscopedClientMock = vi.fn(() => ({
-    select: selectMock,
-    update: updateMock,
-  }));
-
-  const generateLinkMock = vi.fn();
-  const createAdminClientMock = vi.fn(() => ({
-    auth: {
-      admin: {
-        generateLink: generateLinkMock,
-      },
-    },
-  }));
-
-  return {
-    state,
-    provisioningJobsTable: Symbol('provisioning_jobs'),
-    pendingSignupsTable: Symbol('pending_signups'),
-    eqMock,
-    queryCounter,
-    createUnscopedClientMock,
-    createAdminClientMock,
-    generateLinkMock,
-    updateMock,
-    setMock,
-    whereMockUpdate,
-  };
-});
-
-vi.mock('@propertypro/db', () => ({
-  provisioningJobs: provisioningJobsTable,
-  pendingSignups: pendingSignupsTable,
-  // The provisioning-service helper used by the route imports createAdminClient
-  // from `@propertypro/db` (re-exported), so we mock it here too. The
-  // `@propertypro/db/supabase/admin` mock below is kept for any direct
-  // consumers that import from the deeper path.
-  createAdminClient: createAdminClientMock,
-}));
-
-vi.mock('@propertypro/db/filters', () => ({
-  eq: eqMock,
-}));
-
-vi.mock('@propertypro/db/unsafe', () => ({
-  createUnscopedClient: createUnscopedClientMock,
-}));
-
-vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminClient: createAdminClientMock,
+vi.mock('@/lib/services/provisioning-service', () => ({
+  getProvisioningJobBySignupRequestId: (...args: unknown[]) =>
+    getProvisioningJobBySignupRequestId(...args),
+  getPendingSignupBySignupRequestId: (...args: unknown[]) =>
+    getPendingSignupBySignupRequestId(...args),
+  issueSingleUseLoginToken: (...args: unknown[]) => issueSingleUseLoginToken(...args),
 }));
 
 import { GET } from '../../src/app/api/v1/auth/provisioning-status/route';
@@ -114,6 +34,7 @@ const BASE_SIGNUP = {
   email: 'newuser@example.com',
   payload: null,
   signupRequestId: 'req-uuid-abc123',
+  loginTokenConsumedAt: null,
 };
 
 const HASHED_TOKEN = 'hashed-token-xyz789';
@@ -125,21 +46,16 @@ function makeRequest(signupRequestId?: string): Request {
   return new Request(url, { method: 'GET' });
 }
 
+async function dataOf(response: Response): Promise<Record<string, unknown>> {
+  const body = (await response.json()) as { data?: Record<string, unknown> };
+  return (body.data ?? {}) as Record<string, unknown>;
+}
+
 describe('provisioning-status route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.jobRows = [];
-    state.signupRows = [];
-    queryCounter.count = 0;
-
-    generateLinkMock.mockResolvedValue({
-      data: {
-        properties: {
-          hashed_token: HASHED_TOKEN,
-        },
-      },
-      error: null,
-    });
+    issueSingleUseLoginToken.mockResolvedValue({ status: 'issued', token: HASHED_TOKEN });
+    getPendingSignupBySignupRequestId.mockResolvedValue({ ...BASE_SIGNUP });
   });
 
   afterEach(() => {
@@ -151,120 +67,91 @@ describe('provisioning-status route', () => {
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error?.code).toBe('VALIDATION_ERROR');
-    expect(body.error?.message).toBe('Invalid query parameters');
   });
 
   it('returns pending when no provisioning job exists yet', async () => {
-    state.jobRows = [];
+    getProvisioningJobBySignupRequestId.mockResolvedValue(null);
 
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.data).toEqual({ status: 'pending', step: 'waiting' });
-    // Should not try to look up signup or generate a link
-    expect(generateLinkMock).not.toHaveBeenCalled();
+    expect(await dataOf(response)).toEqual({ status: 'pending', step: 'waiting' });
+    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
   });
 
   it('returns provisioning with current step when job is in progress', async () => {
-    state.jobRows = [
-      {
-        ...BASE_JOB,
-        status: 'in_progress',
-        lastSuccessfulStatus: 'community_created',
-      },
-    ];
+    getProvisioningJobBySignupRequestId.mockResolvedValue({
+      ...BASE_JOB,
+      status: 'in_progress',
+      lastSuccessfulStatus: 'community_created',
+    });
 
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.data).toEqual({ status: 'provisioning', step: 'community_created' });
-    expect(generateLinkMock).not.toHaveBeenCalled();
+    expect(await dataOf(response)).toEqual({ status: 'provisioning', step: 'community_created' });
+    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
   });
 
   it('returns failed with last successful step on failure', async () => {
-    state.jobRows = [
-      {
-        ...BASE_JOB,
-        status: 'failed',
-        lastSuccessfulStatus: 'community_created',
-      },
-    ];
+    getProvisioningJobBySignupRequestId.mockResolvedValue({
+      ...BASE_JOB,
+      status: 'failed',
+      lastSuccessfulStatus: 'community_created',
+    });
 
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.data).toEqual({ status: 'failed', step: 'community_created' });
-    expect(generateLinkMock).not.toHaveBeenCalled();
+    expect(await dataOf(response)).toEqual({ status: 'failed', step: 'community_created' });
+    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
   });
 
-  it('generates and returns loginToken + communityId on completed', async () => {
-    state.jobRows = [{ ...BASE_JOB, status: 'completed' }];
-    state.signupRows = [{ ...BASE_SIGNUP, payload: null }];
+  it('issues and returns loginToken + communityId on the first completed poll', async () => {
+    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
 
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.data).toEqual({
+    expect(await dataOf(response)).toEqual({
       status: 'completed',
       step: 'completed',
       loginToken: HASHED_TOKEN,
       communityId: 42,
     });
-    expect(generateLinkMock).toHaveBeenCalledWith({
-      type: 'magiclink',
-      email: BASE_SIGNUP.email,
-    });
-    // Should cache the token
-    expect(updateMock).toHaveBeenCalled();
-    expect(setMock).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: expect.objectContaining({ loginToken: HASHED_TOKEN }) }),
-    );
+    expect(issueSingleUseLoginToken).toHaveBeenCalledWith('req-uuid-abc123', BASE_SIGNUP.email);
   });
 
-  it('returns cached loginToken on repeated polls without calling generateLink', async () => {
-    state.jobRows = [{ ...BASE_JOB, status: 'completed' }];
-    state.signupRows = [
-      {
-        ...BASE_SIGNUP,
-        payload: { loginToken: 'cached-token-from-db', someOtherField: true },
-      },
-    ];
+  it('returns consumed (no token) when the token was already consumed (leaked-id replay)', async () => {
+    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
+    getPendingSignupBySignupRequestId.mockResolvedValue({
+      ...BASE_SIGNUP,
+      loginTokenConsumedAt: new Date('2026-05-04T00:00:00Z'),
+    });
 
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.data).toEqual({
-      status: 'completed',
-      step: 'completed',
-      loginToken: 'cached-token-from-db',
-      communityId: 42,
-    });
-    // Must NOT call generateLink when cached token exists
-    expect(generateLinkMock).not.toHaveBeenCalled();
-    // Must NOT update the DB again
-    expect(updateMock).not.toHaveBeenCalled();
+    const data = await dataOf(response);
+    expect(data).toEqual({ status: 'consumed', step: 'completed', communityId: 42 });
+    expect(data).not.toHaveProperty('loginToken');
+    // Must not even attempt to issue a new token.
+    expect(issueSingleUseLoginToken).not.toHaveBeenCalled();
   });
 
-  it('returns 500 when generateLink fails', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    state.jobRows = [{ ...BASE_JOB, status: 'completed' }];
-    state.signupRows = [{ ...BASE_SIGNUP, payload: null }];
+  it('returns consumed (no token) when a concurrent poll wins the atomic claim', async () => {
+    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
+    issueSingleUseLoginToken.mockResolvedValue({ status: 'consumed' });
 
-    generateLinkMock.mockResolvedValue({
-      data: null,
-      error: { message: 'Auth service unavailable' },
-    });
+    const response = await GET(makeRequest('req-uuid-abc123'));
+    expect(response.status).toBe(200);
+    const data = await dataOf(response);
+    expect(data).toEqual({ status: 'consumed', step: 'completed', communityId: 42 });
+    expect(data).not.toHaveProperty('loginToken');
+  });
+
+  it('returns 500 when token issuance fails', async () => {
+    getProvisioningJobBySignupRequestId.mockResolvedValue({ ...BASE_JOB });
+    issueSingleUseLoginToken.mockResolvedValue({ status: 'error' });
 
     const response = await GET(makeRequest('req-uuid-abc123'));
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error?.message).toMatch(/login token/i);
-    // The error log moved into provisioning-service in A3 Phase 2 — the
-    // route delegates magic-link generation to `generateAndCacheLoginToken`,
-    // which logs with the service-level prefix.
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[provisioning-service]'),
-      expect.any(String),
-    );
   });
 });

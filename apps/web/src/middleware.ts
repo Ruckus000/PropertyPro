@@ -47,6 +47,12 @@ import {
   USER_ID_HEADER,
   USER_PHONE_HEADER,
 } from './lib/request/forwarded-headers';
+import { buildCommunityUrl } from './lib/utils/community-url';
+import {
+  isApexHost,
+  parsePathBasedPublicRoute,
+  shouldRewriteHostTransparency,
+} from './lib/middleware/public-host-routes';
 
 /**
  * Routes under (authenticated) that require a valid session.
@@ -58,6 +64,7 @@ import {
  */
 const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
+  '/welcome',
   '/help',
   '/select-community',
   '/settings',
@@ -87,6 +94,16 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/signup', method: 'POST' },
   { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
   { path: '/api/v1/internal/calendar-event-reminders', method: 'POST' },
+  // Snowbird digest cron: Bearer-token-authenticated, called by the scheduled job
+  { path: '/api/v1/internal/snowbird-digest', method: 'POST' },
+  // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
+  { path: '/api/v1/snowbird-digest/unsubscribe', method: 'GET' },
+  // Insurance alerts cron: Bearer-token-authenticated, called by the scheduled job
+  { path: '/api/v1/internal/insurance-alerts', method: 'POST' },
+  // Insurance alerts unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM);
+  // GET backs the human-clicked link, POST is the RFC 8058 one-click target.
+  { path: '/api/v1/insurance-alerts/unsubscribe', method: 'GET' },
+  { path: '/api/v1/insurance-alerts/unsubscribe', method: 'POST' },
   // Stripe webhook: signature-verified by handler, no session required [P2-34]
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
@@ -150,6 +167,27 @@ function shouldResolveTenant(pathname: string): boolean {
 
 function isApiPath(pathname: string): boolean {
   return pathname.startsWith(API_PATH_PREFIX);
+}
+
+export function shouldHideDevSurfaceInProduction(
+  pathname: string,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+  pdfjsTestEnabled: string | undefined = process.env.PDFJS_TEST_ENABLED,
+): boolean {
+  if (nodeEnv !== 'production') {
+    return false;
+  }
+
+  if (pathname === '/pdfjs-test' || pathname.startsWith('/pdfjs-test/')) {
+    return pdfjsTestEnabled !== '1';
+  }
+
+  return (
+    pathname === '/dev/site-preview' ||
+    pathname === '/dev/reset-onboarding' ||
+    pathname === '/dev/login' ||
+    pathname.startsWith('/dev/login/')
+  );
 }
 
 function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
@@ -385,6 +423,16 @@ function stampForwardedUserHeaders(
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
+  if (shouldHideDevSurfaceInProduction(pathname)) {
+    return NextResponse.rewrite(new URL('/404', request.url));
+  }
+
+  const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com';
+  const pathPublic = parsePathBasedPublicRoute(pathname);
+  if (pathPublic && isApexHost(request.headers.get('host'), rootDomain)) {
+    return NextResponse.redirect(buildCommunityUrl(pathPublic.slug, pathPublic.path), 308);
+  }
+
   const origin = request.headers.get('origin');
   const isApi = isApiPath(pathname);
   const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
@@ -422,6 +470,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   // Refresh Supabase session (reads + writes cookies)
+  const authStartedAt = performance.now();
   const {
     supabase,
     response,
@@ -430,6 +479,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   } = await createMiddlewareClient(
     request as unknown as Parameters<typeof createMiddlewareClient>[0],
   );
+  if (process.env.MIDDLEWARE_TIMING === '1') {
+    console.log(
+      `[mw-auth] ${(performance.now() - authStartedAt).toFixed(1)}ms authChecked=${authChecked} ${pathname}`,
+    );
+  }
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
   const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
 
@@ -509,15 +563,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Only enforce auth checks on protected paths
   if (isProtectedPath(pathname)) {
     const isTokenAuthRoute = isTokenAuthenticatedApiRoute(request);
-    const user = authChecked === undefined
-      ? (
-          middlewareUser ??
-          (
-            await supabase.auth.getUser()
-          ).data.user ??
-          null
-        )
-      : middlewareUser;
+    const user = middlewareUser;
 
     stampForwardedUserHeaders(forwardedHeaders, user);
 
@@ -561,7 +607,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (user && !isTokenAuthRoute && !user.email_confirmed_at && pathname !== VERIFY_EMAIL_PATH) {
+    if (user && !isTokenAuthRoute && !user.emailVerified && pathname !== VERIFY_EMAIL_PATH) {
       if (isApiPath(pathname)) {
         return finaliseResponse(
           response as unknown as NextResponse,
@@ -706,15 +752,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       }
 
       // Check auth: authenticated users go to dashboard, unauthenticated see public site
-      const publicSiteUser = authChecked === undefined
-        ? (
-            middlewareUser ??
-            (
-              await supabase.auth.getUser()
-            ).data.user ??
-            null
-          )
-        : middlewareUser;
+      const publicSiteUser = middlewareUser;
 
       if (publicSiteUser && !isPreviewRequest) {
         const dashboardUrl = request.nextUrl.clone();
@@ -743,6 +781,54 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finaliseResponse(
         response as unknown as NextResponse,
         publicSiteResponse,
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
+    }
+  }
+
+  // --- Host-native public transparency [Wave 2] ---
+  // When a community subdomain requests '/transparency', rewrite to the
+  // internal public-transparency renderer with tenant headers injected.
+  if (shouldRewriteHostTransparency(pathname)) {
+    const tenantContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+      rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
+    });
+
+    const hasCommunityContext =
+      tenantContext.source !== 'none' &&
+      tenantContext.source !== 'custom_domain' &&
+      !tenantContext.isReservedSubdomain;
+
+    if (hasCommunityContext) {
+      if (tenantContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+      } else if (tenantContext.tenantSlug) {
+        forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
+        try {
+          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
+          }
+        } catch {
+          // Non-fatal — public-transparency resolves slug server-side when RLS blocks anon lookup
+        }
+      }
+
+      const transparencyUrl = request.nextUrl.clone();
+      transparencyUrl.pathname = '/public-transparency';
+      const transparencyResponse = NextResponse.rewrite(transparencyUrl, {
+        request: { headers: forwardedHeaders },
+      });
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        transparencyResponse,
         requestId,
         origin,
         isApi,
@@ -793,18 +879,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     pathname !== VERIFY_EMAIL_PATH &&
     pathname !== RESET_PASSWORD_PATH
   ) {
-    const user = authChecked === undefined
-      ? (
-          middlewareUser ??
-          (
-            await supabase.auth.getUser()
-          ).data.user ??
-          null
-        )
-      : middlewareUser;
+    const user = middlewareUser;
 
     if (user) {
-      if (!user.email_confirmed_at) {
+      if (!user.emailVerified) {
         const verifyUrl = request.nextUrl.clone();
         verifyUrl.pathname = VERIFY_EMAIL_PATH;
         const returnTo = request.nextUrl.searchParams.get('returnTo');

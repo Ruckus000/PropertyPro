@@ -1,9 +1,13 @@
 import React from 'react';
 
+// ring colors reference the marketing palette custom properties directly
+// (marketing-theme.css is frozen / out of drain scope) rather than raw hex —
+// var(--mk-teal) / var(--mk-gold) match the same accent colors used by the
+// mk-tl-teal / mk-tl-gold "traffic light" dots elsewhere in this component.
 const COMMUNITIES = [
-  { name: 'Sunset Condos', score: 92, ring: '#2f8f83' },
-  { name: 'Palm Shores HOA', score: 88, ring: '#2f8f83' },
-  { name: 'Bayfront Towers', score: 74, ring: '#e3a93c' },
+  { name: 'Sunset Condos', score: 92, ring: 'var(--mk-teal)' },
+  { name: 'Palm Shores HOA', score: 88, ring: 'var(--mk-teal)' },
+  { name: 'Bayfront Towers', score: 74, ring: 'var(--mk-gold)' },
 ];
 
 /**
@@ -37,7 +41,8 @@ export function PortfolioCard() {
             <span
               className="mk-mini-ring"
               style={{
-                background: `conic-gradient(${c.ring} 0 ${c.score}%, #ece1d4 ${c.score}% 100%)`,
+                // track color is the marketing palette's --mk-line (frozen CSS var)
+                background: `conic-gradient(${c.ring} 0 ${c.score}%, var(--mk-line) ${c.score}% 100%)`,
               }}
             >
               <span className="mk-mini-dot">{c.score}</span>

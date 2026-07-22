@@ -178,7 +178,7 @@ export function IdentityEditor({
         <HeroImageField communityId={communityId} fallbackHeadline={heroFallbackHeadline} />
       </div>
 
-      <p className="mt-4 rounded-md border border-default bg-surface-muted/40 p-3 text-xs text-content-secondary">
+      <p className="mt-4 rounded-md border border-default bg-surface-subtle p-3 text-xs text-content-secondary">
         <strong className="font-medium text-content">Logo:</strong> coming next. It rides on the
         branding upload flow and lands in a follow-up update.
       </p>

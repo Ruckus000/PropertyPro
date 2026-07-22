@@ -14,9 +14,9 @@
  */
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Loader2,
   ShieldCheck,
   UserCog,
   Users,
@@ -34,6 +34,7 @@ import {
   useRevokePropertyManager,
   useTransferRoot,
   useSetDesignation,
+  ADMIN_LIMIT_REACHED,
   type RosterMember,
   type BoardDesignation,
 } from '@/hooks/use-role-management';
@@ -294,6 +295,7 @@ function RootSection({
               type="button"
               variant="destructive"
               disabled={!canConfirm}
+              loading={transfer.isPending}
               onClick={() =>
                 transfer.mutate(
                   { toUserId: selectedUserId },
@@ -310,9 +312,6 @@ function RootSection({
               }
               data-testid="transfer-root-confirm"
             >
-              {transfer.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-              )}
               Transfer root
             </Button>
             <Button type="button" variant="ghost" onClick={reset}>
@@ -402,13 +401,10 @@ function PropertyManagersSection({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={revoke.isPending && pendingRevokeId === pm.userId}
+                    loading={revoke.isPending && pendingRevokeId === pm.userId}
                     onClick={() => setConfirmingId(pm.userId)}
                     data-testid={`pm-revoke-${pm.userId}`}
                   >
-                    {revoke.isPending && pendingRevokeId === pm.userId && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                    )}
                     Revoke
                   </Button>
                 )}
@@ -472,21 +468,54 @@ function MembersSection({
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={assign.isPending && pendingId === member.userId}
+                loading={assign.isPending && pendingId === member.userId}
                 onClick={() => {
                   setPendingId(member.userId);
                   assign.mutate({ userId: member.userId });
                 }}
                 data-testid={`member-promote-${member.userId}`}
               >
-                {assign.isPending && pendingId === member.userId && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                )}
                 Promote to property manager
               </Button>
             </li>
           ))}
         </ul>
+      )}
+
+      {assign.isError && (
+        <div className="mt-4">
+          {assign.error?.code === ADMIN_LIMIT_REACHED ? (
+            // Plan admin cap hit — this is a billing decision, not a failure.
+            // Offer the upgrade path (or remove-an-admin) rather than a red error.
+            <AlertBanner
+              status="warning"
+              variant="subtle"
+              title={
+                assign.error.maxAdmins
+                  ? `Your plan includes up to ${assign.error.maxAdmins} administrators`
+                  : 'Administrator limit reached'
+              }
+              description="Remove a property manager above, or upgrade your plan to add another administrator."
+              action={
+                <Link
+                  href={`/settings/billing?communityId=${communityId}`}
+                  className="text-sm font-medium text-content-link underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  data-testid="admin-limit-upgrade-link"
+                >
+                  View billing &amp; upgrade
+                </Link>
+              }
+              data-testid="admin-limit-banner"
+            />
+          ) : (
+            <AlertBanner
+              status="danger"
+              variant="subtle"
+              title="We couldn’t promote that member. Please try again."
+              description={assign.error?.message ?? undefined}
+            />
+          )}
+        </div>
       )}
     </Section>
   );
@@ -653,13 +682,11 @@ function BoardSection({
                       type="button"
                       variant="destructive"
                       size="sm"
-                      disabled={!ackChecked || setDesignation.isPending}
+                      disabled={!ackChecked}
+                      loading={setDesignation.isPending}
                       onClick={() => submit(member.userId, ackDesignation, true)}
                       data-testid={`board-ack-submit-${member.userId}`}
                     >
-                      {setDesignation.isPending && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-                      )}
                       Confirm designation
                     </Button>
                   </div>

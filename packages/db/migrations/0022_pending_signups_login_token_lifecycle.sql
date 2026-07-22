@@ -1,0 +1,2 @@
+ALTER TABLE "pending_signups" ADD COLUMN "login_token_issued_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "pending_signups" ADD COLUMN "login_token_consumed_at" timestamp with time zone;

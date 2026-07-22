@@ -48,6 +48,9 @@ load-test-summary*.json
 .claire/
 .cursor/
 .kiro/
+.codex/
+.codex-*/
+.knee/
 .claude/patches/
 .claude/plans/
 # Ignore skill contents (not the dir itself) so the one committed project

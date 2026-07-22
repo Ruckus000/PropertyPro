@@ -47,9 +47,11 @@ interface BrandingInfo {
 }
 
 const DEFAULT_BRANDING: BrandingInfo = {
-  primaryColor: '#2563EB',
+  // "Florida Modern" coral default — matches packages/theme THEME_DEFAULTS so an
+  // unbranded demo community previews with the platform brand, not tech-blue.
+  primaryColor: '#C2533A',
   secondaryColor: '#6B7280',
-  accentColor: '#DBEAFE',
+  accentColor: '#F7DCD2',
   fontHeading: 'Inter',
   fontBody: 'Inter',
   communityName: 'Community',
@@ -211,7 +213,7 @@ export function DemoEditDrawer({
           onDoubleClick={() => setDrawerWidth(DEFAULT_DRAWER_WIDTH)}
           className="absolute left-0 top-0 h-full w-2 -translate-x-1 cursor-col-resize"
         >
-          <div className="ml-auto h-full w-px bg-transparent transition-colors hover:bg-blue-300" />
+          <div className="ml-auto h-full w-px bg-transparent transition-colors hover:bg-coral-300" />
         </div>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
@@ -236,7 +238,7 @@ export function DemoEditDrawer({
               onClick={() => setActiveTab('branding')}
               className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'branding'
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-coral-600 text-coral-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
@@ -247,7 +249,7 @@ export function DemoEditDrawer({
               onClick={() => setActiveTab('info')}
               className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'info'
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-coral-600 text-coral-700'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >

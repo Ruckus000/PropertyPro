@@ -11,7 +11,7 @@ interface Props {
 }
 
 const inputClass =
-  'mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40';
+  'mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive';
 
 export function FaqBlockForm({ communityId, blockOrder, initial, onSaved }: Props) {
   const [heading, setHeading] = useState(initial?.heading ?? '');

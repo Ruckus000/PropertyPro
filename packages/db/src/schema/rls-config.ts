@@ -75,6 +75,37 @@ export const RLS_TENANT_TABLES = [
     notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
   },
   {
+    tableName: 'snowbird_digest_subscriptions',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'Self-service digest cadence/opt-out. A user reads and mutates only their own row (auth.uid()); admin-tier sees all for support. The cron reads cross-tenant via the privileged client.',
+  },
+  {
+    tableName: 'insurance_policies',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Per-community master-policy summary. SELECT open to community members (owners retrieve it for lender verification); the insurance:read RBAC gate excludes tenants at the route layer. Writes are admin-tier via requirePermission(insurance, write).',
+  },
+  {
+    tableName: 'insurance_certificate_requests',
+    policyFamily: 'tenant_user_scoped',
+    notes: 'Owner-submitted certificate-request relays. SELECT/UPDATE/DELETE scoped to requested_by = auth.uid() for non-admins; admin-tier sees all. INSERT is community-membership-scoped so owners can create; the route gates on insurance:read + rate-limits.',
+  },
+  {
+    tableName: 'storm_damage_reports',
+    policyFamily: 'tenant_user_scoped',
+    notes:
+      'Post-storm damage intake. Residents file reports about their unit/common areas; a resident reads and mutates only their own rows (reported_by = auth.uid()), admin-tier sees all and updates status. INSERT is community-membership-scoped (pp_tenant_insert) so residents can create. Same posture as insurance_certificate_requests / maintenance_requests. Route gates on storm_damage:read/write + hasStormTools; it is a damage record, NOT an insurance claim (§626.854).',
+  },
+  {
+    tableName: 'wind_mitigation_reports',
+    policyFamily: 'tenant_admin_write',
+    notes: 'Building-level wind-mitigation inspection records. SELECT open to all community members (owners retrieve the report for their own insurer); writes restricted to ADMIN_ROLES via requirePermission(insurance, write) in the wind-mitigation route.',
+  },
+  {
+    tableName: 'reserve_assets',
+    policyFamily: 'tenant_admin_write',
+    notes: "Major physical-asset register (reserve transparency, ships dark behind hasReserveTransparency). SELECT open to all community members (owners see the transparent register + remaining-useful-life countdown); writes restricted to admin-tier via requirePermission(reserve_assets, write) in the reserve-assets route. Factual data only — not a reserve study or adequacy assessment.",
+  },
+  {
     tableName: 'contracts',
     policyFamily: 'tenant_admin_write',
     notes: 'Writes restricted to ADMIN_ROLES (board_member/board_president/cam/site_manager/property_manager_admin) via requireAdminRole in contracts route.',
@@ -254,6 +285,18 @@ export const RLS_TENANT_TABLES = [
   },
   { tableName: 'support_consent_grants', policyFamily: 'service_only' },
   { tableName: 'support_access_log', policyFamily: 'audit_log_restricted' },
+  {
+    tableName: 'access_requests',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Self-service resident signup with OTP verification. RLS hardened in 0021 to use pp_rls_can_access_community(community_id) and the canonical pp_rls_enforce_tenant_scope trigger; the baseline policies referenced the wrong GUC (app.community_id) and never installed a write-scope trigger.',
+  },
+  {
+    tableName: 'community_join_requests',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Self-service community linking: users submit a request to join a community, admins approve/deny. RLS hardened in 0021 (same GUC + missing-trigger drift fix as access_requests).',
+  },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -284,7 +327,7 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // and would never catch accidental additions or removals — it would be comparing
 // the array to itself. The hardcoded constant forces a human to consciously
 // acknowledge the change, which is the entire point of the guard.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 52;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 60;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

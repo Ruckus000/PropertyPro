@@ -103,7 +103,7 @@ const RESIDENT_MEMBERSHIP = {
 };
 
 // "Other" role: synthetic / pathological — not admin AND not resident.
-// Real `NEW_COMMUNITY_ROLES` is ['resident', 'manager', 'pm_admin'] so this
+// Real `COMMUNITY_ROLES` is ['resident', 'manager', 'pm_admin'] so this
 // state can only arise from a misconfigured membership (e.g. pm_admin with
 // isAdmin=false). The handler's else branch must still throw.
 const OTHER_MEMBERSHIP = {

@@ -129,7 +129,7 @@ describe('Sentry client instrumentation', () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', 'https://public@sentry.io/456');
 
     vi.resetModules();
-    const module = await import('../../src/instrumentation-client');
+    const mod = await import('../../src/instrumentation-client');
     await flushMicrotasks();
 
     expect(mockInit).toHaveBeenCalledOnce();
@@ -137,7 +137,7 @@ describe('Sentry client instrumentation', () => {
     expect(config['dsn']).toBe('https://public@sentry.io/456');
     expect(config['enabled']).toBe(true);
 
-    module.onRouterTransitionStart('/dashboard' as never);
+    mod.onRouterTransitionStart('/dashboard' as never);
     await flushMicrotasks();
     expect(mockCaptureRouterTransitionStart).toHaveBeenCalledOnce();
   });
@@ -146,11 +146,11 @@ describe('Sentry client instrumentation', () => {
     vi.stubEnv('NEXT_PUBLIC_SENTRY_DSN', '');
 
     vi.resetModules();
-    const module = await import('../../src/instrumentation-client');
+    const mod = await import('../../src/instrumentation-client');
 
     expect(mockInit).not.toHaveBeenCalled();
 
-    module.onRouterTransitionStart('/dashboard' as never);
+    mod.onRouterTransitionStart('/dashboard' as never);
     await flushMicrotasks();
     expect(mockCaptureRouterTransitionStart).not.toHaveBeenCalled();
   });
@@ -163,7 +163,7 @@ describe('Sentry client instrumentation', () => {
     });
 
     vi.resetModules();
-    const module = await import('../../src/instrumentation-client');
+    const mod = await import('../../src/instrumentation-client');
     await flushMicrotasks();
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -171,7 +171,7 @@ describe('Sentry client instrumentation', () => {
       expect.any(Error),
     );
 
-    module.onRouterTransitionStart('/dashboard' as never);
+    mod.onRouterTransitionStart('/dashboard' as never);
     await flushMicrotasks();
     expect(mockCaptureRouterTransitionStart).toHaveBeenCalledOnce();
 

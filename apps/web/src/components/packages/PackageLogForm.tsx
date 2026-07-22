@@ -95,7 +95,7 @@ export function PackageLogForm({
               <p
                 className="text-xs"
                 role="alert"
-                style={{ color: 'var(--text-danger)' }}
+                style={{ color: 'var(--status-danger)' }}
               >
                 {createPackage.error instanceof Error
                   ? createPackage.error.message

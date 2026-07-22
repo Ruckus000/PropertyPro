@@ -1,50 +1,11 @@
 "use client";
 
-import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { semanticMotion } from "@propertypro/ui/tokens";
 import type { ReactNode } from "react";
 
-// ── Shared token-driven values ──────────────────────
-
-const orientation = {
-  duration: semanticMotion.orientation.duration / 1000,
-  ease: [0, 0, 0.2, 1] as const, // enter easing
-};
-
-const feedback = {
-  duration: semanticMotion.feedback.duration / 1000,
-  ease: [0.4, 0, 0.2, 1] as const, // standard easing
-};
-
-// ── FadeIn ──────────────────────────────────────────
-
-const fadeInVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
-};
-
-export function FadeIn({
-  children,
-  className,
-  delay = 0,
-}: {
-  children: ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  const reduced = useReducedMotion();
-  return (
-    <motion.div
-      variants={fadeInVariants}
-      initial="hidden"
-      animate="visible"
-      transition={reduced ? { duration: 0 } : { ...orientation, delay }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  );
-}
+// All wrappers here are CSS-driven — no framer-motion. Mount animations use
+// CSS @keyframes so they complete even in hidden tabs (rAF throttling froze
+// the old Framer variants), and press feedback is a CSS transform gated on
+// motion-safe so prefers-reduced-motion users get none.
 
 // ── SlideUp — CSS-driven for hidden-tab resilience ──
 
@@ -109,24 +70,16 @@ export function PressScale({
   children: ReactNode;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
   return (
-    <motion.div
-      whileTap={reduced ? undefined : { scale: 0.97 }}
-      transition={feedback}
-      className={className}
+    <div
+      className={`motion-safe:active:scale-[0.97] motion-safe:transition-transform motion-safe:duration-quick ${className ?? ""}`}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
-// ── PageTransition — CSS-driven mount, Framer exit ──
-//
-// Mount animations use CSS @keyframes so they complete even when
-// the browser tab is hidden (JS rAF is throttled in hidden tabs,
-// which causes Framer Motion mount animations to freeze).
-// Exit animations still use Framer Motion via AnimatePresence.
+// ── PageTransition — CSS-driven mount ──
 
 export function PageTransition({
   children,

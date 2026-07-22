@@ -102,7 +102,7 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-600 mr-2" />
+        <Loader2 className="h-5 w-5 animate-spin text-coral-700 mr-2" />
         <span className="text-sm text-gray-500">Loading…</span>
       </div>
     );
@@ -119,7 +119,7 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
           value={form.prospect_name}
           onChange={(e) => handleChange('prospect_name', e.target.value)}
           placeholder="e.g. Sunset Condos HOA"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
@@ -133,7 +133,7 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
           value={form.external_crm_url}
           onChange={(e) => handleChange('external_crm_url', e.target.value)}
           placeholder="https://crm.example.com/deal/123"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
@@ -147,7 +147,7 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
           onChange={(e) => handleChange('prospect_notes', e.target.value)}
           placeholder="Add any notes about this prospect…"
           rows={4}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500 resize-none"
         />
       </div>
 
@@ -159,7 +159,7 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
         type="button"
         onClick={() => { void handleSave(); }}
         disabled={saveState === 'saving'}
-        className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        className="flex items-center gap-2 rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
         {saveState === 'saving' ? (
           <>

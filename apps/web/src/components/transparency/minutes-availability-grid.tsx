@@ -1,6 +1,6 @@
 'use client';
 
-import { Card } from '@propertypro/ui';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { TransparencyMinutesMonth } from '@/lib/services/transparency-service';
 
 interface Props {
@@ -35,13 +35,13 @@ function statusText(status: TransparencyMinutesMonth['status']): string {
 export function MinutesAvailabilityGrid({ months, monthsWithMinutes }: Props) {
   return (
     <Card className="border-edge bg-surface-card">
-      <Card.Header>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <div className="flex flex-col">
-          <Card.Title>Minutes Availability</Card.Title>
-          <Card.Subtitle>Rolling 12-month view</Card.Subtitle>
+          <CardTitle>Minutes Availability</CardTitle>
+          <CardDescription>Rolling 12-month view</CardDescription>
         </div>
-      </Card.Header>
-      <Card.Body>
+      </CardHeader>
+      <CardContent>
         <p className="mb-4 text-sm text-content-secondary">
           {monthsWithMinutes} of {months.length} months have posted minutes.
         </p>
@@ -55,7 +55,7 @@ export function MinutesAvailabilityGrid({ months, monthsWithMinutes }: Props) {
             </div>
           ))}
         </div>
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

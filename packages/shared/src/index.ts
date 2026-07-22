@@ -1,12 +1,16 @@
 /**
  * Shared types and constants for PropertyPro Florida
  *
- * Role model follows ADR-001 canonical role decisions:
- * - COMMUNITY_ROLES: 7 domain roles stored in community-scoped user_roles table
- * - platform_admin is system-scoped (not in user_roles)
- * - auditor deferred to v2 pending approved use case + policy matrix
- * - One active canonical role per (user_id, community_id)
- * - Board-over-owner precedence when both apply
+ * Role model (v3 / ADR-006):
+ * - COMMUNITY_ROLES: the 3 community-scoped roles stored in `user_roles`
+ *   (`resident` / `property_manager` / `root_manager`). `resident.isUnitOwner`
+ *   distinguishes owner vs. tenant; board status is an orthogonal `designation`.
+ * - platform_admin is system-scoped (not in user_roles).
+ * - One active role per (user_id, community_id); ≤1 root_manager per community.
+ *
+ * The legacy 7-role vocabulary (owner/tenant/board_member/board_president/cam/
+ * site_manager/property_manager_admin) was retired in the role-v3 collapse; this
+ * type now speaks the single v3 vocabulary end-to-end.
  */
 
 export const COMMUNITY_TYPES = ["condo_718", "hoa_720", "apartment"] as const;
@@ -20,45 +24,17 @@ export const COMMUNITY_TYPE_DISPLAY_NAMES: Record<CommunityType, string> = {
 };
 
 /**
- * Canonical community-scoped roles per ADR-001.
- * Note: platform_admin is system-scoped (not in user_roles); auditor deferred to v2.
+ * Community-scoped roles (v3 / ADR-006). The single role vocabulary:
+ * `resident` (owner vs. tenant via `isUnitOwner`), `property_manager`, and
+ * `root_manager` (≤1 per community). Board status is an orthogonal `designation`,
+ * never a role. platform_admin is system-scoped (not in user_roles).
  */
 export const COMMUNITY_ROLES = [
-  "owner",
-  "tenant",
-  "board_member",
-  "board_president",
-  "cam",
-  "site_manager",
-  "property_manager_admin",
+  "resident",
+  "property_manager",
+  "root_manager",
 ] as const;
 export type CommunityRole = (typeof COMMUNITY_ROLES)[number];
-
-/** @deprecated Use COMMUNITY_ROLES instead. Kept for migration compatibility. */
-export const USER_ROLES = COMMUNITY_ROLES;
-/** @deprecated Use CommunityRole instead. Kept for migration compatibility. */
-export type UserRole = CommunityRole;
-
-/**
- * Community-type role constraints per ADR-001.
- */
-export const ROLE_COMMUNITY_CONSTRAINTS: Record<CommunityType, readonly CommunityRole[]> = {
-  condo_718: ["owner", "tenant", "board_member", "board_president", "cam", "property_manager_admin"],
-  hoa_720: ["owner", "tenant", "board_member", "board_president", "cam", "property_manager_admin"],
-  apartment: ["tenant", "site_manager", "property_manager_admin"],
-} as const;
-
-/**
- * Derived permission profiles mapped from canonical roles per ADR-001.
- * These are derived mappings, not canonical roles.
- */
-export const PERMISSION_PROFILE_MAP = {
-  portfolio_admin: ["property_manager_admin"],
-  community_admin: ["board_president", "cam", "site_manager"],
-  community_editor: ["board_member"],
-  resident_owner: ["owner"],
-  resident_tenant: ["tenant"],
-} as const;
 
 /**
  * Convert a full name to initials (e.g., "John Doe" → "JD").
@@ -93,13 +69,6 @@ export * from './manager-permissions';
 export * from './default-faqs';
 export * from './role-transition';
 
-// v3 simplified-role model types
-export const NEW_COMMUNITY_ROLES = ['resident', 'property_manager', 'root_manager'] as const;
-export type NewCommunityRole = (typeof NEW_COMMUNITY_ROLES)[number];
-
-/** Any community role — legacy 7-role vocabulary or v3 role. */
-export type AnyCommunityRole = CommunityRole | NewCommunityRole;
-
 // PR #1a — Property Landing Page block schemas (Zod-based)
 // The old flat file at './site-blocks.ts' still exports validateBlockContent
 // and getDefaultBlockContent; those are no longer publicly exported here.
@@ -107,6 +76,7 @@ export type AnyCommunityRole = CommunityRole | NewCommunityRole;
 export {
   BLOCK_TYPES,
   blockTypeSchema,
+  TOMBSTONE_BLOCK_TYPE,
   blockSchemaRegistry,
   heroBlockSchema,
   textBlockSchema,
@@ -157,5 +127,8 @@ export * from './constants/subscription-statuses';
 export * from './constants/cancellation-reasons';
 export * from './auth/password-policy';
 export * from './billing/permissions';
+export * from './billing/signup-trial';
+export * from './billing/paid-grace';
+export * from './billing/format-billing-date';
 export * from './site/custom-domain';
 export * from './site/portfolio-template-branding';

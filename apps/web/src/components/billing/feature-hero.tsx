@@ -19,10 +19,17 @@ const ASSET_MAP: Partial<Record<keyof CommunityFeatures, { src: string; alt: str
 export function FeatureHero({ featureKey, variant }: FeatureHeroProps) {
   const asset = featureKey ? ASSET_MAP[featureKey] : null;
 
+  // Gradient stops reference primitives directly (packages/ui/src/styles/tokens.css)
+  // rather than semantic tokens: this decorative hero gradient is intentionally
+  // fixed-blue-to-violet regardless of community theming. #6366F1 (indigo-500)
+  // has no primitive in this palette (no indigo family) — --violet-600 is used
+  // for the middle stop so it stays visually distinct from the --violet-500 end
+  // stop (the numerically-closest primitive, --violet-500 itself, would collapse
+  // the last third of the gradient into a flat, non-blended color).
   const containerClass =
     variant === 'screen'
-      ? 'relative flex h-56 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-[#3B82F6] via-[#6366F1] to-[#8B5CF6] sm:h-72'
-      : 'relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br from-[#3B82F6] via-[#6366F1] to-[#8B5CF6]';
+      ? 'relative flex h-56 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-[var(--blue-500)] via-[var(--violet-600)] to-[var(--violet-500)] sm:h-72'
+      : 'relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br from-[var(--blue-500)] via-[var(--violet-600)] to-[var(--violet-500)]';
 
   if (asset) {
     return (

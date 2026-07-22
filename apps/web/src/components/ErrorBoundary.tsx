@@ -67,7 +67,7 @@ export class ErrorBoundary extends React.Component<
           }}
         >
           <h2 style={{ marginBottom: '1rem' }}>Something went wrong</h2>
-          <p style={{ color: '#666', marginBottom: '1.5rem' }}>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
             An unexpected error occurred. Please try again.
           </p>
           <button
@@ -76,8 +76,8 @@ export class ErrorBoundary extends React.Component<
             style={{
               padding: '0.5rem 1.5rem',
               borderRadius: '0.375rem',
-              border: '1px solid #d1d5db',
-              backgroundColor: '#fff',
+              border: '1px solid var(--border-strong)',
+              backgroundColor: 'var(--surface-card)',
               cursor: 'pointer',
               fontSize: '0.875rem',
             }}

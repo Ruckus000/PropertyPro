@@ -1,21 +1,19 @@
 /**
- * Role Validator — enforces community-type role constraints
- * and unit assignment policy for the hybrid 4-role model.
+ * Role Validator — v3 role-assignment policy (ADR-006).
  *
- * New role model:
- *   resident (owner/tenant distinguished by is_unit_owner): unit_id REQUIRED
- *   manager: unit_id OPTIONAL
- *   pm_admin: unit_id OPTIONAL
+ * Role model (community-scoped, from `user_roles`):
+ *   resident (owner/tenant via is_unit_owner): unit_id REQUIRED
+ *   property_manager / root_manager: unit_id OPTIONAL
  *
- * Legacy validator kept for backward compatibility during migration.
+ * All three v3 roles are valid in every community type — the owner/tenant
+ * distinction is the isUnitOwner flag, and the management tiers are
+ * community-agnostic.
  */
 import {
   ADMIN_TIER_DB_ROLES,
-  ROLE_COMMUNITY_CONSTRAINTS,
-  TRANSITION_ROLES,
-  type CommunityRole,
+  COMMUNITY_ROLES,
   type CommunityType,
-  type TransitionRole,
+  type CommunityRole,
 } from '@propertypro/shared';
 
 /**
@@ -31,15 +29,9 @@ export function isResidentTierRole(role: string): boolean {
   return !MANAGER_TIER_ROLES.has(role);
 }
 
-/** Roles that require a unit assignment (new model). */
-const UNIT_REQUIRED_ROLES_V2: ReadonlySet<TransitionRole> = new Set([
-  'resident',
-]);
-
-/** Legacy roles that require a unit assignment. */
+/** Roles that require a unit assignment. */
 const UNIT_REQUIRED_ROLES: ReadonlySet<CommunityRole> = new Set([
-  'owner',
-  'tenant',
+  'resident',
 ]);
 
 export interface RoleValidationResult {
@@ -48,39 +40,32 @@ export interface RoleValidationResult {
 }
 
 /**
- * Check whether a role is allowed for the given community type.
- * Accepts both old CommunityRole and v2/v3 TransitionRole.
+ * Check whether a role is allowed for the given community type. All v3 roles are
+ * allowed in every community type; `communityType` is retained for API stability
+ * and any future per-type constraint.
  */
 export function isRoleAllowedForCommunityType(
-  role: CommunityRole | TransitionRole,
-  communityType: CommunityType,
+  role: CommunityRole,
+  _communityType: CommunityType,
 ): boolean {
-  // New roles (v2 + v3 transition window) are allowed in all community types
-  if ((TRANSITION_ROLES as readonly string[]).includes(role)) {
-    return true;
-  }
-  // Legacy role: check constraints
-  const allowed = ROLE_COMMUNITY_CONSTRAINTS[communityType];
-  return allowed.includes(role as CommunityRole);
+  return (COMMUNITY_ROLES as readonly string[]).includes(role);
 }
 
 /**
  * Check whether unit_id is required for the given role.
  */
-export function isUnitRequiredForRole(role: CommunityRole | TransitionRole): boolean {
-  if (UNIT_REQUIRED_ROLES_V2.has(role as TransitionRole)) return true;
-  return UNIT_REQUIRED_ROLES.has(role as CommunityRole);
+export function isUnitRequiredForRole(role: CommunityRole): boolean {
+  return UNIT_REQUIRED_ROLES.has(role);
 }
 
 /**
- * Validate a role assignment against constraints.
- * Accepts both old CommunityRole and v2/v3 TransitionRole.
+ * Validate a v3 role assignment against unit-assignment policy.
  *
  * Returns { valid: true } if the assignment is valid, or
  * { valid: false, error: "..." } describing the violation.
  */
 export function validateRoleAssignment(
-  role: CommunityRole | TransitionRole,
+  role: CommunityRole,
   communityType: CommunityType,
   unitId: number | null | undefined,
 ): RoleValidationResult {

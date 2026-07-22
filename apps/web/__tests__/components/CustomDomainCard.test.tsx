@@ -21,6 +21,13 @@ vi.mock('@/hooks/use-custom-domain', () => ({
   useSetDomain: () => setState,
   useVerifyDomain: () => verifyState,
   useRemoveDomain: () => removeState,
+  // Consumed by the DomainFinder rendered inside the card's empty state.
+  useCheckDomainAvailability: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+    data: undefined,
+  }),
 }));
 
 const EMPTY: DomainState = {
@@ -64,6 +71,28 @@ describe('<CustomDomainCard>', () => {
     expect(screen.getByTestId('custom-domain-empty')).toBeInTheDocument();
     expect(screen.getByLabelText(/custom domain/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add domain/i })).toBeInTheDocument();
+  });
+
+  it('renders the DomainFinder disclosure ONLY in the empty state', () => {
+    queryData = EMPTY;
+    const { unmount } = renderCard();
+    expect(screen.getByTestId('domain-finder')).toBeInTheDocument();
+    unmount();
+
+    queryData = {
+      domain: 'www.example.com',
+      status: 'pending',
+      verifiedAt: null,
+      records: [],
+      reason: null,
+    };
+    renderCard();
+    expect(screen.queryByTestId('domain-finder')).not.toBeInTheDocument();
+  });
+
+  it('does not render the DomainFinder in the gated upsell state', () => {
+    renderCard({ hasSiteCustomDomain: false });
+    expect(screen.queryByTestId('domain-finder')).not.toBeInTheDocument();
   });
 
   it('calls the set mutation with the typed host when Add domain is clicked', async () => {

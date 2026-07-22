@@ -30,13 +30,14 @@ import {
   type ResidentImportRole,
 } from "@/lib/utils/csv-validator";
 import { isResidentTierRole, validateRoleAssignment } from "@/lib/utils/role-validator";
-import type { NewCommunityRole } from "@propertypro/shared";
+import type { CommunityRole } from "@propertypro/shared";
 import { requireAuthenticatedUserId } from "@/lib/api/auth";
 import { requireCommunityMembership } from "@/lib/api/community-membership";
 import { requirePermission } from "@/lib/db/access-control";
 import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 import { listCommunitiesForUser } from "@/lib/api/user-communities";
 import { assertNotDemoGrace } from "@/lib/middleware/demo-grace-guard";
+import { requireActiveSubscriptionForMutation } from "@/lib/middleware/subscription-guard";
 import { getCommunityTypeForOnboarding } from "@/lib/services/onboarding-service";
 import {
   insertNotificationPreferencesForImport,
@@ -49,7 +50,7 @@ import {
 import { importResidentsContract } from "./contract";
 
 interface MappedRole {
-  role: NewCommunityRole;
+  role: CommunityRole;
   isUnitOwner: boolean;
   displayTitle: string;
 }
@@ -72,6 +73,7 @@ export const POST = withErrorHandler(
 
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const { csv, dryRun } = body;
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'residents', 'write');
@@ -96,7 +98,7 @@ export const POST = withErrorHandler(
     const userHasRole = await loadUsersWithExistingRoleForImport(communityId);
 
     const errors = [...parsedCsv.errors];
-    const createdUsers: Array<{ userId: string; email: string; role: NewCommunityRole; legacyRole: ResidentImportRole }> = [];
+    const createdUsers: Array<{ userId: string; email: string; role: CommunityRole; legacyRole: ResidentImportRole }> = [];
     let importedCount = 0;
     let skippedCount = invalidCsvRowNumbers.size; // rows with parse-level errors already skipped
 
@@ -121,6 +123,19 @@ export const POST = withErrorHandler(
         continue;
       }
 
+      // Apartments have no unit owners. Pre-v3 this was enforced by
+      // ROLE_COMMUNITY_CONSTRAINTS rejecting 'owner' for apartment; in v3 it is
+      // an isUnitOwner-vs-community-type rule, preserved explicitly here.
+      if (communityType === "apartment" && mapped.isUnitOwner) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          column: "role",
+          message: `Role '${role}' is not allowed for apartment communities.`,
+        });
+        skippedCount++;
+        continue;
+      }
+
       // Resolve unitId if provided
       let unitId: number | null = null;
       if (unit_number) {
@@ -133,8 +148,8 @@ export const POST = withErrorHandler(
         unitId = found;
       }
 
-      // Validate role assignment vs community type & unit requirement
-      const validation = validateRoleAssignment(role, communityType, unitId);
+      // Validate the v3 role being assigned (resident) against unit-requirement.
+      const validation = validateRoleAssignment(mapped.role, communityType, unitId);
       if (!validation.valid) {
         errors.push({ rowNumber: row.rowNumber, column: "role", message: validation.error ?? "Invalid role assignment" });
         skippedCount++;

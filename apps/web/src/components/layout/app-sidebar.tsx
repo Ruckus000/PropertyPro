@@ -11,13 +11,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
-  inferCanonicalRoleFromMembership,
   toInitials,
   resolvePlanId,
   PLAN_FEATURES,
-  type AnyCommunityRole,
+  type CommunityRole,
   type CommunityFeatures,
   type CommunityType,
   type PlanId,
@@ -28,6 +29,10 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  resolveDashboardHref,
+  resolveNavItemHref,
+  shouldUseSlimNav,
+  buildSlimNavSections,
   type NavSection,
   type NavItemWithGateStatus,
 } from './nav-config';
@@ -39,7 +44,7 @@ interface AppSidebarProps {
   communityId: number | null;
   communityName: string | null;
   communityType: CommunityType | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   /** True when the current user is a unit owner — used to distinguish owner vs tenant within `resident`. */
   isUnitOwner?: boolean;
   /** Board designation (BoardDesignation value); null when not on the board. */
@@ -72,6 +77,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { expanded, toggleExpanded, sectionOpen, toggleSection } = useSidebar();
   const [upgradeFor, setUpgradeFor] = useState<{
     featureKey: keyof CommunityFeatures | null;
@@ -82,12 +88,6 @@ export function AppSidebar({
 
   const isPmContext = pathname.startsWith('/pm/');
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
-  // The runtime role is on the v3 model (resident | property_manager | root_manager).
-  // Plan-gate logic operates on the canonical role (owner, tenant, board_president, ...)
-  // so we resolve once here using isUnitOwner + designation.
-  const canonicalRole: AnyCommunityRole | null = role
-    ? inferCanonicalRoleFromMembership({ role, isUnitOwner, designation: designation ?? null })
-    : null;
 
   const allVisible: NavItemWithGateStatus[] = isPmContext
     ? PM_NAV_ITEMS.map((i) => ({
@@ -97,12 +97,15 @@ export function AppSidebar({
         upgradePlanId: null,
         upgradeFeatureKey: null,
       }))
-    : getVisibleItemsWithPlanGate(NAV_ITEMS, canonicalRole, features, communityType, resolvedPlanId);
+    : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId, isUnitOwner);
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
+  const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);
   const baseSections: readonly NavSection[] = isPmContext
     ? [{ label: null, items: PM_NAV_ITEMS }]
-    : NAV_SECTIONS;
+    : useSlimNav
+      ? buildSlimNavSections(visibleById, NAV_SECTIONS)
+      : NAV_SECTIONS;
   const childParentById = new Map<string, string>();
 
   for (const section of baseSections) {
@@ -125,9 +128,13 @@ export function AppSidebar({
     icon: item.icon,
     href: item.planLocked
       ? undefined
-      : communityId
-        ? item.href(communityId)
-        : '/select-community',
+      // One-hop destination for the dashboard item: avoids the /dashboard →
+      // /dashboard/apartment server redirect for lease-tracking communities.
+      // Everything else goes through resolveNavItemHref, which keeps PM
+      // portfolio items working with communityId = null.
+      : !isPmContext && communityId && item.id === 'dashboard'
+        ? resolveDashboardHref(communityId, features)
+        : resolveNavItemHref(item, communityId, isPmContext),
     ariaHasPopup: item.planLocked ? 'dialog' : undefined,
     trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
   });
@@ -205,7 +212,7 @@ export function AppSidebar({
                 <PlanBadge label={PLAN_FEATURES[resolvedPlanId].displayName} />
               ) : (
                 <span
-                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--surface-muted)] px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)] ring-1 ring-inset ring-[var(--border-default)]"
+                  className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--surface-muted)] px-2 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)] ring-1 ring-inset ring-[var(--border-default)]"
                   aria-label="No plan"
                 >
                   No plan
@@ -249,6 +256,8 @@ export function AppSidebar({
               onClick?.();
               onNavigate?.();
             }}
+            onPointerEnter={() => prefetchNavData(queryClient, href, communityId)}
+            onFocus={() => prefetchNavData(queryClient, href, communityId)}
             {...props}
           >
             {children}
@@ -264,7 +273,8 @@ export function AppSidebar({
         upgradePlanId={upgradeFor?.upgradePlanId ?? null}
         currentPlanId={resolvedPlanId}
         currentPlanRaw={plan}
-        role={canonicalRole}
+        role={role}
+        isUnitOwner={isUnitOwner}
         communityId={communityId}
       />
     </>

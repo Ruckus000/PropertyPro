@@ -43,15 +43,6 @@ const expectedTables = [
 
 const expectedEnumLabels: Record<string, string[]> = {
   community_type: ['condo_718', 'hoa_720', 'apartment'],
-  user_role: [
-    'owner',
-    'tenant',
-    'board_member',
-    'board_president',
-    'cam',
-    'site_manager',
-    'property_manager_admin',
-  ],
 };
 
 const expectedFkOnDelete: Record<string, 'cascade' | 'set null' | 'restrict'> = {
@@ -163,7 +154,6 @@ describeDb('Gate 0: schema sign-off', () => {
     }, {});
 
     expect(enumMap.community_type).toEqual(expectedEnumLabels.community_type);
-    expect(enumMap.user_role).toEqual(expectedEnumLabels.user_role);
   });
 
   it('rejects invalid enum values', async () => {
@@ -173,10 +163,6 @@ describeDb('Gate 0: schema sign-off', () => {
 
     await expect(
       sql.unsafe(`select 'not_a_type'::"${schemaName}".community_type`),
-    ).rejects.toThrow();
-
-    await expect(
-      sql.unsafe(`select 'not_a_role'::"${schemaName}".user_role`),
     ).rejects.toThrow();
   });
 
@@ -207,7 +193,6 @@ describeDb('Gate 0: schema sign-off', () => {
 
   it('exports schema symbols and inferred types from package root', () => {
     expect(dbExports).toHaveProperty('communityTypeEnum');
-    expect(dbExports).toHaveProperty('userRoleEnum');
     expect(dbExports).toHaveProperty('communities');
     expect(dbExports).toHaveProperty('users');
     expect(dbExports).toHaveProperty('userRoles');

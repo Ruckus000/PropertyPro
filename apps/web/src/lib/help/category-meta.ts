@@ -8,8 +8,10 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  CloudRain,
   FileSignature,
   FileText,
+  Landmark,
   Megaphone,
   MessagesSquare,
   Rocket,
@@ -18,6 +20,7 @@ import {
   ShieldCheck,
   Siren,
   TriangleAlert,
+  Umbrella,
   UserCircle,
   Users,
   Vote,
@@ -46,6 +49,9 @@ export const HELP_CATEGORY_META: Record<string, HelpCategoryMeta> = {
   compliance: { label: 'Compliance', icon: ShieldCheck, chipClass: BRAND_CHIP },
   contracts: { label: 'Contracts', icon: ScrollText, chipClass: NEUTRAL_CHIP },
   documents: { label: 'Documents', icon: FileText, chipClass: BRAND_CHIP },
+  // Umbrella, not ShieldCheck — Compliance already owns the shield, and two
+  // categories sharing an icon defeats at-a-glance scanning.
+  insurance: { label: 'Insurance', icon: Umbrella, chipClass: BRAND_CHIP },
   elections: { label: 'Elections', icon: Vote, chipClass: BRAND_CHIP },
   emergency: { label: 'Emergency', icon: Siren, chipClass: DANGER_CHIP },
   esign: { label: 'E-Sign', icon: FileSignature, chipClass: NEUTRAL_CHIP },
@@ -55,7 +61,9 @@ export const HELP_CATEGORY_META: Record<string, HelpCategoryMeta> = {
   maintenance: { label: 'Maintenance', icon: Wrench, chipClass: WARNING_CHIP },
   meetings: { label: 'Meetings', icon: CalendarDays, chipClass: BRAND_CHIP },
   pm: { label: 'Property management', icon: Briefcase, chipClass: NEUTRAL_CHIP },
+  reserves: { label: 'Reserves', icon: Landmark, chipClass: BRAND_CHIP },
   residents: { label: 'Residents', icon: Users, chipClass: NEUTRAL_CHIP },
+  'storm-damage': { label: 'Storm damage', icon: CloudRain, chipClass: WARNING_CHIP },
   transparency: { label: 'Transparency', icon: Scale, chipClass: NEUTRAL_CHIP },
   violations: { label: 'Violations', icon: TriangleAlert, chipClass: WARNING_CHIP },
 };

@@ -33,6 +33,7 @@ preview_snapshot()
 | `board_member` | Board Member | Sunset Condos |
 | `cam` | Community Assoc. Manager | Sunset Condos |
 | `pm_admin` | PM Company Admin | Sunset Condos |
+| `founding_admin` | Root Manager (Essentials) | Palm Shores HOA |
 | `site_manager` | Site Manager | Sunset Ridge Apartments |
 
 ## Switching Roles

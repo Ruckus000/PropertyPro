@@ -5,7 +5,8 @@
 ### Background
 
 The `site_blocks` table uses Row-Level Security (RLS) to scope anonymous reads
-to a single community. The policy (migration `0089`) reads:
+to a single community. The policy (repaired in migration `0023` — the pre-squash `0089` shape used the
+wrong GUC name) reads:
 
 ```sql
 CREATE POLICY site_blocks_anon_read ON site_blocks
@@ -13,14 +14,14 @@ CREATE POLICY site_blocks_anon_read ON site_blocks
   USING (
     is_draft = false
     AND community_id = coalesce(
-      nullif(current_setting('app.community_id', true), ''),
+      nullif(current_setting('app.current_community_id', true), ''),
       '0'
     )::bigint
   );
 ```
 
-**Key behavior:** When `app.community_id` is not set in the Postgres session:
-- `current_setting('app.community_id', true)` returns `NULL` (no throw)
+**Key behavior:** When `app.current_community_id` is not set in the Postgres session:
+- `current_setting('app.current_community_id', true)` returns `NULL` (no throw)
 - `coalesce(nullif(NULL, ''), '0')` evaluates to `'0'`
 - `community_id = 0` matches zero rows — **fail-closed, silently**
 
@@ -42,9 +43,9 @@ ORDER BY block_order;
 If all rows have `is_draft = true`, no blocks will render. The admin must
 publish them via the site builder.
 
-#### 2. Confirm middleware sets `app.community_id`
+#### 2. Confirm middleware sets `app.current_community_id`
 
-The Supabase scoped client sets `app.community_id` via `SET LOCAL` before
+The Supabase scoped client sets `app.current_community_id` via `SET LOCAL` before
 queries. If the public site request doesn't resolve a community context,
 the setting is never applied.
 
@@ -77,10 +78,10 @@ present in the forwarded headers.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Blank page, no errors | `app.community_id` not set (fail-closed) | Verify middleware tenant resolution for this subdomain |
+| Blank page, no errors | `app.current_community_id` not set (fail-closed) | Verify middleware tenant resolution for this subdomain |
 | Blank page, blocks exist | All blocks are `is_draft = true` | Publish blocks in site builder |
 | Blank page after slug rename | Tenant cache serves old slug | Wait 5 minutes or redeploy |
-| 500 on public site | `app.community_id` set to non-numeric value | Check for upstream corruption in community ID forwarding |
+| 500 on public site | `app.current_community_id` set to non-numeric value | Check for upstream corruption in community ID forwarding |
 
 ### Migration History
 
@@ -88,3 +89,4 @@ present in the forwarded headers.
 - `0034`: Fixed to scope by `current_setting('app.community_id')::bigint` — throws 500 when setting is unset
 - `0088`: Forced RLS on `site_blocks` table
 - `0089`: Changed to graceful fail-closed via `coalesce(nullif(...), '0')` — returns empty instead of 500
+- `0023` (post-squash): Repaired the GUC name — historical policies read `app.community_id`, which no code ever set; the canonical session GUC is `app.current_community_id`

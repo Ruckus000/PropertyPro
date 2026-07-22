@@ -82,14 +82,10 @@ export function AnnouncementDetailActions({
           type="button"
           variant="outline"
           size="sm"
-          disabled={restoreMutation.isPending}
+          loading={restoreMutation.isPending}
           onClick={handleRestore}
         >
-          {restoreMutation.isPending ? (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <RotateCcw className="mr-1 h-4 w-4" aria-hidden="true" />
-          )}
+          {!restoreMutation.isPending && <RotateCcw className="mr-1 h-4 w-4" aria-hidden="true" />}
           Restore
         </Button>
       )}
@@ -126,7 +122,7 @@ export function AnnouncementDetailActions({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
+              className="bg-status-danger text-content-inverse hover:bg-[var(--red-900)]"
               disabled={deleteMutation.isPending}
               onClick={(event) => {
                 event.preventDefault();

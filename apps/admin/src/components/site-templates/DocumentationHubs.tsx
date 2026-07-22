@@ -48,9 +48,9 @@ export function DocumentationHubs({ hubs = DOC_HUBS }: { hubs?: DocHub[] }) {
           target="_blank"
           rel="noopener noreferrer"
           data-testid="doc-hub-card"
-          className="group flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="group flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:border-coral-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-coral-500"
         >
-          <h2 className="text-base font-semibold text-gray-900 group-hover:text-blue-700">
+          <h2 className="text-base font-semibold text-gray-900 group-hover:text-coral-700">
             {hub.title}
           </h2>
           <p className="mt-1 flex-1 text-sm text-gray-600">{hub.description}</p>

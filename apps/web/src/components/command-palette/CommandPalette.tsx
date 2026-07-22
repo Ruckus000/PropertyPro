@@ -20,11 +20,11 @@ import {
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { isAdminRole } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { cn } from '@/lib/utils';
-import { useRecentPages } from '@/hooks/useRecentPages';
+import { useRecentPages } from '@/hooks/use-recent-pages';
 import { useFilteredRegistry, type ResolvedRegistryItem } from '@/lib/constants/feature-registry';
 import { getEnabledSearchGroups } from '@/lib/search/group-config';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
@@ -119,7 +119,7 @@ export interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;

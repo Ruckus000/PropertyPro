@@ -1,8 +1,12 @@
 /**
  * Empty state configuration — reusable copy + icon mapping.
  *
- * Source: docs/design-system/constants/empty-states.ts
+ * This is the canonical implementation (the duplicate formerly at
+ * docs/design-system/constants/empty-states.ts was removed 2026-07 —
+ * do not recreate it). See docs/design-system/README.md.
  */
+
+import { RESERVE_TRANSPARENCY_ADMIN_HINT } from "./reserve-disclaimers";
 
 export type EmptyStateIconKey =
   | "upload"
@@ -143,6 +147,61 @@ export const EMPTY_STATE_CONFIGS = {
     title: "You're all set!",
     description: "No items currently require your attention.",
     icon: "check",
+  },
+  wind_mitigation_empty_admin: {
+    title: "Share your wind-mitigation report",
+    description:
+      "Upload the building's inspection once — every owner can then hand it to their insurer to ask about wind-mitigation credits.",
+    actionLabel: "Add Report",
+    icon: "shield-check",
+  },
+  wind_mitigation_empty_resident: {
+    title: "No wind-mitigation report yet",
+    description:
+      "Your board hasn't posted the building's wind-mitigation inspection. Ask them about it — the report can help you ask your insurer about wind-mitigation credits.",
+    icon: "shield-check",
+  },
+  insurance_policy_empty_admin: {
+    title: "Add the master policy",
+    description:
+      "Post the declarations page once — owners get the summary, the download, and a one-click certificate request at every sale or refi.",
+    actionLabel: "Add Policy",
+    icon: "shield-check",
+  },
+  insurance_policy_empty_resident: {
+    title: "No master-policy summary yet",
+    description:
+      "Your board hasn't posted the association's master policy. Ask them about it — you'll need it for lender verification when you sell or refinance.",
+    icon: "shield-check",
+  },
+  reserve_transparency_empty_admin: {
+    title: "Build your reserve register",
+    // Single-sourced from the attorney-reviewed constant so the reserve-funding
+    // / SIRS / milestone warning cannot drift between the empty state and the
+    // admin hint.
+    description: RESERVE_TRANSPARENCY_ADMIN_HINT,
+    actionLabel: "Add Asset",
+    icon: "building",
+  },
+  reserve_transparency_empty_resident: {
+    title: "No reserve register yet",
+    description:
+      "Your board hasn't added the association's major components. Ask them about it — a transparent asset register shows what's been reserved and each component's remaining useful life.",
+    icon: "building",
+  },
+  storm_damage_empty_resident: {
+    title: "No damage reported yet",
+    description:
+      "After a storm, record any building or common-area damage you noticed so your association has it on file. This is a record for the association — not an insurance claim.",
+    actionLabel: "Report Damage",
+    icon: "shield-check",
+  },
+  storm_damage_empty_admin: {
+    title: "No storm-damage reports yet",
+    description:
+      "When residents report post-storm damage, it shows up here for your board and management to review and track. Records only — nothing here files an insurance claim.",
+    actionLabel: "Report Damage",
+    icon: "shield-check",
   },
 } as const satisfies Record<string, EmptyStateConfig>;
 

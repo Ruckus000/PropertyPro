@@ -4,6 +4,11 @@
  * Button — Interactive element for user actions.
  *
  * Class-based styling with explicit dark variants.
+ *
+ * @deprecated Web app: use `@/components/ui/button` (canonical shadcn layer).
+ * This component remains ONLY for apps/admin until its migration program.
+ * Do not add new imports in apps/web — PR review enforces this.
+ * See docs/superpowers/specs/2026-07-13-design-system-standardization-design.md.
  */
 
 import React, {
@@ -248,6 +253,12 @@ const ButtonRoot = forwardRef<HTMLButtonElement, ButtonProps>(
 
 ButtonRoot.displayName = "Button";
 
+/**
+ * @deprecated Web app: use `@/components/ui/button` (canonical shadcn layer).
+ * This component remains ONLY for apps/admin until its migration program.
+ * Do not add new imports in apps/web — PR review enforces this.
+ * See docs/superpowers/specs/2026-07-13-design-system-standardization-design.md.
+ */
 export const Button = Object.assign(ButtonRoot, {
   Icon: ButtonIcon,
   Label: ButtonLabel,

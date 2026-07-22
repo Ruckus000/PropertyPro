@@ -12,6 +12,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from '@stripe/react-stripe-js';
 import { useSearchParams } from 'next/navigation';
+import { CheckoutMissingSession } from '@/components/signup/checkout-missing-session';
 import { createCheckoutSession } from '@/lib/actions/checkout';
 
 // Lazy-initialize Stripe only in the browser to avoid SSR crashes.
@@ -36,7 +37,6 @@ function CheckoutInner() {
 
   useEffect(() => {
     if (!signupRequestId) {
-      setError('Missing signup request ID.');
       return;
     }
     createCheckoutSession(signupRequestId)
@@ -51,6 +51,10 @@ function CheckoutInner() {
         setError('Failed to start checkout. Please try again.');
       });
   }, [signupRequestId]);
+
+  if (!signupRequestId) {
+    return <CheckoutMissingSession />;
+  }
 
   if (error) {
     return (

@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Button, Card, StatusBadge } from '@propertypro/ui';
+import { StatusBadge } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
   useTransparencySettings,
   useUpdateTransparencySettings,
 } from '@/hooks/use-transparency';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 
 interface Props {
   communityId: number;
@@ -19,7 +22,10 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const transparencyUrl = useMemo(() => `/${subdomain}/transparency`, [subdomain]);
+  const transparencyUrl = useMemo(
+    () => buildCommunityUrl(subdomain, '/transparency'),
+    [subdomain],
+  );
 
   const settingsQuery = useTransparencySettings(communityId);
   const updateSettings = useUpdateTransparencySettings(communityId);
@@ -88,14 +94,14 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
 
   return (
     <Card className="border-edge bg-surface-card">
-      <Card.Header>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <div className="flex flex-col">
-          <Card.Title>Compliance Transparency Page</Card.Title>
-          <Card.Subtitle>Control whether your public transparency page is visible.</Card.Subtitle>
+          <CardTitle>Compliance Transparency Page</CardTitle>
+          <CardDescription>Control whether your public transparency page is visible.</CardDescription>
         </div>
-      </Card.Header>
+      </CardHeader>
 
-      <Card.Body>
+      <CardContent>
         <form className="space-y-4" onSubmit={onSubmit}>
           {error ? (
             <p className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger">{error}</p>
@@ -164,7 +170,7 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
             </p>
           ) : null}
         </form>
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

@@ -1,27 +1,31 @@
 /**
- * Declarative RBAC matrix — canonical source of truth for P4-57.
+ * Declarative RBAC matrix — canonical source of truth for RBAC policy.
  *
- * Defines which role can perform which action on which resource within a
+ * Defines which matrix row can perform which action on which resource within a
  * given community type. This is a pure module — no I/O, no side effects.
  *
- * Policy decisions per ADR-001:
+ * Keyed by the 3 rows the v3 choke point `checkPermissionV2` can ever read
+ * (`owner` / `tenant` / `manager`, see `MatrixRole`). The legacy
+ * `board_member` / `board_president` / `cam` / `site_manager` columns were
+ * unreachable and were removed in the role-v3 RBAC_MATRIX collapse
+ * (ADR-006 / R3-01).
+ *
+ * Policy decisions:
  * - compliance: condo/HOA only (apartment → false for all roles)
  * - audit write: always false (logAuditEvent() is internal-only)
- * - settings write: board_president and property_manager_admin only
- * - maintenance write: both residents (own requests) and admins (all requests)
+ * - settings write: management tier (manager) only
+ * - maintenance write: both residents (own requests) and management (all)
  *   → both get `true` here; DB query scoping enforces data boundaries
  * - leases: NOT in this matrix (separate apartment feature gate)
- * - Invalid role/community combos (per ROLE_COMMUNITY_CONSTRAINTS): all false
- *   e.g. site_manager in condo_718, owner in apartment
+ * - `owner` in apartment: all false (apartments have no unit owners)
  *
  * The `satisfies` operator on RBAC_MATRIX enforces exhaustiveness:
- * adding a new CommunityType, CommunityRole, RbacResource, or RbacAction
+ * adding a new CommunityType, MatrixRole, RbacResource, or RbacAction
  * to the respective const arrays will cause a TypeScript compile error
  * until the matrix is updated.
  */
 
-import type { CommunityRole, CommunityType } from './index';
-import type { TransitionRole } from './role-transition';
+import type { CommunityType } from './index';
 
 // ---------------------------------------------------------------------------
 // Resource and action enumerations
@@ -51,6 +55,9 @@ export const RBAC_RESOURCES = [
   'esign',
   'emergency_broadcasts',
   'units',
+  'insurance',
+  'reserve_assets',
+  'storm_damage',
 ] as const;
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number];
@@ -86,6 +93,9 @@ const PHASE5_DEFAULT_RESOURCES = [
   'esign',
   'emergency_broadcasts',
   'units',
+  'insurance',
+  'reserve_assets',
+  'storm_damage',
 ] as const;
 type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
@@ -95,14 +105,26 @@ type Phase5Resource = (typeof PHASE5_DEFAULT_RESOURCES)[number];
 
 type RbacCell = Record<RbacAction, boolean>;
 
+/**
+ * The three matrix rows the v3 choke point (`checkPermissionV2`) can ever read:
+ * `owner` / `tenant` (the `resident` sub-roles, split by `isUnitOwner`) and
+ * `manager` (the uniform management-tier row for
+ * `property_manager` / `root_manager`). The legacy `board_member` /
+ * `board_president` / `cam` / `site_manager` columns were unreachable and were
+ * removed in the role-v3 RBAC_MATRIX collapse (ADR-006 / R3-01). This is the
+ * matrix key vocabulary only — distinct from the global 7-role `CommunityRole`.
+ */
+export const MATRIX_ROLES = ['owner', 'tenant', 'manager'] as const;
+export type MatrixRole = (typeof MATRIX_ROLES)[number];
+
 type RbacMatrix = Record<
   CommunityType,
-  Record<CommunityRole, Record<RbacResource, RbacCell>>
+  Record<MatrixRole, Record<RbacResource, RbacCell>>
 >;
 
 type BaseRbacMatrix = Record<
   CommunityType,
-  Record<CommunityRole, Record<LegacyRbacResource, RbacCell>>
+  Record<MatrixRole, Record<LegacyRbacResource, RbacCell>>
 >;
 
 // ---------------------------------------------------------------------------
@@ -122,7 +144,7 @@ type BaseRbacMatrix = Record<
  * Defined once here and referenced by both entries to eliminate duplication.
  * If policies need to diverge in the future, clone this into separate objects.
  */
-const CONDO_HOA_BASE_POLICY: Record<CommunityRole, Record<LegacyRbacResource, RbacCell>> = {
+const CONDO_HOA_BASE_POLICY: Record<MatrixRole, Record<LegacyRbacResource, RbacCell>> = {
   owner: {
     documents:     { read: true,  write: false },
     meetings:      { read: true,  write: false },
@@ -145,53 +167,7 @@ const CONDO_HOA_BASE_POLICY: Record<CommunityRole, Record<LegacyRbacResource, Rb
     maintenance:   { read: true,  write: true  },
     contracts:     { read: false, write: false },
   },
-  board_member: {
-    documents:     { read: true,  write: true  },
-    meetings:      { read: true,  write: true  },
-    announcements: { read: true,  write: true  },
-    residents:     { read: true,  write: true  },
-    settings:      { read: true,  write: false },
-    audit:         { read: true,  write: false },
-    compliance:    { read: true,  write: true  },
-    maintenance:   { read: true,  write: true  },
-    contracts:     { read: true,  write: true  },
-  },
-  board_president: {
-    documents:     { read: true,  write: true  },
-    meetings:      { read: true,  write: true  },
-    announcements: { read: true,  write: true  },
-    residents:     { read: true,  write: true  },
-    settings:      { read: true,  write: true  },
-    audit:         { read: true,  write: false },
-    compliance:    { read: true,  write: true  },
-    maintenance:   { read: true,  write: true  },
-    contracts:     { read: true,  write: true  },
-  },
-  cam: {
-    documents:     { read: true,  write: true  },
-    meetings:      { read: true,  write: true  },
-    announcements: { read: true,  write: true  },
-    residents:     { read: true,  write: true  },
-    settings:      { read: true,  write: false },
-    audit:         { read: true,  write: false },
-    compliance:    { read: true,  write: true  },
-    maintenance:   { read: true,  write: true  },
-    contracts:     { read: true,  write: true  },
-  },
-  // site_manager is not a valid role for condo/hoa per ADR-001
-  // ROLE_COMMUNITY_CONSTRAINTS — all false to prevent any access
-  site_manager: {
-    documents:     { read: false, write: false },
-    meetings:      { read: false, write: false },
-    announcements: { read: false, write: false },
-    residents:     { read: false, write: false },
-    settings:      { read: false, write: false },
-    audit:         { read: false, write: false },
-    compliance:    { read: false, write: false },
-    maintenance:   { read: false, write: false },
-    contracts:     { read: false, write: false },
-  },
-  property_manager_admin: {
+  manager: {
     documents:     { read: true,  write: true  },
     meetings:      { read: true,  write: true  },
     announcements: { read: true,  write: true  },
@@ -231,54 +207,7 @@ const BASE_RBAC_MATRIX = {
       maintenance:   { read: true,  write: true  },
       contracts:     { read: false, write: false },
     },
-    // board_member is not a valid role for apartment per ADR-001
-    board_member: {
-      documents:     { read: false, write: false },
-      meetings:      { read: false, write: false },
-      announcements: { read: false, write: false },
-      residents:     { read: false, write: false },
-      settings:      { read: false, write: false },
-      audit:         { read: false, write: false },
-      compliance:    { read: false, write: false },
-      maintenance:   { read: false, write: false },
-      contracts:     { read: false, write: false },
-    },
-    // board_president is not a valid role for apartment per ADR-001
-    board_president: {
-      documents:     { read: false, write: false },
-      meetings:      { read: false, write: false },
-      announcements: { read: false, write: false },
-      residents:     { read: false, write: false },
-      settings:      { read: false, write: false },
-      audit:         { read: false, write: false },
-      compliance:    { read: false, write: false },
-      maintenance:   { read: false, write: false },
-      contracts:     { read: false, write: false },
-    },
-    // cam is not a valid role for apartment per ADR-001
-    cam: {
-      documents:     { read: false, write: false },
-      meetings:      { read: false, write: false },
-      announcements: { read: false, write: false },
-      residents:     { read: false, write: false },
-      settings:      { read: false, write: false },
-      audit:         { read: false, write: false },
-      compliance:    { read: false, write: false },
-      maintenance:   { read: false, write: false },
-      contracts:     { read: false, write: false },
-    },
-    site_manager: {
-      documents:     { read: true,  write: true  },
-      meetings:      { read: true,  write: true  },
-      announcements: { read: true,  write: true  },
-      residents:     { read: true,  write: true  },
-      settings:      { read: true,  write: false },
-      audit:         { read: true,  write: false },
-      compliance:    { read: false, write: false }, // apartments have no compliance
-      maintenance:   { read: true,  write: true  },
-      contracts:     { read: true,  write: true  },
-    },
-    property_manager_admin: {
+    manager: {
       documents:     { read: true,  write: true  },
       meetings:      { read: true,  write: true  },
       announcements: { read: true,  write: true  },
@@ -297,7 +226,7 @@ const BASE_RBAC_MATRIX = {
 // ---------------------------------------------------------------------------
 
 interface Phase5PolicyEntry {
-  policy: Record<CommunityRole, RbacCell>;
+  policy: Record<MatrixRole, RbacCell>;
   /** Community types where this resource is excluded (defaults to no exclusions). */
   excludedCommunityTypes?: readonly CommunityType[];
 }
@@ -315,11 +244,7 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: false, write: false },
-      board_member:           { read: true,  write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   violations: {
@@ -330,11 +255,7 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
     excludedCommunityTypes: ['apartment'],
   },
@@ -342,11 +263,7 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
-      board_member:           { read: true,  write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
     excludedCommunityTypes: ['apartment'],
   },
@@ -354,11 +271,7 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   // Two-tier permission model (same pattern as violations):
@@ -369,11 +282,7 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
     excludedCommunityTypes: ['apartment'],
   },
@@ -381,114 +290,124 @@ const PHASE5_POLICIES: Record<Phase5Resource, Phase5PolicyEntry> = {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   amenities: {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
-      board_member:           { read: true,  write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   packages: {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
-      board_member:           { read: false, write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   visitors: {
     policy: {
       owner:                  { read: true,  write: true  },
       tenant:                 { read: true,  write: true  },
-      board_member:           { read: false, write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   calendar_sync: {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
-      board_member:           { read: true,  write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   accounting: {
     policy: {
       owner:                  { read: false, write: false },
       tenant:                 { read: false, write: false },
-      board_member:           { read: false, write: false },
-      board_president:        { read: false, write: false },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   esign: {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   emergency_broadcasts: {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: false, write: false },
-      board_member:           { read: true,  write: true  },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
   units: {
     policy: {
       owner:                  { read: true,  write: false },
       tenant:                 { read: true,  write: false },
-      board_member:           { read: true,  write: false },
-      board_president:        { read: true,  write: true  },
-      cam:                    { read: true,  write: true  },
-      site_manager:           { read: true,  write: true  },
-      property_manager_admin: { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
+    },
+  },
+  // Insurance hub: wind-mitigation reports and master-policy summary.
+  // Read is open to OWNERS (they retrieve the building's report for their own
+  // insurer) and admin-tier; TENANTS are excluded. Legal review (2026-07-17)
+  // ruled tenant read a §718.111(12)(c)/(g) breach — that records section is
+  // statutorily "unit owners and employees only", and the report carries an
+  // unredacted notes field + inspector license number. Write is admin-tier
+  // (same shape as contracts). Apartments are excluded at the feature-flag
+  // layer (hasInsuranceHub), so the matrix stays uniform across community types.
+  insurance: {
+    policy: {
+      owner:                  { read: true,  write: false },
+      tenant:                 { read: false, write: false },
+      manager:                { read: true,  write: true  },
+    },
+  },
+  // Reserve transparency: the association's major-asset register with a
+  // remaining-useful-life countdown. Read is open to EVERY member (owners AND
+  // tenants) — the whole point is a transparent, factual register; there is no
+  // resident-personal-data concern here (assets, not people), so unlike the
+  // insurance hub tenants are NOT excluded. Write is admin-tier (same shape as
+  // contracts). Apartments are excluded at the feature-flag layer
+  // (hasReserveTransparency), so the matrix stays uniform across community types.
+  reserve_assets: {
+    policy: {
+      owner:                  { read: true,  write: false },
+      tenant:                 { read: true,  write: false },
+      manager:                { read: true,  write: true  },
+    },
+  },
+  // Storm-damage intake (Wave 1 differentiation). Two-tier permission model
+  // (same shape as violations/elections):
+  // - write: true for owner + tenant = any resident may FILE a damage report
+  //   (POST /api/v1/storm-damage); RLS scopes their reads/edits to their own
+  //   rows. Admin-tier reads all and updates status.
+  // - The admin-only status transition (PATCH) additionally checks
+  //   isAdminRole() at the route layer, so residents cannot move another
+  //   member's report through the workflow.
+  // Available to every community type (gated per-community by hasStormTools at
+  // the feature-flag layer), so the matrix stays uniform — no exclusions.
+  storm_damage: {
+    policy: {
+      owner:                  { read: true,  write: true  },
+      tenant:                 { read: true,  write: true  },
+      manager:                { read: true,  write: true  },
     },
   },
 };
 
 const PHASE5_DENY: RbacCell = { read: false, write: false };
 
-const ROLE_CONSTRAINTS: Record<CommunityType, readonly CommunityRole[]> = {
-  condo_718: ['owner', 'tenant', 'board_member', 'board_president', 'cam', 'property_manager_admin'],
-  hoa_720: ['owner', 'tenant', 'board_member', 'board_president', 'cam', 'property_manager_admin'],
-  apartment: ['tenant', 'site_manager', 'property_manager_admin'],
+const ROLE_CONSTRAINTS: Record<CommunityType, readonly MatrixRole[]> = {
+  condo_718: ['owner', 'tenant', 'manager'],
+  hoa_720: ['owner', 'tenant', 'manager'],
+  apartment: ['tenant', 'manager'],
 };
 
 function withPhase5Defaults(
   communityType: CommunityType,
-  role: CommunityRole,
+  role: MatrixRole,
   permissions: Record<LegacyRbacResource, RbacCell>,
 ): Record<RbacResource, RbacCell> {
   const allowedRoles = ROLE_CONSTRAINTS[communityType];
@@ -513,60 +432,16 @@ export const RBAC_MATRIX: RbacMatrix = {
   condo_718: {
     owner: withPhase5Defaults('condo_718', 'owner', BASE_RBAC_MATRIX.condo_718.owner),
     tenant: withPhase5Defaults('condo_718', 'tenant', BASE_RBAC_MATRIX.condo_718.tenant),
-    board_member: withPhase5Defaults('condo_718', 'board_member', BASE_RBAC_MATRIX.condo_718.board_member),
-    board_president: withPhase5Defaults('condo_718', 'board_president', BASE_RBAC_MATRIX.condo_718.board_president),
-    cam: withPhase5Defaults('condo_718', 'cam', BASE_RBAC_MATRIX.condo_718.cam),
-    site_manager: withPhase5Defaults('condo_718', 'site_manager', BASE_RBAC_MATRIX.condo_718.site_manager),
-    property_manager_admin: withPhase5Defaults('condo_718', 'property_manager_admin', BASE_RBAC_MATRIX.condo_718.property_manager_admin),
+    manager: withPhase5Defaults('condo_718', 'manager', BASE_RBAC_MATRIX.condo_718.manager),
   },
   hoa_720: {
     owner: withPhase5Defaults('hoa_720', 'owner', BASE_RBAC_MATRIX.hoa_720.owner),
     tenant: withPhase5Defaults('hoa_720', 'tenant', BASE_RBAC_MATRIX.hoa_720.tenant),
-    board_member: withPhase5Defaults('hoa_720', 'board_member', BASE_RBAC_MATRIX.hoa_720.board_member),
-    board_president: withPhase5Defaults('hoa_720', 'board_president', BASE_RBAC_MATRIX.hoa_720.board_president),
-    cam: withPhase5Defaults('hoa_720', 'cam', BASE_RBAC_MATRIX.hoa_720.cam),
-    site_manager: withPhase5Defaults('hoa_720', 'site_manager', BASE_RBAC_MATRIX.hoa_720.site_manager),
-    property_manager_admin: withPhase5Defaults('hoa_720', 'property_manager_admin', BASE_RBAC_MATRIX.hoa_720.property_manager_admin),
+    manager: withPhase5Defaults('hoa_720', 'manager', BASE_RBAC_MATRIX.hoa_720.manager),
   },
   apartment: {
     owner: withPhase5Defaults('apartment', 'owner', BASE_RBAC_MATRIX.apartment.owner),
     tenant: withPhase5Defaults('apartment', 'tenant', BASE_RBAC_MATRIX.apartment.tenant),
-    board_member: withPhase5Defaults('apartment', 'board_member', BASE_RBAC_MATRIX.apartment.board_member),
-    board_president: withPhase5Defaults('apartment', 'board_president', BASE_RBAC_MATRIX.apartment.board_president),
-    cam: withPhase5Defaults('apartment', 'cam', BASE_RBAC_MATRIX.apartment.cam),
-    site_manager: withPhase5Defaults('apartment', 'site_manager', BASE_RBAC_MATRIX.apartment.site_manager),
-    property_manager_admin: withPhase5Defaults('apartment', 'property_manager_admin', BASE_RBAC_MATRIX.apartment.property_manager_admin),
+    manager: withPhase5Defaults('apartment', 'manager', BASE_RBAC_MATRIX.apartment.manager),
   },
 };
-
-// ---------------------------------------------------------------------------
-// checkPermission — pure policy query
-// ---------------------------------------------------------------------------
-
-/**
- * Returns true when the given role is permitted to perform the action
- * on the resource within the given community type.
- *
- * Returns false for invalid role/communityType combinations per ADR-001
- * ROLE_COMMUNITY_CONSTRAINTS (e.g. site_manager in condo_718).
- *
- * This is a pure function — no I/O, no side effects.
- */
-export function checkPermission(
-  role: CommunityRole | TransitionRole,
-  communityType: CommunityType,
-  resource: RbacResource,
-  action: RbacAction,
-  opts?: { isUnitOwner?: boolean },
-): boolean {
-  // property_manager + root_manager: uniform full-operational.
-  if (role === 'root_manager' || role === 'property_manager') {
-    return RBAC_MATRIX[communityType]['property_manager_admin'][resource][action];
-  }
-  if (role === 'resident') {
-    const legacyRole = opts?.isUnitOwner ? 'owner' : 'tenant';
-    return RBAC_MATRIX[communityType][legacyRole][resource][action];
-  }
-  // Legacy 7-role passthrough
-  return RBAC_MATRIX[communityType][role as CommunityRole][resource][action];
-}

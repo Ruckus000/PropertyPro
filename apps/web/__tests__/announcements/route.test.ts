@@ -354,7 +354,6 @@ describe('p1-17 announcements route', () => {
   });
 
   describe('POST input validation', () => {
-    // TODO (security): filePath is not sanitized against path traversal in documents route.
     it('POST without title returns 400', async () => {
       const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
         method: 'POST',

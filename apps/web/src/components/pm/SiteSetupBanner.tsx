@@ -7,15 +7,23 @@
  * Dismissal is persisted per-user (user_preferences) so it stays dismissed
  * across devices/sessions.
  */
+import Link from 'next/link';
 import { Sparkles, X } from 'lucide-react';
 import { useSiteSetupBannerDismissed, useDismissSiteSetupBanner } from '@/hooks/use-site-setup-banner';
 
 interface Props {
   /** True when any of the PM's communities has an incomplete public site. */
   hasIncompleteSite: boolean;
+  /**
+   * The first incomplete community's id — deep-links the CTA into that
+   * community's website-onboarding wizard. Falls back to the website editor
+   * hub when absent (shouldn't happen when hasIncompleteSite is true, but
+   * the nudge must never be a dead end).
+   */
+  firstIncompleteCommunityId?: number | null;
 }
 
-export function SiteSetupBanner({ hasIncompleteSite }: Props) {
+export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId }: Props) {
   const { data: dismissed, isLoading } = useSiteSetupBannerDismissed();
   const dismiss = useDismissSiteSetupBanner();
 
@@ -36,6 +44,17 @@ export function SiteSetupBanner({ hasIncompleteSite }: Props) {
           One or more of your communities hasn&rsquo;t published its public site yet. Pick a layout,
           colors, and a welcome message so residents have somewhere to land.
         </p>
+        <Link
+          href={
+            firstIncompleteCommunityId
+              ? `/pm/onboarding/website?communityId=${firstIncompleteCommunityId}`
+              : '/pm/settings/website'
+          }
+          data-testid="site-setup-banner-cta"
+          className="mt-2 inline-flex items-center text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+        >
+          Set up your website
+        </Link>
       </div>
       <button
         type="button"

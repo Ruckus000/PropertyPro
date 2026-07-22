@@ -36,10 +36,33 @@ describe('MarketingNav', () => {
 });
 
 describe('LogoProofSection', () => {
-  it('names management companies (placeholder)', () => {
+  it('labels illustrative management-company names', () => {
     const html = renderToStaticMarkup(<LogoProofSection />);
-    expect(html).toContain('management companies');
+    expect(html.toLowerCase()).not.toContain(
+      'trusted by management companies across florida',
+    );
+    expect(
+      html.toLowerCase().includes('illustrative') ||
+        html.toLowerCase().includes('example'),
+    ).toBe(true);
     expect(html).toContain('Gulfstream Management');
+  });
+});
+
+describe('PricingSection trial truth', () => {
+  it('states card required and does not claim no card', () => {
+    const html = renderToStaticMarkup(<PricingSection />);
+    expect(html.toLowerCase()).toContain('card required');
+    expect(html.toLowerCase()).not.toContain('no card required');
+    expect(html).toMatch(/30-day/i);
+  });
+});
+
+describe('HeroSection trial truth', () => {
+  it('shows 30-day trial without no-card claim', () => {
+    const html = renderToStaticMarkup(<HeroSection />);
+    expect(html).toMatch(/30-day/i);
+    expect(html.toLowerCase()).not.toContain('no card');
   });
 });
 
@@ -77,7 +100,7 @@ describe('marketing landing page', () => {
 
     it('renders trust indicators', () => {
       const html = renderToStaticMarkup(<HeroSection />);
-      expect(html).toContain('14-day free trial');
+      expect(html).toContain('30-day free trial');
       expect(html).toContain('No setup fees');
     });
 
@@ -139,8 +162,10 @@ describe('marketing landing page', () => {
     it('includes the pricing anchor id and signup CTA', () => {
       const html = renderToStaticMarkup(<PricingSection />);
       expect(html).toContain('id="pricing"');
-      // Essentials/Professional "Start free trial" CTAs still point to signup.
-      expect(html).toContain('href="/signup"');
+      // B5: Essentials/Professional "Start free trial" CTAs deep-link the chosen
+      // plan + community type into signup (form seeds planKey from ?plan=).
+      expect(html).toContain('href="/signup?plan=essentials&amp;communityType=condo_718"');
+      expect(html).toContain('href="/signup?plan=professional&amp;communityType=condo_718"');
     });
 
     it('points the Property Manager "Talk to sales" CTA at a mailto', () => {

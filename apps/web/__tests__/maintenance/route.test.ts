@@ -583,7 +583,27 @@ describe('maintenance requests route', () => {
       const res = await POST(req);
       expect(res.status).toBe(400);
       const json = (await res.json()) as { error: { message: string } };
-      expect(json.error.message).toContain('Invalid storage path');
+      expect(json.error.message).toContain('Invalid file path');
+    });
+
+    it('returns 400 for a photo path containing traversal segments', async () => {
+      const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create',
+          communityId: 42,
+          title: 'Traversal attempt',
+          unitLabel: '4B',
+          description: 'Path escapes the community prefix',
+          storagePaths: ['maintenance/42/../99/tmp/photo.jpg'],
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toContain('Invalid file path');
     });
 
     it('returns 400 when storagePaths exceeds 5 items', async () => {

@@ -1,5 +1,4 @@
-import { PageHeader } from '@/components/shared/page-header';
-
 export default function Page() {
-  return <PageHeader title="Test" />;
+  // No PageHeader title, no heading element, no breadcrumbs:exempt — must fail.
+  return <div>Body with no page title</div>;
 }

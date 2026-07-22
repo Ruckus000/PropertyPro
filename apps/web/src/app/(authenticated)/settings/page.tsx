@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
+import { SnowbirdDigestCard } from '@/components/settings/snowbird-digest-card';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
@@ -11,6 +12,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { PageHeader } from '@/components/shared/page-header';
 import { checkPermissionV2 } from '@/lib/db/access-control';
+import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 
 /**
  * Settings page — exposes Notification Preferences (P1-26).
@@ -79,10 +81,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div className="grid gap-4 sm:grid-cols-2">
           <Link
             href="/settings/account"
-            className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+            className="block rounded-lg border border-edge p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
           >
-            <h3 className="font-medium text-gray-900">Account</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="font-medium text-content">Account</h3>
+            <p className="mt-1 text-sm text-content-tertiary">
               Update your name, phone number, and password.
             </p>
           </Link>
@@ -101,31 +103,44 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               canReadFinances && membership.role === 'resident' && membership.isUnitOwner,
             communityAssessments: canReadFinances && membership.isAdmin,
           }}
+          showInsuranceAlerts={
+            membership.isAdmin
+            && getEffectiveFeatures(
+              membership.communityType,
+              resolvePlanId(membership.subscriptionPlan),
+            ).hasInsuranceHub
+          }
         />
+        {getEffectiveFeatures(membership.communityType, resolvePlanId(membership.subscriptionPlan))
+          .hasSnowbirdDigest && (
+          <div className="mt-4">
+            <SnowbirdDigestCard communityId={context.communityId} canManage={membership.isAdmin} />
+          </div>
+        )}
       </div>
       <AccessibilitySettings />
       {membership.isAdmin && (
         <div>
           <h2 className="mb-2 text-xl font-semibold">Community Settings</h2>
-          <p className="mb-4 text-sm text-gray-600">
+          <p className="mb-4 text-sm text-content-secondary">
             Manage community-level configuration.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Link
               href={`/settings/payments?communityId=${context.communityId}`}
-              className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+              className="block rounded-lg border border-edge p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
             >
-              <h3 className="font-medium text-gray-900">Payment Configuration</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <h3 className="font-medium text-content">Payment Configuration</h3>
+              <p className="mt-1 text-sm text-content-tertiary">
                 Connect Stripe, manage payment processing fees, and configure payment settings.
               </p>
             </Link>
             <Link
               href={`/settings/billing?communityId=${context.communityId}`}
-              className="block rounded-lg border border-gray-200 p-4 transition-colors hover:border-gray-300 hover:bg-gray-50"
+              className="block rounded-lg border border-edge p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
             >
-              <h3 className="font-medium text-gray-900">Billing &amp; Subscription</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <h3 className="font-medium text-content">Billing &amp; Subscription</h3>
+              <p className="mt-1 text-sm text-content-tertiary">
                 View your current plan, manage your subscription, and access invoices.
               </p>
             </Link>
@@ -135,7 +150,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {membership.isAdmin && (
         <div>
           <h2 className="mb-2 text-xl font-semibold">Support Access</h2>
-          <p className="mb-4 text-sm text-gray-600">
+          <p className="mb-4 text-sm text-content-secondary">
             Control whether PropertyPro support staff can access this community for troubleshooting.
           </p>
           <SupportAccessSettings communityId={context.communityId} />

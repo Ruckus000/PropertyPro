@@ -3,7 +3,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, resolvePlanId } from '@propertypro/shared';
+import { getCommunityPublicInfo } from '@/lib/api/branding';
+import { FoundingAhaPanel } from '@/components/onboarding/founding-aha-panel';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
@@ -73,7 +75,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     }
   }
 
-  const data = await loadDashboardData(context.communityId, userId, membership);
   const canWriteAnnouncements = checkPermissionV2(
     membership.role,
     membership.communityType,
@@ -84,36 +85,97 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     },
   );
 
+  const planId = resolvePlanId(membership.subscriptionPlan);
+  const showFoundingAha =
+    membership.role === 'root_manager' &&
+    planId === 'essentials' &&
+    features.hasCompliance;
+
+  // Start the heavy loads WITHOUT awaiting — they resolve inside the
+  // Suspense boundary below, so the shell + skeleton flush to the browser
+  // immediately and the panels stream in when the data arrives.
+  const dataPromise = loadDashboardData(context.communityId, userId, membership);
+  const publicInfoPromise = showFoundingAha
+    ? getCommunityPublicInfo(context.communityId)
+    : Promise.resolve(null);
+
   return (
     <ErrorBoundary>
-      <Suspense fallback={<DashboardSkeleton />}>
-        <div className="space-y-6">
-          <ClaimRootBanner isAdmin={membership.isAdmin} />
-          <OnboardingChecklist
+      <div className="space-y-6">
+        <ClaimRootBanner isAdmin={membership.isAdmin} />
+        <Suspense fallback={<DashboardSkeleton />}>
+          <DashboardPanels
+            dataPromise={dataPromise}
+            publicInfoPromise={publicInfoPromise}
             communityId={context.communityId}
-            communityName={data.communityName}
+            isAdmin={membership.isAdmin}
+            hasViolations={features.hasViolations}
+            hasEsign={features.hasEsign}
+            canWriteAnnouncements={canWriteAnnouncements}
+            showFoundingAha={showFoundingAha}
           />
-          <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <DashboardAnnouncements
-              items={data.announcements}
-              communityId={context.communityId}
-              canWriteAnnouncements={canWriteAnnouncements}
-            />
-            <DashboardMeetings items={data.meetings} timezone={data.timezone} />
-            {features.hasViolations && data.violationSummary && (
-              <DashboardViolations
-                summary={data.violationSummary}
-                communityId={context.communityId}
-                isAdmin={membership.isAdmin}
-              />
-            )}
-            {features.hasEsign && data.pendingSigners.length > 0 && (
-              <DashboardEsignPending items={data.pendingSigners} />
-            )}
-          </div>
-        </div>
-      </Suspense>
+        </Suspense>
+      </div>
     </ErrorBoundary>
+  );
+}
+
+interface DashboardPanelsProps {
+  dataPromise: ReturnType<typeof loadDashboardData>;
+  publicInfoPromise: Promise<Awaited<ReturnType<typeof getCommunityPublicInfo>> | null>;
+  communityId: number;
+  isAdmin: boolean;
+  hasViolations: boolean;
+  hasEsign: boolean;
+  canWriteAnnouncements: boolean;
+  showFoundingAha: boolean;
+}
+
+async function DashboardPanels({
+  dataPromise,
+  publicInfoPromise,
+  communityId,
+  isAdmin,
+  hasViolations,
+  hasEsign,
+  canWriteAnnouncements,
+  showFoundingAha,
+}: DashboardPanelsProps) {
+  const [data, publicInfo] = await Promise.all([dataPromise, publicInfoPromise]);
+
+  return (
+    <div className="space-y-6">
+      {showFoundingAha && publicInfo ? (
+        <FoundingAhaPanel
+          communityId={communityId}
+          communitySlug={publicInfo.slug}
+          communityName={data.communityName}
+        />
+      ) : null}
+      <OnboardingChecklist
+        communityId={communityId}
+        communityName={data.communityName}
+        variant={showFoundingAha ? 'secondary' : 'primary'}
+      />
+      <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <DashboardAnnouncements
+          items={data.announcements}
+          communityId={communityId}
+          canWriteAnnouncements={canWriteAnnouncements}
+        />
+        <DashboardMeetings items={data.meetings} timezone={data.timezone} />
+        {hasViolations && data.violationSummary && (
+          <DashboardViolations
+            summary={data.violationSummary}
+            communityId={communityId}
+            isAdmin={isAdmin}
+          />
+        )}
+        {hasEsign && data.pendingSigners.length > 0 && (
+          <DashboardEsignPending items={data.pendingSigners} />
+        )}
+      </div>
+    </div>
   );
 }

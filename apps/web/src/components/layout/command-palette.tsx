@@ -19,8 +19,8 @@ import {
   Clock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures } from '@propertypro/shared';
-import { useRecentPages } from '@/hooks/useRecentPages';
+import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
+import { useRecentPages } from '@/hooks/use-recent-pages';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { NAV_ITEMS, PM_NAV_ITEMS, PAGE_TITLES, getActiveItemId, getVisibleItems } from './nav-config';
 
@@ -28,7 +28,7 @@ interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   features: CommunityFeatures | null;
   enableGlobalShortcut?: boolean;
 }
@@ -44,7 +44,7 @@ interface CommandItem {
 
 function getCommandItems(
   communityId: number | null,
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
 ): CommandItem[] {
   const cid = communityId;
@@ -181,7 +181,7 @@ export function CommandPalette({
               placeholder="Search pages, actions..."
               className="flex-1 border-0 bg-transparent px-3 py-4 text-sm outline-none placeholder:text-content-disabled"
             />
-            <kbd className="hidden shrink-0 rounded-md border border-edge bg-surface-page px-2 py-0.5 text-[11px] font-medium text-content-disabled sm:inline-block">
+            <kbd className="hidden shrink-0 rounded-md border border-edge bg-surface-page px-2 py-0.5 text-xs font-medium text-content-disabled sm:inline-block">
               ESC
             </kbd>
           </div>

@@ -15,6 +15,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -49,7 +50,11 @@ export const POST = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const { userId, ttlDays } = body;
-    await requireCommunityMembership(communityId, actorUserId);
+    const actorMembership = await requireCommunityMembership(communityId, actorUserId);
+    // Inviting a user into the community is an administrative membership
+    // action, equivalent to creating a resident record (AZ-01). Gate it on
+    // residents:write so ordinary members cannot mint/send invitations.
+    requirePermission(actorMembership, 'residents', 'write');
 
     const community = await getCommunityNameForInvitation(communityId);
     if (!community) {

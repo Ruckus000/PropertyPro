@@ -43,7 +43,7 @@ export function BlockRegistryView({ entries }: Props) {
               href={`https://github.com/Ruckus000/PropertyPro/blob/main/${entry.docHref}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+              className="shrink-0 text-sm font-medium text-coral-700 hover:text-coral-700 hover:underline"
             >
               Docs →
             </a>

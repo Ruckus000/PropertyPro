@@ -82,7 +82,7 @@ describe('DocumentVersionHistory', () => {
   it('shows the loading state while the query is pending', () => {
     setQuery({ isPending: true });
     renderHistory();
-    expect(screen.getByText('Loading versions...')).toBeDefined();
+    expect(screen.getByTestId('document-version-history-loading')).toBeDefined();
   });
 
   it('renders the exact error literal on query error', () => {

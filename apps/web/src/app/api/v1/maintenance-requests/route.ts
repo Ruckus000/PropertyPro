@@ -28,6 +28,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { validateUploadFilePath } from '@/lib/api/upload-path';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
@@ -250,10 +251,10 @@ async function handleCreateRequest(
   if (payload.storagePaths?.length) {
     const uploadedAt = new Date().toISOString();
     for (const storagePath of payload.storagePaths) {
-      // Validate path prefix to prevent cross-tenant photo access
-      if (!storagePath.startsWith(`maintenance/${communityId}/`)) {
-        throw new ValidationError('Invalid storage path');
-      }
+      // Cross-tenant + path-traversal validation, shared with documents/
+      // violations uploads (AZ-04). The inline prefix check this replaced did
+      // not reject `..` segments.
+      validateUploadFilePath(storagePath, communityId, 'maintenance');
       const url = await createPresignedDownloadUrl('maintenance', storagePath);
       photoEntries.push({ url, thumbnailUrl: null, storagePath, uploadedAt });
     }

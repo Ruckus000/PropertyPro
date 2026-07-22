@@ -27,8 +27,11 @@ export type AnyRouteContract = RouteContract<
  * input is byte-identical to the pre-B2 shape. The tuple wrap defeats union
  * distribution (an optional member reads as `TScope | undefined`).
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentional intersection identity; must stay byte-identical to the pre-B2 shape
+type IntersectionIdentity = {};
+
 type CommunityIdOf<C extends AnyRouteContract> = [C['tenantScope']] extends [undefined]
-  ? {}
+  ? IntersectionIdentity
   : { communityId: number };
 
 /**

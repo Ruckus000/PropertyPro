@@ -21,7 +21,14 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
-    await requireActiveSubscriptionForMutation(communityId);
+    // A3: a resident paying their own dues/rent must not be blocked when the
+    // community's own PropertyPro subscription is soft-locked — dues collect via
+    // the community's Stripe Connect account, not the platform subscription.
+    // Admin-initiated charges keep the full guard.
+    const isResidentSelfPay = membership.role === 'resident';
+    await requireActiveSubscriptionForMutation(communityId, {
+      allowResidentSelfService: isResidentSelfPay,
+    });
 
     const payableType = body.payableType ?? 'assessment_line_item';
     const allowApartmentTenantRentSelfService =
