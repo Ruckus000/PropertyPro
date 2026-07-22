@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 // AUTHZ: Host-native public transparency page; community ID injected by middleware before tenant context exists.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
-import { getFeaturesForCommunity, resolveCommunityContext, type CommunityType } from '@propertypro/shared';
+import { getFeaturesForCommunity, resolveCommunityContext, resolveLifecycleState, type CommunityType } from '@propertypro/shared';
 import { getCommunityPublicInfo } from '@/lib/api/branding';
 import { TransparencyPage } from '@/components/transparency/transparency-page';
 import { TransparencyDisabledEmptyState } from '@/components/transparency/transparency-disabled-empty-state';
@@ -60,6 +60,21 @@ export default async function PublicTransparencyHostPage() {
 
   const communityRow = await findCommunityBySlugUnscoped(community.slug);
   if (!communityRow) {
+    notFound();
+  }
+
+  // Statutory page policy (accepted product decision): a canceled community
+  // keeps its public §718.111(12)(g) transparency page through the 7-day paid
+  // grace, then it goes offline. notFound() rather than a billing message so the
+  // page's absence is indistinguishable from "no such community" and does not
+  // leak the association's billing state publicly. `grace` is an entitled state
+  // and renders; only `lapsed` (grace expired) is taken offline.
+  const lifecycleState = resolveLifecycleState({
+    subscriptionStatus: communityRow.subscriptionStatus ?? null,
+    subscriptionCanceledAt: communityRow.subscriptionCanceledAt ?? null,
+    freeAccessExpiresAt: communityRow.freeAccessExpiresAt ?? null,
+  });
+  if (lifecycleState === 'lapsed') {
     notFound();
   }
 
