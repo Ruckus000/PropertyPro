@@ -36,6 +36,7 @@ const GUARDS = [
   'guard:design-tokens',
   'guard:audit-log-trigger-overrides',
   'guard:sanitizer-deps',
+  'guard:read-entitlement',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.
