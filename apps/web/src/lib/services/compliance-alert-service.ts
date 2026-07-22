@@ -18,6 +18,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { sendNotification } from '@/lib/services/notification-service';
 import type { ComplianceAlertEvent } from '@/lib/services/notification-service';
 import { calculateComplianceStatus } from '@/lib/utils/compliance-calculator';
+import { getDocumentDeletedAtByIds } from '@/lib/services/documents-service';
 
 export interface ComplianceAlertResult {
   communityId: number;
@@ -121,6 +122,22 @@ export async function checkAndAlertOverdueItems(
   const scoped = createScopedClient(communityId);
   const rows = await scoped.query(complianceChecklistItems);
 
+  // Resolve deletion state for linked documents. Without this the alert path
+  // would still read a soft-deleted document as "satisfied" while the
+  // compliance UI (which does thread this through) shows the item as overdue
+  // — the two surfaces must not disagree.
+  const linkedDocumentIds = [
+    ...new Set(
+      rows
+        .map((r) => r['documentId'] as number | null)
+        .filter((v): v is number => typeof v === 'number'),
+    ),
+  ];
+  const documentDeletedAtById = await getDocumentDeletedAtByIds(
+    communityId,
+    linkedDocumentIds,
+  );
+
   const overdueItems: OverdueItem[] = [];
 
   for (const row of rows) {
@@ -134,10 +151,14 @@ export async function checkAndAlertOverdueItems(
         ? rollingWindowRecord.months
         : null;
 
+    const documentId = (row['documentId'] as number | null) ?? null;
+
     const status = calculateComplianceStatus({
       isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId: (row['documentId'] as number | null) ?? null,
+      documentId,
       documentPostedAt,
+      documentDeletedAt:
+        documentId != null ? documentDeletedAtById.get(documentId) ?? null : null,
       deadline,
       rollingWindowMonths,
       now,

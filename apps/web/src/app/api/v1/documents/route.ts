@@ -41,6 +41,7 @@ import {
   paginateAccessibleDocuments,
   softDeleteDocument,
 } from '@/lib/services/documents-service';
+import { unlinkChecklistItemsForDocument } from '@/lib/services/compliance-service';
 import {
   documentsCreateContract,
   documentsDeleteContract,
@@ -159,6 +160,11 @@ export const DELETE = withErrorHandler(
     if (!docToDelete) {
       throw new ValidationError('Document not found');
     }
+
+    // Unlink any compliance checklist items that satisfy themselves via this
+    // document, so a deleted document cannot keep an item "satisfied".
+    // The compliance calculator also defends against this at read time.
+    await unlinkChecklistItemsForDocument(communityId, id, userId);
 
     // Perform soft delete
     const deletedRows = await softDeleteDocument(communityId, id);

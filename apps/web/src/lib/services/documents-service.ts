@@ -18,7 +18,44 @@ import {
   paginate,
   type DocumentAccessContext,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, inArray } from '@propertypro/db/filters';
+
+/**
+ * Resolve `deleted_at` for a specific set of document ids, INCLUDING
+ * soft-deleted rows, as `documentId -> deletedAt | null`.
+ *
+ * Compliance needs to distinguish "document is gone" from "document is
+ * live": under a normal scoped read a soft-deleted document simply drops
+ * out of the result set, which is indistinguishable from a document in
+ * another community. Reading it explicitly lets the compliance calculator
+ * treat a deleted document as unlinked rather than silently satisfied.
+ *
+ * Targeted `inArray` lookup — never a full-table scan. Returns an empty map
+ * for an empty id list (drizzle forbids `inArray(col, [])`).
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified membership.
+ */
+export async function getDocumentDeletedAtByIds(
+  communityId: number,
+  documentIds: readonly number[],
+): Promise<Map<number, Date | null>> {
+  const result = new Map<number, Date | null>();
+  if (documentIds.length === 0) return result;
+
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.queryWhere(
+    documents,
+    inArray(documents.id, [...documentIds]),
+    { includeSoftDeleted: true },
+  )) as Array<Record<string, unknown>>;
+
+  for (const row of rows) {
+    const id = row['id'] as number;
+    const deletedAtRaw = row['deletedAt'] as string | Date | null;
+    result.set(id, deletedAtRaw ? new Date(deletedAtRaw) : null);
+  }
+  return result;
+}
 
 /**
  * Cursor-paginated list of documents the actor is allowed to see in a

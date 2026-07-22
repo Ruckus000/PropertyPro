@@ -43,6 +43,37 @@ export async function insertComplianceChecklistItems(
 }
 
 /**
+ * Clear the `documentId` link on every checklist item that points at a
+ * document being soft-deleted, so a deleted document can no longer keep an
+ * item "satisfied".
+ *
+ * Called from the documents DELETE handler. The compliance calculator also
+ * defends against this at read time (treating a soft-deleted document as
+ * unlinked), but clearing the FK keeps the data model honest and the audit
+ * trail readable. The two writes are not atomic — the read-time defense
+ * covers the brief window where the checklist row still references the row.
+ *
+ * Lives here rather than in the route so the route does not import the
+ * `complianceChecklistItems` table directly (ADR-003 / guard:route-table-imports).
+ */
+export async function unlinkChecklistItemsForDocument(
+  communityId: number,
+  documentId: number,
+  actorUserId: string,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.update(
+    complianceChecklistItems,
+    {
+      documentId: null,
+      documentPostedAt: null,
+      lastModifiedBy: actorUserId,
+    },
+    eq(complianceChecklistItems.documentId, documentId),
+  );
+}
+
+/**
  * Apply a single per-item action's update. Returns the updated row (with
  * scoped-client tenant injection still applied) or `null` if the row
  * doesn't exist in this community. Caller composes the audit log + status

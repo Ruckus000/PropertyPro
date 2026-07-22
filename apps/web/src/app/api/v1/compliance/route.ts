@@ -38,6 +38,7 @@ import {
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
+import { getDocumentDeletedAtByIds } from '@/lib/services/documents-service';
 import {
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
@@ -68,8 +69,17 @@ function isUniqueViolation(error: unknown): boolean {
   return maybeCode === '23505';
 }
 
-/** Decorate a checklist row with its derived compliance status. */
-function withDerivedStatus(row: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Decorate a checklist row with its derived compliance status.
+ *
+ * `documentDeletedAtById` maps a linked document id to its `deleted_at` (or
+ * null when live). A soft-deleted linked document must not keep the item
+ * satisfied, so the deletion timestamp is threaded into the calculator.
+ */
+function withDerivedStatus(
+  row: Record<string, unknown>,
+  documentDeletedAtById: Map<number, Date | null> = new Map(),
+): Record<string, unknown> {
   const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
   const documentPostedAt = row['documentPostedAt']
     ? new Date(row['documentPostedAt'] as string)
@@ -79,12 +89,17 @@ function withDerivedStatus(row: Record<string, unknown>): Record<string, unknown
   const rollingWindowMonths =
     typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
 
+  const documentId = (row['documentId'] as number | null) ?? null;
+  const documentDeletedAt =
+    documentId != null ? documentDeletedAtById.get(documentId) ?? null : null;
+
   return {
     ...row,
     status: calculateComplianceStatus({
       isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId: (row['documentId'] as number | null) ?? null,
+      documentId,
       documentPostedAt,
+      documentDeletedAt,
       deadline,
       rollingWindowMonths,
     }),
@@ -100,7 +115,24 @@ export const GET = withErrorHandler(
     requirePermission(membership, 'compliance', 'read');
 
     const rows = await listComplianceChecklistItems(communityId);
-    const data = rows.map(withDerivedStatus);
+
+    // Resolve `documents.deleted_at` for the linked documents so a
+    // soft-deleted document does not silently keep its checklist item
+    // satisfied. Targeted inArray lookup over just the linked ids — this is
+    // a hot route, so it must never become a full-table read.
+    const linkedDocumentIds = [
+      ...new Set(
+        rows
+          .map((r) => r['documentId'] as number | null)
+          .filter((v): v is number => typeof v === 'number'),
+      ),
+    ];
+    const documentDeletedAtById = await getDocumentDeletedAtByIds(
+      communityId,
+      linkedDocumentIds,
+    );
+
+    const data = rows.map((row) => withDerivedStatus(row, documentDeletedAtById));
 
     if (data.length > 0) {
       void tryAutoComplete(communityId, userId, 'review_compliance');
