@@ -84,7 +84,7 @@ export function AddCommunityModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="md" resizable>
         {!clientSecret ? (
           <>
             <DialogHeader>
@@ -153,7 +153,7 @@ export function AddCommunityModal({
               </div>
 
               {/* Address grid */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="add-community-address">Address</Label>
                   <Input

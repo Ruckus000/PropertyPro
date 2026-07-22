@@ -50,7 +50,7 @@ export function DocumentViewerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[960px]" data-testid={contentTestId}>
+      <DialogContent size="xl" resizable data-testid={contentTestId}>
         <DialogHeader>
           <DialogTitle>{fileName ?? 'Document preview'}</DialogTitle>
           <DialogDescription>

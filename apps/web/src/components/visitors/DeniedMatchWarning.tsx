@@ -28,7 +28,7 @@ export function DeniedMatchWarning({
 }: DeniedMatchWarningProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Denied-list match found</DialogTitle>
           <DialogDescription>

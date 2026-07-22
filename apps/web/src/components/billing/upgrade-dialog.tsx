@@ -154,7 +154,7 @@ export function UpgradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden">
+      <DialogContent size="lg" className="gap-0 p-0 overflow-hidden">
         <FeatureHero featureKey={featureKey} variant="dialog" />
 
         <div className="space-y-5 p-6">

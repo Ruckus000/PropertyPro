@@ -237,7 +237,7 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[460px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Revoke Visitor Pass</DialogTitle>
             <DialogDescription>

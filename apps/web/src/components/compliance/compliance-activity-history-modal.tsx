@@ -24,7 +24,9 @@ export function ComplianceActivityHistoryModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[720px]"
+        size="lg"
+        resizable
+        className="flex flex-col gap-0 overflow-hidden p-0"
         data-testid="compliance-activity-history-modal"
       >
         <DialogHeader className="shrink-0 space-y-2 px-6 pb-4 pt-6 text-left">

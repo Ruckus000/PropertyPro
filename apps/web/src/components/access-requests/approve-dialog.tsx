@@ -75,7 +75,7 @@ export function ApproveDialog({
       </button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Approve Request</DialogTitle>
             <DialogDescription>

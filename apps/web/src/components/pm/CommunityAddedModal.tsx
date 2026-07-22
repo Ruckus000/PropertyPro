@@ -42,7 +42,7 @@ export function CommunityAddedModal() {
         if (!isOpen) handleClose();
       }}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Community added</DialogTitle>
         </DialogHeader>

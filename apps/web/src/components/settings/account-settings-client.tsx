@@ -536,7 +536,7 @@ function DangerZoneSection() {
 
       {/* ── Confirmation Dialog ─────────────── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle>Delete Your Account?</DialogTitle>
             <DialogDescription asChild>
