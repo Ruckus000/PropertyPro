@@ -29,6 +29,25 @@ export function assertCommunityOwnedStoragePath(
   /** Subdirectory under `communities/{id}/` (e.g. `esign-templates`). */
   subdirectory: string,
 ): void {
+  // Reject traversal/separator tricks BEFORE the prefix check. A bare
+  // startsWith() is satisfied by
+  // `communities/42/esign-templates/../../99/secret.pdf`, which still *starts*
+  // with the community prefix while pointing outside it. Supabase Storage
+  // currently treats object keys literally (it does not resolve `..`), so this
+  // is defense-in-depth rather than a live exploit — but a path validator must
+  // not depend on that, and any layer that normalizes (CDN, signed-URL
+  // rewriting, a future filesystem-backed store) would turn it into a real
+  // cross-tenant read. Backslashes are rejected for the same reason they are in
+  // ctaTargetSchema: some resolvers treat `\` as a separator.
+  const segments = path.split('/');
+  if (path.includes('\\') || segments.some((s) => s === '..' || s === '.')) {
+    throw new ValidationError('Storage path is not a valid object key.', {
+      fields: {
+        sourceDocumentPath: 'Path must not contain "..", "." or "\\" segments',
+      },
+    });
+  }
+
   const expectedPrefix = `communities/${communityId}/${subdirectory}/`;
   if (!path.startsWith(expectedPrefix)) {
     throw new ValidationError(

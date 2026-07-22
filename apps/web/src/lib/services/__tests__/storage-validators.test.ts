@@ -54,6 +54,30 @@ describe('assertCommunityOwnedStoragePath', () => {
       ),
     ).toThrow(ValidationError);
   });
+
+  // A bare startsWith() is satisfied by a path that traverses back out of the
+  // community prefix. Supabase treats keys literally today, so these are
+  // defense-in-depth — but the validator must not rely on that.
+  it.each([
+    ['parent traversal out of the community', 'communities/42/esign-templates/../../99/secret.pdf'],
+    ['single-segment traversal', 'communities/42/esign-templates/../x.pdf'],
+    ['current-dir segment', 'communities/42/esign-templates/./x.pdf'],
+    ['backslash separator', 'communities/42/esign-templates\\..\\..\\99\\secret.pdf'],
+  ])('throws ValidationError for %s', (_label, badPath) => {
+    expect(() => assertCommunityOwnedStoragePath(badPath, 42, 'esign-templates')).toThrow(
+      ValidationError,
+    );
+  });
+
+  it('still accepts a normal nested key under the community prefix', () => {
+    expect(() =>
+      assertCommunityOwnedStoragePath(
+        'communities/42/esign-templates/2026/proxy-form.pdf',
+        42,
+        'esign-templates',
+      ),
+    ).not.toThrow();
+  });
 });
 
 describe('assertPdfMagicBytes', () => {
