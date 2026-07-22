@@ -85,6 +85,7 @@ Synthesized from recurring incidents — these are the root causes, not the symp
 3. **Env loading:** `scripts/with-env-local.sh` uses `set -u`. If `.env.local` has `$` expansions referencing unset vars, sourcing aborts. Use `set +u` before sourcing if needed.
 4. **Append-only tables:** `compliance_audit_log` has DB-native delete protection. Integration teardown must tolerate FK-restricted cleanup failures.
 5. **PDF parsing:** `pdf-parse` loads entire files into memory. Run asynchronously outside the upload handler to avoid blocking.
+6. **The jsdom pin is load-bearing (Sentry PROPERTY-PRO-7):** root `package.json` has `pnpm.overrides["isomorphic-dompurify>jsdom"] = "25.0.1"`. jsdom >= 26 pulls the **ESM-only `@exodus/bytes`**, which the externalized sanitizer packages `require()` at runtime — 500ing every HTML-sanitizing route (public tenant sites, announcements, violations, document drafts, help API) on Vercel's **Node 24**. It does **not** reproduce locally (`.nvmrc` is Node 20), so CI-green + local-green means nothing here. Do not drop or raise that override when bumping `isomorphic-dompurify`; `pnpm guard:sanitizer-deps` enforces it. Pinning `html-encoding-sniffer` alone is a known dead end — three separate edges reach `@exodus/bytes`.
 
 ---
 
