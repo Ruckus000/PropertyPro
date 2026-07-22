@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
+import { resolveLifecycleState } from '@propertypro/shared';
 import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
@@ -101,6 +102,15 @@ interface AppShellProps {
 }
 
 function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+  // `features` arrives already narrowed for a lapsed community; the sidebar
+  // additionally needs to know WHY, because its type-gate filter reads raw
+  // type features and its plan-lock branch no-ops on a null plan.
+  const isLapsed =
+    resolveLifecycleState({
+      subscriptionStatus: subscriptionStatus ?? null,
+      subscriptionCanceledAt: subscriptionCanceledAt ?? null,
+      freeAccessExpiresAt: freeAccessExpiresAt ?? null,
+    }) === 'lapsed';
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -175,6 +185,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           isUnitOwner={isUnitOwner ?? false}
           designation={designation ?? null}
           features={features}
+          isLapsed={isLapsed}
           userName={user?.fullName ?? null}
           plan={community?.plan ?? null}
         />
@@ -199,6 +210,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
               isUnitOwner={isUnitOwner ?? false}
               designation={designation ?? null}
               features={features}
+              isLapsed={isLapsed}
               userName={user?.fullName ?? null}
               plan={community?.plan ?? null}
             />

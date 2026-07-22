@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PAID_GRACE_DAYS, paidGraceEndsAt } from '@propertypro/shared';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must be declared before any imports that use them
@@ -201,7 +202,7 @@ describe('processPaymentReminders', () => {
     );
   });
 
-  it('sends a two-day lock warning on grace Day 5 and clears nextReminderAt', async () => {
+  it('sends a two-day lock warning on grace Day 5 and arms the lapse notice', async () => {
     const subscriptionCanceledAt = daysAgo(5);
     const community = {
       id: 3,
@@ -244,9 +245,13 @@ describe('processPaymentReminders', () => {
       expect.objectContaining({ expiryDate: expect.any(String) }),
     );
 
-    // nextReminderAt should be cleared
+    // Chains to the lapse notice at the exact grace boundary rather than
+    // clearing, so a community that never resubscribes still hears from us
+    // when access actually changes.
     expect(mockDbSet).toHaveBeenCalledWith(
-      expect.objectContaining({ nextReminderAt: null }),
+      expect.objectContaining({
+        nextReminderAt: paidGraceEndsAt(subscriptionCanceledAt),
+      }),
     );
   });
 
@@ -513,13 +518,14 @@ describe('processPaymentReminders — send-failure retry (A5)', () => {
     );
   });
 
-  it('clears the schedule for a canceled community with no admin recipients (nothing to retry)', async () => {
+  it('advances a recipient-less in-grace community to the lapse notice', async () => {
+    const subscriptionCanceledAt = daysAgo(5);
     const community = {
       id: 23,
       name: 'No Admins HOA',
       communityType: 'hoa_720',
       paymentFailedAt: daysAgo(30),
-      subscriptionCanceledAt: daysAgo(5),
+      subscriptionCanceledAt,
     };
     const db = buildMockDb([community], []); // no recipients
     (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
@@ -528,7 +534,50 @@ describe('processPaymentReminders — send-failure retry (A5)', () => {
 
     expect(sendEmail).not.toHaveBeenCalled();
     expect(summary.emailsSent).toBe(0);
-    // No one to notify → clear so the cron doesn't scan this row forever.
+    // Nothing to retry, but the schedule still advances rather than clearing —
+    // it terminates one step later, at the lapse notice (asserted below).
+    expect(mockDbSet).toHaveBeenCalledWith(
+      expect.objectContaining({ nextReminderAt: paidGraceEndsAt(subscriptionCanceledAt) }),
+    );
+  });
+
+  it('clears the schedule terminally once grace has expired with no recipients', async () => {
+    // The anti-infinite-scan guarantee: the chain must end somewhere.
+    const community = {
+      id: 24,
+      name: 'No Admins HOA',
+      communityType: 'hoa_720',
+      paymentFailedAt: daysAgo(30),
+      subscriptionCanceledAt: daysAgo(PAID_GRACE_DAYS + 1),
+    };
+    const db = buildMockDb([community], []); // no recipients
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(0);
+    expect(mockDbSet).toHaveBeenCalledWith(expect.objectContaining({ nextReminderAt: null }));
+  });
+
+  it('sends the lapse notice, not the warning, once grace has expired', async () => {
+    const community = {
+      id: 25,
+      name: 'Lapsed Towers',
+      communityType: 'condo_718',
+      paymentFailedAt: null,
+      subscriptionCanceledAt: daysAgo(PAID_GRACE_DAYS + 2),
+    };
+    const recipients = [{ email: 'pm@example.com', fullName: 'Pat Manager' }];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(1);
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'Lapsed Towers: subscription ended' }),
+    );
+    // Terminal — no further reminders for a lapsed community.
     expect(mockDbSet).toHaveBeenCalledWith(expect.objectContaining({ nextReminderAt: null }));
   });
 });
