@@ -23,7 +23,7 @@ import {
 // AUTHZ: Demo→paid conversion: atomic write across communities, users, user_roles, demo_instances. Operates on the root tenant table (communities) which has no community_id to scope by; runs from the Stripe webhook handler with no logged-in user context.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import type { CommunityType } from '@propertypro/shared';
+import { reactivationClears, type CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
 
 // ---------------------------------------------------------------------------
@@ -136,6 +136,8 @@ async function convertCommunity(params: ConvertCommunityParams): Promise<boolean
       demoExpiresAt: null,
       trialEndsAt: null,
       updatedAt: new Date(),
+      // A converted demo is a live subscription — drop any cancellation state.
+      ...reactivationClears('active'),
     })
     .where(
       and(

@@ -1,4 +1,5 @@
 import { and, eq, isNull, or, sql } from '@propertypro/db/filters';
+import { reactivationClears } from '@propertypro/shared';
 import {
   accessPlans,
   communities,
@@ -96,10 +97,15 @@ export async function persistSelfServeCommunityStripeIds(input: {
     subscriptionStatus?: string;
     subscriptionPlan?: string;
     subscriptionCurrentPeriodEndAt?: Date;
+    subscriptionCanceledAt?: null;
+    nextReminderAt?: null;
   } = { updatedAt: new Date() };
   if (input.stripeCustomerId) updates.stripeCustomerId = input.stripeCustomerId;
   if (input.stripeSubscriptionId) updates.stripeSubscriptionId = input.stripeSubscriptionId;
-  if (input.subscriptionStatus) updates.subscriptionStatus = input.subscriptionStatus;
+  if (input.subscriptionStatus) {
+    updates.subscriptionStatus = input.subscriptionStatus;
+    Object.assign(updates, reactivationClears(input.subscriptionStatus));
+  }
   if (input.subscriptionPlan) updates.subscriptionPlan = input.subscriptionPlan;
   if (input.subscriptionCurrentPeriodEndAt) {
     updates.subscriptionCurrentPeriodEndAt = input.subscriptionCurrentPeriodEndAt;
@@ -231,6 +237,8 @@ export async function updateCommunitySubscriptionFromStripe(input: {
     subscriptionStatus: input.subscriptionStatus,
     subscriptionPlan: input.subscriptionPlan,
     updatedAt: new Date(),
+    // A subscription coming back to life must drop its cancellation state.
+    ...reactivationClears(input.subscriptionStatus),
   };
   if (input.paymentFailedAt) {
     updates['paymentFailedAt'] = input.paymentFailedAt;
@@ -350,8 +358,8 @@ export async function markCommunityPaymentSucceeded(stripeSubscriptionId: string
     .set({
       subscriptionStatus: 'active',
       paymentFailedAt: null,
-      nextReminderAt: null,
       updatedAt: new Date(),
+      ...reactivationClears('active'),
     })
     .where(eq(communities.stripeSubscriptionId, stripeSubscriptionId));
 }
