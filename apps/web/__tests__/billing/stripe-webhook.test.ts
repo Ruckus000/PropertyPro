@@ -130,6 +130,7 @@ vi.mock('@propertypro/db/filters', () => ({
   and: (...args: unknown[]) => ({ _and: args }),
   isNull: (col: unknown) => ({ _isNull: col }),
   or: (...args: unknown[]) => ({ _or: args }),
+  inArray: (col: unknown, vals: unknown) => ({ _inArray: [col, vals] }),
   sql: Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => ({ _sql: { strings: [...strings], values } }), { raw: (s: string) => ({ _sqlRaw: s }) }),
 }));
 

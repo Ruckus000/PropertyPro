@@ -1,5 +1,5 @@
-import { and, eq, isNull, or, sql } from '@propertypro/db/filters';
-import { reactivationClears } from '@propertypro/shared';
+import { and, eq, inArray, isNull, or, sql } from '@propertypro/db/filters';
+import { CHURNED_STATUSES, reactivationClears } from '@propertypro/shared';
 import {
   accessPlans,
   communities,
@@ -111,13 +111,24 @@ export async function persistSelfServeCommunityStripeIds(input: {
     updates.subscriptionCurrentPeriodEndAt = input.subscriptionCurrentPeriodEndAt;
   }
 
-  // Only bind a subscription id when the row has none, or already names this
-  // same one (webhook redelivery). NEVER overwrite a DIFFERENT live id: doing
-  // so orphans the previous subscription — every later `customer.subscription.*`
-  // event for it resolves to no community and is silently dropped, so
-  // cancellation and dunning stop working while the customer keeps being
-  // billed for both. Expressed as a WHERE clause rather than a read-then-write
-  // so concurrent webhook deliveries can't interleave.
+  // Bind a subscription id when the row has none, already names this same one
+  // (webhook redelivery), or currently names a DEAD one.
+  //
+  // NEVER overwrite a different *live* id: that orphans the previous
+  // subscription — every later `customer.subscription.*` event for it resolves
+  // to no community and is silently dropped, so cancellation and dunning stop
+  // working while the customer keeps being billed for both.
+  //
+  // But a churned id MUST be replaceable. `cancelCommunitySubscription*IfFirst`
+  // leaves `stripe_subscription_id` pointing at the canceled subscription, and
+  // `canStartNewSubscription` (correctly) lets that community buy again — which
+  // mints a NEW id. Without the churned-status arm below, this WHERE matched
+  // zero rows, so the customer was charged while the row stayed `canceled`:
+  // never reactivated, and (once lapse gating lands) locked out of the product
+  // they had just paid for.
+  //
+  // Expressed as a WHERE clause rather than a read-then-write so concurrent
+  // webhook deliveries can't interleave.
   const rows = await db
     .update(communities)
     .set(updates)
@@ -128,6 +139,7 @@ export async function persistSelfServeCommunityStripeIds(input: {
           ? or(
               isNull(communities.stripeSubscriptionId),
               eq(communities.stripeSubscriptionId, input.stripeSubscriptionId),
+              inArray(communities.subscriptionStatus, [...CHURNED_STATUSES]),
             )
           : undefined,
       ),
