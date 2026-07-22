@@ -1,8 +1,9 @@
 import { tokenDefinitions as t, toHex } from './semantic';
+import { primitiveColors } from './primitives';
 
 // Re-export primitives so email templates can reference one-off colors
 // without needing a semantic token for every shade.
-export { primitiveColors } from './primitives';
+export { primitiveColors };
 
 /**
  * Resolved color values for email inline styles.
@@ -23,21 +24,30 @@ export const emailColors = {
   textTertiary:    toHex(t.text.tertiary),         // #4B5563
   textDisabled:    toHex(t.text.disabled),         // #9CA3AF
   textInverse:     toHex(t.text.inverse),          // #FFFFFF
-  textBrand:       toHex(t.text.brand),            // #2563EB
-  textLink:        toHex(t.text.link),             // #2563EB
+  // Brand text follows the app's "Florida Modern" coral rebrand. Uses the
+  // DARKER coral (700) so brand text / links clear WCAG AA on white email
+  // backgrounds (coral 600 is only ~4.6:1) — matches text.brand/link in the app.
+  textBrand:       primitiveColors.coral[700],     // #A8412C
+  textLink:        primitiveColors.coral[700],     // #A8412C
 
-  // Surfaces
-  surfacePage:     toHex(t.surface.page),          // #F9FAFB
-  surfaceCard:     toHex(t.surface.card),          // #FFFFFF
-  surfaceMuted:    toHex(t.surface.muted),         // #F3F4F6
+  // Surfaces — pinned to the cool `gray` ramp. The app's surface.* tokens
+  // warmed to the `sand` ramp for landing-consistency, but transactional
+  // emails stay neutral-cool (out of that scope), so these intentionally do
+  // NOT follow surface.* anymore.
+  surfacePage:     primitiveColors.gray[50],       // #F9FAFB
+  surfaceCard:     primitiveColors.gray[0],         // #FFFFFF
+  surfaceMuted:    primitiveColors.gray[100],       // #F3F4F6
 
-  // Borders
-  borderDefault:   toHex(t.border.default),        // #E5E7EB
-  borderStrong:    toHex(t.border.strong),         // #D1D5DB
+  // Borders — likewise pinned to cool `gray` (see Surfaces note above).
+  borderDefault:   primitiveColors.gray[200],       // #E5E7EB
+  borderStrong:    primitiveColors.gray[300],       // #D1D5DB
 
-  // Interactive (default fallback — overridden by branding.accentColor at runtime)
-  interactivePrimary:      toHex(t.interactive.primary),      // #2563EB
-  interactivePrimaryHover: toHex(t.interactive.primaryHover), // #1D4ED8
+  // Interactive (default fallback — overridden by branding.accentColor at runtime).
+  // Follows the app's coral rebrand. NOTE: the v2 email CTA button renders with
+  // `buttonDefault` (zinc-900), NOT this token, so email buttons stay neutral;
+  // this is kept coral for any legacy/primary use and app-consistency.
+  interactivePrimary:      primitiveColors.coral[600], // #C2533A
+  interactivePrimaryHover: primitiveColors.coral[700], // #A8412C
 
   // Status — success
   successForeground: toHex(t.status.success.foreground), // #047857
@@ -57,11 +67,12 @@ export const emailColors = {
   dangerBorder:     toHex(t.status.danger.border),       // #FECACA
   dangerSubtle:     toHex(t.status.danger.subtle),       // #FEE2E2
 
-  // Status — info
-  infoForeground: toHex(t.status.info.foreground),       // #1D4ED8
-  infoBackground: toHex(t.status.info.background),       // #EFF6FF
-  infoBorder:     toHex(t.status.info.border),           // #BFDBFE
-  infoSubtle:     toHex(t.status.info.subtle),           // #DBEAFE
+  // Status — info follows the app's move to teal (status.info), keeping emails
+  // consistent with the in-app informational accent.
+  infoForeground: primitiveColors.teal[700],             // #1C5A52
+  infoBackground: primitiveColors.teal[50],              // #ECF6F4
+  infoBorder:     primitiveColors.teal[200],             // #A6D5CD
+  infoSubtle:     primitiveColors.teal[100],             // #CFE8E3
 
   // Status — neutral
   neutralForeground: toHex(t.status.neutral.foreground), // #4B5563
@@ -88,8 +99,9 @@ export const emailColors = {
   buttonSuccess:     '#16A34A',  // green-600
   buttonViolet:      '#7C3AED',  // violet-600
 
-  // Accent stripe colors (top of email card)
-  accentBlue:    '#2563EB',
+  // Accent stripe colors (top of email card). The default/brand stripe is the
+  // "Florida Modern" coral (renamed from accentBlue); the rest stay semantic.
+  accentBrand:   primitiveColors.coral[600], // #C2533A
   accentGreen:   '#16A34A',
   accentRed:     '#DC2626',
   accentViolet:  '#7C3AED',
@@ -107,7 +119,7 @@ export const emailColors = {
   alertSuccessBg:    '#F0FDF4',
   alertSuccessBorder:'#BBF7D0',
   alertSuccessText:  '#166534',  // green-800
-  alertInfoBg:       '#DBEAFE',
-  alertInfoBorder:   '#93C5FD',  // blue-300
-  alertInfoText:     '#1E40AF',  // blue-800
+  alertInfoBg:       primitiveColors.teal[100], // #CFE8E3
+  alertInfoBorder:   primitiveColors.teal[300], // #6FBAAF
+  alertInfoText:     primitiveColors.teal[800], // #164841
 } as const;

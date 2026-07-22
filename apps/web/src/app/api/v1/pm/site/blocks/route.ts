@@ -1,8 +1,10 @@
 /**
  * PR #2: PM site editor — content blocks endpoint.
  *
- * GET   /api/v1/pm/site/blocks?communityId=X   — list community's blocks
- * PATCH /api/v1/pm/site/blocks                 — upsert a content block at (blockType, blockOrder)
+ * GET    /api/v1/pm/site/blocks?communityId=X   — list community's blocks
+ * PATCH  /api/v1/pm/site/blocks                 — upsert a content block at (blockType, blockOrder)
+ * DELETE /api/v1/pm/site/blocks                 — remove the content block at blockOrder
+ *                                                 (staged via tombstone draft when published)
  *
  * Authorization: caller must hold pm_admin or cam in the community AND the
  * community's plan must include hasSiteEditor.
@@ -23,9 +25,9 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { blockSchemaRegistry } from '@propertypro/shared';
-import { upsertPublishedBlock } from '@/lib/services/site-blocks-service';
+import { removeSiteBlock, upsertPublishedBlock } from '@/lib/services/site-blocks-service';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
-import { blocksListContract, blocksUpsertContract } from './contract';
+import { blocksDeleteContract, blocksListContract, blocksUpsertContract } from './contract';
 import type { NextRequest } from 'next/server';
 
 /**
@@ -52,8 +54,16 @@ export const GET = withErrorHandler(
     const reader = getPublicCommunityScopedReader(communityId);
     // PR #8e — the editor view merges draft + published (draft wins per
     // block_order) so PMs see and edit pending changes; the public site
-    // continues to use the default published-only read.
-    const rows = await reader.listSiteBlocks({ includeDrafts: true });
+    // continues to use the default published-only read. Tombstones (staged
+    // deletions, slice 8f) are included so the PublishBar's pending count
+    // covers them — the editor list itself filters them from display.
+    // latestPublishedAt is the authoritative publish token (max over ALL
+    // published rows, incl. those shadowed in the merge) so the editor never
+    // derives a stale-low token from the merged list.
+    const [rows, latestPublishedAt] = await Promise.all([
+      reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true }),
+      reader.getLatestPublishedAt(),
+    ]);
     const blocks = rows.map((r) => ({
       id: r.id,
       blockType: r.blockType,
@@ -62,7 +72,7 @@ export const GET = withErrorHandler(
       isDraft: r.isDraft,
       publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
     }));
-    return { blocks };
+    return { blocks, latestPublishedAt: latestPublishedAt ? latestPublishedAt.toISOString() : null };
   }),
 );
 
@@ -99,5 +109,22 @@ export const PATCH = withErrorHandler(
     });
 
     return { ok: true as const };
+  }),
+);
+
+export const DELETE = withErrorHandler(
+  runRoute(blocksDeleteContract, async ({ body, req }) => {
+    const { userId, communityId } = await ensurePmAccess(req, body.communityId);
+
+    // No polish-block gate here: removing a section is core editing, even
+    // when the section's type is Pro-gated (a downgraded plan must still be
+    // able to take Pro blocks off its site).
+    const { staged } = await removeSiteBlock({
+      communityId,
+      actorUserId: userId,
+      blockOrder: body.blockOrder,
+    });
+
+    return { ok: true as const, staged };
   }),
 );

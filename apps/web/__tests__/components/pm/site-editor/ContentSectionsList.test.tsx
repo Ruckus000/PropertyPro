@@ -398,3 +398,76 @@ describe('<ContentSectionsList> reorder controls', () => {
     expect(screen.getByRole('button', { name: /move .* down/i })).toBeDisabled();
   });
 });
+
+describe('<ContentSectionsList> — remove section (slice 8f)', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  const TWO_BLOCKS = [
+    { id: 10, blockType: 'text', blockOrder: 2, content: { body: 'A' }, isDraft: false, publishedAt: '2026-05-01T00:00:00Z' },
+    { id: 11, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/x.webp', altText: 'x' }, isDraft: false, publishedAt: '2026-05-01T00:00:00Z' },
+  ];
+
+  it('renders a Remove button for each content section', async () => {
+    mockBlocks(TWO_BLOCKS);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+    expect(screen.getByRole('button', { name: /remove text section/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /remove image section/i })).toBeInTheDocument();
+  });
+
+  it('confirms, then DELETEs /api/v1/pm/site/blocks with { communityId, blockOrder }', async () => {
+    mockBlocks(TWO_BLOCKS);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { ok: true, staged: true } }),
+    });
+    // Refetch after invalidation.
+    mockBlocks(TWO_BLOCKS);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove text section/i }));
+    expect(confirmSpy).toHaveBeenCalled();
+
+    await waitFor(() => {
+      const deleteCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (c) => c[1]?.method === 'DELETE',
+      );
+      expect(deleteCall).toBeDefined();
+      expect(deleteCall![0]).toBe('/api/v1/pm/site/blocks');
+      expect(JSON.parse(deleteCall![1].body as string)).toEqual({ communityId: 42, blockOrder: 2 });
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it('does nothing when the confirm dialog is cancelled', async () => {
+    mockBlocks(TWO_BLOCKS);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+
+    fireEvent.click(screen.getByRole('button', { name: /remove text section/i }));
+
+    const deleteCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => c[1]?.method === 'DELETE',
+    );
+    expect(deleteCall).toBeUndefined();
+    confirmSpy.mockRestore();
+  });
+
+  it('never renders tombstone rows (staged deletions are invisible in the editor list)', async () => {
+    mockBlocks([
+      ...TWO_BLOCKS,
+      { id: 90, blockType: 'tombstone', blockOrder: 4, content: {}, isDraft: true, publishedAt: null },
+    ]);
+    render(wrap(<ContentSectionsList communityId={42} />));
+    await screen.findByTestId('text-form');
+    expect(screen.queryByText(/tombstone/i)).not.toBeInTheDocument();
+    // Only the two visible sections get remove buttons.
+    expect(screen.getAllByRole('button', { name: /remove .* section/i })).toHaveLength(2);
+  });
+});

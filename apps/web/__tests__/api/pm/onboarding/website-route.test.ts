@@ -56,7 +56,7 @@ describe('PATCH /api/v1/pm/onboarding/website', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthMock.mockResolvedValue('user-1');
-    requireMembershipMock.mockResolvedValue({ role: 'pm_admin', communityId: 42 });
+    requireMembershipMock.mockResolvedValue({ role: 'property_manager', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     updateCommunityNameMock.mockResolvedValue({ name: 'Sunset Condos', changed: true });

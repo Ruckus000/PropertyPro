@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import {
@@ -79,10 +78,10 @@ export function CreateThreadDialog({
           <Button
             type="button"
             className="h-11 md:h-9"
-            disabled={title.trim().length === 0 || body.trim().length === 0 || createThread.isPending}
+            disabled={title.trim().length === 0 || body.trim().length === 0}
+            loading={createThread.isPending}
             onClick={() => void handleSubmit()}
           >
-            {createThread.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             Create Thread
           </Button>
         </DialogFooter>

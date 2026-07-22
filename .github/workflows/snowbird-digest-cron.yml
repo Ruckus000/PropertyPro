@@ -1,0 +1,33 @@
+name: Snowbird Digest Processor
+
+# Hourly. The processor self-gates on 8 AM community-local time, so an hourly
+# cadence just guarantees each community's send window is hit.
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-snowbird-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke snowbird digest processor route
+        env:
+          DIGEST_CRON_BASE_URL: ${{ secrets.DIGEST_CRON_BASE_URL }}
+          SNOWBIRD_DIGEST_CRON_SECRET: ${{ secrets.SNOWBIRD_DIGEST_CRON_SECRET }}
+        run: |
+          if [ -z "$DIGEST_CRON_BASE_URL" ]; then
+            echo "Missing DIGEST_CRON_BASE_URL secret"
+            exit 1
+          fi
+
+          if [ -z "$SNOWBIRD_DIGEST_CRON_SECRET" ]; then
+            echo "Missing SNOWBIRD_DIGEST_CRON_SECRET secret"
+            exit 1
+          fi
+
+          curl -fsS \
+            -X POST \
+            "$DIGEST_CRON_BASE_URL/api/v1/internal/snowbird-digest" \
+            -H "Authorization: Bearer $SNOWBIRD_DIGEST_CRON_SECRET" \
+            -H "Content-Type: application/json"

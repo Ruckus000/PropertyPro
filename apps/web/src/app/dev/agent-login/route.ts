@@ -30,6 +30,7 @@ const ROLE_EMAIL_MAP: Record<string, string> = {
   board_member: 'board.member@sunset.local',
   cam: 'cam.one@sunset.local',
   pm_admin: 'pm.admin@sunset.local',
+  founding_admin: 'founding.admin@palm.local',
   site_manager: 'site.manager@sunsetridge.local',
 };
 
@@ -142,11 +143,15 @@ export async function GET(request: Request) {
   const isAdmin = ADMIN_ROLES.has(role);
   // PM-tier users (property_manager / root_manager) land on the PM portfolio
   // dashboard. The `?as=pm_admin` alias resolves to a property_manager demo row.
+  // Founding admin (`root_manager` on Essentials) stays on the community dashboard.
   const isPmTier =
-    role === 'pm_admin'
-    || primary?.role === 'property_manager'
-    || primary?.role === 'root_manager';
-  let portal = isPmTier ? '/pm/dashboard/communities' : isAdmin ? '/dashboard' : '/mobile';
+    role !== 'founding_admin'
+    && (
+      role === 'pm_admin'
+      || primary?.role === 'property_manager'
+      || primary?.role === 'root_manager'
+    );
+  let portal = isPmTier ? '/pm/dashboard/communities' : (isAdmin || role === 'founding_admin') ? '/dashboard' : '/mobile';
   if (primary && !isPmTier) {
     portal += `?communityId=${primary.communityId}`;
   }

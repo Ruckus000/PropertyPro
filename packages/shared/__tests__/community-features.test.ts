@@ -39,6 +39,10 @@ const ALL_FEATURE_KEYS: readonly (keyof CommunityFeatures)[] = [
   'hasSiteCustomCss',
   'hasSiteCustomDomain',
   'hasSitePortfolioTemplates',
+  'hasInsuranceHub',
+  'hasReserveTransparency',
+  'hasSnowbirdDigest',
+  'hasStormTools',
 ] as const;
 
 describe('CommunityFeatures config', () => {

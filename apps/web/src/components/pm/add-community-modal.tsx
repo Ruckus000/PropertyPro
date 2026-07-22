@@ -223,7 +223,7 @@ export function AddCommunityModal({
 
               {/* Mutation error */}
               {submit.error && (
-                <p className="text-sm" style={{ color: 'var(--text-error)' }}>
+                <p className="text-sm" style={{ color: 'var(--status-danger)' }}>
                   {submit.error.message}
                 </p>
               )}

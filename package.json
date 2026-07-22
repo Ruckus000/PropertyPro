@@ -43,10 +43,15 @@
     "guard:tenant-scope": "tsx scripts/verify-tenant-scope.ts",
     "guard:help-content": "tsx --tsconfig apps/web/tsconfig.json scripts/verify-help-content.ts",
     "guard:legacy-roles": "tsx scripts/verify-legacy-roles.ts",
+    "guard:token-coverage": "tsx scripts/verify-token-coverage.ts",
+    "guard:design-tokens": "tsx scripts/verify-design-tokens.ts",
+    "guard:audit-log-trigger-overrides": "tsx scripts/verify-audit-log-trigger-overrides.ts",
+    "guard:sanitizer-deps": "tsx scripts/verify-sanitizer-deps.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",
-    "lint": "turbo run lint && pnpm guard:db-access && pnpm guard:token-freshness && pnpm guard:breadcrumbs && pnpm guard:operations-routes && pnpm guard:sentry-instrumentation && pnpm guard:component-api-calls && pnpm guard:hook-requestjson && pnpm guard:authz-comments && pnpm guard:component-service-imports && pnpm guard:route-table-imports && pnpm guard:contracts && pnpm guard:tenant-scope && pnpm guard:help-content && pnpm guard:legacy-roles",
+    "lint": "turbo run lint && node scripts/run-lint-guards.mjs",
+    "lint:guards": "node scripts/run-lint-guards.mjs",
     "clean": "turbo run clean"
   },
   "pnpm": {

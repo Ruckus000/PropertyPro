@@ -4,6 +4,8 @@
  * This is loaded in the browser. Uses NEXT_PUBLIC_SENTRY_DSN.
  * Disabled entirely when DSN is not set (local development).
  */
+import { dispatchNavigationStart } from '@/lib/navigation/navigation-progress-event';
+
 type SentryBrowserModule = typeof import('@sentry/nextjs');
 
 const clientDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
@@ -51,6 +53,10 @@ if (clientDsn) {
 export function onRouterTransitionStart(
   ...args: Parameters<SentryBrowserModule['captureRouterTransitionStart']>
 ): void {
+  // Synchronous: drives the global NavigationProgress bar even when Sentry
+  // is disabled or still loading.
+  dispatchNavigationStart();
+
   const SentryPromise = loadSentryClient();
   if (!SentryPromise) {
     return;

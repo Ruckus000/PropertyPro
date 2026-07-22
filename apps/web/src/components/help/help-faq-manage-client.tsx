@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   useCreateFaq,
   useDeleteFaq,
@@ -71,6 +72,7 @@ export function HelpFaqManageClient({
               : faq,
           ),
         );
+        toast.success('FAQ updated.');
         resetForm();
       } else {
         const newFaq = await createFaq.mutateAsync({
@@ -80,6 +82,7 @@ export function HelpFaqManageClient({
         setFaqs((current) =>
           [...current, newFaq].sort((a, b) => a.sortOrder - b.sortOrder),
         );
+        toast.success('FAQ added.');
         resetForm();
       }
     } catch (error) {
@@ -98,6 +101,7 @@ export function HelpFaqManageClient({
     try {
       await deleteFaq.mutateAsync(editingFaq.id);
       setFaqs((current) => current.filter((faq) => faq.id !== editingFaq.id));
+      toast.success('FAQ removed.');
       resetForm();
     } catch (error) {
       setErrorMessage(
@@ -137,7 +141,7 @@ export function HelpFaqManageClient({
         </div>
         <div className="mt-5 space-y-4">
           {errorMessage && (
-            <div className="rounded-xl border border-status-danger/30 bg-status-danger/10 px-3 py-2 text-sm text-status-danger">
+            <div className="rounded-xl border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger">
               {errorMessage}
             </div>
           )}

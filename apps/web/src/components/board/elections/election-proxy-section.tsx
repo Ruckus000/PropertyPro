@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ResidentSearchCombobox } from '@/components/shared/ResidentSearchCombobox';
@@ -113,10 +112,10 @@ export function ElectionProxySection({
           <Button
             type="button"
             className="h-11 md:h-9"
-            disabled={!selectedProxyHolderUserId || createProxy.isPending}
+            disabled={!selectedProxyHolderUserId}
+            loading={createProxy.isPending}
             onClick={() => void handleCreateProxy()}
           >
-            {createProxy.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             Create Proxy
           </Button>
         </div>
@@ -163,9 +162,9 @@ export function ElectionProxySection({
                         variant="secondary"
                         className="h-11 md:h-9"
                         disabled={isMutating}
+                        loading={approveProxy.isPending}
                         onClick={() => void approveProxy.mutateAsync(proxy.id)}
                       >
-                        {approveProxy.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
                         Approve
                       </Button>
                       <Button
@@ -173,9 +172,9 @@ export function ElectionProxySection({
                         variant="destructive"
                         className="h-11 md:h-9"
                         disabled={isMutating}
+                        loading={rejectProxy.isPending}
                         onClick={() => void rejectProxy.mutateAsync(proxy.id)}
                       >
-                        {rejectProxy.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
                         Reject
                       </Button>
                     </>
@@ -187,9 +186,9 @@ export function ElectionProxySection({
                       variant="outline"
                       className={cn('h-11 md:h-9')}
                       disabled={isMutating}
+                      loading={revokeProxy.isPending}
                       onClick={() => void revokeProxy.mutateAsync(proxy.id)}
                     >
-                      {revokeProxy.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
                       Revoke
                     </Button>
                   ) : null}

@@ -6,69 +6,84 @@ type AppBuildManifest = {
   pages?: Record<string, string[]>;
 };
 
-type RouteGroup = 'pm' | 'maintenance' | 'mobile' | 'site';
-
-const APP_BUILD_MANIFEST = join(process.cwd(), 'apps', 'web', '.next', 'app-build-manifest.json');
-const NEXT_OUTPUT_ROOT = join(process.cwd(), 'apps', 'web', '.next');
-
 /**
  * Budget baselines — derived from Phase 2 production build (2026-02-21):
  *
  * Phase 2 representative routes measured 120-180 KiB JS each.
  * TARGET is ~110% of the Phase 2 upper bound to catch regressions early.
- * HARD is set at ~4x Phase 2 average to allow Phase 3 feature growth
- * (PM dashboard, mobile shell) while still catching catastrophic bloat.
+ * HARD allows feature growth while still catching catastrophic bloat.
  * AGGREGATE HARD is ~2x the single-route hard budget (shared chunks overlap).
  *
  * NOTE: These budgets cover JavaScript bundles only (static/chunks/*.js).
- * CSS and font payloads are not measured. Recalibrate after Phase 3 routes ship.
+ * CSS and font payloads are not measured.
  */
 const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
-// Bumped from 700 KiB to 900 KiB to accommodate mobile redesign (hub-and-spoke + animations)
-const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 900 * 1024);
+// Ratcheted from 900 KiB after the framer-motion removal + mobile mockup
+// code-split (nav-perf PR 4): worst measured route is the mobile home;
+// this ceiling is measured + ~10% headroom.
+const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 700 * 1024);
 const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1300 * 1024);
 
-const ROUTE_GROUP_CANDIDATES: Record<RouteGroup, readonly string[]> = {
-  pm: [
-    '/(pm)/dashboard/communities/page',
-    '/pm/dashboard/communities/page',
-    '/(authenticated)/dashboard/page',
-  ],
-  maintenance: [
-    '/(authenticated)/maintenance/inbox/page',
-    '/(authenticated)/maintenance/submit/page',
-    '/(authenticated)/dashboard/apartment/page',
-    '/(authenticated)/dashboard/page',
-  ],
-  mobile: [
-    '/mobile/page',
-    '/(mobile)/page',
-    '/(authenticated)/dashboard/page',
-  ],
-  // PR #1b: public site render path (server component, layout-registry dispatch
-  // via Tidewater for condo_718). Budgets the JS payload — this is a Florida
-  // statutory-transparency entry point so the slug-subdomain page must stay
-  // light. Spec §8.5 sets the v1 budget; the bundle-size check is the
-  // build-time signal we have today. Server-render latency budgets land with
-  // the staging perf harness in a later PR.
-  site: [
-    '/_site/page',
-    '/(public)/_site/page',
-  ],
-};
+interface AppSpec {
+  app: string;
+  nextRoot: string;
+  groups: Record<string, readonly string[]>;
+  /** Enforce an aggregate unique-JS ceiling across the app's selected routes. */
+  aggregateBudgetBytes: number | null;
+}
+
+const APPS: readonly AppSpec[] = [
+  {
+    app: 'web',
+    nextRoot: join(process.cwd(), 'apps', 'web', '.next'),
+    groups: {
+      pm: [
+        '/(pm)/dashboard/communities/page',
+        '/pm/dashboard/communities/page',
+        '/(authenticated)/dashboard/page',
+      ],
+      maintenance: [
+        '/(authenticated)/maintenance/inbox/page',
+        '/(authenticated)/maintenance/submit/page',
+        '/(authenticated)/dashboard/apartment/page',
+        '/(authenticated)/dashboard/page',
+      ],
+      mobile: [
+        '/mobile/page',
+        '/(mobile)/page',
+        '/(authenticated)/dashboard/page',
+      ],
+      // PR #1b: public site render path (server component, layout-registry
+      // dispatch via Tidewater for condo_718). Budgets the JS payload — this
+      // is a Florida statutory-transparency entry point so the slug-subdomain
+      // page must stay light.
+      site: [
+        '/(public)/[subdomain]/page',
+        '/public-site/page',
+      ],
+    },
+    aggregateBudgetBytes: HARD_TOTAL_BUDGET_BYTES,
+  },
+  {
+    app: 'admin',
+    nextRoot: join(process.cwd(), 'apps', 'admin', '.next'),
+    groups: {
+      dashboard: ['/dashboard/page'],
+      communities: ['/communities/page', '/clients/page'],
+      'deletion-requests': ['/deletion-requests/page'],
+    },
+    // Admin is server-first; per-route budgets are the signal we need today.
+    aggregateBudgetBytes: null,
+  },
+];
 
 function formatKiB(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
-function readManifest(): AppBuildManifest {
-  if (!existsSync(APP_BUILD_MANIFEST)) {
-    throw new Error(
-      `Missing Next.js app build manifest at ${APP_BUILD_MANIFEST}. Run \`pnpm build\` first.`,
-    );
-  }
-
-  const raw = readFileSync(APP_BUILD_MANIFEST, 'utf8');
+function readManifest(nextRoot: string): AppBuildManifest {
+  const manifestPath = join(nextRoot, 'app-build-manifest.json');
+  const raw = readFileSync(manifestPath, 'utf8');
   return JSON.parse(raw) as AppBuildManifest;
 }
 
@@ -90,66 +105,90 @@ function fileSizeOrZero(path: string): number {
   return statSync(path).size;
 }
 
-function bytesForRoute(chunks: readonly string[]): { totalBytes: number; files: string[] } {
+function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalBytes: number; files: string[] } {
   const files = routeJsFiles(chunks);
-  const totalBytes = files.reduce((sum, file) => sum + fileSizeOrZero(join(NEXT_OUTPUT_ROOT, file)), 0);
+  const totalBytes = files.reduce((sum, file) => sum + fileSizeOrZero(join(nextRoot, file)), 0);
   return { totalBytes, files };
 }
 
-function main(): void {
-  const manifest = readManifest();
-  const pages = manifest.pages ?? {};
-  const warnings: string[] = [];
-  const failures: string[] = [];
+function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolean {
+  if (!existsSync(join(spec.nextRoot, 'app-build-manifest.json'))) {
+    // Local partial builds (e.g. web-only) should stay usable; CI's
+    // `pnpm build` builds every app, so nothing is skipped there.
+    console.log(`[${spec.app}] SKIPPED — no build manifest at ${spec.nextRoot} (run \`pnpm build\`)`);
+    return false;
+  }
 
-  const selectedByGroup = new Map<RouteGroup, string>();
-  for (const group of Object.keys(ROUTE_GROUP_CANDIDATES) as RouteGroup[]) {
-    const resolved = resolveRoute(pages, ROUTE_GROUP_CANDIDATES[group]);
+  const pages = readManifest(spec.nextRoot).pages ?? {};
+  const selected = new Map<string, string>();
+  for (const [group, candidates] of Object.entries(spec.groups)) {
+    const resolved = resolveRoute(pages, candidates);
     if (resolved) {
-      selectedByGroup.set(group, resolved);
+      selected.set(group, resolved);
+    } else {
+      warnings.push(`${spec.app}: no manifest route matched group "${group}" (${candidates.join(', ')})`);
     }
   }
 
-  if (selectedByGroup.size === 0) {
-    throw new Error('Could not resolve any representative routes from app-build-manifest.');
+  if (selected.size === 0) {
+    failures.push(`${spec.app}: could not resolve any representative routes from app-build-manifest.`);
+    return false;
   }
 
   const uniqueFiles = new Set<string>();
 
-  console.log('Performance budget check (JavaScript route payloads)');
-  console.log(`- Target per-route budget: ${formatKiB(TARGET_ROUTE_BUDGET_BYTES)}`);
-  console.log(`- Hard per-route budget: ${formatKiB(HARD_ROUTE_BUDGET_BYTES)}`);
-  console.log(`- Hard aggregate budget: ${formatKiB(HARD_TOTAL_BUDGET_BYTES)}`);
-  console.log('');
-
-  for (const [group, routeKey] of selectedByGroup) {
+  for (const [group, routeKey] of selected) {
     const chunks = pages[routeKey] ?? [];
-    const { totalBytes, files } = bytesForRoute(chunks);
+    const { totalBytes, files } = bytesForRoute(spec.nextRoot, chunks);
     files.forEach((file) => uniqueFiles.add(file));
 
-    console.log(`[${group}] ${routeKey} -> ${formatKiB(totalBytes)}`);
+    console.log(`[${spec.app}:${group}] ${routeKey} -> ${formatKiB(totalBytes)}`);
 
     if (totalBytes > HARD_ROUTE_BUDGET_BYTES) {
       failures.push(
-        `${group} route ${routeKey} exceeds hard budget (${formatKiB(totalBytes)} > ${formatKiB(HARD_ROUTE_BUDGET_BYTES)})`,
+        `${spec.app} ${group} route ${routeKey} exceeds hard budget (${formatKiB(totalBytes)} > ${formatKiB(HARD_ROUTE_BUDGET_BYTES)})`,
       );
     } else if (totalBytes > TARGET_ROUTE_BUDGET_BYTES) {
       warnings.push(
-        `${group} route ${routeKey} is above target (${formatKiB(totalBytes)} > ${formatKiB(TARGET_ROUTE_BUDGET_BYTES)})`,
+        `${spec.app} ${group} route ${routeKey} is above target (${formatKiB(totalBytes)} > ${formatKiB(TARGET_ROUTE_BUDGET_BYTES)})`,
       );
     }
   }
 
-  const totalUniqueBytes = [...uniqueFiles].reduce(
-    (sum, file) => sum + fileSizeOrZero(join(NEXT_OUTPUT_ROOT, file)),
-    0,
-  );
-  console.log(`\nAggregate unique JS across selected routes: ${formatKiB(totalUniqueBytes)}`);
-
-  if (totalUniqueBytes > HARD_TOTAL_BUDGET_BYTES) {
-    failures.push(
-      `aggregate unique JS exceeds hard budget (${formatKiB(totalUniqueBytes)} > ${formatKiB(HARD_TOTAL_BUDGET_BYTES)})`,
+  if (spec.aggregateBudgetBytes !== null) {
+    const totalUniqueBytes = [...uniqueFiles].reduce(
+      (sum, file) => sum + fileSizeOrZero(join(spec.nextRoot, file)),
+      0,
     );
+    console.log(`[${spec.app}] aggregate unique JS across selected routes: ${formatKiB(totalUniqueBytes)}`);
+
+    if (totalUniqueBytes > spec.aggregateBudgetBytes) {
+      failures.push(
+        `${spec.app} aggregate unique JS exceeds hard budget (${formatKiB(totalUniqueBytes)} > ${formatKiB(spec.aggregateBudgetBytes)})`,
+      );
+    }
+  }
+
+  return true;
+}
+
+function main(): void {
+  const warnings: string[] = [];
+  const failures: string[] = [];
+
+  console.log('Performance budget check (JavaScript route payloads)');
+  console.log(`- Target per-route budget: ${formatKiB(TARGET_ROUTE_BUDGET_BYTES)}`);
+  console.log(`- Hard per-route budget: ${formatKiB(HARD_ROUTE_BUDGET_BYTES)}`);
+  console.log(`- Hard aggregate budget (web): ${formatKiB(HARD_TOTAL_BUDGET_BYTES)}`);
+  console.log('');
+
+  let anyChecked = false;
+  for (const spec of APPS) {
+    anyChecked = checkApp(spec, warnings, failures) || anyChecked;
+  }
+
+  if (!anyChecked) {
+    throw new Error('No app build manifests found. Run `pnpm build` first.');
   }
 
   if (warnings.length > 0) {

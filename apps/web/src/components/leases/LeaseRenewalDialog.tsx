@@ -30,9 +30,6 @@ export function LeaseRenewalDialog({
   open,
   onOpenChange,
 }: LeaseRenewalDialogProps) {
-  // Month-to-month leases (no end date) cannot be renewed
-  if (lease !== null && !lease.endDate) return null;
-
   const createLease = useCreateLease(communityId);
 
   const [newStartDate, setNewStartDate] = useState('');
@@ -52,21 +49,30 @@ export function LeaseRenewalDialog({
     }
   }, [lease, open]);
 
+  // Month-to-month leases (no end date) cannot be renewed. Checked after the
+  // hooks so hook order stays stable across renders (rules-of-hooks).
+  if (lease !== null && !lease.endDate) return null;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!lease) return;
 
     const parsedRent = parseRentInput(newRentAmount);
 
-    await createLease.mutateAsync({
-      unitId: lease.unitId,
-      residentId: lease.residentId,
-      startDate: newStartDate,
-      endDate: newEndDate || null,
-      rentAmount: parsedRent,
-      isRenewal: true,
-      previousLeaseId: lease.id,
-    });
+    try {
+      await createLease.mutateAsync({
+        unitId: lease.unitId,
+        residentId: lease.residentId,
+        startDate: newStartDate,
+        endDate: newEndDate || null,
+        rentAmount: parsedRent,
+        isRenewal: true,
+        previousLeaseId: lease.id,
+      });
+    } catch {
+      // Error surfaced via createLease.isError below; keep the dialog open.
+      return;
+    }
 
     onOpenChange(false);
   }

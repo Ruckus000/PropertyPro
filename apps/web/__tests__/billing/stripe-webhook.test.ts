@@ -148,6 +148,18 @@ vi.mock('@/lib/services/stripe-service', () => ({
   retrieveSubscription: retrieveSubscriptionMock,
   retrieveInvoice: retrieveInvoiceMock,
   resolvePlanIdFromStripePriceId: resolvePlanIdFromStripePriceIdMock,
+  // Real-ish pure impl so subscription.updated/created period-end resolves.
+  resolveSubscriptionPeriodEndAt: (sub: {
+    trial_end?: number | null;
+    items?: { data?: Array<{ current_period_end?: number }> };
+    current_period_end?: number;
+  }) => {
+    if (typeof sub?.trial_end === 'number') return new Date(sub.trial_end * 1000);
+    const item = sub?.items?.data?.[0]?.current_period_end;
+    if (typeof item === 'number') return new Date(item * 1000);
+    if (typeof sub?.current_period_end === 'number') return new Date(sub.current_period_end * 1000);
+    return null;
+  },
 }));
 
 vi.mock('@/lib/services/payment-alert-scheduler', () => ({
@@ -834,6 +846,20 @@ describe('POST /api/v1/webhooks/stripe', () => {
         42,
         expect.objectContaining({ communityName: 'Palm Gardens' }),
       );
+
+      const cancellationUpdate = setMock.mock.calls
+        .map(([values]) => values as Record<string, unknown>)
+        .find((values) => values.subscriptionStatus === 'canceled');
+      expect(cancellationUpdate).toEqual(
+        expect.objectContaining({
+          subscriptionCanceledAt: expect.any(Date),
+          nextReminderAt: expect.any(Date),
+        }),
+      );
+
+      const canceledAt = cancellationUpdate?.subscriptionCanceledAt as Date;
+      const nextReminderAt = cancellationUpdate?.nextReminderAt as Date;
+      expect(nextReminderAt.getTime() - canceledAt.getTime()).toBe(5 * 24 * 60 * 60 * 1000);
     });
 
     it('does NOT send cancellation email when community was already canceled', async () => {
@@ -1267,18 +1293,18 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(sendSubscriptionCanceledEmailMock).not.toHaveBeenCalled();
     });
 
-    it('sets nextReminderAt to Day 23 and nulls out subscriptionPlan in the update payload', async () => {
+    it('sets nextReminderAt to grace Day 5 and nulls out subscriptionPlan in the update payload', async () => {
       const event = makeEvent(
         'customer.subscription.deleted',
-        { id: 'sub_del_day23' },
-        'evt_del_day23',
+        { id: 'sub_del_day5' },
+        'evt_del_day5',
       );
       constructEventMock.mockReturnValue(event);
-      retrieveSubscriptionMock.mockResolvedValue({ id: 'sub_del_day23', status: 'canceled' });
+      retrieveSubscriptionMock.mockResolvedValue({ id: 'sub_del_day5', status: 'canceled' });
 
       const capturedSets: Record<string, unknown>[] = [];
       setupDeletedDb({
-        returningRows: [{ id: 7, name: 'Day23 Condo', communityType: 'condo_718' }],
+        returningRows: [{ id: 7, name: 'Day5 Condo', communityType: 'condo_718' }],
         capturedSets,
       });
 
@@ -1289,11 +1315,11 @@ describe('POST /api/v1/webhooks/stripe', () => {
       const communitySet = capturedSets.find((s) => s.subscriptionStatus === 'canceled');
       expect(communitySet).toBeDefined();
 
-      const day23Ms = 23 * 24 * 60 * 60 * 1000;
+      const day5Ms = 5 * 24 * 60 * 60 * 1000;
       const reminderAt = communitySet!.nextReminderAt as Date;
       expect(reminderAt).toBeInstanceOf(Date);
-      expect(reminderAt.getTime()).toBeGreaterThanOrEqual(before + day23Ms);
-      expect(reminderAt.getTime()).toBeLessThanOrEqual(after + day23Ms);
+      expect(reminderAt.getTime()).toBeGreaterThanOrEqual(before + day5Ms);
+      expect(reminderAt.getTime()).toBeLessThanOrEqual(after + day5Ms);
 
       // subscriptionPlan must be explicitly cleared on deletion
       expect(communitySet!.subscriptionPlan).toBeNull();

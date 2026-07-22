@@ -20,7 +20,6 @@ import {
   Upload,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   ESIGN_TEMPLATE_TYPES,
   type EsignFieldDefinition,
@@ -35,6 +34,7 @@ import {
 } from '@/hooks/use-esign-templates';
 import { FieldOverlay } from '@/components/esign/field-overlay';
 import { FieldPalette } from '@/components/esign/field-palette';
+import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
 
 // pdfjs-dist has top-level side effects that crash during SSR — skip SSR entirely
 const PdfViewer = dynamic(
@@ -58,17 +58,6 @@ interface PageDimension {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const SIGNER_ROLE_COLORS = [
-  '#2563eb', // blue
-  '#dc2626', // red
-  '#16a34a', // green
-  '#9333ea', // purple
-  '#ea580c', // orange
-  '#0891b2', // cyan
-  '#be185d', // pink
-  '#854d0e', // amber
-];
 
 const TYPE_LABELS: Record<string, string> = {
   proxy: 'Proxy',
@@ -145,7 +134,7 @@ export function TemplateBuilderClient({
   const signerRoleColors = useMemo(() => {
     const map: Record<string, string> = {};
     signerRoles.forEach((role, i) => {
-      map[role] = SIGNER_ROLE_COLORS[i % SIGNER_ROLE_COLORS.length]!;
+      map[role] = ESIGN_FIELD_COLORS[i % ESIGN_FIELD_COLORS.length]!;
     });
     return map;
   }, [signerRoles]);
@@ -350,12 +339,6 @@ export function TemplateBuilderClient({
       <div className="mx-auto max-w-2xl space-y-6">
         <PageHeader
           title="Create Template"
-          breadcrumb={
-            <Breadcrumbs
-              items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
-              currentLabel="New template"
-            />
-          }
         />
 
         <div className="space-y-5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6">
@@ -478,7 +461,7 @@ export function TemplateBuilderClient({
                     className="size-3 shrink-0 rounded-full"
                     style={{
                       backgroundColor:
-                        SIGNER_ROLE_COLORS[idx % SIGNER_ROLE_COLORS.length],
+                        ESIGN_FIELD_COLORS[idx % ESIGN_FIELD_COLORS.length],
                     }}
                   />
                   <span className="flex-1 text-sm capitalize text-[var(--text-primary)]">

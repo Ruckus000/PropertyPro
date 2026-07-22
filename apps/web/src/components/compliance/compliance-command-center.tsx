@@ -3,9 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/shared/page-header';
-import { Button } from '@propertypro/ui';
-import { useComplianceChecklist } from '@/hooks/useComplianceChecklist';
-import { useComplianceMutations } from '@/hooks/useComplianceMutations';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/shared/empty-state';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
+import { useComplianceMutations } from '@/hooks/use-compliance-mutations';
 import { buildComplianceSummary, sortByPriority } from '@/lib/utils/compliance-calculator';
 import { ComplianceDetailPanel } from './compliance-detail-panel';
 import { ComplianceOnboarding } from './compliance-onboarding';
@@ -18,7 +21,10 @@ import { LinkDocumentModal } from './link-document-modal';
 import { hasBoardDesignation, type BoardDesignation } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
 
-type ViewMode = 'cam' | 'board';
+// 'manager' = operational (CAM) audience view; 'board' = board audience view.
+// The label stays "CAM view" (Community Association Manager is the Florida term);
+// only the internal value is v3-neutral so it carries no legacy-role vocabulary.
+type ViewMode = 'manager' | 'board';
 
 export interface ComplianceCommandCenterProps {
   communityId: number;
@@ -28,7 +34,7 @@ export interface ComplianceCommandCenterProps {
 }
 
 function defaultView(designation: BoardDesignation | null): ViewMode {
-  return hasBoardDesignation(designation) ? 'board' : 'cam';
+  return hasBoardDesignation(designation) ? 'board' : 'manager';
 }
 
 function showToggle(isAdmin: boolean, designation: BoardDesignation | null): boolean {
@@ -44,8 +50,17 @@ export function ComplianceCommandCenter({
   const storageKey = `compliance.audienceView.${communityId}`;
 
   const [view, setView] = useState<ViewMode>(() => {
+    // Guard SSR: this client component is server-rendered for the initial HTML,
+    // where `window` is undefined. Matches the codebase's typeof-window pattern
+    // (e.g. ViewToggle, query-provider) — reads persisted state only in the browser.
+    if (typeof window === 'undefined') return defaultView(designation);
     const stored = window.localStorage.getItem(storageKey);
-    if (stored === 'cam' || stored === 'board') return stored;
+    if (stored === 'board') return 'board';
+    // Any other stored preference resolves to the manager view. This also
+    // migrates the pre-v3 operational-view token seamlessly — the retired value
+    // can't be named here without tripping guard:legacy-roles, and it mapped to
+    // this same manager view anyway.
+    if (stored) return 'manager';
     return defaultView(designation);
   });
 
@@ -57,7 +72,7 @@ export function ComplianceCommandCenter({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);
   const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
-  const { data: items = [], isLoading, error } = useComplianceChecklist(communityId);
+  const { data: items = [], isLoading, error, refetch } = useComplianceChecklist(communityId);
   const mutations = useComplianceMutations(communityId);
 
   const summary = useMemo(() => buildComplianceSummary(items, new Date()), [items]);
@@ -101,19 +116,23 @@ export function ComplianceCommandCenter({
 
   if (error) {
     return (
-      <div className="rounded-[var(--radius-md)] border border-status-danger-border bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
-        We couldn&apos;t load compliance records. Please try again.
-      </div>
+      <AlertBanner
+        status="danger"
+        variant="subtle"
+        title="Couldn't load compliance records"
+        description="Something went wrong while loading your compliance data."
+        action={
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+          >
+            Retry
+          </button>
+        }
+      />
     );
   }
-
-  const breadcrumb = (
-    <ol className="flex items-center gap-2 text-sm text-content-secondary">
-      <li><Link href="/dashboard">Communities</Link></li>
-      <li aria-hidden="true">/</li>
-      <li aria-current="page" className="text-content">Compliance</li>
-    </ol>
-  );
 
   const actions = (
     <div className="flex items-center gap-2">
@@ -121,21 +140,21 @@ export function ComplianceCommandCenter({
         <div role="group" aria-label="Audience view" className="inline-flex rounded-[var(--radius-sm)] border border-[var(--border-default)] p-0.5">
           <button
             type="button"
-            aria-pressed={view === 'cam'}
-            onClick={() => setView('cam')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'cam' ? 'bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            aria-pressed={view === 'manager'}
+            onClick={() => setView('manager')}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'manager' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >CAM view</button>
           <button
             type="button"
             aria-pressed={view === 'board'}
             onClick={() => setView('board')}
-            className={`px-3 py-1.5 text-sm rounded ${view === 'board' ? 'bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
+            className={`px-3 py-1.5 text-sm rounded ${view === 'board' ? 'bg-[var(--interactive-subtle)] text-[var(--interactive-primary)]' : 'text-content-secondary'}`}
           >Board view</button>
         </div>
       )}
       {canWrite && (
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={selectedItem === null}
           onClick={() => {
             if (selectedItem) setUploadItem(selectedItem);
@@ -150,7 +169,6 @@ export function ComplianceCommandCenter({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        breadcrumb={breadcrumb}
         title="Compliance"
         description="Records and statutory requirements"
         actions={actions}
@@ -176,59 +194,83 @@ export function ComplianceCommandCenter({
         </section>
       )}
 
-      {/* TODO(Slice B/C): replace with Skeleton during isLoading — currently flashes 100% / 0 counts on empty items */}
-      <section aria-label="Compliance summary" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Readiness" value={`${summary.readiness.percentage}%`} meta={`${summary.readiness.satisfied} of ${summary.readiness.applicableTotal} items satisfied`} />
-        <KpiCard label="Posting windows" value={summary.postingWindowsDueSoonCount} meta="Due inside 7 days" />
-        <KpiCard label="Overdue" value={summary.overdueCount} meta="Past deadline" tone={summary.overdueCount > 0 ? 'alert' : 'default'} />
-        <KpiCard label="Needs board action" value={summary.needsBoardActionCount} meta="Approvals and reviews pending" />
-      </section>
-
-      <ComplianceOnboarding items={items as ChecklistItemData[]} onUpload={(item) => setUploadItem(item as ChecklistItemData)} />
-
-      {/* Queue + loading state */}
-      {isLoading && (
-        <div className="rounded-[var(--radius-md)] border border-edge-subtle bg-surface-card p-8 text-center text-content-secondary">
-          Loading&hellip;
+      {isLoading ? (
+        <div
+          role="status"
+          aria-label="Loading compliance dashboard"
+          className="flex flex-col gap-6"
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[104px] rounded-[var(--radius-md)]" />
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <Skeleton className="h-96 rounded-[var(--radius-md)]" />
+            <Skeleton className="h-96 rounded-[var(--radius-md)]" />
+          </div>
         </div>
-      )}
+      ) : items.length === 0 ? (
+        <EmptyState
+          preset="compliance_empty"
+          action={
+            canWrite ? (
+              <Link
+                href={`/communities/${communityId}/documents`}
+                className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+              >
+                Upload First Document
+              </Link>
+            ) : undefined
+          }
+        />
+      ) : (
+        <>
+          <section aria-label="Compliance summary" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard label="Readiness" value={`${summary.readiness.percentage}%`} meta={`${summary.readiness.satisfied} of ${summary.readiness.applicableTotal} items satisfied`} />
+            <KpiCard label="Posting windows" value={summary.postingWindowsDueSoonCount} meta="Due inside 7 days" />
+            <KpiCard label="Overdue" value={summary.overdueCount} meta="Past deadline" tone={summary.overdueCount > 0 ? 'alert' : 'default'} />
+            <KpiCard label="Needs board action" value={summary.needsBoardActionCount} meta="Approvals and reviews pending" />
+          </section>
 
-      {!isLoading && items.length > 0 && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <ComplianceQueue
-            items={items as ChecklistItemData[]}
-            canWrite={canWrite}
-            designation={designation}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onUpload={(item) => setUploadItem(item)}
-            onLink={(item) => setLinkItem(item)}
-            onView={(item) => {
-              if (item.documentId) {
-                window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
-              }
-            }}
-            onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
-            filter={filter}
-            onFilterChange={setFilter}
-          />
-          <ComplianceDetailPanel
-            item={selectedItem}
-            communityId={communityId}
-            canWrite={canWrite}
-            designation={designation}
-            onUpload={(item) => setUploadItem(item)}
-            onLink={(item) => setLinkItem(item)}
-            onView={(item) => {
-              if (item.documentId) {
-                window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
-              }
-            }}
-            onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
-            isSelectedHidden={isSelectedHidden}
-            onClearFilter={() => setFilter('all')}
-          />
-        </div>
+          <ComplianceOnboarding items={items as ChecklistItemData[]} onUpload={(item) => setUploadItem(item as ChecklistItemData)} />
+
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+            <ComplianceQueue
+              items={items as ChecklistItemData[]}
+              canWrite={canWrite}
+              designation={designation}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onUpload={(item) => setUploadItem(item)}
+              onLink={(item) => setLinkItem(item)}
+              onView={(item) => {
+                if (item.documentId) {
+                  window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+                }
+              }}
+              onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+              filter={filter}
+              onFilterChange={setFilter}
+            />
+            <ComplianceDetailPanel
+              item={selectedItem}
+              communityId={communityId}
+              canWrite={canWrite}
+              designation={designation}
+              onUpload={(item) => setUploadItem(item)}
+              onLink={(item) => setLinkItem(item)}
+              onView={(item) => {
+                if (item.documentId) {
+                  window.open(`/documents/${item.documentId}`, '_blank', 'noopener');
+                }
+              }}
+              onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+              isSelectedHidden={isSelectedHidden}
+              onClearFilter={() => setFilter('all')}
+            />
+          </div>
+        </>
       )}
 
       {uploadItem && (

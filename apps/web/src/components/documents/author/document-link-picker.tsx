@@ -6,7 +6,7 @@
  */
 import * as React from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useDocumentSearch, type DocumentLinkPickerResult } from '@/hooks/useDocumentDraft';
+import { useDocumentSearch, type DocumentLinkPickerResult } from '@/hooks/use-document-draft';
 
 interface DocumentLinkPickerProps {
   communityId: number;

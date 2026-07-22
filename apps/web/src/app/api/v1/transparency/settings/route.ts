@@ -67,6 +67,7 @@ import {
   setTransparencySettings,
 } from '@/lib/services/transparency-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import {
   getTransparencySettingsContract,
   patchTransparencySettingsContract,
@@ -106,6 +107,7 @@ export const PATCH = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     const features = getFeaturesForCommunity(membership.communityType);
 

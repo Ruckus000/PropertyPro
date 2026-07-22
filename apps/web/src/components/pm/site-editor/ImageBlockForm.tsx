@@ -145,7 +145,7 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
             value={altText}
             onChange={(e) => setAltText(e.target.value)}
             required={!decorative}
-            className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+            className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
           />
         </div>
       )}
@@ -157,7 +157,7 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
           maxLength={200}
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
-          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
         />
       </div>
       {serverError && (

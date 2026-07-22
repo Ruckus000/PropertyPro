@@ -24,6 +24,8 @@ import { reconcilePublicUserIdWithAuthId } from '../src/seed/seed-community';
 const describeDb = process.env.DATABASE_URL ? describe.sequential : describe.skip;
 
 describeDb('reconcilePublicUserIdWithAuthId (integration)', () => {
+  const auditLogMaintenanceLockNamespace = 817;
+  const auditLogMaintenanceLockKey = 1;
   let sql: ReturnType<typeof postgres>;
   let db: ReturnType<typeof drizzle>;
   const runTag = `reconcile-${Date.now()}-${randomUUID().slice(0, 6)}`;
@@ -60,32 +62,38 @@ describeDb('reconcilePublicUserIdWithAuthId (integration)', () => {
   });
 
   afterAll(async () => {
-    // compliance_audit_log is append-only at runtime; disable the guard
-    // briefly for cleanup, matching what the helper itself does.
-    if (createdAuditLogIds.length > 0) {
-      await sql.unsafe(
-        'alter table compliance_audit_log disable trigger compliance_audit_log_append_only_guard',
-      );
-      try {
-        await db
-          .delete(complianceAuditLog)
-          .where(inArray(complianceAuditLog.id, createdAuditLogIds));
-      } finally {
-        await sql.unsafe(
-          'alter table compliance_audit_log enable trigger compliance_audit_log_append_only_guard',
-        );
-      }
+    try {
+      // The trigger is database-wide; keep every privileged cleanup statement
+      // in one transaction and the shared advisory-lock namespace.
+      await sql.begin(async (tx) => {
+        const txDb = drizzle(tx, { schema });
+        await tx`SELECT pg_advisory_xact_lock(${auditLogMaintenanceLockNamespace}, ${auditLogMaintenanceLockKey})`;
+        if (createdAuditLogIds.length > 0) {
+          await tx.unsafe(
+            'alter table compliance_audit_log disable trigger compliance_audit_log_append_only_guard',
+          );
+          await txDb
+            .delete(complianceAuditLog)
+            .where(inArray(complianceAuditLog.id, createdAuditLogIds));
+        }
+        if (createdAnnouncementIds.length > 0) {
+          await txDb.delete(announcements).where(inArray(announcements.id, createdAnnouncementIds));
+        }
+        for (const id of createdUserIds) {
+          await txDb.delete(users).where(eq(users.id, id)).catch(() => undefined);
+        }
+        if (communityId) {
+          await txDb.delete(communities).where(eq(communities.id, communityId));
+        }
+        if (createdAuditLogIds.length > 0) {
+          await tx.unsafe(
+            'alter table compliance_audit_log enable trigger compliance_audit_log_append_only_guard',
+          );
+        }
+      });
+    } finally {
+      await sql.end();
     }
-    if (createdAnnouncementIds.length > 0) {
-      await db.delete(announcements).where(inArray(announcements.id, createdAnnouncementIds));
-    }
-    for (const id of createdUserIds) {
-      await db.delete(users).where(eq(users.id, id)).catch(() => undefined);
-    }
-    if (communityId) {
-      await db.delete(communities).where(eq(communities.id, communityId));
-    }
-    await sql.end();
   });
 
   it('rejects non-UUID values via assertUuid before touching the DB', async () => {

@@ -90,9 +90,10 @@ export function PmDashboardClient() {
   // Soft nudge when any loaded community hasn't completed its public site.
   // (Scoped to the current page of results — acceptable for a dismissible
   // nudge; the vast majority of portfolios fit on one page.)
-  const hasIncompleteSite = (data?.communities ?? []).some(
+  const firstIncompleteSiteCommunity = (data?.communities ?? []).find(
     (c) => c.siteOnboardingCompletedAt === null,
   );
+  const hasIncompleteSite = firstIncompleteSiteCommunity !== undefined;
 
   const selectedCommunities = useMemo(
     () => Object.values(selectedCommunityMeta),
@@ -101,7 +102,10 @@ export function PmDashboardClient() {
 
   return (
     <div className="space-y-6">
-      <SiteSetupBanner hasIncompleteSite={hasIncompleteSite} />
+      <SiteSetupBanner
+        hasIncompleteSite={hasIncompleteSite}
+        firstIncompleteCommunityId={firstIncompleteSiteCommunity?.communityId ?? null}
+      />
       <PageHeader
         title="Communities"
         description={

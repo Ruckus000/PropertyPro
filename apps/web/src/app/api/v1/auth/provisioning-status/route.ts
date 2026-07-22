@@ -2,18 +2,28 @@
  * Provisioning status polling endpoint.
  *
  * Called by the post-checkout ProvisioningProgress client component every 2s.
- * No auth required — secured by unguessable signupRequestId UUID.
+ * No auth required — secured by an unguessable signupRequestId UUID.
  *
- * Plan A1 drain #152. Migrated to `runRoute(contract, handler)`; see
- * `./contract.ts`. Success payloads are canonical `{ data: { status, step, ... } }`.
+ * The magic-link login token is SINGLE-USE with a short TTL:
+ *   - The first poll that observes status='completed' generates a token AND
+ *     atomically marks pending_signups.login_token_consumed_at in the same
+ *     update (guarded by `login_token_consumed_at IS NULL`).
+ *   - Subsequent polls (or any leaked-signupRequestId replay) see the consumed
+ *     marker and receive { status: 'consumed' } with no token.
+ * The genuine browser polls every 2s and consumes the token essentially
+ * immediately; any later replay gets no token. Closes the audit's leaked-id
+ * replay scenario.
+ *
+ * Plan A1 drain #152. `runRoute(contract, handler)`; success payloads are the
+ * canonical `{ data: { status, step, ... } }`.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError } from '@/lib/api/errors';
 import {
-  generateAndCacheLoginToken,
   getPendingSignupBySignupRequestId,
   getProvisioningJobBySignupRequestId,
+  issueSingleUseLoginToken,
 } from '@/lib/services/provisioning-service';
 import { provisioningStatusGetContract } from './contract';
 
@@ -41,32 +51,38 @@ export const GET = withErrorHandler(
         throw new AppError('Signup record not found', 500, 'INTERNAL_ERROR');
       }
 
-      const payload = (signup.payload ?? {}) as Record<string, unknown>;
-      const cachedToken =
-        typeof payload.loginToken === 'string' ? payload.loginToken : null;
-
-      if (cachedToken) {
+      // Already consumed — a repeat poll after the genuine browser claimed the
+      // token, or a leaked-signupRequestId replay. Surface 'consumed' with no
+      // token so it can never be replayed.
+      if (signup.loginTokenConsumedAt) {
         return {
-          status: 'completed' as const,
+          status: 'consumed' as const,
           step: 'completed',
-          loginToken: cachedToken,
           communityId: job.communityId,
         };
       }
 
-      const loginToken = await generateAndCacheLoginToken(
-        signupRequestId,
-        signup.email,
-        payload,
-      );
-      if (!loginToken) {
+      const result = await issueSingleUseLoginToken(signupRequestId, signup.email);
+
+      if (result.status === 'error') {
         throw new AppError('Failed to generate login token', 500, 'INTERNAL_ERROR');
+      }
+
+      if (result.status === 'consumed') {
+        // A concurrent poll won the atomic claim in the window between our
+        // SELECT and UPDATE. Don't return the freshly generated token — the
+        // other poller already received the canonical one.
+        return {
+          status: 'consumed' as const,
+          step: 'completed',
+          communityId: job.communityId,
+        };
       }
 
       return {
         status: 'completed' as const,
         step: 'completed',
-        loginToken,
+        loginToken: result.token,
         communityId: job.communityId,
       };
     }

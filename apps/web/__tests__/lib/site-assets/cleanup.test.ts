@@ -12,7 +12,7 @@ const { listMock, removeMock, fromMock, createAdminClientMock } = vi.hoisted(() 
   };
 });
 
-vi.mock('@propertypro/db', () => ({ createAdminClient: createAdminClientMock }));
+vi.mock('@propertypro/db/supabase/admin', () => ({ createAdminClient: createAdminClientMock }));
 
 import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 

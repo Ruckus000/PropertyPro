@@ -52,9 +52,9 @@ interface BrandingFormProps {
 }
 
 export function BrandingForm({ communityId, initialBranding }: BrandingFormProps) {
-  const [primaryColor, setPrimaryColor] = useState(initialBranding.primaryColor ?? '#2563eb');
-  const [secondaryColor, setSecondaryColor] = useState(initialBranding.secondaryColor ?? '#6b7280');
-  const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE');
+  const [primaryColor, setPrimaryColor] = useState(initialBranding.primaryColor ?? '#2563eb'); // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  const [secondaryColor, setSecondaryColor] = useState(initialBranding.secondaryColor ?? '#6b7280'); // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  const [accentColor, setAccentColor] = useState(initialBranding.accentColor ?? '#DBEAFE'); // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
   const [fontHeading, setFontHeading] = useState(initialBranding.fontHeading ?? 'Inter');
   const [fontBody, setFontBody] = useState(initialBranding.fontBody ?? 'Inter');
   const [customEmailFooter, setCustomEmailFooter] = useState(initialBranding.customEmailFooter ?? '');
@@ -164,7 +164,7 @@ export function BrandingForm({ communityId, initialBranding }: BrandingFormProps
             type="file"
             accept="image/png,image/jpeg,image/jpg,image/webp"
             onChange={handleLogoChange}
-            className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive/20"
+            className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive-subtle file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive-muted"
           />
         </div>
 

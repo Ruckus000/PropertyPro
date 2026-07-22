@@ -25,6 +25,10 @@ const {
   createAdminClientMock,
   sendEmailMock,
   captureExceptionMock,
+  retrieveCheckoutSessionMock,
+  markPendingSignupPaymentCompletedMock,
+  insertProvisioningJobFenceMock,
+  getProvisioningJobIdBySignupRequestIdMock,
   andMock,
   ascMock,
   eqMock,
@@ -47,6 +51,10 @@ const {
     createAdminClientMock: vi.fn(),
     sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_test_001' }),
     captureExceptionMock: vi.fn(),
+    retrieveCheckoutSessionMock: vi.fn(),
+    markPendingSignupPaymentCompletedMock: vi.fn().mockResolvedValue(undefined),
+    insertProvisioningJobFenceMock: vi.fn().mockResolvedValue(undefined),
+    getProvisioningJobIdBySignupRequestIdMock: vi.fn().mockResolvedValue(null),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
@@ -79,6 +87,7 @@ const {
       candidateSlug: 'pending_signups.candidate_slug',
       status: 'pending_signups.status',
       updatedAt: 'pending_signups.updated_at',
+      payload: 'pending_signups.payload',
     },
     communitiesTable: { id: 'communities.id', slug: 'communities.slug' },
     usersTable: { id: 'users.id', email: 'users.email', fullName: 'users.full_name' },
@@ -101,8 +110,11 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
-vi.mock('@propertypro/db', () => ({
+vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
+}));
+
+vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
   complianceChecklistItems: complianceChecklistItemsTable,
   documentCategories: documentCategoriesTable,
@@ -133,8 +145,21 @@ vi.mock('@sentry/nextjs', () => ({
   captureException: captureExceptionMock,
 }));
 
+vi.mock('@/lib/services/stripe-service', () => ({
+  retrieveCheckoutSession: retrieveCheckoutSessionMock,
+  resolveSubscriptionPeriodEndAt: (sub: { trial_end?: number | null }) =>
+    typeof sub?.trial_end === 'number' ? new Date(sub.trial_end * 1000) : null,
+}));
+
+vi.mock('@/lib/services/stripe-webhook-service', () => ({
+  markPendingSignupPaymentCompleted: markPendingSignupPaymentCompletedMock,
+  insertProvisioningJobFence: insertProvisioningJobFenceMock,
+  getProvisioningJobIdBySignupRequestId: getProvisioningJobIdBySignupRequestIdMock,
+}));
+
 // Service import must come after all vi.mock calls
 import {
+  reconcileLostCheckoutSignups,
   recoverStuckProvisioningJobs,
   runProvisioning,
 } from '../../src/lib/services/provisioning-service';
@@ -632,5 +657,112 @@ describe('runProvisioning', () => {
     await expect(runProvisioning(1)).rejects.toThrow(
       /no admin user_role found for community 10/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reconcileLostCheckoutSignups (A1 — paid-but-webhook-lost recovery)
+// ---------------------------------------------------------------------------
+
+function buildReconcileDb(rows: unknown[]) {
+  const limitMock = vi.fn().mockResolvedValue(rows);
+  const orderByMock = vi.fn(() => ({ limit: limitMock }));
+  const whereMock = vi.fn(() => ({ orderBy: orderByMock }));
+  const fromMock = vi.fn(() => ({ where: whereMock }));
+  const selectMock = vi.fn(() => ({ from: fromMock }));
+  return { select: selectMock };
+}
+
+describe('reconcileLostCheckoutSignups', () => {
+  const TRIAL_END = Math.floor(Date.UTC(2026, 7, 12) / 1000);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    markPendingSignupPaymentCompletedMock.mockResolvedValue(undefined);
+    insertProvisioningJobFenceMock.mockResolvedValue(undefined);
+    getProvisioningJobIdBySignupRequestIdMock.mockResolvedValue(null);
+  });
+
+  it('recovers a paid-and-complete session that never got a provisioning job', async () => {
+    createUnscopedClientMock.mockReturnValue(
+      buildReconcileDb([
+        { signupRequestId: 'req_lost', payload: { stripeCheckoutSessionId: 'cs_lost' } },
+      ]),
+    );
+    retrieveCheckoutSessionMock.mockResolvedValue({
+      status: 'complete',
+      customer: 'cus_lost',
+      subscription: { id: 'sub_lost', status: 'trialing', trial_end: TRIAL_END },
+    });
+
+    const summary = await reconcileLostCheckoutSignups({ now: new Date('2026-08-01T00:00:00Z') });
+
+    expect(summary.scanned).toBe(1);
+    expect(summary.recovered).toBe(1);
+    expect(summary.failed).toBe(0);
+    // Self-heals its own partial failures: the scan covers not just
+    // checkout_started but also payment_completed/provisioning rows that lack a
+    // job (a prior reconcile that marked paid but failed to insert the fence).
+    expect(inArrayMock).toHaveBeenCalledWith(pendingSignupsTable.status, [
+      'checkout_started',
+      'payment_completed',
+      'provisioning',
+    ]);
+    expect(markPendingSignupPaymentCompletedMock).toHaveBeenCalledWith({
+      signupRequestId: 'req_lost',
+      stripeCustomerId: 'cus_lost',
+      stripeSubscriptionId: 'sub_lost',
+      subscriptionStatus: 'trialing',
+      subscriptionCurrentPeriodEndAt: new Date(TRIAL_END * 1000),
+    });
+    expect(insertProvisioningJobFenceMock).toHaveBeenCalledWith({
+      signupRequestId: 'req_lost',
+      stripeEventId: 'reconcile:cs_lost',
+    });
+  });
+
+  it('leaves an abandoned (not complete) checkout alone', async () => {
+    createUnscopedClientMock.mockReturnValue(
+      buildReconcileDb([
+        { signupRequestId: 'req_open', payload: { stripeCheckoutSessionId: 'cs_open' } },
+      ]),
+    );
+    retrieveCheckoutSessionMock.mockResolvedValue({ status: 'open' });
+
+    const summary = await reconcileLostCheckoutSignups();
+
+    expect(summary.recovered).toBe(0);
+    expect(summary.skippedNotComplete).toBe(1);
+    expect(markPendingSignupPaymentCompletedMock).not.toHaveBeenCalled();
+    expect(insertProvisioningJobFenceMock).not.toHaveBeenCalled();
+  });
+
+  it('skips a signup with no stored checkout session id', async () => {
+    createUnscopedClientMock.mockReturnValue(
+      buildReconcileDb([{ signupRequestId: 'req_nosession', payload: {} }]),
+    );
+
+    const summary = await reconcileLostCheckoutSignups();
+
+    expect(summary.skippedNotComplete).toBe(1);
+    expect(retrieveCheckoutSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('records a failure and preserves the row when Stripe retrieval throws', async () => {
+    createUnscopedClientMock.mockReturnValue(
+      buildReconcileDb([
+        { signupRequestId: 'req_err', payload: { stripeCheckoutSessionId: 'cs_err' } },
+      ]),
+    );
+    retrieveCheckoutSessionMock.mockRejectedValue(new Error('stripe down'));
+
+    const summary = await reconcileLostCheckoutSignups();
+
+    expect(summary.failed).toBe(1);
+    expect(summary.failures[0]).toEqual({
+      signupRequestId: 'req_err',
+      errorMessage: 'stripe down',
+    });
+    expect(markPendingSignupPaymentCompletedMock).not.toHaveBeenCalled();
   });
 });

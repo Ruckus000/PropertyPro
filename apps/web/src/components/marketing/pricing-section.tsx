@@ -1,4 +1,5 @@
 import React from 'react';
+import { signupTrialMarketingLine } from '@propertypro/shared';
 
 interface Tier {
   name: string;
@@ -24,7 +25,7 @@ const TIERS: Tier[] = [
       'Owner portal',
       'Compliance dashboard',
     ],
-    cta: { label: 'Start free trial', href: '/signup' },
+    cta: { label: 'Start free trial', href: '/signup?plan=essentials&communityType=condo_718' },
   },
   {
     name: 'Professional',
@@ -38,7 +39,7 @@ const TIERS: Tier[] = [
       'Maintenance & violations',
       'Advanced reporting',
     ],
-    cta: { label: 'Start free trial', href: '/signup' },
+    cta: { label: 'Start free trial', href: '/signup?plan=professional&communityType=condo_718' },
   },
   {
     name: 'Property Manager',
@@ -67,7 +68,7 @@ export function PricingSection() {
           <h2 className="mk-display">Priced for one building or fifty.</h2>
           <p className="mk-muted" style={{ marginLeft: 'auto', marginRight: 'auto' }}>
             Every plan includes statute compliance monitoring, hosting, and SSL.
-            14-day free trial, no card required.
+            {' '}{signupTrialMarketingLine()}
           </p>
         </div>
         <div className="mk-price-grid">

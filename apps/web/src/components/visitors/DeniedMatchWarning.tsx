@@ -39,7 +39,7 @@ export function DeniedMatchWarning({
 
         <div className="space-y-3">
           {matches.map((match) => (
-            <div key={match.id} className="rounded-lg border border-status-warning-bg bg-status-warning-bg/40 p-3">
+            <div key={match.id} className="rounded-lg border border-status-warning-bg bg-status-warning-bg p-3">
               <p className="font-medium text-sm">{match.fullName}</p>
               <p className="mt-1 text-sm text-content-secondary">{match.reason}</p>
               {match.vehiclePlate ? (

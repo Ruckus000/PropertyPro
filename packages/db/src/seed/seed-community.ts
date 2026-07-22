@@ -78,6 +78,8 @@ export type DemoDocumentCategoryKey =
 export type SeededDocumentCategoryIds = Record<DemoDocumentCategoryKey, number | undefined>;
 
 const STORAGE_RETRY_DELAYS_MS = [400, 1000, 2000] as const;
+const AUDIT_LOG_MAINTENANCE_LOCK_NAMESPACE = 817;
+const AUDIT_LOG_MAINTENANCE_LOCK_KEY = 1;
 
 function isRetryableStorageSeedError(message: string): boolean {
   return /bad gateway|gateway timeout|fetch failed|timed out|timeout|503|504|not visible in storage listing|no data returned|\{\}/i.test(
@@ -587,6 +589,11 @@ export async function reconcilePublicUserIdWithAuthId(
   }
 
   await db.transaction(async (tx) => {
+    // The audit-log trigger is database-wide. Serialize this exceptional,
+    // seed-only mutation with other approved maintenance paths.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${AUDIT_LOG_MAINTENANCE_LOCK_NAMESPACE}, ${AUDIT_LOG_MAINTENANCE_LOCK_KEY})`,
+    );
     const oldRow = await tx.select().from(users).where(eq(users.id, oldPublicUserId)).limit(1);
     if (!oldRow[0]) {
       throw new Error(`reconcilePublicUserIdWithAuthId: no public.users row for ${oldPublicUserId}`);

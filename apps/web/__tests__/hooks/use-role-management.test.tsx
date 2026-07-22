@@ -65,8 +65,16 @@ describe('useCommunityRoster', () => {
 });
 
 describe('useAssignPropertyManager', () => {
-  it('POSTs the right body and returns the payload', async () => {
-    requestJsonMock.mockResolvedValueOnce({ assigned: true, alreadyAssigned: false });
+  // Uses a RAW fetch (not requestJson) so the structured error code survives.
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  it('POSTs the right body and returns the unwrapped payload', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { assigned: true, alreadyAssigned: false } }),
+    });
     const { Wrapper, client } = makeWrapper();
     const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
     const { result } = renderHook(() => useAssignPropertyManager(42), {
@@ -77,13 +85,37 @@ describe('useAssignPropertyManager', () => {
       returned = await result.current.mutateAsync({ userId: 'u9' });
     });
     expect(returned).toEqual({ assigned: true, alreadyAssigned: false });
-    const [url, init] = requestJsonMock.mock.calls[0];
+    const [url, init] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0];
     expect(url).toBe('/api/v1/communities/role-assignments');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({ communityId: 42, userId: 'u9' });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: COMMUNITY_ROSTER_KEY(42),
     });
+  });
+
+  it('throws a typed error carrying the code + maxAdmins on an admin-cap 403', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        error: {
+          code: 'ADMIN_LIMIT_REACHED',
+          message: 'This plan includes up to 3 administrators.',
+          details: { maxAdmins: 3 },
+        },
+      }),
+    });
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useAssignPropertyManager(42), {
+      wrapper: Wrapper,
+    });
+    const error = await result.current
+      .mutateAsync({ userId: 'u9' })
+      .catch((e) => e as { code?: string; maxAdmins?: number; message: string });
+    expect(error.code).toBe('ADMIN_LIMIT_REACHED');
+    expect(error.maxAdmins).toBe(3);
+    expect(error.message).toMatch(/up to 3 administrators/);
   });
 });
 

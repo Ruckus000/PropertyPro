@@ -1,4 +1,4 @@
-import type { TransitionRole, BoardDesignation } from '@propertypro/shared';
+import type { CommunityRole, BoardDesignation } from '@propertypro/shared';
 import { BOARD_DESIGNATIONS } from '@propertypro/shared';
 import type { MultiTenantCommunityKey } from './multi-tenant-communities';
 
@@ -17,7 +17,7 @@ export type MultiTenantUserKey =
 export interface MultiTenantUserFixture {
   key: MultiTenantUserKey;
   communityKey: MultiTenantCommunityKey;
-  role: TransitionRole;
+  role: CommunityRole;
   isUnitOwner: boolean;
   displayTitle: string;
   /** Board designation (role-v3): statutory marker, independent of role. Null when not a board member. */

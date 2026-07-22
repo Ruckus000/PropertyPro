@@ -36,6 +36,8 @@ describe('PDF.js public asset contract', () => {
         },
       },
       response: NextResponse.next(),
+      user: null,
+      authChecked: false,
     });
   });
 

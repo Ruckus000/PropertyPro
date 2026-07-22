@@ -1,0 +1,104 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const requirePlatformAdmin = vi.fn();
+const accessPlansInsert = vi.fn();
+const communitiesUpdate = vi.fn();
+
+function makeFromMock(table: string) {
+  switch (table) {
+    case 'access_plans':
+      return {
+        insert: (payload: unknown) => ({
+          select: () => ({
+            single: () => accessPlansInsert(payload),
+          }),
+        }),
+      };
+    case 'communities':
+      return {
+        update: (payload: unknown) => ({
+          eq: (_col: string, val: unknown) => communitiesUpdate(payload, val),
+        }),
+      };
+    default:
+      throw new Error(`Unexpected table: ${table}`);
+  }
+}
+
+vi.mock('@/lib/auth/platform-admin', () => ({
+  requirePlatformAdmin: (...args: unknown[]) => requirePlatformAdmin(...args),
+}));
+
+vi.mock('@propertypro/db/supabase/admin', () => ({
+  createAdminTypedClient: () => ({
+    from: (table: string) => makeFromMock(table),
+  }),
+}));
+
+async function callGrant(body: Record<string, unknown>) {
+  const mod = await import('@/app/api/admin/access-plans/route');
+  const req = new Request('http://localhost/api/admin/access-plans', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  // The Next route handler accepts NextRequest — Request shape is structurally compatible for our use.
+  return mod.POST(req as never);
+}
+
+describe('POST /api/admin/access-plans', () => {
+  beforeEach(() => {
+    requirePlatformAdmin.mockReset();
+    accessPlansInsert.mockReset();
+    communitiesUpdate.mockReset();
+    requirePlatformAdmin.mockResolvedValue({ id: 'admin-1' });
+    communitiesUpdate.mockResolvedValue({ error: null });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('denormalizes free_access_expires_at onto the community after creating the plan', async () => {
+    accessPlansInsert.mockResolvedValue({
+      data: { id: 7, community_id: 99 },
+      error: null,
+    });
+
+    const response = await callGrant({
+      communityId: 99,
+      durationMonths: 3,
+      gracePeriodDays: 30,
+    });
+
+    expect(response.status).toBe(201);
+    expect(accessPlansInsert).toHaveBeenCalledTimes(1);
+    expect(communitiesUpdate).toHaveBeenCalledTimes(1);
+    const [updatePayload, communityIdArg] = communitiesUpdate.mock.calls[0]!;
+    expect(communityIdArg).toBe(99);
+    // free_access_expires_at should equal grace_ends_at — derived from now + duration + grace.
+    expect(updatePayload).toMatchObject({ free_access_expires_at: expect.any(String) });
+    expect(new Date(updatePayload.free_access_expires_at).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('returns 400 for missing communityId or durationMonths', async () => {
+    const response = await callGrant({ durationMonths: 3 });
+    expect(response.status).toBe(400);
+    expect(accessPlansInsert).not.toHaveBeenCalled();
+    expect(communitiesUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not call community update if access_plans insert fails', async () => {
+    accessPlansInsert.mockResolvedValue({
+      data: null,
+      error: { message: 'insert failed' },
+    });
+
+    const response = await callGrant({
+      communityId: 99,
+      durationMonths: 3,
+    });
+
+    expect(response.status).toBe(500);
+    expect(communitiesUpdate).not.toHaveBeenCalled();
+  });
+});

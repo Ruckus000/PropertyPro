@@ -10,7 +10,7 @@
 Tenant isolation is enforced at four layers — not by convention alone:
 
 1. **Runtime:** `createScopedClient()` (`packages/db/src/scoped-client.ts`) auto-injects `community_id` and `deleted_at IS NULL` on every query. Throws `TenantContextMissing` if community ID is null/undefined/NaN.
-2. **Database RLS:** `FORCE ROW LEVEL SECURITY` is enabled on all 21+ tenant tables (migrations 0020, 0027). Even the table owner role cannot bypass policies.
+2. **Database RLS:** `FORCE ROW LEVEL SECURITY` is enabled on all 50+ tenant tables (baseline migration `0000`; policy repairs in `0021`/`0023`). Even the table owner role cannot bypass policies.
 3. **Write trigger:** `pp_rls_enforce_tenant_community_id` blocks any non-privileged INSERT/UPDATE lacking `app.current_community_id` in session context. Direct browser-to-Supabase writes are blocked even if RLS policies pass.
 4. **CI guard:** `scripts/verify-scoped-db-access.ts` (rules DB001–DB005) runs on every PR via `pnpm lint`. It uses TypeScript AST parsing to catch unauthorized `drizzle-orm` imports, direct `@propertypro/db/src` imports, and new tables missing RLS enablement.
 
@@ -85,6 +85,7 @@ Synthesized from recurring incidents — these are the root causes, not the symp
 3. **Env loading:** `scripts/with-env-local.sh` uses `set -u`. If `.env.local` has `$` expansions referencing unset vars, sourcing aborts. Use `set +u` before sourcing if needed.
 4. **Append-only tables:** `compliance_audit_log` has DB-native delete protection. Integration teardown must tolerate FK-restricted cleanup failures.
 5. **PDF parsing:** `pdf-parse` loads entire files into memory. Run asynchronously outside the upload handler to avoid blocking.
+6. **The jsdom pin is load-bearing (Sentry PROPERTY-PRO-7):** root `package.json` has `pnpm.overrides["isomorphic-dompurify>jsdom"] = "25.0.1"`. jsdom >= 26 pulls the **ESM-only `@exodus/bytes`**, which the externalized sanitizer packages `require()` at runtime — 500ing every HTML-sanitizing route (public tenant sites, announcements, violations, document drafts, help API) on Vercel's **Node 24**. It does **not** reproduce locally (`.nvmrc` is Node 20), so CI-green + local-green means nothing here. Do not drop or raise that override when bumping `isomorphic-dompurify`; `pnpm guard:sanitizer-deps` enforces it. Pinning `html-encoding-sniffer` alone is a known dead end — three separate edges reach `@exodus/bytes`.
 
 ---
 

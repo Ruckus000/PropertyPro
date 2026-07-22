@@ -68,6 +68,12 @@ export const GET = withErrorHandler(
       pageSize: query.pageSize,
     });
 
+    // B2: owner/tenant checklists carry `access_document`. Fire on list load so
+    // residents can reach 100% — fired unconditionally (residents can't create
+    // documents, so gating on presence would dead-end empty communities); a no-op
+    // for roles whose checklist doesn't include this key.
+    void tryAutoComplete(effectiveCommunityId, userId, 'access_document');
+
     return { data: result.data, pagination: result.pagination };
   }),
 );

@@ -43,6 +43,13 @@ vi.mock('@/lib/services/esign-service', () => ({
   listTemplates: listTemplatesMock,
 }));
 
+// Stub the upload validators (own unit suite in storage-validators.test.ts)
+// so importing the route module doesn't pull the real @propertypro/db barrel.
+vi.mock('@/lib/services/storage-validators', () => ({
+  assertCommunityOwnedStoragePath: vi.fn(),
+  assertPdfMagicBytes: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/lib/middleware/plan-guard', () => ({
   requirePlanFeature: vi.fn().mockResolvedValue(undefined),
 }));

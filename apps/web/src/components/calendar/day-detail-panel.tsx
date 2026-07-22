@@ -1,6 +1,8 @@
 'use client';
 
-import { Badge, Button, Card } from '@propertypro/ui';
+import { Badge } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { format } from 'date-fns';
 import type { CalendarAssessmentEvent, CalendarEvent, CalendarMeetingEvent, CalendarMyAssessmentEvent } from '@/lib/calendar/event-types';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
@@ -42,7 +44,7 @@ function MeetingCard({
   const endsAt = resolveEndsAt(startsAt, event.endsAt);
 
   return (
-    <Card.Section bordered className="space-y-3">
+    <div className="space-y-3 border-t border-edge-subtle p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-2">
           <Badge variant={token.badgeVariant}>{token.label}</Badge>
@@ -71,13 +73,13 @@ function MeetingCard({
           {detailQuery.isLoading ? 'Loading attachments…' : `${docCount} attached document${docCount === 1 ? '' : 's'}`}
         </div>
       </div>
-    </Card.Section>
+    </div>
   );
 }
 
 function AggregateAssessmentCard({ event }: { event: CalendarAssessmentEvent }) {
   return (
-    <Card.Section bordered className="space-y-2">
+    <div className="space-y-2 border-t border-edge-subtle p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <Badge variant="warning">Assessment Due</Badge>
@@ -90,13 +92,13 @@ function AggregateAssessmentCard({ event }: { event: CalendarAssessmentEvent }) 
         <div>{event.pendingCount} pending</div>
         <div>{formatCurrency(event.totalAmountCents)}</div>
       </div>
-    </Card.Section>
+    </div>
   );
 }
 
 function OwnerAssessmentCard({ event }: { event: CalendarMyAssessmentEvent }) {
   return (
-    <Card.Section bordered className="space-y-2">
+    <div className="space-y-2 border-t border-edge-subtle p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <Badge variant="warning">My Assessment</Badge>
@@ -109,7 +111,7 @@ function OwnerAssessmentCard({ event }: { event: CalendarMyAssessmentEvent }) {
         <div>{formatCurrency(event.amountCents)}</div>
         <div className="capitalize">{event.status.replace('_', ' ')}</div>
       </div>
-    </Card.Section>
+    </div>
   );
 }
 
@@ -125,11 +127,11 @@ export function DayDetailPanel({
 }: DayDetailPanelProps) {
   return (
     <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
-      <Card.Header bordered>
+      <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
         <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <Card.Title>{format(date, 'EEEE, MMMM d')}</Card.Title>
-            <Card.Subtitle>{events.length} event{events.length === 1 ? '' : 's'} on this day</Card.Subtitle>
+            <CardTitle>{format(date, 'EEEE, MMMM d')}</CardTitle>
+            <CardDescription>{events.length} event{events.length === 1 ? '' : 's'} on this day</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             {canCreateMeeting ? (
@@ -142,14 +144,14 @@ export function DayDetailPanel({
             </Button>
           </div>
         </div>
-      </Card.Header>
-      <Card.Body className="space-y-3">
+      </CardHeader>
+      <CardContent className="space-y-3">
         {events.length === 0 ? (
           <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] px-4 py-8 text-center text-sm text-[var(--text-secondary)]">
             No events on this day.
           </div>
         ) : (
-          <Card noPadding className="overflow-hidden border-[var(--border-subtle)] bg-[var(--surface-page)]">
+          <Card className="overflow-hidden border-[var(--border-subtle)] bg-[var(--surface-page)]">
             {events.map((event) => {
               if (event.type === 'meeting') {
                 return (
@@ -181,7 +183,7 @@ export function DayDetailPanel({
             })}
           </Card>
         )}
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

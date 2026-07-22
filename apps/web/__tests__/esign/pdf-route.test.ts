@@ -94,7 +94,7 @@ describe('GET /api/v1/esign/templates/[id]/pdf', () => {
     getTemplateMock.mockResolvedValue({
       id: 5,
       name: 'Violation Acknowledgment',
-      sourceDocumentPath: 'communities/1/esign/violation-ack.pdf',
+      sourceDocumentPath: 'communities/1/esign-templates/violation-ack.pdf',
     });
     createPresignedDownloadUrlMock.mockResolvedValue(PRESIGNED_URL);
   });
@@ -111,8 +111,22 @@ describe('GET /api/v1/esign/templates/[id]/pdf', () => {
     expect(getTemplateMock).toHaveBeenCalledWith(1, 5);
     expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith(
       'documents',
-      'communities/1/esign/violation-ack.pdf',
+      'communities/1/esign-templates/violation-ack.pdf',
     );
+  });
+
+  it('returns 403 when the template path belongs to another community (defensive check)', async () => {
+    getTemplateMock.mockResolvedValueOnce({
+      id: 5,
+      name: 'Violation Acknowledgment',
+      // Path under community 99 — must be refused for a community-1 caller.
+      sourceDocumentPath: 'communities/99/esign-templates/violation-ack.pdf',
+    });
+
+    const res = await GET(getReq(5), routeCtx('5'));
+
+    expect(res.status).toBe(403);
+    expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated', async () => {

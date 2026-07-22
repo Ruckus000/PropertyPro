@@ -184,10 +184,10 @@ export function ElectionVoteForm({
       <Button
         type="button"
         className="h-11 w-full md:h-9"
-        disabled={!canReview || castVote.isPending}
+        disabled={!canReview}
+        loading={castVote.isPending}
         onClick={() => setReviewOpen(true)}
       >
-        {castVote.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
         Review Ballot
       </Button>
 

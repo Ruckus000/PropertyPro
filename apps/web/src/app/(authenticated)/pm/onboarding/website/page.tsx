@@ -4,8 +4,8 @@
  * Route: /pm/onboarding/website/?communityId=X
  * Auth: pm_admin or cam required.
  *
- * Step 1 ships here (layout chooser). Steps 2-5 land in follow-up
- * slices; the page renders placeholders so PMs see the full path.
+ * All five steps are live: layout + theme chooser, identity, welcome
+ * message, and confirm-publish (which stamps site_onboarding_completed_at).
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';

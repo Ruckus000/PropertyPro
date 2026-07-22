@@ -24,7 +24,10 @@ export function useOnboardingChecklist(communityId: number | null) {
       return json.data;
     },
     enabled: communityId != null,
-    staleTime: 30_000,
+    // B2: short window so the dashboard reflects checklist items that were
+    // auto-completed server-side while the user was on a target view (e.g. the
+    // announcements or documents page) and then returned.
+    staleTime: 5_000,
   });
 
   // Self-healing: if query succeeds with empty data and we haven't tried

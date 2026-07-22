@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type FormEvent } from 'react';
-import type { CommunityType, NewCommunityRole } from '@propertypro/shared';
+import type { CommunityType, CommunityRole } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 
 // ---------------------------------------------------------------------------
@@ -14,7 +14,7 @@ interface RoleOption {
   /** Internal key used as the <option> value */
   key: string;
   /** v2 API role field */
-  apiRole: NewCommunityRole;
+  apiRole: CommunityRole;
   /** v2 API isUnitOwner field */
   isUnitOwner: boolean;
   /** Whether unit selection is required for this role */
@@ -64,7 +64,7 @@ export interface ResidentFormSubmitValues {
   fullName: string;
   email: string;
   phone: string;
-  role: NewCommunityRole;
+  role: CommunityRole;
   unitId: number | null;
   isUnitOwner: boolean;
 }

@@ -12,7 +12,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useSelectedCommunity } from '@/hooks/useSelectedCommunity';
+import { useSelectedCommunity } from '@/hooks/use-selected-community';
 import type { PmCommunityPortfolioCard } from '@/lib/api/pm-communities';
 
 interface CommunitySwitcherProps {

@@ -41,7 +41,7 @@ export function HeroBlock(props: BlockRendererProps) {
           {content.headline}
         </h1>
         {content.subtitle && (
-          <p className="mt-4 text-lg text-content-inverse/80">{content.subtitle}</p>
+          <p className="mt-4 text-lg text-content-inverse">{content.subtitle}</p>
         )}
         {content.ctaText && content.ctaTarget && (
           <div className="mt-8">

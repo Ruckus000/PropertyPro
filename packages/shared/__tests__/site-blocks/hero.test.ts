@@ -54,6 +54,26 @@ describe('heroBlockSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects ctaTarget with a backslash-bypass protocol-relative URL (/\\evil.com)', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '/\\evil.com' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects ctaTarget with mixed slash/backslash bypass (/\\/\\evil.com)', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '/\\/\\evil.com' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects ctaTarget with a leading double backslash (\\\\evil.com)', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '\\\\evil.com' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects ctaTarget with a single leading backslash (\\evil.com)', () => {
+    const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '\\evil.com' });
+    expect(result.success).toBe(false);
+  });
+
   it('still accepts a normal internal path with a single leading slash', () => {
     const result = heroBlockSchema.safeParse({ ...valid, ctaTarget: '/path/to/page' });
     expect(result.success).toBe(true);

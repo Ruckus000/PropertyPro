@@ -29,7 +29,7 @@ const {
   deleteResidentRoleMock,
   revokeVisitorPassesForUserMock,
   requireCommunityTypeMock,
-  requireNewCommunityRoleMock,
+  requireCommunityRoleMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -50,7 +50,7 @@ const {
   deleteResidentRoleMock: vi.fn(),
   revokeVisitorPassesForUserMock: vi.fn(),
   requireCommunityTypeMock: vi.fn(),
-  requireNewCommunityRoleMock: vi.fn(),
+  requireCommunityRoleMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -99,7 +99,7 @@ vi.mock('@/lib/services/package-visitor-service', () => ({
 
 vi.mock('@/lib/utils/community-validators', () => ({
   requireCommunityType: requireCommunityTypeMock,
-  requireNewCommunityRole: requireNewCommunityRoleMock,
+  requireCommunityRole: requireCommunityRoleMock,
 }));
 
 import { POST, PATCH } from '../../../src/app/api/v1/residents/route';
@@ -152,13 +152,13 @@ describe('residents manager-tier lockdown', () => {
     logAuditEventMock.mockResolvedValue(undefined);
     // requireCommunityType returns a valid type
     requireCommunityTypeMock.mockImplementation((_type: string) => 'condo_718');
-    // requireNewCommunityRole returns its first arg
-    requireNewCommunityRoleMock.mockImplementation((role: string) => role);
+    // requireCommunityRole returns its first arg
+    requireCommunityRoleMock.mockImplementation((role: string) => role);
   });
 
   // -----------------------------------------------------------------------
   // PATCH: manager-tier role → 403
-  // role='property_manager' is valid per the contract schema (NEW_COMMUNITY_ROLES
+  // role='property_manager' is valid per the contract schema (COMMUNITY_ROLES
   // includes it) but must be blocked by the isResidentTierRole guard before any
   // DB write.
   // -----------------------------------------------------------------------
@@ -250,7 +250,7 @@ describe('residents manager-tier lockdown', () => {
 
   // -----------------------------------------------------------------------
   // POST: manager-tier role → 403
-  // role='property_manager' passes Zod (NEW_COMMUNITY_ROLES includes it) but
+  // role='property_manager' passes Zod (COMMUNITY_ROLES includes it) but
   // must be blocked by the isResidentTierRole guard before any DB write.
   // -----------------------------------------------------------------------
   describe('POST with manager-tier role', () => {

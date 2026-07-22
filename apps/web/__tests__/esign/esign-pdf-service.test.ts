@@ -8,7 +8,7 @@ const { createAdminClientMock } = vi.hoisted(() => ({
   createAdminClientMock: vi.fn(),
 }));
 
-vi.mock('@propertypro/db', () => ({
+vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
 }));
 

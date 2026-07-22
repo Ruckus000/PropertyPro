@@ -86,6 +86,35 @@ export async function getDemoById(id: number): Promise<{
     .single();
 }
 
+/**
+ * Fetch a demo instance with the joined community's `is_demo` flag, populating
+ * `is_converted`. Used by DELETE to refuse cascading the community when the
+ * demo has already been converted to a real customer (is_demo=false).
+ */
+export async function getDemoByIdWithConversionState(id: number): Promise<{
+  data: DemoInstanceRow | null;
+  error: { message: string } | null;
+}> {
+  const { data, error } = await from('demo_instances')
+    .select('*, communities:seeded_community_id(is_demo)')
+    .eq('id', id)
+    .single();
+
+  if (error || !data) {
+    return { data: null, error };
+  }
+
+  const row = data as DemoInstanceRow & { communities: { is_demo: boolean } | null };
+  return {
+    data: {
+      ...row,
+      is_converted: row.communities ? !row.communities.is_demo : false,
+      communities: undefined,
+    } as DemoInstanceRow,
+    error: null,
+  };
+}
+
 /** Insert a new demo instance row. */
 export async function insertDemo(row: {
   template_type: string;

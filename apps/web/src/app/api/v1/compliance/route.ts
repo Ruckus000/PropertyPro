@@ -104,6 +104,9 @@ export const GET = withErrorHandler(
 
     if (data.length > 0) {
       void tryAutoComplete(communityId, userId, 'review_compliance');
+      // B2: board members' checklist carries `check_compliance` (distinct from the
+      // admin `review_compliance`). Firing it here lets board roles reach 100%.
+      void tryAutoComplete(communityId, userId, 'check_compliance');
     }
 
     return data;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import {
@@ -156,8 +156,7 @@ export function CreatePollDialog({
           <Button type="button" variant="outline" className="h-11 md:h-9" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" className="h-11 md:h-9" disabled={!canSubmit || createPoll.isPending} onClick={() => void handleSubmit()}>
-            {createPoll.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          <Button type="button" className="h-11 md:h-9" disabled={!canSubmit} loading={createPoll.isPending} onClick={() => void handleSubmit()}>
             Create Poll
           </Button>
         </DialogFooter>

@@ -5,6 +5,8 @@ import {
   PM_NAV_ITEMS,
   getVisibleItems,
   getActiveItemId,
+  resolveDashboardHref,
+  resolveNavItemHref,
   PAGE_TITLES,
 } from '../../src/components/layout/nav-config';
 import type { CommunityFeatures } from '@propertypro/shared';
@@ -111,8 +113,8 @@ describe('NAV_SECTIONS', () => {
 });
 
 describe('getVisibleItems', () => {
-  it('shows all main items to owners in condo communities', () => {
-    const items = getVisibleItems(NAV_ITEMS, 'owner', ALL_FEATURES);
+  it('shows all main items to residents in condo communities', () => {
+    const items = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, true);
     const ids = items.map((i) => i.id);
     expect(ids).toContain('dashboard');
     expect(ids).toContain('documents');
@@ -122,22 +124,23 @@ describe('getVisibleItems', () => {
     expect(ids).toContain('operations');
   });
 
-  it('hides admin items from owners', () => {
-    const items = getVisibleItems(NAV_ITEMS, 'owner', ALL_FEATURES);
+  it('hides admin items from residents', () => {
+    const items = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, true);
     const ids = items.map((i) => i.id);
     expect(ids).not.toContain('compliance');
     expect(ids).not.toContain('contracts');
     expect(ids).not.toContain('audit-trail');
   });
 
-  it('hides payments from tenant role to avoid finance dead-end pages', () => {
-    const items = getVisibleItems(NAV_ITEMS, 'tenant', ALL_FEATURES);
-    const ids = items.map((i) => i.id);
-    expect(ids).not.toContain('payments');
+  it('shows payments to unit owners but hides it from tenants (finance dead-end)', () => {
+    const owner = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, true).map((i) => i.id);
+    const tenant = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, false).map((i) => i.id);
+    expect(owner).toContain('payments');
+    expect(tenant).not.toContain('payments');
   });
 
-  it('shows admin items to board members', () => {
-    const items = getVisibleItems(NAV_ITEMS, 'board_member', ALL_FEATURES);
+  it('shows admin items to the management tier', () => {
+    const items = getVisibleItems(NAV_ITEMS, 'property_manager', ALL_FEATURES);
     const ids = items.map((i) => i.id);
     expect(ids).toContain('compliance');
     expect(ids).toContain('contracts');
@@ -145,7 +148,7 @@ describe('getVisibleItems', () => {
   });
 
   it('hides feature-gated items when feature is disabled', () => {
-    const items = getVisibleItems(NAV_ITEMS, 'board_member', APARTMENT_FEATURES);
+    const items = getVisibleItems(NAV_ITEMS, 'property_manager', APARTMENT_FEATURES);
     const ids = items.map((i) => i.id);
     // Apartments have meetings, so it should be visible
     expect(ids).toContain('meetings');
@@ -165,27 +168,27 @@ describe('getVisibleItems', () => {
     // hasPackageLogging=false at the community-type layer must hide the
     // packages nav item entirely so users do not click into a guard state
     // they cannot resolve. Same for visitors.
-    const items = getVisibleItems(NAV_ITEMS, 'board_member', HOA_FEATURES);
+    const items = getVisibleItems(NAV_ITEMS, 'property_manager', HOA_FEATURES);
     const ids = items.map((i) => i.id);
     expect(ids).not.toContain('packages');
     expect(ids).not.toContain('visitors');
   });
 
-  it('shows the Website (site editor) launcher only to cam + property_manager_admin', () => {
-    // The editor route allows only pm_admin/cam, so the community-sidebar
-    // launcher must be gated to exactly those roles — never a dead link.
+  it('shows the Website (site editor) launcher to the management tier only', () => {
+    // The editor route is management-tier, so the community-sidebar launcher is
+    // gated the same way — never a dead link. `designation` is orthogonal
+    // (ADR-006): a resident who holds a board seat still does not see it.
     const withEditor = { ...ALL_FEATURES, hasSiteEditor: true };
-    expect(getVisibleItems(NAV_ITEMS, 'cam', withEditor).map((i) => i.id)).toContain('website');
-    expect(getVisibleItems(NAV_ITEMS, 'property_manager_admin', withEditor).map((i) => i.id)).toContain('website');
-    for (const role of ['owner', 'tenant', 'board_member', 'board_president'] as const) {
-      // Excluded by ROLE even with the feature on.
-      expect(getVisibleItems(NAV_ITEMS, role, withEditor).map((i) => i.id)).not.toContain('website');
-    }
+    expect(getVisibleItems(NAV_ITEMS, 'property_manager', withEditor).map((i) => i.id)).toContain('website');
+    expect(getVisibleItems(NAV_ITEMS, 'root_manager', withEditor).map((i) => i.id)).toContain('website');
+    // Residents (owner or tenant) never see it, even with the feature on.
+    expect(getVisibleItems(NAV_ITEMS, 'resident', withEditor, true).map((i) => i.id)).not.toContain('website');
+    expect(getVisibleItems(NAV_ITEMS, 'resident', withEditor, false).map((i) => i.id)).not.toContain('website');
   });
 
   it('hides the Website launcher when the plan lacks the site editor', () => {
     const noEditor = { ...ALL_FEATURES, hasSiteEditor: false };
-    expect(getVisibleItems(NAV_ITEMS, 'cam', noEditor).map((i) => i.id)).not.toContain('website');
+    expect(getVisibleItems(NAV_ITEMS, 'property_manager', noEditor).map((i) => i.id)).not.toContain('website');
   });
 });
 
@@ -197,6 +200,59 @@ describe('nav href generation', () => {
     expect(byId.get('meetings')?.href(42)).toBe('/communities/42/meetings');
     expect(byId.get('payments')?.href(42)).toBe('/communities/42/payments');
     expect(byId.get('compliance')?.href(42)).toBe('/communities/42/compliance');
+  });
+
+  it('never targets a compatibility redirect bridge page', () => {
+    // Top-level bridge stubs that immediately server-redirect to
+    // /communities/:id/... — one click must not cost two route loads.
+    const bridgePathnames = ['/documents', '/payments', '/finance', '/assessments'];
+
+    for (const item of [...NAV_ITEMS, ...PM_NAV_ITEMS]) {
+      const pathname = item.href(42).split('?')[0];
+      expect(
+        bridgePathnames.includes(pathname),
+        `nav item "${item.id}" links to redirect bridge ${pathname}`,
+      ).toBe(false);
+    }
+  });
+});
+
+describe('resolveDashboardHref', () => {
+  it('links lease-tracking communities straight to the apartment dashboard', () => {
+    expect(
+      resolveDashboardHref(42, { ...ALL_FEATURES, hasLeaseTracking: true }),
+    ).toBe('/dashboard/apartment?communityId=42');
+  });
+
+  it('links non-lease communities to the generic dashboard', () => {
+    expect(resolveDashboardHref(42, ALL_FEATURES)).toBe('/dashboard?communityId=42');
+  });
+
+  it('falls back to the generic dashboard when features are unknown', () => {
+    expect(resolveDashboardHref(42, null)).toBe('/dashboard?communityId=42');
+  });
+});
+
+describe('resolveNavItemHref', () => {
+  it('resolves every PM item to its real /pm/... destination when communityId is null', () => {
+    // Regression: the PM portal renders with community = null (cross-community
+    // context, no tenant header), and the old sidebar logic sent EVERY PM nav
+    // item to the /select-community fallback — a fully dead PM nav.
+    for (const item of PM_NAV_ITEMS) {
+      const href = resolveNavItemHref(item, null, true);
+      expect(href, `PM item "${item.id}"`).toBe(item.href(0));
+      expect(href.startsWith('/pm/'), `PM item "${item.id}" resolves to ${href}`).toBe(true);
+    }
+  });
+
+  it('keeps the community-scoped href when communityId is present', () => {
+    const documents = NAV_ITEMS.find((item) => item.id === 'documents')!;
+    expect(resolveNavItemHref(documents, 42, false)).toBe('/communities/42/documents');
+  });
+
+  it('falls back to the community picker for community items without tenant context', () => {
+    const documents = NAV_ITEMS.find((item) => item.id === 'documents')!;
+    expect(resolveNavItemHref(documents, null, false)).toBe('/select-community');
   });
 });
 

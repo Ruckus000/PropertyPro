@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { COMMUNITY_ROLES } from '../src/index';
 import {
   ADMIN_TIER_DB_ROLES,
   MANAGER_TIER_DB_ROLES,
   PM_SCOPE_DB_ROLES,
-  TRANSITION_ROLES,
   expandTransitionRoleFilter,
   hasBoardDesignation,
   isBoardPresident,
@@ -11,8 +11,8 @@ import {
 
 describe('role-transition constants', () => {
   // Contract-pin tests: they catch accidental constant mutation, not logic.
-  it('TRANSITION_ROLES is the v3-only set', () => {
-    expect(TRANSITION_ROLES).toEqual(['resident', 'property_manager', 'root_manager']);
+  it('COMMUNITY_ROLES is the v3-only set', () => {
+    expect(COMMUNITY_ROLES).toEqual(['resident', 'property_manager', 'root_manager']);
   });
   it('ADMIN_TIER includes the v3 manager-or-above values', () => {
     expect(ADMIN_TIER_DB_ROLES).toEqual(['property_manager', 'root_manager']);

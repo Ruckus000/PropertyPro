@@ -63,3 +63,20 @@ describe('<SiteSetupBanner>', () => {
     await waitFor(() => expect(screen.queryByTestId('site-setup-banner')).toBeNull());
   });
 });
+
+describe('<SiteSetupBanner> — CTA (slice 8f)', () => {
+  it('deep-links the CTA into the first incomplete community wizard', async () => {
+    mockStatus(false);
+    render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} />));
+    const cta = await screen.findByTestId('site-setup-banner-cta');
+    expect(cta).toHaveAttribute('href', '/pm/onboarding/website?communityId=7');
+    expect(cta).toHaveTextContent(/set up your website/i);
+  });
+
+  it('falls back to the website editor hub when no community id is supplied', async () => {
+    mockStatus(false);
+    render(wrap(<SiteSetupBanner hasIncompleteSite />));
+    const cta = await screen.findByTestId('site-setup-banner-cta');
+    expect(cta).toHaveAttribute('href', '/pm/settings/website');
+  });
+});

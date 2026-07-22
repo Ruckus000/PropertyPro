@@ -1,0 +1,254 @@
+{
+  "apps/admin/src/app/api/admin/communities/[id]/branding/route.ts": {
+    "raw-hex": 1
+  },
+  "apps/admin/src/app/api/admin/demos/[id]/community/branding/route.ts": {
+    "raw-hex": 1
+  },
+  "apps/admin/src/app/api/admin/demos/preview/route.ts": {
+    "raw-hex": 3
+  },
+  "apps/admin/src/app/auth/login/page.tsx": {
+    "raw-palette": 20
+  },
+  "apps/admin/src/app/communities/rootless/page.tsx": {
+    "raw-palette": 28
+  },
+  "apps/admin/src/app/dashboard/page.tsx": {
+    "raw-palette": 1
+  },
+  "apps/admin/src/app/deletion-requests/page.tsx": {
+    "raw-palette": 1
+  },
+  "apps/admin/src/app/demo/[id]/mobile/MobilePreviewClient.tsx": {
+    "raw-palette": 7
+  },
+  "apps/admin/src/app/demo/[id]/preview/page.tsx": {
+    "raw-palette": 10
+  },
+  "apps/admin/src/app/demo/[id]/preview/SplitPreviewClient.tsx": {
+    "raw-palette": 8
+  },
+  "apps/admin/src/app/demo/[id]/preview/TabbedPreviewClient.tsx": {
+    "raw-palette": 26
+  },
+  "apps/admin/src/app/demo/new/page.tsx": {
+    "raw-hex": 3
+  },
+  "apps/admin/src/app/layout.tsx": {
+    "raw-palette": 2
+  },
+  "apps/admin/src/app/site-templates/block-registry/page.tsx": {
+    "raw-palette": 5
+  },
+  "apps/admin/src/app/site-templates/documentation/page.tsx": {
+    "raw-palette": 5
+  },
+  "apps/admin/src/app/site-templates/page.tsx": {
+    "raw-palette": 14
+  },
+  "apps/admin/src/app/site-templates/starter-packs/page.tsx": {
+    "raw-palette": 2
+  },
+  "apps/admin/src/app/site-templates/theme-presets/page.tsx": {
+    "raw-palette": 2
+  },
+  "apps/admin/src/components/AdminLayout.tsx": {
+    "raw-palette": 1
+  },
+  "apps/admin/src/components/clients/AccessLogTable.tsx": {
+    "raw-palette": 19
+  },
+  "apps/admin/src/components/clients/ClientPortfolio.tsx": {
+    "raw-palette": 50
+  },
+  "apps/admin/src/components/clients/ClientWorkspace.tsx": {
+    "raw-palette": 49
+  },
+  "apps/admin/src/components/clients/CommunityAccess.tsx": {
+    "raw-palette": 98
+  },
+  "apps/admin/src/components/clients/CommunityCompliance.tsx": {
+    "raw-palette": 51
+  },
+  "apps/admin/src/components/clients/CommunityMembers.tsx": {
+    "raw-palette": 58
+  },
+  "apps/admin/src/components/clients/CommunitySettingsEditor.tsx": {
+    "raw-palette": 48
+  },
+  "apps/admin/src/components/clients/CommunityWebsiteEditor.tsx": {
+    "raw-palette": 43,
+    "raw-hex": 1
+  },
+  "apps/admin/src/components/clients/StartSessionDialog.tsx": {
+    "raw-palette": 18
+  },
+  "apps/admin/src/components/clients/SupportAccessTab.tsx": {
+    "raw-palette": 33
+  },
+  "apps/admin/src/components/communities/ReassignRootControl.tsx": {
+    "raw-palette": 4
+  },
+  "apps/admin/src/components/dashboard/PlatformDashboard.tsx": {
+    "raw-palette": 40
+  },
+  "apps/admin/src/components/deletion-requests/DeletionRequestsDashboard.tsx": {
+    "raw-palette": 78
+  },
+  "apps/admin/src/components/demo/CommunityEditSection.tsx": {
+    "raw-palette": 17
+  },
+  "apps/admin/src/components/demo/DemoEditDrawer.tsx": {
+    "raw-hex": 3,
+    "raw-palette": 14
+  },
+  "apps/admin/src/components/demo/DemoListClient.tsx": {
+    "raw-palette": 52
+  },
+  "apps/admin/src/components/demo/PillStepper.tsx": {
+    "arbitrary-font": 2,
+    "raw-hex": 1,
+    "arbitrary-color": 1
+  },
+  "apps/admin/src/components/demo/PreviewModal.tsx": {
+    "arbitrary-color": 1,
+    "raw-hex": 3
+  },
+  "apps/admin/src/components/demo/PreviewPanel.tsx": {
+    "arbitrary-font": 2,
+    "raw-hex": 3
+  },
+  "apps/admin/src/components/demo/ProspectEditSection.tsx": {
+    "raw-palette": 17
+  },
+  "apps/admin/src/components/demo/ReviewStep.tsx": {
+    "arbitrary-font": 7,
+    "raw-hex": 2,
+    "arbitrary-color": 2
+  },
+  "apps/admin/src/components/loading/AdminPageLoading.tsx": {
+    "raw-palette": 2
+  },
+  "apps/admin/src/components/settings/PlatformSettings.tsx": {
+    "raw-palette": 37
+  },
+  "apps/admin/src/components/Sidebar.tsx": {
+    "raw-palette": 13
+  },
+  "apps/admin/src/components/site-templates/BlockRegistryView.tsx": {
+    "raw-palette": 20
+  },
+  "apps/admin/src/components/site-templates/DocumentationHubs.tsx": {
+    "raw-palette": 4
+  },
+  "apps/admin/src/components/site-templates/LayoutsTable.tsx": {
+    "raw-palette": 57
+  },
+  "apps/admin/src/components/site-templates/StarterPackBlocksEditor.tsx": {
+    "raw-palette": 16
+  },
+  "apps/admin/src/components/site-templates/StarterPacksTable.tsx": {
+    "raw-palette": 14
+  },
+  "apps/admin/src/components/site-templates/ThemePresetsTable.tsx": {
+    "raw-palette": 58
+  },
+  "apps/admin/src/lib/constants/community-labels.ts": {
+    "raw-palette": 14
+  },
+  "apps/admin/src/lib/utils/stale-badge.ts": {
+    "raw-palette": 6
+  },
+  "apps/web/src/app/(authenticated)/select-community/page.tsx": {
+    "raw-palette": 6
+  },
+  "apps/web/src/app/(marketing)/marketing-theme.css": {
+    "raw-hex": 50,
+    "raw-color-fn": 12
+  },
+  "apps/web/src/app/layout.tsx": {
+    "raw-palette": 2
+  },
+  "apps/web/src/app/mobile/page.tsx": {
+    "raw-hex": 3
+  },
+  "apps/web/src/components/announcements/announcement-feed.tsx": {
+    "raw-palette": 11
+  },
+  "apps/web/src/components/announcements/announcement-toolbar.tsx": {
+    "raw-palette": 5
+  },
+  "apps/web/src/components/command-palette/CommandItem.tsx": {
+    "raw-palette": 6
+  },
+  "apps/web/src/components/mobile/FeatureCard.tsx": {
+    "raw-palette": 41,
+    "arbitrary-font": 12
+  },
+  "apps/web/src/components/mobile/MobileAnnouncementsContent.tsx": {
+    "raw-palette": 14,
+    "arbitrary-font": 6
+  },
+  "apps/web/src/components/mobile/MobileBackHeader.tsx": {
+    "raw-palette": 4
+  },
+  "apps/web/src/components/mobile/MobileContactContent.tsx": {
+    "raw-palette": 16,
+    "arbitrary-font": 6
+  },
+  "apps/web/src/components/mobile/MobileDocumentsContent.tsx": {
+    "raw-palette": 27,
+    "arbitrary-font": 3
+  },
+  "apps/web/src/components/mobile/MobileFaqManageContent.tsx": {
+    "raw-palette": 32,
+    "arbitrary-font": 11
+  },
+  "apps/web/src/components/mobile/MobileHelpContent.tsx": {
+    "raw-palette": 32,
+    "arbitrary-font": 11
+  },
+  "apps/web/src/components/mobile/MobileHomeContent.tsx": {
+    "raw-palette": 6,
+    "arbitrary-font": 1
+  },
+  "apps/web/src/components/mobile/MobileMaintenanceContent.tsx": {
+    "raw-palette": 25,
+    "arbitrary-font": 5
+  },
+  "apps/web/src/components/mobile/MobileMeetingsContent.tsx": {
+    "raw-palette": 19,
+    "arbitrary-font": 9
+  },
+  "apps/web/src/components/mobile/MobileNavRow.tsx": {
+    "raw-palette": 7,
+    "arbitrary-font": 2
+  },
+  "apps/web/src/components/mobile/MobileProfileContent.tsx": {
+    "raw-palette": 22,
+    "arbitrary-font": 10
+  },
+  "apps/web/src/components/mobile/MobileSearchContent.tsx": {
+    "arbitrary-font": 1,
+    "slash-opacity-semantic": 1
+  },
+  "apps/web/src/components/mobile/MobileSecurityContent.tsx": {
+    "raw-palette": 23,
+    "arbitrary-font": 10
+  },
+  "apps/web/src/components/mobile/MobileSettingsContent.tsx": {
+    "raw-palette": 31,
+    "arbitrary-font": 11
+  },
+  "apps/web/src/components/mobile/TenantDashboardMockup.tsx": {
+    "raw-palette": 18,
+    "arbitrary-font": 10
+  },
+  "apps/web/src/lib/documents/render-authored-html.ts": {
+    "raw-hex": 23
+  },
+  "apps/web/src/styles/mobile.css": {
+    "raw-hex": 8
+  }
+}

@@ -1,44 +1,10 @@
-import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
-// AUTHZ: Public transparency page resolves community by subdomain slug before any tenant context exists; no communityId is available yet.
-import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
-import { getFeaturesForCommunity } from '@propertypro/shared';
-import { TransparencyPage } from '@/components/transparency/transparency-page';
-import { getTransparencyPageData } from '@/lib/services/transparency-service';
-import { resolvePublicCommunity } from '@/lib/tenant/community-resolution';
+import { redirectToCanonicalHost } from '@/lib/tenant/redirect-canonical-host';
 
 interface Props {
   params: Promise<{ subdomain: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function PublicTransparencyPage({ params, searchParams }: Props) {
-  const [{ subdomain }, resolvedSearchParams, requestHeaders] = await Promise.all([
-    params,
-    searchParams,
-    headers(),
-  ]);
-
-  const community = await resolvePublicCommunity(
-    resolvedSearchParams,
-    subdomain,
-    requestHeaders.get('host'),
-  );
-
-  if (!community) {
-    notFound();
-  }
-
-  const features = getFeaturesForCommunity(community.communityType);
-  if (!features.hasTransparencyPage) {
-    notFound();
-  }
-
-  const communityRow = await findCommunityBySlugUnscoped(community.slug);
-  if (!communityRow || !communityRow.transparencyEnabled) {
-    notFound();
-  }
-
-  const data = await getTransparencyPageData(community);
-  return <TransparencyPage data={data} />;
+export default async function PublicTransparencyPathPage({ params }: Props) {
+  const { subdomain } = await params;
+  redirectToCanonicalHost(subdomain, '/transparency');
 }

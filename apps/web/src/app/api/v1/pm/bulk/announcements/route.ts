@@ -11,13 +11,10 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 // AUTHZ: Phase 2C: Bulk operations — cross-community announcements + document uploads
-import {
-  findManagedCommunitiesPortfolioUnscoped,
-  isPmAdminInAnyCommunity,
-} from '@propertypro/db/unsafe';
+import { findManagedCommunitiesPortfolioUnscoped } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError } from '@/lib/api/errors';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { type AnnouncementAudience } from '@/lib/services/announcement-delivery';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
@@ -33,12 +30,9 @@ interface BulkResult {
 
 export const POST = withErrorHandler(
   runRoute(pmBulkAnnouncementsPostContract, async ({ body }) => {
-    const userId = await requireAuthenticatedUserId();
-
-    const isPm = await isPmAdminInAnyCommunity(userId);
-    if (!isPm) {
-      throw new ForbiddenError('Only property managers can send bulk announcements');
-    }
+    const userId = await requirePmPortfolioAccess(
+      'Only property managers can send bulk announcements',
+    );
 
     const { communityIds, title, body: rawBody, audience, isPinned } = body;
     const sanitizedBody = sanitizeHtml(rawBody);

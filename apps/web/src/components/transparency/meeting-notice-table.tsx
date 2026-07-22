@@ -1,6 +1,7 @@
 'use client';
 
-import { Card, StatusBadge, type StatusKey } from '@propertypro/ui';
+import { StatusBadge, type StatusKey } from '@propertypro/ui';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { TransparencyMeetingNotice } from '@/lib/services/transparency-service';
 
 interface Props {
@@ -45,13 +46,13 @@ function formatLeadTime(value: number | null, required: number): string {
 export function MeetingNoticeTable({ meetings, timezone }: Props) {
   return (
     <Card className="border-edge bg-surface-card">
-      <Card.Header>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <div className="flex flex-col">
-          <Card.Title>Meeting Notice History</Card.Title>
-          <Card.Subtitle>Last 12 months tracked in PropertyPro</Card.Subtitle>
+          <CardTitle>Meeting Notice History</CardTitle>
+          <CardDescription>Last 12 months tracked in PropertyPro</CardDescription>
         </div>
-      </Card.Header>
-      <Card.Body>
+      </CardHeader>
+      <CardContent>
         {meetings.length === 0 ? (
           <p className="rounded-md border border-edge bg-surface-page p-3 text-sm text-content-secondary">
             No meeting notices have been recorded in PropertyPro for the last 12 months.
@@ -121,7 +122,7 @@ export function MeetingNoticeTable({ meetings, timezone }: Props) {
             </div>
           </>
         )}
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

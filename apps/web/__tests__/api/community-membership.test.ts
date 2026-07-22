@@ -56,6 +56,8 @@ describe('requireCommunityMembership', () => {
       communityType: 'condo_718',
       subscriptionPlan: null,
       subscriptionStatus: null,
+      subscriptionCanceledAt: null,
+      subscriptionCurrentPeriodEndAt: null,
       freeAccessExpiresAt: null,
       timezone: 'America/New_York',
       designation: null,

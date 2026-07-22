@@ -2,7 +2,7 @@ import { createElement, type ReactElement } from 'react';
 import { addDays } from 'date-fns';
 import type {
   CommunityType,
-  TransitionRole,
+  CommunityRole,
 } from '@propertypro/shared';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
@@ -49,7 +49,7 @@ import {
   listAggregateAssessmentDueRecords,
   listCommunityCalendarMeetings,
 } from '@/lib/services/calendar-data-service';
-import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
+import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
 
 const MAX_ATTEMPTS = 5;
@@ -73,7 +73,7 @@ interface ActiveCommunity {
 interface CommunityRoleRow {
   [key: string]: unknown;
   userId: string;
-  role: TransitionRole;
+  role: CommunityRole;
   isUnitOwner: boolean;
   unitId: number | null;
 }
@@ -109,7 +109,7 @@ export interface CommunityRecipient {
   userId: string;
   email: string;
   fullName: string;
-  role: TransitionRole;
+  role: CommunityRole;
   isUnitOwner: boolean;
   isAdmin: boolean;
   unitId: number | null;
@@ -394,7 +394,7 @@ async function loadCommunityRecipients(
     const user = usersById.get(row.userId);
     if (!user?.email) continue;
 
-    const role = requireNewCommunityRole(
+    const role = requireCommunityRole(
       row.role,
       `calendar reminder role ${community.id}:${row.userId}`,
     );

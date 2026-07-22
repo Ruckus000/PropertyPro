@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { FilePlus2, PenTool } from 'lucide-react';
 import {
   type CommunityType,
-  type TransitionRole,
+  type CommunityRole,
 } from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { DocumentUploadArea } from './document-upload-area';
@@ -15,13 +15,13 @@ import { DocumentViewer } from './document-viewer';
 import { DocumentVersionHistory } from './document-version-history';
 import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentSearch } from './document-search';
-import type { UploadDocumentResult } from '@/hooks/useDocumentUpload';
+import type { UploadDocumentResult } from '@/hooks/use-document-upload';
 
 interface DocumentLibraryProps {
   communityId: number;
   communityType: CommunityType;
   userId: string;
-  userRole: TransitionRole;
+  userRole: CommunityRole;
   isUnitOwner?: boolean;
   /** Effective community feature — hide E‑Sign when the plan/type does not include it. */
   hasEsign: boolean;

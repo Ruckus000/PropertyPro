@@ -446,17 +446,6 @@ function mapAssessmentRow(row: AssessmentRecord): AssessmentRecord {
   };
 }
 
-export async function listAssessmentsForCommunity(
-  communityId: number,
-): Promise<AssessmentRecord[]> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped
-    .selectFrom<AssessmentRecord>(assessments, {})
-    .orderBy(desc(assessments.isActive), desc(assessments.createdAt), desc(assessments.id));
-
-  return rows.map(mapAssessmentRow);
-}
-
 /**
  * Ordered-keyset paginated assessment list.
  *
@@ -2371,15 +2360,6 @@ export async function getLedgerBalanceForUnit(
 ): Promise<number> {
   const scoped = createScopedClient(communityId);
   return getUnitLedgerBalance(scoped, unitId);
-}
-
-export async function findActorUnitId(
-  communityId: number,
-  actorUserId: string,
-): Promise<number | null> {
-  const scoped = createScopedClient(communityId);
-  const unitIds = await listActorUnitIds(scoped, actorUserId);
-  return unitIds[0] ?? null;
 }
 
 export async function listActorUnitIdsForFinance(

@@ -76,8 +76,8 @@ export async function getUserForInvitation(
 }
 
 /**
- * One-row user-role lookup. Returns the role string (e.g. 'resident',
- * 'cam', 'board_member') or `null` when no row matches.
+ * One-row user-role lookup. Returns the v3 role string (e.g. 'resident',
+ * 'property_manager', 'root_manager') or `null` when no row matches.
  */
 export async function getUserRoleForInvitation(
   communityId: number,

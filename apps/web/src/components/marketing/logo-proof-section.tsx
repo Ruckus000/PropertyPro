@@ -9,13 +9,13 @@ const COMPANIES = [
   'Mangrove Association Mgmt',
 ];
 
-/** Social-proof strip: management companies that run portfolios on PropertyPro. */
+/** Placeholder management-company strip. */
 export function LogoProofSection() {
   return (
     <section className="mk-band mk-logo-proof">
       <div className="mk-wrap">
         <p className="mk-logo-eyebrow">
-          Trusted by management companies across Florida
+          Illustrative management-company names (examples)
         </p>
         <div className="mk-logo-strip">
           {COMPANIES.map((c) => (

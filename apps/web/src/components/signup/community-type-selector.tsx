@@ -49,7 +49,7 @@ export function CommunityTypeSelector({
               onClick={() => onChange(option.value)}
               className={`rounded-md border px-3 py-3 text-left transition-colors ${
                 isSelected
-                  ? 'border-interactive bg-interactive/10'
+                  ? 'border-interactive bg-interactive-subtle'
                   : 'border-edge-strong bg-surface-card hover:border-edge-strong'
               } disabled:cursor-not-allowed disabled:opacity-60`}
               aria-pressed={isSelected}
