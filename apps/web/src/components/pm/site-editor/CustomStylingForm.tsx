@@ -12,13 +12,13 @@ interface Props {
 }
 
 const COLOR_DEFAULTS = {
-  primaryColor: '#2563eb',
-  secondaryColor: '#6b7280',
-  accentColor: '#dbeafe',
+  primaryColor: '#2563eb', // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  secondaryColor: '#6b7280', // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  accentColor: '#dbeafe', // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
 } as const;
 
 const hexInputClass =
-  'w-28 rounded-sm border border-default px-2 py-1.5 font-mono text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50';
+  'w-28 rounded-sm border border-default px-2 py-1.5 font-mono text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50';
 
 export function CustomStylingForm({ communityId, initial, hasSiteCustomCss }: Props) {
   const [primaryOn, setPrimaryOn] = useState(initial?.primaryColor != null);
@@ -135,7 +135,7 @@ export function CustomStylingForm({ communityId, initial, hasSiteCustomCss }: Pr
               value={bodyFont}
               disabled={disabled}
               onChange={(e) => setBodyFont(e.target.value)}
-              className="w-full max-w-xs rounded-sm border border-default px-2 py-1.5 text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50"
+              className="w-full max-w-xs rounded-sm border border-default px-2 py-1.5 text-sm focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50"
             >
               {ALLOWED_FONTS.map((font) => (
                 <option key={font} value={font}>

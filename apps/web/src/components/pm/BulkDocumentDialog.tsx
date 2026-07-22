@@ -192,7 +192,7 @@ export function BulkDocumentDialog({
                 type="file"
                 multiple
                 onChange={handleFileChange}
-                className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive/10 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive/20"
+                className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive-subtle file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive-muted"
               />
               {files.length > 0 && (
                 <p className="mt-1 text-xs text-content-tertiary">

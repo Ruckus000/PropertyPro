@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useDocumentCategories } from '@/hooks/useDocumentCategories';
+import { useDocumentCategories } from '@/hooks/use-document-categories';
 
 interface DocumentCategoryFilterProps {
   communityId: number;

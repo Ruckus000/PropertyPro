@@ -76,7 +76,6 @@ const {
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
-  createAdminTypedClient: createAdminClientMock,
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
   esignTemplates: esignTemplatesTable,
   esignSubmissions: esignSubmissionsTable,
@@ -84,6 +83,10 @@ vi.mock('@propertypro/db', () => ({
   esignEvents: esignEventsTable,
   esignConsent: esignConsentTable,
   logAuditEvent: logAuditEventMock,
+}));
+
+vi.mock('@propertypro/db/supabase/admin', () => ({
+  createAdminTypedClient: createAdminClientMock,
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({

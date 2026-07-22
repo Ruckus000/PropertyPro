@@ -5,58 +5,12 @@
  * lists, and horizontal rules. Intentionally minimal — it covers the subset
  * of markdown used in the legal content files.
  *
- * Two output variants:
- *  - 'app' (default): Tailwind app-token classes (unchanged legacy output).
- *  - 'marketing': class-less semantic HTML, styled by the `.mk-prose` block
- *    in the marketing theme.
+ * Emits class-less semantic HTML; styling is owned by the `.mk-prose` block in
+ * the marketing theme. The legal pages and the footer modal both render the
+ * output inside `.marketing-theme`, so no per-element classes are needed here.
  *
  * For more complex markdown needs, consider adding `remark` + `remark-html`.
  */
-
-type MarkdownVariant = 'app' | 'marketing';
-
-interface RenderMarkdownOptions {
-  variant?: MarkdownVariant;
-}
-
-interface VariantClasses {
-  heading: Record<number, string>;
-  hr: string;
-  ul: string;
-  paragraph: string;
-  link: string;
-}
-
-const APP_CLASSES: VariantClasses = {
-  heading: {
-    1: 'text-3xl font-semibold text-content mt-8 mb-4',
-    2: 'text-2xl font-semibold text-content mt-8 mb-3',
-    3: 'text-xl font-medium text-content mt-6 mb-2',
-    4: 'text-lg font-medium text-content mt-4 mb-2',
-    5: 'text-base font-medium text-content-secondary mt-4 mb-1',
-    6: 'text-sm font-medium text-content-secondary mt-4 mb-1',
-  },
-  hr: 'my-8 border-edge',
-  ul: 'list-disc pl-8 my-4 space-y-2 text-content-secondary',
-  paragraph: 'my-4 text-content-secondary leading-relaxed',
-  link: 'text-content-link underline hover:text-interactive',
-};
-
-const MARKETING_CLASSES: VariantClasses = {
-  heading: { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '' },
-  hr: '',
-  ul: '',
-  paragraph: '',
-  link: '',
-};
-
-function classesFor(variant: MarkdownVariant): VariantClasses {
-  return variant === 'marketing' ? MARKETING_CLASSES : APP_CLASSES;
-}
-
-function classAttr(cls: string): string {
-  return cls ? ` class="${cls}"` : '';
-}
 
 function escapeHtml(text: string): string {
   return text
@@ -79,21 +33,21 @@ function sanitizeHref(url: string): string {
   return '#';
 }
 
-function processInline(text: string, linkClass: string): string {
+function processInline(text: string): string {
   let result = escapeHtml(text);
 
   // Bold: **text** or __text__
   result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   result = result.replace(/__(.+?)__/g, '<strong>$1</strong>');
 
-  // Italic: *text* or _text_ (but not inside bold)
+  // Italic: *text* only. Single-underscore _text_ is intentionally left
+  // literal (not used in the legal content and ambiguous with snake_case).
   result = result.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
 
-  // Links: [text](url) — href sanitized, variant-specific class.
+  // Links: [text](url) — href sanitized.
   result = result.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
-    (_match, label: string, url: string) =>
-      `<a href="${sanitizeHref(url)}"${classAttr(linkClass)}>${label}</a>`,
+    (_match, label: string, url: string) => `<a href="${sanitizeHref(url)}">${label}</a>`,
   );
 
   return result;
@@ -120,10 +74,7 @@ function isSpecialLine(line: string): boolean {
   return isBlankLine(line) || isHorizontalRule(line) || isHeading(line) || isListItem(line);
 }
 
-export function renderMarkdown(markdown: string, options?: RenderMarkdownOptions): string {
-  const variant: MarkdownVariant = options?.variant ?? 'app';
-  const classes = classesFor(variant);
-
+export function renderMarkdown(markdown: string): string {
   const lines = markdown.split('\n');
   const htmlParts: string[] = [];
   let inList = false;
@@ -146,7 +97,7 @@ export function renderMarkdown(markdown: string, options?: RenderMarkdownOptions
         htmlParts.push('</ul>');
         inList = false;
       }
-      htmlParts.push(`<hr${classAttr(classes.hr)} />`);
+      htmlParts.push('<hr />');
       i++;
       continue;
     }
@@ -158,9 +109,8 @@ export function renderMarkdown(markdown: string, options?: RenderMarkdownOptions
         inList = false;
       }
       const level = (headingMatch[1] ?? '#').length;
-      const text = processInline(headingMatch[2] ?? '', classes.link);
-      const headingClass = classes.heading[level] ?? classes.heading[1] ?? '';
-      htmlParts.push(`<h${level}${classAttr(headingClass)}>${text}</h${level}>`);
+      const text = processInline(headingMatch[2] ?? '');
+      htmlParts.push(`<h${level}>${text}</h${level}>`);
       i++;
       continue;
     }
@@ -168,10 +118,10 @@ export function renderMarkdown(markdown: string, options?: RenderMarkdownOptions
     const listMatch = line.match(/^- (.+)$/);
     if (listMatch) {
       if (!inList) {
-        htmlParts.push(`<ul${classAttr(classes.ul)}>`);
+        htmlParts.push('<ul>');
         inList = true;
       }
-      htmlParts.push(`<li>${processInline(listMatch[1] ?? '', classes.link)}</li>`);
+      htmlParts.push(`<li>${processInline(listMatch[1] ?? '')}</li>`);
       i++;
       continue;
     }
@@ -193,9 +143,7 @@ export function renderMarkdown(markdown: string, options?: RenderMarkdownOptions
     }
 
     const paragraphText = paragraphLines.map((l) => l.trim()).join(' ');
-    htmlParts.push(
-      `<p${classAttr(classes.paragraph)}>${processInline(paragraphText, classes.link)}</p>`,
-    );
+    htmlParts.push(`<p>${processInline(paragraphText)}</p>`);
   }
 
   if (inList) {

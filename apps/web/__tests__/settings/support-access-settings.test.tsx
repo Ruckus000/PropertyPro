@@ -67,11 +67,11 @@ beforeEach(() => {
 });
 
 describe('SupportAccessSettings', () => {
-  it('shows the loading spinner', () => {
+  it('shows the loading skeleton', () => {
     setQuery({ isLoading: true });
     setToggle();
-    const { container } = render(<SupportAccessSettings communityId={42} />);
-    expect(container.querySelector('.animate-spin')).not.toBeNull();
+    render(<SupportAccessSettings communityId={42} />);
+    expect(screen.getByTestId('support-access-settings-loading')).not.toBeNull();
   });
 
   it('renders the full-card error when load fails and no data', () => {

@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, ilike, lt, lte, or, sql, type SQL } from 'drizzle-orm';
-import type { CommunityRole, CommunityType, TransitionRole } from '@propertypro/shared';
+import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { createScopedClient } from '../scoped-client';
 import { documents } from '../schema/documents';
 import { buildDocumentAccessFilter } from './document-access';
@@ -14,7 +14,7 @@ export interface DocumentSearchParams {
   cursor?: number | null;
   limit?: number;
   /** If provided, filters documents based on role-based access control */
-  role?: CommunityRole | TransitionRole;
+  role?: CommunityRole;
   /** Required with role to apply strict role x community_type policy filters */
   communityType?: CommunityType;
   isUnitOwner?: boolean;

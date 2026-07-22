@@ -6,13 +6,12 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { AnyCommunityRole, TransitionRole } from '@propertypro/shared';
-import { Button } from '@propertypro/ui';
+import { isAdminRole, type CommunityRole } from '@propertypro/shared';
+import { Button } from '@/components/ui/button';
 import type { ViolationStatus, ViolationSeverity } from '@propertypro/db';
 import { listViolations, type ViolationItem } from '@/lib/api/violations';
 import { ViolationDetailPanel } from './ViolationDetailPanel';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 const STATUS_OPTIONS: { value: ViolationStatus | ''; label: string }[] = [
   { value: '', label: 'All Statuses' },
@@ -72,7 +71,7 @@ const LIMIT = 20;
 interface ViolationsAdminInboxProps {
   communityId: number;
   userId: string;
-  userRole: AnyCommunityRole | TransitionRole;
+  userRole: CommunityRole;
 }
 
 export function ViolationsAdminInbox({ communityId, userId, userRole }: ViolationsAdminInboxProps) {
@@ -138,22 +137,16 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
   }, [fetchViolations]);
 
   const totalPages = Math.ceil(total / LIMIT);
-  const canCreateViolation = userRole !== 'resident' && userRole !== 'owner' && userRole !== 'tenant';
+  const canCreateViolation = isAdminRole(userRole);
 
   return (
     <div>
       <PageHeader
         title="Violations"
         description="Review, track, and manage violation cases for the community."
-        breadcrumb={
-          <Breadcrumbs
-            items={[]}
-            currentLabel="Violations"
-          />
-        }
         actions={canCreateViolation ? (
           <Link href={`/violations/report?communityId=${communityId}`}>
-            <Button variant="primary" size="md">
+            <Button>
               New violation
             </Button>
           </Link>

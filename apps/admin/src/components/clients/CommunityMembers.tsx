@@ -242,7 +242,7 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
             onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
             onFocus={() => { if (search.trim()) setDropdownOpen(true); }}
             onKeyDown={(e) => { if (e.key === 'Escape') setDropdownOpen(false); }}
-            className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-8 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-8 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
           {search ? (
             <button
@@ -347,7 +347,7 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                           type="button"
                           onClick={() => saveEdit(member.userId)}
                           disabled={editSaving}
-                          className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50"
+                          className="rounded bg-coral-600 px-2 py-1 text-xs text-white hover:bg-coral-700 disabled:opacity-50"
                         >
                           {editSaving ? 'Saving...' : 'Save'}
                         </button>

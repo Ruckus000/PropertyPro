@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { UserPlus, Upload } from 'lucide-react';
 import Link from 'next/link';
 import type { CommunityType } from '@propertypro/shared';
@@ -57,6 +58,7 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
         );
       } else {
         setInvitationWarning(null);
+        toast.success('Resident added.');
       }
       setDialogOpen(false);
     },
@@ -74,7 +76,12 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
 
   const handleResendInvite = useCallback(
     async (userId: string) => {
-      await resendInviteMutation.mutateAsync(userId);
+      try {
+        await resendInviteMutation.mutateAsync(userId);
+        toast.success('Invitation resent.');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Could not resend the invitation.');
+      }
     },
     [resendInviteMutation],
   );
@@ -142,14 +149,23 @@ export function ResidentsPageClient({ communityId, communityType }: ResidentsPag
         <EmptyState
           preset="no_residents"
           action={
-            <button
-              type="button"
-              onClick={() => setDialogOpen(true)}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
-            >
-              <UserPlus size={16} aria-hidden="true" />
-              Add Resident
-            </button>
+            <div className="flex flex-col items-center gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
+              >
+                <UserPlus size={16} aria-hidden="true" />
+                Add Resident
+              </button>
+              <Link
+                href={`/dashboard/import-residents?communityId=${communityId}`}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
+              >
+                <Upload size={16} aria-hidden="true" />
+                Import CSV
+              </Link>
+            </div>
           }
         />
         <AddResidentDialog

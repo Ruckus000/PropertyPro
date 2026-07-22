@@ -35,6 +35,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireArcEnabled, requireArcReviewPermission } from '@/lib/violations/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { reviewArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { requirePermission } from '@/lib/db/access-control';
 import { arcReviewContract } from './contract';
@@ -44,6 +45,7 @@ export const PATCH = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireArcEnabled(membership);

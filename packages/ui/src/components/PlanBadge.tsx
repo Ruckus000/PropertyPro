@@ -1,8 +1,10 @@
 /**
  * PlanBadge — small pill that marks a feature as gated to a higher plan.
  *
- * Atlassian-style: brand-tinted, full-color (never gray). Pairs with the
- * NavRail trailingBadge slot and with feature lock screens.
+ * Uses the "Florida Modern" gold `status-premium` accent (premium tier). Pairs
+ * with the NavRail trailingBadge slot and with feature lock screens. Colors are
+ * portable `var()` refs (not named Tailwind classes) so the shared component
+ * renders correctly in every app that imports it.
  */
 import React from "react";
 
@@ -29,11 +31,11 @@ const VARIANT_LABELS: Record<PlanBadgeVariant, string> = {
 
 function classes(tone: PlanBadgeTone): string {
   if (tone === "dark") {
-    // On the dark sidebar — bright brand tint, plenty of contrast against the rail
-    return "bg-[var(--interactive-primary)]/20 text-[#7AB6FF] ring-1 ring-inset ring-[var(--interactive-primary)]/40";
+    // Solid gold chip for dark surfaces — bright and legible against the rail.
+    return "bg-[var(--gold-800)] text-white ring-1 ring-inset ring-[var(--gold-600)]";
   }
-  // On light surfaces (dialogs, locked-feature hero)
-  return "bg-[var(--interactive-primary)]/10 text-[var(--interactive-primary)] ring-1 ring-inset ring-[var(--interactive-primary)]/25";
+  // On light surfaces (dialogs, locked-feature hero) — soft gold tint.
+  return "bg-[var(--status-premium-subtle)] text-[var(--status-premium)] ring-1 ring-inset ring-[var(--status-premium-border)]";
 }
 
 export function PlanBadge({

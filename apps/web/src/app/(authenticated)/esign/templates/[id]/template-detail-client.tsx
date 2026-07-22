@@ -21,8 +21,8 @@ import {
 import { Badge } from '@propertypro/ui';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   useEsignTemplate,
   useArchiveEsignTemplate,
@@ -30,6 +30,7 @@ import {
 } from '@/hooks/use-esign-templates';
 import { useEsignTemplatePdfUrl } from '@/hooks/use-esign-template-pdf';
 import { FieldOverlay } from '@/components/esign/field-overlay';
+import { ESIGN_FIELD_COLORS } from '@/components/esign/esign-field-colors';
 
 const PdfViewer = dynamic(
   () => import('@/components/pdf/pdf-viewer').then((m) => m.PdfViewer),
@@ -53,17 +54,6 @@ interface PageDimension {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const SIGNER_ROLE_COLORS = [
-  '#2563eb',
-  '#dc2626',
-  '#16a34a',
-  '#9333ea',
-  '#ea580c',
-  '#0891b2',
-  '#be185d',
-  '#854d0e',
-];
 
 const TYPE_LABELS: Record<string, string> = {
   proxy: 'Proxy',
@@ -125,7 +115,7 @@ export function TemplateDetailClient({
   const signerRoleColors = useMemo(() => {
     const map: Record<string, string> = {};
     signerRoles.forEach((role, i) => {
-      map[role] = SIGNER_ROLE_COLORS[i % SIGNER_ROLE_COLORS.length]!;
+      map[role] = ESIGN_FIELD_COLORS[i % ESIGN_FIELD_COLORS.length]!;
     });
     return map;
   }, [signerRoles]);
@@ -164,8 +154,9 @@ export function TemplateDetailClient({
   // -----------------------------------------------------------------------
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
@@ -195,12 +186,6 @@ export function TemplateDetailClient({
       <PageHeader
         title={template.name}
         description={template.description ?? undefined}
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Templates', href: `/esign/templates?communityId=${communityId}` }]}
-            currentLabel={template.name}
-          />
-        }
         actions={
           <div className="flex items-center gap-2">
             <Badge
@@ -324,11 +309,13 @@ export function TemplateDetailClient({
             </PdfViewer>
           </div>
         ) : pdfIsLoading || pdfIsFetching ? (
-          <div className="flex items-center justify-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
-              <p className="text-sm text-[var(--text-tertiary)]">Loading PDF preview...</p>
-            </div>
+          <div
+            role="status"
+            aria-label="Loading PDF preview"
+            data-testid="pdf-preview-loading"
+            className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-6"
+          >
+            <Skeleton className="h-[600px] w-full" />
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-12">

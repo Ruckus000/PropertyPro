@@ -69,4 +69,33 @@ export interface CommunityFeatures {
   readonly hasSiteCustomDomain: boolean;
   /** Portfolio templates + bulk apply across communities (PM/Enterprise, Phase 2). */
   readonly hasSitePortfolioTemplates: boolean;
+  /**
+   * Insurance hub — wind-mitigation report locker and master-policy summary
+   * (condo/HOA only). Building-level insurance records the board posts once
+   * and every owner can retrieve for their own HO-6/wind insurer.
+   */
+  readonly hasInsuranceHub: boolean;
+  /**
+   * Reserve transparency — the association's major physical-asset register with
+   * a remaining-useful-life countdown per component (condo/HOA only). Factual
+   * data only: NOT a reserve study and NOT an assessment of reserve adequacy.
+   * Ships DARK — enablement is gated on attorney-reviewed copy plus this
+   * per-community flag.
+   */
+  readonly hasReserveTransparency: boolean;
+  /**
+   * Snowbird digest — an auto-generated periodic email recap of community
+   * activity (board decisions, new documents, upcoming deadlines) for seasonal
+   * and out-of-state owners. Compiled from data already in the platform; zero
+   * board effort. Available to every community type.
+   */
+  readonly hasSnowbirdDigest: boolean;
+  /**
+   * Storm-damage intake — post-storm, residents record building/common-area
+   * damage to the association and the board tracks it through a status. A
+   * damage RECORD, not an insurance claim (PropertyPro is not a public
+   * adjuster, §626.854). Available to every community type; ships dark until
+   * the attorney-reviewed copy is approved and the community enables it.
+   */
+  readonly hasStormTools: boolean;
 }

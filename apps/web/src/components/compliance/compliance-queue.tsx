@@ -73,7 +73,7 @@ function FilterChip({
       onClick={onClick}
       className={`rounded-full border px-3 py-1.5 text-sm min-h-[36px] ${
         active
-          ? 'border-[var(--interactive-primary)] bg-[var(--interactive-primary-soft)] text-[var(--interactive-primary)] font-semibold'
+          ? 'border-[var(--interactive-primary)] bg-[var(--interactive-subtle)] text-[var(--interactive-primary)] font-semibold'
           : 'border-[var(--border-default)] text-content hover:bg-surface-muted'
       }`}
     >
@@ -218,7 +218,7 @@ export function ComplianceQueue({
                   aria-current={selectedId === item.id ? 'true' : undefined}
                   className={
                     selectedId === item.id
-                      ? 'bg-[var(--interactive-primary-soft)]'
+                      ? 'bg-[var(--interactive-subtle)]'
                       : 'hover:bg-surface-muted'
                   }
                 >

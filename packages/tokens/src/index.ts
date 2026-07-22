@@ -7,3 +7,4 @@ export {
   type ThemeRef,
   type TokenRef,
 } from "./semantic";
+export { staticTokens, type StaticTokens } from "./static";

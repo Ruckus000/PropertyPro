@@ -16,21 +16,19 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
 import { X } from 'lucide-react';
-import type { AnyCommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
-import { ADMIN_ROLES, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
+import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
+import { ShellBreadcrumbs } from './shell-breadcrumbs';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
 import { HelpDeepLinkHandler } from '@/components/help/help-deep-link-handler';
 import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
-import { AlertBanner } from '@/components/shared/alert-banner';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
+import { SubscriptionBillingBanners } from '@/components/billing/subscription-billing-banners';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
@@ -56,7 +54,7 @@ interface LazyCommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;
@@ -88,17 +86,20 @@ interface AppShellProps {
   children: ReactNode;
   user: AppShellUser | null;
   community: AppShellCommunity | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   isUnitOwner?: boolean;
   designation?: string | null;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   subscriptionStatus?: string | null;
+  subscriptionCanceledAt?: Date | null;
+  subscriptionCurrentPeriodEndAt?: Date | null;
+  isDemo?: boolean;
   freeAccessExpiresAt?: Date | null;
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -213,38 +214,16 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
         />
-        {role && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role) && community && (
-          <div className="flex items-center gap-1.5 border-b border-edge bg-surface-page px-6 py-2 lg:px-8">
-            <Link
-              href="/pm/dashboard/communities"
-              className="flex items-center gap-1 text-sm text-content-secondary transition-colors duration-quick hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              aria-label="Back to portfolio"
-            >
-              <ChevronLeft size={14} aria-hidden="true" />
-              <span>Portfolio</span>
-            </Link>
-            <span className="text-sm text-content-tertiary" aria-hidden="true">/</span>
-            <span className="text-sm font-medium text-content">{community.name}</span>
-          </div>
-        )}
-        {subscriptionStatus === 'past_due' && role && (ADMIN_ROLES as readonly string[]).includes(role) && (
-          <div className="px-6 pt-4 lg:px-8">
-            <AlertBanner
-              status="warning"
-              variant="filled"
-              title="Your subscription payment failed."
-              description="Please update your payment method to avoid service interruption."
-              action={
-                <a
-                  href={`/billing/portal${community ? `?communityId=${community.id}` : ''}`}
-                  className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  Update Payment Method
-                </a>
-              }
-            />
-          </div>
-        )}
+        <ShellBreadcrumbs role={role} community={community} features={features} />
+        <SubscriptionBillingBanners
+          role={role}
+          communityId={community?.id ?? null}
+          subscriptionStatus={subscriptionStatus ?? null}
+          subscriptionCanceledAt={subscriptionCanceledAt ?? null}
+          subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt ?? null}
+          freeAccessExpiresAt={freeAccessExpiresAt ?? null}
+          isDemo={isDemo ?? false}
+        />
         {freeAccessExpiresAt && (
           <div className="px-6 pt-4 lg:px-8">
             <FreeAccessBanner expiresAt={freeAccessExpiresAt} />

@@ -1,6 +1,7 @@
 'use client';
 
-import { Card, StatusBadge } from '@propertypro/ui';
+import { StatusBadge } from '@propertypro/ui';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 
 interface Props {
   passwordProtected: boolean;
@@ -27,19 +28,19 @@ export function PortalStatusSection({
 }: Props) {
   return (
     <Card className="border-edge bg-surface-card">
-      <Card.Header>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <div className="flex flex-col">
-          <Card.Title>Portal Status</Card.Title>
-          <Card.Subtitle>Platform-level access controls</Card.Subtitle>
+          <CardTitle>Portal Status</CardTitle>
+          <CardDescription>Platform-level access controls</CardDescription>
         </div>
-      </Card.Header>
-      <Card.Body>
+      </CardHeader>
+      <CardContent>
         <ul className="space-y-2">
           {renderBooleanItem('Password-protected portal', passwordProtected)}
           {renderBooleanItem('Individual owner credentials', individualCredentials)}
           {renderBooleanItem('Public notices page', publicNoticesPage)}
         </ul>
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 }

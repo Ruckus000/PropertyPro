@@ -15,8 +15,8 @@ interface BrandingPreviewProps {
 }
 
 export function BrandingPreview({ branding, logoObjectUrl }: BrandingPreviewProps) {
-  const primary = branding.primaryColor ?? '#1a56db';
-  const secondary = branding.secondaryColor ?? '#6b7280';
+  const primary = branding.primaryColor ?? '#1a56db'; // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
+  const secondary = branding.secondaryColor ?? '#6b7280'; // design-tokens:exempt — branding color-picker default; feature product IS choosing a hex value
   const logoSrc = logoObjectUrl ?? null;
 
   return (

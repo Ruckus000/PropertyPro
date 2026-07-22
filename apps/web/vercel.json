@@ -40,7 +40,7 @@
     },
     {
       "path": "/api/v1/internal/provisioning-watchdog",
-      "schedule": "15 0 * * *"
+      "schedule": "15 * * * *"
     },
     {
       "path": "/api/v1/internal/assessment-overdue",

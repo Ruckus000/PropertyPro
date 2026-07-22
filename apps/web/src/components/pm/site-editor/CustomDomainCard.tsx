@@ -21,6 +21,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Clock, AlertCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PlanBadge } from '@propertypro/ui';
 import {
   useCustomDomain,
   useSetDomain,
@@ -28,6 +29,7 @@ import {
   useRemoveDomain,
   type DomainState,
 } from '@/hooks/use-custom-domain';
+import { DomainFinder } from './DomainFinder';
 
 interface CustomDomainCardProps {
   communityId: number;
@@ -43,7 +45,7 @@ const secondaryButtonClass =
   'inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content disabled:opacity-50 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
 
 const inputClass =
-  'w-full max-w-md rounded-sm border border-default px-3 py-2 text-base focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40 disabled:opacity-50';
+  'w-full max-w-md rounded-sm border border-default px-3 py-2 text-base focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive disabled:opacity-50';
 
 function InlineAlert({ message }: { message: string }) {
   return (
@@ -95,7 +97,7 @@ export function CustomDomainCard({
 
   const heading = (
     <h2 className="text-lg font-medium text-content">
-      Custom Domain{!hasSiteCustomDomain && ' (Pro)'}
+      Custom Domain{!hasSiteCustomDomain && <PlanBadge variant="pro" className="ml-2" />}
     </h2>
   );
 
@@ -186,6 +188,9 @@ export function CustomDomainCard({
             {setDomain.isPending ? 'Adding…' : 'Add domain'}
           </button>
         </form>
+        {/* Guided purchase — only in the empty state, collapsed by default so
+            the connect flow stays uncluttered. */}
+        <DomainFinder communityId={communityId} />
       </div>
     );
   }

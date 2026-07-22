@@ -1,4 +1,5 @@
 import React from 'react';
+import { signupTrialHeroBullet } from '@propertypro/shared';
 import { PortfolioCard } from './portfolio-card';
 
 /**
@@ -45,7 +46,7 @@ export function HeroSection() {
               <i className="mk-check">✓</i> Onboard a community in minutes
             </span>
             <span>
-              <i className="mk-check">✓</i> 14-day free trial
+              <i className="mk-check">✓</i> {signupTrialHeroBullet()}
             </span>
             <span>
               <i className="mk-check">✓</i> No setup fees

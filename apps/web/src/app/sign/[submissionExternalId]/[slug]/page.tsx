@@ -11,7 +11,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import {
   ESIGN_CONSENT_TEXT,
   type EsignFieldDefinition,
@@ -31,7 +31,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Loader2,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -479,8 +478,8 @@ export default function SigningPage() {
                       key={field.id}
                       className={`absolute border-2 rounded transition-colors ${
                         isFilled
-                          ? 'border-status-success bg-status-success-bg/80'
-                          : 'border-interactive bg-interactive-subtle/60'
+                          ? 'border-status-success bg-status-success-bg'
+                          : 'border-interactive bg-interactive-subtle'
                       }`}
                       style={sharedStyle}
                       title={field.label ?? field.type}
@@ -503,8 +502,8 @@ export default function SigningPage() {
                     onClick={() => handleFieldClick(field)}
                     className={`absolute border-2 rounded transition-colors cursor-pointer ${
                       isFilled
-                        ? 'border-status-success bg-status-success-bg/80'
-                        : 'border-interactive bg-interactive-subtle/60 hover:bg-interactive-subtle/80'
+                        ? 'border-status-success bg-status-success-bg'
+                        : 'border-interactive bg-interactive-subtle hover:bg-interactive-subtle-hover'
                     }`}
                     style={sharedStyle}
                     title={field.label ?? field.type}
@@ -538,7 +537,7 @@ export default function SigningPage() {
       </div>
 
       {/* Progress bar */}
-      <div className="sticky bottom-[72px] z-20 bg-surface-card/95 backdrop-blur border-t">
+      <div className="sticky bottom-[72px] z-20 bg-surface-card backdrop-blur border-t">
         <div className="max-w-4xl mx-auto px-4 py-2">
           <div className="flex items-center justify-between text-sm text-content-secondary mb-1">
             <span>
@@ -586,21 +585,11 @@ export default function SigningPage() {
                 </Button>
                 <Button
                   className="flex-1"
-                  disabled={
-                    !allRequiredDone ||
-                    !consentChecked ||
-                    submitMutation.isPending
-                  }
+                  disabled={!allRequiredDone || !consentChecked}
+                  loading={submitMutation.isPending}
                   onClick={handleFinish}
                 >
-                  {submitMutation.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    'Finish'
-                  )}
+                  {submitMutation.isPending ? 'Submitting...' : 'Finish'}
                 </Button>
               </>
             ) : (
@@ -622,19 +611,12 @@ export default function SigningPage() {
                     Go back
                   </Button>
                   <Button
-                    variant="danger"
+                    variant="destructive"
                     className="flex-1"
                     onClick={handleDecline}
-                    disabled={declineMutation.isPending}
+                    loading={declineMutation.isPending}
                   >
-                    {declineMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Declining...
-                      </>
-                    ) : (
-                      'Confirm Decline'
-                    )}
+                    {declineMutation.isPending ? 'Declining...' : 'Confirm Decline'}
                   </Button>
                 </div>
               </div>

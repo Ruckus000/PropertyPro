@@ -48,6 +48,18 @@ export const pendingSignups = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /**
+     * Set when /api/v1/auth/provisioning-status generates a magic-link
+     * login token after provisioning completes. Used together with
+     * loginTokenConsumedAt to enforce single-use + TTL on the token.
+     */
+    loginTokenIssuedAt: timestamp('login_token_issued_at', { withTimezone: true }),
+    /**
+     * Set in the same atomic update as token generation completes.
+     * Subsequent polls observe the consumed marker and receive
+     * { status: 'consumed' } with no token, defeating leaked-id replay.
+     */
+    loginTokenConsumedAt: timestamp('login_token_consumed_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('pending_signups_signup_request_unique').on(table.signupRequestId),

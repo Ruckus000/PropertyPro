@@ -43,7 +43,7 @@ vi.mock('@/lib/services/user-profile-service', () => ({
   updateUserProfile: updateUserProfileMock,
 }));
 
-vi.mock('@propertypro/db', () => ({
+vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
 }));
 

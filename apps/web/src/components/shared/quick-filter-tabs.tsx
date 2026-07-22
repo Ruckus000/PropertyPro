@@ -42,7 +42,7 @@ export function QuickFilterTabs({
             {tab.count !== undefined && (
               <Badge
                 variant={isActive ? 'secondary' : 'outline'}
-                className="ml-0.5 h-5 min-w-[20px] justify-center px-1.5 text-[10px]"
+                className="ml-0.5 h-5 min-w-[20px] justify-center px-1.5 text-xs"
               >
                 {tab.count}
               </Badge>

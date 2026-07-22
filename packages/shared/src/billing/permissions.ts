@@ -1,75 +1,64 @@
 /**
- * Role-based behavior for plan-gated features.
+ * Role-based behavior for plan-gated features (v3-native, ADR-006).
  *
  * Three audiences:
- *   - Billing admins (board_president, cam, property_manager_admin) can purchase upgrades.
- *   - Other community members (owner, board_member, site_manager) can request an upgrade
- *     by notifying billing admins, but can't purchase.
- *   - Tenants don't see locked features at all — they're filtered from the nav.
+ *   - Management tier (`property_manager` / `root_manager`) can purchase upgrades.
+ *   - Unit owners (`resident` + `isUnitOwner`) can request an upgrade by
+ *     notifying billing admins, but can't purchase.
+ *   - Tenants (`resident`, not a unit owner) don't see locked features at all —
+ *     they're filtered from the nav.
  *
- * The v3 role model (`resident` / `property_manager` / `root_manager`) maps onto
- * the canonical CommunityRole via `inferCanonicalRoleFromMembership`:
- *   - `root_manager` → property_manager_admin (→ upgrade)
- *   - `property_manager` → board_president / board_member (by designation) or cam
- *   - `resident` → owner / tenant (by isUnitOwner)
+ * ADR-006 §2: general permissions NEVER read `designation`. Billing is a general
+ * permission, so this module keys ONLY on the v3 role (+ `isUnitOwner` to split
+ * owner from tenant). A board designation never changes a member's billing
+ * capability — that is why the v3→legacy bridge shim was removed: it let a
+ * `board_member` designation strip an operational manager's billing-admin power.
  */
-import type { AnyCommunityRole, CommunityRole } from '../index';
-
-const BILLING_ADMIN_ROLES: readonly CommunityRole[] = [
-  'board_president',
-  'cam',
-  'property_manager_admin',
-];
+import type { CommunityRole } from '../index';
 
 export type LockedFeatureBehavior = 'upgrade' | 'request' | 'hidden';
 
 /**
- * Resolve the canonical CommunityRole from the v3 membership shape.
- *
- * The runtime stores `role` as resident | property_manager | root_manager.
- * Board membership is sourced from `designation`; an operational
- * property_manager with no designation maps to `cam` (its billing-admin
- * legacy analog). residents split owner/tenant via isUnitOwner.
- * (NB: distinct from the private `resolveLegacyRole` helper in
- * `access-policies.ts`, which serves document-access policies.)
+ * Management-tier predicate. Only the two v3 manager roles qualify; residents
+ * (owner or tenant) never do. Runtime roles are always v3 — a legacy string
+ * simply falls through to `false`.
  */
-export function inferCanonicalRoleFromMembership(input: {
-  role: string;
-  isUnitOwner?: boolean;
-  designation?: string | null;
-}): AnyCommunityRole {
-  if (input.role === 'root_manager') return 'property_manager_admin';
-  if (input.role === 'property_manager') {
-    if (input.designation === 'board_president') return 'board_president';
-    if (input.designation === 'board_member') return 'board_member';
-    return 'cam'; // operational PM → cam legacy analog (billing-admin); do not symmetrize to board_member
-  }
-  return input.isUnitOwner ? 'owner' : 'tenant';
+function isManagementTier(role: CommunityRole | null): boolean {
+  return role === 'property_manager' || role === 'root_manager';
 }
 
-export function canManageBilling(role: AnyCommunityRole | null): boolean {
-  if (!role) return false;
-  return (BILLING_ADMIN_ROLES as readonly string[]).includes(role);
-}
-
-export function canRequestUpgrade(role: AnyCommunityRole | null): boolean {
-  if (!role) return false;
-  if (role === 'tenant') return false;
-  return true;
+/** Management tier can purchase plan upgrades. Never gated on `designation`. */
+export function canManageBilling(role: CommunityRole | null): boolean {
+  return isManagementTier(role);
 }
 
 /**
- * Decide what happens when this role hits a plan-gated feature.
+ * Everyone except tenants can request an upgrade (notify billing admins).
+ * Management tier and unit owners → true; tenants (resident, not owner) → false.
+ */
+export function canRequestUpgrade(
+  role: CommunityRole | null,
+  isUnitOwner?: boolean,
+): boolean {
+  if (!role) return false;
+  if (isManagementTier(role)) return true;
+  if (role === 'resident') return isUnitOwner === true;
+  return false;
+}
+
+/**
+ * Decide what happens when this member hits a plan-gated feature.
  *
- * `upgrade` — show "Upgrade now" CTA → Stripe checkout.
- * `request` — show "Notify your board" CTA.
+ * `upgrade` — show "Upgrade now" CTA → Stripe checkout (management tier).
+ * `request` — show "Notify your board" CTA (unit owners).
  * `hidden`  — filter the locked surface entirely (tenants).
  */
 export function getLockedFeatureBehavior(
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
+  isUnitOwner?: boolean,
 ): LockedFeatureBehavior {
   if (!role) return 'request';
-  if (canManageBilling(role)) return 'upgrade';
-  if (role === 'tenant') return 'hidden';
-  return 'request';
+  if (isManagementTier(role)) return 'upgrade';
+  if (role === 'resident' && isUnitOwner !== true) return 'hidden'; // tenant
+  return 'request'; // unit owner
 }

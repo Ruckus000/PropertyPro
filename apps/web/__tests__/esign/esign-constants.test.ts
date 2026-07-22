@@ -9,7 +9,6 @@ import {
   ESIGN_SUBMISSION_STATUSES,
   ESIGN_SIGNER_STATUSES,
   ESIGN_EVENT_TYPES,
-  ESIGN_ELEVATED_ROLES,
   ESIGN_REMINDER_INTERVALS_DAYS,
 } from '@propertypro/shared';
 
@@ -140,20 +139,6 @@ describe('e-sign constants', () => {
       for (const e of coreEvents) {
         expect(ESIGN_EVENT_TYPES).toContain(e);
       }
-    });
-  });
-
-  describe('ESIGN_ELEVATED_ROLES', () => {
-    it('includes management roles', () => {
-      expect(ESIGN_ELEVATED_ROLES).toContain('board_member');
-      expect(ESIGN_ELEVATED_ROLES).toContain('board_president');
-      expect(ESIGN_ELEVATED_ROLES).toContain('cam');
-      expect(ESIGN_ELEVATED_ROLES).toContain('property_manager_admin');
-    });
-
-    it('does not include owner or tenant', () => {
-      expect(ESIGN_ELEVATED_ROLES).not.toContain('owner');
-      expect(ESIGN_ELEVATED_ROLES).not.toContain('tenant');
     });
   });
 

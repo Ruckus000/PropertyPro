@@ -17,7 +17,7 @@
  */
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, ShieldCheck, ShieldQuestion } from 'lucide-react';
+import { ShieldCheck, ShieldQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -128,10 +128,9 @@ export function ClaimRootClient() {
             <Button
               type="button"
               onClick={handleClaimAll}
-              disabled={claimRoot.isPending}
+              loading={claimRoot.isPending}
               data-testid="claim-all"
             >
-              {claimRoot.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
               Claim all
             </Button>
           </div>
@@ -225,10 +224,9 @@ function DisputeCard({ communityName, isPending, result, isError, errorMessage, 
                 type="button"
                 variant="destructive"
                 onClick={onConfirm}
-                disabled={isPending}
+                loading={isPending}
                 data-testid="dispute-confirm"
               >
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                 Dispute this claim
               </Button>
             </div>

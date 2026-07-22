@@ -1,4 +1,5 @@
 import { Heading, Text } from '@react-email/components';
+import { PAID_GRACE_DAYS } from '@propertypro/shared';
 import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
 import { EmailButton } from '../components/email-button';
@@ -26,7 +27,7 @@ export function SubscriptionCanceledEmail({
       branding={branding}
       previewText={
         previewText ??
-        `Your subscription has been canceled — 30-day grace period ends ${gracePeriodEndDate}`
+        `Your subscription has been canceled — ${PAID_GRACE_DAYS}-day grace period ends ${gracePeriodEndDate}`
       }
       accentColor={emailColors.accentWarning}
     >
@@ -40,8 +41,9 @@ export function SubscriptionCanceledEmail({
         canceled on {canceledAt}.
       </Text>
 
-      <EmailAlert variant="warning" title="30-day grace period">
-        Your community portal will remain accessible until{' '}
+      <EmailAlert variant="warning" title={`${PAID_GRACE_DAYS}-day grace period`}>
+        You have {PAID_GRACE_DAYS} days of full access. Your community portal
+        will remain accessible until{' '}
         <strong>{gracePeriodEndDate}</strong>. After that date, access will be
         restricted and your data will be retained for 90 days.
       </EmailAlert>

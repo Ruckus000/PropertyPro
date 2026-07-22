@@ -149,6 +149,11 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     pageSize: parsedQuery.data.pageSize,
   });
 
+  // B2: board/owner/tenant checklists carry `review_announcement`. Fire on list
+  // load so those roles can reach 100% (fired unconditionally — residents can't
+  // create announcements; a no-op for roles without this key).
+  void tryAutoComplete(communityId, userId, 'review_announcement');
+
   return NextResponse.json({
     data: {
       data: rows,

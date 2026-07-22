@@ -2,7 +2,7 @@
 
 Compliance and community management platform for Florida condominium associations (§718.111(12)(g)).
 
-**Status:** Phase 4 complete (role-v3 / ADR-006). Phase 5 (table-stakes) in progress.
+**Status:** role-v3 / ADR-006 fully landed — the legacy 7-role vocabulary is retired and a single v3 role vocabulary runs end-to-end. Phase 5 (table-stakes) in progress.
 
 ## Tech Stack
 
@@ -37,7 +37,18 @@ docs/                   # Specs, ADRs, audits, design system
 
 **User Roles (v3 / ADR-006):** Community-scoped roles in `user_roles` are `resident`, `property_manager`, and `root_manager` (≤1 per community). `resident.isUnitOwner` distinguishes owner vs. tenant. Board status is an orthogonal `designation` column (`board_president` / `board_member`), read only by statutory features — not general permissions. `super_admin` is system-scoped (`platformAdminRoleEnum`), stored outside `user_roles`.
 
-> Transition note: the legacy seven-role vocabulary (`owner`, `tenant`, `board_member`, `board_president`, `cam`, `site_manager`, `property_manager_admin`) is being retired but is still live in the app/RBAC layer during the shimmed transition (`CommunityRole`, `ADMIN_ROLES`/`BILLING_ADMIN_ROLES` in `packages/shared/src/access-policies.ts`). See `docs/adr/ADR-006-root-manager-role-model.md` (supersedes ADR-001).
+> Role vocabulary: the legacy seven-role names (`owner`, `tenant`, `board_member`,
+> `board_president`, `cam`, `site_manager`, `property_manager_admin`) have been
+> **fully retired** — the compatibility shim, the 7-role `RBAC_MATRIX` columns, and
+> the dead `user_role` pgEnum are all gone. `CommunityRole` (`packages/shared`) is
+> now the 3 v3 roles (`resident`/`property_manager`/`root_manager`); the derived
+> permission layer keys on the `MatrixRole` rows (`owner`/`tenant`/`manager`, e.g.
+> `ADMIN_ROLES = ['manager']` in `access-policies.ts`), which `resolveMatrixRole`
+> maps the v3 roles onto (`resident` splits owner/tenant via `isUnitOwner`). The only
+> residual legacy-name strings are non-runtime content — help-article frontmatter,
+> dev-login aliases, and test fixtures — held to a floor by `guard:legacy-roles`
+> (STRUCTURAL/BRIDGE buckets empty). See `docs/adr/ADR-006-root-manager-role-model.md`
+> (supersedes ADR-001).
 
 ## Development Commands
 
@@ -67,7 +78,21 @@ pnpm playwright:install         # Install browsers
 pnpm guard:breadcrumbs          # Breadcrumb coverage
 pnpm guard:tenant-scope         # tenantScope contract well-formedness
 pnpm guard:legacy-roles         # Legacy-role vocabulary floor
+pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)
+pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 ```
+
+> **Design tokens (`guard:design-tokens`):** bans raw hex, raw Tailwind palette
+> classes (`bg-blue-500`), arbitrary color/font/spacing values, and
+> **slash-opacity on semantic tokens** (`bg-interactive/10`,
+> `hover:bg-status-danger/90`) — the app's semantic colors are bare `var(--x)`
+> with no `<alpha-value>`, so Tailwind emits ZERO CSS for the modifier and the
+> color silently renders as nothing. Use a solid `-subtle`/`-bg`/`-hover`/`-border`
+> token, or built-in `white`/`black` alpha (`bg-white/20`) for genuine
+> translucency. Existing violations are frozen in
+> `scripts/design-token-baseline.json` (shrink-only); new files must be clean;
+> escape hatch `// design-tokens:exempt — <reason>`. Full rules in
+> `.claude/rules/design.md`.
 
 > The list above is representative, not exhaustive. See the root `package.json`
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,
@@ -103,4 +128,4 @@ Domain-specific rules are in `.claude/rules/` and load automatically when releva
 - `docs/00-DEMO-PLATFORM-TECH-SPEC.md` — Full technical specification
 - `docs/adr/` — Architecture Decision Records
 - `docs/audits/` — Gate verification evidence
-- `docs/design-system/` — Design system documentation (V2 spec, patterns, constants)
+- `docs/design-system/` — Design system documentation, docs only (V2 spec README, DESIGN_LAWS, public-site block specs, layout templates, custom CSS overrides); implementations live in the canonical code paths listed in its README

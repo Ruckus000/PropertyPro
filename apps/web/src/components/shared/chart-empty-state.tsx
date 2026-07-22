@@ -1,5 +1,7 @@
 import { BarChart3, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/shared/empty-state';
+import { Button } from '@/components/ui/button';
 
 interface ChartEmptyStateProps {
   type: 'empty' | 'error';
@@ -12,38 +14,30 @@ const defaults = {
   empty: {
     icon: BarChart3,
     title: 'No data for the selected period',
-    subtitle: 'Try adjusting your date range or community filters',
+    description: 'Try adjusting your date range or community filters',
   },
   error: {
     icon: AlertCircle,
     title: 'Failed to load report data',
-    subtitle: null,
+    description: undefined,
   },
-};
+} as const;
 
 function ChartEmptyState({ type, message, onRetry, className }: ChartEmptyStateProps) {
   const config = defaults[type];
-  const Icon = config.icon;
-
   return (
-    <div className={cn('flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center', className)}>
-      <Icon className="h-10 w-10 text-content-disabled" />
-      <div className="space-y-1">
-        <p className="text-sm font-medium text-content-secondary">{message ?? config.title}</p>
-        {config.subtitle && (
-          <p className="text-xs text-content-tertiary">{config.subtitle}</p>
-        )}
-      </div>
-      {type === 'error' && onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-1 rounded-md bg-interactive px-3 py-1.5 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover"
-        >
-          Retry
-        </button>
-      )}
-    </div>
+    <EmptyState
+      size="sm"
+      icon={config.icon}
+      title={message ?? config.title}
+      description={config.description}
+      className={cn('h-full min-h-[200px] justify-center', className)}
+      action={
+        type === 'error' && onRetry ? (
+          <Button size="sm" onClick={onRetry}>Retry</Button>
+        ) : undefined
+      }
+    />
   );
 }
 

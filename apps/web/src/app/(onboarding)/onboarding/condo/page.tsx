@@ -43,7 +43,7 @@ export default async function CondoOnboardingPage({ searchParams }: OnboardingPa
     }
 
     return (
-        <main className="min-h-screen bg-[var(--surface-page)] text-[var(--color-text)]">
+        <main className="min-h-screen bg-[var(--surface-page)] text-[var(--text-primary)]">
             <CondoWizard
                 communityId={context.communityId}
                 communityType={membership.communityType}

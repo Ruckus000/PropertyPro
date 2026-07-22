@@ -211,13 +211,13 @@ interface StatuteRefProps {
 export function StatuteRef({ cite, title, children }: StatuteRefProps) {
   return (
     <span
-      className="inline-flex items-baseline gap-1 rounded-md bg-purple-50 px-1.5 py-0.5 text-xs font-medium text-purple-900"
+      className="inline-flex items-baseline gap-1 rounded-md bg-status-brand-bg px-1.5 py-0.5 text-xs font-medium text-status-brand"
       title={title}
       aria-label={title ? `Florida statute ${cite}: ${title}` : `Florida statute ${cite}`}
     >
       <span aria-hidden="true">§</span>
       <span>{cite.replace(/^§\s*/, '')}</span>
-      {children && <span className="text-purple-800">— {children}</span>}
+      {children && <span className="text-status-brand">— {children}</span>}
     </span>
   );
 }

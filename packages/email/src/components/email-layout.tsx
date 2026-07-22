@@ -13,7 +13,7 @@ import { emailColors } from '@propertypro/tokens/email';
 interface EmailLayoutProps {
   branding: CommunityBranding;
   previewText?: string;
-  /** Override the accent stripe color. Defaults to blue (#2563EB). */
+  /** Override the accent stripe color. Defaults to the brand coral (#C2533A). */
   accentColor?: string;
   children: React.ReactNode;
 }
@@ -24,7 +24,7 @@ export function EmailLayout({
   accentColor,
   children,
 }: EmailLayoutProps) {
-  const stripe = accentColor ?? branding.accentColor ?? emailColors.accentBlue;
+  const stripe = accentColor ?? branding.accentColor ?? emailColors.accentBrand;
 
   return (
     <Html>

@@ -80,7 +80,7 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
         {canWrite && (
           <Link
             href={`/emergency/new?communityId=${context.communityId}`}
-            className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-danger/90"
+            className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-[var(--red-900)]"
           >
             Send Emergency Alert
           </Link>

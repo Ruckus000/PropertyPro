@@ -14,7 +14,6 @@ import {
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   useDryRunImport,
   useImportResidents,
@@ -137,12 +136,6 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
     <div className="space-y-6">
       <PageHeader
         title="Import Residents"
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Residents', href: `/dashboard/residents?communityId=${communityId}` }]}
-            currentLabel="Import residents"
-          />
-        }
       />
 
       {/* Step 1: Upload */}
@@ -268,7 +261,7 @@ function UploadStep({
         className={cn(
           'flex flex-col items-center justify-center gap-4 rounded-md border-2 border-dashed p-12 transition-colors',
           dragOver
-            ? 'border-interactive bg-interactive/5'
+            ? 'border-interactive bg-interactive-subtle'
             : 'border-border-default bg-surface-card',
           isLoading && 'pointer-events-none opacity-60',
         )}
@@ -439,7 +432,7 @@ function PreviewStep({
                 key={row.rowNumber}
                 className={cn(
                   'h-[52px] border-b border-border-default last:border-b-0',
-                  row.status === 'error' && 'bg-status-danger/5',
+                  row.status === 'error' && 'bg-status-danger-bg',
                 )}
               >
                 <td className="px-3">

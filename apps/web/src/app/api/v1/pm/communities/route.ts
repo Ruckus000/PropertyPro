@@ -5,11 +5,9 @@
  * `./contract.ts`.
  */
 import { runRoute } from '@propertypro/api-contract';
-// AUTHZ: P3-PRE-03: PM role gate (isPmAdminInAnyCommunity) at route layer
-import { isPmAdminInAnyCommunity } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { ValidationError } from '@/lib/api/errors';
+import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
 import { checkSignupSubdomainAvailability } from '@/lib/auth/signup';
 import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
@@ -24,12 +22,7 @@ import {
 
 export const GET = withErrorHandler(
   runRoute(pmCommunitiesGetContract, async ({ query }) => {
-    const userId = await requireAuthenticatedUserId();
-
-    const isPm = await isPmAdminInAnyCommunity(userId);
-    if (!isPm) {
-      throw new ForbiddenError('This endpoint is only available to property managers');
-    }
+    const userId = await requirePmPortfolioAccess();
 
     return listManagedCommunitiesForPm(userId, query);
   }),
@@ -37,12 +30,7 @@ export const GET = withErrorHandler(
 
 export const POST = withErrorHandler(
   runRoute(pmCommunitiesPostContract, async ({ body }) => {
-    const userId = await requireAuthenticatedUserId();
-
-    const isPm = await isPmAdminInAnyCommunity(userId);
-    if (!isPm) {
-      throw new ForbiddenError('This endpoint is only available to property managers');
-    }
+    const userId = await requirePmPortfolioAccess();
 
     const slugCheck = await checkSignupSubdomainAvailability(body.subdomain);
     if (!slugCheck.available) {

@@ -7,6 +7,7 @@ import { resetPasswordSchema } from '@/lib/auth/schemas';
 import { updatePasswordAction } from '@/lib/auth/actions';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -241,23 +242,10 @@ export function ResetPasswordForm() {
 
   if (!sessionReady) {
     return (
-      <div className="flex flex-col items-center gap-3 text-center" data-testid="reset-password-loading">
-        {/* Loading spinner */}
-        <svg
-          className="h-6 w-6 animate-spin text-interactive"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          />
-        </svg>
-        <p className="text-content-secondary">Verifying reset link&hellip;</p>
+      <div className="w-full space-y-4" data-testid="reset-password-loading">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
       </div>
     );
   }

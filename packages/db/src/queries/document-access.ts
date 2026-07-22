@@ -6,7 +6,7 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
-import type { CommunityRole, CommunityType, TransitionRole } from '@propertypro/shared';
+import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import {
   getAccessibleKnownCategories,
   isElevatedRole,
@@ -36,7 +36,7 @@ function buildSourceTypeFilter(
 
 export interface DocumentAccessContext {
   communityId: number;
-  role: CommunityRole | TransitionRole;
+  role: CommunityRole;
   communityType: CommunityType;
   isUnitOwner?: boolean;
 }

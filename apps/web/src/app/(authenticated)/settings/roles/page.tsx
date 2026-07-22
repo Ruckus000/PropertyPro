@@ -5,7 +5,6 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { RolesAccessClient } from '@/components/settings/RolesAccessClient';
 
 /**
@@ -50,12 +49,6 @@ export default async function RolesAccessPage({
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Settings', href: '/settings' }]}
-            currentLabel="Roles & Access"
-          />
-        }
         title="Roles & Access"
         description="Promote or remove property managers, set board designations, and transfer the root manager role."
       />

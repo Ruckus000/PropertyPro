@@ -79,26 +79,68 @@ export function useCommunityRoster(communityId: number, enabled = true) {
 }
 
 /**
+ * Error thrown by `useAssignPropertyManager` when a promotion fails. Carries the
+ * server's machine-readable `code` (and, for `ADMIN_LIMIT_REACHED`, the plan's
+ * `maxAdmins`) so the UI can render an upgrade affordance for the plan-cap case
+ * without string-matching the human message.
+ */
+export class AssignPropertyManagerError extends Error {
+  readonly code?: string;
+  readonly maxAdmins?: number;
+  constructor(message: string, code?: string, maxAdmins?: number) {
+    super(message);
+    this.name = 'AssignPropertyManagerError';
+    this.code = code;
+    this.maxAdmins = maxAdmins;
+  }
+}
+
+/** The error code the role-assignment API returns when the plan admin cap is hit. */
+export const ADMIN_LIMIT_REACHED = 'ADMIN_LIMIT_REACHED';
+
+/**
  * Promotes a member to `property_manager`
  * (`POST /api/v1/communities/role-assignments`). On success the roster is
  * invalidated so the screen refreshes.
+ *
+ * RAW fetch (not `requestJson`) so the structured `{ error: { code, details } }`
+ * body survives into a typed `AssignPropertyManagerError` — `requestJson`
+ * collapses every failure to a bare `Error(message)`, discarding the code the
+ * UI needs to distinguish a plan-cap 403 from an ordinary one. Hooks ARE
+ * allowed to call `fetch` directly (`guard:component-api-calls` only forbids it
+ * in components).
  */
 export function useAssignPropertyManager(communityId: number) {
   const qc = useQueryClient();
   return useMutation<
     { assigned: boolean; alreadyAssigned: boolean },
-    Error,
+    AssignPropertyManagerError,
     { userId: string }
   >({
-    mutationFn: async ({ userId }) =>
-      requestJson<{ assigned: boolean; alreadyAssigned: boolean }>(
-        '/api/v1/communities/role-assignments',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ communityId, userId }),
-        },
-      ),
+    mutationFn: async ({ userId }) => {
+      const res = await fetch('/api/v1/communities/role-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ communityId, userId }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | {
+            data?: { assigned: boolean; alreadyAssigned: boolean };
+            error?: { message?: string; code?: string; details?: { maxAdmins?: number } };
+          }
+        | null;
+      if (!res.ok) {
+        throw new AssignPropertyManagerError(
+          body?.error?.message ?? 'Request failed',
+          body?.error?.code,
+          body?.error?.details?.maxAdmins,
+        );
+      }
+      if (!body?.data) {
+        throw new AssignPropertyManagerError('Missing response payload');
+      }
+      return body.data;
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: COMMUNITY_ROSTER_KEY(communityId) });
     },

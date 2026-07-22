@@ -17,9 +17,18 @@ interface Props {
     personalAssessments: boolean;
     communityAssessments: boolean;
   };
+  /**
+   * Show the "Insurance alerts" email toggle. Only board/admins in insurance-hub
+   * (condo/HOA) communities receive these, so the parent gates on that.
+   */
+  showInsuranceAlerts?: boolean;
 }
 
-export function NotificationPreferencesForm({ communityId, reminderVisibility }: Props) {
+export function NotificationPreferencesForm({
+  communityId,
+  reminderVisibility,
+  showInsuranceAlerts = false,
+}: Props) {
   const [values, setValues] = useState<PreferencesState>({
     emailFrequency: 'immediate',
     emailAnnouncements: true,
@@ -29,6 +38,7 @@ export function NotificationPreferencesForm({ communityId, reminderVisibility }:
     calendarReminderPersonalAssessments: true,
     calendarReminderCommunityAssessments: false,
     inAppEnabled: true,
+    emailInsuranceAlerts: true,
   });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -210,6 +220,24 @@ export function NotificationPreferencesForm({ communityId, reminderVisibility }:
           />
           <span className="text-sm text-content">In-app notifications</span>
         </label>
+        {showInsuranceAlerts ? (
+          <label className="flex min-h-[44px] cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={values.emailInsuranceAlerts}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, emailInsuranceAlerts: e.target.checked }))
+              }
+            />
+            <span className="text-sm text-content">
+              Insurance alerts
+              <span className="block text-xs text-content-secondary">
+                Reminders when the master policy or wind-mitigation report is nearing expiry.
+              </span>
+            </span>
+          </label>
+        ) : null}
       </div>
 
       <button

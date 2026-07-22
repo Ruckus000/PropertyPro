@@ -8,8 +8,9 @@
  */
 
 import Link from 'next/link';
-import { Plus, FileSignature, Loader2 } from 'lucide-react';
+import { Plus, FileSignature } from 'lucide-react';
 import { Badge } from '@propertypro/ui';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 
@@ -64,8 +65,25 @@ export function EsignTemplatesListClient({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="size-8 animate-spin text-[var(--text-tertiary)]" />
+      <div className="mx-auto max-w-5xl space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <Skeleton className="h-9 w-40" />
+        </div>
+        <div className="space-y-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4">
+              <Skeleton className="h-4 w-[200px]" />
+              <Skeleton className="h-4 w-[100px]" />
+              <Skeleton className="h-4 w-[60px]" />
+              <Skeleton className="h-6 w-[80px] rounded-full" />
+              <Skeleton className="h-4 w-[100px] ml-auto" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

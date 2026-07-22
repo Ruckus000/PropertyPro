@@ -106,6 +106,11 @@ export async function markPendingSignupPaymentCompleted(input: {
   signupRequestId: string;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  // A2: carry the trial status + period end so stepCommunityCreated can stamp
+  // them onto the community — otherwise the trialing banner is absent during
+  // onboarding until a later subscription.updated event happens to arrive.
+  subscriptionStatus?: string | null;
+  subscriptionCurrentPeriodEndAt?: Date | null;
 }): Promise<void> {
   const db = createUnscopedClient();
   await db
@@ -115,6 +120,10 @@ export async function markPendingSignupPaymentCompleted(input: {
       payload: sql`coalesce(${pendingSignups.payload}, '{}'::jsonb) || ${JSON.stringify({
         stripeCustomerId: input.stripeCustomerId,
         stripeSubscriptionId: input.stripeSubscriptionId,
+        subscriptionStatus: input.subscriptionStatus ?? null,
+        subscriptionCurrentPeriodEndAt: input.subscriptionCurrentPeriodEndAt
+          ? input.subscriptionCurrentPeriodEndAt.toISOString()
+          : null,
       })}::jsonb`,
       updatedAt: new Date(),
     })
@@ -183,6 +192,7 @@ export async function updateCommunitySubscriptionFromStripe(input: {
   subscriptionStatus: string;
   subscriptionPlan: string | null;
   paymentFailedAt?: Date;
+  subscriptionCurrentPeriodEndAt?: Date | null;
 }): Promise<void> {
   const db = createUnscopedClient();
   const updates: Record<string, unknown> = {
@@ -192,6 +202,22 @@ export async function updateCommunitySubscriptionFromStripe(input: {
   };
   if (input.paymentFailedAt) {
     updates['paymentFailedAt'] = input.paymentFailedAt;
+  } else if (
+    input.subscriptionStatus === 'active' ||
+    input.subscriptionStatus === 'trialing'
+  ) {
+    // Clear the payment-failure marker only when the subscription genuinely
+    // RECOVERS (active/trialing). The billing page's payment-failed block is
+    // gated on paymentFailedAt while the shell's past_due banner is gated on
+    // subscriptionStatus — without this, a subscription.updated → active event
+    // (which carries no paymentFailedAt) would let the page block outlive the
+    // shell banner. Deliberately NOT cleared on escalation to worse statuses
+    // (past_due, unpaid, incomplete_expired) — those are still-failed states
+    // that must keep the reminder ladder and payment-failed UI alive.
+    updates['paymentFailedAt'] = null;
+  }
+  if (input.subscriptionCurrentPeriodEndAt !== undefined) {
+    updates['subscriptionCurrentPeriodEndAt'] = input.subscriptionCurrentPeriodEndAt;
   }
 
   await db

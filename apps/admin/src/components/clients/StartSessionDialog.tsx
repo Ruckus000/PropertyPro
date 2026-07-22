@@ -103,7 +103,7 @@ export function StartSessionDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+            className="rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-coral-600"
             aria-label="Close dialog"
           >
             <X size={18} aria-hidden="true" />
@@ -133,7 +133,7 @@ export function StartSessionDialog({
               required
               value={targetUserId}
               onChange={(e) => setTargetUserId(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             >
               <option value="">Select a member…</option>
               {members.map((m) => (
@@ -160,7 +160,7 @@ export function StartSessionDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Describe why support access is needed…"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             />
           </div>
 
@@ -178,7 +178,7 @@ export function StartSessionDialog({
               value={ticketId}
               onChange={(e) => setTicketId(e.target.value)}
               placeholder="e.g. SUPPORT-1234"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             />
           </div>
 
@@ -201,7 +201,7 @@ export function StartSessionDialog({
             <button
               type="submit"
               disabled={submitting || !targetUserId}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700 disabled:opacity-50"
             >
               {submitting ? 'Starting…' : 'Start Session'}
             </button>

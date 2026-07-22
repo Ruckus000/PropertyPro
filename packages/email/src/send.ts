@@ -22,6 +22,7 @@ export interface TestMessage {
   subject: string;
   react: ReactElement;
   headers: Record<string, string>;
+  idempotencyKey?: string;
 }
 
 /** Collected emails when running in test mode (no RESEND_API_KEY). */
@@ -74,19 +75,24 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       subject: options.subject,
       react: options.react,
       headers,
+      idempotencyKey: options.idempotencyKey,
     });
 
     return { id: `test_${testInbox.length}` };
   }
 
-  const { data, error } = await resend.emails.send({
+  const payload = {
     from,
     to: Array.isArray(options.to) ? options.to : [options.to],
     subject: options.subject,
     react: options.react,
     replyTo: options.replyTo,
     headers,
-  });
+  };
+  const response = options.idempotencyKey
+    ? await resend.emails.send(payload, { idempotencyKey: options.idempotencyKey })
+    : await resend.emails.send(payload);
+  const { data, error } = response;
 
   if (error) {
     throw new Error(`Resend API error: ${error.message}`);
@@ -102,6 +108,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
  * When RESEND_API_KEY is not set, operates in test mode.
  */
 export async function sendBulkEmail(requests: SendEmailOptions[]): Promise<SendBulkEmailResult> {
+  if (requests.some((request) => request.idempotencyKey)) {
+    throw new Error('sendBulkEmail does not support per-message idempotency keys; use sendEmail instead');
+  }
+
   const resend = getResendClient();
 
   const results: SendBulkEmailResult['results'] = [];

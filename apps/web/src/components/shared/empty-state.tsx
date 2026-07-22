@@ -1,8 +1,10 @@
 /**
  * EmptyState — Placeholder for empty content areas.
  *
- * Tailwind-based implementation of the pattern from
- * docs/design-system/patterns/EmptyState.tsx.
+ * Tailwind-based implementation of the pattern documented at
+ * docs/design-system/patterns/ (see docs/design-system/README.md). This
+ * component is the canonical implementation — the docs folder no longer
+ * carries a duplicate .tsx copy.
  *
  * Can be used with presets from EMPTY_STATE_CONFIGS or with custom props.
  */

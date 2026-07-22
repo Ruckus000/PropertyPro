@@ -11,7 +11,6 @@
  */
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 import { listAllStatutes } from '@/lib/services/help-article-service';
@@ -34,17 +33,6 @@ export default async function StatutesIndexPage({
     <div className="space-y-6">
       <PageHeader
         title="Statutes & bills"
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              {
-                label: 'Help Center',
-                href: `/help?communityId=${context.communityId}`,
-              },
-            ]}
-            currentLabel="Statutes & bills"
-          />
-        }
         description="Every Florida statute and bill referenced in our guides. Click one to see all articles tagged with it."
       />
 

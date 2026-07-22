@@ -14,6 +14,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Page titles use the "Florida Modern" display serif (Fraunces — loaded in
+   app/layout.tsx as --font-display) to echo the marketing landing page. Covers
+   every page-level h1 (PageHeader + standalone) from one place; body, data,
+   tables, and section headings stay on Inter. Marketing h1s keep their own font
+   via higher-specificity .mk-* classes; any single h1 can opt out with a
+   `font-sans` utility. */
+h1 {
+  font-family: var(--font-display, "Fraunces", Georgia, serif);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
