@@ -239,13 +239,17 @@ export interface CheckoutCommunity {
   name: string;
   communityType: CommunityType;
   stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  subscriptionStatus: string | null;
 }
 
 /**
  * Fetch the minimal community projection the Stripe-checkout flow needs:
- * id, name, communityType (for plan-availability gate), and the existing
- * stripeCustomerId (to attach to the session if present). Returns `null`
- * when the community doesn't exist.
+ * id, name, communityType (for plan-availability gate), the existing
+ * stripeCustomerId (to attach to the session if present), and
+ * stripeSubscriptionId + subscriptionStatus (so the route can refuse to open
+ * a second checkout for a community that is already subscribed). Returns
+ * `null` when the community doesn't exist.
  *
  * AUTHZ: cross-tenant lookup of platform-level `communities` table. Caller
  * MUST verify the actor's `requirePermission(membership, 'settings', 'write')`
@@ -261,6 +265,8 @@ export async function getCommunityForCheckout(
       name: communities.name,
       communityType: communities.communityType,
       stripeCustomerId: communities.stripeCustomerId,
+      stripeSubscriptionId: communities.stripeSubscriptionId,
+      subscriptionStatus: communities.subscriptionStatus,
     })
     .from(communities)
     .where(eq(communities.id, communityId))

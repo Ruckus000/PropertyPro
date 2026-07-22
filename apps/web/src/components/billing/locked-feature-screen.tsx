@@ -17,6 +17,7 @@ import {
   getPlanFeatureCopy,
   type CommunityRole,
   type CommunityFeatures,
+  type CommunityType,
   type PlanId,
 } from '@propertypro/shared';
 import { PlanBadge } from '@propertypro/ui';
@@ -27,6 +28,11 @@ import { UpgradeDialog } from './upgrade-dialog';
 export interface LockedFeatureScreenProps {
   featureKey: keyof CommunityFeatures;
   role: CommunityRole | null;
+  /**
+   * Restricts the recommended plan to the ladder this community can buy.
+   * See UpgradeDialog's prop of the same name.
+   */
+  communityType?: CommunityType | null;
   /** Distinguishes unit owner (request) from tenant (hidden) among residents. */
   isUnitOwner?: boolean;
   currentPlanId: PlanId | null;
@@ -37,6 +43,7 @@ export interface LockedFeatureScreenProps {
 export function LockedFeatureScreen({
   featureKey,
   role,
+  communityType = null,
   isUnitOwner,
   currentPlanId,
   currentPlanRaw,
@@ -44,7 +51,7 @@ export function LockedFeatureScreen({
 }: LockedFeatureScreenProps) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const copy = getPlanFeatureCopy(featureKey);
-  const upgradePlan = findCheapestPlanForFeature(featureKey);
+  const upgradePlan = findCheapestPlanForFeature(featureKey, communityType);
   const behavior = getLockedFeatureBehavior(role, isUnitOwner);
 
   const ctaLabel =
@@ -103,6 +110,7 @@ export function LockedFeatureScreen({
         currentPlanId={currentPlanId}
         currentPlanRaw={currentPlanRaw}
         role={role}
+        communityType={communityType}
         isUnitOwner={isUnitOwner}
         communityId={communityId}
       />

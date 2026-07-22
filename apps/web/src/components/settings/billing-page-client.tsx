@@ -235,14 +235,30 @@ export function BillingPageClient({
             )}
           </div>
         ) : (
+          /* No plan: either never provisioned, or canceled (which nulls
+             subscriptionPlan). Admins get a real purchase CTA — this branch
+             used to say "Contact support to set up billing", which made the
+             Upgrade now button a dead end and left canceled customers with no
+             way to come back. */
           <div className="py-4 text-center">
             <p className="text-sm text-content-secondary">
-              No subscription plan found for this community.
+              {isAdmin
+                ? "This community doesn't have an active subscription yet."
+                : 'No subscription plan found for this community.'}
             </p>
             {isAdmin && (
-              <p className="mt-1 text-sm text-content-secondary">
-                Contact support to set up billing.
-              </p>
+              <>
+                <p className="mt-1 text-sm text-content-secondary">
+                  Pick a plan to unlock the full platform for {communityName}.
+                </p>
+                <Link
+                  href={changePlanUrl}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-[10px] bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-opacity hover:opacity-90"
+                >
+                  Choose a plan
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </Link>
+              </>
             )}
           </div>
         )}

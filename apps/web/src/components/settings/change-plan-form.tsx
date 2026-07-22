@@ -8,6 +8,7 @@ import { Check } from 'lucide-react';
 import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { useReauth } from '@/hooks/use-reauth';
 import { useChangePlan } from '@/hooks/use-change-plan';
+import { useSubscribe } from '@/hooks/use-subscribe';
 import { ReauthModal } from '@/components/auth/reauth-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,25 @@ interface PlanOption {
   description: string;
 }
 
+/**
+ * `change` — community already pays; POSTs /api/v1/subscribe/change-plan and
+ *   stays in-app (Stripe updates the subscription server-side). Reauth-gated,
+ *   because it charges a payment method already on file.
+ * `new` — community has no active subscription; POSTs /api/v1/subscribe and
+ *   hands off to Stripe Checkout. NOT reauth-gated: nothing is charged until
+ *   the user enters card details on Stripe's own page, so a password prompt
+ *   would guard nothing and just add friction to the purchase funnel.
+ */
+type ChangePlanFormMode = 'new' | 'change';
+
 interface ChangePlanFormProps {
+  mode?: ChangePlanFormMode;
+  /**
+   * `new` mode only. True when the community already has a Stripe customer
+   * (a re-subscribe), which the API reauth-gates because completing it
+   * repoints the community's billing identity.
+   */
+  requiresReauth?: boolean;
   communityId: number;
   currentPlan: PlanId | null;
   currentInterval: BillingInterval | null;
@@ -40,12 +59,15 @@ function formatPrice(monthlyUsd: number, interval: BillingInterval): string {
 }
 
 export function ChangePlanForm({
+  mode = 'change',
+  requiresReauth = false,
   communityId,
   currentPlan,
   currentInterval,
   plans,
   cancelHref,
 }: ChangePlanFormProps) {
+  const isNewSubscription = mode === 'new';
   const router = useRouter();
   const [interval, setInterval] = useState<BillingInterval>(currentInterval === 'year' ? 'year' : 'month');
   const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(null);
@@ -54,13 +76,14 @@ export function ChangePlanForm({
   const [error, setError] = useState<string | null>(null);
   const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
   const changePlan = useChangePlan();
+  const subscribe = useSubscribe();
 
   // A plan card is offered when the change is either a tier upgrade
   // (compareTiers < 0) OR the same tier with a different interval.
-  // If `currentInterval` is null (Stripe lookup failed server-side), we
-  // optimistically show the annual same-tier card — the API enforces the
-  // no-op rule, so a wrongly-shown card surfaces a clean 400 instead of
-  // silently hiding the upsell during a Stripe blip.
+  // If `currentInterval` is null (Stripe lookup failed server-side), the
+  // same-tier card is shown at BOTH toggle positions rather than hidden — the
+  // API enforces the no-op rule, so a wrongly-shown card surfaces a clean 400
+  // instead of silently hiding the upsell during a Stripe blip.
   const offeredPlans = useMemo(() => {
     if (!currentPlan) return plans;
     return plans.filter((p) => {
@@ -88,6 +111,36 @@ export function ChangePlanForm({
     if (!selectedPlan) return;
     setIsSubmitting(true);
     setError(null);
+
+    if (isNewSubscription) {
+      try {
+        if (requiresReauth) {
+          const confirmed = await triggerReauth();
+          if (!confirmed) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
+        const { checkoutUrl } = await subscribe.mutateAsync({
+          communityId,
+          planId: selectedPlan,
+          billingInterval: interval,
+        });
+        if (!checkoutUrl) {
+          throw new Error('Stripe did not return a checkout URL. Please try again.');
+        }
+        // Full navigation, not router.push — we're leaving the app for Stripe.
+        // Deliberately no setIsSubmitting(false): the button stays busy until
+        // the browser unloads, so the user can't fire a second checkout.
+        window.location.href = checkoutUrl;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+        setIsSubmitting(false);
+        setShowConfirm(false);
+      }
+      return;
+    }
+
     try {
       const confirmed = await triggerReauth();
       if (!confirmed) {
@@ -202,7 +255,7 @@ export function ChangePlanForm({
             onClick={openConfirm}
             disabled={!selectedPlan || isSubmitting}
           >
-            Review change
+            {isNewSubscription ? 'Continue to payment' : 'Review change'}
           </Button>
         </div>
       )}
@@ -220,21 +273,33 @@ export function ChangePlanForm({
       <Dialog open={showConfirm && selected !== null} onOpenChange={(open) => !isSubmitting && setShowConfirm(open)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm plan change</DialogTitle>
+            <DialogTitle>
+              {isNewSubscription ? 'Confirm your plan' : 'Confirm plan change'}
+            </DialogTitle>
             <DialogDescription asChild>
               <div className="space-y-2 pt-2">
                 <p>
-                  You&apos;ll be moved to <strong className="text-content-primary">{selected?.label}</strong> at{' '}
+                  {isNewSubscription ? "You're subscribing to " : "You'll be moved to "}
+                  <strong className="text-content-primary">{selected?.label}</strong> at{' '}
                   <strong className="text-content-primary">{selected ? formatPrice(selected.monthlyPriceUsd, interval) : ''}</strong>{' '}
                   ({interval === 'year' ? 'billed annually' : 'billed monthly'}).
                 </p>
-                <p>
-                  Stripe will charge a prorated amount today for the remainder of your current period and
-                  bill the new rate going forward.
-                </p>
-                <p>
-                  You&apos;ll be asked to re-enter your password to confirm.
-                </p>
+                {isNewSubscription ? (
+                  <p>
+                    We&apos;ll take you to Stripe to enter your payment details. Nothing is charged
+                    until you complete checkout there.
+                  </p>
+                ) : (
+                  <>
+                    <p>
+                      Stripe will charge a prorated amount today for the remainder of your current period and
+                      bill the new rate going forward.
+                    </p>
+                    <p>
+                      You&apos;ll be asked to re-enter your password to confirm.
+                    </p>
+                  </>
+                )}
               </div>
             </DialogDescription>
           </DialogHeader>
@@ -252,7 +317,7 @@ export function ChangePlanForm({
               onClick={submit}
               loading={isSubmitting}
             >
-              Confirm change
+              {isNewSubscription ? 'Continue to Stripe' : 'Confirm change'}
             </Button>
           </DialogFooter>
         </DialogContent>

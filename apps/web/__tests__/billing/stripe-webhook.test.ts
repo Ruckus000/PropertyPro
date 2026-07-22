@@ -129,6 +129,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: (...args: unknown[]) => ({ _and: args }),
   isNull: (col: unknown) => ({ _isNull: col }),
+  or: (...args: unknown[]) => ({ _or: args }),
   sql: Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => ({ _sql: { strings: [...strings], values } }), { raw: (s: string) => ({ _sqlRaw: s }) }),
 }));
 
@@ -555,7 +556,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       }));
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };
@@ -646,7 +653,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       }));
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };
@@ -674,6 +687,78 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(communityUpdate).toBeDefined();
     });
 
+    it('persists Stripe IDs for self-serve subscribe events with NO accessPlanId', async () => {
+      // REGRESSION: persistence used to be gated on `accessPlanId && communityId`.
+      // Most self-serve upgrades carry no access plan, so their Stripe IDs were
+      // never written — and every later customer.subscription.* event resolves
+      // its community via stripeSubscriptionId, silently returning on no match.
+      // Net effect: the customer was charged and never received the plan.
+      const session = {
+        id: 'cs_live_selfserve_003',
+        status: 'complete',
+        metadata: { communityId: '44', planId: 'essentials' },
+      };
+      const event = makeEvent('checkout.session.completed', session, 'evt_cs_selfserve_003');
+      constructEventMock.mockReturnValue(event);
+      retrieveCheckoutSessionMock.mockResolvedValue({
+        ...session,
+        customer: 'cus_selfserve_003',
+        // Expanded by retrieveCheckoutSession, so status is available here.
+        subscription: { id: 'sub_selfserve_003', status: 'active', items: { data: [] } },
+      });
+
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([]),
+          })),
+        })),
+      }));
+
+      const setPayloads: Array<Record<string, unknown>> = [];
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
+      const setMock = vi.fn((payload: Record<string, unknown>) => {
+        setPayloads.push(payload);
+        return { where: whereForUpdateMock };
+      });
+      const updateMock = vi.fn(() => ({ set: setMock }));
+      const insertMock = vi.fn(() => ({
+        values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+      }));
+
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: insertMock,
+        update: updateMock,
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).toHaveBeenCalledWith('cs_live_selfserve_003');
+
+      const communityUpdate = setPayloads.find(
+        (p) =>
+          p.stripeCustomerId === 'cus_selfserve_003' &&
+          p.stripeSubscriptionId === 'sub_selfserve_003',
+      );
+      expect(communityUpdate).toBeDefined();
+      // Stripe does not guarantee that checkout.session.completed arrives
+      // before customer.subscription.created. When the subscription event
+      // lands first it finds no community (this link doesn't exist yet) and
+      // silently returns, and nothing re-stamps until the next renewal — so
+      // the status/plan MUST be written here, not just the two IDs.
+      expect(communityUpdate).toMatchObject({
+        subscriptionStatus: 'active',
+        subscriptionPlan: 'essentials',
+      });
+    });
+
     it('skips Stripe ID persistence when fresh session status is not complete', async () => {
       const session = {
         id: 'cs_live_selfserve_002',
@@ -690,7 +775,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       });
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };

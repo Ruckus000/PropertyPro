@@ -3,7 +3,13 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { communities, createScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { resolvePlanId, type PlanId } from '@propertypro/shared';
+import {
+  PLANS_BY_COMMUNITY_TYPE,
+  canStartNewSubscription,
+  resolvePlanId,
+  type CommunityType,
+  type PlanId,
+} from '@propertypro/shared';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -16,9 +22,19 @@ import { ChangePlanForm } from '@/components/settings/change-plan-form';
 /**
  * Settings → Billing → Change plan.
  *
- * Lets an existing paid subscriber switch tier or billing interval. Tier
- * downgrades and cancellation stay on the Stripe Customer Portal — this
- * page only renders upgrade options.
+ * Two modes, both admin-only:
+ *
+ *   - `change` — an existing paid subscriber switches tier or billing
+ *     interval via `/api/v1/subscribe/change-plan`. Downgrades and
+ *     cancellation stay on the Stripe Customer Portal.
+ *   - `new` — a community with no active subscription (never provisioned, or
+ *     canceled, which nulls `subscriptionPlan`) picks a plan and is handed off
+ *     to Stripe Checkout via `/api/v1/subscribe`.
+ *
+ * The `new` mode exists because this page previously redirected any community
+ * without an active subscription straight back to /settings/billing, which had
+ * no purchase CTA — so the "Upgrade now" button was an inescapable loop and no
+ * one could ever subscribe (or re-subscribe) from inside the app.
  */
 export default async function ChangePlanPage({
   searchParams,
@@ -56,34 +72,54 @@ export default async function ChangePlanPage({
   const subscriptionStatus = (community?.['subscriptionStatus'] as string) ?? null;
   const stripeSubscriptionId = (community?.['stripeSubscriptionId'] as string) ?? null;
   const communityType = (community?.['communityType'] as string) ?? null;
+  const stripeCustomerId = (community?.['stripeCustomerId'] as string) ?? null;
   const currentPlan = resolvePlanId((community?.['subscriptionPlan'] as string) ?? null);
 
-  // Without an active subscription, the user has no plan to switch from —
-  // bounce back to /settings/billing where they'll see appropriate copy.
-  if (!stripeSubscriptionId || subscriptionStatus !== 'active' || !communityType) {
+  // Without a RECOGNIZED community type we can't resolve a plan ladder or a
+  // Stripe price — bounce back to billing. Checking membership in the ladder
+  // map rather than mere truthiness: an unmapped string would otherwise pass
+  // this guard, make getSignupPlansForCommunityType return undefined, and 500
+  // on `plans.map` below.
+  if (!communityType || !(communityType in PLANS_BY_COMMUNITY_TYPE)) {
     redirect(`/settings/billing?communityId=${context.communityId}`);
   }
 
-  const currentInterval = await getActiveSubscriptionInterval(stripeSubscriptionId).catch(
-    () => null,
-  );
+  // Mode selection MUST use the same predicate the API enforces, or the page
+  // offers a flow the route will reject (or worse, one it will accept and
+  // duplicate-bill for). `trialing` is the case that matters: every signup
+  // spends its first 30 days there with a live subscription.
+  const lifecycle = { stripeSubscriptionId, subscriptionStatus };
+  const hasLiveSubscription = !canStartNewSubscription(lifecycle);
 
-  const plans = getSignupPlansForCommunityType(
-    communityType as 'condo_718' | 'hoa_720' | 'apartment',
-  );
+  // Only meaningful in `change` mode; a new subscriber has no interval yet.
+  const currentInterval = stripeSubscriptionId
+    ? await getActiveSubscriptionInterval(stripeSubscriptionId).catch(() => null)
+    : null;
+
+  const plans = getSignupPlansForCommunityType(communityType as CommunityType);
 
   const billingHref = `/settings/billing?communityId=${context.communityId}`;
 
   return (
     <div>
       <PageHeader
-        title="Change plan"
-        description={`Update the plan or billing interval for ${membership.communityName}.`}
+        title={hasLiveSubscription ? 'Change plan' : 'Choose a plan'}
+        description={
+          hasLiveSubscription
+            ? `Update the plan or billing interval for ${membership.communityName}.`
+            : `Pick a plan to activate ${membership.communityName}.`
+        }
       />
 
       <ChangePlanForm
+        mode={hasLiveSubscription ? 'change' : 'new'}
+        // A re-subscribe (Stripe customer already on file) rebinds billing
+        // identity, so POST /api/v1/subscribe demands a fresh reauth for it.
+        // Prompt in the UI to match, or the request 401s after the user has
+        // already picked a plan.
+        requiresReauth={Boolean(stripeCustomerId)}
         communityId={context.communityId}
-        currentPlan={currentPlan as PlanId | null}
+        currentPlan={hasLiveSubscription ? (currentPlan as PlanId | null) : null}
         currentInterval={currentInterval}
         plans={plans.map((p) => ({
           id: p.id,

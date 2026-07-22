@@ -24,6 +24,43 @@ describe('signup plan options', () => {
     expect(apartmentPlans).not.toContain('essentials');
   });
 
+  it('pins the exact customer-facing plan options (labels, prices, order)', () => {
+    // SIGNUP_PLAN_OPTIONS is now DERIVED from PLANS_BY_COMMUNITY_TYPE +
+    // PLAN_FEATURES rather than written out literally. Nothing else in the
+    // suite asserts labels, prices, descriptions or ordering — so without
+    // this, a drift in either source would silently change the prices shown
+    // on the public signup page and still pass CI.
+    expect(getSignupPlansForCommunityType('condo_718')).toEqual([
+      {
+        id: 'essentials',
+        label: 'Essentials',
+        monthlyPriceUsd: 199,
+        description:
+          'Website, statutory document posting, owner portal, and announcements.',
+      },
+      {
+        id: 'professional',
+        label: 'Professional',
+        monthlyPriceUsd: 349,
+        description: 'Full platform with e-sign, violations, ARC, finance, and more.',
+      },
+    ]);
+
+    expect(getSignupPlansForCommunityType('hoa_720')).toEqual(
+      getSignupPlansForCommunityType('condo_718'),
+    );
+
+    expect(getSignupPlansForCommunityType('apartment')).toEqual([
+      {
+        id: 'operations_plus',
+        label: 'Operations Plus',
+        monthlyPriceUsd: 499,
+        description:
+          'Full apartment operations with lease tracking, packages, and visitors.',
+      },
+    ]);
+  });
+
   it('enforces plan availability by selected community type', () => {
     expect(isPlanAvailableForCommunityType('condo_718', 'essentials')).toBe(
       true,

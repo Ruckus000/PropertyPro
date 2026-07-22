@@ -19,12 +19,13 @@ import * as React from 'react';
 import { Check } from 'lucide-react';
 import {
   PLAN_FEATURES,
-  findCheapestPlanForFeature,
+  findCheapestPlanEntryForFeature,
   getLockedFeatureBehavior,
   getPlanFeatureCopy,
   resolvePlanId,
   type CommunityRole,
   type CommunityFeatures,
+  type CommunityType,
   type PlanId,
 } from '@propertypro/shared';
 import { PlanBadge } from '@propertypro/ui';
@@ -51,6 +52,12 @@ export interface UpgradeDialogProps {
   /** Raw plan string from the community row, used as a fallback for resolution. */
   currentPlanRaw: string | null;
   role: CommunityRole | null;
+  /**
+   * Restricts the recommended plan to the ladder this community can actually
+   * buy. Without it an apartment community is offered Professional, which
+   * checkout rejects as unavailable for its type.
+   */
+  communityType?: CommunityType | null;
   /** Distinguishes unit owner (request) from tenant (hidden) among residents. */
   isUnitOwner?: boolean;
   /**
@@ -69,6 +76,7 @@ export function UpgradeDialog({
   currentPlanId,
   currentPlanRaw,
   role,
+  communityType = null,
   isUnitOwner,
   communityId,
 }: UpgradeDialogProps) {
@@ -96,24 +104,21 @@ export function UpgradeDialog({
 
   // Prefer the caller-provided plan id (for any-of gates), then fall back to
   // deriving from the triggering feature key.
-  const fallbackUpgradePlan = featureKey ? findCheapestPlanForFeature(featureKey) : null;
-  const fallbackUpgradePlanId: PlanId | null = fallbackUpgradePlan
-    ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === fallbackUpgradePlan)?.[0] as PlanId | undefined) ??
-      null)
+  const fallbackUpgradePlan = featureKey
+    ? findCheapestPlanEntryForFeature(featureKey, communityType)
     : null;
-  const recommendedPlanId: PlanId | null = upgradePlanId ?? fallbackUpgradePlanId;
+  const recommendedPlanId: PlanId | null = upgradePlanId ?? fallbackUpgradePlan?.planId ?? null;
   const recommendedPlan = recommendedPlanId ? PLAN_FEATURES[recommendedPlanId] : null;
 
   const tenantQuery = communityId ? `?communityId=${communityId}` : '';
 
   function handleUpgrade() {
     if (pending) return;
-    // Hand off to the dedicated Change plan page. That flow already handles
-    // the active-subscription branch (Stripe portal change-plan endpoint) and
-    // the no-subscription branch (bounce back to /settings/billing). Owning
-    // the checkout logic in a single place keeps this dialog purely a
-    // marketing surface — it doesn't duplicate the subscription-state checks
-    // the change-plan page already does.
+    // Hand off to the dedicated Change plan page, which owns both branches:
+    // an existing subscription switches tier in place, and a community with
+    // none picks a plan and goes to Stripe Checkout. Keeping the checkout
+    // logic there leaves this dialog a pure marketing surface, with no
+    // duplicated subscription-state checks to drift.
     setPending(true);
     window.location.href = `/settings/billing/change-plan${tenantQuery}`;
   }

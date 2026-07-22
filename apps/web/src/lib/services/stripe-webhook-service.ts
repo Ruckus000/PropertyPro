@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from '@propertypro/db/filters';
+import { and, eq, isNull, or, sql } from '@propertypro/db/filters';
 import {
   accessPlans,
   communities,
@@ -83,20 +83,52 @@ export async function persistSelfServeCommunityStripeIds(input: {
   communityId: number;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
-}): Promise<void> {
+  /** Synced from the same Checkout session so the row isn't left half-written. */
+  subscriptionStatus?: string | null;
+  subscriptionPlan?: string | null;
+  subscriptionCurrentPeriodEndAt?: Date | null;
+}): Promise<{ rebindBlocked: boolean }> {
   const db = createUnscopedClient();
   const updates: {
     updatedAt: Date;
     stripeCustomerId?: string;
     stripeSubscriptionId?: string;
+    subscriptionStatus?: string;
+    subscriptionPlan?: string;
+    subscriptionCurrentPeriodEndAt?: Date;
   } = { updatedAt: new Date() };
   if (input.stripeCustomerId) updates.stripeCustomerId = input.stripeCustomerId;
   if (input.stripeSubscriptionId) updates.stripeSubscriptionId = input.stripeSubscriptionId;
+  if (input.subscriptionStatus) updates.subscriptionStatus = input.subscriptionStatus;
+  if (input.subscriptionPlan) updates.subscriptionPlan = input.subscriptionPlan;
+  if (input.subscriptionCurrentPeriodEndAt) {
+    updates.subscriptionCurrentPeriodEndAt = input.subscriptionCurrentPeriodEndAt;
+  }
 
-  await db
+  // Only bind a subscription id when the row has none, or already names this
+  // same one (webhook redelivery). NEVER overwrite a DIFFERENT live id: doing
+  // so orphans the previous subscription — every later `customer.subscription.*`
+  // event for it resolves to no community and is silently dropped, so
+  // cancellation and dunning stop working while the customer keeps being
+  // billed for both. Expressed as a WHERE clause rather than a read-then-write
+  // so concurrent webhook deliveries can't interleave.
+  const rows = await db
     .update(communities)
     .set(updates)
-    .where(eq(communities.id, input.communityId));
+    .where(
+      and(
+        eq(communities.id, input.communityId),
+        input.stripeSubscriptionId
+          ? or(
+              isNull(communities.stripeSubscriptionId),
+              eq(communities.stripeSubscriptionId, input.stripeSubscriptionId),
+            )
+          : undefined,
+      ),
+    )
+    .returning({ id: communities.id });
+
+  return { rebindBlocked: rows.length === 0 };
 }
 
 /**
