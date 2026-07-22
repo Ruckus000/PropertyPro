@@ -10,10 +10,13 @@ const {
   scopedInsertMock,
   scopedUpdateMock,
   scopedHardDeleteMock,
+  scopedQueryByIdMock,
   communitiesTable,
   usersTable,
   userRolesTable,
   notificationPreferencesTable,
+  unitsTable,
+  documentsTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
 } = vi.hoisted(() => ({
@@ -24,10 +27,13 @@ const {
   scopedInsertMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
   scopedHardDeleteMock: vi.fn(),
+  scopedQueryByIdMock: vi.fn(),
   communitiesTable: Symbol('communities'),
   usersTable: Symbol('users'),
   userRolesTable: Symbol('user_roles'),
   notificationPreferencesTable: Symbol('notification_preferences'),
+  unitsTable: Symbol('units'),
+  documentsTable: Symbol('documents'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
 }));
@@ -39,6 +45,8 @@ vi.mock('@propertypro/db', () => ({
   notificationPreferences: notificationPreferencesTable,
   userRoles: userRolesTable,
   users: usersTable,
+  units: unitsTable,
+  documents: documentsTable,
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -79,7 +87,11 @@ describe('p1-18 residents route', () => {
       insert: scopedInsertMock,
       update: scopedUpdateMock,
       hardDelete: scopedHardDeleteMock,
+      // Cross-tenant FK guard resolves referenced ids through queryById; default
+      // to "found" so unit lookups succeed unless a test overrides it.
+      queryById: scopedQueryByIdMock,
     });
+    scopedQueryByIdMock.mockResolvedValue({ id: 1 });
   });
 
   it('POST creates user role and notification preferences with scoped client', async () => {

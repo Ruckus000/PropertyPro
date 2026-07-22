@@ -39,6 +39,9 @@ const {
   listComplianceChecklistItemsMock,
   insertComplianceChecklistItemsMock,
   updateComplianceChecklistItemMock,
+  createScopedClientMock,
+  scopedQueryByIdMock,
+  documentsTable,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -54,10 +57,15 @@ const {
   listComplianceChecklistItemsMock: vi.fn(),
   insertComplianceChecklistItemsMock: vi.fn(),
   updateComplianceChecklistItemMock: vi.fn(),
+  createScopedClientMock: vi.fn(),
+  scopedQueryByIdMock: vi.fn(),
+  documentsTable: Symbol('documents'),
 }));
 
 vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
+  createScopedClient: createScopedClientMock,
+  documents: documentsTable,
 }));
 
 vi.mock('@propertypro/shared', async () => {
@@ -141,6 +149,10 @@ beforeEach(() => {
   assertNotDemoGraceMock.mockResolvedValue(undefined);
   requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
   requirePermissionMock.mockReturnValue(undefined);
+  // Cross-tenant FK guard: link_document resolves the referenced document via
+  // queryById. Default to "found in this community" so happy paths pass.
+  scopedQueryByIdMock.mockResolvedValue({ id: 1 });
+  createScopedClientMock.mockReturnValue({ queryById: scopedQueryByIdMock });
   getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true });
   calculateComplianceStatusMock.mockReturnValue('overdue');
   calculatePostingDeadlineMock.mockReturnValue(new Date('2026-01-01T00:00:00Z'));

@@ -18,7 +18,7 @@
  *             `{ data: { data, meta } }` (already-generated / race / empty)
  *   - PATCH → `{ data: result }`
  */
-import { logAuditEvent } from '@propertypro/db';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
@@ -37,6 +37,7 @@ import {
 } from '@/lib/utils/compliance-calculator';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
 import {
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
@@ -201,6 +202,11 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requireCondoCommunity(membership.communityType);
     requirePermission(membership, 'compliance', 'write');
+
+    // Reject a foreign-tenant document reference before any write happens.
+    if (patchAction === 'link_document') {
+      await assertDocumentInCommunity(createScopedClient(communityId), documentId);
+    }
 
     // Build the update payload based on the action
     let updateData: Record<string, unknown>;

@@ -6,7 +6,7 @@
  */
 import crypto from 'node:crypto';
 import { runRoute } from '@/lib/api/run-route';
-import { logAuditEvent } from '@propertypro/db';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import {
   COMMUNITY_ROLES,
   type CommunityRole,
@@ -21,6 +21,7 @@ import { requireCommunityType, requireCommunityRole } from '@/lib/utils/communit
 import { isResidentTierRole, validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import {
   createResidentNotificationPreferences,
   createResidentRole,
@@ -99,6 +100,9 @@ export const POST = withErrorHandler(
     if (!validation.valid) {
       throw new ValidationError(validation.error ?? 'Invalid role assignment');
     }
+
+    // Reject foreign-tenant unit references before any write happens.
+    await assertUnitInCommunity(createScopedClient(communityId), unitId);
 
     if (role === 'resident' && isUnitOwner && communityType === 'apartment') {
       throw new ValidationError('Owners are not allowed in apartment communities');
@@ -223,6 +227,10 @@ export const PATCH = withErrorHandler(
       const validation = validateRoleAssignment(newRole, communityType, newUnitId);
       if (!validation.valid) {
         throw new ValidationError(validation.error ?? 'Invalid role assignment');
+      }
+      // Reject a foreign-tenant unit reference before any write happens.
+      if (unitId !== undefined) {
+        await assertUnitInCommunity(createScopedClient(communityId), unitId);
       }
     }
 
