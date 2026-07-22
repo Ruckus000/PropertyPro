@@ -8,7 +8,14 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { getDemoById, deleteDemo, deleteCommunity, updateDemo, sanitizeDemoRow } from '@/lib/db/demo-queries';
+import {
+  getDemoById,
+  getDemoByIdWithConversionState,
+  deleteDemo,
+  deleteCommunity,
+  updateDemo,
+  sanitizeDemoRow,
+} from '@/lib/db/demo-queries';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -57,8 +64,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
     );
   }
 
-  // 1. Look up the demo instance
-  const { data: demo, error: fetchError } = await getDemoById(id);
+  // 1. Look up the demo instance with conversion state
+  const { data: demo, error: fetchError } = await getDemoByIdWithConversionState(id);
   if (fetchError || !demo) {
     return NextResponse.json(
       { error: { code: 'NOT_FOUND', message: 'Demo not found' } },
@@ -66,7 +73,23 @@ export async function DELETE(_request: Request, context: RouteContext) {
     );
   }
 
-  // 2. Delete demo users from Supabase Auth
+  // 2. Refuse to delete a demo whose community has been converted to a real
+  // customer. The community row still references this demo via
+  // seeded_community_id, but cascading the delete would wipe live tenant data.
+  if (demo.is_converted) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'DEMO_ALREADY_CONVERTED',
+          message:
+            'This demo has been converted to a customer community. Delete the demo_instances row directly without cascading the community.',
+        },
+      },
+      { status: 409 },
+    );
+  }
+
+  // 3. Delete demo users from Supabase Auth
   const supabase = createAdminClient();
   const userIds = [demo.demo_resident_user_id, demo.demo_board_user_id].filter(Boolean) as string[];
   for (const userId of userIds) {
@@ -77,12 +100,12 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
   }
 
-  // 3. Delete the community (cascades demo data)
+  // 4. Delete the community (cascades demo data)
   if (demo.seeded_community_id) {
     await deleteCommunity(demo.seeded_community_id);
   }
 
-  // 4. Delete the demo_instances row
+  // 5. Delete the demo_instances row
   const { error: deleteError } = await deleteDemo(id);
   if (deleteError) {
     return NextResponse.json(
