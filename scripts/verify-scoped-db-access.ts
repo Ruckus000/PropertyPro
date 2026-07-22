@@ -507,6 +507,54 @@ function hasTableRlsEnable(sql: string, tableName: string): boolean {
   return pattern.test(sql);
 }
 
+function hasTableRlsForce(sql: string, tableName: string): boolean {
+  const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|${escapedTableName})\\s+FORCE\\s+ROW\\s+LEVEL\\s+SECURITY`,
+    'i',
+  );
+  return pattern.test(sql);
+}
+
+function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
+  const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Direct CREATE TRIGGER form, e.g.
+  //   CREATE TRIGGER "pp_rls_enforce_tenant_scope" BEFORE INSERT OR UPDATE
+  //   ON "public"."tableName" FOR EACH ROW EXECUTE FUNCTION ...
+  // Two corrections over the naive form, both needed for this to mean anything:
+  //
+  // 1. The word-boundary belongs INSIDE the unquoted alternative only. A
+  //    trailing \b after the quoted form can never match — the characters
+  //    either side of the closing quote (`"` and `;`/newline) are both
+  //    non-word, so there is no boundary there. Every migration writes the
+  //    quoted form, so with \b outside the group this pattern silently never
+  //    fired and only the loop/ARRAY form below carried the check — which is
+  //    why access_requests and community_join_requests, whose triggers 0021
+  //    creates in the direct form, reported false DB005 violations.
+  //
+  // 2. The gap is `[^;]*?`, not `[\s\S]*?`. The ON clause must live in the
+  //    SAME statement as the CREATE TRIGGER. With `[\s\S]*?` the match could
+  //    bridge across unrelated statements in the concatenated corpus and pair
+  //    a CREATE TRIGGER with some later `ON "public"."other_table"` (e.g. a
+  //    CREATE POLICY), reporting a trigger that does not exist.
+  const directPattern = new RegExp(
+    `CREATE\\s+TRIGGER\\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
+    'i',
+  );
+  if (directPattern.test(sql)) return true;
+
+  // Loop-based form where the trigger is installed via dynamic SQL across an
+  // array of table names. Match the table name appearing in a `SELECT
+  // unnest(ARRAY[ ... ])` literal AND a CREATE TRIGGER pp_rls_enforce_tenant_scope
+  // reference somewhere in the corpus.
+  const arrayContainsTable = new RegExp(
+    `unnest\\s*\\(\\s*ARRAY\\s*\\[[\\s\\S]*?'${escapedTableName}'[\\s\\S]*?\\]`,
+    'i',
+  );
+  const hasLoopTriggerInstall = /CREATE\s+TRIGGER\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)/i;
+  return arrayContainsTable.test(sql) && hasLoopTriggerInstall.test(sql);
+}
+
 function stripSqlComments(sql: string): string {
   // Replace block comments /* ... */ with equivalent whitespace (preserves newlines for accurate line reporting)
   let s = sql.replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '));
@@ -627,7 +675,128 @@ function runRlsPolicyCheck(): number {
   return 1;
 }
 
-function main(): number {
+/**
+ * Inventory-driven RLS coverage check.
+ *
+ * RLS hardening for a tenant table is frequently split across several
+ * migrations (e.g. initial CREATE TABLE in one file, FORCE + write-scope
+ * trigger added later). The audit's intent — "every tenant table has RLS
+ * ENABLE + FORCE, at least one policy, and (unless service/audit-only) the
+ * write-scope trigger" — is therefore a coverage check across the entire
+ * migration corpus rather than a per-file rule. Complements the non-gating
+ * live integration test (which needs DATABASE_URL); this runs in every PR.
+ */
+async function runRlsTenantTableCoverageCheck(): Promise<number> {
+  if (!isDirectory(migrationsRoot)) {
+    // eslint-disable-next-line no-console
+    console.error(`Migrations directory not found: ${migrationsRoot}`);
+    return 1;
+  }
+
+  const migrationFiles = readdirSync(migrationsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
+    .map((entry) => join(migrationsRoot, entry.name))
+    .sort();
+
+  const corpus = stripSqlComments(
+    migrationFiles.map((f) => readFileSync(f, 'utf8')).join('\n'),
+  );
+
+  type RlsTenantTableConfig = {
+    tableName: string;
+    policyFamily: string;
+  };
+  let RLS_TENANT_TABLES: readonly RlsTenantTableConfig[];
+  try {
+    const mod = await import('../packages/db/src/schema/rls-config.ts');
+    RLS_TENANT_TABLES = mod.RLS_TENANT_TABLES as readonly RlsTenantTableConfig[];
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      'Could not load RLS_TENANT_TABLES from packages/db/src/schema/rls-config.ts:',
+      err,
+    );
+    return 1;
+  }
+
+  // service_only and audit_log_restricted tables are written exclusively under
+  // a privileged role; append-only tables take INSERT-only writes. The generic
+  // INSERT/UPDATE write-scope trigger is not installed on those families.
+  // Policy families that legitimately have NO pp_rls_enforce_tenant_scope
+  // trigger. Keep in sync with RlsPolicyFamily in
+  // packages/db/src/schema/rls-config.ts — this set is hardcoded, so a new
+  // trigger-exempt family must be added here or DB005 fires spuriously.
+  const FAMILIES_WITHOUT_TRIGGER = new Set([
+    'service_only',
+    'audit_log_restricted',
+    'tenant_append_only',
+    // No authenticated write path at all (anon/authenticated SELECT only,
+    // writes are service-role) — so there is nothing for a write-scope
+    // trigger to guard. Added for site_blocks in #763.
+    'public_read_service_write',
+  ]);
+
+  const violations: Violation[] = [];
+  for (const entry of RLS_TENANT_TABLES) {
+    const t = entry.tableName;
+    if (!hasTableRlsEnable(corpus, t)) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" has no ALTER TABLE … ENABLE ROW LEVEL SECURITY in any migration.`,
+      });
+    }
+    if (!hasTableRlsForce(corpus, t)) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" has no ALTER TABLE … FORCE ROW LEVEL SECURITY in any migration.`,
+      });
+    }
+    // NOTE: policy-presence is intentionally NOT checked here. Per-family
+    // CREATE POLICY coverage is verified with higher fidelity by the live
+    // rls-policies integration test (pg_policies per family); a static text
+    // scan for CREATE POLICY is both redundant and brittle against the
+    // quote-wrapped baseline DDL. FORCE + write-scope-trigger coverage below
+    // is what no other gate enforces, which is the gap this check fills.
+    if (
+      !FAMILIES_WITHOUT_TRIGGER.has(entry.policyFamily) &&
+      !hasTenantWriteScopeTrigger(corpus, t)
+    ) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" (${entry.policyFamily}) has no pp_rls_enforce_tenant_scope trigger in any migration.`,
+      });
+    }
+  }
+
+  if (violations.length === 0) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `PASS: RLS tenant-table coverage check is clean for ${RLS_TENANT_TABLES.length} tables.`,
+    );
+    return 0;
+  }
+
+  for (const violation of violations) {
+    // eslint-disable-next-line no-console
+    console.error(`${violation.file} [${violation.code}] ${violation.message}`);
+  }
+  // eslint-disable-next-line no-console
+  console.error(
+    `FAIL: ${violations.length} tenant-table RLS coverage violation(s) found.`,
+  );
+  return 1;
+}
+
+async function main(): Promise<number> {
   let exitCode = 0;
 
   for (const config of APP_CONFIGS) {
@@ -642,7 +811,12 @@ function main(): number {
     exitCode = rlsCode;
   }
 
+  const coverageCode = await runRlsTenantTableCoverageCheck();
+  if (coverageCode !== 0) {
+    exitCode = coverageCode;
+  }
+
   return exitCode;
 }
 
-process.exit(main());
+main().then((code) => process.exit(code));
