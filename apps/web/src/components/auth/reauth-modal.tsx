@@ -57,7 +57,7 @@ export function ReauthModal({ isOpen, onCancel, verify }: ReauthModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Confirm your identity</DialogTitle>
           <DialogDescription>

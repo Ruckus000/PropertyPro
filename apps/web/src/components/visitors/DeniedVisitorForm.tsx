@@ -77,7 +77,7 @@ export function DeniedVisitorForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>{editing ? 'Edit Denied Entry' : 'Add to Denied List'}</DialogTitle>
           <DialogDescription>

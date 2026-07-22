@@ -14,6 +14,7 @@ import {
   signupSchema,
   type SignupInput,
 } from './signup-schema';
+import { getBaseUrl } from '@/lib/utils/url';
 
 const SIGNUP_SUCCESS_MESSAGE =
   'Thanks for signing up. Check your email for a verification link before checkout.';
@@ -549,16 +550,6 @@ function buildVerificationRedirectUrl(signupRequestId: string): string {
   url.searchParams.set('signupRequestId', signupRequestId);
   url.searchParams.set('verified', '1');
   return url.toString();
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  return 'http://localhost:3000';
 }
 
 function isAlreadyRegisteredAuthError(message: string | undefined): boolean {

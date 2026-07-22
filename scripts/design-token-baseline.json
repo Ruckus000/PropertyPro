@@ -173,12 +173,6 @@
   "apps/web/src/app/mobile/page.tsx": {
     "raw-hex": 3
   },
-  "apps/web/src/components/announcements/announcement-feed.tsx": {
-    "raw-palette": 11
-  },
-  "apps/web/src/components/announcements/announcement-toolbar.tsx": {
-    "raw-palette": 5
-  },
   "apps/web/src/components/command-palette/CommandItem.tsx": {
     "raw-palette": 6
   },
@@ -192,10 +186,6 @@
   },
   "apps/web/src/components/mobile/MobileBackHeader.tsx": {
     "raw-palette": 4
-  },
-  "apps/web/src/components/mobile/MobileContactContent.tsx": {
-    "raw-palette": 16,
-    "arbitrary-font": 6
   },
   "apps/web/src/components/mobile/MobileDocumentsContent.tsx": {
     "raw-palette": 27,

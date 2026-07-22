@@ -65,7 +65,7 @@ export function CancelCommunityDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Cancel {communityName}?</DialogTitle>
         </DialogHeader>

@@ -29,6 +29,7 @@ import { SnowbirdDigestEmail, sendEmail } from '@propertypro/email';
 import { compileSnowbirdDigest, isDigestEmpty } from './snowbird-digest-service';
 import { resolveEffectiveCadence } from './snowbird-digest-subscription-service';
 import { signSnowbirdUnsubscribeToken } from './snowbird-digest-token';
+import { getBaseUrl } from '@/lib/utils/url';
 
 const DEFAULT_TIMEZONE = 'America/New_York';
 const DEFAULT_EMAILS_PER_TICK = 500;
@@ -60,12 +61,6 @@ export function toLocalParts(date: Date, timezone: string): LocalParts {
     weekday: (get('weekday') ?? 'Mon').slice(0, 3),
     day: Number(get('day') ?? '1'),
   };
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
 }
 
 /** Cadences that fire on this local tick (8 AM already asserted by the caller). */

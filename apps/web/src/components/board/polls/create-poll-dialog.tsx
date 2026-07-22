@@ -64,7 +64,7 @@ export function CreatePollDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Create poll</DialogTitle>
           <DialogDescription>Create a board poll with between 2 and 20 options.</DialogDescription>

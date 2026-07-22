@@ -21,6 +21,7 @@ import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertyp
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
+import { PageContainer, PAGE_GUTTER_X } from './page-container';
 import { ShellBreadcrumbs } from './shell-breadcrumbs';
 import { SidebarProvider, useSidebar } from './sidebar-context';
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
@@ -225,7 +226,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           isDemo={isDemo ?? false}
         />
         {freeAccessExpiresAt && (
-          <div className="px-6 pt-4 lg:px-8">
+          <div className={`${PAGE_GUTTER_X} pt-4`}>
             <FreeAccessBanner expiresAt={freeAccessExpiresAt} />
           </div>
         )}
@@ -233,7 +234,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           id="main-content"
           className="flex-1 overflow-y-auto"
         >
-          <div className="group relative mx-auto w-full max-w-[1400px] px-6 py-8 lg:px-8">
+          <PageContainer className="group relative">
             {/* Per-page Help button — fallback for pages that DON'T use
                 <PageHeader/>. When PageHeader is present, it renders its
                 own inline Help button in the actions row and this absolute
@@ -245,7 +246,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
               <PageHeaderHelpButton />
             </div>
             {children}
-          </div>
+          </PageContainer>
         </main>
       </div>
 

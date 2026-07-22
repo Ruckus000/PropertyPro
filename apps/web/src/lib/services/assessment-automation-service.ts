@@ -31,13 +31,7 @@ import { and, eq, inArray, isNull, lt, lte, ne } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
-
+import { getBaseUrl } from '@/lib/utils/url';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Overdue status transitions

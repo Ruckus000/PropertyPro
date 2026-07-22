@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PM "Website" Editor — existing-design mockup</title>
+<!--
+  Static, self-contained mockup of the PM-facing "Website" editor page
+  (/pm/settings/website) as it looks TODAY. Faithful to the PropertyPro
+  "Florida Modern" design system: real token hex values, 18px root font-size,
+  Inter (UI) + Fraunces (page <h1>). No build step, no external JS.
+  Pairs with website-editor-spec.md. See §8 of the spec for the "rough edges"
+  this mockup annotates (e.g. the accent-tint banner that renders blank in the
+  live build but is shown here at its intended tint).
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap');
+
+/* ── Real design tokens (copied from packages/ui/src/styles/tokens.css) ── */
+:root{
+  /* primitives used here */
+  --gray-0:#FFFFFF; --gray-400:#9CA3AF; --gray-500:#6B7280; --gray-600:#4B5563;
+  --gray-700:#374151; --gray-900:#111827; --gray-950:#0D1117;
+  --sand-0:#FFFEFC; --sand-25:#FDFAF6; --sand-50:#FBF7F1; --sand-100:#F6EFE6;
+  --sand-200:#EFE7DC; --sand-300:#E3D8C9;
+  --coral-50:#FCF1ED; --coral-100:#F7DCD2; --coral-200:#EDB9A6; --coral-400:#D4744F;
+  --coral-500:#CB6047; --coral-600:#C2533A; --coral-700:#A8412C; --coral-800:#87331F;
+  --green-50:#ECFDF5; --green-100:#D1FAE5; --green-200:#A7F3D0; --green-700:#047857;
+  --amber-50:#FFFBEB; --amber-100:#FEF3C7; --amber-200:#FDE68A; --amber-700:#B45309;
+  --red-50:#FEF2F2; --red-100:#FEE2E2; --red-200:#FECACA; --red-500:#EF4444; --red-700:#B91C1C;
+  --gold-50:#FDF6E7; --gold-100:#FAE9C2; --gold-200:#F3D488; --gold-800:#6F4C13;
+
+  /* semantic */
+  --text-primary:var(--gray-900); --text-secondary:var(--gray-600);
+  --text-tertiary:var(--gray-500); --text-placeholder:var(--gray-400);
+  --text-inverse:var(--gray-0);
+  --surface-page:var(--sand-50); --surface-card:var(--sand-0); --surface-muted:var(--sand-100);
+  --surface-hover:var(--sand-50);
+  --border-default:var(--sand-200); --border-subtle:var(--sand-100); --border-strong:var(--sand-300);
+  --interactive-primary:var(--coral-600); --interactive-primary-hover:var(--coral-700);
+  --status-success:var(--green-700); --status-success-bg:var(--green-50); --status-success-border:var(--green-200);
+  --status-warning:var(--amber-700); --status-warning-bg:var(--amber-50); --status-warning-border:var(--amber-200);
+  --status-danger:var(--red-700); --status-danger-bg:var(--red-50); --status-danger-border:var(--red-200);
+
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-full:9999px;
+  --elevation-e1:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+  --elevation-e2:0 4px 6px rgba(15,23,42,.06),0 2px 4px rgba(15,23,42,.04);
+  --focus-ring:var(--coral-500);
+
+  --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Fraunces",Georgia,"Times New Roman",serif;
+
+  /* nav (light rail) */
+  --nav-surface:var(--surface-card); --nav-text-inactive:var(--text-secondary);
+  --nav-text-muted:var(--text-tertiary); --nav-bg-active:var(--surface-muted);
+  --nav-bg-hover:var(--surface-hover); --nav-border-divider:var(--border-default);
+  --nav-indicator:var(--interactive-primary);
+}
+
+/* THE key fidelity detail: the running app sets :root font-size:18px (globals.css),
+   so 1rem = 18px. Font sizes below are rem-based; spacing is px, exactly as in the app. */
+html{font-size:18px;}
+
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--sand-25); color:var(--text-primary);
+  font-family:var(--font-sans); font-size:1rem; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{margin:0;}
+p{margin:0;}
+code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;}
+a{color:inherit;}
+button{font-family:inherit;cursor:pointer;}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:inherit;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+
+/* ── Document chrome (the annotation wrapper, NOT part of the app design) ── */
+.legend{
+  position:sticky; top:0; z-index:50; background:var(--gray-950); color:#fff;
+  padding:10px 20px; display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;
+  border-bottom:1px solid rgba(255,255,255,.1); font-size:.8125rem;
+}
+.legend strong{font-weight:600;}
+.legend .muted{color:#B9C0CC;}
+.legend .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:5px;border:1px solid rgba(255,255,255,.2);}
+.doc{max-width:1360px;margin:0 auto;padding:28px 20px 96px;}
+.doc-h{font-family:var(--font-display);font-size:1.5rem;font-weight:600;letter-spacing:-.01em;margin:44px 0 6px;color:var(--text-primary);}
+.doc-h:first-of-type{margin-top:24px;}
+.doc-sub{color:var(--text-secondary);font-size:.9375rem;margin-bottom:18px;max-width:70ch;}
+.doc-intro{background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:20px 24px;margin-bottom:8px;}
+.doc-intro p{color:var(--text-secondary);font-size:.9375rem;margin-top:8px;max-width:80ch;}
+.doc-intro .kbd{display:inline-block;padding:1px 6px;border:1px solid var(--border-strong);border-radius:5px;background:var(--surface-page);font-size:.75rem;font-family:inherit;}
+
+/* annotation callouts (dashed = "this is a note about the design, not the design") */
+.anno{
+  display:flex;gap:10px;align-items:flex-start;
+  border:1px dashed var(--coral-400);background:var(--coral-50);
+  border-radius:var(--radius-sm);padding:8px 12px;margin:0 0 12px;
+  font-size:.8125rem;color:var(--coral-800);max-width:100%;
+}
+.anno b{color:var(--coral-800);}
+.anno .tag{flex:none;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:.6875rem;
+  background:var(--coral-100);color:var(--coral-800);padding:2px 6px;border-radius:4px;}
+.inline-anno{
+  float:right;margin:2px 0 4px 12px;border:1px dashed var(--coral-400);background:var(--coral-50);
+  color:var(--coral-800);font-size:.6875rem;padding:2px 8px;border-radius:var(--radius-full);font-weight:600;
+}
+.caption{
+  display:inline-flex;align-items:center;gap:8px;margin:26px 0 10px;
+  font-weight:600;font-size:.9375rem;color:var(--text-primary);
+}
+.caption .num{background:var(--interactive-primary);color:#fff;border-radius:var(--radius-full);
+  width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;}
+.caption .state{font-family:inherit;font-size:.75rem;font-weight:500;color:var(--text-tertiary);
+  border:1px solid var(--border-default);border-radius:var(--radius-full);padding:2px 8px;background:var(--surface-card);}
+.variant-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:22px;align-items:start;}
+
+/* ── App-shell primitives (faithful to components/layout/*) ── */
+.viewport{
+  border:1px solid var(--border-strong);border-radius:12px;overflow:hidden;
+  box-shadow:var(--elevation-e2);background:var(--surface-page);
+}
+.shell{display:flex;background:var(--surface-page);}
+
+/* sidebar / nav rail — 260px light rail */
+.sidebar{width:260px;flex:none;background:var(--nav-surface);border-right:1px solid var(--nav-border-divider);
+  display:flex;flex-direction:column;overflow:hidden;}
+.sb-head{height:64px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid var(--border-default);}
+.brand-mark{width:36px;height:36px;border-radius:10px;background:var(--interactive-primary);
+  display:flex;align-items:center;justify-content:center;color:#fff;flex:none;}
+.sb-head .name{font-size:1rem;font-weight:600;line-height:1.1;color:var(--text-primary);}
+.sb-head .sub{font-size:.875rem;color:var(--text-secondary);}
+.nav{flex:1;overflow-y:auto;padding:8px;}
+.nav-sec{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--nav-text-muted);padding:14px 12px 6px;}
+.nav-item{position:relative;display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;
+  border-radius:10px;color:var(--nav-text-inactive);font-size:.9375rem;font-weight:500;text-decoration:none;margin-bottom:2px;}
+.nav-item:hover{background:var(--nav-bg-hover);}
+.nav-item.active{background:var(--nav-bg-active);color:var(--text-primary);font-weight:600;}
+.nav-item.active::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:4px;border-radius:0 6px 6px 0;background:var(--nav-indicator);}
+.nav-item svg{width:20px;height:20px;flex:none;}
+.sb-foot{border-top:1px solid var(--border-default);padding:12px;display:flex;align-items:center;gap:10px;}
+.avatar{width:36px;height:36px;border-radius:var(--radius-full);background:var(--surface-muted);
+  display:flex;align-items:center;justify-content:center;font-size:.8125rem;font-weight:600;color:var(--text-secondary);flex:none;}
+.sb-foot .name{font-size:.875rem;font-weight:500;line-height:1.1;}
+.sb-foot .role{font-size:.75rem;color:var(--text-tertiary);}
+
+/* main column */
+.main-col{flex:1;min-width:0;display:flex;flex-direction:column;}
+.topbar{height:56px;flex:none;border-bottom:1px solid var(--border-default);background:var(--surface-card);
+  display:flex;align-items:center;gap:12px;padding:0 24px;}
+.search{display:flex;align-items:center;gap:10px;height:40px;width:100%;max-width:560px;
+  border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--surface-card);
+  padding:0 14px;color:var(--text-placeholder);font-size:.875rem;}
+.search .kbd{margin-left:auto;border:1px solid var(--border-default);background:var(--surface-page);
+  border-radius:5px;padding:1px 6px;font-size:.75rem;color:var(--text-tertiary);}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:8px;}
+.icon-btn{width:36px;height:36px;border-radius:var(--radius-md);border:none;background:transparent;
+  display:flex;align-items:center;justify-content:center;color:var(--text-secondary);}
+.icon-btn:hover{background:var(--surface-hover);}
+.crumbs{border-bottom:1px solid var(--border-default);background:var(--surface-page);
+  padding:8px 24px;display:flex;align-items:center;gap:6px;font-size:.875rem;color:var(--text-secondary);}
+.crumbs a{text-decoration:none;color:var(--text-secondary);}
+.crumbs a:hover{color:var(--text-primary);}
+.crumbs .sep{color:var(--text-tertiary);}
+.crumbs .cur{font-weight:500;color:var(--text-secondary);}
+.scroll{}   /* natural height — the whole page scrolls, so the full editor is visible in context */
+.content{max-width:1152px;margin:0 auto;padding:32px 24px;}   /* mx-auto max-w-5xl px-6 py-8 */
+
+/* ── Editor primitives (faithful to the page + site-editor components) ── */
+.card{background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:24px;}
+.card + .card, .mt8{margin-top:32px;}
+.block-card{background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:16px;}
+.block-card.dashed{border:2px dashed var(--border-default);}
+.sec-h{font-size:1.125rem;font-weight:500;color:var(--text-primary);}   /* text-lg font-medium */
+.sec-help{font-size:.875rem;color:var(--text-secondary);margin-top:4px;}
+
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px;}
+.page-title{font-family:var(--font-display);font-size:1.5rem;font-weight:600;letter-spacing:-.01em;color:var(--text-primary);}
+.title-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
+.page-subtitle{margin-top:4px;font-size:.875rem;color:var(--text-secondary);max-width:70ch;}
+.page-subtitle code{background:var(--surface-muted);border-radius:4px;padding:1px 5px;font-size:.75rem;}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-full);
+  padding:4px 10px;font-size:.75rem;font-weight:500;}
+.pill svg{width:14px;height:14px;}
+.pill-success{background:var(--status-success-bg);color:var(--status-success);}
+.pill-warning{background:var(--status-warning-bg);color:var(--status-warning);}
+.pill-muted{background:var(--surface-muted);color:var(--text-secondary);font-weight:400;}
+.pill-accent{background:var(--coral-100);color:var(--coral-700);}  /* accent draft badge (intended tint) */
+.pill-lg{padding:5px 10px;font-size:.875rem;} .pill-lg svg{width:16px;height:16px;}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;
+  padding:0 16px;border-radius:var(--radius-md);font-size:.875rem;font-weight:500;border:1px solid transparent;
+  text-decoration:none;line-height:1;}
+.btn svg{width:16px;height:16px;}
+.btn-primary{background:var(--interactive-primary);color:var(--text-inverse);box-shadow:var(--elevation-e1);}
+.btn-primary:hover{background:var(--interactive-primary-hover);}
+.btn-outline{background:var(--surface-card);border-color:var(--border-default);color:var(--text-primary);box-shadow:var(--elevation-e1);}
+.btn-outline:hover{background:var(--surface-hover);}
+.btn:disabled,.btn.disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+.btn-sm{height:32px;padding:0 12px;font-size:.75rem;}
+.pill-btn{border:1px solid var(--border-default);background:var(--surface-card);border-radius:var(--radius-md);
+  padding:6px 12px;font-size:.875rem;color:var(--text-primary);display:inline-flex;align-items:center;gap:6px;}
+.pill-btn:hover{background:var(--surface-muted);}
+.pill-btn:disabled{opacity:.5;cursor:not-allowed;}
+.icon-square{width:36px;height:36px;border:1px solid var(--border-default);border-radius:var(--radius-md);
+  background:var(--surface-card);display:inline-flex;align-items:center;justify-content:center;color:var(--text-primary);}
+.icon-square svg{width:16px;height:16px;} .icon-square.danger{color:var(--status-danger);}
+.icon-square:disabled{opacity:.4;cursor:not-allowed;}
+
+/* forms */
+.field{margin-bottom:16px;} .field:last-child{margin-bottom:0;}
+.label{display:block;font-size:.875rem;font-weight:500;color:var(--text-primary);margin-bottom:4px;}
+.req{color:var(--status-danger);}
+.input,.textarea,.select{display:block;width:100%;border:1px solid var(--border-default);border-radius:var(--radius-sm);
+  padding:8px 12px;font-family:inherit;font-size:1rem;background:var(--surface-card);color:var(--text-primary);}
+.input:focus,.textarea:focus,.select:focus{outline:none;border-color:var(--interactive-primary);box-shadow:0 0 0 2px var(--coral-200);}
+.textarea{resize:vertical;} .input.w32{width:128px;} .input.mono{font-family:"JetBrains Mono",monospace;font-size:.875rem;}
+.hint{margin-top:4px;font-size:.75rem;color:var(--text-secondary);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-stack > * + *{margin-top:16px;}
+.check{display:flex;align-items:center;gap:8px;font-size:.875rem;color:var(--text-primary);}
+.check input{width:16px;height:16px;accent-color:var(--interactive-primary);}
+.maxw2xl{max-width:42rem;}
+
+.upsell{border:1px solid var(--border-default);background:var(--surface-muted);border-radius:var(--radius-md);
+  padding:12px 16px;font-size:.875rem;color:var(--text-secondary);}
+.upsell strong{color:var(--text-primary);font-weight:500;}
+.note-box{border:1px solid var(--border-default);background:var(--surface-muted);border-radius:var(--radius-sm);
+  padding:8px 12px;font-size:.75rem;color:var(--text-secondary);margin-top:8px;}
+.note-box strong{color:var(--text-primary);font-weight:600;}
+.pro-badge{display:inline-flex;align-items:center;background:var(--gold-50);color:var(--gold-800);
+  border:1px solid var(--gold-200);border-radius:var(--radius-full);
+  font-size:.625rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:1px 6px;margin-left:6px;}
+.success-box{border:1px solid var(--status-success-border);background:var(--status-success-bg);
+  color:var(--status-success);border-radius:var(--radius-sm);padding:8px 12px;font-size:.875rem;}
+.danger-box{border:1px solid var(--status-danger-border);background:var(--status-danger-bg);
+  color:var(--status-danger);border-radius:var(--radius-md);padding:10px 14px;font-size:.875rem;display:flex;gap:8px;align-items:flex-start;}
+.danger-box svg{width:16px;height:16px;flex:none;margin-top:2px;}
+
+/* wizard banner — intended coral-accent tint (see note; renders blank in live build) */
+.wizard{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--coral-200);background:var(--coral-50);
+  border-radius:var(--radius-md);padding:16px;margin-bottom:24px;}
+.wizard svg{width:20px;height:20px;color:var(--coral-700);flex:none;}
+.wizard .t{font-size:.875rem;font-weight:500;color:var(--text-primary);}
+.wizard .d{font-size:.875rem;color:var(--text-secondary);margin-top:4px;}
+.wizard .cta{align-self:center;flex:none;}
+
+.block-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;}
+.block-tag{font-size:.75rem;color:var(--text-secondary);}
+.block-ctrls{display:flex;align-items:center;gap:4px;}
+.addrow{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px;}
+.color-swatch{width:64px;height:36px;border:1px solid var(--border-default);border-radius:var(--radius-sm);padding:2px;}
+.color-swatch span{display:block;width:100%;height:100%;border-radius:3px;}
+.color-row{display:flex;align-items:center;gap:12px;padding-left:24px;margin-top:8px;}
+
+/* dns table */
+.dns{width:100%;border-collapse:collapse;border:1px solid var(--border-default);border-radius:var(--radius-md);
+  overflow:hidden;font-size:.875rem;}
+.dns th{background:var(--surface-muted);color:var(--text-secondary);font-weight:500;text-align:left;padding:8px 12px;}
+.dns td{border-top:1px solid var(--border-default);padding:8px 12px;font-family:"JetBrains Mono",monospace;color:var(--text-primary);}
+
+.publish-bar{position:sticky;bottom:0;margin-top:24px;border:1px solid var(--border-default);
+  background:var(--surface-card);border-radius:var(--radius-md);padding:16px;box-shadow:var(--elevation-e1);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.pb-left{display:flex;align-items:center;gap:12px;}
+.pb-left .lbl{font-size:.875rem;font-weight:500;}
+.pb-right{display:flex;align-items:center;gap:12px;}
+.pb-status{font-size:.875rem;color:var(--text-secondary);}
+hr.soft{border:none;border-top:1px solid var(--border-subtle);margin:16px 0;}
+.disabled-region{opacity:.6;}
+.disabled-region .input,.disabled-region .check input,.disabled-region .btn{pointer-events:none;}
+</style>
+</head>
+<body>
+
+<header class="legend">
+  <strong>PropertyPro · “Website” editor</strong>
+  <span class="muted">/pm/settings/website — static mockup of the <em>existing</em> design</span>
+  <span class="muted">·</span>
+  <span class="muted"><span class="swatch" style="background:#C2533A"></span>coral brand</span>
+  <span class="muted"><span class="swatch" style="background:#FBF7F1"></span>sand canvas</span>
+  <span class="muted">·</span>
+  <span class="muted">Inter UI + Fraunces titles · 18px root · dashed boxes are annotations</span>
+</header>
+
+<main class="doc">
+
+  <section class="doc-intro">
+    <h1 style="font-family:var(--font-display);font-size:1.75rem;font-weight:600;">PM “Website” editor — existing-design reference</h1>
+    <p>Where a property manager builds and publishes their community’s public site (shown at
+      <code style="background:var(--surface-muted);padding:1px 5px;border-radius:4px;font-size:.8125rem;">[slug].getpropertypro.com</code>,
+      the Florida §718.111(12)(g) statutory site). This file reproduces today’s look faithfully so a redesign starts from an accurate baseline.
+      Full behaviour, copy, states, and data wiring are in <b>website-editor-spec.md</b>.</p>
+    <p><b>Section 1</b> is the page inside the full app shell (a realistic <em>Professional</em>-plan community, mid-edit).
+      <b>Section 2</b> breaks out the conditional states that can’t all co-exist in one screenshot — Pro-locked vs unlocked,
+      the five custom-domain variants, header/publish-badge variants, and empty states. Everything in a
+      <span style="border:1px dashed var(--coral-400);background:var(--coral-50);color:var(--coral-800);border-radius:6px;padding:0 6px;font-size:.8125rem;">dashed coral box</span>
+      is an annotation, not part of the UI.</p>
+  </section>
+
+  <!-- ══════════════════════════════ SECTION 1 ══════════════════════════════ -->
+  <h2 class="doc-h">1 · Primary view — full app shell</h2>
+  <p class="doc-sub">The editor as it renders in-app: light coral sidebar rail, top search bar, shell breadcrumbs,
+    and the centered <code style="font-size:.85em;">max-w-5xl</code> editor column. Community: “Sunset Condos” (Professional plan).</p>
+
+  <div class="viewport">
+    <div class="shell">
+
+      <!-- Sidebar / NavRail -->
+      <aside class="sidebar">
+        <div class="sb-head">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M6 21V7l6-4 6 4v14"/><path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h.01M15 17h.01"/></svg>
+          </div>
+          <div>
+            <div class="name">PropertyPro</div>
+            <div class="sub">Sunset Condos</div>
+          </div>
+        </div>
+        <nav class="nav">
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Dashboard</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M9 8h1M9 12h1M9 16h1M14 8h1M14 12h1M14 16h1M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/></svg>Communities</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>Residents</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>Documents</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Meetings</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Announcements</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5a9 9 0 0 1-7 8 9 9 0 0 1-7-8V7z"/></svg>Compliance</a>
+
+          <div class="nav-sec">Management</div>
+          <a class="nav-item active" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/></svg>Website</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a10 10 0 1 0 20 0 10 10 0 0 0-20 0z"/><path d="M12 8v8M8 12h8"/></svg>Branding</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Billing</a>
+          <a class="nav-item" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 3.6 15H3.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 5 9.4"/></svg>Settings</a>
+        </nav>
+        <div class="sb-foot">
+          <div class="avatar">DM</div>
+          <div style="flex:1;min-width:0;">
+            <div class="name">Dana Reyes</div>
+            <div class="role">PM Admin · Pro</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main column -->
+      <div class="main-col">
+        <div class="topbar">
+          <div class="search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
+            Search documents, residents, meetings…
+            <span class="kbd">⌘K</span>
+          </div>
+          <div class="right">
+            <button class="icon-btn" aria-label="Help"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
+            <button class="icon-btn" aria-label="Notifications"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+            <div class="avatar" style="width:32px;height:32px;">DR</div>
+          </div>
+        </div>
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="#">Dashboard</a><span class="sep">›</span>
+          <a href="#">Settings</a><span class="sep">›</span>
+          <span class="cur">Website</span>
+        </nav>
+
+        <div class="scroll">
+          <div class="content">
+
+            <!-- 1. Wizard entry banner -->
+            <span class="inline-anno">▸ conditional: onboarding not completed</span>
+            <div class="wizard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.9L21.5 18l-1.8.7L19 20.5l-.7-1.8L16.5 18l1.8-.7z"/></svg>
+              <div style="flex:1;">
+                <p class="t">Your site is using default settings.</p>
+                <p class="d">Run the 5-step onboarding wizard to pick a layout, a color palette, and write your welcome message. You can come back anytime.</p>
+              </div>
+              <a class="btn btn-primary cta" href="#">Customize →</a>
+            </div>
+            <div class="anno"><span class="tag">note</span><span>The banner’s tint uses <code>bg-accent/10</code> / <code>border-accent/40</code> — slash-opacity on the <code>--brand-accent</code> token, which has no alpha channel, so it renders <b>blank</b> in the live build. Shown here at its <b>intended</b> coral tint. (spec §8.1)</span></div>
+
+            <!-- 2. Page header -->
+            <div class="page-head">
+              <div>
+                <div class="title-row">
+                  <h1 class="page-title">Website</h1>
+                  <span class="pill pill-success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4L12 14.01l-3-3"/></svg>Live</span>
+                </div>
+                <p class="page-subtitle">Customize the welcome panel that visitors see at <code>[your-community].getpropertypro.com</code>. Use <strong style="font-weight:500;">Publish Website</strong> at the bottom to make your changes live.</p>
+              </div>
+              <div style="display:flex;gap:8px;flex:none;">
+                <a class="btn btn-outline" href="#">Re-run onboarding</a>
+                <a class="btn btn-outline" href="#">Preview Draft</a>
+              </div>
+            </div>
+
+            <!-- 3. Welcome / Hero -->
+            <section class="card">
+              <h2 class="sec-h" style="margin-bottom:16px;">Welcome</h2>
+              <form class="maxw2xl form-stack" onsubmit="return false">
+                <div class="field">
+                  <label class="label">Headline <span class="req">*</span></label>
+                  <input class="input" type="text" value="Welcome to Sunset Condos" maxlength="120" />
+                </div>
+                <div class="field">
+                  <label class="label">Subtitle</label>
+                  <textarea class="textarea" rows="3" maxlength="280">A 120-unit oceanfront community in Miami Beach — records, meetings, and announcements in one place.</textarea>
+                </div>
+                <div class="grid2">
+                  <div class="field"><label class="label">CTA text</label><input class="input" type="text" value="Resident Login" maxlength="40" /></div>
+                  <div class="field"><label class="label">CTA target</label><input class="input" type="text" value="/auth/login" placeholder="/auth/login" maxlength="512" /></div>
+                </div>
+                <div style="padding-top:8px;"><button class="btn btn-primary" type="submit">Save</button></div>
+              </form>
+            </section>
+
+            <!-- 4. Content sections -->
+            <div class="mt8">
+              <section>
+                <h2 class="sec-h" style="margin-bottom:24px;">Content Sections</h2>
+
+                <!-- text block -->
+                <div class="block-card" style="margin-bottom:24px;">
+                  <div class="block-head">
+                    <span class="block-tag">#2 — text</span>
+                    <div class="block-ctrls">
+                      <button class="icon-square" disabled aria-label="Move text section up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                      <button class="icon-square" aria-label="Move text section down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                      <button class="icon-square danger" aria-label="Remove text section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+                    </div>
+                  </div>
+                  <div class="field"><label class="label">Heading</label><input class="input" value="About our community" maxlength="120" /></div>
+                  <div class="field"><label class="label">Body <span class="req">*</span></label><textarea class="textarea" rows="6" maxlength="2000">Sunset Condos is a self-managed oceanfront association established in 1998. This site is the official home for our governing documents, budgets, and meeting notices.</textarea></div>
+                  <button class="btn btn-primary" type="button">Save</button>
+                </div>
+
+                <!-- announcements block -->
+                <div class="block-card" style="margin-bottom:24px;">
+                  <div class="block-head">
+                    <span class="block-tag">#3 — announcements</span>
+                    <div class="block-ctrls">
+                      <button class="icon-square" aria-label="Move announcements section up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                      <button class="icon-square" aria-label="Move announcements section down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                      <button class="icon-square danger" aria-label="Remove announcements section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+                    </div>
+                  </div>
+                  <p class="sec-help" style="margin-bottom:16px;">Renders the latest published announcements on the public site.</p>
+                  <div class="field"><label class="label">Maximum items <span class="req">*</span></label><input class="input w32" type="number" value="5" /><p class="hint">Between 1 and 20.</p></div>
+                  <div class="field"><label class="label">Time window (days) <span class="req">*</span></label><input class="input w32" type="number" value="30" /><p class="hint">Only announcements published within this window appear.</p></div>
+                  <button class="btn btn-primary" type="button">Save</button>
+                </div>
+
+                <!-- documents block -->
+                <div class="block-card" style="margin-bottom:24px;">
+                  <div class="block-head">
+                    <span class="block-tag">#4 — documents</span>
+                    <div class="block-ctrls">
+                      <button class="icon-square" aria-label="Move documents section up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                      <button class="icon-square" aria-label="Move documents section down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                      <button class="icon-square danger" aria-label="Remove documents section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+                    </div>
+                  </div>
+                  <p class="sec-help" style="margin-bottom:16px;">Renders publicly accessible documents filtered by category.</p>
+                  <div class="field"><label class="label">Maximum items <span class="req">*</span></label><input class="input w32" type="number" value="5" /><p class="hint">Between 1 and 20.</p></div>
+                  <fieldset style="border:none;padding:0;margin:0;">
+                    <legend class="label" style="padding:0;">Include categories</legend>
+                    <p class="hint" style="margin-top:2px;">Only documents in the selected categories will be shown.</p>
+                    <div class="note-box">Only documents marked <strong>Public</strong> on the Documents page will appear here — the category selection below narrows that list further. To make a document public, open it on the Documents page and toggle <em>Public</em>.</div>
+                    <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+                      <label class="check"><input type="checkbox" checked />Budget</label>
+                      <label class="check"><input type="checkbox" checked />Minutes</label>
+                      <label class="check"><input type="checkbox" />Financial</label>
+                      <label class="check"><input type="checkbox" checked />Rules</label>
+                      <label class="check"><input type="checkbox" />Other</label>
+                    </div>
+                  </fieldset>
+                  <button class="btn btn-primary" type="button" style="margin-top:16px;">Save</button>
+                </div>
+
+                <!-- meetings block -->
+                <div class="block-card" style="margin-bottom:24px;">
+                  <div class="block-head">
+                    <span class="block-tag">#5 — meetings</span>
+                    <div class="block-ctrls">
+                      <button class="icon-square" aria-label="Move meetings section up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+                      <button class="icon-square" disabled aria-label="Move meetings section down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+                      <button class="icon-square danger" aria-label="Remove meetings section"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+                    </div>
+                  </div>
+                  <p class="sec-help" style="margin-bottom:16px;">Renders upcoming community meetings on the public site.</p>
+                  <div class="field"><label class="label">Maximum items <span class="req">*</span></label><input class="input w32" type="number" value="10" /><p class="hint">Between 1 and 20.</p></div>
+                  <div class="field"><label class="label">Time window (days) <span class="req">*</span></label><input class="input w32" type="number" value="30" /><p class="hint">Only meetings starting within this many days from today will appear.</p></div>
+                  <button class="btn btn-primary" type="button">Save</button>
+                </div>
+
+                <!-- add row -->
+                <span class="inline-anno">▸ last 3 are Pro-gated (locked on Essentials — see §2)</span>
+                <div class="addrow">
+                  <button class="pill-btn">+ Add text section</button>
+                  <button class="pill-btn">+ Add image section</button>
+                  <button class="pill-btn">+ Add announcements section</button>
+                  <button class="pill-btn">+ Add documents section</button>
+                  <button class="pill-btn">+ Add meetings section</button>
+                  <button class="pill-btn">+ Add contact section</button>
+                  <button class="pill-btn">+ Add FAQ section</button>
+                  <button class="pill-btn">+ Add gallery section</button>
+                  <button class="pill-btn">+ Add amenities section</button>
+                </div>
+              </section>
+            </div>
+
+            <!-- 5. Custom styling (unlocked, Professional) -->
+            <section class="card mt8">
+              <h2 class="sec-h" style="margin-bottom:4px;">Custom Styling</h2>
+              <p class="sec-help" style="margin-bottom:16px;">Override your selected preset’s colors and body font. These win over the theme on your public site.</p>
+              <form onsubmit="return false" class="form-stack">
+                <div>
+                  <label class="check"><input type="checkbox" checked />Override primary color</label>
+                  <div class="color-row"><span class="color-swatch"><span style="background:#C2533A"></span></span><input class="input mono" style="width:112px;" value="#C2533A" maxlength="7" /></div>
+                </div>
+                <div><label class="check"><input type="checkbox" />Override secondary color</label></div>
+                <div><label class="check"><input type="checkbox" />Override accent color</label></div>
+                <div>
+                  <label class="check"><input type="checkbox" checked />Override body font</label>
+                  <div style="padding-left:24px;margin-top:8px;"><select class="select" style="max-width:20rem;"><option>Inter</option><option>Source Sans 3</option><option>Lora</option><option>Merriweather</option></select></div>
+                </div>
+                <div class="success-box">Custom styling saved.</div>
+                <button class="btn btn-primary" type="submit">Save custom styling</button>
+              </form>
+            </section>
+
+            <!-- 6. Custom domain (pending DNS) -->
+            <section class="card mt8">
+              <span class="inline-anno">▸ other 4 domain states in §2</span>
+              <h2 class="sec-h" style="margin-bottom:16px;">Custom Domain</h2>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px;">
+                <span class="pill pill-warning pill-lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Pending DNS</span>
+                <code style="background:var(--surface-muted);border-radius:4px;padding:2px 8px;font-size:.875rem;">portal.sunsetcondos.org</code>
+              </div>
+              <p class="sec-help" style="margin-bottom:8px;">Add the following DNS records at your registrar, then click Check status.</p>
+              <table class="dns">
+                <thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead>
+                <tbody>
+                  <tr><td>CNAME</td><td>portal</td><td>cname.vercel-dns.com</td></tr>
+                  <tr><td>TXT</td><td>_vercel</td><td>vc-domain-verify=portal.sunsetcondos.org,9f2c1a</td></tr>
+                </tbody>
+              </table>
+              <div style="display:flex;gap:8px;margin-top:16px;">
+                <button class="btn btn-primary" type="button">Check status</button>
+                <button class="btn btn-outline" type="button">Remove</button>
+              </div>
+            </section>
+
+            <!-- 7. Publish bar -->
+            <div class="publish-bar">
+              <div class="pb-left">
+                <span class="lbl">Website</span>
+                <span class="pill pill-accent">2 draft sections</span>
+              </div>
+              <div class="pb-right">
+                <span class="pb-status">Published — 3 sections live.</span>
+                <button class="btn btn-outline" type="button">Discard Drafts</button>
+                <button class="btn btn-primary" type="button">Publish Website</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════ SECTION 2 ══════════════════════════════ -->
+  <h2 class="doc-h">2 · Annotated state variants</h2>
+  <p class="doc-sub">The conditional states that can’t all appear in one screenshot. Each panel shows a single region in isolation
+    with the exact condition that triggers it.</p>
+
+  <!-- 2A: Pro-gating -->
+  <div class="caption"><span class="num">A</span> Pro-gating — the same three regions when locked <span class="state">plan = Essentials · Pro flags off</span></div>
+
+  <div class="anno"><span class="tag">A1</span><span>ContentSectionsList add-row — FAQ / Gallery / Amenities disabled with a gold <b>PRO</b> badge + <code>title</code> tooltip (<code>hasSitePolishBlocks = false</code>).</span></div>
+  <div class="card" style="margin-bottom:8px;">
+    <div class="addrow">
+      <button class="pill-btn">+ Add text section</button>
+      <button class="pill-btn">+ Add image section</button>
+      <button class="pill-btn">+ Add announcements section</button>
+      <button class="pill-btn">+ Add documents section</button>
+      <button class="pill-btn">+ Add meetings section</button>
+      <button class="pill-btn">+ Add contact section</button>
+      <button class="pill-btn" disabled title="Upgrade to Professional to add FAQ sections">+ Add FAQ section <span class="pro-badge">Pro</span></button>
+      <button class="pill-btn" disabled title="Upgrade to Professional to add gallery sections">+ Add gallery section <span class="pro-badge">Pro</span></button>
+      <button class="pill-btn" disabled title="Upgrade to Professional to add amenities sections">+ Add amenities section <span class="pro-badge">Pro</span></button>
+    </div>
+  </div>
+
+  <div class="variant-grid">
+    <div>
+      <div class="anno"><span class="tag">A2</span><span>CustomStylingForm — upsell banner + <b>all controls disabled</b> (<code>hasSiteCustomCss = false</code>). Section stays visible, never hidden.</span></div>
+      <div class="card disabled-region">
+        <h2 class="sec-h" style="margin-bottom:4px;">Custom Styling</h2>
+        <p class="sec-help" style="margin-bottom:16px;">Override your selected preset’s colors and body font. These win over the theme on your public site.</p>
+        <div class="upsell" style="margin-bottom:20px;">Custom styling is a <strong>Professional</strong> feature. Upgrade to fine-tune your site’s colors and body font beyond the selected preset.</div>
+        <div class="form-stack">
+          <label class="check"><input type="checkbox" disabled />Override primary color</label>
+          <label class="check"><input type="checkbox" disabled />Override secondary color</label>
+          <label class="check"><input type="checkbox" disabled />Override accent color</label>
+          <label class="check"><input type="checkbox" disabled />Override body font</label>
+        </div>
+        <button class="btn btn-primary disabled" style="margin-top:20px;">Save custom styling</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">A3</span><span>CustomDomainCard — gated upsell (<code>hasSiteCustomDomain = false</code>): <b>PRO</b> badge on the heading, disabled input + button.</span></div>
+      <div class="card disabled-region">
+        <h2 class="sec-h" style="margin-bottom:16px;">Custom Domain <span class="pro-badge">Pro</span></h2>
+        <div class="upsell" style="margin-bottom:16px;">Connecting a custom domain is a <strong>Professional</strong> feature. Upgrade to serve your community site from your own hostname.</div>
+        <div class="field"><label class="label">Custom domain</label><input class="input" style="max-width:28rem;" placeholder="www.yourcommunity.com" disabled /></div>
+        <button class="btn btn-primary disabled" style="margin-top:16px;">Add domain</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2B: Custom domain states -->
+  <div class="caption"><span class="num">B</span> Custom Domain — the 5-state machine <span class="state">pending shown in §1; the other four here</span></div>
+  <div class="variant-grid">
+
+    <div>
+      <div class="anno"><span class="tag">B1</span><span><b>Empty</b> — no domain set (<code>domain === null</code>). Includes the collapsible “Find one” disclosure (shown open).</span></div>
+      <div class="card">
+        <h2 class="sec-h" style="margin-bottom:12px;">Custom Domain</h2>
+        <p class="sec-help" style="margin-bottom:12px;">Point your own hostname at this community’s public site. You’ll add a DNS record at your registrar, then we’ll verify it.</p>
+        <div class="field"><label class="label">Custom domain</label><input class="input" style="max-width:28rem;" placeholder="www.yourcommunity.com" /></div>
+        <button class="btn btn-primary" style="margin-bottom:8px;">Add domain</button>
+        <hr class="soft" />
+        <button class="pill-btn" style="border:none;background:none;padding:0;color:var(--text-link,var(--coral-700));">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          Don’t have a domain yet? Find one
+        </button>
+        <div style="margin-top:12px;">
+          <label class="label">Domain to check</label>
+          <div style="display:flex;gap:8px;"><input class="input" style="max-width:20rem;" placeholder="yourcommunity.com" value="sunsetcondos.org" /><button class="btn btn-primary" type="button">Check availability</button></div>
+          <p class="sec-help" style="margin-top:10px;"><code style="font-size:.85em;">sunsetcondos.org</code> looks available — from ~$12/yr (final price set by the registrar).</p>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <a class="btn btn-outline btn-sm" href="#"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>Buy at Namecheap</a>
+            <a class="btn btn-outline btn-sm" href="#"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>Buy at Porkbun</a>
+          </div>
+          <p class="sec-help" style="margin-top:8px;">After you buy it, come back and enter it above to connect it.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">B2</span><span><b>Active</b> — verified &amp; live (<code>status === 'active'</code>). Green “Live” pill + View site / Remove.</span></div>
+      <div class="card">
+        <h2 class="sec-h" style="margin-bottom:16px;">Custom Domain</h2>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px;">
+          <span class="pill pill-success pill-lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1"/><path d="M22 4L12 14.01l-3-3"/></svg>Live</span>
+          <code style="background:var(--surface-muted);border-radius:4px;padding:2px 8px;font-size:.875rem;">portal.sunsetcondos.org</code>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a class="btn btn-outline" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>View site</a>
+          <button class="btn btn-outline" type="button">Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">B3</span><span><b>Error</b> — provider/verification failure (<code>status === 'error'</code>). Danger alert + Check status / Remove.</span></div>
+      <div class="card">
+        <h2 class="sec-h" style="margin-bottom:16px;">Custom Domain</h2>
+        <div style="margin-bottom:12px;"><code style="background:var(--surface-muted);border-radius:4px;padding:2px 8px;font-size:.875rem;">portal.sunsetcondos.org</code></div>
+        <div class="danger-box" role="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span>DNS verification failed — the CNAME record was not found. Confirm it at your registrar and try again.</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-primary" type="button">Check status</button>
+          <button class="btn btn-outline" type="button">Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">B4</span><span><b>Pending, no records yet</b> — the server seed returns <code>records: []</code>; records populate after a <code>verify</code>. Copy handles the empty case.</span></div>
+      <div class="card">
+        <h2 class="sec-h" style="margin-bottom:16px;">Custom Domain</h2>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px;">
+          <span class="pill pill-warning pill-lg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Pending DNS</span>
+          <code style="background:var(--surface-muted);border-radius:4px;padding:2px 8px;font-size:.875rem;">portal.sunsetcondos.org</code>
+        </div>
+        <p class="sec-help" style="margin-bottom:16px;">Add the DNS records at your registrar, then click Check status.</p>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" type="button">Check status</button>
+          <button class="btn btn-outline" type="button">Remove</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 2C: Header + publish badge + empty -->
+  <div class="caption"><span class="num">C</span> Header pill · Publish badge · empty content <span class="state">the small either/or states</span></div>
+  <div class="variant-grid">
+
+    <div>
+      <div class="anno"><span class="tag">C1</span><span>Header status pill — <b>Not published yet</b> (amber) when no block has ever been published (<code>hasPublishedContent = false</code>). “Live” green shown in §1.</span></div>
+      <div class="card">
+        <div class="title-row">
+          <h1 class="page-title">Website</h1>
+          <span class="pill pill-warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Not published yet</span>
+        </div>
+        <p class="page-subtitle">Customize the welcome panel that visitors see at <code>[your-community].getpropertypro.com</code>. Use <strong style="font-weight:500;">Publish Website</strong> at the bottom to make your changes live.</p>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">C2</span><span>PublishBar badge — its 3 mutually-exclusive states. §1 shows “N draft sections” (accent).</span></div>
+      <div class="publish-bar" style="position:static;margin-top:0;margin-bottom:16px;">
+        <div class="pb-left"><span class="lbl">Website</span><span class="pill pill-muted">All changes published</span></div>
+        <div class="pb-right"><button class="btn btn-primary" type="button">Publish Website</button></div>
+      </div>
+      <div class="publish-bar" style="position:static;margin-top:0;">
+        <div class="pb-left"><span class="lbl">Website</span><span class="pill pill-warning">Not published yet</span></div>
+        <div class="pb-right"><button class="btn btn-primary" type="button">Publish Website</button></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">C3</span><span>ContentSectionsList — <b>empty</b> state (no content blocks yet), before any “+ Add” is used.</span></div>
+      <div class="card">
+        <h2 class="sec-h" style="margin-bottom:16px;">Content Sections</h2>
+        <p class="sec-help" style="margin-bottom:20px;">No content sections yet — add a text or image block below.</p>
+        <div class="addrow" style="padding-top:0;">
+          <button class="pill-btn">+ Add text section</button>
+          <button class="pill-btn">+ Add image section</button>
+          <button class="pill-btn">+ Add announcements section</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="anno"><span class="tag">C4</span><span>ContentSectionsList — an <b>“adding”</b> draft card (dashed border) that appears when a “+ Add” is clicked.</span></div>
+      <div class="card">
+        <div class="block-card dashed">
+          <div class="block-tag" style="margin-bottom:12px;">New FAQ section #6</div>
+          <div class="field"><label class="label">Heading</label><input class="input" placeholder="Frequently asked questions" maxlength="120" /></div>
+          <div class="block-card" style="margin-bottom:12px;">
+            <div class="field"><label class="label">Question 1 <span class="req">*</span></label><input class="input" maxlength="200" /></div>
+            <div class="field"><label class="label">Answer 1 <span class="req">*</span></label><textarea class="textarea" rows="3" maxlength="2000"></textarea></div>
+            <button class="pill-btn" style="border:none;padding:0;background:none;color:var(--coral-700);">Remove</button>
+          </div>
+          <button class="pill-btn" style="margin-bottom:12px;">+ Add question</button>
+          <div><button class="btn btn-primary disabled">Save</button></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="anno" style="margin-top:34px;max-width:none;">
+    <span class="tag">reminder</span>
+    <span>This is a faithful render of the <b>current</b> design, warts included — see <b>website-editor-spec.md §8</b> for the known rough edges a redesign can fix
+      (accent tint that renders blank in production, tech-blue color-picker defaults vs. the coral brand, “Saving…” vs “Saving...”, no hero-image field, dev-ish “#4 — documents” block labels).</span>
+  </div>
+
+</main>
+</body>
+</html>

@@ -101,7 +101,7 @@ export function InsurancePolicyFormDialog({ communityId, open, onOpenChange, edi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit master policy' : 'Add master policy'}</DialogTitle>
           <DialogDescription>

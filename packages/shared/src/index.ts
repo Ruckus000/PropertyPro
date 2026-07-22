@@ -65,7 +65,6 @@ export * from './middleware/reserved-subdomains';
 export * from './middleware/subdomain-router';
 export * from './validators';
 export * from './esign-constants';
-export * from './manager-permissions';
 export * from './default-faqs';
 export * from './role-transition';
 

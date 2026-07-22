@@ -71,7 +71,7 @@ export function PackageLogForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Log Package</DialogTitle>
           <DialogDescription>

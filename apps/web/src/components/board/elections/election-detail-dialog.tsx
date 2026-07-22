@@ -40,7 +40,7 @@ export function ElectionDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+      <DialogContent size="lg" resizable>
         {isLoading || electionId === null ? (
           <div className="space-y-4 py-2">
             <Skeleton className="h-8 w-3/4" />

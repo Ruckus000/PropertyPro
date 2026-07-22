@@ -176,6 +176,91 @@ function checkSnapshotChainIntact(entries: JournalEntry[]): Problem[] {
 }
 
 /**
+ * Verify that the table CONTENT of the snapshot chain is continuous — not just
+ * that the right number of snapshot files exist (checkSnapshotChainIntact) or
+ * that prevId pointers line up.
+ *
+ * For each consecutive journal pair (prev → curr), every table present in the
+ * prev snapshot must still be present in the curr snapshot UNLESS curr's own
+ * migration SQL actually drops it (`DROP TABLE ["public".]"name"`). A table
+ * that silently vanishes from a snapshot without a matching DROP is metadata
+ * rot: `drizzle-kit generate` will then re-`CREATE TABLE` an object that is
+ * already live in prod, and the spurious migration fails or duplicates objects.
+ *
+ * This is exactly the class of bug that parallel-developed migrations reintroduce:
+ * two branches generate snapshots off the same pre-baseline, and when the second
+ * merges its prevId is reconciled but the first branch's new table is dropped
+ * from the tip snapshot's `tables` map. checkSnapshotChainIntact cannot see it —
+ * it only validates entry count and per-idx file existence, not table continuity.
+ */
+function extractDroppedTables(sql: string): Set<string> {
+  const dropped = new Set<string>();
+  // Match: DROP TABLE [IF EXISTS] ["public".]"table_name" — quoted or bare.
+  const re = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:"?public"?\s*\.\s*)?"?([a-zA-Z_][a-zA-Z0-9_]*)"?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(sql)) !== null) {
+    dropped.add(m[1]);
+  }
+  return dropped;
+}
+
+function snapshotTableNames(snapshotPath: string): Set<string> {
+  const raw = readFileSync(snapshotPath, 'utf-8');
+  const snap = JSON.parse(raw) as { tables?: Record<string, unknown> };
+  const names = new Set<string>();
+  for (const key of Object.keys(snap.tables ?? {})) {
+    // Keys are "schema.table" (e.g. "public.storm_damage_reports"); take the
+    // final dotted segment as the bare table name.
+    names.add(key.split('.').pop() as string);
+  }
+  return names;
+}
+
+function checkSnapshotTableContinuity(entries: JournalEntry[]): Problem[] {
+  const problems: Problem[] = [];
+  const metaDir = join(migrationsDir, 'meta');
+
+  for (let i = 1; i < entries.length; i++) {
+    const prev = entries[i - 1];
+    const curr = entries[i];
+
+    const prevSnap = join(metaDir, `${String(prev.idx).padStart(4, '0')}_snapshot.json`);
+    const currSnap = join(metaDir, `${String(curr.idx).padStart(4, '0')}_snapshot.json`);
+    const currSql = join(migrationsDir, `${curr.tag}.sql`);
+
+    let prevTables: Set<string>;
+    let currTables: Set<string>;
+    let droppedTables: Set<string>;
+    try {
+      prevTables = snapshotTableNames(prevSnap);
+      currTables = snapshotTableNames(currSnap);
+      droppedTables = extractDroppedTables(readFileSync(currSql, 'utf-8'));
+    } catch {
+      // Missing files are already reported by checkSnapshotChainIntact /
+      // checkMigrationFilesExist — skip so we don't double-report.
+      continue;
+    }
+
+    for (const table of prevTables) {
+      if (currTables.has(table)) continue;
+      if (droppedTables.has(table)) continue;
+      problems.push({
+        severity: 'error',
+        message:
+          `Snapshot table rot: "${table}" is present in meta/${String(prev.idx).padStart(4, '0')}_snapshot.json ` +
+          `but missing from meta/${String(curr.idx).padStart(4, '0')}_snapshot.json (${curr.tag}), ` +
+          `yet that migration's SQL contains no DROP TABLE for it. ` +
+          `The tip snapshot lost a live table — \`drizzle-kit generate\` will re-CREATE it. ` +
+          `Repair the snapshot's tables map (union of the predecessor plus this migration's additions). ` +
+          `This is the parallel-migration-merge drift class from project_drizzle_snapshot_collision.md.`,
+      });
+    }
+  }
+
+  return problems;
+}
+
+/**
  * SQL files known to exist on disk without a corresponding journal entry.
  *
  * Historical artifacts from before the migration journal was strictly
@@ -339,6 +424,9 @@ function main(): void {
 
   console.log('Checking snapshot chain integrity...');
   allProblems.push(...checkSnapshotChainIntact(journal.entries));
+
+  console.log('Checking snapshot table continuity...');
+  allProblems.push(...checkSnapshotTableContinuity(journal.entries));
 
   console.log('Checking migration files...');
   allProblems.push(...checkMigrationFilesExist(journal.entries));

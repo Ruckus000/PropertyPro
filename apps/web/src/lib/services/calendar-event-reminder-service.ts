@@ -51,6 +51,7 @@ import {
 } from '@/lib/services/calendar-data-service';
 import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
+import { getBaseUrl } from '@/lib/utils/url';
 
 const MAX_ATTEMPTS = 5;
 const RETRY_MINUTES_BY_ATTEMPT = [15, 60, 240, 720] as const;
@@ -184,12 +185,6 @@ export interface CalendarEventReminderProcessorSummary {
   emailsSent: number;
   errors: number;
   hasMore: boolean;
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
 }
 
 function addMinutes(date: Date, minutes: number): Date {

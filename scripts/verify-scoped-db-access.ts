@@ -83,13 +83,13 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/api/branding.ts'),
   // Custom domain — communities is the root tenant table (no community_id column);
   // the service reads/writes custom_domain* columns by primary key directly.
-  // Caller authorization (pm_admin/cam membership + hasSiteCustomDomain plan) is
+  // Caller authorization (management-tier property_manager/root_manager membership + hasSiteCustomDomain plan) is
   // verified upstream at the route layer.
   resolve(repoRoot, 'apps/web/src/lib/services/custom-domain-service.ts'),
   // Portfolio templates — site_portfolio_templates is user-owned (no community_id
   // column), keyed by owner_user_id with RLS via auth.uid(); the access-gate joins
-  // user_roles → communities (root tenant table). Caller authz (pm_admin +
-  // hasSitePortfolioTemplates plan) is verified upstream at the route layer.
+  // user_roles → communities (root tenant table). Caller authz (management-tier
+  // property_manager/root_manager + hasSitePortfolioTemplates plan) is verified upstream at the route layer.
   resolve(repoRoot, 'apps/web/src/lib/services/site-portfolio-template-service.ts'),
   // JSX site template — public site queries published template by community_id (root tenant key)
   // P4-64: Community data export — residents export joins users table (no community_id column)
@@ -104,8 +104,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // communities → soft-delete published → promote drafts → audit log) per
   // spec §2.7. upsertPublishedBlock also wraps its soft-delete + insert in
   // a transaction. Both require createUnscopedClient().transaction().
-  // Caller authorization is verified upstream at the route layer (pm_admin
-  // membership + hasSiteEditor plan feature).
+  // Caller authorization is verified upstream at the route layer (management-tier
+  // property_manager/root_manager membership + hasSiteEditor plan feature).
   resolve(repoRoot, 'apps/web/src/lib/services/site-blocks-service.ts'),
   // Community-scoped user display-name resolution for board/forum and elections UX
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
@@ -258,15 +258,15 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/insurance-alert-unsubscribe-service.ts'),
   // PR #2: Site asset quota lookup — communities is the root tenant table (no communityId column);
   // plan resolution requires unscoped read. Routes calling these helpers MUST have already
-  // verified caller's pm_admin membership in the target community.
+  // verified caller's management-tier property_manager/root_manager membership in the target community.
   resolve(repoRoot, 'apps/web/src/lib/site-assets/quota.ts'),
   // PR #5: Starter pack apply — reads platform-level site_starter_packs catalog (no community_id);
   // inserts into site_blocks via scoped client after community creation.
   resolve(repoRoot, 'apps/web/src/lib/services/starter-pack-service.ts'),
   // PR #5b: Theme preset catalog reader — reads platform-level site_theme_presets
   // (no community_id). Powers the onboarding wizard Step 2 preset chooser.
-  // Routes calling this helper MUST have already verified pm_admin / cam membership
-  // in the target community and the `hasSiteEditor` plan feature.
+  // Routes calling this helper MUST have already verified management-tier
+  // (property_manager / root_manager) membership in the target community and the `hasSiteEditor` plan feature.
   resolve(repoRoot, 'apps/web/src/lib/db/theme-preset-catalog.ts'),
   // DBB-01: createAdminClient (service-role, RLS-bypassing) is no longer
   // re-exported from the root @propertypro/db barrel — callers now import it

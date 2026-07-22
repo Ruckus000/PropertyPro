@@ -79,7 +79,7 @@ export function LeaseRenewalDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Renew Lease</DialogTitle>
           <DialogDescription>

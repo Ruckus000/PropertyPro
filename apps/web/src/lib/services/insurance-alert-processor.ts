@@ -52,6 +52,7 @@ import {
   classifyInsurancePolicyExpiry,
   shouldSendInsurancePolicyAlert,
 } from './insurance-policy-expiry';
+import { getBaseUrl } from '@/lib/utils/url';
 
 /** Community types the insurance hub is available for (mirrors hasInsuranceHub). */
 const INSURANCE_HUB_TYPES = ['condo_718', 'hoa_720'] as const;
@@ -89,12 +90,6 @@ interface AdminRecipient {
   userId: string;
   email: string;
   fullName: string;
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
 }
 
 function nonEmpty(value: unknown): string | null {

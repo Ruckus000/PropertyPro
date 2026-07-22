@@ -111,7 +111,7 @@ export function PackageStaffView({ communityId }: PackageStaffViewProps) {
           if (!open) setPickupPkg(null);
         }}
       >
-        <DialogContent className="sm:max-w-[380px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Mark as Picked Up</DialogTitle>
             <DialogDescription>

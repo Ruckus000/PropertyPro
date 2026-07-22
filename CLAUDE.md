@@ -79,6 +79,7 @@ pnpm guard:breadcrumbs          # Breadcrumb coverage
 pnpm guard:tenant-scope         # tenantScope contract well-formedness
 pnpm guard:legacy-roles         # Legacy-role vocabulary floor
 pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)
+pnpm guard:page-padding         # Page gutter single-sourced in the shell; no per-page px / nested <main>
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 ```
 
@@ -93,6 +94,21 @@ pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 > `scripts/design-token-baseline.json` (shrink-only); new files must be clean;
 > escape hatch `// design-tokens:exempt — <reason>`. Full rules in
 > `.claude/rules/design.md`.
+
+> **Page padding (`guard:page-padding`):** the authenticated page gutter (horizontal
+> `px`, vertical `py`, and centred max-width) is single-sourced in **one** place —
+> `PageContainer` (`apps/web/src/components/layout/page-container.tsx`), rendered by
+> the app shell around every authenticated route (`px-6 sm:px-8 lg:px-10 py-8`,
+> `max-w-[1400px]`). Pages render only their content and inherit that gutter. Use
+> `PageBody` (`apps/web/src/components/shared/page-body.tsx`) as the content root —
+> it standardises vertical rhythm (`space-y-6`) and offers narrower centred columns
+> (`width="prose|form|content|reading|narrow"`) **without** horizontal padding.
+> Pages must NOT re-add their own `px-*`/`py-*` at the root (double-pads the gutter)
+> or render their own `<main>` (the shell owns the only `<main id="main-content">`).
+> The guard scans `(authenticated)/**/page.tsx`; violations are frozen shrink-only in
+> `scripts/page-padding-baseline.json` (currently empty); escape hatch
+> `// page-padding:exempt — <reason>`. To retune app-wide padding, edit
+> `PAGE_GUTTER_X` / `py-*` in `PageContainer` — one line, whole app.
 
 > The list above is representative, not exhaustive. See the root `package.json`
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,

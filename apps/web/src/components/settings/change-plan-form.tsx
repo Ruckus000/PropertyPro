@@ -271,7 +271,7 @@ export function ChangePlanForm({
 
       {/* Confirm dialog */}
       <Dialog open={showConfirm && selected !== null} onOpenChange={(open) => !isSubmitting && setShowConfirm(open)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="md" resizable>
           <DialogHeader>
             <DialogTitle>
               {isNewSubscription ? 'Confirm your plan' : 'Confirm plan change'}

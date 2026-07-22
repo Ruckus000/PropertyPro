@@ -118,7 +118,7 @@ export function BulkAnnouncementDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Bulk Announcement</DialogTitle>
           <DialogDescription>

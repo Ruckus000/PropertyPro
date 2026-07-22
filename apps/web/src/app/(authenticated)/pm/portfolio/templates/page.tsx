@@ -11,6 +11,7 @@ import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context'
 import { isPmAdminInAnyCommunity, listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
 import { userHasPortfolioTemplatesAccess } from '@/lib/services/site-portfolio-template-service';
 import { PortfolioTemplatesManager } from '@/components/pm/portfolio/PortfolioTemplatesManager';
+import { PageBody } from '@/components/shared/page-body';
 
 export default async function PortfolioTemplatesPage() {
   const userId = await requirePageAuthenticatedUserId();
@@ -27,7 +28,7 @@ export default async function PortfolioTemplatesPage() {
   const communities = managed.map((c) => ({ communityId: c.communityId, name: c.communityName }));
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
+    <PageBody width="reading" spacing="none">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-content">Portfolio Templates</h1>
         <p className="mt-1 text-sm text-content-secondary">
@@ -36,6 +37,6 @@ export default async function PortfolioTemplatesPage() {
         </p>
       </div>
       <PortfolioTemplatesManager hasAccess={hasAccess} communities={communities} />
-    </div>
+    </PageBody>
   );
 }

@@ -31,12 +31,8 @@ import {
   acceptInvitationContract,
   createInvitationContract,
 } from './contract';
+import { getBaseUrl } from '@/lib/utils/url';
 
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);

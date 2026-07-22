@@ -119,7 +119,7 @@ export function BulkDocumentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Bulk Document Upload</DialogTitle>
           <DialogDescription>

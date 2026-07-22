@@ -13,6 +13,7 @@ import {
   checkPasswordResetRateLimit,
   type RateLimitResult,
 } from '../rate-limit/password-reset-limiter';
+import { getBaseUrl } from '@/lib/utils/url';
 
 /** Minimum response time (ms) to normalise timing across all code paths. */
 const MIN_RESPONSE_MS = 250;
@@ -138,17 +139,6 @@ async function enforceMinResponseTime(startMs: number): Promise<void> {
   if (remaining > 0) {
     await new Promise((resolve) => setTimeout(resolve, remaining));
   }
-}
-
-function getBaseUrl(): string {
-  // Server-side: use NEXT_PUBLIC_APP_URL or VERCEL_URL, fall back to localhost
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  return 'http://localhost:3000';
 }
 
 /** Exported for testing */
