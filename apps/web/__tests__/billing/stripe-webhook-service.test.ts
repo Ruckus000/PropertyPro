@@ -72,6 +72,7 @@ vi.mock('@propertypro/db/filters', () => ({
   and: andMock,
   isNull: isNullMock,
   or: (...args: unknown[]) => ({ _or: args }),
+  inArray: (col: unknown, vals: unknown) => ({ _inArray: [col, vals] }),
   sql: sqlMock,
 }));
 
@@ -374,6 +375,73 @@ describe('stripe-webhook-service', () => {
       updatedAt: attemptedPaymentFailedAt,
     });
     expect(eqMock).toHaveBeenCalledWith(communitiesTable.id, 42);
+  });
+
+  describe('persistSelfServeCommunityStripeIds — rebind rules', () => {
+    // The WHERE clause decides whether a checkout can bind its subscription id.
+    // Too strict and a paying customer is never reactivated; too loose and a
+    // live subscription is orphaned. Both failure modes cost real money, so
+    // assert the predicate shape directly.
+    it('allows the bind when the row currently names a CHURNED subscription', async () => {
+      // REGRESSION (live on prod): cancellation leaves stripe_subscription_id
+      // pointing at the dead subscription, and canStartNewSubscription lets
+      // that community buy again — which mints a NEW id. The old predicate was
+      // `IS NULL OR = <new id>`, so it matched zero rows: the customer was
+      // charged monthly while the row stayed `canceled` and never reactivated.
+      const db = setupDb();
+      db.returningMock.mockResolvedValue([{ id: 7 }]);
+
+      const result = await persistSelfServeCommunityStripeIds({
+        communityId: 7,
+        stripeCustomerId: 'cus_x',
+        stripeSubscriptionId: 'sub_new',
+        subscriptionStatus: 'active',
+        subscriptionPlan: 'essentials',
+      });
+
+      expect(result.rebindBlocked).toBe(false);
+      // The churned-status arm must be part of the OR.
+      const serialized = JSON.stringify(db.whereMock.mock.calls[0]?.[0] ?? {});
+      expect(serialized).toContain('_inArray');
+      expect(serialized).toContain('canceled');
+    });
+
+    it('reactivates the row in the same write', async () => {
+      const db = setupDb();
+      db.returningMock.mockResolvedValue([{ id: 7 }]);
+
+      await persistSelfServeCommunityStripeIds({
+        communityId: 7,
+        stripeCustomerId: 'cus_x',
+        stripeSubscriptionId: 'sub_new',
+        subscriptionStatus: 'active',
+        subscriptionPlan: 'essentials',
+      });
+
+      expect(db.setMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stripeSubscriptionId: 'sub_new',
+          subscriptionStatus: 'active',
+          subscriptionPlan: 'essentials',
+          subscriptionCanceledAt: null,
+          nextReminderAt: null,
+        }),
+      );
+    });
+
+    it('still reports a blocked rebind when no row matches', async () => {
+      const db = setupDb();
+      db.returningMock.mockResolvedValue([]);
+
+      const result = await persistSelfServeCommunityStripeIds({
+        communityId: 7,
+        stripeCustomerId: 'cus_x',
+        stripeSubscriptionId: 'sub_new',
+        subscriptionStatus: 'active',
+      });
+
+      expect(result.rebindBlocked).toBe(true);
+    });
   });
 
   describe('reactivation clears cancellation state', () => {
