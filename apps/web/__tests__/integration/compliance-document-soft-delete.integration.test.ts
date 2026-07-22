@@ -68,6 +68,10 @@ describeDb('compliance × document soft-delete (db-backed integration)', () => {
 
     actorACommunityId = requireCommunity(state, 'communityA').id;
 
+    // beforeAll runs before beforeEach, so the actor must be set here too —
+    // the shared auth provider throws when no actor is registered.
+    setActor(state, 'actorA');
+
     // Generate the checklist for community A.
     await complianceRoute.POST(
       jsonRequest(apiUrl('/api/v1/compliance'), 'POST', {
