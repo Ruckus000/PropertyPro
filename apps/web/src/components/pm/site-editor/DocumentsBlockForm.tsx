@@ -76,7 +76,7 @@ export function DocumentsBlockForm({ communityId, blockOrder, initial, onSaved }
           value={limit}
           onChange={(e) => setLimit(Number(e.target.value))}
           required
-          className="mt-1 block w-32 rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+          className="mt-1 block w-32 rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
         />
         <p className="mt-1 text-xs text-content-secondary">Between 1 and 20.</p>
       </div>

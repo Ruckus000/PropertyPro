@@ -80,7 +80,7 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
             <span className="text-sm font-semibold text-white tracking-tight whitespace-nowrap">
               PropertyPro
             </span>
-            <span className="rounded bg-blue-600 px-1.5 py-0.5 text-xs font-medium text-white">
+            <span className="rounded bg-coral-600 px-1.5 py-0.5 text-xs font-medium text-white">
               Admin
             </span>
           </div>

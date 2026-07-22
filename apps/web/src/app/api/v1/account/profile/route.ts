@@ -50,7 +50,7 @@
  * even the envelope/error-shape changes are consumer-invisible.
  */
 import { runRoute } from '@propertypro/api-contract';
-import { createAdminClient } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

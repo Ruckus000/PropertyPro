@@ -188,10 +188,9 @@ const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
   'apps/web/src/hooks/use-units.ts',
   'apps/web/src/hooks/use-upload-logo.ts',
   'apps/web/src/hooks/use-website-wizard.ts',
-  'apps/web/src/hooks/useComplianceChecklist.ts',
-  'apps/web/src/hooks/useComplianceMutations.ts',
-  'apps/web/src/hooks/useDocumentDraft.ts',
-  'apps/web/src/hooks/useDocumentUpload.ts',
+  'apps/web/src/hooks/use-compliance-mutations.ts',
+  'apps/web/src/hooks/use-document-draft.ts',
+  'apps/web/src/hooks/use-document-upload.ts',
 ]);
 
 // ---------------------------------------------------------------------------

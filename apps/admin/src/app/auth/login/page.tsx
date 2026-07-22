@@ -101,7 +101,7 @@ function LoginForm() {
         <div className="mb-8 text-center">
           <div className="mb-3 inline-flex items-center gap-2">
             <span className="text-xl font-bold text-white">PropertyPro</span>
-            <span className="rounded bg-blue-600 px-1.5 py-0.5 text-xs font-medium text-white">
+            <span className="rounded bg-coral-600 px-1.5 py-0.5 text-xs font-medium text-white">
               Admin
             </span>
           </div>
@@ -123,7 +123,7 @@ function LoginForm() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
                 placeholder="admin@getpropertypro.com"
               />
             </div>
@@ -139,7 +139,7 @@ function LoginForm() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
                 placeholder="••••••••"
               />
             </div>

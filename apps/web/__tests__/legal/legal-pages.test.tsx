@@ -63,23 +63,23 @@ describe('renderMarkdown', () => {
   });
 });
 
-describe('renderMarkdown — marketing variant', () => {
+describe('renderMarkdown — class-less semantic output', () => {
   it('emits class-less semantic headings', () => {
-    const html = renderMarkdown('# H1\n\n## H2', { variant: 'marketing' });
+    const html = renderMarkdown('# H1\n\n## H2');
     expect(html).toContain('<h1>H1</h1>');
     expect(html).toContain('<h2>H2</h2>');
     expect(html).not.toContain('class=');
   });
 
   it('emits class-less paragraphs and links', () => {
-    const html = renderMarkdown('See [site](https://example.com).', { variant: 'marketing' });
+    const html = renderMarkdown('See [site](https://example.com).');
     expect(html).toContain('<a href="https://example.com">site</a>');
     expect(html).toContain('<p>');
     expect(html).not.toContain('text-content');
   });
 
   it('emits class-less lists and horizontal rules', () => {
-    const html = renderMarkdown('- a\n- b\n\n---', { variant: 'marketing' });
+    const html = renderMarkdown('- a\n- b\n\n---');
     expect(html).toContain('<ul>');
     expect(html).toContain('<li>a</li>');
     expect(html).toContain('<hr />');
@@ -101,11 +101,9 @@ describe('renderMarkdown — href sanitization', () => {
     expect(html).not.toContain('javascript:');
   });
 
-  it('leaves the documented app-variant link shape byte-identical', () => {
+  it('emits a plain class-less link for safe URLs', () => {
     const html = renderMarkdown('Visit [our site](https://example.com) now.');
-    expect(html).toContain(
-      '<a href="https://example.com" class="text-content-link underline hover:text-interactive">our site</a>',
-    );
+    expect(html).toContain('<a href="https://example.com">our site</a>');
   });
 
   it('single-encodes & in URL query strings (no double-encoding)', () => {

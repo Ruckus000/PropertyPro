@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 
 export const ADMIN_ROLES_PARAM =
@@ -12,6 +12,8 @@ export interface ResidentRow {
 
 export function useResidents(communityId: number, roles: string) {
   return useQuery<ResidentRow[]>({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: ['residents', communityId, roles],
     enabled: communityId > 0,
     queryFn: async ({ signal }) => {

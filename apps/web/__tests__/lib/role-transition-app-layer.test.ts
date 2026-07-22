@@ -33,18 +33,18 @@ describe('checkPermissionV2 — v3 transition roles', () => {
   });
 });
 
-describe('hasRole — v3 transition aliases', () => {
-  it('accepts property_manager and root_manager rows where pm_admin is allowed', () => {
-    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['pm_admin'])).toBe(true);
-    expect(hasRole({ role: 'root_manager', communityId: 1 }, ['pm_admin'])).toBe(true);
+describe('hasRole — v3 transition roles', () => {
+  it('accepts the management tier where the PM tier is allowed', () => {
+    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['property_manager'])).toBe(true);
+    // root is a superset of the operational manager tier.
+    expect(hasRole({ role: 'root_manager', communityId: 1 }, ['property_manager'])).toBe(true);
+    expect(hasRole({ role: 'root_manager', communityId: 1 }, ['root_manager'])).toBe(true);
   });
-  it('accepts property_manager rows where a manager-alias is allowed', () => {
-    // property_manager is the canonical PM-tier value and matches pm_admin / property_manager_admin allowlists.
-    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['property_manager_admin'])).toBe(true);
+  it('enforces the stricter root-only gate', () => {
+    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['root_manager'])).toBe(false);
   });
-  it('does not match non-PM allowlists', () => {
-    expect(hasRole({ role: 'property_manager', communityId: 1 }, ['cam'])).toBe(false);
-    expect(hasRole({ role: 'resident', communityId: 1 }, ['pm_admin'])).toBe(false);
+  it('rejects residents', () => {
+    expect(hasRole({ role: 'resident', communityId: 1 }, ['property_manager'])).toBe(false);
   });
 });
 

@@ -5,7 +5,6 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { ClaimRootClient } from '@/components/dashboard/ClaimRootClient';
 
 /**
@@ -47,14 +46,6 @@ export default async function ClaimRootPage({
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              { label: 'Dashboard', href: `/dashboard?communityId=${context.communityId}` },
-            ]}
-            currentLabel="Claim root manager"
-          />
-        }
         title="Claim root manager"
         description="Take ownership of role management for communities that don’t have a root manager yet."
       />

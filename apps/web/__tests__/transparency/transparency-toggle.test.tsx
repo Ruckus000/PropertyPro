@@ -66,7 +66,7 @@ describe('TransparencyToggle', () => {
     const link = screen.getByText(
       'Preview what your transparency page will look like',
     );
-    expect(link).toHaveAttribute('href', '/sunset/transparency');
+    expect(link).toHaveAttribute('href', 'https://sunset.getpropertypro.com/transparency');
   });
 
   it('shows the load-failure copy when the query errors', async () => {

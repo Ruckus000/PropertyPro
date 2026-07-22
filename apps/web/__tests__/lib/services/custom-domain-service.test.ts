@@ -9,6 +9,7 @@ const {
   addProjectDomainMock,
   getDomainStatusMock,
   removeProjectDomainMock,
+  checkDomainAvailabilityMock,
   selectRowsQueue,
   updateCalls,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   addProjectDomainMock: vi.fn(),
   getDomainStatusMock: vi.fn(),
   removeProjectDomainMock: vi.fn(),
+  checkDomainAvailabilityMock: vi.fn(),
   selectRowsQueue: [] as unknown[][],
   updateCalls: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
 }));
@@ -25,18 +27,23 @@ const {
 // the service's translateProviderError. We re-export the real ones and add spies
 // for the call functions.
 vi.mock('@/lib/domains/vercel-domains-client', async () => {
+  class DomainProvisioningUnavailableError extends Error {}
+  class DomainProviderError extends Error {
+    providerCode?: string;
+    constructor(message: string, providerCode?: string) {
+      super(message);
+      this.providerCode = providerCode;
+    }
+  }
+  class DomainProviderRateLimitedError extends DomainProviderError {}
   return {
-    DomainProvisioningUnavailableError: class DomainProvisioningUnavailableError extends Error {},
-    DomainProviderError: class DomainProviderError extends Error {
-      providerCode?: string;
-      constructor(message: string, providerCode?: string) {
-        super(message);
-        this.providerCode = providerCode;
-      }
-    },
+    DomainProvisioningUnavailableError,
+    DomainProviderError,
+    DomainProviderRateLimitedError,
     addProjectDomain: addProjectDomainMock,
     getDomainStatus: getDomainStatusMock,
     removeProjectDomain: removeProjectDomainMock,
+    checkDomainAvailability: checkDomainAvailabilityMock,
   };
 });
 
@@ -66,10 +73,12 @@ import {
   setDomain,
   verifyDomain,
   removeDomain,
+  checkPurchasableDomain,
 } from '@/lib/services/custom-domain-service';
 import {
   DomainProvisioningUnavailableError,
   DomainProviderError,
+  DomainProviderRateLimitedError,
 } from '@/lib/domains/vercel-domains-client';
 import { ConflictError, ValidationError, AppError } from '@/lib/api/errors';
 
@@ -368,5 +377,53 @@ describe('removeDomain', () => {
     expect(removeProjectDomainMock).not.toHaveBeenCalled();
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0].set).toMatchObject({ customDomain: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkPurchasableDomain (guided purchase)
+// ---------------------------------------------------------------------------
+describe('checkPurchasableDomain', () => {
+  it('sanitizes the input and returns the availability result — no DB, no audit', async () => {
+    checkDomainAvailabilityMock.mockResolvedValue({ available: true, price: 12, period: 1 });
+
+    const result = await checkPurchasableDomain('HTTPS://Foo.COM/path');
+
+    expect(result).toEqual({ name: 'foo.com', available: true, price: 12, period: 1 });
+    expect(checkDomainAvailabilityMock).toHaveBeenCalledWith('foo.com');
+    expect(createUnscopedClientMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid hostnames with a ValidationError', async () => {
+    await expect(checkPurchasableDomain('not a domain')).rejects.toBeInstanceOf(ValidationError);
+    expect(checkDomainAvailabilityMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects the platform root domain and its subdomains', async () => {
+    await expect(checkPurchasableDomain('foo.getpropertypro.com')).rejects.toBeInstanceOf(ValidationError);
+    expect(checkDomainAvailabilityMock).not.toHaveBeenCalled();
+  });
+
+  it('translates a provider rate limit into a 429 AppError', async () => {
+    checkDomainAvailabilityMock.mockRejectedValue(new DomainProviderRateLimitedError('slow down'));
+    const err = await checkPurchasableDomain('foo.com').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).statusCode).toBe(429);
+    expect((err as AppError).code).toBe('DOMAIN_CHECK_RATE_LIMITED');
+  });
+
+  it('translates a generic provider error into a 502 AppError', async () => {
+    checkDomainAvailabilityMock.mockRejectedValue(new DomainProviderError('boom'));
+    const err = await checkPurchasableDomain('foo.com').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).statusCode).toBe(502);
+  });
+
+  it('translates missing provisioning config into a 503 AppError', async () => {
+    checkDomainAvailabilityMock.mockRejectedValue(new DomainProvisioningUnavailableError('unset'));
+    const err = await checkPurchasableDomain('foo.com').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect((err as AppError).statusCode).toBe(503);
   });
 });

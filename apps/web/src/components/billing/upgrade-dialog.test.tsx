@@ -25,7 +25,7 @@ describe('UpgradeDialog', () => {
         upgradePlanId="operations_plus"
         currentPlanId="essentials"
         currentPlanRaw="essentials"
-        role="cam"
+        role="property_manager"
         communityId={2}
       />,
     );

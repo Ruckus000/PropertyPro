@@ -139,14 +139,14 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
       {blocksQ.isLoading ? (
         <p
           data-testid="confirm-publish-loading"
-          className="rounded-md border border-default bg-surface-muted/40 p-3 text-sm text-content-secondary"
+          className="rounded-md border border-default bg-surface-subtle p-3 text-sm text-content-secondary"
         >
           Loading block list…
         </p>
       ) : summary.length === 0 ? (
         <p
           data-testid="confirm-publish-empty"
-          className="rounded-md border border-dashed border-default bg-surface-muted/40 p-3 text-sm text-content-secondary"
+          className="rounded-md border border-dashed border-default bg-surface-subtle p-3 text-sm text-content-secondary"
         >
           No blocks configured yet. Add content in previous steps to publish.
         </p>
@@ -161,7 +161,7 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
               <span className="flex items-center gap-2 text-sm font-medium text-content">
                 <span
                   aria-hidden="true"
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-interactive/15 text-xs font-semibold text-interactive"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-interactive-subtle text-xs font-semibold text-interactive"
                 >
                   {s.blockOrder}
                 </span>

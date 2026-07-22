@@ -1,0 +1,1 @@
+ALTER TABLE "notification_preferences" ADD COLUMN "email_insurance_alerts" boolean DEFAULT true NOT NULL;

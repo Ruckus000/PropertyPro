@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { captureException, captureMessage } from '@sentry/nextjs';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
-import { recoverStuckProvisioningJobs } from '@/lib/services/provisioning-service';
+import {
+  reconcileLostCheckoutSignups,
+  recoverStuckProvisioningJobs,
+} from '@/lib/services/provisioning-service';
 
 function requireProvisioningWatchdogSecret(req: NextRequest): void {
   requireCronSecret(
@@ -15,6 +18,30 @@ async function handleWatchdog(req: NextRequest): Promise<NextResponse> {
   requireProvisioningWatchdogSecret(req);
 
   const summary = await recoverStuckProvisioningJobs();
+
+  // A1: independent pass for paid-but-webhook-lost signups (invisible to the
+  // job-based recovery above because no provisioning_jobs row was ever created).
+  const reconcile = await reconcileLostCheckoutSignups();
+  if (reconcile.recovered > 0) {
+    captureMessage('provisioning_reconcile_recovered', {
+      level: 'warning',
+      extra: { reconcile },
+    });
+  }
+  if (reconcile.failed > 0) {
+    captureMessage('provisioning_reconcile_failed', {
+      level: 'error',
+      extra: { reconcile },
+    });
+    for (const failure of reconcile.failures) {
+      captureException(new Error(failure.errorMessage), {
+        extra: {
+          component: 'provisioning-reconcile',
+          signupRequestId: failure.signupRequestId,
+        },
+      });
+    }
+  }
 
   if (summary.failed > 0) {
     captureMessage('provisioning_watchdog_failed_jobs', {
@@ -47,7 +74,7 @@ async function handleWatchdog(req: NextRequest): Promise<NextResponse> {
     });
   }
 
-  return NextResponse.json({ data: summary });
+  return NextResponse.json({ data: { ...summary, reconcile } });
 }
 
 export const GET = withErrorHandler(handleWatchdog);

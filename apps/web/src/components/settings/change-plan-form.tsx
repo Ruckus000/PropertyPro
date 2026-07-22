@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Check } from 'lucide-react';
 import { comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { useReauth } from '@/hooks/use-reauth';
 import { useChangePlan } from '@/hooks/use-change-plan';
@@ -99,6 +100,8 @@ export function ChangePlanForm({
         billingInterval: interval,
       });
       // Webhook will sync subscriptionPlan in a few seconds; bounce back and refresh.
+      // Toast confirms the change given the webhook lag before the plan pill updates.
+      toast.success('Plan change submitted — your subscription will update shortly.');
       router.push(cancelHref);
       router.refresh();
     } catch (err) {
@@ -163,7 +166,7 @@ export function ChangePlanForm({
                   'relative rounded-[10px] border-2 p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ' +
                   (isSelected
                     ? 'border-[var(--interactive-primary)] bg-surface-card'
-                    : 'border-edge bg-surface-card hover:border-[var(--border-hover)]')
+                    : 'border-edge bg-surface-card hover:border-[var(--border-strong)]')
                 }
                 aria-pressed={isSelected}
               >
@@ -247,9 +250,8 @@ export function ChangePlanForm({
             <Button
               type="button"
               onClick={submit}
-              disabled={isSubmitting}
+              loading={isSubmitting}
             >
-              {isSubmitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
               Confirm change
             </Button>
           </DialogFooter>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Loader2, ShieldCheck, Eye } from 'lucide-react';
+import { ShieldCheck, Eye } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   useSupportAccess,
   useToggleSupportAccess,
@@ -71,33 +72,40 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
 
   if (loading) {
     return (
-      <div className="flex h-24 items-center justify-center">
-        <Loader2 size={18} className="animate-spin text-gray-400" />
+      <div
+        className="flex items-start justify-between gap-4 rounded-lg border border-edge bg-surface-card p-5"
+        data-testid="support-access-settings-loading"
+      >
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-64" />
+        </div>
+        <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
       </div>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger" role="alert">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 rounded-lg border border-gray-200 bg-white p-5">
+    <div className="space-y-6 rounded-lg border border-edge bg-surface-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
-          <ShieldCheck size={20} className="mt-0.5 shrink-0 text-gray-400" aria-hidden="true" />
+          <ShieldCheck size={20} className="mt-0.5 shrink-0 text-content-disabled" aria-hidden="true" />
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Support Access</h3>
-            <p className="mt-0.5 text-sm text-gray-500">
+            <h3 className="text-sm font-semibold text-content">Support Access</h3>
+            <p className="mt-0.5 text-sm text-content-tertiary">
               Allow PropertyPro support staff to access this community in read-only mode for
               troubleshooting. All access is logged.
             </p>
             {data?.consent && (
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-content-disabled">
                 Enabled since{' '}
                 {format(new Date(data.consent.granted_at), 'MMM d, yyyy')}
               </p>
@@ -113,15 +121,15 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
           onClick={handleToggle}
           disabled={toggling || loading}
           className={[
-            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50',
-            data?.consentActive ? 'bg-blue-600' : 'bg-gray-200',
+            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive disabled:opacity-50',
+            data?.consentActive ? 'bg-interactive' : 'bg-surface-muted',
           ].join(' ')}
           aria-label="Toggle support access"
         >
           <span
             aria-hidden="true"
             className={[
-              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-card shadow ring-0 transition duration-200 ease-in-out',
               data?.consentActive ? 'translate-x-5' : 'translate-x-0',
             ].join(' ')}
           />
@@ -129,7 +137,7 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+        <div className="rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger" role="alert">
           {error}
         </div>
       )}
@@ -137,15 +145,15 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
       {/* Recent activity */}
       {data && data.recentAccess.length > 0 && (
         <div>
-          <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-content-tertiary">
             <Eye size={12} aria-hidden="true" />
             Recent Support Activity
           </h4>
-          <div className="divide-y divide-gray-100 rounded-md border border-gray-200">
+          <div className="divide-y divide-edge-subtle rounded-md border border-edge">
             {data.recentAccess.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                <span className="font-mono text-gray-600">{entry.event}</span>
-                <span className="text-gray-400">
+                <span className="font-mono text-content-secondary">{entry.event}</span>
+                <span className="text-content-disabled">
                   {format(new Date(entry.created_at), 'MMM d, HH:mm')}
                 </span>
               </div>
@@ -155,7 +163,7 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
       )}
 
       {data && data.recentAccess.length === 0 && data.consentActive && (
-        <p className="text-xs text-gray-400">No support activity yet.</p>
+        <p className="text-xs text-content-disabled">No support activity yet.</p>
       )}
     </div>
   );

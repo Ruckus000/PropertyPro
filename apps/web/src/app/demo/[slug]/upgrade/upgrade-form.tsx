@@ -86,7 +86,7 @@ export function UpgradeForm({
               className={`relative w-full rounded-[10px] border-2 p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-primary)] focus-visible:ring-offset-2 ${
                 isSelected
                   ? 'border-[var(--interactive-primary)] bg-[var(--surface-card)]'
-                  : 'border-[var(--border-default)] bg-[var(--surface-card)] hover:border-[var(--border-hover)]'
+                  : 'border-[var(--border-default)] bg-[var(--surface-card)] hover:border-[var(--border-strong)]'
               }`}
               aria-pressed={isSelected}
             >

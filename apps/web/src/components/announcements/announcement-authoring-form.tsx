@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   AnnouncementComposer,
   type AnnouncementComposerValues,
@@ -47,6 +48,7 @@ export function AnnouncementAuthoringForm({
         throw new Error('Announcement saved, but we could not open it.');
       }
 
+      toast.success(announcement ? 'Announcement updated.' : 'Announcement published.');
       router.push(`/announcements/${announcementId}?communityId=${communityId}`);
       router.refresh();
     } finally {

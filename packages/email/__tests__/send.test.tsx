@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { sendEmail, testInbox, clearTestInbox } from '../src/send';
+import { sendBulkEmail, sendEmail, testInbox, clearTestInbox } from '../src/send';
 import { InvitationEmail } from '../src/templates/invitation-email';
 
 const branding = {
@@ -157,5 +157,47 @@ describe('sendEmail', () => {
     });
 
     expect(testInbox[0]?.from).toBe('PropertyPro Support <support@getpropertypro.com>');
+  });
+
+  it('retains the caller idempotency key in test mode', async () => {
+    await sendEmail({
+      to: 'resident@example.com',
+      subject: 'Invitation',
+      category: 'transactional',
+      idempotencyKey: 'insurance-alert/1/wind_mitigation/11/30_days/resident-1',
+      react: (
+        <InvitationEmail
+          branding={branding}
+          inviteeName="Jane Doe"
+          inviterName="John Smith"
+          role="Owner"
+          inviteUrl="https://example.com/invite/abc123"
+        />
+      ),
+    });
+
+    expect(testInbox[0]?.idempotencyKey).toBe(
+      'insurance-alert/1/wind_mitigation/11/30_days/resident-1',
+    );
+  });
+
+  it('rejects a per-message idempotency key on the batch sender', async () => {
+    await expect(
+      sendBulkEmail([{
+        to: 'resident@example.com',
+        subject: 'Invitation',
+        category: 'transactional',
+        idempotencyKey: 'insurance-alert/1/wind_mitigation/11/30_days/resident-1',
+        react: (
+          <InvitationEmail
+            branding={branding}
+            inviteeName="Jane Doe"
+            inviterName="John Smith"
+            role="Owner"
+            inviteUrl="https://example.com/invite/abc123"
+          />
+        ),
+      }]),
+    ).rejects.toThrow(/does not support per-message idempotency keys/i);
   });
 });

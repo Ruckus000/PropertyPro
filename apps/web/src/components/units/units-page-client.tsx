@@ -108,7 +108,7 @@ export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsP
     return (
       <div
         role="alert"
-        className="rounded-md border border-status-danger/40 bg-status-danger/5 p-4 text-sm text-status-danger"
+        className="rounded-md border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger"
       >
         We couldn&apos;t load units. Please try again.
       </div>

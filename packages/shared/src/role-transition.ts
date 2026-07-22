@@ -1,15 +1,16 @@
 /**
- * v3 role constants (root-manager simplification, end state).
+ * v3 role tier constants (root-manager simplification, end state).
  * Spec: docs/superpowers/specs/2026-06-10-root-manager-role-simplification-design.md
  *
  * The user_role_v2 enum holds the v3 values only: resident, property_manager,
- * root_manager. Every DB-level role predicate AND every app-layer branch on a
- * raw membership.role value matches these via the constants below.
- * The _DB_ infix means "raw user_role_v2 enum values" — as opposed to the legacy-NAME arrays in access-policies.ts (ADMIN_ROLES etc.), which hold 7-role vocabulary strings.
+ * root_manager (the `CommunityRole` vocabulary). Every DB-level role predicate
+ * AND every app-layer branch on a raw membership.role value matches these via
+ * the tier constants below.
+ * The _DB_ infix means "raw user_role_v2 enum values" — as opposed to the
+ * legacy-NAME arrays in access-policies.ts (ADMIN_ROLES etc.), which hold
+ * MatrixRole row-key strings.
  */
-// resident appears in no tier array below — it is the non-admin base role, not an omission.
-export const TRANSITION_ROLES = ['resident', 'property_manager', 'root_manager'] as const;
-export type TransitionRole = (typeof TRANSITION_ROLES)[number];
+import type { CommunityRole } from './index';
 
 /** Admin-tier membership rows (manager or above). */
 export const ADMIN_TIER_DB_ROLES = ['property_manager', 'root_manager'] as const;
@@ -25,7 +26,7 @@ export const MANAGER_TIER_DB_ROLES = ['property_manager', 'root_manager'] as con
  * unknown input — callers MUST short-circuit (drizzle forbids inArray(col, [])).
  * Legacy 7-role NAMES (cam, board_member, …) are not valid inputs here — those filters belong to the legacy-name path.
  */
-export function expandTransitionRoleFilter(role: string): readonly TransitionRole[] {
+export function expandTransitionRoleFilter(role: string): readonly CommunityRole[] {
   switch (role) {
     case 'resident': return ['resident'];
     case 'property_manager': return ['property_manager'];

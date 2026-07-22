@@ -9,8 +9,8 @@
  *   Day 0  — webhook fires sendPaymentFailedEmail() directly
  *   Day 3  — processPaymentReminders() sends Day 3 reminder, advances to Day 7
  *   Day 7  — processPaymentReminders() sends Day 7 escalation, clears pre-cancel schedule
- *   Cancel — webhook fires sendSubscriptionCanceledEmail() directly, sets Day 23 reminder
- *   Day 23 — processPaymentReminders() sends 7-day final expiry warning, clears schedule
+ *   Cancel — webhook fires sendSubscriptionCanceledEmail() directly, sets Day 5 reminder
+ *   Day 5  — processPaymentReminders() sends final 2-day lock warning, clears schedule
  *
  * Uses createUnscopedClient() because the cron scans across all communities.
  */
@@ -25,7 +25,14 @@ import {
   SubscriptionExpiryWarningEmail,
   sendEmail,
 } from '@propertypro/email';
-import { ADMIN_TIER_DB_ROLES, MANAGER_TIER_DB_ROLES, type TransitionRole } from '@propertypro/shared';
+import {
+  ADMIN_TIER_DB_ROLES,
+  formatBillingDateUTC,
+  GRACE_EXPIRY_WARNING_OFFSET_DAYS,
+  MANAGER_TIER_DB_ROLES,
+  PAID_GRACE_DAYS,
+  type CommunityRole,
+} from '@propertypro/shared';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -34,11 +41,11 @@ const CONDO_HOA_TYPES = new Set(['condo_718', 'hoa_720']);
 
 /** Roles that receive billing alerts for condo/HOA communities. */
 // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-const CONDO_HOA_ADMIN_ROLES: readonly TransitionRole[] = MANAGER_TIER_DB_ROLES;
+const CONDO_HOA_ADMIN_ROLES: readonly CommunityRole[] = MANAGER_TIER_DB_ROLES;
 
 /** Roles that receive billing alerts for apartment communities. */
 // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
-const APARTMENT_ADMIN_ROLES: readonly TransitionRole[] = ADMIN_TIER_DB_ROLES;
+const APARTMENT_ADMIN_ROLES: readonly CommunityRole[] = ADMIN_TIER_DB_ROLES;
 
 function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
@@ -54,9 +61,9 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * MS_PER_DAY);
 }
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
+// Billing dates are rendered UTC via the shared formatter so the email and the
+// in-app banner (which uses the same helper) never disagree by a day.
+const formatDate = formatBillingDateUTC;
 
 // ---------------------------------------------------------------------------
 // Admin recipient lookup
@@ -72,7 +79,7 @@ async function lookupAdminRecipients(
   communityType: string,
 ): Promise<AdminRecipient[]> {
   const db = createUnscopedClient();
-  const adminRoles: readonly TransitionRole[] = CONDO_HOA_TYPES.has(communityType)
+  const adminRoles: readonly CommunityRole[] = CONDO_HOA_TYPES.has(communityType)
     ? CONDO_HOA_ADMIN_ROLES
     : APARTMENT_ADMIN_ROLES;
 
@@ -94,17 +101,29 @@ async function lookupAdminRecipients(
 // Internal send helpers
 // ---------------------------------------------------------------------------
 
+interface SendResult {
+  sent: number;
+  failed: number;
+}
+
 async function sendToAll(
   recipients: AdminRecipient[],
   subject: string,
   buildElement: (r: AdminRecipient) => ReturnType<typeof createElement>,
-): Promise<void> {
-  if (recipients.length === 0) return;
-  await Promise.allSettled(
+): Promise<SendResult> {
+  if (recipients.length === 0) return { sent: 0, failed: 0 };
+  const results = await Promise.allSettled(
     recipients.map((r) =>
       sendEmail({ to: r.email, subject, category: 'transactional', react: buildElement(r) }),
     ),
   );
+  let sent = 0;
+  let failed = 0;
+  for (const result of results) {
+    if (result.status === 'fulfilled') sent += 1;
+    else failed += 1;
+  }
+  return { sent, failed };
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +182,7 @@ export interface SendSubscriptionCanceledEmailOpts {
 
 /**
  * Sends a cancellation email immediately on subscription deletion.
- * Also schedules the Day 23 reminder via next_reminder_at (done in webhook handler).
+ * Also schedules the Day 5 reminder via next_reminder_at (done in webhook handler).
  */
 export async function sendSubscriptionCanceledEmail(
   communityId: number,
@@ -173,11 +192,11 @@ export async function sendSubscriptionCanceledEmail(
   if (recipients.length === 0) return;
 
   const billingPortalUrl = `${getBaseUrl()}/billing/portal?communityId=${communityId}`;
-  const gracePeriodEnd = addDays(opts.canceledAt, 30);
+  const gracePeriodEnd = addDays(opts.canceledAt, PAID_GRACE_DAYS);
 
   await sendToAll(
     recipients,
-    `${opts.communityName} subscription canceled — 30-day grace period begins`,
+    `${opts.communityName} subscription canceled — ${PAID_GRACE_DAYS}-day grace period begins`,
     (r) =>
       createElement(SubscriptionCanceledEmail, {
         branding: { communityName: opts.communityName },
@@ -196,6 +215,7 @@ export async function sendSubscriptionCanceledEmail(
 export interface PaymentReminderSummary {
   communitiesScanned: number;
   emailsSent: number;
+  emailsFailed: number;
   errors: number;
 }
 
@@ -222,13 +242,15 @@ export async function processPaymentReminders(
   const summary: PaymentReminderSummary = {
     communitiesScanned: dueCommunities.length,
     emailsSent: 0,
+    emailsFailed: 0,
     errors: 0,
   };
 
   for (const community of dueCommunities) {
     try {
-      await processCommunityReminder(community, now, db);
-      summary.emailsSent += 1;
+      const result = await processCommunityReminder(community, now, db);
+      summary.emailsSent += result.sent;
+      summary.emailsFailed += result.failed;
     } catch (err) {
       console.error(
         `[payment-scheduler] Failed to process community ${community.id}:`,
@@ -257,18 +279,27 @@ async function processCommunityReminder(
   community: CommunityReminderRow,
   now: Date,
   db: ReturnType<typeof createUnscopedClient>,
-): Promise<void> {
+): Promise<SendResult> {
   const billingPortalUrl = `${getBaseUrl()}/billing/portal?communityId=${community.id}`;
   const recipients = await lookupAdminRecipients(community.id, community.communityType);
 
-  if (community.subscriptionCanceledAt != null) {
-    // Post-cancellation: send the Day 23 expiry warning
-    const canceledAt = community.subscriptionCanceledAt;
-    const expiryDate = addDays(canceledAt, 30);
+  // A5: only advance/clear the schedule once we've confirmed the reminder went
+  // out. If recipients exist but every send failed, we leave next_reminder_at at
+  // its due value so the next cron run retries — otherwise a transient email
+  // outage would silently drop the (day-5) lock warning. When there are no
+  // recipients at all, there is nothing to retry, so we clear to avoid scanning
+  // the row forever.
+  const shouldPersistSchedule = (result: SendResult): boolean =>
+    result.sent > 0 || recipients.length === 0;
 
-    await sendToAll(
+  if (community.subscriptionCanceledAt != null) {
+    // Post-cancellation: send the Day 5, two-day lock warning.
+    const canceledAt = community.subscriptionCanceledAt;
+    const expiryDate = addDays(canceledAt, PAID_GRACE_DAYS);
+
+    const result = await sendToAll(
       recipients,
-      `Final warning: ${community.name} portal access expires ${formatDate(expiryDate)}`,
+      `Final warning: ${community.name} access locked in ${GRACE_EXPIRY_WARNING_OFFSET_DAYS} days`,
       (r) =>
         createElement(SubscriptionExpiryWarningEmail, {
           branding: { communityName: community.name },
@@ -277,16 +308,22 @@ async function processCommunityReminder(
           billingPortalUrl,
         }),
     );
-    // Clear reminder — no further scheduled reminders after Day 23
-    await db
-      .update(communities)
-      .set({ nextReminderAt: null, updatedAt: now })
-      .where(eq(communities.id, community.id));
-  } else if (community.paymentFailedAt != null) {
+
+    if (shouldPersistSchedule(result)) {
+      // Clear reminder — no further scheduled reminders after the final warning.
+      await db
+        .update(communities)
+        .set({ nextReminderAt: null, updatedAt: now })
+        .where(eq(communities.id, community.id));
+    }
+    return result;
+  }
+
+  if (community.paymentFailedAt != null) {
     // Pre-cancellation: Day 3 → Day 7 reminder ladder
     const dayElapsed = daysDiff(community.paymentFailedAt, now);
 
-    await sendToAll(
+    const result = await sendToAll(
       recipients,
       dayElapsed < 7
         ? `Reminder: Payment failed for ${community.name}`
@@ -301,21 +338,25 @@ async function processCommunityReminder(
         }),
     );
 
-    // Advance schedule or clear
-    const nextReminderAt =
-      dayElapsed < 7
-        ? addDays(community.paymentFailedAt, 7) // Day 3 → Day 7
-        : null; // Day 7+ → clear (wait for cancellation to set Day 23)
+    if (shouldPersistSchedule(result)) {
+      // Advance schedule or clear
+      const nextReminderAt =
+        dayElapsed < 7
+          ? addDays(community.paymentFailedAt, 7) // Day 3 → Day 7
+          : null; // Day 7+ → clear (wait for cancellation to set Day 5)
 
-    await db
-      .update(communities)
-      .set({ nextReminderAt, updatedAt: now })
-      .where(eq(communities.id, community.id));
-  } else {
-    // Stale reminder with no relevant state — clear it
-    await db
-      .update(communities)
-      .set({ nextReminderAt: null, updatedAt: now })
-      .where(eq(communities.id, community.id));
+      await db
+        .update(communities)
+        .set({ nextReminderAt, updatedAt: now })
+        .where(eq(communities.id, community.id));
+    }
+    return result;
   }
+
+  // Stale reminder with no relevant state — clear it (nothing was sent).
+  await db
+    .update(communities)
+    .set({ nextReminderAt: null, updatedAt: now })
+    .where(eq(communities.id, community.id));
+  return { sent: 0, failed: 0 };
 }

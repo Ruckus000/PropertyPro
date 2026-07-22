@@ -5,12 +5,18 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   // Point to monorepo root so Next.js doesn't pick up ~/package-lock.json
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  // Lint runs in the dedicated CI lint job (`pnpm lint`). Without this flag,
+  // the presence of eslint.config.mjs re-arms Next's build-time lint pass,
+  // slowing every build and turning error-severity findings into a second,
+  // unintended deploy gate inside `vercel build --prod`.
+  eslint: { ignoreDuringBuilds: true },
   // Tenant subdomain Playwright (localtest.me) fetches /_next/* from a different
   // dev host than the document; Next 15 requires this allowlist in development.
   allowedDevOrigins: [
     "http://localtest.me:3002",
     "http://sunset-condos.localtest.me:3002",
     "http://palm-shores-hoa.localtest.me:3002",
+    "http://*.localtest.me:3002",
   ],
   // Server-only packages that must not be bundled by webpack:
   //   - puppeteer-core / @sparticuz/chromium-min: Chromium binary is
@@ -38,8 +44,24 @@ const nextConfig: NextConfig = {
     "@propertypro/theme",
     "@propertypro/tokens",
   ],
+  experimental: {
+    // Tree-shake barrel imports from the workspace packages so importing one
+    // component doesn't pull the whole barrel into every route chunk.
+    // (lucide-react, date-fns, and recharts are already in Next 15.5's
+    // built-in default list — do not re-add them here.)
+    optimizePackageImports: ["@propertypro/ui", "@propertypro/shared"],
+  },
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",
+  },
+  async redirects() {
+    return [
+      {
+        source: "/login",
+        destination: "/auth/login",
+        permanent: true,
+      },
+    ];
   },
 };
 

@@ -43,7 +43,7 @@ export function TextBlockForm({ communityId, blockOrder, initial, onSaved }: Pro
           maxLength={120}
           value={heading}
           onChange={(e) => setHeading(e.target.value)}
-          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
         />
       </div>
       <div>
@@ -57,7 +57,7 @@ export function TextBlockForm({ communityId, blockOrder, initial, onSaved }: Pro
           value={body}
           onChange={(e) => setBody(e.target.value)}
           required
-          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive/40"
+          className="mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive"
         />
       </div>
       {serverError && (

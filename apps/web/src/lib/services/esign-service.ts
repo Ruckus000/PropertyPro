@@ -10,7 +10,6 @@
 import crypto from 'node:crypto';
 import { EsignInvitationEmail, EsignReminderEmail, sendEmail } from '@propertypro/email';
 import {
-  createAdminTypedClient,
   createScopedClient,
   esignConsent,
   esignEvents,
@@ -20,6 +19,7 @@ import {
   logAuditEvent,
   users,
 } from '@propertypro/db';
+import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { and, eq, gte, inArray, isNull, lt, or } from '@propertypro/db/filters';
 // AUTHZ: Public e-sign links are authorized by possession of submissionExternalId + signer slug and must resolve across tenants before any community context exists.
 import { createUnscopedClient } from '@propertypro/db/unsafe';

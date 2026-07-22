@@ -1,6 +1,7 @@
 'use client';
 
-import { Card, StatusBadge, type StatusKey } from '@propertypro/ui';
+import { StatusBadge, type StatusKey } from '@propertypro/ui';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { TransparencyDocumentGroup, TransparencyDocumentStatus } from '@/lib/services/transparency-service';
 
 function mapStatus(status: TransparencyDocumentStatus): StatusKey {
@@ -46,11 +47,11 @@ export function DocumentChecklistSection({ groups }: Props) {
   if (groups.length === 0) {
     return (
       <Card className="border-edge bg-surface-card">
-        <Card.Body>
+        <CardContent>
           <p className="text-sm text-content-secondary">
             No compliance checklist data has been generated yet for this community.
           </p>
-        </Card.Body>
+        </CardContent>
       </Card>
     );
   }
@@ -59,13 +60,13 @@ export function DocumentChecklistSection({ groups }: Props) {
     <div className="space-y-4">
       {groups.map((group) => (
         <Card key={group.category} className="border-edge bg-surface-card">
-          <Card.Header>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
             <div className="flex flex-col">
-              <Card.Title>{group.label}</Card.Title>
-              <Card.Subtitle>{group.items.length} tracked item{group.items.length === 1 ? '' : 's'}</Card.Subtitle>
+              <CardTitle>{group.label}</CardTitle>
+              <CardDescription>{group.items.length} tracked item{group.items.length === 1 ? '' : 's'}</CardDescription>
             </div>
-          </Card.Header>
-          <Card.Body className="space-y-3">
+          </CardHeader>
+          <CardContent className="space-y-3">
             {group.items.map((item) => (
               <article
                 key={item.templateKey}
@@ -84,7 +85,7 @@ export function DocumentChecklistSection({ groups }: Props) {
                 <p className="mt-2 text-xs text-content-tertiary">Last posted: {formatDate(item.postedAt)}</p>
               </article>
             ))}
-          </Card.Body>
+          </CardContent>
         </Card>
       ))}
     </div>

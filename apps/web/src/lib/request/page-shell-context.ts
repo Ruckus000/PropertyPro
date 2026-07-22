@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type {
-  AnyCommunityRole,
+  CommunityRole,
   CommunityFeatures,
   CommunityType,
 } from '@propertypro/shared';
@@ -27,7 +27,7 @@ export interface PageShellCommunity {
 export interface PageShellContext {
   user: PageShellUser | null;
   community: PageShellCommunity | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
   /** Membership flag — true when the resident is a unit owner. Used to distinguish owner vs tenant. */
   isUnitOwner: boolean;
   /** Board designation (BoardDesignation value); null when not on the board. */
@@ -35,6 +35,8 @@ export interface PageShellContext {
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   subscriptionStatus: string | null;
+  subscriptionCanceledAt: Date | null;
+  subscriptionCurrentPeriodEndAt: Date | null;
   freeAccessExpiresAt: Date | null;
   isDemo: boolean;
   trialEndsAt: Date | null;
@@ -50,6 +52,8 @@ const EMPTY_PAGE_SHELL_CONTEXT: PageShellContext = {
   features: null,
   resourceAccess: null,
   subscriptionStatus: null,
+  subscriptionCanceledAt: null,
+  subscriptionCurrentPeriodEndAt: null,
   freeAccessExpiresAt: null,
   isDemo: false,
   trialEndsAt: null,
@@ -71,7 +75,7 @@ const getPageActiveCommunityShellContextCached = cache(
           type: membership.communityType as CommunityType,
           plan: membership.subscriptionPlan,
         },
-        role: membership.role as AnyCommunityRole,
+        role: membership.role as CommunityRole,
         isUnitOwner: membership.isUnitOwner,
         designation: membership.designation ?? null,
         features: getEffectiveFeatures(
@@ -80,6 +84,8 @@ const getPageActiveCommunityShellContextCached = cache(
         ),
         resourceAccess: getMembershipResourceAccess(membership),
         subscriptionStatus: membership.subscriptionStatus,
+        subscriptionCanceledAt: membership.subscriptionCanceledAt,
+        subscriptionCurrentPeriodEndAt: membership.subscriptionCurrentPeriodEndAt,
         freeAccessExpiresAt: membership.freeAccessExpiresAt,
         isDemo: membership.isDemo,
         trialEndsAt: membership.trialEndsAt,

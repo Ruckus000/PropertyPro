@@ -43,35 +43,26 @@ const SUBMIT_VALUES = {
 };
 
 vi.mock('@/components/announcements/announcement-composer', () => ({
-  AnnouncementComposer: (props: ComposerProps) =>
-    require('react').createElement(
-      'div',
-      null,
-      require('react').createElement(
-        'button',
-        {
-          type: 'button',
-          'data-testid': 'composer-submit',
-          disabled: props.isSubmitting,
-          onClick: () => {
-            // Swallow the handler's rethrow exactly as the real composer's
-            // form does (it surfaces it via form error state, not an uncaught
-            // rejection). The component's throw behavior is unchanged.
-            props.onSubmit(SUBMIT_VALUES).catch(() => {});
-          },
-        },
-        props.submitLabel,
-      ),
-      require('react').createElement(
-        'button',
-        {
-          type: 'button',
-          'data-testid': 'composer-cancel',
-          onClick: props.onCancel,
-        },
-        'Cancel',
-      ),
-    ),
+  AnnouncementComposer: (props: ComposerProps) => (
+    <div>
+      <button
+        type="button"
+        data-testid="composer-submit"
+        disabled={props.isSubmitting}
+        onClick={() => {
+          // Swallow the handler's rethrow exactly as the real composer's
+          // form does (it surfaces it via form error state, not an uncaught
+          // rejection). The component's throw behavior is unchanged.
+          props.onSubmit(SUBMIT_VALUES).catch(() => {});
+        }}
+      >
+        {props.submitLabel}
+      </button>
+      <button type="button" data-testid="composer-cancel" onClick={props.onCancel}>
+        Cancel
+      </button>
+    </div>
+  ),
 }));
 
 import { AnnouncementAuthoringForm } from '../../src/components/announcements/announcement-authoring-form';

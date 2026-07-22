@@ -74,24 +74,28 @@ export function DemoTrialBanner({
 
     return (
       <div
-        className="fixed inset-x-0 bottom-0 z-50 flex h-12 items-center justify-between gap-4 bg-red-900 px-4 text-sm text-white sm:justify-center"
+        // Fixed critical-alert bar: intentionally a solid dark red regardless of
+        // community theme. No status-danger token targets a solid dark surface
+        // with white text (status-danger* is tuned for danger text/tints on light
+        // surfaces), so these reference primitives directly via arbitrary var().
+        className="fixed inset-x-0 bottom-0 z-50 flex h-12 items-center justify-between gap-4 bg-[var(--red-900)] px-4 text-sm text-white sm:justify-center"
         role="status"
         aria-label="Demo trial expired — limited access"
       >
         <div className="flex items-center gap-2">
-          <AlertTriangle size={16} aria-hidden="true" className="shrink-0 text-red-200" />
-          <span className="text-red-100">
+          <AlertTriangle size={16} aria-hidden="true" className="shrink-0 text-[var(--red-200)]" />
+          <span className="text-[var(--red-100)]">
             Limited access — some features disabled
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-red-200 sm:inline">
+          <span className="hidden text-xs text-[var(--red-200)] sm:inline">
             {daysText} until lockout
           </span>
           <a
             href={upgradePath}
-            className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-red-900 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-red-900"
+            className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-[var(--red-900)] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--red-900)]"
           >
             Subscribe Now
           </a>
@@ -113,7 +117,11 @@ export function DemoTrialBanner({
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-50 flex h-12 items-center justify-between gap-3 bg-gray-900/90 px-4 text-sm text-white backdrop-blur-sm"
+      // Translucent dark scrim + backdrop-blur (matches the app's overlay
+      // convention, e.g. modal scrims using bg-black/40-50): raw `black` isn't
+      // a numbered palette shade, and semantic surface tokens don't support
+      // slash-opacity (var()-based, no <alpha-value> placeholder).
+      className="fixed inset-x-0 bottom-0 z-50 flex h-12 items-center justify-between gap-3 bg-black/90 px-4 text-sm text-white backdrop-blur-sm"
       role="status"
       aria-label="Demo session banner"
     >
@@ -154,7 +162,7 @@ export function DemoTrialBanner({
               aria-label={`Trial progress: ${progressPct}%`}
             >
               <div
-                className="h-full rounded-full bg-blue-400 transition-all"
+                className="h-full rounded-full bg-[var(--blue-400)] transition-all"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -163,7 +171,7 @@ export function DemoTrialBanner({
         )}
         <a
           href={upgradePath}
-          className="rounded-md bg-blue-500 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+          className="rounded-md bg-[var(--blue-500)] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-[var(--blue-400)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue-300)] focus-visible:ring-offset-2 focus-visible:ring-offset-black"
         >
           Upgrade
         </a>

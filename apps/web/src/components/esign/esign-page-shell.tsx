@@ -8,7 +8,7 @@
  */
 
 import Link from 'next/link';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { Plus, FileText, LayoutTemplate } from 'lucide-react';
 import { SubmissionList } from '@/components/esign/submission-list';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';

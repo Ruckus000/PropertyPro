@@ -1,6 +1,6 @@
 'use client';
 
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 
 // ---------------------------------------------------------------------------
@@ -265,6 +265,8 @@ export function getPmReportQueryOptions<T extends ReportData = ReportData>(
   filters: ReportFilters = {},
 ) {
   return queryOptions({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: PM_REPORT_KEYS.report(reportType, filters),
     queryFn: () => fetchPmReport<T>(reportType, filters),
     staleTime: PM_REPORT_STALE_TIME,

@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { BLOCK_TYPES, textBlockSchema, heroBlockSchema } from '@propertypro/shared';
 import {
@@ -46,6 +48,15 @@ describe('getBlockRegistry', () => {
       expect(['essentials', 'professional']).toContain(entry.tier);
       expect(entry.fields.length).toBeGreaterThan(0);
       expect(entry.label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('every docHref points at a file that exists on disk', () => {
+    // Repo root is four levels up from apps/admin/__tests__/site-templates/.
+    const repoRoot = resolve(__dirname, '../../../..');
+    for (const entry of entries) {
+      const target = resolve(repoRoot, entry.docHref);
+      expect(existsSync(target), `${entry.type}: ${entry.docHref} does not exist`).toBe(true);
     }
   });
 });

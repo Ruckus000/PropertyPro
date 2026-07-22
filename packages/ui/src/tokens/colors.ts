@@ -96,6 +96,10 @@ export const semanticColors = {
       border: "var(--status-board-border)",
       subtle: "var(--status-board-subtle)",
     },
+    // NOTE: `premium` (gold accent) is deliberately NOT a StatusVariant — it has
+    // no status icon and isn't a domain status. Its --status-premium* CSS vars
+    // are generated from tokens (semantic.ts) and consumed via the
+    // --status-premium* var()s by PlanBadge (the plan-gate pill).
   },
 } as const;
 

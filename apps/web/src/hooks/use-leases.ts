@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import { useUnits, type Unit } from '@/hooks/use-units';
 
@@ -82,6 +82,8 @@ export const LEASE_KEYS = {
 
 export function useLeases(communityId: number, filters?: LeaseFilters) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: LEASE_KEYS.list(communityId, filters),
     queryFn: async () => {
       const params = new URLSearchParams({ communityId: String(communityId) });

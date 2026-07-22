@@ -82,7 +82,7 @@ let state: TestKitState | null = null;
 let routes: RouteModules | null = null;
 
 /** Maps community key → category name → category DB id */
-let categoryIds: Record<string, Record<string, number>> = {};
+const categoryIds: Record<string, Record<string, number>> = {};
 
 /** Sentinel value embedded in forbidden documents' searchText */
 const SENTINEL_PREFIX = 'FORBIDDEN_SENTINEL_';

@@ -2,6 +2,7 @@
 
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export type ExtractionStatus = 'pending' | 'completed' | 'failed' | 'not_applicable' | 'skipped';
 
@@ -36,6 +37,8 @@ interface DocumentListProps {
   onDeleteDocument: (document: DocumentListItem) => void | Promise<void>;
   onDownloadDocument: (document: DocumentListItem) => void;
   onUploadRequest?: () => void;
+  /** Retry the underlying fetch when the list fails to load. */
+  onRetry?: () => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -108,6 +111,7 @@ export function DocumentList({
   onDeleteDocument,
   onDownloadDocument,
   onUploadRequest,
+  onRetry,
 }: DocumentListProps) {
   if (errorMessage) {
     return (
@@ -115,15 +119,36 @@ export function DocumentList({
         status="danger"
         title="Something went wrong"
         description={errorMessage}
+        action={
+          onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+            >
+              Retry
+            </button>
+          ) : undefined
+        }
       />
     );
   }
 
   if (isLoading && documents.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
-        <span className="ml-2 text-sm text-content-secondary">Loading documents...</span>
+      <div className="divide-y divide-edge rounded-md border border-edge">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between p-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Skeleton className="h-10 w-10 shrink-0 rounded" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-3 w-64" />
+              </div>
+            </div>
+            <Skeleton className="ml-4 h-8 w-16 shrink-0" />
+          </div>
+        ))}
       </div>
     );
   }

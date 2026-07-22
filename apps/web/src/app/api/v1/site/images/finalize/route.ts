@@ -18,7 +18,8 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { incrementAssetsUsage } from '@/lib/site-assets/quota';
 import { parseSiteAssetPath, SITE_ASSETS_BUCKET } from '@/lib/site-assets/storage-paths';
 import { transformSiteImage } from '@/lib/site-assets/transform';
-import { createAdminClient, logAuditEvent } from '@propertypro/db';
+import { logAuditEvent } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { siteFinalizeContract } from './contract';
 
 export const runtime = 'nodejs';

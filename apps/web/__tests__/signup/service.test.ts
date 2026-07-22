@@ -254,6 +254,14 @@ function createMockDb(state: MockDbState): {
             }
 
             if (typeof changes.emailNormalized === 'string') {
+              // A6: enforce the email_normalized unique index on updates too.
+              const emailConflict = state.pendingSignups.find(
+                (entry) =>
+                  entry.emailNormalized === changes.emailNormalized && entry.id !== row.id,
+              );
+              if (emailConflict) {
+                throw createUniqueConstraintError('pending_signups_email_normalized_unique');
+              }
               row.emailNormalized = changes.emailNormalized;
             }
             if (typeof changes.authUserId === 'string' || changes.authUserId === null) {
@@ -320,6 +328,19 @@ function createMockDb(state: MockDbState): {
     from: (table: unknown) => ({
       where: (condition: unknown) => ({
         limit: async () => {
+          // A6: status lookup by signupRequestId (used by the email-change branch).
+          const cond = condition as Record<string, unknown>;
+          if (
+            table === pendingSignupsTable &&
+            cond._type === 'eq' &&
+            cond.col === pendingSignupsTable.signupRequestId
+          ) {
+            const sid = String(cond.value);
+            return state.pendingSignups
+              .filter((row) => row.signupRequestId === sid)
+              .map((row) => ({ id: row.id, status: row.status }));
+          }
+
           const slugValue = extractSlugValue(condition);
           if (!slugValue) return [];
 
@@ -531,6 +552,25 @@ describe('signup service', () => {
     expect(generateLinkMock).toHaveBeenCalledTimes(2);
   });
 
+  // A6 — clear, status-aware errors on signupRequestId reuse (hijack guard kept)
+  it('refuses to reset a completed signup and tells the user to log in (A6)', async () => {
+    state.pendingSignups.push({
+      id: 51,
+      signupRequestId: validSignupPayload.signupRequestId,
+      emailNormalized: 'already-done@example.com',
+      candidateSlug: 'legacy-slug',
+      status: 'completed',
+      expiresAt: null,
+      authUserId: 'auth-existing-1',
+      verificationEmailId: 'email_done',
+      verificationEmailSentAt: new Date(),
+    });
+
+    await expect(submitSignup(validSignupPayload)).rejects.toThrow(/already complete/i);
+    // The completed row must NOT be clobbered back to pending_verification.
+    expect(state.pendingSignups[0]?.status).toBe('completed');
+  });
+
   it('rejects signupRequestId reuse from a different email (cross-user hijacking)', async () => {
     // First user creates a pending signup.
     await submitSignup(validSignupPayload);
@@ -543,8 +583,10 @@ describe('signup service', () => {
       candidateSlug: 'attacker-community',
     };
 
+    // A6: still rejected (a reused signupRequestId must never be reassigned to a
+    // new email), now with an actionable message instead of the opaque one.
     await expect(submitSignup(hijackPayload)).rejects.toThrow(
-      'Unable to process signup request.',
+      /started with a different email/i,
     );
 
     // Original signup should be untouched.

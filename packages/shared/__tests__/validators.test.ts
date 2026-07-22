@@ -17,8 +17,14 @@ describe('shared runtime validators', () => {
   });
 
   describe('isCommunityRole', () => {
-    it('returns true for a valid value', () => {
-      expect(isCommunityRole('owner')).toBe(true);
+    it('returns true for a valid v3 role', () => {
+      expect(isCommunityRole('resident')).toBe(true);
+      expect(isCommunityRole('property_manager')).toBe(true);
+      expect(isCommunityRole('root_manager')).toBe(true);
+    });
+
+    it('returns false for a retired legacy role name', () => {
+      expect(isCommunityRole('owner')).toBe(false);
     });
 
     it('returns false for an invalid value', () => {

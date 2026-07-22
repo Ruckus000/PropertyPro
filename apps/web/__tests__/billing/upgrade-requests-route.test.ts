@@ -45,9 +45,8 @@ describe('POST /api/v1/billing/upgrade-requests', () => {
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
     requireAuthenticatedUserIdMock.mockResolvedValue('user-owner');
     requireCommunityMembershipMock.mockResolvedValue({
-      role: 'owner',
+      role: 'resident',
       isUnitOwner: true,
-      presetKey: null,
       displayTitle: 'Jane Owner',
     });
     listBillingCapableUserIdsMock.mockResolvedValue(['billing-1', 'billing-2']);

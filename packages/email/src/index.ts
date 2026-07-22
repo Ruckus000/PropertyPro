@@ -39,6 +39,18 @@ export type {
   NotificationDigestItem,
 } from "./templates/notification-digest-email";
 
+export { SnowbirdDigestEmail } from "./templates/snowbird-digest-email";
+export type {
+  SnowbirdDigestEmailProps,
+  SnowbirdDigestItem,
+} from "./templates/snowbird-digest-email";
+
+export { CertificateRequestEmail } from "./templates/certificate-request-email";
+export type { CertificateRequestEmailProps } from "./templates/certificate-request-email";
+
+export { InsuranceAlertEmail } from "./templates/insurance-alert-email";
+export type { InsuranceAlertEmailProps } from "./templates/insurance-alert-email";
+
 export { SignupVerificationEmail } from "./templates/signup-verification-email";
 export type { SignupVerificationEmailProps } from "./templates/signup-verification-email";
 

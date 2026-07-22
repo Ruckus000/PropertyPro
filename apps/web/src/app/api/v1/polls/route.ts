@@ -28,6 +28,7 @@ import {
   requirePollsEnabled,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import {
   createPollForCommunity,
   paginatePollsForCommunity,
@@ -72,6 +73,7 @@ export const POST = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requirePollsEnabled(membership);

@@ -169,7 +169,7 @@ function LayoutEditForm({
             type="submit"
             data-testid={`layout-edit-save-${row.slug}`}
             disabled={saving || nameEmpty}
-            className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-md bg-coral-600 px-3 py-1 text-xs font-medium text-white hover:bg-coral-700 disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save metadata'}
           </button>

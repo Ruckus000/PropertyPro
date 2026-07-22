@@ -11,6 +11,7 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-sans)", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
         mono: ["var(--font-mono)", "JetBrains Mono", "SF Mono", "ui-monospace", "monospace"],
+        display: ["var(--font-display)", "Fraunces", "Georgia", "serif"],
         heading: ["var(--theme-font-heading, Inter)", "var(--font-sans)", "sans-serif"],
         body: ["var(--theme-font-body, Inter)", "var(--font-sans)", "sans-serif"],
       },
@@ -48,10 +49,22 @@ const config: Config = {
         "2xl": "24px",
       },
       boxShadow: {
-        e0: "none",
-        e1: "0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)",
-        e2: "0 4px 6px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02)",
-        e3: "0 10px 15px rgba(0,0,0,0.06), 0 4px 6px rgba(0,0,0,0.03)",
+        // Elevation ladder — values live in packages/tokens (static.ts) and are
+        // consumed via the generated CSS variables. Do not hardcode values here.
+        e0: "var(--elevation-e0)",
+        e1: "var(--elevation-e1)",
+        e2: "var(--elevation-e2)",
+        e3: "var(--elevation-e3)",
+        // Fold Tailwind's default utilities into the ladder so existing
+        // shadow-sm / shadow / shadow-md / shadow-lg usages obey E0–E3
+        // (E2/E3 are overlays only — see DESIGN.md).
+        sm: "var(--elevation-e1)",
+        DEFAULT: "var(--elevation-e1)",
+        md: "var(--elevation-e2)",
+        lg: "var(--elevation-e3)",
+        xl: "var(--elevation-e3)",
+        "2xl": "var(--elevation-e3)",
+        none: "none",
       },
       colors: {
         // ── Legacy primitives (kept during migration, remove after) ──
@@ -178,6 +191,11 @@ const config: Config = {
           'brand-bg': 'var(--status-brand-bg)',
           'brand-border': 'var(--status-brand-border)',
           'brand-subtle': 'var(--status-brand-subtle)',
+
+          premium: 'var(--status-premium)',
+          'premium-bg': 'var(--status-premium-bg)',
+          'premium-border': 'var(--status-premium-border)',
+          'premium-subtle': 'var(--status-premium-subtle)',
         },
 
         // ── Semantic: Navigation ──

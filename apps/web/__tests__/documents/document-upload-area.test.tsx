@@ -12,11 +12,11 @@ const {
   uploadDocumentMock: vi.fn(),
 }));
 
-vi.mock('@/hooks/useDocumentCategories', () => ({
+vi.mock('@/hooks/use-document-categories', () => ({
   useDocumentCategories: useDocumentCategoriesMock,
 }));
 
-vi.mock('@/hooks/useDocumentUpload', () => ({
+vi.mock('@/hooks/use-document-upload', () => ({
   useDocumentUpload: useDocumentUploadMock,
 }));
 

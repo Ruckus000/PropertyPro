@@ -60,6 +60,7 @@ export const GET = withErrorHandler(
             (row['calendarReminderCommunityAssessments'] as boolean | undefined)
             ?? defaults.calendarReminderCommunityAssessments,
           inAppEnabled: (row['inAppEnabled'] as boolean | undefined) ?? true,
+          emailInsuranceAlerts: (row['emailInsuranceAlerts'] as boolean | undefined) ?? true,
           smsEnabled: (row['smsEnabled'] as boolean | undefined) ?? false,
           smsEmergencyOnly: (row['smsEmergencyOnly'] as boolean | undefined) ?? true,
           smsConsentGivenAt: (row['smsConsentGivenAt'] as string | null) ?? null,
@@ -69,6 +70,7 @@ export const GET = withErrorHandler(
           userId,
           communityId,
           ...defaults,
+          emailInsuranceAlerts: true,
           smsEnabled: false,
           smsEmergencyOnly: true,
           smsConsentGivenAt: null,
@@ -91,6 +93,7 @@ export const PATCH = withErrorHandler(
       calendarReminderPersonalAssessments,
       calendarReminderCommunityAssessments,
       inAppEnabled,
+      emailInsuranceAlerts,
       smsEnabled,
       smsEmergencyOnly,
     } = body;
@@ -119,6 +122,9 @@ export const PATCH = withErrorHandler(
       updateValues['calendarReminderCommunityAssessments'] = calendarReminderCommunityAssessments;
     }
     if (inAppEnabled !== undefined) updateValues['inAppEnabled'] = inAppEnabled;
+    if (emailInsuranceAlerts !== undefined) {
+      updateValues['emailInsuranceAlerts'] = emailInsuranceAlerts;
+    }
 
     if (smsEnabled !== undefined) {
       updateValues['smsEnabled'] = smsEnabled;

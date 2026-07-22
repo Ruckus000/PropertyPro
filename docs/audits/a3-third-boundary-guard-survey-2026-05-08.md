@@ -1,8 +1,15 @@
 # A3 Third Boundary Guard — Routes-Layer Survey
 
+> **SUPERSEDED (2026-07-18):** The guard shipped as
+> `scripts/verify-route-table-imports.ts` and its route-layer allowlist has been
+> drained to zero — tier-C (direct table import) routes went 89 → 0, and
+> route-layer `@propertypro/db/filters` importers 76 → 0. Treat the "guard not
+> yet implemented / don't enable" note below as historical. See
+> `docs/audits/2026-07-18-refactor-audit-and-cleanup-roadmap.md` §3 and DBB-05.
+
 **Date**: 2026-05-08
 **Author**: Claude (audit pass)
-**Status**: Survey only — guard not yet implemented
+**Status**: Survey only — guard not yet implemented (superseded — see banner above)
 **Scope**: Read-only investigation of `apps/web/src/app/api/**/route.ts` for direct
 `@propertypro/db` imports per ADR-003. Companion to `guard:component-api-calls`
 (#198) and `guard:component-service-imports` (#208).

@@ -48,8 +48,11 @@ vi.mock('@/lib/api/tenant-context', () => ({ resolveEffectiveCommunityId: resolv
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: requirePlanFeatureMock }));
 vi.mock('@/lib/site-assets/transform', () => ({ transformSiteImage: transformSiteImageMock }));
 vi.mock('@/lib/site-assets/quota', () => ({ incrementAssetsUsage: incrementAssetsUsageMock }));
-vi.mock('@propertypro/db', () => ({
+vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: createAdminClientMock,
+}));
+
+vi.mock('@propertypro/db', () => ({
   logAuditEvent: logAuditEventMock,
 }));
 

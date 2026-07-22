@@ -16,7 +16,7 @@
  */
 import crypto from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
-import { createAdminClient } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import type { EsignFieldsSchema, EsignFieldDefinition } from '@propertypro/shared';
 
 interface SignerData {
