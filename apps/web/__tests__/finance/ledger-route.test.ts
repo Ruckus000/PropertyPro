@@ -138,12 +138,15 @@ describe('GET /api/v1/ledger', () => {
     );
   });
 
-  it('does not block a resident-owner (guard is called but resident path is unaffected)', async () => {
-    // Resident-owner reads their own unit; the admin read-gate must not deny them.
+  it('does not block a resident-owner — the admin read-gate is never reached on the owner path', async () => {
+    // Resident-owner reads their own unit via the `if` branch, which returns
+    // before the admin `else` branch where the gate lives. The gate must never
+    // run for them (not merely no-op), so their reads are wholly unaffected.
     requireCommunityMembershipMock.mockResolvedValue(OWNER_MEMBERSHIP);
     listActorUnitIdsForFinanceMock.mockResolvedValue([7]);
     const res = await GET(new NextRequest('http://localhost/api/v1/ledger?communityId=42&unitId=7'));
     expect(res.status).toBe(200);
+    expect(requireEntitledForAdminReadMock).not.toHaveBeenCalled();
   });
 
   it('propagates a 403 when the guard rejects an admin on a lapsed community', async () => {
