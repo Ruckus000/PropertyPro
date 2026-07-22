@@ -18,6 +18,7 @@ import { WizardLayoutThemePreview } from '@/components/pm/onboarding-wizard/Wiza
 import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
 import { WelcomeMessageEditor } from '@/components/pm/onboarding-wizard/WelcomeMessageEditor';
 import { ConfirmPublish } from '@/components/pm/onboarding-wizard/ConfirmPublish';
+import { PageBody } from '@/components/shared/page-body';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -29,7 +30,7 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
 
   if (!Number.isInteger(rawId) || rawId <= 0) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <PageBody width="narrow" className="text-center">
         <h1 className="text-xl font-semibold text-content">Select a Community</h1>
         <p className="mt-2 text-sm text-content-secondary">
           Choose a community to run the website onboarding wizard.
@@ -40,7 +41,7 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
         >
           Go to Communities
         </a>
-      </main>
+      </PageBody>
     );
   }
 
@@ -64,7 +65,7 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
   ]);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8">
+    <PageBody width="content" spacing="none">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-content">Customize your community site</h1>
         <p className="mt-1 text-sm text-content-secondary">
@@ -112,6 +113,6 @@ export default async function WebsiteOnboardingPage({ searchParams }: PageProps)
           communitySlug={community?.slug ?? null}
         />
       </div>
-    </div>
+    </PageBody>
   );
 }

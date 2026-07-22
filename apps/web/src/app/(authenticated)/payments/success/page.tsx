@@ -7,6 +7,7 @@
  */
 import Link from 'next/link';
 import { getStripeClient } from '@/lib/services/stripe-service';
+import { PageBody } from '@/components/shared/page-body';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -19,11 +20,11 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
 
   if (!paymentIntentId) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <PageBody width="narrow" className="text-center">
         <h1 className="text-xl font-semibold text-content">Invalid return URL</h1>
         <p className="mt-2 text-sm text-content-secondary">No payment intent ID found.</p>
         <BackLink />
-      </main>
+      </PageBody>
     );
   }
 
@@ -34,20 +35,20 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
     status = intent.status;
   } catch {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <PageBody width="narrow" className="text-center">
         <h1 className="text-xl font-semibold text-content">Something went wrong</h1>
         <p className="mt-2 text-sm text-content-secondary">
           We could not retrieve your payment status. Please check your payment history or contact
           your association.
         </p>
         <BackLink />
-      </main>
+      </PageBody>
     );
   }
 
   if (status === 'succeeded') {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <PageBody width="narrow" className="text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-success-bg">
           <svg className="h-6 w-6 text-status-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -59,13 +60,13 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
           shortly.
         </p>
         <BackLink />
-      </main>
+      </PageBody>
     );
   }
 
   if (status === 'processing') {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <PageBody width="narrow" className="text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-interactive-subtle">
           <svg className="h-6 w-6 text-interactive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -77,18 +78,18 @@ export default async function PaymentSuccessPage({ searchParams }: PageProps) {
           a confirmation when complete.
         </p>
         <BackLink />
-      </main>
+      </PageBody>
     );
   }
 
   return (
-    <main className="mx-auto max-w-lg px-6 py-16 text-center">
+    <PageBody width="narrow" className="text-center">
       <h1 className="text-xl font-semibold text-content">Payment not completed</h1>
       <p className="mt-2 text-sm text-content-secondary">
         Your payment was not processed. Please go back and try again.
       </p>
       <BackLink />
-    </main>
+    </PageBody>
   );
 }
 

@@ -4,6 +4,8 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
+import { PageBody } from '@/components/shared/page-body';
+import { PageHeader } from '@/components/shared/page-header';
 import { NotificationsPageClient } from './notifications-page-client';
 
 interface NotificationsPageProps {
@@ -28,9 +30,9 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
   await requireCommunityMembership(context.communityId, userId);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 lg:px-6">
-      <h1 className="text-xl font-semibold text-[var(--text-primary)]">Notifications</h1>
+    <PageBody>
+      <PageHeader title="Notifications" />
       <NotificationsPageClient communityId={context.communityId} />
-    </div>
+    </PageBody>
   );
 }

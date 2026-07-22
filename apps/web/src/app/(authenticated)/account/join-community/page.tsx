@@ -7,13 +7,14 @@ import {
 } from '@/components/join-requests/community-search';
 import { JoinRequestForm } from '@/components/join-requests/join-request-form';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageBody } from '@/components/shared/page-body';
 
 export default function JoinCommunityPage() {
   const [selected, setSelected] = useState<CommunitySearchResult | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
+    <PageBody width="prose">
       <div>
         <h1 className="text-2xl font-semibold">Join Another Community</h1>
         <p className="text-sm text-muted-foreground mt-2">
@@ -38,6 +39,6 @@ export default function JoinCommunityPage() {
           onBack={() => setSelected(null)}
         />
       )}
-    </div>
+    </PageBody>
   );
 }
