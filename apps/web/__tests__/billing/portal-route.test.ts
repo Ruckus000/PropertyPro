@@ -84,7 +84,11 @@ describe('GET /billing/portal — authorization', () => {
     // REGRESSION: this previously reached Stripe and let them cancel billing.
     requireCommunityMembershipMock.mockResolvedValue(membership(role, isUnitOwner));
 
-    await expect(GET(req())).rejects.toMatchObject({ statusCode: 403 });
+    // Denied via redirect, not a raw throw — this handler has no
+    // withErrorHandler, so a ForbiddenError would surface as an opaque 500.
+    await expect(GET(req())).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirectMock).toHaveBeenCalledWith('/settings/billing?communityId=42');
+    // The security guarantee: no Stripe session is ever minted for them.
     expect(createBillingPortalSessionMock).not.toHaveBeenCalled();
   });
 

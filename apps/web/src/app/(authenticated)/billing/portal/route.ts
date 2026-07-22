@@ -60,7 +60,18 @@ export const GET = async (req: NextRequest): Promise<never> => {
   // management-tier only (`settings.write` is true solely on the `manager`
   // matrix row), matching /api/v1/subscribe and /api/v1/subscribe/change-plan.
   const membership = await requireCommunityMembership(context.communityId, userId);
-  requirePermission(membership, 'settings', 'write');
+  try {
+    requirePermission(membership, 'settings', 'write');
+  } catch {
+    // Redirect rather than throw: this is a plain App Router handler, not an
+    // /api/v1 route, so there is no `withErrorHandler` and no error boundary —
+    // a raw ForbiddenError surfaces as an opaque 500 plus a Sentry event. The
+    // grace and soft-lock banners render for non-admins too, and the dunning
+    // emails go to all admin recipients, so a unit owner following one of
+    // those links lands here legitimately and deserves the billing page.
+    // Every other rejection path in this handler redirects the same way.
+    redirect(`/settings/billing?communityId=${context.communityId}`);
+  }
 
   // 4. Look up the Stripe customer ID
   const db = createUnscopedClient();

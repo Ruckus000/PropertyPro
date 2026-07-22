@@ -143,8 +143,12 @@ export function resolveSubscriptionBillingBannerState(
   billingSettingsHref: string;
 } {
   const now = props.now ?? new Date();
-  // Derived from the same resolver the API guard uses, so the banner can no
-  // longer claim access is fine while the guard is 403ing (or vice versa).
+  // The lock/grace decision is derived from the same resolver the API guard
+  // uses, so the banner can no longer claim access is fine while the guard is
+  // 403ing (or vice versa). `showTrialing` and `showPastDue` below still read
+  // the raw status — they announce a billing situation rather than an access
+  // decision, and folding them in would change which banners a comped
+  // community sees. Left as-is deliberately.
   const lifecycle = resolveLifecycleState(
     {
       subscriptionStatus: props.subscriptionStatus,

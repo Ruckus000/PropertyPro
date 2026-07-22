@@ -94,7 +94,6 @@ import {
   markCommunityPaymentSucceeded,
   markPendingSignupPaymentCompleted,
   persistSelfServeCommunityStripeIds,
-  reactivationClears,
   updateCommunitySubscriptionFromStripe,
   type StripeWebhookCommunity,
 } from '../../src/lib/services/stripe-webhook-service';
@@ -378,35 +377,9 @@ describe('stripe-webhook-service', () => {
   });
 
   describe('reactivation clears cancellation state', () => {
-    // REGRESSION: nothing in the codebase ever wrote subscription_canceled_at
-    // back to NULL. A community that cancelled and re-subscribed kept the stale
-    // timestamp forever, which (a) made the next cancellation skip its email via
-    // the `WHERE subscription_canceled_at IS NULL` first-cancellation guard,
-    // (b) made isWithinPaidGrace() measure from the OLD date so the customer was
-    // locked out instantly, and (c) made the reminder scheduler send the
-    // cancellation final-warning instead of a payment-failed email. Re-subscribe
-    // only became reachable in-app with the self-serve checkout path (#826).
-
-    it.each(['active', 'trialing', 'past_due'])(
-      'clears cancellation state when status becomes %s',
-      (status) => {
-        expect(reactivationClears(status)).toEqual({
-          subscriptionCanceledAt: null,
-          nextReminderAt: null,
-        });
-      },
-    );
-
-    it.each(['canceled', 'expired', 'unpaid', 'incomplete_expired'])(
-      'leaves cancellation state alone for churned status %s',
-      (status) => {
-        expect(reactivationClears(status)).toEqual({});
-      },
-    );
-
-    it('leaves cancellation state alone for a null status', () => {
-      expect(reactivationClears(null)).toEqual({});
-    });
+    // The pure helper is unit-tested at its home in
+    // packages/shared/src/__tests__/subscription-lifecycle.test.ts. These cases
+    // assert it is actually wired into the real UPDATE payloads.
 
     it('clears it on a subscription.updated back to active', async () => {
       const db = setupDb();
@@ -418,6 +391,23 @@ describe('stripe-webhook-service', () => {
       expect(db.setMock).toHaveBeenCalledWith(
         expect.objectContaining({ subscriptionCanceledAt: null, nextReminderAt: null }),
       );
+    });
+
+    it('preserves the dunning schedule on a subscription.updated to past_due', async () => {
+      // REGRESSION: past_due is a still-failing state. Nulling nextReminderAt
+      // here would wipe the schedule markCommunityPaymentFailed just set and
+      // silently drop the Day-3/Day-7 payment-failed emails, because the
+      // scheduler selects on `next_reminder_at <= now`.
+      const db = setupDb();
+      await updateCommunitySubscriptionFromStripe({
+        communityId: 7,
+        subscriptionStatus: 'past_due',
+        subscriptionPlan: 'essentials',
+        paymentFailedAt: new Date('2026-07-01T00:00:00.000Z'),
+      });
+      const payload = db.setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect('nextReminderAt' in payload).toBe(false);
+      expect('subscriptionCanceledAt' in payload).toBe(false);
     });
 
     it('does NOT clear it on a subscription.updated to unpaid', async () => {

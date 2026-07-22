@@ -86,6 +86,52 @@ export function resolveLifecycleState(
   return 'active';
 }
 
+/**
+ * Statuses that mean a subscription has genuinely RECOVERED.
+ *
+ * Deliberately an allow-list of two, not "anything that isn't churned".
+ * `past_due` is a still-failing state — Stripe is mid-retry — and
+ * `incomplete`/`paused`/anything Stripe adds later are not recoveries either.
+ * Mirrors the rule `updateCommunitySubscriptionFromStripe` already applies when
+ * deciding whether to clear `paymentFailedAt`.
+ */
+const RECOVERED_STATUSES: readonly string[] = ['active', 'trialing'];
+
+/**
+ * Column resets to apply when a subscription returns to a recovered status.
+ *
+ * `subscription_canceled_at` was previously never cleared by anything, so a
+ * community that cancelled and later re-subscribed kept the stale timestamp
+ * forever. Three things then broke on its NEXT cancellation:
+ *
+ *   1. `cancelCommunitySubscription*IfFirst` guards on
+ *      `WHERE subscription_canceled_at IS NULL`, so the update matched nothing
+ *      and the cancellation email was never sent.
+ *   2. `isWithinPaidGrace()` measured from the stale date, so the customer was
+ *      locked out immediately instead of getting PAID_GRACE_DAYS.
+ *   3. `processCommunityReminder` tests `subscriptionCanceledAt` BEFORE
+ *      `paymentFailedAt`, so an active community carrying a stale value that
+ *      later failed a payment received the cancellation final-warning instead
+ *      of a payment-failed reminder.
+ *
+ * Re-subscribing only became reachable in-app with the self-serve checkout
+ * path, which turned this from dormant to live.
+ *
+ * `nextReminderAt` is cleared alongside it because a recovered subscription has
+ * no dunning left to do. It must NOT be cleared for `past_due`: that would null
+ * the schedule `markCommunityPaymentFailed` just set and silently drop the
+ * Day-3/Day-7 payment-failed ladder, since the scheduler selects on
+ * `next_reminder_at <= now` and a NULL never matches.
+ */
+export function reactivationClears(subscriptionStatus: string | null): {
+  subscriptionCanceledAt?: null;
+  nextReminderAt?: null;
+} {
+  if (subscriptionStatus === null) return {};
+  if (!RECOVERED_STATUSES.includes(subscriptionStatus)) return {};
+  return { subscriptionCanceledAt: null, nextReminderAt: null };
+}
+
 /** States where the community is entitled to its paid surfaces. */
 const ENTITLED_STATES: readonly LifecycleState[] = [
   'unprovisioned',

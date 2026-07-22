@@ -1,5 +1,5 @@
 import { and, eq, isNull, or, sql } from '@propertypro/db/filters';
-import { isChurnedStatus } from '@propertypro/shared';
+import { reactivationClears } from '@propertypro/shared';
 import {
   accessPlans,
   communities,
@@ -10,34 +10,6 @@ import {
 } from '@propertypro/db';
 // AUTHZ: Stripe webhook service — system webhook handlers operate before tenant context is resolved. Callers MUST verify the Stripe webhook signature before invoking these helpers.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-
-/**
- * Column resets to apply whenever a subscription returns to a LIVE status.
- *
- * `subscription_canceled_at` was previously never cleared by anything, so a
- * community that cancelled and later re-subscribed kept the old timestamp
- * forever. Three things then broke:
- *
- *   1. `cancelCommunitySubscription*IfFirst` guards on
- *      `WHERE subscription_canceled_at IS NULL`, so a SECOND cancellation
- *      matched no rows and the cancellation email was never sent.
- *   2. `isWithinPaidGrace()` measured from the stale date, so the customer was
- *      locked out immediately instead of getting PAID_GRACE_DAYS.
- *   3. `processCommunityReminder` tests `subscriptionCanceledAt` BEFORE
- *      `paymentFailedAt`, so an active community carrying a stale value that
- *      later failed a payment received "Final warning: access locked in 2 days"
- *      instead of a payment-failed reminder.
- *
- * Re-subscribing only became reachable in-app with the self-serve checkout
- * path (#826), which is what turned this from dormant to live.
- */
-export function reactivationClears(subscriptionStatus: string | null): {
-  subscriptionCanceledAt?: null;
-  nextReminderAt?: null;
-} {
-  if (subscriptionStatus === null || isChurnedStatus(subscriptionStatus)) return {};
-  return { subscriptionCanceledAt: null, nextReminderAt: null };
-}
 
 export interface StripeWebhookAttempt {
   eventId: string;

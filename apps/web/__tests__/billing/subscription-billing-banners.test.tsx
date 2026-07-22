@@ -27,6 +27,46 @@ describe('resolveSubscriptionBillingBannerState', () => {
     expect(state.showPastDue).toBe(false);
   });
 
+  it('suppresses the grace banner while free access is still active', () => {
+    // DELIBERATE behavior change (PR: lifecycle correctness). The old
+    // open-coded isInGrace ignored free access entirely, so a canceled
+    // community inside its grace window ALSO holding an active free-access
+    // grant showed "access until <grace end>" — a date its free access
+    // outlives. resolveLifecycleState resolves `comped` first, so neither the
+    // grace nor the soft-lock banner renders and FreeAccessBanner owns the
+    // messaging. Pinned here because no pre-existing banner test passed a
+    // non-null freeAccessExpiresAt, so the untouched suite did not cover it.
+    const state = resolveSubscriptionBillingBannerState({
+      role: 'root_manager',
+      communityId: 1,
+      subscriptionStatus: 'canceled',
+      subscriptionCanceledAt: new Date('2026-07-09T12:00:00.000Z'),
+      subscriptionCurrentPeriodEndAt: null,
+      freeAccessExpiresAt: new Date('2026-09-01T12:00:00.000Z'),
+      isDemo: false,
+      now,
+    });
+
+    expect(state.isInGrace).toBe(false);
+    expect(state.showGrace).toBe(false);
+    expect(state.showSoftLock).toBe(false);
+  });
+
+  it('still soft-locks a canceled community once free access has expired', () => {
+    const state = resolveSubscriptionBillingBannerState({
+      role: 'root_manager',
+      communityId: 1,
+      subscriptionStatus: 'canceled',
+      subscriptionCanceledAt: new Date('2026-06-01T12:00:00.000Z'),
+      subscriptionCurrentPeriodEndAt: null,
+      freeAccessExpiresAt: new Date('2026-07-01T12:00:00.000Z'),
+      isDemo: false,
+      now,
+    });
+
+    expect(state.showSoftLock).toBe(true);
+  });
+
   it('suppresses trialing banner for demo communities', () => {
     const state = resolveSubscriptionBillingBannerState({
       role: 'root_manager',

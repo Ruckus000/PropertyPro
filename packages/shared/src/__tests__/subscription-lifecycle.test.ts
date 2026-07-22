@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canChangeExistingPlan,
   canStartNewSubscription,
+  reactivationClears,
   isEntitledState,
   resolveLifecycleState,
   type LifecycleState,
@@ -206,27 +207,47 @@ describe('resolveLifecycleState', () => {
     }
   });
 
-  it('resolves every input combination to exactly one state — no gaps', () => {
-    const statuses = [
-      null, 'active', 'trialing', 'past_due', 'canceled',
-      'expired', 'unpaid', 'incomplete_expired', 'incomplete', 'paused',
-    ];
-    const canceledAts = [null, daysAgo(1), daysAgo(PAID_GRACE_DAYS + 5)];
-    const freeAccess = [null, daysAgo(1), new Date(NOW.getTime() + 86_400_000)];
-    const valid: LifecycleState[] = [
-      'unprovisioned', 'comped', 'trialing', 'active', 'past_due', 'grace', 'lapsed',
+  it('maps every meaningful input combination to a specific expected state', () => {
+    // A real mapping table. The previous version of this test only asserted the
+    // result was a member of the return type's own union, which cannot fail for
+    // any implementation that compiles — it proved nothing.
+    const future = new Date(NOW.getTime() + 86_400_000);
+    const expired = daysAgo(1);
+    const inGrace = daysAgo(PAID_GRACE_DAYS - 1);
+    const pastGrace = daysAgo(PAID_GRACE_DAYS + 1);
+
+    const table: Array<[string | null, Date | null, Date | null, LifecycleState]> = [
+      // status,               canceledAt,  freeAccess,  expected
+      [null,                   null,        null,        'unprovisioned'],
+      [null,                   null,        future,      'comped'],
+      [null,                   null,        expired,     'unprovisioned'],
+      ['active',               null,        null,        'active'],
+      ['active',               null,        future,      'comped'],
+      ['trialing',             null,        null,        'trialing'],
+      ['trialing',             null,        future,      'comped'],
+      ['past_due',             null,        null,        'past_due'],
+      ['past_due',             null,        future,      'comped'],
+      ['canceled',             inGrace,     null,        'grace'],
+      ['canceled',             inGrace,     expired,     'grace'],
+      ['canceled',             inGrace,     future,      'comped'],
+      ['canceled',             pastGrace,   null,        'lapsed'],
+      ['canceled',             pastGrace,   future,      'comped'],
+      ['canceled',             null,        null,        'lapsed'],
+      ['expired',              inGrace,     null,        'lapsed'],
+      ['unpaid',               inGrace,     null,        'lapsed'],
+      ['incomplete_expired',   inGrace,     null,        'lapsed'],
+      ['incomplete',           null,        null,        'active'],
+      ['paused',               null,        null,        'active'],
+      ['something_new',        pastGrace,   null,        'active'],
     ];
 
-    for (const subscriptionStatus of statuses) {
-      for (const subscriptionCanceledAt of canceledAts) {
-        for (const freeAccessExpiresAt of freeAccess) {
-          const state = resolveLifecycleState(
-            { subscriptionStatus, subscriptionCanceledAt, freeAccessExpiresAt },
-            NOW,
-          );
-          expect(valid).toContain(state);
-        }
-      }
+    for (const [subscriptionStatus, subscriptionCanceledAt, freeAccessExpiresAt, expected] of table) {
+      expect(
+        resolveLifecycleState(
+          { subscriptionStatus, subscriptionCanceledAt, freeAccessExpiresAt },
+          NOW,
+        ),
+      ).toBe(expected);
     }
   });
 
@@ -235,5 +256,44 @@ describe('resolveLifecycleState', () => {
     for (const state of ['unprovisioned', 'comped', 'trialing', 'active', 'past_due', 'grace'] as LifecycleState[]) {
       expect(isEntitledState(state)).toBe(true);
     }
+  });
+});
+
+
+describe('reactivationClears', () => {
+  it.each(['active', 'trialing'])('clears cancellation state for %s', (status) => {
+    expect(reactivationClears(status)).toEqual({
+      subscriptionCanceledAt: null,
+      nextReminderAt: null,
+    });
+  });
+
+  it('does NOT clear the reminder schedule for past_due', () => {
+    // REGRESSION: past_due is neither null nor churned, so a "not churned"
+    // rule cleared next_reminder_at — nulling the schedule that
+    // markCommunityPaymentFailed had just set. The payment reminder scheduler
+    // selects on `next_reminder_at <= now` and a NULL never matches, so the
+    // Day-3/Day-7 dunning ladder was silently dropped whenever a
+    // customer.subscription.updated(past_due) landed after the payment_failed
+    // event. Stripe does not guarantee that ordering.
+    expect(reactivationClears('past_due')).toEqual({});
+  });
+
+  it.each(['canceled', 'expired', 'unpaid', 'incomplete_expired'])(
+    'leaves churned status %s alone',
+    (status) => {
+      expect(reactivationClears(status)).toEqual({});
+    },
+  );
+
+  it.each(['incomplete', 'paused', 'something_new_in_2027'])(
+    'leaves unrecognized status %s alone rather than assuming recovery',
+    (status) => {
+      expect(reactivationClears(status)).toEqual({});
+    },
+  );
+
+  it('leaves a null status alone', () => {
+    expect(reactivationClears(null)).toEqual({});
   });
 });
