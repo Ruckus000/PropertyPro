@@ -140,7 +140,9 @@ describeDb('cross-tenant FK rejection (db-backed integration)', () => {
       }),
     );
 
-    expect(response.status).toBe(201);
+    // runRoute returns 200 on success (no per-contract successStatus override);
+    // the route's own unit test asserts the same.
+    expect(response.status).toBe(200);
     const body = await parseJson<{ data: { userId: string } }>(response);
     createdResidentUserId = body.data.userId;
   });
@@ -168,7 +170,7 @@ describeDb('cross-tenant FK rejection (db-backed integration)', () => {
     // Seed a checklist item in community A.
     const scopedA = state.dbModule.createScopedClient(actorACommunityId);
     const [item] = await scopedA.insert(state.dbModule.complianceChecklistItems, {
-      itemKey: `xfk-${state.runSuffix}`,
+      templateKey: `xfk-${state.runSuffix}`,
       title: `XFK Compliance Item ${state.runSuffix}`,
       category: 'governing_documents',
       isApplicable: true,
