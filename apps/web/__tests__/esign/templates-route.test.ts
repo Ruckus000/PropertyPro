@@ -51,6 +51,14 @@ vi.mock('@/lib/services/esign-service', () => ({
   listTemplates: listTemplatesMock,
 }));
 
+// The path-ownership + PDF magic-byte validators have their own unit suite
+// (storage-validators.test.ts); here we stub them so the POST route test
+// stays focused on auth/envelope wiring and doesn't need real storage / db.
+vi.mock('@/lib/services/storage-validators', () => ({
+  assertCommunityOwnedStoragePath: vi.fn(),
+  assertPdfMagicBytes: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/lib/middleware/plan-guard', () => ({
   requirePlanFeature: vi.fn().mockResolvedValue(undefined),
 }));
@@ -75,6 +83,10 @@ vi.mock('@/lib/api/errors', () => ({
 }));
 
 import { GET, POST } from '../../src/app/api/v1/esign/templates/route';
+import {
+  assertCommunityOwnedStoragePath,
+  assertPdfMagicBytes,
+} from '@/lib/services/storage-validators';
 
 const COMMUNITY_ID = 99;
 
@@ -136,7 +148,7 @@ describe('POST /api/v1/esign/templates', () => {
     communityId: COMMUNITY_ID,
     name: 'Proxy Form',
     templateType: 'proxy',
-    sourceDocumentPath: 'docs/template.pdf',
+    sourceDocumentPath: `communities/${COMMUNITY_ID}/esign-templates/template.pdf`,
     fieldsSchema: {
       version: 1 as const,
       fields: [],
@@ -144,7 +156,7 @@ describe('POST /api/v1/esign/templates', () => {
     },
   };
 
-  it('creates a template', async () => {
+  it('creates a template after validating the storage path and PDF bytes', async () => {
     const created = { id: 5, ...validBody };
     createTemplateMock.mockResolvedValueOnce(created);
 
@@ -158,6 +170,16 @@ describe('POST /api/v1/esign/templates', () => {
 
     expect(response.status).toBe(200);
     expect(json).toEqual({ data: created });
+    // Cross-tenant path + PDF magic-byte validation must run before the write.
+    expect(assertCommunityOwnedStoragePath).toHaveBeenCalledWith(
+      `communities/${COMMUNITY_ID}/esign-templates/template.pdf`,
+      COMMUNITY_ID,
+      'esign-templates',
+    );
+    expect(assertPdfMagicBytes).toHaveBeenCalledWith(
+      'documents',
+      `communities/${COMMUNITY_ID}/esign-templates/template.pdf`,
+    );
     expect(createTemplateMock).toHaveBeenCalled();
   });
 });

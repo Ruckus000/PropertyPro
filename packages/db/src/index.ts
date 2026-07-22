@@ -41,6 +41,7 @@ export {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
   deleteStorageObject,
+  downloadStorageObject,
 } from './supabase/storage';
 
 // Audit logger
