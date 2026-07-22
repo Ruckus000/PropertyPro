@@ -98,6 +98,7 @@ export type AdminUserRow = {
   email: string;
   full_name: string;
   raw_user_meta_data: Record<string, unknown> | null;
+  deleted_at: string | null;
 };
 
 export type AdminCommunityRow = {
@@ -106,6 +107,9 @@ export type AdminCommunityRow = {
   slug: string;
   timezone: string;
   community_type: 'condo_718' | 'hoa_720' | 'apartment';
+  // Denormalized free-access grace expiry read by the subscription guard.
+  free_access_expires_at: string | null;
+  deleted_at: string | null;
 };
 
 // ─── Database definition for typed client ───

@@ -50,5 +50,36 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: { message: 'Plan not found or already revoked/converted' } }, { status: 404 });
   }
 
+  // Mirror the web-side service: if no other active plans remain for this
+  // community, clear the denormalized free_access_expires_at column so
+  // subscription-guard stops admitting writes under the revoked grant.
+  const revokedRow = data as { community_id: number };
+  const { data: otherPlans, error: otherErr } = await (db
+    .from('access_plans'))
+    .select('id')
+    .eq('community_id', revokedRow.community_id)
+    .is('revoked_at', null)
+    .is('converted_at', null)
+    .neq('id', id);
+
+  if (otherErr) {
+    console.error(
+      '[admin/access-plans/revoke] Plan revoked but other-plans lookup failed:',
+      otherErr.message,
+    );
+  } else if ((otherPlans ?? []).length === 0) {
+    const { error: clearErr } = await (db
+      .from('communities'))
+      .update({ free_access_expires_at: null })
+      .eq('id', revokedRow.community_id);
+
+    if (clearErr) {
+      console.error(
+        '[admin/access-plans/revoke] Plan revoked but community clear failed:',
+        clearErr.message,
+      );
+    }
+  }
+
   return NextResponse.json({ plan: data });
 }

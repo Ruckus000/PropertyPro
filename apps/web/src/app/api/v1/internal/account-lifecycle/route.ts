@@ -42,6 +42,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const now = new Date();
   const summary = {
     softDeleted: { users: 0, communities: 0 },
+    // Requests that raced out of 'cooling' (cancelled/recovered) between the
+    // scan and the state-guarded batch write — surfaced for observability.
+    skipped: { users: 0, communities: 0 },
     purged: { users: 0, communities: 0 },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     siteBlocksCleaned: 0,
@@ -60,6 +63,9 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     try {
       const results = await executeUserSoftDelete(userDeletionIds);
       summary.softDeleted.users += results.length;
+      // Any requested id not returned raced out of 'cooling' and was skipped
+      // by the state guard rather than force-deleted.
+      summary.skipped.users += userDeletionIds.length - results.length;
     } catch (err) {
       summary.errors.push(`batch soft-delete user: ${String(err)}`);
     }
@@ -69,6 +75,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     try {
       const results = await executeCommunitySoftDelete(communityDeletionIds);
       summary.softDeleted.communities += results.length;
+      summary.skipped.communities += communityDeletionIds.length - results.length;
     } catch (err) {
       summary.errors.push(`batch soft-delete community: ${String(err)}`);
     }
