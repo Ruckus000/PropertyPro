@@ -6,7 +6,6 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,15 +90,6 @@ export function ForumThreadDetail({
       <PageHeader
         title={thread.title}
         description={`Started by ${getName(thread.authorUserId)} · ${new Date(thread.createdAt).toLocaleString()}`}
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              { label: 'Board', href: `/communities/${communityId}/board/polls` },
-              { label: 'Forum', href: `/communities/${communityId}/board/forum` },
-            ]}
-            currentLabel={thread.title}
-          />
-        }
         actions={
           thread.isPinned || thread.isLocked ? (
             <div className="flex flex-wrap gap-2">
@@ -119,20 +109,18 @@ export function ForumThreadDetail({
               type="button"
               variant="outline"
               className="h-11 md:h-9"
-              disabled={updateThread.isPending}
+              loading={updateThread.isPending && updateThread.variables?.isPinned !== undefined}
               onClick={() => void updateThread.mutateAsync({ isPinned: !thread.isPinned })}
             >
-              {updateThread.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               {thread.isPinned ? 'Unpin' : 'Pin'} Thread
             </Button>
             <Button
               type="button"
               variant="outline"
               className="h-11 md:h-9"
-              disabled={updateThread.isPending}
+              loading={updateThread.isPending && updateThread.variables?.isLocked !== undefined}
               onClick={() => void updateThread.mutateAsync({ isLocked: !thread.isLocked })}
             >
-              {updateThread.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
               {thread.isLocked ? 'Unlock' : 'Lock'} Thread
             </Button>
           </div>
@@ -179,12 +167,11 @@ export function ForumThreadDetail({
                     variant="ghost"
                     className="h-11 shrink-0 px-3 text-content-secondary hover:bg-status-danger-bg hover:text-status-danger md:h-9"
                     disabled={deleteReply.isPending}
+                    loading={deleteReply.isPending && replyPendingRemoval === reply.id}
                     title="Delete reply"
                     onClick={() => setReplyPendingRemoval(reply.id)}
                   >
-                    {deleteReply.isPending && replyPendingRemoval === reply.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : (
+                    {!(deleteReply.isPending && replyPendingRemoval === reply.id) && (
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     )}
                     Delete reply
@@ -239,14 +226,14 @@ export function ForumThreadDetail({
           <Button
             type="button"
             className="h-11 md:h-9"
-            disabled={thread.isLocked || replyBody.trim().length === 0 || createReply.isPending}
+            disabled={thread.isLocked || replyBody.trim().length === 0}
+            loading={createReply.isPending}
             onClick={() => {
               void createReply.mutateAsync({ body: replyBody.trim() }).then(() => {
                 setReplyBody('');
               });
             }}
           >
-            {createReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             Post Reply
           </Button>
         </div>
@@ -278,7 +265,7 @@ export function ForumThreadDetail({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteReply.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-status-danger text-content-inverse hover:bg-status-danger/90"
+              className="bg-status-danger text-content-inverse hover:bg-[var(--red-900)]"
               disabled={deleteReply.isPending || replyPendingRemoval === null}
               onClick={(event) => {
                 event.preventDefault();

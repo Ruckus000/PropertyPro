@@ -29,6 +29,16 @@ export type BlockType = (typeof BLOCK_TYPES)[number];
 export const blockTypeSchema = z.enum(BLOCK_TYPES);
 
 /**
+ * Sentinel block type for a staged deletion: a draft row of this type marks
+ * "remove the published block at this order on next publish". Deliberately
+ * NOT part of BLOCK_TYPES / blockTypeSchema / blockSchemaRegistry — PMs can
+ * never write one through the upsert contract, only via the DELETE endpoint,
+ * and tombstones are never promoted to published (publishCommunitySite
+ * retires them). Renderers and the editor filter rows of this type out.
+ */
+export const TOMBSTONE_BLOCK_TYPE = 'tombstone' as const;
+
+/**
  * Supabase Storage path for site assets.
  *
  * Path shape: {community_id}/{kind}/{safe-filename}

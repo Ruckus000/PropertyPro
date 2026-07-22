@@ -17,7 +17,7 @@ import {
 import { eq } from '@propertypro/db/filters';
 import { createElement } from 'react';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
-import type { CommunityType, NewCommunityRole } from '@propertypro/shared';
+import type { CommunityType, CommunityRole } from '@propertypro/shared';
 import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -63,7 +63,7 @@ export async function createOnboardingResident(params: {
   email: string;
   fullName: string;
   phone: string | null;
-  role: NewCommunityRole;
+  role: CommunityRole;
   unitId: number | null;
   actorUserId: string;
   communityType: CommunityType;
@@ -231,9 +231,9 @@ function addDays(date: Date, days: number): Date {
 }
 
 function resolveDisplayTitle(
-  role: NewCommunityRole,
+  role: CommunityRole,
   isUnitOwner?: boolean,
 ): string {
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';
-  return 'Administrator'; // non-resident NewCommunityRole (not minted via onboarding)
+  return 'Administrator'; // non-resident CommunityRole (not minted via onboarding)
 }

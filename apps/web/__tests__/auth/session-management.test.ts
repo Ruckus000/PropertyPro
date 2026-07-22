@@ -29,6 +29,30 @@ function request(
   });
 }
 
+interface MockMiddlewareUser {
+  id: string;
+  emailVerified: boolean;
+  email?: string | null;
+  phone?: string | null;
+  user_metadata?: { full_name: string | null };
+}
+
+// createMiddlewareClient resolves the user itself (getClaims) and returns it
+// directly — middleware no longer calls supabase.auth.getUser.
+function mockAuthState(user: MockMiddlewareUser | null) {
+  createMiddlewareClientMock.mockImplementation(async () => ({
+    supabase: {
+      auth: {
+        getUser: getUserMock,
+      },
+      from: fromMock,
+    },
+    response: NextResponse.next(),
+    user,
+    authChecked: user != null,
+  }));
+}
+
 describe('p1-22 session middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,15 +66,7 @@ describe('p1-22 session middleware', () => {
     selectMock.mockReturnValue({ eq: eqMock });
     fromMock.mockReturnValue({ select: selectMock });
 
-    createMiddlewareClientMock.mockResolvedValue({
-      supabase: {
-        auth: {
-          getUser: getUserMock,
-        },
-        from: fromMock,
-      },
-      response: NextResponse.next(),
-    });
+    mockAuthState(null);
 
     getUserMock.mockResolvedValue({
       data: {
@@ -203,14 +219,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('redirects authenticated but unverified users to /auth/verify-email', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: null,
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: false });
 
     const response = await middleware(request('http://localhost:3000/dashboard'));
 
@@ -220,14 +229,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('returns 403 JSON for unverified users on protected API routes', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: null,
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: false });
 
     const response = await middleware(request('http://localhost:3000/api/v1/documents'));
     const json = (await response.json()) as { error: string };
@@ -238,14 +240,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('allows authenticated + verified users to access protected routes', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: '2026-02-11T21:00:00.000Z',
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: true });
 
     // Include ?communityId= so middleware can resolve a tenant context.
     // Without it, the missing-tenant guard correctly redirects authenticated
@@ -258,14 +253,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('allows authenticated + verified users to access protected API routes', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: '2026-02-11T21:00:00.000Z',
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: true });
 
     const response = await middleware(request('http://localhost:3000/api/v1/documents'));
 
@@ -273,38 +261,25 @@ describe('p1-22 session middleware', () => {
   });
 
   it('allows API request after deterministic refresh transition', async () => {
-    getUserMock
-      .mockResolvedValueOnce({
-        data: {
-          user: null,
+    // createMiddlewareClient refreshes the session internally (getClaims →
+    // getSession) and resolves the post-refresh user itself; middleware never
+    // calls getUser. Simulate the post-refresh state: user resolved, verified.
+    createMiddlewareClientMock.mockImplementationOnce(async () => ({
+      supabase: {
+        auth: {
+          getUser: getUserMock,
         },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          user: {
-            id: 'user-1',
-            email_confirmed_at: '2026-02-11T21:00:00.000Z',
-          },
-        },
-      });
-
-    createMiddlewareClientMock.mockImplementationOnce(async () => {
-      // Simulate middleware refresh call before route protection check.
-      await getUserMock();
-      return {
-        supabase: {
-          auth: {
-            getUser: getUserMock,
-          },
-        },
-        response: NextResponse.next(),
-      };
-    });
+        from: fromMock,
+      },
+      response: NextResponse.next(),
+      user: { id: 'user-1', emailVerified: true },
+      authChecked: true,
+    }));
 
     const response = await middleware(request('http://localhost:3000/api/v1/upload'));
 
     expect(response.status).toBe(200);
-    expect(getUserMock).toHaveBeenCalledTimes(2);
+    expect(getUserMock).not.toHaveBeenCalled();
   });
 
   it('reuses middleware-authenticated null session without calling getUser again', async () => {
@@ -336,7 +311,7 @@ describe('p1-22 session middleware', () => {
       user: {
         id: 'user-1',
         email: 'user@example.com',
-        email_confirmed_at: '2026-02-11T21:00:00.000Z',
+        emailVerified: true,
         user_metadata: {
           full_name: 'User Example',
         },
@@ -351,14 +326,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('redirects authenticated users on root domain auth pages to /select-community (no tenant context)', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: '2026-02-11T21:00:00.000Z',
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: true });
 
     const response = await middleware(request('http://localhost:3000/auth/login'));
 
@@ -367,14 +335,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('redirects authenticated users to returnTo when present on auth pages', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: '2026-02-11T21:00:00.000Z',
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: true });
 
     const response = await middleware(
       request('http://localhost:3000/auth/login?returnTo=%2Fdocuments'),
@@ -385,14 +346,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('keeps unverified users on verify-email route (no redirect loop)', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: null,
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: false });
 
     const response = await middleware(request('http://localhost:3000/auth/verify-email'));
 
@@ -410,14 +364,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('allows authenticated + verified users to access /communities routes', async () => {
-    getUserMock.mockResolvedValue({
-      data: {
-        user: {
-          id: 'user-1',
-          email_confirmed_at: '2026-02-11T21:00:00.000Z',
-        },
-      },
-    });
+    mockAuthState({ id: 'user-1', emailVerified: true });
 
     const response = await middleware(
       request('http://localhost:3000/communities/8/documents'),

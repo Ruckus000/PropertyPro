@@ -5,7 +5,7 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import {
   useDocumentUpload,
   type UploadDocumentResult,
-} from '@/hooks/useDocumentUpload';
+} from '@/hooks/use-document-upload';
 
 interface DocumentUploaderProps {
   communityId: number;

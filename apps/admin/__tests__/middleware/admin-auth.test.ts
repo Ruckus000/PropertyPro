@@ -22,6 +22,11 @@ const mockAdminDb = {
   })),
 };
 
+// createMiddlewareClient resolves the user itself (getClaims) and returns it
+// directly — the admin middleware no longer calls supabase.auth.getUser.
+// Tests set `middlewareUser` to control the authenticated identity.
+let middlewareUser: { id: string; email: string | null; emailVerified: boolean } | null = null;
+
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async (_req: NextRequest) => {
     return {
@@ -30,6 +35,8 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
         headers: new Headers(),
         status: 200,
       },
+      user: middlewareUser,
+      authChecked: middlewareUser != null,
     };
   }),
 }));
@@ -52,6 +59,7 @@ function makeRequest(pathname: string): NextRequest {
 describe('admin middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    middlewareUser = null;
   });
 
   it('passes through /auth/login without session check', async () => {
@@ -71,7 +79,7 @@ describe('admin middleware', () => {
   });
 
   it('redirects unauthenticated request to /clients → /auth/login', async () => {
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    middlewareUser = null;
 
     const { middleware } = await import('@/middleware');
     const req = makeRequest('/clients');
@@ -83,9 +91,7 @@ describe('admin middleware', () => {
   });
 
   it('redirects authenticated non-admin user to /auth/login?error=access_denied', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-123', email: 'notadmin@example.com' } },
-    });
+    middlewareUser = { id: 'user-123', email: 'notadmin@example.com', emailVerified: true };
     mockSingleFrom.mockResolvedValue({ data: null });
 
     const { middleware } = await import('@/middleware');
@@ -99,9 +105,7 @@ describe('admin middleware', () => {
   });
 
   it('passes through authenticated platform admin', async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: 'admin-456', email: 'admin@getpropertypro.com' } },
-    });
+    middlewareUser = { id: 'admin-456', email: 'admin@getpropertypro.com', emailVerified: true };
     mockSingleFrom.mockResolvedValue({ data: { user_id: 'admin-456' } });
 
     const { middleware } = await import('@/middleware');
@@ -114,7 +118,7 @@ describe('admin middleware', () => {
   it('returns 429 on rate limit exceeded', async () => {
     // The rate limiter is stateful; this test is basic verification
     // In real tests you would mock Date.now() to control the window
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    middlewareUser = null;
 
     const { middleware } = await import('@/middleware');
 

@@ -37,6 +37,7 @@ const prefs: NotificationPreferences = {
   calendarReminderPersonalAssessments: false,
   calendarReminderCommunityAssessments: true,
   inAppEnabled: false,
+  emailInsuranceAlerts: true,
 };
 
 beforeEach(() => {

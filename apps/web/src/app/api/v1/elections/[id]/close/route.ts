@@ -30,6 +30,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireElectionsAdminRole, requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { closeElectionForCommunity } from '@/lib/services/elections-service';
 import { requirePermission } from '@/lib/db/access-control';
 import { electionsCloseContract } from './contract';
@@ -39,6 +40,7 @@ export const POST = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
+    await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireElectionsEnabled(membership);

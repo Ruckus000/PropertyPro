@@ -1,7 +1,14 @@
 'use client';
 import { useState } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
-import { useContentBlocks, useReorderBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { PlanBadge } from '@propertypro/ui';
+import { toast } from 'sonner';
+import {
+  useContentBlocks,
+  useDeleteContentBlock,
+  useReorderBlocks,
+  type SiteBlockSummary,
+} from '@/hooks/use-content-blocks';
 import { TextBlockForm } from './TextBlockForm';
 import { ImageBlockForm } from './ImageBlockForm';
 import { AnnouncementsBlockForm } from './AnnouncementsBlockForm';
@@ -95,8 +102,34 @@ function parseGalleryBlock(content: unknown): GalleryBlockContent | null {
 }
 
 export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }: Props) {
-  const { data: blocks, isLoading, isError, error } = useContentBlocks(communityId);
+  const { data: blocks, isLoading, isError, error, refetch } = useContentBlocks(communityId);
   const reorder = useReorderBlocks(communityId);
+  const deleteBlock = useDeleteContentBlock(communityId);
+
+  function onRemove(b: SiteBlockSummary) {
+    // The merged editor view can't tell a draft-only section from a draft
+    // shadowing a published row, so the confirm copy covers both; the
+    // response's `staged` flag picks the accurate toast.
+    const confirmed = window.confirm(
+      `Remove this ${b.blockType} section? If it's on your live site, it stays visible until you publish.`,
+    );
+    if (!confirmed) return;
+    deleteBlock.mutate(
+      { blockOrder: b.blockOrder },
+      {
+        onSuccess: ({ staged }) => {
+          toast.success(
+            staged
+              ? 'Removal staged — publish to take the section off your live site.'
+              : 'Section removed.',
+          );
+        },
+        onError: (err) => {
+          toast.error(err.message || 'We couldn’t remove this section. Please try again.');
+        },
+      },
+    );
+  }
   const [adding, setAdding] = useState<
     | 'text'
     | 'image'
@@ -115,8 +148,15 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
   }
   if (isError) {
     return (
-      <div role="alert" className="rounded-sm border border-danger bg-danger/10 px-3 py-2 text-sm text-danger">
-        Failed to load content sections: {error instanceof Error ? error.message : 'unknown error'}
+      <div role="alert" className="rounded-sm border border-danger bg-danger/10 px-3 py-3 text-sm text-danger">
+        <p>Failed to load content sections: {error instanceof Error ? error.message : 'unknown error'}</p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="mt-2 inline-flex items-center rounded-md border border-danger px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -168,6 +208,15 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
                 className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-default text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemove(b)}
+                disabled={deleteBlock.isPending}
+                aria-label={`Remove ${b.blockType} section`}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-default text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -404,7 +453,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add FAQ section
-          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+          {!hasSitePolishBlocks && <PlanBadge variant="pro" className="ml-1" />}
         </button>
         <button
           type="button"
@@ -414,7 +463,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add gallery section
-          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+          {!hasSitePolishBlocks && <PlanBadge variant="pro" className="ml-1" />}
         </button>
         <button
           type="button"
@@ -424,7 +473,7 @@ export function ContentSectionsList({ communityId, hasSitePolishBlocks = false }
           className="rounded-md border border-default px-3 py-1.5 text-sm hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
         >
           + Add amenities section
-          {!hasSitePolishBlocks && <span className="ml-1 text-xs text-content-secondary">(Pro)</span>}
+          {!hasSitePolishBlocks && <PlanBadge variant="pro" className="ml-1" />}
         </button>
       </div>
     </section>

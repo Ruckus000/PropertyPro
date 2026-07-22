@@ -66,7 +66,7 @@ export default async function PreviewPage({
       ))}
       <div style={cssVars} className="min-h-screen flex flex-col font-body">
         {/* Dev banner */}
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-center text-xs text-yellow-800">
+        <div className="bg-status-warning-bg border-b border-status-warning-border px-4 py-2 text-center text-xs text-status-warning">
           Preview Mode — Community: <strong>{community.name}</strong> (ID: {community.id})
           {branding ? (
             <span className="ml-2">
@@ -74,7 +74,7 @@ export default async function PreviewPage({
               {' · '}Font: {branding.fontHeading ?? 'default'}
             </span>
           ) : (
-            <span className="ml-2 text-yellow-600">(no custom branding set — using defaults)</span>
+            <span className="ml-2 text-status-warning">(no custom branding set — using defaults)</span>
           )}
         </div>
 
@@ -87,7 +87,7 @@ export default async function PreviewPage({
               <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
                 {community.name}
               </h1>
-              <p className="mt-4 text-lg text-content-inverse/80">
+              <p className="mt-4 text-lg text-content-inverse">
                 Your community portal for documents, meetings, and more.
               </p>
               <div className="mt-8">

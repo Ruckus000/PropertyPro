@@ -17,6 +17,7 @@
  *   - Retry resumes from lastSuccessfulStatus — never restarts from scratch
  */
 import { createElement } from 'react';
+import type Stripe from 'stripe';
 import { and, asc, eq, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
 import {
   communities,
@@ -30,7 +31,7 @@ import {
 } from '@propertypro/db';
 // AUTHZ: P2-35: Provisioning pipeline — cross-tenant bootstrap, no communityId at start
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { createAdminClient } from '@propertypro/db';
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
   linkCommunityToBillingGroup,
   recalculateVolumeTier,
@@ -40,6 +41,15 @@ import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import { getComplianceTemplate, getDefaultDocumentCategories, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 import { resolvePendingSignupAddress } from './provisioning-address';
+import {
+  resolveSubscriptionPeriodEndAt,
+  retrieveCheckoutSession,
+} from '@/lib/services/stripe-service';
+import {
+  getProvisioningJobIdBySignupRequestId,
+  insertProvisioningJobFence,
+  markPendingSignupPaymentCompleted,
+} from '@/lib/services/stripe-webhook-service';
 
 // ---------------------------------------------------------------------------
 // State machine constants — must match PHASE2_EXECUTION_PLAN.md exactly
@@ -73,6 +83,11 @@ const RECOVERABLE_SIGNUP_STATUSES = ['payment_completed', 'provisioning'] as con
 const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
 const DEFAULT_MAX_JOBS = 10;
 const DEFAULT_MAX_RETRY_COUNT = 5;
+
+// A1: how long a signup may sit at `checkout_started` before the reconciler
+// treats its webhook as lost. Longer than the webhook's own retry window so we
+// never race a normally-delivered `checkout.session.completed`.
+const RECONCILE_STALE_AFTER_MS = 15 * 60 * 1000;
 
 function nextStep(last: string | null): ProvisioningStepSuccess {
   if (!last) return STEP_SEQUENCE[0];
@@ -116,8 +131,14 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   const normalizedAddress = resolvePendingSignupAddress(ctx.signup);
 
   // Extract Stripe billing IDs from the provisioning payload (set by webhook handler).
-  const stripeCustomerId = (ctx.signup.payload as Record<string, unknown>)?.stripeCustomerId as string | null ?? null;
-  const stripeSubscriptionId = (ctx.signup.payload as Record<string, unknown>)?.stripeSubscriptionId as string | null ?? null;
+  const payload = (ctx.signup.payload as Record<string, unknown>) ?? {};
+  const stripeCustomerId = (payload.stripeCustomerId as string | null) ?? null;
+  const stripeSubscriptionId = (payload.stripeSubscriptionId as string | null) ?? null;
+  // A2: stamp the trial status + period end captured at checkout so the trialing
+  // banner shows immediately, without waiting for a later subscription.updated.
+  const subscriptionStatus = (payload.subscriptionStatus as string | null) ?? null;
+  const periodEndRaw = payload.subscriptionCurrentPeriodEndAt as string | null | undefined;
+  const subscriptionCurrentPeriodEndAt = periodEndRaw ? new Date(periodEndRaw) : null;
 
   // Insert the community — slug unique constraint prevents duplicates on retry.
   // Use onConflictDoNothing to tolerate exact-duplicate retries.
@@ -134,6 +155,8 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       timezone: 'America/New_York',
       stripeCustomerId,
       stripeSubscriptionId,
+      ...(subscriptionStatus ? { subscriptionStatus } : {}),
+      ...(subscriptionCurrentPeriodEndAt ? { subscriptionCurrentPeriodEndAt } : {}),
     })
     .onConflictDoNothing()
     .returning({ id: communities.id });
@@ -168,9 +191,10 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
   const communityId = ctx.communityId;
   if (!communityId) throw new Error('[provisioning] user_linked: communityId not set');
 
-  // The founding user who signs up and pays gets pm_admin — the highest community-scoped
-  // role — so they can access the PM portfolio dashboard and cross-community management
-  // from day one. pm_admin has blanket access and doesn't need presets or granular permissions.
+  // The founding user who signs up and pays gets root_manager — the highest
+  // community-scoped role under role-v3/ADR-006 (creator-is-root, spec §3.5(a)) —
+  // so they can manage the community and (for PM plans) the portfolio from day one.
+  // root_manager has blanket access and doesn't need presets or granular permissions.
   const displayTitle = 'Administrator';
 
   let userId: string;
@@ -626,6 +650,135 @@ export async function recoverStuckProvisioningJobs(
   // detritus — both recovered 2026-04-24). The watchdog can't safely guess an
   // owner, so it just lists them for the cron handler to log and alert.
   summary.orphans = await findOrphanCommunities();
+
+  return summary;
+}
+
+export interface ReconcileLostCheckoutSummary {
+  /** checkout_started signups older than the stale window with no job row. */
+  scanned: number;
+  /** Paid-and-complete sessions that were driven back into provisioning. */
+  recovered: number;
+  /** Sessions that were not yet complete (genuinely abandoned) — left alone. */
+  skippedNotComplete: number;
+  /** Recovery attempts that threw (Stripe/DB error) — row left for next run. */
+  failed: number;
+  failures: Array<{ signupRequestId: string; errorMessage: string }>;
+}
+
+/**
+ * A1: durable recovery for a charged customer whose `checkout.session.completed`
+ * webhook was permanently lost.
+ *
+ * `recoverStuckProvisioningJobs` cannot see these — it INNER JOINs
+ * `provisioning_jobs`, and a lost webhook means no job row was ever created; the
+ * signup is stuck at `checkout_started`. This pass scans those stale signups,
+ * asks Stripe whether the session actually completed (trials complete with
+ * `no_payment_required`, so we gate on `status === 'complete'`, same as the
+ * webhook), and if so drives the exact idempotent helpers the webhook uses.
+ *
+ * Idempotent: the business-key uniqueness (signup_request_id, slug) means a
+ * delayed real webhook landing mid-reconcile creates no duplicate community.
+ */
+export async function reconcileLostCheckoutSignups(
+  options: ProvisioningWatchdogOptions = {},
+): Promise<ReconcileLostCheckoutSummary> {
+  const db = createUnscopedClient();
+  const now = options.now ?? new Date();
+  const staleAfterMs = options.staleAfterMs ?? RECONCILE_STALE_AFTER_MS;
+  const maxJobs = options.maxJobs ?? DEFAULT_MAX_JOBS;
+  const staleBefore = new Date(now.getTime() - staleAfterMs);
+
+  const rows = await db
+    .select({
+      signupRequestId: pendingSignups.signupRequestId,
+      payload: pendingSignups.payload,
+    })
+    .from(pendingSignups)
+    .where(
+      and(
+        // `checkout_started` is the lost-webhook case. `payment_completed` /
+        // `provisioning` WITHOUT a job row can only arise if a prior reconcile
+        // marked the signup paid but then failed before/while inserting the job
+        // fence — recoverStuckProvisioningJobs INNER-JOINs jobs so it can't see
+        // those. Re-scanning them here makes the reconciler self-healing across
+        // its own partial failures (the steps below are all idempotent).
+        inArray(pendingSignups.status, ['checkout_started', 'payment_completed', 'provisioning']),
+        lt(pendingSignups.updatedAt, staleBefore),
+        // The whole point: NO provisioning_jobs row exists (webhook never ran, or
+        // the fence insert failed). A signup that already has a job is handled by
+        // recoverStuckProvisioningJobs, so NOT EXISTS keeps the two passes disjoint.
+        sql`NOT EXISTS (SELECT 1 FROM ${provisioningJobs} WHERE ${provisioningJobs.signupRequestId} = ${pendingSignups.signupRequestId})`,
+      ),
+    )
+    .orderBy(asc(pendingSignups.updatedAt))
+    .limit(maxJobs);
+
+  const summary: ReconcileLostCheckoutSummary = {
+    scanned: rows.length,
+    recovered: 0,
+    skippedNotComplete: 0,
+    failed: 0,
+    failures: [],
+  };
+
+  for (const row of rows) {
+    const sessionId = (row.payload as Record<string, unknown> | null)?.stripeCheckoutSessionId as
+      | string
+      | undefined;
+    if (!sessionId) {
+      // No stored session id — can't reconcile from Stripe deterministically.
+      summary.skippedNotComplete += 1;
+      continue;
+    }
+
+    try {
+      const session = await retrieveCheckoutSession(sessionId);
+      if (session.status !== 'complete') {
+        // Abandoned checkout — leave it for the normal expiry/cleanup path.
+        summary.skippedNotComplete += 1;
+        continue;
+      }
+
+      const stripeCustomerId =
+        typeof session.customer === 'string'
+          ? session.customer
+          : (session.customer as { id: string } | null)?.id ?? null;
+      const stripeSubscriptionId =
+        typeof session.subscription === 'string'
+          ? session.subscription
+          : (session.subscription as { id: string } | null)?.id ?? null;
+      const subscriptionObject =
+        session.subscription && typeof session.subscription !== 'string'
+          ? (session.subscription as Stripe.Subscription)
+          : null;
+
+      await markPendingSignupPaymentCompleted({
+        signupRequestId: row.signupRequestId,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        subscriptionStatus: subscriptionObject?.status ?? null,
+        subscriptionCurrentPeriodEndAt: subscriptionObject
+          ? resolveSubscriptionPeriodEndAt(subscriptionObject)
+          : null,
+      });
+      await insertProvisioningJobFence({
+        signupRequestId: row.signupRequestId,
+        stripeEventId: `reconcile:${sessionId}`,
+      });
+      const jobId = await getProvisioningJobIdBySignupRequestId(row.signupRequestId);
+      if (jobId !== null) {
+        await runProvisioning(jobId);
+      }
+      summary.recovered += 1;
+    } catch (err) {
+      summary.failed += 1;
+      summary.failures.push({
+        signupRequestId: row.signupRequestId,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   return summary;
 }

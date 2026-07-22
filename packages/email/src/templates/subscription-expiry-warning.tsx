@@ -1,4 +1,8 @@
 import { Heading, Text } from '@react-email/components';
+import {
+  GRACE_EXPIRY_WARNING_OFFSET_DAYS,
+  PAID_GRACE_DAYS,
+} from '@propertypro/shared';
 import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
 import { EmailButton } from '../components/email-button';
@@ -24,7 +28,7 @@ export function SubscriptionExpiryWarningEmail({
       branding={branding}
       previewText={
         previewText ??
-        `Final warning: Portal access for ${branding.communityName} expires ${expiryDate}`
+        `Access will be locked in ${GRACE_EXPIRY_WARNING_OFFSET_DAYS} days. Update payment to keep your portal active.`
       }
       accentColor={emailColors.accentRed}
     >
@@ -34,14 +38,16 @@ export function SubscriptionExpiryWarningEmail({
 
       <Text style={styles.body}>Hi {recipientName},</Text>
       <Text style={styles.body}>
-        This is a final reminder that portal access for{' '}
-        <strong>{branding.communityName}</strong> will expire on{' '}
+        This is a final reminder: portal access for{' '}
+        <strong>{branding.communityName}</strong> will be locked in{' '}
+        <strong>{GRACE_EXPIRY_WARNING_OFFSET_DAYS} days</strong>, on{' '}
         <strong>{expiryDate}</strong>.
       </Text>
 
-      <EmailAlert variant="danger" title="After expiry">
-        After {expiryDate}, all admin access will be suspended. Your data will
-        be retained for 90 days, after which it may be permanently deleted.
+      <EmailAlert variant="danger" title={`${PAID_GRACE_DAYS}-day grace period ending`}>
+        Update payment before {expiryDate} to keep your portal active. After
+        that date, all admin access will be suspended. Your data will be
+        retained for 90 days, after which it may be permanently deleted.
       </EmailAlert>
 
       <EmailButton href={billingPortalUrl} variant="destructive">

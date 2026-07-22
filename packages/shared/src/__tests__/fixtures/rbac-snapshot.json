@@ -92,6 +92,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "tenant": {
@@ -186,6 +198,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -280,6 +304,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_president": {
@@ -372,6 +408,18 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -468,6 +516,18 @@
       "units": {
         "read": true,
         "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -562,9 +622,21 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
-    "property_manager_admin": {
+    "manager": {
       "documents": {
         "read": true,
         "write": true
@@ -654,6 +726,18 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -752,6 +836,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "tenant": {
@@ -846,6 +942,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -940,6 +1048,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_president": {
@@ -1032,6 +1152,18 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1128,6 +1260,18 @@
       "units": {
         "read": true,
         "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "site_manager": {
@@ -1222,9 +1366,21 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
-    "property_manager_admin": {
+    "manager": {
       "documents": {
         "read": true,
         "write": true
@@ -1314,6 +1470,18 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }
@@ -1412,6 +1580,18 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "tenant": {
@@ -1506,6 +1686,18 @@
       "units": {
         "read": true,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": false
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
     "board_member": {
@@ -1598,6 +1790,18 @@
         "write": false
       },
       "units": {
+        "read": false,
+        "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
         "read": false,
         "write": false
       }
@@ -1694,6 +1898,18 @@
       "units": {
         "read": false,
         "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
+        "read": false,
+        "write": false
       }
     },
     "cam": {
@@ -1786,6 +2002,18 @@
         "write": false
       },
       "units": {
+        "read": false,
+        "write": false
+      },
+      "insurance": {
+        "read": false,
+        "write": false
+      },
+      "reserve_assets": {
+        "read": false,
+        "write": false
+      },
+      "storm_damage": {
         "read": false,
         "write": false
       }
@@ -1882,9 +2110,21 @@
       "units": {
         "read": true,
         "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
+        "read": true,
+        "write": true
       }
     },
-    "property_manager_admin": {
+    "manager": {
       "documents": {
         "read": true,
         "write": true
@@ -1974,6 +2214,18 @@
         "write": true
       },
       "units": {
+        "read": true,
+        "write": true
+      },
+      "insurance": {
+        "read": true,
+        "write": true
+      },
+      "reserve_assets": {
+        "read": true,
+        "write": true
+      },
+      "storm_damage": {
         "read": true,
         "write": true
       }

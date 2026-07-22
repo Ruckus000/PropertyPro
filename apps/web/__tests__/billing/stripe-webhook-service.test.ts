@@ -92,6 +92,7 @@ import {
   markCommunityPaymentFailed,
   markPendingSignupPaymentCompleted,
   persistSelfServeCommunityStripeIds,
+  updateCommunitySubscriptionFromStripe,
   type StripeWebhookCommunity,
 } from '../../src/lib/services/stripe-webhook-service';
 
@@ -243,6 +244,8 @@ describe('stripe-webhook-service', () => {
           JSON.stringify({
             stripeCustomerId: 'cus_abc',
             stripeSubscriptionId: 'sub_abc',
+            subscriptionStatus: null,
+            subscriptionCurrentPeriodEndAt: null,
           }),
         ],
       },
@@ -251,6 +254,35 @@ describe('stripe-webhook-service', () => {
     expect(eqMock).toHaveBeenCalledWith(
       pendingSignupsTable.signupRequestId,
       'signup_abc',
+    );
+  });
+
+  it('merges trial status + period end into the payload when provided (A2)', async () => {
+    const db = setupDb();
+    const periodEnd = new Date('2026-08-12T00:00:00.000Z');
+
+    await markPendingSignupPaymentCompleted({
+      signupRequestId: 'signup_trial',
+      stripeCustomerId: 'cus_t',
+      stripeSubscriptionId: 'sub_t',
+      subscriptionStatus: 'trialing',
+      subscriptionCurrentPeriodEndAt: periodEnd,
+    });
+
+    expect(db.setMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          values: [
+            pendingSignupsTable.payload,
+            JSON.stringify({
+              stripeCustomerId: 'cus_t',
+              stripeSubscriptionId: 'sub_t',
+              subscriptionStatus: 'trialing',
+              subscriptionCurrentPeriodEndAt: periodEnd.toISOString(),
+            }),
+          ],
+        }),
+      }),
     );
   });
 
@@ -340,5 +372,71 @@ describe('stripe-webhook-service', () => {
       updatedAt: attemptedPaymentFailedAt,
     });
     expect(eqMock).toHaveBeenCalledWith(communitiesTable.id, 42);
+  });
+
+  describe('updateCommunitySubscriptionFromStripe', () => {
+    it('clears paymentFailedAt when the subscription recovers to active', async () => {
+      const db = setupDb();
+
+      await updateCommunitySubscriptionFromStripe({
+        communityId: 7,
+        subscriptionStatus: 'active',
+        subscriptionPlan: 'essentials',
+      });
+
+      expect(db.update).toHaveBeenCalledWith(communitiesTable);
+      expect(db.setMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subscriptionStatus: 'active',
+          subscriptionPlan: 'essentials',
+          paymentFailedAt: null,
+        }),
+      );
+      expect(eqMock).toHaveBeenCalledWith(communitiesTable.id, 7);
+    });
+
+    it('preserves paymentFailedAt when the subscription escalates to unpaid', async () => {
+      // unpaid/incomplete_expired are worse-than-past_due states, not recovery —
+      // the payment-failure marker (and its reminder ladder + UI) must survive.
+      const db = setupDb();
+
+      await updateCommunitySubscriptionFromStripe({
+        communityId: 7,
+        subscriptionStatus: 'unpaid',
+        subscriptionPlan: 'essentials',
+      });
+
+      const payload = db.setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect('paymentFailedAt' in payload).toBe(false);
+    });
+
+    it('sets paymentFailedAt when a past_due update carries one', async () => {
+      const db = setupDb();
+      const failedAt = new Date('2026-07-01T00:00:00.000Z');
+
+      await updateCommunitySubscriptionFromStripe({
+        communityId: 7,
+        subscriptionStatus: 'past_due',
+        subscriptionPlan: 'essentials',
+        paymentFailedAt: failedAt,
+      });
+
+      expect(db.setMock).toHaveBeenCalledWith(
+        expect.objectContaining({ subscriptionStatus: 'past_due', paymentFailedAt: failedAt }),
+      );
+    });
+
+    it('preserves an existing paymentFailedAt on a past_due update with no timestamp', async () => {
+      const db = setupDb();
+
+      await updateCommunitySubscriptionFromStripe({
+        communityId: 7,
+        subscriptionStatus: 'past_due',
+        subscriptionPlan: 'essentials',
+      });
+
+      const payload = db.setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect('paymentFailedAt' in payload).toBe(false);
+    });
   });
 });

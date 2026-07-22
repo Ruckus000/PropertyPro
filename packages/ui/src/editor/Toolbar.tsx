@@ -54,7 +54,7 @@ const buttonStyle: React.CSSProperties = {
 
 const activeStyle: React.CSSProperties = {
   background: 'var(--interactive-primary, #1f2937)',
-  color: 'var(--text-on-primary, #fff)',
+  color: 'var(--text-inverse, #fff)',
   borderColor: 'var(--interactive-primary, #1f2937)',
 };
 
@@ -196,7 +196,7 @@ export function Toolbar({ editor, mode, onImageUpload, onPickDocument, disabled 
         gap: 4,
         padding: 8,
         borderBottom: '1px solid var(--border-default)',
-        background: 'var(--surface-canvas, var(--surface-card))',
+        background: 'var(--surface-page, var(--surface-card))',
         opacity: disabled ? 0.5 : 1,
         pointerEvents: disabled ? 'none' : 'auto',
       }}

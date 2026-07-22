@@ -58,6 +58,8 @@ export const communities = pgTable('communities', {
   nextReminderAt: timestamp('next_reminder_at', { withTimezone: true }),
   /** P2-34a: When the subscription was canceled (start of 30-day grace period). Null = not canceled. */
   subscriptionCanceledAt: timestamp('subscription_canceled_at', { withTimezone: true }),
+  /** Stripe subscription current_period_end — trial end or renewal date for in-app banners. */
+  subscriptionCurrentPeriodEndAt: timestamp('subscription_current_period_end_at', { withTimezone: true }),
   /** Admin metrics: why the community canceled (e.g. 'price', 'missing_feature', 'switching'). Validated at API boundary. */
   cancellationReason: text('cancellation_reason'),
   /** Admin metrics: free-text elaboration on the cancellation reason. */
@@ -99,6 +101,8 @@ export const communities = pgTable('communities', {
   transparencyEnabled: boolean('transparency_enabled').notNull().default(false),
   /** Timestamp when transparency scope disclosure was acknowledged by an authorized user. */
   transparencyAcknowledgedAt: timestamp('transparency_acknowledged_at', { withTimezone: true }),
+  /** Snowbird digest board opt-in — when true, owners receive the periodic recap unless they opt out. */
+  snowbirdDigestEnabled: boolean('snowbird_digest_enabled').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

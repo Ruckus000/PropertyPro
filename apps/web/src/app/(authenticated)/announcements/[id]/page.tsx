@@ -12,7 +12,6 @@ import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { AnnouncementDetailActions } from '@/components/announcements/announcement-detail-actions';
 
@@ -82,12 +81,6 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title={announcement.title}
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Announcements', href: `/announcements?communityId=${communityId}` }]}
-            currentLabel={announcement.title}
-          />
-        }
         actions={
           canManage ? (
             <AnnouncementDetailActions

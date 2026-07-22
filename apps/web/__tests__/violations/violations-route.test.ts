@@ -29,6 +29,7 @@ const {
   parseCommunityIdFromQueryMock,
   parseCommunityIdFromBodyMock,
   assertNotDemoGraceMock,
+  requireActiveSubscriptionForMutationMock,
   createViolationForCommunityMock,
   unitExistsInCommunityMock,
 } = vi.hoisted(() => ({
@@ -56,6 +57,7 @@ const {
   parseCommunityIdFromQueryMock: vi.fn(),
   parseCommunityIdFromBodyMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn(),
+  requireActiveSubscriptionForMutationMock: vi.fn(),
   createViolationForCommunityMock: vi.fn(),
   unitExistsInCommunityMock: vi.fn(),
 }));
@@ -172,6 +174,10 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
+}));
+
 import { GET, POST } from '../../src/app/api/v1/violations/route';
 
 function makeGetRequest(url: string) {
@@ -228,6 +234,7 @@ beforeEach(() => {
   createScopedClientMock.mockReturnValue(scopedClient);
   getActorUnitIdsMock.mockResolvedValue([10]);
   assertNotDemoGraceMock.mockResolvedValue(undefined);
+  requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
   unitExistsInCommunityMock.mockResolvedValue(true);
   createViolationForCommunityMock.mockResolvedValue({ id: 1, category: 'Noise' });
 });

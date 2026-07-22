@@ -14,6 +14,9 @@ import {
   Vote,
   BriefcaseBusiness,
   Shield,
+  Umbrella,
+  Landmark,
+  CloudRain,
   History,
   Building2,
   Paintbrush,
@@ -27,38 +30,38 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import {
-  ADMIN_ROLES,
   isAdminRole,
-  isCommunityRole,
   getFeaturesForCommunity,
   PLAN_FEATURES,
   findCheapestPlanForFeature,
-  getLockedFeatureBehavior,
-  type AnyCommunityRole,
   type CommunityRole,
   type CommunityFeatures,
   type CommunityType,
   type PlanId,
 } from '@propertypro/shared';
 
-const FINANCE_READ_NAV_ROLES: readonly CommunityRole[] = [
-  'owner',
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
-];
+/** Essentials slim-nav placement. Ignored outside slim-nav mode. */
+export type NavTier = 'default' | 'more';
+
+/**
+ * Role-based visibility for a nav item (v3-native, ADR-006).
+ * - `'admin'`: management tier only (`property_manager` / `root_manager`).
+ * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
+ * Omit to make an item visible to all roles.
+ */
+export type NavVisibility = 'admin' | 'owner_or_admin';
 
 export interface NavItemConfig {
   id: string;
   label: string;
   icon: LucideIcon;
   href: (communityId: number) => string;
+  /** Essentials slim-nav tier for founding root_manager. Defaults to `default`. */
+  navTier?: NavTier;
   /** Optional child item IDs for nested sidebar disclosure groups. */
   children?: readonly string[];
-  /** Restrict to these roles. Omit = visible to all roles. */
-  roles?: readonly CommunityRole[];
+  /** Role-based visibility gate. Omit = visible to all roles. */
+  visibility?: NavVisibility;
   /** Only show when this community feature is enabled. */
   featureKey?: keyof CommunityFeatures;
   /** Visible when ANY of these features is enabled (any-of semantics). Evaluated alongside featureKey. */
@@ -70,6 +73,26 @@ export interface NavItemConfig {
 export interface NavSection {
   label: string | null;
   items: readonly NavItemConfig[];
+}
+
+/**
+ * Resolve the dashboard destination for a community in ONE hop.
+ *
+ * /dashboard server-redirects lease-tracking (apartment) communities to
+ * /dashboard/apartment on every visit — a permanent extra round-trip through
+ * the middleware for every apartment-community click. Nav surfaces that
+ * already know the community's features should link straight to the final
+ * destination. (The onboarding-wizard redirects are deliberately kept
+ * server-side: they depend on a DB read and only affect pre-onboarding
+ * users.)
+ */
+export function resolveDashboardHref(
+  communityId: number,
+  features: CommunityFeatures | null,
+): string {
+  return features?.hasLeaseTracking
+    ? `/dashboard/apartment?communityId=${communityId}`
+    : `/dashboard?communityId=${communityId}`;
 }
 
 export const NAV_ITEMS: readonly NavItemConfig[] = [
@@ -109,6 +132,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Vote,
     href: (cid) => `/communities/${cid}/board/polls`,
     featureKey: 'hasCommunityBoard',
+    navTier: 'more',
     matchPrefixes: ['/board'],
   },
   {
@@ -117,6 +141,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: BriefcaseBusiness,
     href: (cid) => `/communities/${cid}/operations?tab=requests`,
     featureKeys: ['hasMaintenanceRequests', 'hasWorkOrders', 'hasAmenities'],
+    navTier: 'more',
     matchPrefixes: ['/operations'],
   },
   {
@@ -126,6 +151,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/dashboard/leases?communityId=${cid}`,
     children: ['move-in-out'],
     featureKey: 'hasLeaseTracking',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/leases'],
   },
   {
@@ -134,6 +160,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Package,
     href: (cid) => `/dashboard/packages?communityId=${cid}`,
     featureKey: 'hasPackageLogging',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/packages'],
   },
   {
@@ -142,6 +169,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Users,
     href: (cid) => `/dashboard/visitors?communityId=${cid}`,
     featureKey: 'hasVisitorLogging',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/visitors'],
   },
   {
@@ -149,21 +177,23 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Payments',
     icon: CreditCard,
     href: (cid) => `/communities/${cid}/payments`,
-    roles: FINANCE_READ_NAV_ROLES,
+    visibility: 'owner_or_admin',
     featureKey: 'hasFinance',
+    navTier: 'more',
     matchPrefixes: ['/payments'],
   },
   {
     // Launcher into the public-site / landing-page editor (which lives under
-    // /pm/settings/website). Surfaced in the community sidebar so single-
-    // community admins (cam) and PM admins can reach it without first going to
-    // the PM portal. Gated to the same roles the editor route allows
-    // (property_manager_admin + cam) so the link never lands on a redirect.
+    // /pm/settings/website). Surfaced in the community sidebar so management-tier
+    // members can reach it without first going to the PM portal. Gated to the
+    // management tier the editor route allows so the link never lands on a
+    // redirect. (v3: `designation` is orthogonal — a manager who also holds a
+    // board seat still sees this, unlike the old legacy-name gate.)
     id: 'website',
     label: 'Website',
     icon: Paintbrush,
     href: (cid) => `/pm/settings/website?communityId=${cid}`,
-    roles: ['property_manager_admin', 'cam'],
+    visibility: 'admin',
     featureKey: 'hasSiteEditor',
     matchPrefixes: ['/pm/settings'],
   },
@@ -174,6 +204,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     href: (cid) => `/violations/report?communityId=${cid}`,
     children: ['violations-inbox'],
     featureKey: 'hasViolations',
+    navTier: 'more',
     matchPrefixes: ['/violations/report'],
   },
 
@@ -183,7 +214,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Compliance',
     icon: Shield,
     href: (cid) => `/communities/${cid}/compliance`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasCompliance',
     matchPrefixes: ['/compliance'],
   },
@@ -192,7 +223,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Residents',
     icon: Users,
     href: (cid) => `/dashboard/residents?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     matchPrefixes: ['/dashboard/residents'],
   },
   {
@@ -200,7 +231,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Units',
     icon: Building2,
     href: (cid) => `/dashboard/units?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     matchPrefixes: ['/dashboard/units'],
   },
   {
@@ -208,17 +239,59 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Contracts',
     icon: FileText,
     href: (cid) => `/contracts?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasCompliance',
+    navTier: 'more',
     matchPrefixes: ['/contracts'],
+  },
+  {
+    id: 'insurance',
+    label: 'Insurance',
+    icon: Umbrella,
+    // Path-scoped tenancy: the [id] segment is authoritative, no query param.
+    href: (cid) => `/communities/${cid}/insurance`,
+    // Intentionally NO `roles` gate — every owner needs to reach the building's
+    // wind-mitigation report to share it with their own insurer. Management
+    // controls inside the page are admin-gated.
+    featureKey: 'hasInsuranceHub',
+    navTier: 'more',
+    // Bare segment, matching the `documents`/`meetings` convention: active-state
+    // matching is endsWith/includes-based, so '/communities/' would light this
+    // item up on every nested community route.
+    matchPrefixes: ['/insurance'],
+  },
+  {
+    id: 'reserves',
+    label: 'Reserves',
+    icon: Landmark,
+    // Path-scoped tenancy: the [id] segment is authoritative, no query param.
+    href: (cid) => `/communities/${cid}/reserves`,
+    // Intentionally NO `roles` gate — every member sees the transparent reserve
+    // register. Management controls inside the page are admin-gated.
+    featureKey: 'hasReserveTransparency',
+    navTier: 'more',
+    matchPrefixes: ['/reserves'],
+  },
+  {
+    id: 'storm-damage',
+    label: 'Storm Damage',
+    icon: CloudRain,
+    // Path-scoped tenancy: the [id] segment is authoritative, no query param.
+    href: (cid) => `/communities/${cid}/storm-damage`,
+    // Intentionally NO `roles` gate — every resident can file a report and see
+    // their own. Status controls inside the page are admin-gated.
+    featureKey: 'hasStormTools',
+    navTier: 'more',
+    matchPrefixes: ['/storm-damage'],
   },
   {
     id: 'esign',
     label: 'E-Sign',
     icon: FileSignature,
     href: (cid) => `/esign?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasEsign',
+    navTier: 'more',
     matchPrefixes: ['/esign'],
   },
   {
@@ -226,8 +299,9 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Violations',
     icon: AlertTriangle,
     href: (cid) => `/violations?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasViolations',
+    navTier: 'more',
     matchPrefixes: ['/violations'],
   },
   {
@@ -235,8 +309,9 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'ARC Requests',
     icon: ClipboardCheck,
     href: (cid) => `/arc-requests?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
     featureKey: 'hasARC',
+    navTier: 'more',
     matchPrefixes: ['/arc-requests'],
   },
   {
@@ -245,7 +320,8 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: ClipboardCheck,
     href: (cid) => `/dashboard/move-in-out?communityId=${cid}`,
     featureKey: 'hasLeaseTracking',
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
+    navTier: 'more',
     matchPrefixes: ['/dashboard/move-in-out'],
   },
   {
@@ -253,7 +329,8 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Audit Trail',
     icon: History,
     href: (cid) => `/audit-trail?communityId=${cid}`,
-    roles: ADMIN_ROLES,
+    visibility: 'admin',
+    navTier: 'more',
     matchPrefixes: ['/audit-trail'],
   },
 ];
@@ -281,7 +358,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // also live in a section so `AppSidebar` has a fallback top-level placement when
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
-  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations']),
+  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'reserves', 'storm-damage']),
   navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
   navSection('Admin', [
     'compliance',
@@ -331,22 +408,57 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
 ];
 
 /**
+ * Resolve a sidebar item's destination href.
+ *
+ * PM portfolio routes (PM_NAV_ITEMS) are cross-community — their href
+ * builders ignore the communityId argument — so they must NEVER fall back to
+ * /select-community just because the shell has no tenant context (the PM
+ * portal routinely renders with community = null). Only community-scoped
+ * items use the picker fallback, which exists so a tenant-less shell doesn't
+ * render dead `href={undefined}` links (see the www-subdomain incident).
+ */
+export function resolveNavItemHref(
+  item: Pick<NavItemConfig, 'href'>,
+  communityId: number | null,
+  isPmContext: boolean,
+): string {
+  if (isPmContext) {
+    return item.href(communityId ?? 0);
+  }
+  return communityId ? item.href(communityId) : '/select-community';
+}
+
+/**
+ * v3-native role gate for a nav item (ADR-006). A null role skips the gate
+ * (matches the pre-v3 behavior where a role-less shell saw every item).
+ * `designation` is never consulted — management status comes from the role.
+ */
+function itemVisibleForRole(
+  item: NavItemConfig,
+  role: CommunityRole | null,
+  isUnitOwner?: boolean,
+): boolean {
+  if (!item.visibility || !role) return true;
+  const admin = isAdminRole(role);
+  if (item.visibility === 'owner_or_admin') return admin || isUnitOwner === true;
+  return admin; // 'admin'
+}
+
+/**
  * Filter nav items by user role and community features.
+ *
+ * `isUnitOwner` distinguishes unit owners from tenants for `owner_or_admin`
+ * items (finance-read surfaces). Omit it to gate those items on management tier
+ * only — the command palette does this deliberately.
  */
 export function getVisibleItems(
   items: readonly NavItemConfig[],
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
+  isUnitOwner?: boolean,
 ): NavItemConfig[] {
   return items.filter((item) => {
-    if (item.roles && role) {
-      if (isCommunityRole(role)) {
-        if (!item.roles.includes(role)) return false;
-      } else {
-        // New roles: all role-gated nav items are currently admin-gated
-        if (!isAdminRole(role)) return false;
-      }
-    }
+    if (!itemVisibleForRole(item, role, isUnitOwner)) return false;
     if (item.featureKey && features && !features[item.featureKey]) return false;
     if (item.featureKeys && features) {
       const anyEnabled = item.featureKeys.some((key) => features[key]);
@@ -384,27 +496,23 @@ export interface NavItemWithGateStatus extends NavItemConfig {
  */
 export function getVisibleItemsWithPlanGate(
   items: readonly NavItemConfig[],
-  role: AnyCommunityRole | null,
+  role: CommunityRole | null,
   features: CommunityFeatures | null,
   communityType: CommunityType | null,
   planId: PlanId | null,
+  isUnitOwner?: boolean,
 ): NavItemWithGateStatus[] {
   // Raw type-level features (before plan intersection)
   const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
-  // Tenants don't see plan-gated marketing surfaces — for them, plan-locked
-  // items behave like type-gated ones: filtered out completely.
-  const hideLockedEntirely = getLockedFeatureBehavior(role) === 'hidden';
+  // Tenants (resident, not a unit owner) don't see plan-gated marketing
+  // surfaces — for them, plan-locked items behave like type-gated ones:
+  // filtered out completely. Designation is never read (ADR-006 §2).
+  const hideLockedEntirely = role === 'resident' && isUnitOwner !== true;
 
   return items
     .filter((item) => {
       // Role gate — same logic as getVisibleItems
-      if (item.roles && role) {
-        if (isCommunityRole(role)) {
-          if (!item.roles.includes(role)) return false;
-        } else {
-          if (!isAdminRole(role)) return false;
-        }
-      }
+      if (!itemVisibleForRole(item, role, isUnitOwner)) return false;
       // Community-type gate: if the TYPE doesn't support it, hide entirely
       if (item.featureKey && typeFeatures && !typeFeatures[item.featureKey]) return false;
       if (item.featureKeys && typeFeatures) {
@@ -466,6 +574,50 @@ export function getVisibleItemsWithPlanGate(
 }
 
 /**
+ * Essentials founding admin (`root_manager`) gets a slim default rail with
+ * advanced tools collapsed under a "More" section.
+ */
+export function shouldUseSlimNav(
+  role: CommunityRole | null,
+  planId: PlanId | null,
+): boolean {
+  return role === 'root_manager' && planId === 'essentials';
+}
+
+/**
+ * Rebuild NAV_SECTIONS for slim nav: default-tier items stay in their
+ * original section groupings; more-tier items move to a trailing "More" section.
+ */
+export function buildSlimNavSections(
+  visibleById: ReadonlyMap<string, NavItemWithGateStatus>,
+  baseSections: readonly NavSection[],
+): NavSection[] {
+  const defaultSections: NavSection[] = [];
+  const moreItems: NavItemConfig[] = [];
+
+  for (const section of baseSections) {
+    const defaultItems: NavItemConfig[] = [];
+    for (const item of section.items) {
+      if (!visibleById.has(item.id)) continue;
+      if (item.navTier === 'more') {
+        moreItems.push(item);
+      } else {
+        defaultItems.push(item);
+      }
+    }
+    if (defaultItems.length > 0) {
+      defaultSections.push({ label: section.label, items: defaultItems });
+    }
+  }
+
+  if (moreItems.length > 0) {
+    defaultSections.push({ label: 'More', items: moreItems });
+  }
+
+  return defaultSections;
+}
+
+/**
  * Determine the active nav item ID based on the current pathname.
  * Uses segment-aware matching: a prefix matches if the pathname starts
  * with it OR contains it as a path segment (e.g. '/compliance' matches
@@ -519,6 +671,9 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   operations: { title: 'Operations', subtitle: 'Requests, work orders, and reservations' },
   compliance: { title: 'Compliance', subtitle: 'Statutory requirements' },
   contracts: { title: 'Contracts', subtitle: 'Vendor tracking' },
+  insurance: { title: 'Insurance', subtitle: 'Building policies & wind mitigation' },
+  reserves: { title: 'Reserve Register', subtitle: 'Major components & remaining useful life' },
+  'storm-damage': { title: 'Storm Damage', subtitle: 'Report & track post-storm damage' },
   esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
   'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
   'violations-inbox': { title: 'Violations', subtitle: 'Review & manage violations' },

@@ -90,7 +90,7 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
         </div>
         <Link
           href="/demo/new"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-coral-600 px-4 py-2 text-sm font-medium text-white hover:bg-coral-700"
         >
           Create Demo
         </Link>
@@ -101,7 +101,7 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
           <p className="text-gray-500">No demos yet.</p>
           <Link
             href="/demo/new"
-            className="mt-2 inline-block text-sm font-medium text-blue-600 hover:text-blue-700"
+            className="mt-2 inline-block text-sm font-medium text-coral-700 hover:text-coral-700"
           >
             Create your first demo →
           </Link>
@@ -181,7 +181,7 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
                         <button
                           type="button"
                           onClick={() => { void copyClientLink(demo.slug); }}
-                          className="self-start text-xs font-medium text-blue-600 hover:text-blue-700"
+                          className="self-start text-xs font-medium text-coral-700 hover:text-coral-700"
                         >
                           {copiedSlug === demo.slug
                             ? 'Copied'
@@ -198,14 +198,14 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
                     <div className="flex items-center justify-end gap-2">
                       <Link
                         href={`/demo/${demo.id}/preview`}
-                        className="rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-coral-700 hover:bg-coral-50"
                         title="Split-screen preview"
                       >
                         Preview
                       </Link>
                       <Link
                         href={`/demo/${demo.id}/mobile`}
-                        className="rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-coral-700 hover:bg-coral-50"
                         title="Mobile preview"
                       >
                         Mobile

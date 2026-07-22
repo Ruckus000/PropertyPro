@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 
 export interface MoveChecklistRow {
@@ -49,6 +49,8 @@ export function useMoveChecklists(
   filters?: { type?: string; completed?: boolean },
 ) {
   return useQuery({
+    // Keep showing the previous page while a filter/page change refetches.
+    placeholderData: keepPreviousData,
     queryKey: ['move-checklists', communityId, filters],
     queryFn: () => fetchChecklists(communityId, filters),
     staleTime: 2 * 60 * 1000,

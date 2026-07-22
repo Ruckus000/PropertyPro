@@ -1,25 +1,28 @@
 // scripts/verify-page-breadcrumbs.ts
 //
 // CI guard: every in-scope page.tsx under apps/web/src/app/(authenticated)/
-// must contain <PageHeader ... breadcrumb=…> OR a // breadcrumbs:exempt comment.
+// must render a page-title <h1> so the global breadcrumb trail can resolve a
+// real leaf label for the route.
+//
+// Background: breadcrumbs are no longer authored per-page. A single global
+// trail is rendered by the app shell (components/layout/shell-breadcrumbs.tsx),
+// derived from the URL plus the page's <h1> (which the design system already
+// requires each page to render). This guard therefore checks that in-scope
+// pages provide that <h1> — via `<PageHeader title=...>` (the canonical page
+// header, which renders the h1) or a literal `<h1>` — OR opt out with a
+// `// breadcrumbs:exempt` comment.
+//
+// A page whose chrome is rendered by a delegated client component uses
+// `// breadcrumbs:exempt — delegated to <path>`; the delegated target is then
+// checked for the title h1 instead.
 //
 // In-scope glob (matched by findInScopePages below):
 //   **/[<param>]/page.tsx      (parent dir bracketed → entity detail)
 //   **/new/page.tsx            (parent dir is `new`)
 //   **/[<param>]/edit/page.tsx (parent dir `edit`, grandparent bracketed)
 //
-// Known false-negative classes (see spec §CI Guard):
-//   1. `breadcrumb={someExpression}` that evaluates to `null` at runtime.
-//   2. `<PageHeader>` rendered conditionally where one branch passes breadcrumb
-//      and another doesn't (regex matches the source, not the runtime).
-//   3. A delegated component that itself delegates further (two-hop only).
-//   4. Prop ordering: `<PageHeader>` with a JSX-valued prop containing `>`
-//      (e.g., `actions={<Button>Cancel</Button>}`) placed BEFORE `breadcrumb=`.
-//      The [^>]* halts at the first `>` inside the nested JSX. Mitigation:
-//      .claude/rules/design.md requires `breadcrumb=` before any JSX-valued
-//      prop on <PageHeader>.
-//
-// These are documented limitations; a grep guard is not a type checker.
+// Known limitation: a grep guard is not a type checker — it verifies the title
+// is authored in source, not that it renders under every runtime branch.
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve, relative, basename, join } from 'node:path';
@@ -34,54 +37,16 @@ export interface VerifyResult {
   reason?: string;
 }
 
-// See false-negative class 4 above — `[^>]*` halts at the first `>`.
-// Every migrated <PageHeader> must place `breadcrumb=` before `actions=`
-// or any other JSX-valued prop.
-const PAGE_HEADER_BREADCRUMB_RE = /<PageHeader\b[^>]*\sbreadcrumb=/s;
-const PAGE_HEADER_OPENING_TAG_RE = /<PageHeader\b[\s\S]*?>/;
-const BREADCRUMBS_ITEMS_RE = /<Breadcrumbs\s+items=\{(\[[\s\S]*?\])\}/;
-// Match ?communityId= appearing anywhere after a /communities/<id>/ prefix
-// (works for template literals like `/communities/${id}/foo?communityId=...`).
-const NESTED_COMMUNITY_QUERY_RE = /\/communities\/[^`'"]+\?communityId=/;
+// A <PageHeader> with a `title=` prop (PageHeader renders the page <h1>), or a
+// literal <h1> element for pages/components with a custom header.
+const PAGE_HEADER_TITLE_RE = /<PageHeader\b[\s\S]*?\btitle=/;
+const H1_RE = /<h1[\s>]/;
 const EXEMPT_RE = /^\s*\/\/\s*breadcrumbs:exempt(.*)$/m;
 const DELEGATED_RE = /delegated\s+to\s+(\S+)/;
 
-/**
- * Runs the deeper design-rule checks against the file that actually owns the
- * <PageHeader breadcrumb=...> render (which may be a delegated client component).
- * Returns the first failure found, or null on success.
- *
- *  - prop-order: `breadcrumb=` must appear before any JSX-valued prop on
- *    <PageHeader> (the spec's note about `[^>]*` halting at the first `>`).
- *  - no-?communityId-on-nested: hrefs that target `/communities/<id>/...`
- *    must not append `?communityId=` — the path segment is the authoritative
- *    tenant id for those routes.
- */
-function verifyDesignRules(content: string, label: string): string | null {
-  const openTagMatch = content.match(PAGE_HEADER_OPENING_TAG_RE);
-  if (openTagMatch) {
-    const tag = openTagMatch[0];
-    const breadcrumbIdx = tag.indexOf('breadcrumb=');
-    const actionsMatch = tag.match(/\sactions=/);
-    if (
-      breadcrumbIdx >= 0 &&
-      actionsMatch &&
-      actionsMatch.index !== undefined &&
-      actionsMatch.index < breadcrumbIdx
-    ) {
-      return `${label}: \`actions=\` appears before \`breadcrumb=\` on <PageHeader>; reorder so \`breadcrumb=\` comes first (design.md rule).`;
-    }
-  }
-
-  const itemsMatch = content.match(BREADCRUMBS_ITEMS_RE);
-  if (itemsMatch) {
-    const itemsBlock = itemsMatch[1] ?? '';
-    if (NESTED_COMMUNITY_QUERY_RE.test(itemsBlock)) {
-      return `${label}: a Breadcrumbs item href targets \`/communities/<id>/...\` but appends \`?communityId=\`. The path segment is the authoritative tenant id for nested routes; drop the query param (design.md rule).`;
-    }
-  }
-
-  return null;
+/** True when the source renders a page-title h1 (via PageHeader or literal). */
+function hasPageTitle(content: string): boolean {
+  return PAGE_HEADER_TITLE_RE.test(content) || H1_RE.test(content);
 }
 
 export function verifyFile(absolutePath: string): VerifyResult {
@@ -101,22 +66,24 @@ export function verifyFile(absolutePath: string): VerifyResult {
         return { ok: false, reason: `delegated target not found: ${targetRel}` };
       }
       const targetContent = readFileSync(targetAbs, 'utf8');
-      if (!PAGE_HEADER_BREADCRUMB_RE.test(targetContent)) {
-        return { ok: false, reason: `delegated target ${targetRel} has no <PageHeader breadcrumb=...>` };
+      if (!hasPageTitle(targetContent)) {
+        return {
+          ok: false,
+          reason: `delegated target ${targetRel} renders no page-title <h1> (need <PageHeader title=...> or an <h1>)`,
+        };
       }
-      const designIssue = verifyDesignRules(targetContent, `delegated target ${targetRel}`);
-      if (designIssue) return { ok: false, reason: designIssue };
       return { ok: true };
     }
     return { ok: true };
   }
 
-  if (!PAGE_HEADER_BREADCRUMB_RE.test(content)) {
-    return { ok: false, reason: 'no breadcrumb: file has no <PageHeader ... breadcrumb=...> and no exemption comment' };
+  if (!hasPageTitle(content)) {
+    return {
+      ok: false,
+      reason:
+        'no page title: file renders no <PageHeader title=...> or <h1>, and has no // breadcrumbs:exempt comment',
+    };
   }
-
-  const designIssue = verifyDesignRules(content, 'file');
-  if (designIssue) return { ok: false, reason: designIssue };
 
   return { ok: true };
 }
@@ -155,13 +122,13 @@ function main(): void {
     }
   }
   if (failures.length > 0) {
-    console.error('Breadcrumb guard failed:');
+    console.error('Page-title (breadcrumb) guard failed:');
     for (const f of failures) {
       console.error(`  ${f.file}: ${f.reason}`);
     }
     process.exit(1);
   }
-  console.log(`Breadcrumb guard passed: ${files.length} in-scope pages verified.`);
+  console.log(`Page-title (breadcrumb) guard passed: ${files.length} in-scope pages verified.`);
 }
 
 // ESM main-detection (POSIX only — fine for the dev team's Mac/Linux setup).

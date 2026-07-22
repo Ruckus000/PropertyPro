@@ -50,7 +50,7 @@ function validatePassword(pw: string): string | null {
 // ── Shared styles ──────────────────────────────────────
 
 const inputClassName =
-  'w-full rounded-[var(--radius-sm,6px)] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ring-focus)] disabled:cursor-not-allowed disabled:opacity-50';
+  'w-full rounded-[var(--radius-sm,6px)] border border-[var(--border-default)] bg-[var(--surface-card)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--border-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring-color)] disabled:cursor-not-allowed disabled:opacity-50';
 
 const labelClassName = 'mb-1.5 block text-sm font-medium text-[var(--text-secondary)]';
 
@@ -240,7 +240,7 @@ export function AccountSettingsClient({
                 type="email"
                 value={email}
                 readOnly
-                className={cn(inputClassName, 'cursor-not-allowed bg-[var(--surface-secondary)] opacity-70')}
+                className={cn(inputClassName, 'cursor-not-allowed bg-[var(--surface-subtle)] opacity-70')}
                 aria-describedby="email-note"
               />
               <p id="email-note" className="mt-1.5 text-xs text-[var(--text-tertiary)]">
@@ -267,7 +267,7 @@ export function AccountSettingsClient({
             {profileError && (
               <div
                 role="alert"
-                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--status-danger-bg)] px-3 py-2.5 text-sm text-[var(--status-danger)]"
               >
                 <AlertCircle size={16} aria-hidden="true" />
                 {profileError}
@@ -277,7 +277,7 @@ export function AccountSettingsClient({
             {profileSuccess && (
               <div
                 role="status"
-                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-success)] bg-[var(--surface-success)] px-3 py-2.5 text-sm text-[var(--text-success)]"
+                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 py-2.5 text-sm text-[var(--status-success)]"
               >
                 <Check size={16} aria-hidden="true" />
                 Profile updated successfully.
@@ -290,8 +290,8 @@ export function AccountSettingsClient({
                 disabled={profileLoading || !profileDirty}
                 className={cn(
                   'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
-                  'bg-[var(--interactive-primary)] text-[var(--text-on-primary)] hover:bg-[var(--interactive-primary-hover)]',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                  'bg-[var(--interactive-primary)] text-[var(--text-inverse)] hover:bg-[var(--interactive-primary-hover)]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
                   'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
@@ -360,7 +360,7 @@ export function AccountSettingsClient({
                         key={req.label}
                         className={cn(
                           'flex items-center gap-1.5 text-xs',
-                          met ? 'text-[var(--text-success)]' : 'text-[var(--text-tertiary)]',
+                          met ? 'text-[var(--status-success)]' : 'text-[var(--text-tertiary)]',
                         )}
                       >
                         <span aria-hidden="true">{met ? '\u2713' : '\u25CB'}</span>
@@ -392,7 +392,7 @@ export function AccountSettingsClient({
             {passwordError && (
               <div
                 role="alert"
-                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--status-danger-bg)] px-3 py-2.5 text-sm text-[var(--status-danger)]"
               >
                 <AlertCircle size={16} aria-hidden="true" />
                 {passwordError}
@@ -402,7 +402,7 @@ export function AccountSettingsClient({
             {passwordSuccess && (
               <div
                 role="status"
-                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-success)] bg-[var(--surface-success)] px-3 py-2.5 text-sm text-[var(--text-success)]"
+                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-3 py-2.5 text-sm text-[var(--status-success)]"
               >
                 <Check size={16} aria-hidden="true" />
                 Password updated successfully.
@@ -415,8 +415,8 @@ export function AccountSettingsClient({
                 disabled={!canSubmitPassword}
                 className={cn(
                   'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
-                  'bg-[var(--interactive-primary)] text-[var(--text-on-primary)] hover:bg-[var(--interactive-primary-hover)]',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                  'bg-[var(--interactive-primary)] text-[var(--text-inverse)] hover:bg-[var(--interactive-primary-hover)]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
                   'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
@@ -462,8 +462,8 @@ function DangerZoneSection() {
     <section aria-labelledby="danger-heading">
       <div className={cn(cardClassName, 'border-[var(--border-error)]')}>
         <div className="mb-3 flex items-center gap-2">
-          <Shield size={18} className="text-[var(--text-error)]" aria-hidden="true" />
-          <h2 id="danger-heading" className="text-base font-semibold text-[var(--text-error)]">
+          <Shield size={18} className="text-[var(--status-danger)]" aria-hidden="true" />
+          <h2 id="danger-heading" className="text-base font-semibold text-[var(--status-danger)]">
             Danger Zone
           </h2>
         </div>
@@ -478,12 +478,12 @@ function DangerZoneSection() {
           </div>
 
           {isLoading ? (
-            <div className="h-10 w-48 animate-pulse rounded-[var(--radius-md,10px)] bg-[var(--surface-secondary)]" />
+            <div className="h-10 w-48 animate-pulse rounded-[var(--radius-md,10px)] bg-[var(--surface-subtle)]" />
           ) : hasCoolingRequest ? (
             <div className="space-y-3">
               <div
                 role="status"
-                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+                className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--status-danger-bg)] px-3 py-2.5 text-sm text-[var(--status-danger)]"
               >
                 <Clock size={16} aria-hidden="true" />
                 <span>
@@ -498,8 +498,8 @@ function DangerZoneSection() {
                 className={cn(
                   'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
                   'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]',
-                  'hover:bg-[var(--surface-secondary)]',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                  'hover:bg-[var(--surface-subtle)]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
                   'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
@@ -508,7 +508,7 @@ function DangerZoneSection() {
               {cancelDeletion.isError && (
                 <div
                   role="alert"
-                  className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+                  className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--status-danger-bg)] px-3 py-2.5 text-sm text-[var(--status-danger)]"
                 >
                   <AlertCircle size={16} aria-hidden="true" />
                   {cancelDeletion.error instanceof Error
@@ -523,8 +523,8 @@ function DangerZoneSection() {
               onClick={() => setDialogOpen(true)}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
-                'bg-[var(--interactive-danger)] text-white hover:bg-[var(--interactive-danger-hover,var(--interactive-danger))]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                'bg-[var(--status-danger)] text-white hover:bg-[var(--red-900,var(--status-danger))]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
               )}
             >
               <Trash2 size={16} aria-hidden="true" />
@@ -562,7 +562,7 @@ function DangerZoneSection() {
                     htmlFor="delete-confirm-input"
                     className="mb-1.5 block text-sm font-medium text-[var(--text-secondary)]"
                   >
-                    Type <strong className="text-[var(--text-error)]">DELETE</strong> to confirm
+                    Type <strong className="text-[var(--status-danger)]">DELETE</strong> to confirm
                   </label>
                   <input
                     id="delete-confirm-input"
@@ -581,7 +581,7 @@ function DangerZoneSection() {
           {requestDeletion.isError && (
             <div
               role="alert"
-              className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--surface-error)] px-3 py-2.5 text-sm text-[var(--text-error)]"
+              className="flex items-center gap-2 rounded-[var(--radius-sm,6px)] border border-[var(--border-error)] bg-[var(--status-danger-bg)] px-3 py-2.5 text-sm text-[var(--status-danger)]"
             >
               <AlertCircle size={16} aria-hidden="true" />
               {requestDeletion.error instanceof Error
@@ -600,8 +600,8 @@ function DangerZoneSection() {
               className={cn(
                 'inline-flex items-center justify-center rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
                 'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]',
-                'hover:bg-[var(--surface-secondary)]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                'hover:bg-[var(--surface-subtle)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
               )}
             >
               Cancel
@@ -626,8 +626,8 @@ function DangerZoneSection() {
               }}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
-                'bg-[var(--interactive-danger)] text-white hover:bg-[var(--interactive-danger-hover,var(--interactive-danger))]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)] focus-visible:ring-offset-2',
+                'bg-[var(--status-danger)] text-white hover:bg-[var(--red-900,var(--status-danger))]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
                 'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >

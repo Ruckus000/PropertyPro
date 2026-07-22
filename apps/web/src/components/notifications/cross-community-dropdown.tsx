@@ -126,7 +126,7 @@ export function CrossCommunityNotificationDropdown() {
         {unread > 0 && (
           <span
             aria-hidden="true"
-            className="absolute -right-0.5 -top-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-status-danger px-1 text-[10px] font-semibold leading-[18px] text-content-inverse"
+            className="absolute -right-0.5 -top-0.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-status-danger px-1 text-xs font-semibold leading-[18px] text-content-inverse"
           >
             {unread > 99 ? '99+' : unread}
           </span>
@@ -230,7 +230,7 @@ export function CrossCommunityNotificationDropdown() {
                                 >
                                   {n.title}
                                   {isUnread && (
-                                    <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-interactive">
+                                    <span className="ml-2 align-middle text-xs font-semibold uppercase tracking-wide text-interactive">
                                       new
                                     </span>
                                   )}

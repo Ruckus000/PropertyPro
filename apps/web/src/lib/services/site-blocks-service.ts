@@ -28,7 +28,7 @@ import {
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies pm_admin + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import type { HeroBlockContent } from '@propertypro/shared';
+import { TOMBSTONE_BLOCK_TYPE, type HeroBlockContent } from '@propertypro/shared';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 
 /**
@@ -205,6 +205,10 @@ export type PublishCommunitySiteResult =
  *      kept intact. This makes the published site equal the merged
  *      draft-wins editor view (spec §2.7), rather than wiping every published
  *      block whenever a single draft exists.
+ *   4b. Soft-delete tombstone drafts (staged deletions from removeSiteBlock,
+ *      slice 8f). Step 4 already retired the published rows they shadow;
+ *      dropping the tombstones before step 5 means they are never promoted —
+ *      the slot simply ends up empty.
  *   5. Promote every draft row (is_draft=true, deleted_at IS NULL) to
  *      published (is_draft=false, published_at=now()).
  *   6. Audit row (action='update', resourceType='community_site') inside
@@ -304,6 +308,23 @@ export async function publishCommunitySite({
       )
       .returning({ id: siteBlocks.id });
     const retiredCount = retiredResult.length;
+
+    // Step 4b: retire tombstone drafts (staged deletions from
+    // removeSiteBlock). Their published rows were just soft-deleted in step 4
+    // (tombstone orders are part of draftOrders); soft-deleting the
+    // tombstones themselves BEFORE step 5 ensures they are never promoted to
+    // published — the slot simply ends up empty, which is the point.
+    await tx
+      .update(siteBlocks)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.isDraft, true),
+          eq(siteBlocks.blockType, TOMBSTONE_BLOCK_TYPE),
+          isNull(siteBlocks.deletedAt),
+        ),
+      );
 
     // Step 5: promote drafts. Capture the new publishedAt up front so the
     // returned timestamp matches what landed in the rows.
@@ -458,7 +479,12 @@ export async function reorderSiteBlock({
         byOrder.set(row.blockOrder, row);
       }
     }
-    const merged = [...byOrder.values()].sort((a, b) => a.blockOrder - b.blockOrder);
+    // Tombstone drafts (staged deletions) shadow their published row in the
+    // merge; the editor doesn't show them, so they are not reorderable and
+    // must not count as neighbors.
+    const merged = [...byOrder.values()]
+      .filter((b) => b.blockType !== TOMBSTONE_BLOCK_TYPE)
+      .sort((a, b) => a.blockOrder - b.blockOrder);
 
     const index = merged.findIndex((b) => b.id === blockId);
     if (index === -1) {
@@ -527,6 +553,197 @@ export async function reorderSiteBlock({
     });
 
     return { movedBlockId: blockId, fromOrder, toOrder };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Block deletion + discard drafts (slice 8f)
+// ---------------------------------------------------------------------------
+
+export interface RemoveSiteBlockInput {
+  communityId: number;
+  actorUserId: string;
+  /**
+   * The slot to remove. Content blocks only (block_order >= 2) — the hero at
+   * order 1 is required by every layout and cannot be deleted.
+   */
+  blockOrder: number;
+}
+
+export interface RemoveSiteBlockResult {
+  /**
+   * true  — the slot has a published row; a tombstone draft was staged and
+   *         the live site keeps the section until the next publish.
+   * false — the slot was draft-only; the draft was discarded immediately.
+   */
+  staged: boolean;
+}
+
+/**
+ * Removes the content section at `blockOrder`, expressed in the same draft
+ * model as edits and reorders:
+ *
+ *   - Draft-only slot (never published): soft-delete the draft. The section
+ *     disappears immediately; nothing is staged.
+ *   - Published slot: soft-delete any draft at the order, then insert a
+ *     `tombstone` draft. The live site keeps serving the published row until
+ *     `publishCommunitySite` retires it (step 4) and drops the tombstone
+ *     (step 4b). Re-adding a section at the order (upsertPublishedBlock)
+ *     replaces the tombstone — re-add cancels the staged removal, and
+ *     `discardSiteDrafts` undoes it wholesale.
+ *
+ * Why a tombstone and not an immediate both-layer delete: after a reorder,
+ * the published row at a slot can be a *different logical section* than the
+ * merged draft-wins row the PM is looking at — deleting both layers by order
+ * would silently drop the wrong section from the live site.
+ *
+ * AUTHZ: caller (route layer) verifies pm_admin/cam membership + hasSiteEditor.
+ */
+export async function removeSiteBlock({
+  communityId,
+  actorUserId,
+  blockOrder,
+}: RemoveSiteBlockInput): Promise<RemoveSiteBlockResult> {
+  if (blockOrder < MIN_CONTENT_BLOCK_ORDER) {
+    throw new ValidationError('The welcome (hero) section cannot be removed.');
+  }
+
+  const db = createUnscopedClient();
+
+  return db.transaction(async (tx) => {
+    // Serialize with publish/reorder for this community (same lock) so the
+    // read-decide-write below can't interleave with a promotion.
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
+    const scoped = createScopedClient(
+      communityId,
+      tx as unknown as Parameters<typeof createScopedClient>[1],
+    );
+
+    const rows = await tx
+      .select({
+        id: siteBlocks.id,
+        blockType: siteBlocks.blockType,
+        isDraft: siteBlocks.isDraft,
+      })
+      .from(siteBlocks)
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.blockOrder, blockOrder),
+          isNull(siteBlocks.deletedAt),
+        ),
+      );
+
+    const hasPublished = rows.some((r) => !r.isDraft);
+    const visibleDraft = rows.find(
+      (r) => r.isDraft && r.blockType !== TOMBSTONE_BLOCK_TYPE,
+    );
+
+    // Nothing the PM can see at this slot (empty, or already tombstoned with
+    // no published row — which publish would clean up anyway).
+    if (!hasPublished && !visibleDraft) {
+      throw new NotFoundError('Content section not found for this community');
+    }
+
+    // Clear any draft at the slot (edited draft or stale tombstone). For a
+    // draft-only slot this IS the removal; for a published slot it makes room
+    // for the tombstone under the partial unique index.
+    await scoped.softDelete(
+      siteBlocks,
+      and(
+        eq(siteBlocks.blockOrder, blockOrder),
+        eq(siteBlocks.isDraft, true),
+        isNull(siteBlocks.deletedAt),
+      ),
+    );
+
+    if (hasPublished) {
+      await scoped.insert(siteBlocks, {
+        communityId,
+        blockType: TOMBSTONE_BLOCK_TYPE,
+        blockOrder,
+        isDraft: true,
+        publishedAt: null,
+        content: {},
+      });
+    }
+
+    await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
+      userId: actorUserId,
+      communityId,
+      action: 'delete',
+      resourceType: 'site_block',
+      resourceId: String(blockOrder),
+      metadata: {
+        blockOrder,
+        staged: hasPublished,
+        removedBlockType: visibleDraft?.blockType ?? rows.find((r) => !r.isDraft)?.blockType ?? null,
+      },
+    });
+
+    return { staged: hasPublished };
+  });
+}
+
+export interface DiscardSiteDraftsInput {
+  communityId: number;
+  actorUserId: string;
+}
+
+export interface DiscardSiteDraftsResult {
+  discardedCount: number;
+}
+
+/**
+ * Discards every pending draft for the community — staged edits, staged
+ * reorders, and staged deletions (tombstones) alike. Published rows are
+ * untouched, so the editor snaps back to exactly what the live site shows.
+ * Without this, a staged change could only be escaped by publishing it.
+ *
+ * AUTHZ: caller (route layer) verifies pm_admin/cam membership + hasSiteEditor.
+ */
+export async function discardSiteDrafts({
+  communityId,
+  actorUserId,
+}: DiscardSiteDraftsInput): Promise<DiscardSiteDraftsResult> {
+  const db = createUnscopedClient();
+
+  return db.transaction(async (tx) => {
+    // Same community lock as publish — a discard racing a publish must see
+    // either all drafts (discard wins the lock) or none (publish promoted
+    // them first), never a partial set.
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
+    const discarded = await tx
+      .update(siteBlocks)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.isDraft, true),
+          isNull(siteBlocks.deletedAt),
+        ),
+      )
+      .returning({ id: siteBlocks.id });
+    const discardedCount = discarded.length;
+
+    if (discardedCount > 0) {
+      await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
+        userId: actorUserId,
+        communityId,
+        action: 'delete',
+        resourceType: 'community_site_drafts',
+        resourceId: String(communityId),
+        metadata: { discardedCount },
+      });
+    }
+
+    return { discardedCount };
   });
 }
 

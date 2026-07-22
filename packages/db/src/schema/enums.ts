@@ -1,11 +1,15 @@
 /**
  * PostgreSQL enum definitions for PropertyPro.
  *
- * Role model follows ADR-001 canonical role decisions:
- * - userRoleEnum contains 7 canonical community-scoped domain roles
- * - platform_admin is system-scoped (stored separately, not in user_roles)
- * - auditor excluded from v1 (deferred to v2 per ADR-001)
- * - One active canonical role per (user_id, community_id)
+ * Role model (v3 / ADR-006): community-scoped roles live in `userRoleV2Enum`
+ * (`resident` / `property_manager` / `root_manager`), with board status carried
+ * by an orthogonal `designation`. `platform_admin` is system-scoped (stored
+ * separately in `platformAdminRoleEnum`, not in `user_roles`).
+ *
+ * The legacy 7-role `user_role` enum (ADR-001) was retired: dropped from prod in
+ * the pre-squash role-simplification cleanup and removed from the schema here
+ * (role-v3 R3-06). Migration 0031 drops it from any from-disk database so the
+ * squashed baseline's `CREATE TYPE user_role` is reconciled with prod.
  */
 import { pgEnum } from 'drizzle-orm/pg-core';
 
@@ -14,27 +18,6 @@ export const communityTypeEnum = pgEnum('community_type', [
   'condo_718',
   'hoa_720',
   'apartment',
-]);
-
-/**
- * Canonical community-scoped roles per ADR-001.
- * [AGENTS #2: roles are per-community, not global]
- *
- * Note: platform_admin is system-scoped (stored separately, not in user_roles).
- * Note: auditor excluded from v1, deferred to v2 per ADR-001.
- *
- * Community-type constraints (enforced at application layer):
- * - condo_718/hoa_720: owner, tenant, board_member, board_president, cam, property_manager_admin
- * - apartment: tenant, site_manager, property_manager_admin
- */
-export const userRoleEnum = pgEnum('user_role', [
-  'owner',
-  'tenant',
-  'board_member',
-  'board_president',
-  'cam',
-  'site_manager',
-  'property_manager_admin',
 ]);
 
 /** Contract lifecycle status for vendor contract tracking (P3-52). */

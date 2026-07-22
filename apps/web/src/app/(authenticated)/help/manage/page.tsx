@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { createScopedClient, faqs } from '@propertypro/db';
 import { HelpFaqManageClient } from '@/components/help/help-faq-manage-client';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { requireHelpPageContext } from '@/lib/help/page-context';
 import { ensureFaqsExist, sortFaqs } from '@/lib/services/faq-service';
 
@@ -30,12 +29,6 @@ export default async function HelpManagePage({
       <PageHeader
         title="Manage FAQs"
         description="Review and update the quick-answer help content shown to this community."
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Help Center', href: `/help?communityId=${context.communityId}` }]}
-            currentLabel="Manage FAQs"
-          />
-        }
       />
       <HelpFaqManageClient
         communityId={context.communityId}

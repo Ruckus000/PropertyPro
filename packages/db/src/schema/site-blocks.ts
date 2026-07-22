@@ -5,6 +5,9 @@
  * Block types: hero, announcements, documents, meetings, contact, text, image
  * (enforced via CHECK constraint; jsx_template retired in migration 0008).
  * Migration 0010 added the Pro+ polish blocks: faq, gallery, amenities.
+ * Migration 0026 added the 'tombstone' sentinel (staged deletion — a draft
+ * row marking "remove the published block at this order on publish"; see
+ * TOMBSTONE_BLOCK_TYPE in @propertypro/shared).
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -47,7 +50,7 @@ export const siteBlocks = pgTable(
       .where(sql`${table.deletedAt} IS NULL`),
     check(
       'site_blocks_block_type_check',
-      sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities')`,
+      sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','tombstone')`,
     ),
   ],
 );

@@ -23,21 +23,13 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
-import { ForbiddenError } from '@/lib/api/errors';
-// AUTHZ: Billing group lookup — returns PM's owned billing group, creating on-demand from existing community
-import { isPmAdminInAnyCommunity } from '@propertypro/db/unsafe';
+import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { getOrCreateBillingGroupForPm } from '@/lib/billing/billing-group-service';
 import { billingGroupsMineContract } from './contract';
 
 export const GET = withErrorHandler(
   runRoute(billingGroupsMineContract, async () => {
-    const userId = await requireAuthenticatedUserId();
-
-    const isPm = await isPmAdminInAnyCommunity(userId);
-    if (!isPm) {
-      throw new ForbiddenError('This endpoint is only available to property managers');
-    }
+    const userId = await requirePmPortfolioAccess();
 
     const { billingGroupId } = await getOrCreateBillingGroupForPm(userId);
     return { billingGroupId };

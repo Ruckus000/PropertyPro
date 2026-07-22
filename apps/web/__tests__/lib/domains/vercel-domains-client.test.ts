@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   addProjectDomain,
+  checkDomainAvailability,
   getDomainStatus,
   removeProjectDomain,
   DomainProvisioningUnavailableError,
   DomainProviderError,
+  DomainProviderRateLimitedError,
 } from '@/lib/domains/vercel-domains-client';
 
 const ENV = { VERCEL_TOKEN: 't0ken', VERCEL_PROJECT_ID: 'prj_x', VERCEL_ORG_ID: 'team_y' };
@@ -72,5 +74,80 @@ describe('vercel-domains-client', () => {
     const res = await addProjectDomain('not-a-domain');
     expect(res.status).toBe('error');
     expect(res.reason).toBe('Domain is invalid');
+  });
+});
+
+describe('checkDomainAvailability (guided purchase)', () => {
+  function mockFetchSequence(responses: Array<{ status: number; body: unknown }>) {
+    const spy = vi.spyOn(globalThis, 'fetch');
+    for (const r of responses) {
+      spy.mockResolvedValueOnce(new Response(JSON.stringify(r.body), { status: r.status }) as Response);
+    }
+    return spy;
+  }
+
+  it('returns available with price + period when both calls succeed', async () => {
+    const spy = mockFetchSequence([
+      { status: 200, body: { available: true } },
+      { status: 200, body: { purchasePrice: 12, years: 1 } },
+    ]);
+    const res = await checkDomainAvailability('foo.com');
+    expect(res).toEqual({ available: true, price: 12, period: 1 });
+    // Registrar API (the old /v4/domains/status + /price were sunsetted
+    // 2025-11-09). Price query is built with URLSearchParams so teamId is
+    // appended with &, never a second '?'.
+    const statusUrl = String(spy.mock.calls[0]![0]);
+    expect(statusUrl).toContain('/v1/registrar/domains/foo.com/availability');
+    expect(statusUrl).toContain('teamId=team_y');
+    const priceUrl = String(spy.mock.calls[1]![0]);
+    expect(priceUrl).toContain('/v1/registrar/domains/foo.com/price?');
+    expect(priceUrl).toContain('years=1');
+    expect(priceUrl.match(/\?/g)).toHaveLength(1);
+  });
+
+  it("accepts the docs' string form of available ('true')", async () => {
+    mockFetchSequence([
+      { status: 200, body: { available: 'true' } },
+      { status: 400, body: {} },
+    ]);
+    const res = await checkDomainAvailability('foo.com');
+    expect(res.available).toBe(true);
+  });
+
+  it('returns taken without calling the price endpoint', async () => {
+    const spy = mockFetchSequence([{ status: 200, body: { available: false } }]);
+    const res = await checkDomainAvailability('google.com');
+    expect(res).toEqual({ available: false, price: null, period: null });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('degrades to price=null when the price call fails (availability still answered)', async () => {
+    mockFetchSequence([
+      { status: 200, body: { available: true } },
+      { status: 400, body: { error: { code: 'unsupported_tld' } } },
+    ]);
+    const res = await checkDomainAvailability('foo.dev');
+    expect(res).toEqual({ available: true, price: null, period: null });
+  });
+
+  it('URL-encodes the domain into the registrar path', async () => {
+    const spy = mockFetchSequence([{ status: 200, body: { available: false } }]);
+    await checkDomainAvailability('xn--caf-dma.com');
+    expect(String(spy.mock.calls[0]![0])).toContain('/v1/registrar/domains/xn--caf-dma.com/availability');
+  });
+
+  it('throws DomainProviderRateLimitedError on a 429 from the status call', async () => {
+    mockFetchSequence([{ status: 429, body: { error: { code: 'rate_limited' } } }]);
+    await expect(checkDomainAvailability('foo.com')).rejects.toBeInstanceOf(DomainProviderRateLimitedError);
+  });
+
+  it('throws DomainProviderError on other status-call failures', async () => {
+    mockFetchSequence([{ status: 400, body: { error: { message: 'Unsupported TLD', code: 'bad_tld' } } }]);
+    await expect(checkDomainAvailability('foo.zzz')).rejects.toBeInstanceOf(DomainProviderError);
+  });
+
+  it('throws DomainProvisioningUnavailableError when env is unconfigured', async () => {
+    delete (process.env as Record<string,string>).VERCEL_TOKEN;
+    await expect(checkDomainAvailability('foo.com')).rejects.toBeInstanceOf(DomainProvisioningUnavailableError);
   });
 });

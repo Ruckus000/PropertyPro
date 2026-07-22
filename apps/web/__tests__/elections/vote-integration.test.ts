@@ -29,6 +29,8 @@ import { UnprocessableEntityError } from '@/lib/api/errors';
  *   apps/web/__tests__/elections/vote-integration.test.ts
  */
 describe('vote submission integration', () => {
+  const auditLogMaintenanceLockNamespace = 817;
+  const auditLogMaintenanceLockKey = 1;
   const db = createUnscopedClient();
   const testUserId = randomUUID();
   let communityId: number;
@@ -149,17 +151,19 @@ describe('vote submission integration', () => {
   });
 
   afterAll(async () => {
-    // compliance_audit_log has a PL/pgSQL trigger that blocks DELETE.
-    // Temporarily disable it for test cleanup, then re-enable.
-    await db.execute(sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`);
-    await db.execute(
-      sql`DELETE FROM compliance_audit_log WHERE community_id = ${communityId}`,
-    );
-    await db.execute(sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`);
+    // The audit trigger is database-wide. Keep its test-only override inside a
+    // transaction and the shared advisory-lock namespace so parallel cleanup
+    // cannot interleave a re-enable between DELETE statements.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${auditLogMaintenanceLockNamespace}, ${auditLogMaintenanceLockKey})`);
+      await tx.execute(sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`);
+      await tx.execute(sql`DELETE FROM compliance_audit_log WHERE community_id = ${communityId}`);
+      await tx.execute(sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`);
 
-    // Deleting the community cascades to elections, candidates, ballots,
-    // submissions, snapshots, units, and user_roles
-    await db.delete(communities).where(eq(communities.id, communityId));
+      // Deleting the community cascades to elections, candidates, ballots,
+      // submissions, snapshots, units, and user_roles.
+      await tx.delete(communities).where(eq(communities.id, communityId));
+    });
 
     // Finally remove the test user
     await db.delete(users).where(eq(users.id, testUserId));

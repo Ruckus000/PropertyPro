@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { SIGNUP_TRIAL_DAYS } from '@propertypro/shared';
 
 const QA = [
   {
@@ -18,6 +19,10 @@ const QA = [
   {
     q: 'What if a community already has a website?',
     a: 'Most general websites don’t meet the statute’s posting and notice requirements. PropertyPro can run alongside or replace it — and each community can use its own custom domain.',
+  },
+  {
+    q: 'Is there a free trial? Do I need a card?',
+    a: `Yes — a ${SIGNUP_TRIAL_DAYS}-day trial. A card is required to start; you will not be charged until the trial ends unless you cancel.`,
   },
 ];
 

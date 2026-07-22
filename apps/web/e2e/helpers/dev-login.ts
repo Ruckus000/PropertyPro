@@ -10,6 +10,7 @@ export type DevRole =
   | 'tenant'
   | 'cam'
   | 'pm_admin'
+  | 'founding_admin'
   | 'site_manager';
 
 type AgentLoginPayload = {
@@ -83,7 +84,7 @@ export async function loginAs(
     );
   }
 
-  await page.goto(payload.portal, { waitUntil: 'networkidle' });
+  await page.goto(payload.portal, { waitUntil: 'domcontentloaded' });
 
   return {
     communityId,

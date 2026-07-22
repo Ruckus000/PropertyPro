@@ -12,8 +12,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
-import { ADMIN_ROLES } from '@propertypro/shared';
-import type { AnyCommunityRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
+import { getIdleTimeoutMs } from './idle-timeout';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,15 +31,8 @@ const CHANNEL_NAME = 'pp-idle-sync';
 
 type ChannelMessage = { deadline: number } | { type: 'stay' };
 
-function getIdleTimeoutMs(role: AnyCommunityRole | null): number {
-  if (role && (ADMIN_ROLES as readonly string[]).includes(role)) {
-    return 30 * 60 * 1000; // 30 min for admin roles
-  }
-  return 60 * 60 * 1000; // 60 min for residents / unknown
-}
-
 interface IdleSessionManagerProps {
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
 }
 
 export function IdleSessionManager({ role }: IdleSessionManagerProps) {

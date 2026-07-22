@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Button } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentDownloadUrl } from '@/hooks/use-documents';
 
 interface DocumentViewerModalProps {
@@ -59,9 +60,7 @@ export function DocumentViewerModal({
 
         <div className="h-[80vh]">
           {query.isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-interactive border-t-transparent" />
-            </div>
+            <Skeleton className="h-full w-full" />
           ) : null}
 
           {query.isError ? (
@@ -75,14 +74,14 @@ export function DocumentViewerModal({
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => {
                     void query.refetch();
                   }}
                 >
                   Try again
                 </Button>
-                <Button type="button" variant="primary" onClick={() => onOpenChange(false)}>
+                <Button type="button" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
               </div>

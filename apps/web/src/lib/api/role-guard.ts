@@ -5,24 +5,21 @@
  * caller holds one of the supplied roles in the resolved community. Throws
  * ForbiddenError when the caller's role is not in the allowlist.
  *
- * Aliases like `pm_admin` / `property_manager_admin` are accepted as
- * equivalent (per packages/shared/src/default-faqs.ts:15-17).
+ * v3 (ADR-006): stored roles are `resident` / `property_manager` /
+ * `root_manager`. Gating on `property_manager` also admits `root_manager`
+ * (root is a superset of the operational manager tier).
  */
 import { ForbiddenError } from '@/lib/api/errors';
 
 /**
  * v3 property-manager tier — re-exported under the call-site name for use with
  * requireRole/hasRole. The single source of truth is the shared role-transition
- * const (role-v3 Phase 4.3). ROLE_ALIASES expands `property_manager` to also
- * accept the legacy pm_admin/property_manager_admin analogs, so gating on it is
- * behavior-neutral; prod has no `cam`-role rows.
+ * const (role-v3 Phase 4.3).
  */
 export { PM_SCOPE_DB_ROLES as PM_MANAGER_ROLES } from '@propertypro/shared';
 
 const ROLE_ALIASES: Record<string, readonly string[]> = {
-  pm_admin: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
-  property_manager_admin: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
-  property_manager: ['pm_admin', 'property_manager_admin', 'property_manager', 'root_manager'],
+  property_manager: ['property_manager', 'root_manager'],
   root_manager: ['root_manager'],
 };
 

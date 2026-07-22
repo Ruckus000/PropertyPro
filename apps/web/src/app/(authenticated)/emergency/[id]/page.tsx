@@ -10,7 +10,6 @@ import { useSearchParams, useParams } from 'next/navigation';
 import { useEmergencyBroadcast } from '@/hooks/use-emergency-broadcasts';
 import { DeliveryReport } from '@/components/emergency/DeliveryReport';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 
 export default function BroadcastDetailPage() {
   const params = useParams();
@@ -42,12 +41,6 @@ export default function BroadcastDetailPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader
         title={report.title}
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Emergency', href: `/emergency?communityId=${communityId}` }]}
-            currentLabel={report.title}
-          />
-        }
         actions={
           <span
             className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[report.severity] ?? 'bg-surface-muted'}`}

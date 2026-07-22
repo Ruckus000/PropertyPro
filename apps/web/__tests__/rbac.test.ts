@@ -1,47 +1,58 @@
 /**
- * P4-57 RBAC matrix unit tests.
+ * RBAC matrix unit tests (role-v3 collapse, R3-01).
  *
- * Coverage strategy:
- * 1. Exhaustive: programmatically iterate all 378 cells
- *    (7 roles × 3 community types × 9 resources × 2 actions)
- *    and assert checkPermission() matches RBAC_MATRIX.
- * 2. Policy invariants: spot-check critical rules that must never regress,
- *    including ROLE_COMMUNITY_CONSTRAINTS consistency (covers all invalid
- *    role/community-type combinations programmatically).
+ * `checkPermissionV2` is the production choke point. It resolves the 3 reachable
+ * RBAC_MATRIX rows: `resident` + isUnitOwner → `owner`, `resident` → `tenant`,
+ * and `property_manager` / `root_manager` → `property_manager_admin`. These
+ * tests verify that resolution exhaustively against RBAC_MATRIX, plus the policy
+ * invariants that must never regress.
  *
- * No vi.mock needed — checkPermission is a pure function with no side effects.
+ * No vi.mock needed — checkPermissionV2 is a pure function with no side effects.
  */
 import { describe, expect, it } from 'vitest';
 import {
-  checkPermission,
   RBAC_MATRIX,
   RBAC_RESOURCES,
   RBAC_ACTIONS,
-  COMMUNITY_ROLES,
   COMMUNITY_TYPES,
-  ROLE_COMMUNITY_CONSTRAINTS,
-  type CommunityRole,
+  type MatrixRole,
+  type RbacResource,
+  type RbacAction,
   type CommunityType,
+  type CommunityRole,
 } from '@propertypro/shared';
+import { checkPermissionV2 } from '@/lib/db/access-control';
+
+// Each reachable v3 role-context and the matrix row checkPermissionV2 resolves.
+const CONTEXTS: Array<{
+  role: CommunityRole;
+  isUnitOwner?: boolean;
+  row: MatrixRole;
+  label: string;
+}> = [
+  { role: 'resident', isUnitOwner: true, row: 'owner', label: 'resident(owner)' },
+  { role: 'resident', isUnitOwner: false, row: 'tenant', label: 'resident(tenant)' },
+  { role: 'property_manager', row: 'manager', label: 'property_manager' },
+  { role: 'root_manager', row: 'manager', label: 'root_manager' },
+];
 
 // ---------------------------------------------------------------------------
-// 1. Exhaustive: 378 cells (7 × 3 × 9 × 2)
+// 1. Exhaustive: checkPermissionV2 resolves the correct matrix row
 // ---------------------------------------------------------------------------
 
-describe('checkPermission — exhaustive RBAC_MATRIX coverage', () => {
+describe('checkPermissionV2 — exhaustive matrix-row resolution', () => {
   for (const communityType of COMMUNITY_TYPES) {
-    for (const role of COMMUNITY_ROLES) {
+    for (const ctx of CONTEXTS) {
       for (const resource of RBAC_RESOURCES) {
         for (const action of RBAC_ACTIONS) {
-          const expected = RBAC_MATRIX[communityType][role][resource][action];
-          it(
-            `${role} / ${communityType} / ${resource} / ${action} → ${String(expected)}`,
-            () => {
-              expect(
-                checkPermission(role, communityType, resource, action),
-              ).toBe(expected);
-            },
-          );
+          const expected = RBAC_MATRIX[communityType][ctx.row][resource][action];
+          it(`${ctx.label} / ${communityType} / ${resource} / ${action} → ${String(expected)}`, () => {
+            expect(
+              checkPermissionV2(ctx.role, communityType, resource, action, {
+                isUnitOwner: ctx.isUnitOwner,
+              }),
+            ).toBe(expected);
+          });
         }
       }
     }
@@ -52,363 +63,74 @@ describe('checkPermission — exhaustive RBAC_MATRIX coverage', () => {
 // 2. Policy invariants
 // ---------------------------------------------------------------------------
 
+const owner = (t: CommunityType, r: RbacResource, a: RbacAction) =>
+  checkPermissionV2('resident', t, r, a, { isUnitOwner: true });
+const tenant = (t: CommunityType, r: RbacResource, a: RbacAction) =>
+  checkPermissionV2('resident', t, r, a, { isUnitOwner: false });
+const manager = (t: CommunityType, r: RbacResource, a: RbacAction) =>
+  checkPermissionV2('property_manager', t, r, a);
+
 describe('policy invariants', () => {
-
-  // --- apartment communities now support meetings; compliance stays condo/HOA only ---
-
-  it('apartment tenant can read meetings', () => {
-    expect(checkPermission('tenant', 'apartment', 'meetings', 'read')).toBe(true);
-  });
-
-  it('apartment tenant cannot write meetings', () => {
-    expect(checkPermission('tenant', 'apartment', 'meetings', 'write')).toBe(false);
-  });
-
-  it('apartment site_manager cannot read compliance', () => {
-    expect(checkPermission('site_manager', 'apartment', 'compliance', 'read')).toBe(false);
-  });
-
-  it('apartment site_manager cannot write compliance', () => {
-    expect(checkPermission('site_manager', 'apartment', 'compliance', 'write')).toBe(false);
-  });
-
-  it('apartment property_manager_admin can read meetings', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'meetings', 'read')).toBe(true);
-  });
-
-  it('apartment site_manager can write meetings', () => {
-    expect(checkPermission('site_manager', 'apartment', 'meetings', 'write')).toBe(true);
-  });
-
-  it('apartment property_manager_admin cannot read compliance', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'compliance', 'read')).toBe(false);
-  });
-
-  // --- audit is always read-only (write always false for all roles/types) ---
-
-  for (const role of COMMUNITY_ROLES) {
-    for (const communityType of COMMUNITY_TYPES) {
-      it(`${role} in ${communityType} cannot write audit (internal only)`, () => {
-        expect(checkPermission(role, communityType, 'audit', 'write')).toBe(false);
-      });
+  it('audit write is always false (logAuditEvent is internal-only)', () => {
+    for (const t of COMMUNITY_TYPES) {
+      expect(owner(t, 'audit', 'write')).toBe(false);
+      expect(tenant(t, 'audit', 'write')).toBe(false);
+      expect(manager(t, 'audit', 'write')).toBe(false);
     }
-  }
-
-  // --- settings write: only board_president and property_manager_admin ---
-
-  it('board_member cannot write settings in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'settings', 'write')).toBe(false);
   });
 
-  it('board_member cannot write settings in hoa_720', () => {
-    expect(checkPermission('board_member', 'hoa_720', 'settings', 'write')).toBe(false);
+  it('owner can read documents but not write them (read/write are separate axes)', () => {
+    expect(owner('condo_718', 'documents', 'read')).toBe(true);
+    expect(owner('condo_718', 'documents', 'write')).toBe(false);
+    expect(owner('hoa_720', 'documents', 'write')).toBe(false);
   });
 
-  it('cam cannot write settings in condo_718', () => {
-    expect(checkPermission('cam', 'condo_718', 'settings', 'write')).toBe(false);
+  it('managers have full document write', () => {
+    for (const t of COMMUNITY_TYPES) {
+      expect(manager(t, 'documents', 'write')).toBe(true);
+    }
   });
 
-  it('owner cannot write settings in condo_718', () => {
-    expect(checkPermission('owner', 'condo_718', 'settings', 'write')).toBe(false);
+  it('only managers can write settings; owners read, tenants cannot', () => {
+    expect(owner('condo_718', 'settings', 'read')).toBe(true);
+    expect(owner('condo_718', 'settings', 'write')).toBe(false);
+    expect(tenant('condo_718', 'settings', 'read')).toBe(false);
+    expect(manager('condo_718', 'settings', 'write')).toBe(true);
   });
 
-  it('tenant cannot write settings in condo_718', () => {
-    expect(checkPermission('tenant', 'condo_718', 'settings', 'write')).toBe(false);
+  it('residents (owner + tenant) can submit maintenance requests', () => {
+    expect(owner('condo_718', 'maintenance', 'write')).toBe(true);
+    expect(tenant('condo_718', 'maintenance', 'write')).toBe(true);
+    expect(tenant('apartment', 'maintenance', 'write')).toBe(true);
   });
 
-  it('board_president can write settings in condo_718', () => {
-    expect(checkPermission('board_president', 'condo_718', 'settings', 'write')).toBe(true);
+  it('apartments have no compliance for any role', () => {
+    expect(manager('apartment', 'compliance', 'read')).toBe(false);
+    expect(manager('apartment', 'compliance', 'write')).toBe(false);
+    expect(owner('apartment', 'compliance', 'read')).toBe(false);
   });
 
-  it('board_president can write settings in hoa_720', () => {
-    expect(checkPermission('board_president', 'hoa_720', 'settings', 'write')).toBe(true);
-  });
-
-  it('property_manager_admin can write settings in condo_718', () => {
-    expect(checkPermission('property_manager_admin', 'condo_718', 'settings', 'write')).toBe(true);
-  });
-
-  it('property_manager_admin can write settings in hoa_720', () => {
-    expect(checkPermission('property_manager_admin', 'hoa_720', 'settings', 'write')).toBe(true);
-  });
-
-  it('property_manager_admin can write settings in apartment', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'settings', 'write')).toBe(true);
-  });
-
-  it('site_manager cannot write settings in apartment', () => {
-    expect(checkPermission('site_manager', 'apartment', 'settings', 'write')).toBe(false);
-  });
-
-  // --- documents write: management-tier only; owners/tenants are read-only ---
-  // Issue #734: upload AND delete both gate on `documents:write` via
-  // requirePermission(). owner is in ELEVATED_ROLES for READ transparency but
-  // must NOT write. These invariants pin the per-type upload/delete authority.
-
-  it('owner cannot write documents in condo_718 (read-only transparency)', () => {
-    expect(checkPermission('owner', 'condo_718', 'documents', 'write')).toBe(false);
-  });
-
-  it('owner cannot write documents in hoa_720 (read-only transparency)', () => {
-    expect(checkPermission('owner', 'hoa_720', 'documents', 'write')).toBe(false);
-  });
-
-  it('owner can read documents in condo_718 (§718 transparency)', () => {
-    expect(checkPermission('owner', 'condo_718', 'documents', 'read')).toBe(true);
-  });
-
-  it('tenant cannot write documents in condo_718', () => {
-    expect(checkPermission('tenant', 'condo_718', 'documents', 'write')).toBe(false);
-  });
-
-  it('tenant cannot write documents in apartment', () => {
-    expect(checkPermission('tenant', 'apartment', 'documents', 'write')).toBe(false);
-  });
-
-  it('board_member can write documents in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'documents', 'write')).toBe(true);
-  });
-
-  it('board_president can write documents in hoa_720', () => {
-    expect(checkPermission('board_president', 'hoa_720', 'documents', 'write')).toBe(true);
-  });
-
-  it('cam can write documents in condo_718', () => {
-    expect(checkPermission('cam', 'condo_718', 'documents', 'write')).toBe(true);
-  });
-
-  it('cam can write documents in hoa_720', () => {
-    expect(checkPermission('cam', 'hoa_720', 'documents', 'write')).toBe(true);
-  });
-
-  it('property_manager_admin can write documents in condo_718', () => {
-    expect(checkPermission('property_manager_admin', 'condo_718', 'documents', 'write')).toBe(true);
-  });
-
-  it('property_manager_admin can write documents in apartment', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'documents', 'write')).toBe(true);
-  });
-
-  it('site_manager can write documents in apartment', () => {
-    expect(checkPermission('site_manager', 'apartment', 'documents', 'write')).toBe(true);
-  });
-
-  it('site_manager cannot write documents in condo_718 (invalid role)', () => {
-    expect(checkPermission('site_manager', 'condo_718', 'documents', 'write')).toBe(false);
-  });
-
-  // --- owner/tenant can write maintenance (their own requests) ---
-
-  it('condo_718 owner can write maintenance', () => {
-    expect(checkPermission('owner', 'condo_718', 'maintenance', 'write')).toBe(true);
-  });
-
-  it('condo_718 tenant can write maintenance', () => {
-    expect(checkPermission('tenant', 'condo_718', 'maintenance', 'write')).toBe(true);
-  });
-
-  it('hoa_720 owner can write maintenance', () => {
-    expect(checkPermission('owner', 'hoa_720', 'maintenance', 'write')).toBe(true);
-  });
-
-  it('apartment tenant can write maintenance', () => {
-    expect(checkPermission('tenant', 'apartment', 'maintenance', 'write')).toBe(true);
-  });
-
-  // --- owner/tenant cannot access contracts ---
-
-  it('condo_718 owner cannot read contracts', () => {
-    expect(checkPermission('owner', 'condo_718', 'contracts', 'read')).toBe(false);
-  });
-
-  it('condo_718 owner cannot write contracts', () => {
-    expect(checkPermission('owner', 'condo_718', 'contracts', 'write')).toBe(false);
-  });
-
-  it('condo_718 tenant cannot read contracts', () => {
-    expect(checkPermission('tenant', 'condo_718', 'contracts', 'read')).toBe(false);
-  });
-
-  it('hoa_720 tenant cannot read contracts', () => {
-    expect(checkPermission('tenant', 'hoa_720', 'contracts', 'read')).toBe(false);
-  });
-
-  // --- owner/tenant cannot access audit ---
-
-  it('condo_718 owner cannot read audit', () => {
-    expect(checkPermission('owner', 'condo_718', 'audit', 'read')).toBe(false);
-  });
-
-  it('condo_718 tenant cannot read audit', () => {
-    expect(checkPermission('tenant', 'condo_718', 'audit', 'read')).toBe(false);
-  });
-
-  // --- admin roles can read audit ---
-
-  it('board_member can read audit in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'audit', 'read')).toBe(true);
-  });
-
-  it('board_president can read audit in condo_718', () => {
-    expect(checkPermission('board_president', 'condo_718', 'audit', 'read')).toBe(true);
-  });
-
-  it('cam can read audit in condo_718', () => {
-    expect(checkPermission('cam', 'condo_718', 'audit', 'read')).toBe(true);
-  });
-
-  it('site_manager can read audit in apartment', () => {
-    expect(checkPermission('site_manager', 'apartment', 'audit', 'read')).toBe(true);
-  });
-
-  it('property_manager_admin can read audit in apartment', () => {
-    expect(checkPermission('property_manager_admin', 'apartment', 'audit', 'read')).toBe(true);
-  });
-
-  // --- owner can read settings in condo/HOA ---
-
-  it('condo_718 owner can read settings', () => {
-    expect(checkPermission('owner', 'condo_718', 'settings', 'read')).toBe(true);
-  });
-
-  it('hoa_720 owner can read settings', () => {
-    expect(checkPermission('owner', 'hoa_720', 'settings', 'read')).toBe(true);
-  });
-
-  it('condo_718 tenant cannot read settings', () => {
-    expect(checkPermission('tenant', 'condo_718', 'settings', 'read')).toBe(false);
-  });
-
-  // --- admin roles can write announcements/meetings ---
-
-  it('board_member can write announcements in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'announcements', 'write')).toBe(true);
-  });
-
-  it('board_member can write meetings in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'meetings', 'write')).toBe(true);
-  });
-
-  it('condo_718 owner cannot write announcements', () => {
-    expect(checkPermission('owner', 'condo_718', 'announcements', 'write')).toBe(false);
-  });
-
-  it('condo_718 owner cannot write meetings', () => {
-    expect(checkPermission('owner', 'condo_718', 'meetings', 'write')).toBe(false);
-  });
-
-  it('condo_718 tenant cannot write announcements', () => {
-    expect(checkPermission('tenant', 'condo_718', 'announcements', 'write')).toBe(false);
-  });
-
-  // --- residents write is admin-only ---
-
-  it('condo_718 owner cannot write residents', () => {
-    expect(checkPermission('owner', 'condo_718', 'residents', 'write')).toBe(false);
-  });
-
-  it('condo_718 tenant cannot write residents', () => {
-    expect(checkPermission('tenant', 'condo_718', 'residents', 'write')).toBe(false);
-  });
-
-  it('board_member can write residents in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'residents', 'write')).toBe(true);
-  });
-
-  it('site_manager can write residents in apartment', () => {
-    expect(checkPermission('site_manager', 'apartment', 'residents', 'write')).toBe(true);
-  });
-
-  it('apartment tenant cannot write residents', () => {
-    expect(checkPermission('tenant', 'apartment', 'residents', 'write')).toBe(false);
-  });
-
-  // --- documents read for all valid roles, write for admins ---
-
-  it('condo_718 owner can read documents', () => {
-    expect(checkPermission('owner', 'condo_718', 'documents', 'read')).toBe(true);
-  });
-
-  it('condo_718 owner cannot write documents', () => {
-    expect(checkPermission('owner', 'condo_718', 'documents', 'write')).toBe(false);
-  });
-
-  it('board_member can write documents in condo_718', () => {
-    expect(checkPermission('board_member', 'condo_718', 'documents', 'write')).toBe(true);
-  });
-
-  it('apartment tenant can read documents', () => {
-    expect(checkPermission('tenant', 'apartment', 'documents', 'read')).toBe(true);
-  });
-
-  it('apartment tenant cannot write documents', () => {
-    expect(checkPermission('tenant', 'apartment', 'documents', 'write')).toBe(false);
-  });
-
-  // --- WS70/WS71 resources ---
-
-  it('condo board_president can write calendar sync but not accounting connectors', () => {
-    expect(checkPermission('board_president', 'condo_718', 'calendar_sync', 'write')).toBe(true);
-    expect(checkPermission('board_president', 'condo_718', 'accounting', 'write')).toBe(false);
-  });
-
-  it('residents can read authenticated calendar sync feeds', () => {
-    expect(checkPermission('owner', 'condo_718', 'calendar_sync', 'read')).toBe(true);
-    expect(checkPermission('tenant', 'condo_718', 'calendar_sync', 'read')).toBe(true);
-    expect(checkPermission('tenant', 'apartment', 'calendar_sync', 'read')).toBe(true);
-  });
-
-  it('condo cam can write accounting connectors', () => {
-    expect(checkPermission('cam', 'condo_718', 'accounting', 'write')).toBe(true);
-  });
-
-  it('condo board_member cannot read or write packages/visitors', () => {
-    expect(checkPermission('board_member', 'condo_718', 'packages', 'read')).toBe(false);
-    expect(checkPermission('board_member', 'condo_718', 'packages', 'write')).toBe(false);
-    expect(checkPermission('board_member', 'condo_718', 'visitors', 'read')).toBe(false);
-    expect(checkPermission('board_member', 'condo_718', 'visitors', 'write')).toBe(false);
-  });
-
-  it('condo tenant can read packages and manage own visitor passes', () => {
-    expect(checkPermission('tenant', 'condo_718', 'packages', 'read')).toBe(true);
-    expect(checkPermission('tenant', 'condo_718', 'packages', 'write')).toBe(false);
-    expect(checkPermission('tenant', 'condo_718', 'visitors', 'read')).toBe(true);
-    expect(checkPermission('tenant', 'condo_718', 'visitors', 'write')).toBe(true);
-  });
-
-  // --- ROLE_COMMUNITY_CONSTRAINTS consistency ---
-  // Invalid role/community combos must be false for ALL resources and actions
-
-  it('RBAC_MATRIX is consistent with ROLE_COMMUNITY_CONSTRAINTS', () => {
-    for (const communityType of COMMUNITY_TYPES) {
-      const allowedRoles = ROLE_COMMUNITY_CONSTRAINTS[communityType] as readonly CommunityRole[];
-      for (const role of COMMUNITY_ROLES) {
-        const isAllowed = (allowedRoles as readonly string[]).includes(role);
-        if (!isAllowed) {
-          for (const resource of RBAC_RESOURCES) {
-            for (const action of RBAC_ACTIONS) {
-              expect(
-                checkPermission(role, communityType, resource, action),
-                `${role} in ${communityType} / ${resource} / ${action} must be false (invalid combo)`,
-              ).toBe(false);
-            }
-          }
+  it('property_manager and root_manager resolve identically (uniform management tier)', () => {
+    for (const t of COMMUNITY_TYPES) {
+      for (const resource of RBAC_RESOURCES) {
+        for (const action of RBAC_ACTIONS) {
+          expect(checkPermissionV2('root_manager', t, resource, action)).toBe(
+            checkPermissionV2('property_manager', t, resource, action),
+          );
         }
       }
     }
   });
 
-  // --- hoa_720 policy equals condo_718 policy ---
-  // Structural check: the two community types have identical permission profiles
-
-  it('hoa_720 and condo_718 have identical permission profiles', () => {
-    for (const role of COMMUNITY_ROLES) {
+  it('hoa_720 and condo_718 share identical policy for every reachable role', () => {
+    for (const ctx of CONTEXTS) {
       for (const resource of RBAC_RESOURCES) {
         for (const action of RBAC_ACTIONS) {
           expect(
-            checkPermission(role, 'hoa_720', resource, action),
-            `${role} / ${resource} / ${action} must match between condo_718 and hoa_720`,
-          ).toBe(checkPermission(role, 'condo_718', resource, action));
+            checkPermissionV2(ctx.role, 'hoa_720', resource, action, { isUnitOwner: ctx.isUnitOwner }),
+          ).toBe(
+            checkPermissionV2(ctx.role, 'condo_718', resource, action, { isUnitOwner: ctx.isUnitOwner }),
+          );
         }
       }
     }

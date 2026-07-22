@@ -131,7 +131,7 @@ describe('processPaymentReminders', () => {
 
     const summary = await processPaymentReminders(new Date());
 
-    expect(summary).toEqual({ communitiesScanned: 0, emailsSent: 0, errors: 0 });
+    expect(summary).toEqual({ communitiesScanned: 0, emailsSent: 0, emailsFailed: 0, errors: 0 });
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
@@ -201,8 +201,8 @@ describe('processPaymentReminders', () => {
     );
   });
 
-  it('sends expiry warning email and clears nextReminderAt when subscriptionCanceledAt is set', async () => {
-    const subscriptionCanceledAt = daysAgo(23);
+  it('sends a two-day lock warning on grace Day 5 and clears nextReminderAt', async () => {
+    const subscriptionCanceledAt = daysAgo(5);
     const community = {
       id: 3,
       name: 'Ocean Breeze HOA',
@@ -236,9 +236,12 @@ describe('processPaymentReminders', () => {
     );
     expect(paymentFailedCall).toBeUndefined();
 
-    // Subject should reference "Final warning" / expiry
+    // The final warning is sent two days before the 7-day grace period ends.
     expect(sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: expect.stringContaining('Final warning') }),
+      expect.objectContaining({ subject: 'Final warning: Ocean Breeze HOA access locked in 2 days' }),
+    );
+    expect(expiryCall?.[1]).toEqual(
+      expect.objectContaining({ expiryDate: expect.any(String) }),
     );
 
     // nextReminderAt should be cleared
@@ -432,6 +435,105 @@ describe('processPaymentReminders', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests: A5 — advance/clear schedule only on confirmed send
+// ---------------------------------------------------------------------------
+
+describe('processPaymentReminders — send-failure retry (A5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (sendEmail as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  it('preserves nextReminderAt when the final lock-warning send fails (retry next run)', async () => {
+    const community = {
+      id: 20,
+      name: 'Retry HOA',
+      communityType: 'hoa_720',
+      paymentFailedAt: daysAgo(30),
+      subscriptionCanceledAt: daysAgo(5),
+    };
+    const recipients = [{ email: 'p@hoa.com', fullName: 'P' }];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+    (sendEmail as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('resend down'));
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(0);
+    expect(summary.emailsFailed).toBe(1);
+    // Schedule must NOT be cleared — the warning would otherwise be lost forever.
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not advance the reminder schedule when the Day-3 send fails', async () => {
+    const community = {
+      id: 21,
+      name: 'Retry Villas',
+      communityType: 'apartment',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+    const recipients = [{ email: 'a@v.com', fullName: 'A' }];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+    (sendEmail as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('resend down'));
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(0);
+    expect(summary.emailsFailed).toBe(1);
+    expect(mockDbUpdate).not.toHaveBeenCalled();
+  });
+
+  it('counts sent and failed separately on partial failure and still advances the schedule', async () => {
+    const community = {
+      id: 22,
+      name: 'Partial',
+      communityType: 'apartment',
+      paymentFailedAt: daysAgo(3),
+      subscriptionCanceledAt: null,
+    };
+    const recipients = [
+      { email: 'ok@x.com', fullName: 'OK' },
+      { email: 'bad@x.com', fullName: 'Bad' },
+    ];
+    const db = buildMockDb([community], recipients);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+    (sendEmail as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('one bounced'));
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(summary.emailsSent).toBe(1);
+    expect(summary.emailsFailed).toBe(1);
+    // At least one delivered → schedule advances to Day 7.
+    expect(mockDbSet).toHaveBeenCalledWith(
+      expect.objectContaining({ nextReminderAt: expect.anything() }),
+    );
+  });
+
+  it('clears the schedule for a canceled community with no admin recipients (nothing to retry)', async () => {
+    const community = {
+      id: 23,
+      name: 'No Admins HOA',
+      communityType: 'hoa_720',
+      paymentFailedAt: daysAgo(30),
+      subscriptionCanceledAt: daysAgo(5),
+    };
+    const db = buildMockDb([community], []); // no recipients
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    const summary = await processPaymentReminders(new Date());
+
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(summary.emailsSent).toBe(0);
+    // No one to notify → clear so the cron doesn't scan this row forever.
+    expect(mockDbSet).toHaveBeenCalledWith(expect.objectContaining({ nextReminderAt: null }));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests: sendSubscriptionCanceledEmail
 // ---------------------------------------------------------------------------
 
@@ -442,7 +544,7 @@ describe('sendSubscriptionCanceledEmail', () => {
     (createUnscopedClient as ReturnType<typeof vi.fn>).mockReset();
   });
 
-  it('sends an email to each recipient with a subject including "30-day grace period"', async () => {
+  it('sends an email to each recipient with a subject including "7-day grace period"', async () => {
     const recipients = [
       { email: 'president@hoa.com', fullName: 'Frank President' },
       { email: 'cam@hoa.com', fullName: 'Grace CAM' },
@@ -467,10 +569,10 @@ describe('sendSubscriptionCanceledEmail', () => {
     // One sendEmail call per recipient
     expect(sendEmail).toHaveBeenCalledTimes(recipients.length);
 
-    // Every call must have a subject containing "30-day grace period"
+    // Every call must have a subject containing "7-day grace period"
     for (const call of (sendEmail as ReturnType<typeof vi.fn>).mock.calls) {
       const arg = call[0] as { subject: string };
-      expect(arg.subject).toMatch(/30-day grace period/i);
+      expect(arg.subject).toMatch(/7-day grace period/i);
     }
 
     // createElement should have been called with SubscriptionCanceledEmail
@@ -479,6 +581,9 @@ describe('sendSubscriptionCanceledEmail', () => {
       ([comp]) => comp === SubscriptionCanceledEmail,
     );
     expect(canceledCall).toBeDefined();
+    expect(canceledCall?.[1]).toEqual(
+      expect.objectContaining({ gracePeriodEndDate: 'February 8, 2026' }),
+    );
   });
 
   it('sends no emails when there are no admin recipients', async () => {

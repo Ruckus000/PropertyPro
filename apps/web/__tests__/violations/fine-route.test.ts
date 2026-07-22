@@ -62,6 +62,10 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: assertNotDemoGraceMock,
 }));
 
+vi.mock('@/lib/middleware/subscription-guard', () => ({
+  requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('@/lib/services/violations-service', () => ({
   imposeViolationFineForCommunity: imposeViolationFineForCommunityMock,
 }));

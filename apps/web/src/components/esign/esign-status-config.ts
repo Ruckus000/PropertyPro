@@ -1,9 +1,9 @@
 /**
- * Shared esign status configuration — single source of truth for
- * status badge labels, variants, and icons across esign components.
+ * E-sign status ICONS + event icons. Labels/variants come from the canonical
+ * domain map in @/lib/constants/status (ESIGN_STATUS_CONFIG).
  */
 
-import type { BadgeVariant } from '@propertypro/ui';
+import { ESIGN_STATUS_CONFIG } from '@/lib/constants/status';
 import {
   Clock,
   CheckCircle2,
@@ -17,22 +17,30 @@ import {
   Download,
 } from 'lucide-react';
 
+const STATUS_ICONS: Record<keyof typeof ESIGN_STATUS_CONFIG, typeof Clock> = {
+  pending: Clock,
+  processing: Loader2,
+  processing_failed: AlertTriangle,
+  opened: Eye,
+  completed: CheckCircle2,
+  declined: XCircle,
+  expired: AlertTriangle,
+  cancelled: Ban,
+};
+
 export interface EsignStatusConfigEntry {
   label: string;
-  variant: BadgeVariant;
+  variant: (typeof ESIGN_STATUS_CONFIG)[keyof typeof ESIGN_STATUS_CONFIG]['variant'];
   icon: typeof Clock;
 }
 
-export const ESIGN_STATUS_CONFIG: Record<string, EsignStatusConfigEntry> = {
-  pending: { label: 'Pending', variant: 'warning', icon: Clock },
-  processing: { label: 'Processing', variant: 'info', icon: Loader2 },
-  processing_failed: { label: 'Processing Failed', variant: 'danger', icon: AlertTriangle },
-  opened: { label: 'Opened', variant: 'info', icon: Eye },
-  completed: { label: 'Completed', variant: 'success', icon: CheckCircle2 },
-  declined: { label: 'Declined', variant: 'danger', icon: XCircle },
-  expired: { label: 'Expired', variant: 'neutral', icon: AlertTriangle },
-  cancelled: { label: 'Cancelled', variant: 'neutral', icon: Ban },
-};
+export const ESIGN_STATUS_DISPLAY: Record<string, EsignStatusConfigEntry> =
+  Object.fromEntries(
+    Object.entries(ESIGN_STATUS_CONFIG).map(([k, v]) => [
+      k,
+      { ...v, icon: STATUS_ICONS[k as keyof typeof ESIGN_STATUS_CONFIG] },
+    ]),
+  );
 
 export const EVENT_ICONS: Record<string, typeof Clock> = {
   created: FileSignature,

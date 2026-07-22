@@ -73,16 +73,11 @@ export const ESIGN_EVENT_TYPES = [
 ] as const;
 export type EsignEventType = (typeof ESIGN_EVENT_TYPES)[number];
 
-// ---------------------------------------------------------------------------
-// Roles that can manage e-sign templates and submissions
-// ---------------------------------------------------------------------------
-
-export const ESIGN_ELEVATED_ROLES = [
-  'board_member',
-  'board_president',
-  'cam',
-  'property_manager_admin',
-] as const;
+// E-sign management authorization is enforced at the route layer via
+// `requirePermission('esign', 'write')` (checkPermissionV2), not a static
+// role list. The former `ESIGN_ELEVATED_ROLES` legacy-vocabulary constant was
+// unused in production (asserted only by its own test) and was removed in the
+// role-v3 Phase 4.4 bridge drain (ADR-006).
 
 // ---------------------------------------------------------------------------
 // UETA consent text

@@ -41,6 +41,7 @@ export const DEMO_USERS = [
   { email: 'tenant.one@sunset.local', fullName: 'Tyler Tenant', phone: '305-555-0104' },
   { email: 'cam.one@sunset.local', fullName: 'Cameron CAM', phone: '305-555-0105' },
   { email: 'pm.admin@sunset.local', fullName: 'Pat PM', phone: '305-555-0106' },
+  { email: 'founding.admin@palm.local', fullName: 'Fran Founding', phone: '954-555-0100' },
   { email: 'site.manager@sunsetridge.local', fullName: 'Sierra Site', phone: '813-555-0107' },
   { email: 'tenant.apt101@sunsetridge.local', fullName: 'Alex Tenant', phone: '813-555-0201' },
   { email: 'tenant.apt102@sunsetridge.local', fullName: 'Blake Resident', phone: '813-555-0202' },

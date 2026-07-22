@@ -16,6 +16,7 @@ export interface NotificationPreferences {
   calendarReminderPersonalAssessments: boolean;
   calendarReminderCommunityAssessments: boolean;
   inAppEnabled: boolean;
+  emailInsuranceAlerts: boolean;
 }
 
 export const notificationPreferencesKey = (communityId: number) =>

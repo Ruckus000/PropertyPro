@@ -35,20 +35,14 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 // AUTHZ: Phase 2C: PM dashboard — cross-community KPI aggregation + report queries
-import { isPmAdminInAnyCommunity, getPortfolioDashboard } from '@propertypro/db/unsafe';
+import { getPortfolioDashboard } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError } from '@/lib/api/errors';
-import { requireAuthenticatedUserId } from '@/lib/api/auth';
+import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { pmDashboardSummaryContract } from './contract';
 
 export const GET = withErrorHandler(
   runRoute(pmDashboardSummaryContract, async ({ query }) => {
-    const userId = await requireAuthenticatedUserId();
-
-    const isPm = await isPmAdminInAnyCommunity(userId);
-    if (!isPm) {
-      throw new ForbiddenError('This endpoint is only available to property managers');
-    }
+    const userId = await requirePmPortfolioAccess();
 
     return await getPortfolioDashboard(userId, query);
   }),

@@ -26,6 +26,10 @@ export const notificationPreferences = pgTable(
     calendarReminderMeetings: boolean('calendar_reminder_meetings').notNull().default(true),
     calendarReminderPersonalAssessments: boolean('calendar_reminder_personal_assessments').notNull().default(true),
     calendarReminderCommunityAssessments: boolean('calendar_reminder_community_assessments').notNull().default(false),
+    // Insurance-hub renewal/expiry alerts (wind-mit report + master-policy expiry).
+    // Board/admin-only governance emails; the one-click List-Unsubscribe token and
+    // the settings toggle both write this flag. Default on (opt-out).
+    emailInsuranceAlerts: boolean('email_insurance_alerts').notNull().default(true),
     // In-app per-category muting toggles (all default true)
     // Master toggle inAppEnabled takes precedence — if false, none deliver.
     inAppAnnouncements: boolean('in_app_announcements').notNull().default(true),

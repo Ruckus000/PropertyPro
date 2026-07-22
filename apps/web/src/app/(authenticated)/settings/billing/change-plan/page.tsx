@@ -11,7 +11,6 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { getActiveSubscriptionInterval } from '@/lib/services/stripe-service';
 import { getSignupPlansForCommunityType } from '@/lib/auth/signup-schema';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import { ChangePlanForm } from '@/components/settings/change-plan-form';
 
 /**
@@ -78,15 +77,6 @@ export default async function ChangePlanPage({
   return (
     <div>
       <PageHeader
-        breadcrumb={
-          <Breadcrumbs
-            items={[
-              { label: 'Settings', href: `/settings?communityId=${context.communityId}` },
-              { label: 'Billing', href: billingHref },
-            ]}
-            currentLabel="Change plan"
-          />
-        }
         title="Change plan"
         description={`Update the plan or billing interval for ${membership.communityName}.`}
       />

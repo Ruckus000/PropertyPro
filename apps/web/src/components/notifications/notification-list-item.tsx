@@ -22,7 +22,7 @@ const CATEGORY_CONFIG: Record<
   document:     { icon: FileText,  iconClass: 'text-[var(--status-info)]' },
   meeting:      { icon: Calendar,  iconClass: 'text-[var(--interactive-primary)]' },
   maintenance:  { icon: Wrench,    iconClass: 'text-[var(--status-warning)]' },
-  violation:    { icon: AlertTriangle, iconClass: 'text-[var(--status-error)]' },
+  violation:    { icon: AlertTriangle, iconClass: 'text-[var(--status-danger)]' },
   election:     { icon: ClipboardList, iconClass: 'text-[var(--interactive-primary)]' },
   system:       { icon: Bell,      iconClass: 'text-[var(--text-tertiary)]' },
 };
@@ -75,7 +75,7 @@ export function NotificationListItem({
       onClick={handleClick}
       className={cn(
         'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-quick hover:bg-[var(--surface-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus',
-        isUrgent && 'border-l-2 border-[var(--status-error)]',
+        isUrgent && 'border-l-2 border-[var(--status-danger)]',
       )}
     >
       <span

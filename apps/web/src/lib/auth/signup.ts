@@ -314,6 +314,10 @@ export async function submitSignup(rawInput: unknown): Promise<SignupSubmitResul
   };
 }
 
+// A6: statuses at or past payment. A pending-signup row in one of these is a
+// live/committed signup and must never be reset by a re-submission.
+const POST_PAYMENT_SIGNUP_STATUSES = ['payment_completed', 'provisioning', 'completed'] as const;
+
 async function upsertPendingSignup(input: SignupPersistenceInput): Promise<PersistedSignupRow> {
   const db = createUnscopedClient();
   const timestamp = new Date();
@@ -370,6 +374,9 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
           updatedAt: timestamp,
           expiresAt,
         },
+        // A6: never clobber a paid/provisioned/completed signup back to
+        // pending_verification if someone re-signs up with an already-used email.
+        setWhere: notInArray(pendingSignups.status, [...POST_PAYMENT_SIGNUP_STATUSES]),
       })
       .returning({
         id: pendingSignups.id,
@@ -380,7 +387,12 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
 
     const row = rows[0];
     if (!row) {
-      throw new Error('Failed to persist pending signup');
+      // With the setWhere guard above, an empty result means the email already
+      // belongs to a committed signup — surface an actionable message.
+      throw new ValidationError(
+        'An account already exists for this email address. Please log in.',
+        { field: 'email' },
+      );
     }
     return row;
   } catch (error) {
@@ -391,51 +403,30 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
     }
 
     if (isUniqueConstraintError(error, 'pending_signups_signup_request_unique')) {
-      // Guard: also match emailNormalized to prevent cross-user hijacking
-      // when an attacker provides another user's signupRequestId.
-      const rows = await db
-        .update(pendingSignups)
-        .set({
-          primaryContactName: input.primaryContactName,
-          email: input.email,
-          emailNormalized: input.email,
-          communityName: input.communityName,
-          address: input.address,
-          addressLine1: input.addressLine1,
-          city: input.city || null,
-          state: input.state || null,
-          zipCode: input.zipCode || null,
-          county: input.county,
-          unitCount: input.unitCount,
-          communityType: input.communityType,
-          planKey: input.planKey,
-          candidateSlug: input.candidateSlug,
-          termsAcceptedAt: timestamp,
-          status: 'pending_verification',
-          payload,
-          updatedAt: timestamp,
-          expiresAt,
-        })
-        .where(
-          and(
-            eq(pendingSignups.signupRequestId, input.signupRequestId),
-            eq(pendingSignups.emailNormalized, input.email),
-          ),
-        )
-        .returning({
-          id: pendingSignups.id,
-          signupRequestId: pendingSignups.signupRequestId,
-          candidateSlug: pendingSignups.candidateSlug,
-          verificationEmailSentAt: pendingSignups.verificationEmailSentAt,
-        });
+      // A6: the submitted email differs from the one this signupRequestId was
+      // created with (a matching email would have been handled by the
+      // email-keyed upsert above). We must NOT reassign the signup to the new
+      // email — anyone who obtained a signupRequestId could otherwise hijack it.
+      // The client mints a fresh signupRequestId when the user legitimately edits
+      // their email, so a real correction becomes a brand-new signup. Here we
+      // return a clear, status-aware error and leave the existing row untouched.
+      const [existing] = await db
+        .select({ status: pendingSignups.status })
+        .from(pendingSignups)
+        .where(eq(pendingSignups.signupRequestId, input.signupRequestId))
+        .limit(1);
 
-      const row = rows[0];
-      if (row) {
-        return row;
+      if (
+        existing &&
+        (POST_PAYMENT_SIGNUP_STATUSES as readonly string[]).includes(existing.status)
+      ) {
+        throw new ValidationError('This signup is already complete — please log in.');
       }
 
-      // Email mismatch — the signupRequestId belongs to a different user.
-      throw new ValidationError('Unable to process signup request.');
+      throw new ValidationError(
+        'This signup was started with a different email address. Please start a new signup to use a different email.',
+        { field: 'email' },
+      );
     }
 
     const missingColumn = getUndefinedColumnName(error);

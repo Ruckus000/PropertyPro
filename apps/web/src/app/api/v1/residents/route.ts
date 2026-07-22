@@ -8,8 +8,8 @@ import crypto from 'node:crypto';
 import { runRoute } from '@/lib/api/run-route';
 import { logAuditEvent } from '@propertypro/db';
 import {
-  NEW_COMMUNITY_ROLES,
-  type NewCommunityRole,
+  COMMUNITY_ROLES,
+  type CommunityRole,
   type CommunityType,
 } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -17,7 +17,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
-import { requireCommunityType, requireNewCommunityRole } from '@/lib/utils/community-validators';
+import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 import { isResidentTierRole, validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -61,7 +61,7 @@ export const GET = withErrorHandler(
     requirePermission(membership, 'residents', 'read');
 
     const { searchParams } = new URL(req.url);
-    const validRoles = new Set(NEW_COMMUNITY_ROLES as unknown as string[]);
+    const validRoles = new Set(COMMUNITY_ROLES as unknown as string[]);
     const rolesParam = searchParams.get('roles');
     const roleParam = searchParams.get('role');
 
@@ -199,7 +199,7 @@ export const PATCH = withErrorHandler(
       throw new NotFoundError(`User ${userId} has no role in community ${communityId}`);
     }
 
-    const oldRole = requireNewCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
+    const oldRole = requireCommunityRole(existingRole['role'], `residents.PATCH existing role (userId=${userId})`);
     const oldUnitId = (existingRole['unitId'] as number | null) ?? null;
 
     // A manager-tier member's role configuration (role / unit / owner flag) is
@@ -278,7 +278,7 @@ export const PATCH = withErrorHandler(
         }
 
         roleUpdate['displayTitle'] = resolveDisplayTitle(
-          newRole as NewCommunityRole,
+          newRole as CommunityRole,
           effectiveIsUnitOwner,
         );
       }
@@ -345,7 +345,7 @@ export const DELETE = withErrorHandler(
 );
 
 function resolveDisplayTitle(
-  role: NewCommunityRole,
+  role: CommunityRole,
   isUnitOwner?: boolean,
 ): string {
   if (role === 'resident') return isUnitOwner ? 'Owner' : 'Tenant';

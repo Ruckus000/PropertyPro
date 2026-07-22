@@ -1,8 +1,10 @@
 /**
  * AlertBanner — Contextual alert messages with semantic token styling.
  *
- * Tailwind-based implementation of the pattern from
- * docs/design-system/patterns/AlertBanner.tsx.
+ * Tailwind-based implementation of the pattern documented at
+ * docs/design-system/patterns/ (see docs/design-system/README.md). This
+ * component is the canonical implementation — the docs folder no longer
+ * carries a duplicate .tsx copy.
  *
  * Always renders with role="alert" for accessibility.
  * Always includes icon + text (never color alone).
@@ -30,6 +32,8 @@ const STATUS_ICONS: Record<StatusVariant, LucideIcon> = {
   info: Info,
   neutral: Circle,
   brand: Info,
+  owner: Info,
+  board: Info,
 };
 
 // ── Variant class mappings ──
@@ -41,6 +45,8 @@ const filledClasses: Record<StatusVariant, string> = {
   info: "bg-status-info-bg border-l-status-info text-status-info",
   neutral: "bg-status-neutral-bg border-l-status-neutral text-status-neutral",
   brand: "bg-status-brand-bg border-l-status-brand text-status-brand",
+  owner: "bg-[var(--status-owner-bg)] border-l-[var(--status-owner)] text-[var(--status-owner)]",
+  board: "bg-[var(--status-board-bg)] border-l-[var(--status-board)] text-[var(--status-board)]",
 };
 
 const subtleClasses: Record<StatusVariant, string> = {
@@ -55,6 +61,10 @@ const subtleClasses: Record<StatusVariant, string> = {
     "bg-status-neutral-subtle border border-status-neutral-border border-l-status-neutral text-status-neutral",
   brand:
     "bg-status-brand-subtle border border-status-brand-border border-l-status-brand text-status-brand",
+  owner:
+    "bg-[var(--status-owner-subtle)] border border-[var(--status-owner-border)] border-l-[var(--status-owner)] text-[var(--status-owner)]",
+  board:
+    "bg-[var(--status-board-subtle)] border border-[var(--status-board-border)] border-l-[var(--status-board)] text-[var(--status-board)]",
 };
 
 const outlinedClasses: Record<StatusVariant, string> = {
@@ -69,6 +79,10 @@ const outlinedClasses: Record<StatusVariant, string> = {
     "bg-transparent border border-status-neutral-border border-l-status-neutral text-status-neutral",
   brand:
     "bg-transparent border border-status-brand-border border-l-status-brand text-status-brand",
+  owner:
+    "bg-transparent border border-[var(--status-owner-border)] border-l-[var(--status-owner)] text-[var(--status-owner)]",
+  board:
+    "bg-transparent border border-[var(--status-board-border)] border-l-[var(--status-board)] text-[var(--status-board)]",
 };
 
 // ── Props ──

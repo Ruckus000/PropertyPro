@@ -16,14 +16,14 @@
  *                fallback if it ever does.
  */
 import * as React from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check } from 'lucide-react';
 import {
   PLAN_FEATURES,
   findCheapestPlanForFeature,
   getLockedFeatureBehavior,
   getPlanFeatureCopy,
   resolvePlanId,
-  type AnyCommunityRole,
+  type CommunityRole,
   type CommunityFeatures,
   type PlanId,
 } from '@propertypro/shared';
@@ -50,7 +50,9 @@ export interface UpgradeDialogProps {
   currentPlanId: PlanId | null;
   /** Raw plan string from the community row, used as a fallback for resolution. */
   currentPlanRaw: string | null;
-  role: AnyCommunityRole | null;
+  role: CommunityRole | null;
+  /** Distinguishes unit owner (request) from tenant (hidden) among residents. */
+  isUnitOwner?: boolean;
   /**
    * Tenant id, threaded through to the fetch URLs. Without it,
    * `resolveEffectiveCommunityId` on the API side can't pick a tenant when
@@ -67,6 +69,7 @@ export function UpgradeDialog({
   currentPlanId,
   currentPlanRaw,
   role,
+  isUnitOwner,
   communityId,
 }: UpgradeDialogProps) {
   const [pending, setPending] = React.useState(false);
@@ -82,7 +85,7 @@ export function UpgradeDialog({
     }
   }, [open]);
 
-  const behavior = getLockedFeatureBehavior(role);
+  const behavior = getLockedFeatureBehavior(role, isUnitOwner);
   const copy = featureKey ? getPlanFeatureCopy(featureKey) : null;
 
   const resolvedCurrentPlan: PlanId | null =
@@ -307,8 +310,7 @@ function DialogFooterActions({
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             Maybe later
           </Button>
-          <Button onClick={onNotify} disabled={pending}>
-            {pending && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+          <Button onClick={onNotify} loading={pending}>
             Notify your board
           </Button>
         </div>
@@ -321,8 +323,7 @@ function DialogFooterActions({
       <Button variant="ghost" onClick={onClose} disabled={pending}>
         Maybe later
       </Button>
-      <Button onClick={onUpgrade} disabled={pending || !canUpgrade}>
-        {pending && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
+      <Button onClick={onUpgrade} disabled={!canUpgrade} loading={pending}>
         Upgrade now
       </Button>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -122,10 +122,10 @@ export function PollVotingSection({
         <Button
           type="button"
           className="h-11 md:h-9"
-          disabled={selectedOptions.length === 0 || castVote.isPending}
+          disabled={selectedOptions.length === 0}
+          loading={castVote.isPending}
           onClick={() => void castVote.mutateAsync(selectedOptions)}
         >
-          {castVote.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           Submit Vote
         </Button>
       ) : null}

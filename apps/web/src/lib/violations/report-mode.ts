@@ -1,4 +1,4 @@
-import type { TransitionRole } from '@propertypro/shared';
+import type { CommunityRole } from '@propertypro/shared';
 
 export type ViolationReportMode = 'resident' | 'resident_no_unit' | 'staff';
 
@@ -10,7 +10,7 @@ export type ViolationReportMode = 'resident' | 'resident_no_unit' | 'staff';
  *   staff form with unit picker.
  */
 export function resolveReportMode(
-  role: TransitionRole,
+  role: CommunityRole,
   residentUnitIds: number[],
 ): ViolationReportMode {
   if (role !== 'resident') return 'staff';

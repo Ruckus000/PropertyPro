@@ -1,5 +1,4 @@
 export {
-  FadeIn,
   SlideUp,
   StaggerChildren,
   StaggerItem,

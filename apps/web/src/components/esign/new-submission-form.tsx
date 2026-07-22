@@ -12,9 +12,9 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Card } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/shared/page-header';
-import { Breadcrumbs } from '@/components/shared/breadcrumbs';
 import type { EsignFieldsSchema } from '@propertypro/shared';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 import { useCreateEsignSubmission } from '@/hooks/use-esign-submissions';
@@ -178,12 +178,6 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
       <PageHeader
         title="Send Document for Signing"
         description="Select a template, add signers, and send."
-        breadcrumb={
-          <Breadcrumbs
-            items={[{ label: 'Submissions', href: `/esign/submissions?communityId=${communityId}` }]}
-            currentLabel="New submission"
-          />
-        }
       />
 
       <div className="space-y-6">
@@ -460,7 +454,7 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                 Review & Send
               </Button>
             ) : (
-              <Card className="p-5 border-status-info-border bg-interactive-subtle/50">
+              <Card className="p-5 border-status-info-border bg-interactive-subtle">
                 <h3 className="text-sm font-medium text-content mb-2">
                   Confirm & Send
                 </h3>
@@ -498,19 +492,10 @@ export function NewSubmissionForm({ communityId }: NewSubmissionFormProps) {
                   <Button
                     className="flex-1"
                     onClick={handleSubmit}
-                    disabled={createMutation.isPending}
+                    loading={createMutation.isPending}
                   >
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4 mr-2" />
-                        Send for Signing
-                      </>
-                    )}
+                    {!createMutation.isPending && <Send className="h-4 w-4 mr-2" />}
+                    {createMutation.isPending ? 'Sending...' : 'Send for Signing'}
                   </Button>
                 </div>
 
