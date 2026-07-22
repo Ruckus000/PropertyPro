@@ -14,6 +14,7 @@ import {
 } from '@/lib/services/help-article-service';
 import { HelpSearchInput } from '@/components/help/help-search-input';
 import { PageHeader } from '@/components/shared/page-header';
+import { PageBody } from '@/components/shared/page-body';
 
 interface CategoryPageProps {
   params: Promise<{ category: string }>;
@@ -83,7 +84,7 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 lg:px-6">
+    <PageBody width="content" spacing="none">
       <PageHeader
         title={categoryLabel}
         description={`${sorted.length} ${sorted.length === 1 ? 'article' : 'articles'}`}
@@ -134,6 +135,6 @@ export default async function HelpCategoryPage({ params }: CategoryPageProps) {
           );
         })}
       </div>
-    </div>
+    </PageBody>
   );
 }

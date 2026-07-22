@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageBody } from '@/components/shared/page-body';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { UNKNOWN_SUBDOMAIN_REASON } from '@/lib/middleware/unknown-subdomain-reason';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
@@ -52,7 +53,7 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
   }
 
   return (
-    <main id="main-content" className="mx-auto max-w-4xl px-6 py-12">
+    <PageBody width="content">
       {unknownSubdomain && (
         <div className="mb-6">
           <AlertBanner
@@ -81,6 +82,6 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
       ) : (
         <CommunityPickerGrid communities={communities} returnTo={safeReturnTo} />
       )}
-    </main>
+    </PageBody>
   );
 }

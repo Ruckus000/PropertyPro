@@ -29,6 +29,7 @@ import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
 import { ContentSectionsList } from '@/components/pm/site-editor/ContentSectionsList';
 import { PublishBar } from '@/components/pm/site-editor/PublishBar';
 import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
+import { PageBody } from '@/components/shared/page-body';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -40,7 +41,7 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
 
   if (!Number.isInteger(rawId) || rawId <= 0) {
     return (
-      <main className="mx-auto max-w-lg px-6 py-16 text-center">
+      <PageBody width="narrow" className="text-center">
         <h1 className="text-xl font-semibold text-content">Select a Community</h1>
         <p className="mt-2 text-sm text-content-secondary">
           Choose a community from the Communities list to customize its public site.
@@ -51,7 +52,7 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
         >
           Go to Communities
         </a>
-      </main>
+      </PageBody>
     );
   }
 
@@ -110,7 +111,7 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   const showWizardBanner = onboardingCompletedAt === null;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
+    <PageBody width="reading" spacing="none">
       {showWizardBanner && <WizardEntryBanner communityId={communityId} />}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
@@ -200,6 +201,6 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
       </section>
 
       <PublishBar communityId={communityId} />
-    </div>
+    </PageBody>
   );
 }

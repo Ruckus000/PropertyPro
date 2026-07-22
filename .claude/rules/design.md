@@ -21,6 +21,17 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Page layout: `section`/`page` semantic spacing. Dashboard sections: `space-y-6`, grids: `gap-6 lg:grid-cols-2`
 - Macro spacing is constant across viewports. Only micro spacing adapts.
 - NEVER use ad-hoc spacing values.
+- **Page gutter is the shell's job, not the page's.** The authenticated page gutter
+  (horizontal `px`, vertical `py`, centred max-width) is single-sourced in
+  `PageContainer` (`components/layout/page-container.tsx`, rendered by the app shell:
+  `px-6 sm:px-8 lg:px-10 py-8`, `max-w-[1400px]`). Author pages with `PageBody`
+  (`components/shared/page-body.tsx`) as the content root — it owns vertical rhythm
+  (`space-y-6`) and optional narrower centred columns
+  (`width="prose|form|content|reading|narrow"`), and applies NO horizontal padding.
+  Do NOT add root `px-*`/`py-*` (double-pads the gutter) or a page-level `<main>`
+  (the shell owns the only `<main>`). Enforced by `guard:page-padding` (shrink-only
+  `scripts/page-padding-baseline.json`; escape hatch `// page-padding:exempt — …`).
+  Retune app-wide padding by editing `PAGE_GUTTER_X`/`py-*` in `PageContainer`.
 
 ## Colors & Surfaces
 

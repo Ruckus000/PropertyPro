@@ -1,8 +1,9 @@
 import { AdminReviewList } from '@/components/join-requests/admin-review-list';
+import { PageBody } from '@/components/shared/page-body';
 
 export default function AdminJoinRequestsPage() {
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <PageBody width="content">
       <div>
         <h1 className="text-2xl font-semibold">Pending Join Requests</h1>
         <p className="text-sm text-muted-foreground mt-2">
@@ -11,6 +12,6 @@ export default function AdminJoinRequestsPage() {
         </p>
       </div>
       <AdminReviewList />
-    </div>
+    </PageBody>
   );
 }
