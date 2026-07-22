@@ -63,6 +63,9 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // P2-34a: Payment reminders + subscription guard — cross-community cron + mutation guard
   resolve(repoRoot, 'apps/web/src/lib/services/payment-alert-scheduler.ts'),
   resolve(repoRoot, 'apps/web/src/lib/middleware/subscription-guard.ts'),
+  // Lapsed-state admin read gating — reads the root communities row by PK to
+  // derive lifecycle state (same rationale as subscription-guard.ts).
+  resolve(repoRoot, 'apps/web/src/lib/middleware/read-entitlement-guard.ts'),
   // B-01: Plan-to-feature gating — cross-community plan lookup for feature guard
   resolve(repoRoot, 'apps/web/src/lib/middleware/plan-guard.ts'),
   resolve(repoRoot, 'apps/web/src/app/(authenticated)/billing/portal/route.ts'),
