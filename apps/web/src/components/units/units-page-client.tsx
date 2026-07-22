@@ -47,7 +47,7 @@ export function UnitsPageClient({ communityId, communityType, canWrite }: UnitsP
           Add unit
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Add a unit</DialogTitle>
         </DialogHeader>

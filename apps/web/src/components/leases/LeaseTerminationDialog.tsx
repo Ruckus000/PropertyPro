@@ -55,7 +55,7 @@ export function LeaseTerminationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Terminate Lease</DialogTitle>
           <DialogDescription>

@@ -44,7 +44,7 @@ export function CreateThreadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>New thread</DialogTitle>
           <DialogDescription>Start a new discussion for your board community.</DialogDescription>

@@ -86,7 +86,7 @@ export function LeaseCreateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>New Lease</DialogTitle>
           <DialogDescription>
@@ -136,7 +136,7 @@ export function LeaseCreateModal({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="lease-start">Start Date</Label>
               <Input

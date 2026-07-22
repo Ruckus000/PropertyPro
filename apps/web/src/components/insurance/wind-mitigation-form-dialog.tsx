@@ -208,7 +208,7 @@ export function WindMitigationFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit wind-mitigation report' : 'Add wind-mitigation report'}</DialogTitle>
           <DialogDescription>

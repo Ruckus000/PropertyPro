@@ -75,7 +75,7 @@ export function CertificateRequestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Request a certificate for my lender</DialogTitle>
           <DialogDescription>{INSURANCE_CERTIFICATE_REQUEST_HINT}</DialogDescription>

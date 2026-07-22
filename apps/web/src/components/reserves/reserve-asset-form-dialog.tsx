@@ -145,7 +145,7 @@ export function ReserveAssetFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit reserve asset' : 'Add reserve asset'}</DialogTitle>
           <DialogDescription>{RESERVE_TRANSPARENCY_ADMIN_HINT}</DialogDescription>

@@ -272,7 +272,7 @@ function AddResidentDialog({
 }: AddResidentDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Add Resident</DialogTitle>
           <DialogDescription>

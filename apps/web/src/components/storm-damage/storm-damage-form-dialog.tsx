@@ -92,7 +92,7 @@ export function StormDamageFormDialog({ communityId, open, onOpenChange }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Report storm damage</DialogTitle>
           <DialogDescription>{STORM_DAMAGE_DISCLAIMER}</DialogDescription>

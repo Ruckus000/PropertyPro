@@ -137,7 +137,7 @@ export function BrandingCopyDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Copy Branding</DialogTitle>
           <DialogDescription>
@@ -189,7 +189,7 @@ export function BrandingCopyDialog({
             {/* Properties to copy */}
             <div>
               <p className="mb-2 text-sm font-medium text-content-secondary">Properties to copy</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {BRANDING_PROPERTIES.map((prop) => {
                   const hasValue = sourceCommunity.branding[prop.key] !== undefined;
                   return (

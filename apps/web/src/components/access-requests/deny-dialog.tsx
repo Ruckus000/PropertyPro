@@ -69,7 +69,7 @@ export function DenyDialog({ requestId, requestName, onSuccess }: DenyDialogProp
       </button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Deny Request</DialogTitle>
             <DialogDescription>

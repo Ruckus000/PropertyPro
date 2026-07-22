@@ -123,7 +123,7 @@ export function VisitorRegistrationForm({
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent size="md" resizable>
         <DialogHeader>
           <DialogTitle>Register Visitor</DialogTitle>
           <DialogDescription>
