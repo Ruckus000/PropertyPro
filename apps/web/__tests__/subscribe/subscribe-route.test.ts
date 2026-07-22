@@ -40,6 +40,9 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 vi.mock('@/lib/services/stripe-service', () => ({
   resolveStripePrice: resolveStripePriceMock,
+  getStripeClient: () => ({
+    checkout: { sessions: { create: stripeCheckoutCreateMock } },
+  }),
 }));
 vi.mock('@/lib/services/conversion-events', () => ({
   emitConversionEvent: emitConversionEventMock,
@@ -55,16 +58,6 @@ vi.mock('@/lib/auth/signup-schema', () => ({
     if (communityType === 'apartment') return planId === 'operations_plus';
     return planId === 'essentials' || planId === 'professional';
   },
-}));
-
-vi.mock('stripe', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    checkout: {
-      sessions: {
-        create: stripeCheckoutCreateMock,
-      },
-    },
-  })),
 }));
 
 import { POST } from '../../src/app/api/v1/subscribe/route';
@@ -91,6 +84,8 @@ describe('POST /api/v1/subscribe', () => {
       id: 1,
       communityType: 'condo_718',
       stripeCustomerId: 'cus_abc',
+      stripeSubscriptionId: null,
+      subscriptionStatus: null,
     });
     findActiveAccessPlanIdForCommunityMock.mockResolvedValue(null);
     resolveStripePriceMock.mockResolvedValue('price_essentials');
@@ -113,6 +108,7 @@ describe('POST /api/v1/subscribe', () => {
         customer: 'cus_abc',
         metadata: expect.objectContaining({ communityId: '1', planId: 'essentials' }),
       }),
+      expect.objectContaining({ idempotencyKey: expect.stringContaining('subscribe:1:essentials:month') }),
     );
     expect(emitConversionEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: 'self_service_upgrade_started' }),
@@ -134,6 +130,7 @@ describe('POST /api/v1/subscribe', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({ accessPlanId: '99' }),
       }),
+      expect.anything(),
     );
   });
 
@@ -148,9 +145,60 @@ describe('POST /api/v1/subscribe', () => {
       id: 1,
       communityType: 'apartment',
       stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      subscriptionStatus: null,
     });
     const res = await POST(buildRequest({ planId: 'essentials' }));
     expect(res.status).toBe(400);
     expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+  it('defaults to monthly billing and carries communityId in the return URLs', async () => {
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(200);
+    expect(resolveStripePriceMock).toHaveBeenCalledWith('essentials', 'condo_718', 'month');
+    const [params] = stripeCheckoutCreateMock.mock.calls[0]!;
+    // Without communityId the billing page can't resolve its tenant on a
+    // non-community host, and the post-checkout landing would 'need a communityId'.
+    expect(params.success_url).toContain('communityId=1');
+    expect(params.cancel_url).toContain('communityId=1');
+  });
+
+  it('passes an explicit annual billingInterval through to the price lookup', async () => {
+    const res = await POST(buildRequest({ planId: 'essentials', billingInterval: 'year' }));
+    expect(res.status).toBe(200);
+    expect(resolveStripePriceMock).toHaveBeenCalledWith('essentials', 'condo_718', 'year');
+  });
+
+  it('rejects a second checkout when the community already has an active subscription', async () => {
+    // Guards against minting a duplicate Stripe subscription (double-billing).
+    // Tier/interval switches belong to /api/v1/subscribe/change-plan.
+    getCommunityForCheckoutMock.mockResolvedValue({
+      id: 1,
+      communityType: 'condo_718',
+      stripeCustomerId: 'cus_abc',
+      stripeSubscriptionId: 'sub_live',
+      subscriptionStatus: 'active',
+    });
+    const res = await POST(buildRequest({ planId: 'professional' }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: expect.objectContaining({ code: 'ALREADY_SUBSCRIBED' }),
+    });
+    expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+
+  it('allows re-subscribing after cancellation (plan nulled, sub id left behind)', async () => {
+    // The cancel webhook nulls subscriptionPlan and sets status='canceled'.
+    // That must remain a purchasable state or churned customers can never return.
+    getCommunityForCheckoutMock.mockResolvedValue({
+      id: 1,
+      communityType: 'condo_718',
+      stripeCustomerId: 'cus_abc',
+      stripeSubscriptionId: 'sub_old',
+      subscriptionStatus: 'canceled',
+    });
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(200);
+    expect(stripeCheckoutCreateMock).toHaveBeenCalled();
   });
 });

@@ -16,9 +16,19 @@ import { ChangePlanForm } from '@/components/settings/change-plan-form';
 /**
  * Settings → Billing → Change plan.
  *
- * Lets an existing paid subscriber switch tier or billing interval. Tier
- * downgrades and cancellation stay on the Stripe Customer Portal — this
- * page only renders upgrade options.
+ * Two modes, both admin-only:
+ *
+ *   - `change` — an existing paid subscriber switches tier or billing
+ *     interval via `/api/v1/subscribe/change-plan`. Downgrades and
+ *     cancellation stay on the Stripe Customer Portal.
+ *   - `new` — a community with no active subscription (never provisioned, or
+ *     canceled, which nulls `subscriptionPlan`) picks a plan and is handed off
+ *     to Stripe Checkout via `/api/v1/subscribe`.
+ *
+ * The `new` mode exists because this page previously redirected any community
+ * without an active subscription straight back to /settings/billing, which had
+ * no purchase CTA — so the "Upgrade now" button was an inescapable loop and no
+ * one could ever subscribe (or re-subscribe) from inside the app.
  */
 export default async function ChangePlanPage({
   searchParams,
@@ -58,15 +68,22 @@ export default async function ChangePlanPage({
   const communityType = (community?.['communityType'] as string) ?? null;
   const currentPlan = resolvePlanId((community?.['subscriptionPlan'] as string) ?? null);
 
-  // Without an active subscription, the user has no plan to switch from —
-  // bounce back to /settings/billing where they'll see appropriate copy.
-  if (!stripeSubscriptionId || subscriptionStatus !== 'active' || !communityType) {
+  // Without a community type we can't resolve a plan ladder or a Stripe price
+  // — nothing useful to render, so bounce back to billing.
+  if (!communityType) {
     redirect(`/settings/billing?communityId=${context.communityId}`);
   }
 
-  const currentInterval = await getActiveSubscriptionInterval(stripeSubscriptionId).catch(
-    () => null,
-  );
+  // Only meaningful in `change` mode; a new subscriber has no interval yet.
+  // Narrowed inline (rather than via a hasActiveSubscription boolean) so
+  // `stripeSubscriptionId` is provably non-null without an assertion.
+  const currentInterval =
+    stripeSubscriptionId && subscriptionStatus === 'active'
+      ? await getActiveSubscriptionInterval(stripeSubscriptionId).catch(() => null)
+      : null;
+
+  const hasActiveSubscription =
+    Boolean(stripeSubscriptionId) && subscriptionStatus === 'active';
 
   const plans = getSignupPlansForCommunityType(
     communityType as 'condo_718' | 'hoa_720' | 'apartment',
@@ -77,13 +94,18 @@ export default async function ChangePlanPage({
   return (
     <div>
       <PageHeader
-        title="Change plan"
-        description={`Update the plan or billing interval for ${membership.communityName}.`}
+        title={hasActiveSubscription ? 'Change plan' : 'Choose a plan'}
+        description={
+          hasActiveSubscription
+            ? `Update the plan or billing interval for ${membership.communityName}.`
+            : `Pick a plan to activate ${membership.communityName}.`
+        }
       />
 
       <ChangePlanForm
+        mode={hasActiveSubscription ? 'change' : 'new'}
         communityId={context.communityId}
-        currentPlan={currentPlan as PlanId | null}
+        currentPlan={hasActiveSubscription ? (currentPlan as PlanId | null) : null}
         currentInterval={currentInterval}
         plans={plans.map((p) => ({
           id: p.id,

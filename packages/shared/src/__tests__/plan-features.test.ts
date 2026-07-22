@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanId } from '../../src/plans/types';
-import { PLAN_IDS } from '../../src/plans/types';
+import { PLAN_IDS, PLANS_BY_COMMUNITY_TYPE } from '../../src/plans/types';
 import type { CommunityFeatures } from '../../src/features/types';
-import { PLAN_FEATURES, resolvePlanId } from '../../src/features/plan-features';
+import {
+  PLAN_FEATURES,
+  resolvePlanId,
+  findCheapestPlanForFeature,
+  findCheapestPlanEntryForFeature,
+} from '../../src/features/plan-features';
+import { COMMUNITY_TYPES } from '../../src/index';
 
 /**
  * All keys on CommunityFeatures, used to verify plan feature keys are valid.
@@ -150,5 +156,82 @@ describe('resolvePlanId', () => {
 
   it('returns null for unknown plan strings', () => {
     expect(resolvePlanId('unknown_plan')).toBeNull();
+  });
+});
+
+describe('findCheapestPlanForFeature — community-type awareness', () => {
+  it('recommends Operations Plus, not Professional, for an apartment', () => {
+    // REGRESSION: the search used to span both pricing ladders and sort by
+    // price, so an apartment community was recommended Professional ($349) —
+    // a condo/HOA-only plan that `isPlanAvailableForCommunityType` then
+    // rejects at checkout. Selling a plan the buyer cannot buy is worse than
+    // no recommendation.
+    expect(findCheapestPlanEntryForFeature('hasEsign', 'apartment')?.planId).toBe(
+      'operations_plus',
+    );
+    expect(findCheapestPlanForFeature('hasEsign', 'apartment')?.displayName).toBe(
+      'Operations Plus',
+    );
+  });
+
+  it('still picks the cheaper condo plan when the feature is on both tiers', () => {
+    expect(findCheapestPlanEntryForFeature('hasMeetings', 'condo_718')?.planId).toBe(
+      'essentials',
+    );
+  });
+
+  it('picks the higher condo tier when only it has the feature', () => {
+    expect(findCheapestPlanEntryForFeature('hasEsign', 'condo_718')?.planId).toBe(
+      'professional',
+    );
+    expect(findCheapestPlanEntryForFeature('hasEsign', 'hoa_720')?.planId).toBe(
+      'professional',
+    );
+  });
+
+  it('returns null when no plan on that type ladder has the feature', () => {
+    // Apartments have no statutory-category concept at all.
+    expect(findCheapestPlanEntryForFeature('hasStatutoryCategories', 'apartment')).toBeNull();
+    // Condo/HOA plans have no lease tracking.
+    expect(findCheapestPlanEntryForFeature('hasLeaseTracking', 'condo_718')).toBeNull();
+  });
+
+  it('falls back to searching every plan when no community type is given', () => {
+    // Preserves the pre-existing (type-blind) behaviour for callers that
+    // genuinely have no community context.
+    expect(findCheapestPlanEntryForFeature('hasEsign')?.planId).toBe('professional');
+    expect(findCheapestPlanEntryForFeature('hasLeaseTracking')?.planId).toBe(
+      'operations_plus',
+    );
+  });
+
+  it('only ever recommends a plan the community type can actually buy', () => {
+    for (const communityType of COMMUNITY_TYPES) {
+      for (const featureKey of ALL_FEATURE_KEYS) {
+        const entry = findCheapestPlanEntryForFeature(featureKey, communityType);
+        if (entry) {
+          expect(PLANS_BY_COMMUNITY_TYPE[communityType]).toContain(entry.planId);
+        }
+      }
+    }
+  });
+});
+
+describe('PLANS_BY_COMMUNITY_TYPE', () => {
+  it('lists only canonical plan ids, in ascending price order', () => {
+    for (const communityType of COMMUNITY_TYPES) {
+      const planIds = PLANS_BY_COMMUNITY_TYPE[communityType];
+      expect(planIds.length).toBeGreaterThan(0);
+      for (const planId of planIds) {
+        expect(PLAN_IDS).toContain(planId);
+      }
+      const prices = planIds.map((id) => PLAN_FEATURES[id].monthlyPriceUsd);
+      expect([...prices].sort((a, b) => a - b)).toEqual(prices);
+    }
+  });
+
+  it('covers every plan across all ladders — no unsellable plan', () => {
+    const sellable = new Set(COMMUNITY_TYPES.flatMap((t) => [...PLANS_BY_COMMUNITY_TYPE[t]]));
+    expect([...sellable].sort()).toEqual([...PLAN_IDS].sort());
   });
 });

@@ -13,6 +13,7 @@ export {
   PLAN_MONTHLY_PRICES_USD,
   resolvePlanId,
   findCheapestPlanForFeature,
+  findCheapestPlanEntryForFeature,
   comparePlanTiers,
   isUpgrade,
 } from './plan-features';

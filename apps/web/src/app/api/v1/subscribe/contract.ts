@@ -17,6 +17,8 @@ export const subscribePostContract = defineRoute({
   request: {
     body: z.object({
       planId: z.enum(PLAN_IDS),
+      // Defaulted so the historical body shape (`{ planId }` only) stays valid.
+      billingInterval: z.enum(['month', 'year']).default('month'),
     }),
   },
   response: z.object({

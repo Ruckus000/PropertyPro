@@ -13,12 +13,20 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import type { PlanId } from '@propertypro/shared';
 
 const mutateAsyncMock = vi.fn();
+const subscribeMutateAsyncMock = vi.fn();
 const triggerReauthMock = vi.fn();
 const routerPushMock = vi.fn();
 const routerRefreshMock = vi.fn();
 
 vi.mock('@/hooks/use-change-plan', () => ({
   useChangePlan: () => ({ mutateAsync: mutateAsyncMock }),
+}));
+
+// The form also mounts `useSubscribe` (the `new` subscription mode). Mocked
+// here so these `change`-mode tests need no QueryClientProvider. New-mode
+// behaviour is covered in __tests__/billing/change-plan-form.test.tsx.
+vi.mock('@/hooks/use-subscribe', () => ({
+  useSubscribe: () => ({ mutateAsync: subscribeMutateAsyncMock }),
 }));
 
 vi.mock('@/hooks/use-reauth', () => ({

@@ -33,7 +33,7 @@ import {
   isAdminRole,
   getFeaturesForCommunity,
   PLAN_FEATURES,
-  findCheapestPlanForFeature,
+  findCheapestPlanEntryForFeature,
   type CommunityRole,
   type CommunityFeatures,
   type CommunityType,
@@ -533,11 +533,9 @@ export function getVisibleItemsWithPlanGate(
         if (planConfig && !planConfig.features[item.featureKey]) {
           planLocked = true;
           // Find cheapest plan that includes this feature
-          const upgrade = findCheapestPlanForFeature(item.featureKey);
-          upgradePlanName = upgrade?.displayName ?? null;
-          upgradePlanId = upgrade
-            ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === upgrade)?.[0] as PlanId | undefined) ?? null)
-            : null;
+          const upgrade = findCheapestPlanEntryForFeature(item.featureKey, communityType);
+          upgradePlanName = upgrade?.config.displayName ?? null;
+          upgradePlanId = upgrade?.planId ?? null;
           upgradeFeatureKey = item.featureKey;
         }
       }
@@ -552,14 +550,13 @@ export function getVisibleItemsWithPlanGate(
           if (allPlanLocked) {
             planLocked = true;
             const candidates = item.featureKeys
-              .map((key) => findCheapestPlanForFeature(key))
+              .map((key) => findCheapestPlanEntryForFeature(key, communityType))
               .filter((x): x is NonNullable<typeof x> => Boolean(x));
-            const cheapest = candidates.sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0];
-            upgradePlanName = cheapest?.displayName ?? null;
-            upgradePlanId = cheapest
-              ? ((Object.entries(PLAN_FEATURES).find(([, cfg]) => cfg === cheapest)?.[0] as PlanId | undefined) ??
-                null)
-              : null;
+            const cheapest = candidates.sort(
+              (a, b) => a.config.monthlyPriceUsd - b.config.monthlyPriceUsd,
+            )[0];
+            upgradePlanName = cheapest?.config.displayName ?? null;
+            upgradePlanId = cheapest?.planId ?? null;
             // For any-of gates we can't point at a single canonical feature
             // for marketing copy — leave it null and let the dialog fall back.
             upgradeFeatureKey = null;

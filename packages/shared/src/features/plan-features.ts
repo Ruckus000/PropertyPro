@@ -8,9 +8,10 @@
  * via getEffectiveFeatures() — both dimensions must allow a feature.
  */
 
+import type { CommunityType } from '../index';
 import type { CommunityFeatures } from './types';
 import type { PlanId } from '../plans/types';
-import { PLAN_IDS, LEGACY_PLAN_ALIASES } from '../plans/types';
+import { PLAN_IDS, LEGACY_PLAN_ALIASES, PLANS_BY_COMMUNITY_TYPE } from '../plans/types';
 
 /** Configuration for a single subscription plan. */
 export interface PlanFeatureConfig {
@@ -161,14 +162,42 @@ export const PLAN_MONTHLY_PRICES_USD = {
 
 /**
  * Finds the cheapest plan that includes a specific feature.
- * Returns null if no plan includes the feature.
+ *
+ * Pass `communityType` to restrict the search to plans that community can
+ * actually buy. ALWAYS pass it where one is known: without it the search spans
+ * both pricing ladders, so an apartment community gets recommended
+ * Professional ($349) for e-sign when its only purchasable plan is Operations
+ * Plus — and checkout then rejects the plan it was just sold.
+ *
+ * Returns null if no eligible plan includes the feature.
  */
 export function findCheapestPlanForFeature(
   featureKey: keyof CommunityFeatures,
+  communityType?: CommunityType | null,
 ): PlanFeatureConfig | null {
-  return (Object.values(PLAN_FEATURES) as PlanFeatureConfig[])
-    .filter((p) => p.features[featureKey])
-    .sort((a, b) => a.monthlyPriceUsd - b.monthlyPriceUsd)[0] ?? null;
+  return findCheapestPlanEntryForFeature(featureKey, communityType)?.config ?? null;
+}
+
+/**
+ * Like `findCheapestPlanForFeature` but returns the `PlanId` alongside the
+ * config. Prefer this in UI code that needs the id — the alternative is a
+ * reverse lookup through `Object.entries(PLAN_FEATURES).find(...)` by object
+ * identity, which several call sites had each reimplemented.
+ */
+export function findCheapestPlanEntryForFeature(
+  featureKey: keyof CommunityFeatures,
+  communityType?: CommunityType | null,
+): { planId: PlanId; config: PlanFeatureConfig } | null {
+  const eligible: readonly PlanId[] = communityType
+    ? PLANS_BY_COMMUNITY_TYPE[communityType]
+    : PLAN_IDS;
+
+  return (
+    eligible
+      .map((planId) => ({ planId, config: PLAN_FEATURES[planId] }))
+      .filter(({ config }) => config.features[featureKey])
+      .sort((a, b) => a.config.monthlyPriceUsd - b.config.monthlyPriceUsd)[0] ?? null
+  );
 }
 
 /**

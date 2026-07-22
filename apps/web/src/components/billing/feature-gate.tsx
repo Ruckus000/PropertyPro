@@ -24,8 +24,8 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
+  getEffectiveFeatures,
   resolvePlanId,
-  PLAN_FEATURES,
   type CommunityFeatures,
 } from '@propertypro/shared';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
@@ -48,9 +48,15 @@ export async function FeatureGate({
   const membership = await requirePageCommunityMembership(communityIdOverride);
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
 
-  // Allowed if the resolved plan unlocks this feature.
-  const planConfig = planId ? PLAN_FEATURES[planId] : null;
-  const allowed = planConfig?.features[feature] === true;
+  // Compose community-TYPE features with PLAN features through the single
+  // shared resolver, which also owns the null-plan rule: an unresolved plan
+  // (never provisioned, or canceled — which nulls `subscriptionPlan`) fails
+  // OPEN. That matches `plan-guard.ts` and `subscription-guard.ts`, which
+  // already let those communities through at the API layer; gating them only
+  // at the page meant the sidebar advertised features that rendered a locked
+  // screen, and pushed users at an upgrade CTA instead of the app.
+  const features = getEffectiveFeatures(membership.communityType, planId);
+  const allowed = features[feature] === true;
 
   if (allowed) {
     return <>{children}</>;
@@ -64,6 +70,7 @@ export async function FeatureGate({
     <LockedFeatureScreen
       featureKey={feature}
       role={membership.role}
+      communityType={membership.communityType}
       isUnitOwner={membership.isUnitOwner}
       currentPlanId={planId}
       currentPlanRaw={membership.subscriptionPlan ?? null}

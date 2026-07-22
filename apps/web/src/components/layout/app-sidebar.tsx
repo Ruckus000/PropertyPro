@@ -274,6 +274,7 @@ export function AppSidebar({
         currentPlanId={resolvedPlanId}
         currentPlanRaw={plan}
         role={role}
+        communityType={communityType}
         isUnitOwner={isUnitOwner}
         communityId={communityId}
       />

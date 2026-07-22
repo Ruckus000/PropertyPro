@@ -176,11 +176,18 @@ async function handleCheckoutSessionCompleted(
   }
 
   if (!signupRequestId) {
-    // Self-serve subscribe flow (existing community) carries accessPlanId + communityId.
-    // Persist Stripe IDs now so later subscription/invoice events can resolve the community.
+    // Self-serve subscribe flow (existing community) carries communityId, and
+    // OPTIONALLY accessPlanId when a free-access grant was active.
+    //
+    // Persistence is gated on communityId ALONE — deliberately not on
+    // accessPlanId. Every later `customer.subscription.*` event resolves its
+    // community via `getCommunityByStripeSubscriptionId` and silently returns
+    // when there is no match, so skipping this write means the customer is
+    // charged and never receives the plan. Most self-serve upgrades have no
+    // access plan at all; requiring one here dropped them on the floor.
     const communityIdRaw = session.metadata?.communityId;
     const communityId = communityIdRaw ? Number(communityIdRaw) : null;
-    if (accessPlanId && communityId && Number.isFinite(communityId)) {
+    if (communityId && Number.isFinite(communityId)) {
       const freshSession = await retrieveCheckoutSession(session.id);
       if (freshSession.status !== 'complete') {
         logStripeWebhookEvent('warn', 'self-serve checkout session not yet complete, skipping Stripe ID persistence', {

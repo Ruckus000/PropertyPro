@@ -10,8 +10,8 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
+  getEffectiveFeatures,
   resolvePlanId,
-  PLAN_FEATURES,
   type CommunityFeatures,
 } from '@propertypro/shared';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
@@ -35,9 +35,12 @@ export async function FeatureGateAnyOf({
 
   const membership = await requirePageCommunityMembership(communityIdOverride);
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
-  const planConfig = planId ? PLAN_FEATURES[planId] : null;
 
-  const allowed = features.some((f) => planConfig?.features[f] === true);
+  // Same composed type ∧ plan resolution (and same null-plan fail-open rule)
+  // as FeatureGate — see the comment there for why null fails open.
+  const effectiveFeatures = getEffectiveFeatures(membership.communityType, planId);
+
+  const allowed = features.some((f) => effectiveFeatures[f] === true);
   if (allowed) {
     return <>{children}</>;
   }
@@ -53,6 +56,7 @@ export async function FeatureGateAnyOf({
     <LockedFeatureScreen
       featureKey={headlineFeature}
       role={membership.role}
+      communityType={membership.communityType}
       isUnitOwner={membership.isUnitOwner}
       currentPlanId={planId}
       currentPlanRaw={membership.subscriptionPlan ?? null}

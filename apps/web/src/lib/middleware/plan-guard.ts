@@ -29,12 +29,16 @@ export async function requirePlanFeature(
 ): Promise<void> {
   const db = createUnscopedClient();
   const rows = await db
-    .select({ subscriptionPlan: communities.subscriptionPlan })
+    .select({
+      subscriptionPlan: communities.subscriptionPlan,
+      communityType: communities.communityType,
+    })
     .from(communities)
     .where(eq(communities.id, communityId))
     .limit(1);
 
   const rawPlan = rows[0]?.subscriptionPlan ?? null;
+  const communityType = (rows[0]?.communityType as CommunityType | undefined) ?? null;
 
   // Null plan = fail-open (new community, not yet provisioned)
   if (rawPlan === null) return;
@@ -54,8 +58,9 @@ export async function requirePlanFeature(
     return;
   }
 
-  // Find the cheapest plan that includes this feature
-  const upgradeTo = findCheapestPlanForFeature(featureKey);
+  // Find the cheapest plan that includes this feature AND is purchasable by
+  // this community's type — naming a plan they can't buy is worse than vague.
+  const upgradeTo = findCheapestPlanForFeature(featureKey, communityType);
 
   const upgradeDisplayName = upgradeTo?.displayName ?? 'a higher';
 

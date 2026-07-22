@@ -1,5 +1,11 @@
 import type { CommunityType } from '@propertypro/shared';
-import { PLAN_IDS, buildPasswordZodSchema, type PlanId } from '@propertypro/shared';
+import {
+  PLAN_IDS,
+  PLANS_BY_COMMUNITY_TYPE,
+  PLAN_FEATURES,
+  buildPasswordZodSchema,
+  type PlanId,
+} from '@propertypro/shared';
 import { z } from 'zod';
 
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
@@ -22,43 +28,47 @@ export const SIGNUP_PLAN_IDS = PLAN_IDS;
 /** Alias of PlanId — kept for backward compatibility. */
 export type SignupPlanId = PlanId;
 
+/**
+ * Marketing copy per plan. Descriptions are the only genuinely local data
+ * here — ids, labels, and prices are derived below so this file can never
+ * drift from the canonical plan definitions.
+ */
+const SIGNUP_PLAN_DESCRIPTIONS: Record<PlanId, string> = {
+  essentials:
+    'Website, statutory document posting, owner portal, and announcements.',
+  professional:
+    'Full platform with e-sign, violations, ARC, finance, and more.',
+  operations_plus:
+    'Full apartment operations with lease tracking, packages, and visitors.',
+};
+
+/**
+ * Plans offered at signup, per community type.
+ *
+ * Derived from `PLANS_BY_COMMUNITY_TYPE` (which ladder a type is on) and
+ * `PLAN_FEATURES` (display name + price) so the type→plan relationship has
+ * exactly ONE definition shared with the upgrade-recommendation path. A
+ * hand-maintained second copy here is how an apartment community ends up
+ * being recommended a condo-only plan.
+ */
+function buildSignupPlanOptions(
+  communityType: CommunityType,
+): readonly SignupPlanOption[] {
+  return PLANS_BY_COMMUNITY_TYPE[communityType].map((planId) => ({
+    id: planId,
+    label: PLAN_FEATURES[planId].displayName,
+    monthlyPriceUsd: PLAN_FEATURES[planId].monthlyPriceUsd,
+    description: SIGNUP_PLAN_DESCRIPTIONS[planId],
+  }));
+}
+
+// Spelled out per key rather than derived with Object.fromEntries so the
+// Record type stays exhaustiveness-checked: a new CommunityType is a compile
+// error here, not a silently missing entry.
 export const SIGNUP_PLAN_OPTIONS: Record<CommunityType, readonly SignupPlanOption[]> = {
-  condo_718: [
-    {
-      id: 'essentials',
-      label: 'Essentials',
-      monthlyPriceUsd: 199,
-      description: 'Website, statutory document posting, owner portal, and announcements.',
-    },
-    {
-      id: 'professional',
-      label: 'Professional',
-      monthlyPriceUsd: 349,
-      description: 'Full platform with e-sign, violations, ARC, finance, and more.',
-    },
-  ],
-  hoa_720: [
-    {
-      id: 'essentials',
-      label: 'Essentials',
-      monthlyPriceUsd: 199,
-      description: 'Website, statutory document posting, owner portal, and announcements.',
-    },
-    {
-      id: 'professional',
-      label: 'Professional',
-      monthlyPriceUsd: 349,
-      description: 'Full platform with e-sign, violations, ARC, finance, and more.',
-    },
-  ],
-  apartment: [
-    {
-      id: 'operations_plus',
-      label: 'Operations Plus',
-      monthlyPriceUsd: 499,
-      description: 'Full apartment operations with lease tracking, packages, and visitors.',
-    },
-  ],
+  condo_718: buildSignupPlanOptions('condo_718'),
+  hoa_720: buildSignupPlanOptions('hoa_720'),
+  apartment: buildSignupPlanOptions('apartment'),
 };
 
 export function normalizeSignupSubdomain(rawValue: string): string {
