@@ -187,7 +187,9 @@ async function handleCheckoutSessionCompleted(
     // access plan at all; requiring one here dropped them on the floor.
     const communityIdRaw = session.metadata?.communityId;
     const communityId = communityIdRaw ? Number(communityIdRaw) : null;
-    if (communityId && Number.isFinite(communityId)) {
+    // Integer, not merely finite: this value goes into `WHERE id = $1`, and
+    // "1.5"/"1e3" are finite but are not row ids.
+    if (communityId !== null && Number.isInteger(communityId) && communityId > 0) {
       const freshSession = await retrieveCheckoutSession(session.id);
       if (freshSession.status !== 'complete') {
         logStripeWebhookEvent('warn', 'self-serve checkout session not yet complete, skipping Stripe ID persistence', {
@@ -208,11 +210,51 @@ async function handleCheckoutSessionCompleted(
           ? freshSession.subscription
           : (freshSession.subscription as { id: string } | null)?.id ?? null;
 
-      await persistSelfServeCommunityStripeIds({
+      // Stamp status/plan from THIS session, not just the two IDs. Stripe does
+      // not guarantee ordering between `checkout.session.completed` and
+      // `customer.subscription.created`; when the subscription event lands
+      // first, `handleSubscriptionUpdated` finds no community (the link below
+      // doesn't exist yet) and silently returns, and nothing re-stamps until
+      // the next renewal a month later. Writing status+plan here closes that
+      // window — the customer would otherwise be charged while the app still
+      // showed "no plan".
+      const subscriptionObject =
+        freshSession.subscription && typeof freshSession.subscription !== 'string'
+          ? (freshSession.subscription as Stripe.Subscription)
+          : null;
+      const metadataPlan = session.metadata?.planId ?? null;
+
+      const { rebindBlocked } = await persistSelfServeCommunityStripeIds({
         communityId,
         stripeCustomerId,
         stripeSubscriptionId,
+        subscriptionStatus: subscriptionObject?.status ?? null,
+        subscriptionPlan: metadataPlan,
+        subscriptionCurrentPeriodEndAt: subscriptionObject
+          ? resolveSubscriptionPeriodEndAt(subscriptionObject)
+          : null,
       });
+
+      if (rebindBlocked) {
+        // The community already points at a DIFFERENT subscription. Refusing
+        // the write is correct (see persistSelfServeCommunityStripeIds), but it
+        // means a duplicate subscription now exists in Stripe and is billing
+        // the customer with nothing in our DB pointing at it. Needs a human.
+        const err = new Error(
+          `Refused to rebind community ${communityId} to ${stripeSubscriptionId}: a different subscription is already linked. Possible duplicate subscription in Stripe.`,
+        );
+        captureException(err, {
+          extra: { communityId, stripeSubscriptionId, sessionId: session.id },
+        });
+        logStripeWebhookEvent('error', 'self-serve checkout would rebind an existing subscription', {
+          eventId,
+          eventType: 'checkout.session.completed',
+          category: 'processing',
+          outcome: 'failure',
+          errorMessage: err.message,
+          payloadSnippet: { communityId, stripeSubscriptionId, sessionId: session.id },
+        });
+      }
       return;
     }
 

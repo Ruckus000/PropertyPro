@@ -14,6 +14,7 @@ const {
   getCommunityForCheckoutMock,
   findActiveAccessPlanIdForCommunityMock,
   stripeCheckoutCreateMock,
+  requireFreshReauthMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -24,6 +25,7 @@ const {
   getCommunityForCheckoutMock: vi.fn(),
   findActiveAccessPlanIdForCommunityMock: vi.fn(),
   stripeCheckoutCreateMock: vi.fn(),
+  requireFreshReauthMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -34,6 +36,9 @@ vi.mock('@/lib/api/community-membership', () => ({
 }));
 vi.mock('@/lib/db/access-control', () => ({
   requirePermission: requirePermissionMock,
+}));
+vi.mock('@/lib/api/reauth-guard', () => ({
+  requireFreshReauth: requireFreshReauthMock,
 }));
 vi.mock('@/lib/api/tenant-context', () => ({
   resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
@@ -94,6 +99,7 @@ describe('POST /api/v1/subscribe', () => {
       url: 'https://checkout.stripe.test/session',
     });
     emitConversionEventMock.mockResolvedValue(undefined);
+    requireFreshReauthMock.mockResolvedValue(undefined);
   });
 
   it('creates checkout session and returns canonical { data: { checkoutUrl } }', async () => {
@@ -108,7 +114,7 @@ describe('POST /api/v1/subscribe', () => {
         customer: 'cus_abc',
         metadata: expect.objectContaining({ communityId: '1', planId: 'essentials' }),
       }),
-      expect.objectContaining({ idempotencyKey: expect.stringContaining('subscribe:1:essentials:month') }),
+      expect.objectContaining({ idempotencyKey: expect.stringContaining('subscribe:1:cus_abc:essentials:month') }),
     );
     expect(emitConversionEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ eventType: 'self_service_upgrade_started' }),
@@ -200,5 +206,84 @@ describe('POST /api/v1/subscribe', () => {
     const res = await POST(buildRequest({ planId: 'essentials' }));
     expect(res.status).toBe(200);
     expect(stripeCheckoutCreateMock).toHaveBeenCalled();
+  });
+
+  it('rejects a trialing community — a live subscription that is not "active"', async () => {
+    // REGRESSION (the expensive one): the guard used to be
+    // `subscriptionStatus === 'active'`. Every self-serve signup spends its
+    // first SIGNUP_TRIAL_DAYS (30) in `trialing` WITH a live subscription, so
+    // an equality check waved every new customer through and sold them a
+    // second subscription against the same Stripe customer.
+    getCommunityForCheckoutMock.mockResolvedValue({
+      id: 1,
+      communityType: 'condo_718',
+      stripeCustomerId: 'cus_abc',
+      stripeSubscriptionId: 'sub_trial',
+      subscriptionStatus: 'trialing',
+    });
+    const res = await POST(buildRequest({ planId: 'professional' }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: expect.objectContaining({ code: 'ALREADY_SUBSCRIBED' }),
+    });
+    expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['past_due', 'incomplete', 'paused', 'some_future_stripe_status'])(
+    'rejects a community whose status is %s (live or unknown, never assumed dead)',
+    async (subscriptionStatus) => {
+      getCommunityForCheckoutMock.mockResolvedValue({
+        id: 1,
+        communityType: 'condo_718',
+        stripeCustomerId: 'cus_abc',
+        stripeSubscriptionId: 'sub_x',
+        subscriptionStatus,
+      });
+      const res = await POST(buildRequest({ planId: 'professional' }));
+      expect(res.status).toBe(400);
+      expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('treats a subscription id with an unsynced (null) status as live', async () => {
+    getCommunityForCheckoutMock.mockResolvedValue({
+      id: 1,
+      communityType: 'condo_718',
+      stripeCustomerId: 'cus_abc',
+      stripeSubscriptionId: 'sub_unsynced',
+      subscriptionStatus: null,
+    });
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(400);
+    expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+
+  it('requires fresh reauth when a Stripe customer is already on file', async () => {
+    // Completing a re-subscribe repoints communities.stripe_customer_id, which
+    // is what /billing/portal resolves — so a stolen session could otherwise
+    // rebind billing identity to a customer the attacker controls.
+    getCommunityForCheckoutMock.mockResolvedValue({
+      id: 1,
+      communityType: 'condo_718',
+      stripeCustomerId: 'cus_existing',
+      stripeSubscriptionId: 'sub_old',
+      subscriptionStatus: 'canceled',
+    });
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(200);
+    expect(requireFreshReauthMock).toHaveBeenCalledWith('user-1');
+  });
+
+  it('does NOT require reauth for a first-ever purchase', async () => {
+    getCommunityForCheckoutMock.mockResolvedValue({
+      id: 1,
+      communityType: 'condo_718',
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+      subscriptionStatus: null,
+    });
+    const res = await POST(buildRequest({ planId: 'essentials' }));
+    expect(res.status).toBe(200);
+    expect(requireFreshReauthMock).not.toHaveBeenCalled();
   });
 });

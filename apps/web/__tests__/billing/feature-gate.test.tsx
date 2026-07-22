@@ -97,14 +97,16 @@ describe('FeatureGate', () => {
     expect(renderedChildren(result)).toBe(true);
   });
 
-  it('honors community-TYPE gating, not just plan gating', async () => {
-    // hasStatutoryCategories is a condo/HOA concept; an apartment on its only
-    // plan must not be told to "upgrade" into a feature its type never has.
+  it('does NOT apply community-TYPE gating — that is the sidebar\'s job', async () => {
+    // REGRESSION: composing type features here denied an HOA on Professional
+    // at /dashboard/packages (hoa_720 has hasPackageLogging: false) and then
+    // offered them an "upgrade" to Professional — the plan they already pay
+    // for. Type gating stays out of this gate, per the module header.
     requirePageCommunityMembershipMock.mockResolvedValue(
-      membership({ communityType: 'apartment', subscriptionPlan: 'operations_plus' }),
+      membership({ communityType: 'hoa_720', subscriptionPlan: 'professional' }),
     );
-    const result = await FeatureGate({ feature: 'hasStatutoryCategories', children });
-    expect(renderedChildren(result)).toBe(false);
+    const result = await FeatureGate({ feature: 'hasPackageLogging', children });
+    expect(renderedChildren(result)).toBe(true);
   });
 
   it('redirects tenants instead of showing them the locked screen', async () => {

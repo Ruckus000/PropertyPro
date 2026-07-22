@@ -3,7 +3,13 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { communities, createScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { resolvePlanId, type PlanId } from '@propertypro/shared';
+import {
+  PLANS_BY_COMMUNITY_TYPE,
+  canStartNewSubscription,
+  resolvePlanId,
+  type CommunityType,
+  type PlanId,
+} from '@propertypro/shared';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -66,46 +72,54 @@ export default async function ChangePlanPage({
   const subscriptionStatus = (community?.['subscriptionStatus'] as string) ?? null;
   const stripeSubscriptionId = (community?.['stripeSubscriptionId'] as string) ?? null;
   const communityType = (community?.['communityType'] as string) ?? null;
+  const stripeCustomerId = (community?.['stripeCustomerId'] as string) ?? null;
   const currentPlan = resolvePlanId((community?.['subscriptionPlan'] as string) ?? null);
 
-  // Without a community type we can't resolve a plan ladder or a Stripe price
-  // — nothing useful to render, so bounce back to billing.
-  if (!communityType) {
+  // Without a RECOGNIZED community type we can't resolve a plan ladder or a
+  // Stripe price — bounce back to billing. Checking membership in the ladder
+  // map rather than mere truthiness: an unmapped string would otherwise pass
+  // this guard, make getSignupPlansForCommunityType return undefined, and 500
+  // on `plans.map` below.
+  if (!communityType || !(communityType in PLANS_BY_COMMUNITY_TYPE)) {
     redirect(`/settings/billing?communityId=${context.communityId}`);
   }
 
+  // Mode selection MUST use the same predicate the API enforces, or the page
+  // offers a flow the route will reject (or worse, one it will accept and
+  // duplicate-bill for). `trialing` is the case that matters: every signup
+  // spends its first 30 days there with a live subscription.
+  const lifecycle = { stripeSubscriptionId, subscriptionStatus };
+  const hasLiveSubscription = !canStartNewSubscription(lifecycle);
+
   // Only meaningful in `change` mode; a new subscriber has no interval yet.
-  // Narrowed inline (rather than via a hasActiveSubscription boolean) so
-  // `stripeSubscriptionId` is provably non-null without an assertion.
-  const currentInterval =
-    stripeSubscriptionId && subscriptionStatus === 'active'
-      ? await getActiveSubscriptionInterval(stripeSubscriptionId).catch(() => null)
-      : null;
+  const currentInterval = stripeSubscriptionId
+    ? await getActiveSubscriptionInterval(stripeSubscriptionId).catch(() => null)
+    : null;
 
-  const hasActiveSubscription =
-    Boolean(stripeSubscriptionId) && subscriptionStatus === 'active';
-
-  const plans = getSignupPlansForCommunityType(
-    communityType as 'condo_718' | 'hoa_720' | 'apartment',
-  );
+  const plans = getSignupPlansForCommunityType(communityType as CommunityType);
 
   const billingHref = `/settings/billing?communityId=${context.communityId}`;
 
   return (
     <div>
       <PageHeader
-        title={hasActiveSubscription ? 'Change plan' : 'Choose a plan'}
+        title={hasLiveSubscription ? 'Change plan' : 'Choose a plan'}
         description={
-          hasActiveSubscription
+          hasLiveSubscription
             ? `Update the plan or billing interval for ${membership.communityName}.`
             : `Pick a plan to activate ${membership.communityName}.`
         }
       />
 
       <ChangePlanForm
-        mode={hasActiveSubscription ? 'change' : 'new'}
+        mode={hasLiveSubscription ? 'change' : 'new'}
+        // A re-subscribe (Stripe customer already on file) rebinds billing
+        // identity, so POST /api/v1/subscribe demands a fresh reauth for it.
+        // Prompt in the UI to match, or the request 401s after the user has
+        // already picked a plan.
+        requiresReauth={Boolean(stripeCustomerId)}
         communityId={context.communityId}
-        currentPlan={hasActiveSubscription ? (currentPlan as PlanId | null) : null}
+        currentPlan={hasLiveSubscription ? (currentPlan as PlanId | null) : null}
         currentInterval={currentInterval}
         plans={plans.map((p) => ({
           id: p.id,

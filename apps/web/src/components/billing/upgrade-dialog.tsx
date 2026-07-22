@@ -114,12 +114,11 @@ export function UpgradeDialog({
 
   function handleUpgrade() {
     if (pending) return;
-    // Hand off to the dedicated Change plan page. That flow already handles
-    // the active-subscription branch (Stripe portal change-plan endpoint) and
-    // the no-subscription branch (bounce back to /settings/billing). Owning
-    // the checkout logic in a single place keeps this dialog purely a
-    // marketing surface — it doesn't duplicate the subscription-state checks
-    // the change-plan page already does.
+    // Hand off to the dedicated Change plan page, which owns both branches:
+    // an existing subscription switches tier in place, and a community with
+    // none picks a plan and goes to Stripe Checkout. Keeping the checkout
+    // logic there leaves this dialog a pure marketing surface, with no
+    // duplicated subscription-state checks to drift.
     setPending(true);
     window.location.href = `/settings/billing/change-plan${tenantQuery}`;
   }

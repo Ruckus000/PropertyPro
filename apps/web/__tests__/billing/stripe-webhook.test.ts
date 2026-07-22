@@ -129,6 +129,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: (...args: unknown[]) => ({ _and: args }),
   isNull: (col: unknown) => ({ _isNull: col }),
+  or: (...args: unknown[]) => ({ _or: args }),
   sql: Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => ({ _sql: { strings: [...strings], values } }), { raw: (s: string) => ({ _sqlRaw: s }) }),
 }));
 
@@ -555,7 +556,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       }));
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };
@@ -646,7 +653,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       }));
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };
@@ -690,7 +703,8 @@ describe('POST /api/v1/webhooks/stripe', () => {
       retrieveCheckoutSessionMock.mockResolvedValue({
         ...session,
         customer: 'cus_selfserve_003',
-        subscription: 'sub_selfserve_003',
+        // Expanded by retrieveCheckoutSession, so status is available here.
+        subscription: { id: 'sub_selfserve_003', status: 'active', items: { data: [] } },
       });
 
       const selectMock = vi.fn(() => ({
@@ -702,7 +716,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       }));
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };
@@ -728,6 +748,15 @@ describe('POST /api/v1/webhooks/stripe', () => {
           p.stripeSubscriptionId === 'sub_selfserve_003',
       );
       expect(communityUpdate).toBeDefined();
+      // Stripe does not guarantee that checkout.session.completed arrives
+      // before customer.subscription.created. When the subscription event
+      // lands first it finds no community (this link doesn't exist yet) and
+      // silently returns, and nothing re-stamps until the next renewal — so
+      // the status/plan MUST be written here, not just the two IDs.
+      expect(communityUpdate).toMatchObject({
+        subscriptionStatus: 'active',
+        subscriptionPlan: 'essentials',
+      });
     });
 
     it('skips Stripe ID persistence when fresh session status is not complete', async () => {
@@ -746,7 +775,13 @@ describe('POST /api/v1/webhooks/stripe', () => {
       });
 
       const setPayloads: Array<Record<string, unknown>> = [];
-      const whereForUpdateMock = vi.fn(() => Promise.resolve([]));
+      // persistSelfServeCommunityStripeIds now ends in .returning() so it can
+      // detect a refused rebind; a row back means the write landed.
+      const whereForUpdateMock = vi.fn(() =>
+        Object.assign(Promise.resolve([{ id: 1 }]), {
+          returning: vi.fn(() => Promise.resolve([{ id: 1 }])),
+        }),
+      );
       const setMock = vi.fn((payload: Record<string, unknown>) => {
         setPayloads.push(payload);
         return { where: whereForUpdateMock };

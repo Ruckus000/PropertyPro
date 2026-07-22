@@ -36,6 +36,12 @@ type ChangePlanFormMode = 'new' | 'change';
 
 interface ChangePlanFormProps {
   mode?: ChangePlanFormMode;
+  /**
+   * `new` mode only. True when the community already has a Stripe customer
+   * (a re-subscribe), which the API reauth-gates because completing it
+   * repoints the community's billing identity.
+   */
+  requiresReauth?: boolean;
   communityId: number;
   currentPlan: PlanId | null;
   currentInterval: BillingInterval | null;
@@ -54,6 +60,7 @@ function formatPrice(monthlyUsd: number, interval: BillingInterval): string {
 
 export function ChangePlanForm({
   mode = 'change',
+  requiresReauth = false,
   communityId,
   currentPlan,
   currentInterval,
@@ -73,10 +80,10 @@ export function ChangePlanForm({
 
   // A plan card is offered when the change is either a tier upgrade
   // (compareTiers < 0) OR the same tier with a different interval.
-  // If `currentInterval` is null (Stripe lookup failed server-side), we
-  // optimistically show the annual same-tier card — the API enforces the
-  // no-op rule, so a wrongly-shown card surfaces a clean 400 instead of
-  // silently hiding the upsell during a Stripe blip.
+  // If `currentInterval` is null (Stripe lookup failed server-side), the
+  // same-tier card is shown at BOTH toggle positions rather than hidden — the
+  // API enforces the no-op rule, so a wrongly-shown card surfaces a clean 400
+  // instead of silently hiding the upsell during a Stripe blip.
   const offeredPlans = useMemo(() => {
     if (!currentPlan) return plans;
     return plans.filter((p) => {
@@ -107,6 +114,13 @@ export function ChangePlanForm({
 
     if (isNewSubscription) {
       try {
+        if (requiresReauth) {
+          const confirmed = await triggerReauth();
+          if (!confirmed) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
         const { checkoutUrl } = await subscribe.mutateAsync({
           communityId,
           planId: selectedPlan,

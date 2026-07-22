@@ -24,7 +24,7 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
-  getEffectiveFeatures,
+  PLAN_FEATURES,
   resolvePlanId,
   type CommunityFeatures,
 } from '@propertypro/shared';
@@ -48,15 +48,18 @@ export async function FeatureGate({
   const membership = await requirePageCommunityMembership(communityIdOverride);
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
 
-  // Compose community-TYPE features with PLAN features through the single
-  // shared resolver, which also owns the null-plan rule: an unresolved plan
-  // (never provisioned, or canceled — which nulls `subscriptionPlan`) fails
-  // OPEN. That matches `plan-guard.ts` and `subscription-guard.ts`, which
-  // already let those communities through at the API layer; gating them only
-  // at the page meant the sidebar advertised features that rendered a locked
-  // screen, and pushed users at an upgrade CTA instead of the app.
-  const features = getEffectiveFeatures(membership.communityType, planId);
-  const allowed = features[feature] === true;
+  // PLAN gating only — community-TYPE gating stays out of this gate by design
+  // (see the header comment). Composing type features here would deny e.g. an
+  // HOA on Professional at /dashboard/packages, which `hoa_720` doesn't have
+  // as a type, and then offer them an "upgrade" to the plan they already own.
+  //
+  // An unresolved plan — null (never provisioned) or an unrecognized legacy
+  // string — fails OPEN, matching `plan-guard.ts` and `subscription-guard.ts`,
+  // which already let those communities through at the API layer. Failing
+  // closed only at the page meant the sidebar advertised features whose pages
+  // rendered a locked screen, pushing users at an upgrade CTA instead of the
+  // app they were entitled to.
+  const allowed = planId === null || PLAN_FEATURES[planId].features[feature] === true;
 
   if (allowed) {
     return <>{children}</>;

@@ -10,7 +10,7 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
-  getEffectiveFeatures,
+  PLAN_FEATURES,
   resolvePlanId,
   type CommunityFeatures,
 } from '@propertypro/shared';
@@ -36,11 +36,10 @@ export async function FeatureGateAnyOf({
   const membership = await requirePageCommunityMembership(communityIdOverride);
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
 
-  // Same composed type ∧ plan resolution (and same null-plan fail-open rule)
-  // as FeatureGate — see the comment there for why null fails open.
-  const effectiveFeatures = getEffectiveFeatures(membership.communityType, planId);
-
-  const allowed = features.some((f) => effectiveFeatures[f] === true);
+  // Plan-only, with the same null-plan fail-open rule as FeatureGate — see the
+  // comment there for why an unresolved plan is allowed through.
+  const allowed =
+    planId === null || features.some((f) => PLAN_FEATURES[planId].features[f] === true);
   if (allowed) {
     return <>{children}</>;
   }

@@ -13,7 +13,7 @@
  * `./contract.ts` for schemas and auth-chain rationale.
  */
 import { runRoute } from '@propertypro/api-contract';
-import { comparePlanTiers, type PlanId } from '@propertypro/shared';
+import { canChangeExistingPlan, comparePlanTiers, type PlanId } from '@propertypro/shared';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -46,7 +46,12 @@ export const POST = withErrorHandler(
       throw new ValidationError('Community not found', { communityId: 'Not found' });
     }
 
-    if (!community.stripeSubscriptionId || community.subscriptionStatus !== 'active') {
+    // Accepts `trialing` and `past_due` as well as `active` — Stripe allows
+    // `subscriptions.update` in all three. Requiring `active` here meant a
+    // trialing customer (every signup's first 30 days) could not upgrade at
+    // all, and the checkout route would happily sell them a second
+    // subscription instead.
+    if (!canChangeExistingPlan(community)) {
       throw new AppError(
         'No active subscription to change. Start a subscription first.',
         400,
