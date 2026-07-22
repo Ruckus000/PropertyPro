@@ -11,7 +11,7 @@
  *   2. PATCH /api/v1/residents — foreign unitId rejected with 400
  *   3. PATCH /api/v1/compliance link_document — foreign documentId rejected with 400
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
@@ -22,7 +22,6 @@ import {
   teardownTestKit,
   requireCommunity,
   setActor,
-  requireCurrentActor,
   apiUrl,
   jsonRequest,
   parseJson,
@@ -34,13 +33,10 @@ requireDatabaseUrlInCI('Cross-tenant FK rejection integration tests');
 
 const describeDb = getDescribeDb();
 
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
+// Auth is NOT mocked here. `setup-integration.ts` installs the shared
+// `@/lib/api/auth` double globally, backed by `providers/test-auth-provider`;
+// `initTestKit()` registers this suite's state with that provider, so
+// `setActor()` below is what drives `requireAuthenticatedUserId`.
 
 type ResidentsRouteModule = typeof import('../../src/app/api/v1/residents/route');
 type ComplianceRouteModule = typeof import('../../src/app/api/v1/compliance/route');
@@ -96,9 +92,7 @@ describeDb('cross-tenant FK rejection (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     if (!state) return;
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(state!));
     setActor(state, 'actorA');
   });
 
