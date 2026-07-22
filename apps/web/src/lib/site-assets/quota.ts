@@ -18,8 +18,9 @@ import { eq, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 // PR #2 quota lookup. communities is the root tenant table (no communityId
 // column); plan resolution requires unscoped read. Routes calling these
-// helpers MUST have already verified caller's pm_admin membership.
-// AUTHZ: PR #2 site-assets quota lookup against communities root tenant table; callers verify pm_admin membership before invoking.
+// helpers MUST have already verified caller's management-tier
+// (property_manager / root_manager) membership.
+// AUTHZ: PR #2 site-assets quota lookup against communities root tenant table; callers verify management-tier (property_manager / root_manager) membership before invoking.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { PLAN_FEATURES } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';

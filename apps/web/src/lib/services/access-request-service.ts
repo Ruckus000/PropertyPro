@@ -30,16 +30,11 @@ import { PM_SCOPE_DB_ROLES, isBoardPresident } from '@propertypro/shared';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
+import { getBaseUrl } from '@/lib/utils/url';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 function hashOtp(otp: string): string {
   const secret = process.env.OTP_HMAC_SECRET ?? 'dev-secret';

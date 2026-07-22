@@ -19,6 +19,7 @@ import {
   enqueueDigestItems,
   type EnqueueDigestItemInput,
 } from '@/lib/services/notification-digest-queue';
+import { getBaseUrl } from '@/lib/utils/url';
 
 export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
@@ -38,12 +39,6 @@ interface Recipient {
   fullName: string;
   mode: 'immediate' | 'digest';
   frequency?: Extract<EmailFrequency, 'daily_digest' | 'weekly_digest'>;
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
 }
 
 function isAudienceMatch(role: string, audience: AnnouncementAudience, opts?: { isUnitOwner?: boolean; designation?: string | null }): boolean {

@@ -41,6 +41,7 @@ import {
   generateCommunityFinanceStatementPdf,
   generateFinanceStatementPdf,
 } from '@/lib/utils/finance-pdf';
+import { getBaseUrl } from '@/lib/utils/url';
 
 export type AssessmentFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time';
 export type AssessmentLineItemStatus = 'pending' | 'paid' | 'overdue' | 'waived';
@@ -258,12 +259,6 @@ function logFinanceWebhookEvent(
   };
   const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info;
   fn('[finance-webhook]', payload);
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
 }
 
 const FINANCE_EXPORT_HEADERS = [

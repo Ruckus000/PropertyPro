@@ -40,6 +40,7 @@ import { chunk } from '@/lib/utils/chunk';
 import { sendBulkEmergencySms } from '@/lib/services/sms/sms-service';
 import { isStatusAdvancement } from '@/lib/services/sms/sms-types';
 import type { SmsDeliveryStatus } from '@/lib/services/sms/sms-types';
+import { getBaseUrl } from '@/lib/utils/url';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,12 +111,6 @@ const UNDO_WINDOW_MS = 10_000;
 const MAX_BROADCAST_RECIPIENTS = 500;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 function isAudienceMatch(
   role: string,

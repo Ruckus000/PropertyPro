@@ -26,6 +26,7 @@ import {
   type UserNotificationPreferences,
 } from '@/lib/utils/email-preferences';
 import { updateQueuedDigestAnnouncementStatus } from '@/lib/services/announcement-delivery';
+import { getBaseUrl } from '@/lib/utils/url';
 
 const MAX_ATTEMPTS = 5;
 const RETRY_MINUTES_BY_ATTEMPT = [15, 60, 240, 720] as const;
@@ -98,12 +99,6 @@ interface ClaimedRow {
   eventSummary: string | null;
   actionUrl: string | null;
   attemptCount: number;
-}
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
 }
 
 function toLocalTimeParts(date: Date, timezone: string): LocalTimeParts {

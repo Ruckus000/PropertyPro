@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { CommunityType, CommunityRole } from '../src';
-import type { ManagerPermissions } from '../src/manager-permissions';
 import {
   canAccessCategory,
   canAccessDocument,
@@ -9,15 +8,6 @@ import {
   isRestrictedRole,
   normalizeCategoryName,
 } from '../src/access-policies';
-
-/**
- * Build a minimal ManagerPermissions for tests that only exercise the
- * document_categories field. Cast keeps the literal terse — the access-policies
- * functions under test only read `permissions.document_categories`.
- */
-function perms(document_categories: ManagerPermissions['document_categories']): ManagerPermissions {
-  return { document_categories } as ManagerPermissions;
-}
 
 // role-v3 (ADR-006): the document-access policy is keyed by the 3 MatrixRole
 // rows, but the accepted INPUTS are the 3 v3 roles. `resident` splits into the
@@ -75,16 +65,10 @@ describe('access-policies strict matrix', () => {
   });
 
   // role-v3 phase 4.1 (ADR-006): property_manager is uniformly elevated for
-  // document-category visibility, regardless of any per-row JSONB permissions.
-  it('treats property_manager as uniformly elevated regardless of JSONB permissions', () => {
+  // document-category visibility (no per-row JSONB permissions post-cleanup).
+  it('treats property_manager as uniformly elevated', () => {
     // No permissions opts at all → still elevated (covers the 211 null-perms ex-pm_admins).
     expect(isElevatedRole('property_manager')).toBe(true);
-    // Even with a restrictive JSONB document_categories value → still elevated.
-    expect(
-      isElevatedRole('property_manager', {
-        permissions: perms(['rules']),
-      }),
-    ).toBe(true);
     // root_manager remains elevated too.
     expect(isElevatedRole('root_manager')).toBe(true);
     // property_manager is not "restricted".
@@ -95,11 +79,9 @@ describe('access-policies strict matrix', () => {
     const communityTypes: CommunityType[] = ['condo_718', 'hoa_720', 'apartment'];
     const allKnown = getAccessibleKnownCategories('property_manager', 'condo_718');
     for (const communityType of communityTypes) {
-      // Same full set, even with a restrictive JSONB value present.
+      // Same full set in every community type.
       expect(
-        getAccessibleKnownCategories('property_manager', communityType, {
-          permissions: perms(['rules']),
-        }),
+        getAccessibleKnownCategories('property_manager', communityType),
       ).toEqual(allKnown);
       // And can access unknown/unmapped categories.
       expect(canAccessCategory('property_manager', communityType, 'unknown')).toBe(true);
