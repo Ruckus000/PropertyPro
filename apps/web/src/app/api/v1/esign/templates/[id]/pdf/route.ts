@@ -21,10 +21,11 @@ import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { NotFoundError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
 import { getTemplate } from '@/lib/services/esign-service';
+import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 import { esignTemplatePdfGetContract } from './contract';
 
@@ -40,6 +41,19 @@ export const GET = withErrorHandler(
 
     let pdfUrl: string | null = null;
     if (template.sourceDocumentPath) {
+      // Defensive double-check: even though create-template enforces the
+      // path-prefix rule, a row stored before that check existed could
+      // reference a foreign path. Refuse to sign anything outside the
+      // template's own community prefix.
+      try {
+        assertCommunityOwnedStoragePath(
+          template.sourceDocumentPath,
+          communityId,
+          'esign-templates',
+        );
+      } catch {
+        throw new ForbiddenError('Template path is not in this community.');
+      }
       try {
         pdfUrl = await createPresignedDownloadUrl('documents', template.sourceDocumentPath);
       } catch {

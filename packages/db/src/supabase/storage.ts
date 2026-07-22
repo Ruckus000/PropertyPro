@@ -99,3 +99,26 @@ export async function deleteStorageObject(bucket: string, path: string) {
     throw new Error(`Failed to delete storage object: ${error.message}`);
   }
 }
+
+/**
+ * Downloads a Supabase Storage object as bytes.
+ *
+ * Used by content validators that need to inspect uploaded file headers
+ * (e.g., PDF magic-byte verification) before trusting the upload.
+ */
+export async function downloadStorageObject(
+  bucket: string,
+  path: string,
+): Promise<Uint8Array> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(bucket).download(path);
+
+  if (error || !data) {
+    throw new Error(
+      `Failed to download storage object ${bucket}/${path}: ${error?.message ?? 'no data'}`,
+    );
+  }
+
+  const buffer = await data.arrayBuffer();
+  return new Uint8Array(buffer);
+}
