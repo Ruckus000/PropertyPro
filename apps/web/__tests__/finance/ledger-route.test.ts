@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { AppError } from '@/lib/api/errors/AppError';
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
@@ -8,6 +9,7 @@ const {
   requireFinanceReadPermissionMock,
   listActorUnitIdsForFinanceMock,
   listLedgerForCommunityMock,
+  requireEntitledForAdminReadMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -16,6 +18,7 @@ const {
   requireFinanceReadPermissionMock: vi.fn(),
   listActorUnitIdsForFinanceMock: vi.fn(),
   listLedgerForCommunityMock: vi.fn(),
+  requireEntitledForAdminReadMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -40,6 +43,10 @@ vi.mock('@/lib/finance/common', () => ({
 vi.mock('@/lib/services/finance-service', () => ({
   listActorUnitIdsForFinance: listActorUnitIdsForFinanceMock,
   listLedgerForCommunity: listLedgerForCommunityMock,
+}));
+
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
+  requireEntitledForAdminRead: requireEntitledForAdminReadMock,
 }));
 
 import { GET } from '../../src/app/api/v1/ledger/route';
@@ -67,6 +74,7 @@ beforeEach(() => {
   requireCommunityMembershipMock.mockResolvedValue(STAFF_MEMBERSHIP);
   requireFinanceEnabledMock.mockResolvedValue(undefined);
   requireFinanceReadPermissionMock.mockReturnValue(undefined);
+  requireEntitledForAdminReadMock.mockResolvedValue(undefined);
   listLedgerForCommunityMock.mockResolvedValue([{ id: 1, amountCents: 100 }]);
 });
 
@@ -120,5 +128,29 @@ describe('GET /api/v1/ledger', () => {
       42,
       expect.objectContaining({ entryType: 'payment' }),
     );
+  });
+
+  it('calls requireEntitledForAdminRead for a staff/admin caller', async () => {
+    await GET(new NextRequest('http://localhost/api/v1/ledger?communityId=42'));
+    expect(requireEntitledForAdminReadMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ isAdmin: true }),
+    );
+  });
+
+  it('does not block a resident-owner (guard is called but resident path is unaffected)', async () => {
+    // Resident-owner reads their own unit; the admin read-gate must not deny them.
+    requireCommunityMembershipMock.mockResolvedValue(OWNER_MEMBERSHIP);
+    listActorUnitIdsForFinanceMock.mockResolvedValue([7]);
+    const res = await GET(new NextRequest('http://localhost/api/v1/ledger?communityId=42&unitId=7'));
+    expect(res.status).toBe(200);
+  });
+
+  it('propagates a 403 when the guard rejects an admin on a lapsed community', async () => {
+    requireEntitledForAdminReadMock.mockRejectedValue(
+      new AppError('lapsed', 403, 'SUBSCRIPTION_REQUIRED'),
+    );
+    const res = await GET(new NextRequest('http://localhost/api/v1/ledger?communityId=42'));
+    expect(res.status).toBe(403);
   });
 });
