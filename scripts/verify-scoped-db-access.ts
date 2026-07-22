@@ -521,8 +521,24 @@ function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
   // Direct CREATE TRIGGER form, e.g.
   //   CREATE TRIGGER "pp_rls_enforce_tenant_scope" BEFORE INSERT OR UPDATE
   //   ON "public"."tableName" FOR EACH ROW EXECUTE FUNCTION ...
+  // Two corrections over the naive form, both needed for this to mean anything:
+  //
+  // 1. The word-boundary belongs INSIDE the unquoted alternative only. A
+  //    trailing \b after the quoted form can never match — the characters
+  //    either side of the closing quote (`"` and `;`/newline) are both
+  //    non-word, so there is no boundary there. Every migration writes the
+  //    quoted form, so with \b outside the group this pattern silently never
+  //    fired and only the loop/ARRAY form below carried the check — which is
+  //    why access_requests and community_join_requests, whose triggers 0021
+  //    creates in the direct form, reported false DB005 violations.
+  //
+  // 2. The gap is `[^;]*?`, not `[\s\S]*?`. The ON clause must live in the
+  //    SAME statement as the CREATE TRIGGER. With `[\s\S]*?` the match could
+  //    bridge across unrelated statements in the concatenated corpus and pair
+  //    a CREATE TRIGGER with some later `ON "public"."other_table"` (e.g. a
+  //    CREATE POLICY), reporting a trigger that does not exist.
   const directPattern = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)[\\s\\S]*?ON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|${escapedTableName})\\b`,
+    `CREATE\\s+TRIGGER\\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
     'i',
   );
   if (directPattern.test(sql)) return true;
@@ -706,10 +722,18 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
   // service_only and audit_log_restricted tables are written exclusively under
   // a privileged role; append-only tables take INSERT-only writes. The generic
   // INSERT/UPDATE write-scope trigger is not installed on those families.
+  // Policy families that legitimately have NO pp_rls_enforce_tenant_scope
+  // trigger. Keep in sync with RlsPolicyFamily in
+  // packages/db/src/schema/rls-config.ts — this set is hardcoded, so a new
+  // trigger-exempt family must be added here or DB005 fires spuriously.
   const FAMILIES_WITHOUT_TRIGGER = new Set([
     'service_only',
     'audit_log_restricted',
     'tenant_append_only',
+    // No authenticated write path at all (anon/authenticated SELECT only,
+    // writes are service-role) — so there is nothing for a write-scope
+    // trigger to guard. Added for site_blocks in #763.
+    'public_read_service_write',
   ]);
 
   const violations: Violation[] = [];
