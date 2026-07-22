@@ -6,17 +6,10 @@ import {
   billingDaysRemainingUTC,
   canManageBilling,
   formatBillingDateUTC,
-  isWithinPaidGrace,
   paidGraceEndsAt,
+  resolveLifecycleState,
 } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
-
-const LOCKED_SUBSCRIPTION_STATUSES = new Set([
-  'canceled',
-  'expired',
-  'unpaid',
-  'incomplete_expired',
-]);
 
 export interface SubscriptionBillingBannerProps {
   role: CommunityRole | null;
@@ -150,16 +143,18 @@ export function resolveSubscriptionBillingBannerState(
   billingSettingsHref: string;
 } {
   const now = props.now ?? new Date();
-  const isInGrace =
-    props.subscriptionStatus === 'canceled' &&
-    props.subscriptionCanceledAt !== null &&
-    isWithinPaidGrace(props.subscriptionCanceledAt, now);
-  const freeAccessActive =
-    props.freeAccessExpiresAt !== null && props.freeAccessExpiresAt > now;
-  const isSoftLocked =
-    LOCKED_SUBSCRIPTION_STATUSES.has(props.subscriptionStatus ?? '') &&
-    !isInGrace &&
-    !freeAccessActive;
+  // Derived from the same resolver the API guard uses, so the banner can no
+  // longer claim access is fine while the guard is 403ing (or vice versa).
+  const lifecycle = resolveLifecycleState(
+    {
+      subscriptionStatus: props.subscriptionStatus,
+      subscriptionCanceledAt: props.subscriptionCanceledAt,
+      freeAccessExpiresAt: props.freeAccessExpiresAt,
+    },
+    now,
+  );
+  const isInGrace = lifecycle === 'grace';
+  const isSoftLocked = lifecycle === 'lapsed';
   const billingPortalHref = `/billing/portal${props.communityId ? `?communityId=${props.communityId}` : ''}`;
   const billingSettingsHref = props.communityId
     ? `/settings/billing?communityId=${props.communityId}`

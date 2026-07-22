@@ -13,10 +13,98 @@
  * minting a second subscription against the same Stripe customer.
  */
 import { isChurnedStatus } from '../constants/subscription-statuses';
+import { isWithinPaidGrace } from './paid-grace';
 
 export interface SubscriptionLifecycleState {
   stripeSubscriptionId: string | null;
   subscriptionStatus: string | null;
+}
+
+/**
+ * The one named state every guard, banner and gate should key on.
+ *
+ * Purely DERIVED from columns that already exist — no new column, no migration.
+ * Churn state was previously inferred independently at each call site from some
+ * mix of `subscription_status`, a nulled `subscription_plan`,
+ * `subscription_canceled_at` and `free_access_expires_at`, and those call sites
+ * disagreed with each other. Deriving it once removes the drift.
+ *
+ *   unprovisioned — never subscribed. The majority of rows today.
+ *   comped        — an active free-access grant. Overrides everything below.
+ *   trialing      — inside the signup trial.
+ *   active        — paying.
+ *   past_due      — payment failed, Stripe still retrying.
+ *   grace         — canceled, still inside the paid grace window.
+ *   lapsed        — canceled, grace expired.
+ */
+export type LifecycleState =
+  | 'unprovisioned'
+  | 'comped'
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'grace'
+  | 'lapsed';
+
+export interface LifecycleInput {
+  subscriptionStatus: string | null;
+  subscriptionCanceledAt: Date | null;
+  freeAccessExpiresAt?: Date | null;
+}
+
+export function resolveLifecycleState(
+  input: LifecycleInput,
+  now: Date = new Date(),
+): LifecycleState {
+  // Free access overrides a locked subscription — matches subscription-guard's
+  // long-standing rule (spec §4.2), kept first so a comped community is never
+  // treated as churned.
+  if (input.freeAccessExpiresAt && input.freeAccessExpiresAt > now) return 'comped';
+
+  const status = input.subscriptionStatus;
+  if (status === null) return 'unprovisioned';
+  if (status === 'trialing') return 'trialing';
+  if (status === 'past_due') return 'past_due';
+
+  if (isChurnedStatus(status)) {
+    // Only `canceled` earns a grace window, and only with a real timestamp.
+    // `expired`/`unpaid`/`incomplete_expired` are hard stops.
+    if (
+      status === 'canceled' &&
+      input.subscriptionCanceledAt &&
+      isWithinPaidGrace(input.subscriptionCanceledAt, now)
+    ) {
+      return 'grace';
+    }
+    return 'lapsed';
+  }
+
+  // `active`, plus anything Stripe adds that isn't a known churn state
+  // (`incomplete`, `paused`, …). Deliberately permissive: these guards have
+  // always failed OPEN on unrecognized statuses, and tightening that here would
+  // silently lock out communities on a Stripe vocabulary change.
+  return 'active';
+}
+
+/** States where the community is entitled to its paid surfaces. */
+const ENTITLED_STATES: readonly LifecycleState[] = [
+  'unprovisioned',
+  'comped',
+  'trialing',
+  'active',
+  'past_due',
+  'grace',
+];
+
+/**
+ * Whether this state still grants full paid access.
+ *
+ * `lapsed` is the only state that does not — and today it behaves exactly like
+ * the others for reads, because read gating for churned communities has never
+ * existed. Introducing that is a separate, deliberate change.
+ */
+export function isEntitledState(state: LifecycleState): boolean {
+  return ENTITLED_STATES.includes(state);
 }
 
 /** Statuses where Stripe still holds a mutable subscription we can upgrade in place. */

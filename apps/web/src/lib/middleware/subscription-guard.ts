@@ -20,10 +20,8 @@ import { eq } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 // AUTHZ: Reads communities row by primary key — communities is the root tenant table and cannot be scoped by community_id (it IS the community_id).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { isWithinPaidGrace } from '@propertypro/shared';
+import { resolveLifecycleState, isEntitledState } from '@propertypro/shared';
 import { AppError } from '@/lib/api/errors/AppError';
-
-const LOCKED_STATUSES = new Set(['canceled', 'expired', 'unpaid', 'incomplete_expired']);
 
 /**
  * Verify that the community's subscription allows admin mutations.
@@ -57,24 +55,19 @@ export async function requireActiveSubscriptionForMutation(
     .limit(1);
 
   const status = rows[0]?.subscriptionStatus ?? null;
-  const freeAccessExpiresAt = rows[0]?.freeAccessExpiresAt ?? null;
-  const subscriptionCanceledAt = rows[0]?.subscriptionCanceledAt ?? null;
 
-  // Free access overrides locked subscription status (see spec §4.2)
-  if (freeAccessExpiresAt && freeAccessExpiresAt > new Date()) {
-    return;
-  }
+  // One derived state rather than three open-coded checks. It encodes the same
+  // rules this function used to spell out inline — free access wins, `canceled`
+  // inside the paid window is still entitled, null/unknown statuses fail open —
+  // and is now shared with the billing banners so the UI and the guard cannot
+  // disagree about whether a community is locked.
+  const state = resolveLifecycleState({
+    subscriptionStatus: status,
+    subscriptionCanceledAt: rows[0]?.subscriptionCanceledAt ?? null,
+    freeAccessExpiresAt: rows[0]?.freeAccessExpiresAt ?? null,
+  });
 
-  if (
-    status === 'canceled' &&
-    subscriptionCanceledAt &&
-    isWithinPaidGrace(subscriptionCanceledAt)
-  ) {
-    return;
-  }
-
-  // Treat unknown/null status as active (fail-open for new/unprovisioned communities)
-  if (status !== null && LOCKED_STATUSES.has(status)) {
+  if (!isEntitledState(state)) {
     throw new AppError(
       'Your subscription is no longer active. Please reactivate to continue.',
       403,

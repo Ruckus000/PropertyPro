@@ -25,6 +25,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import type { CommunityType } from '@propertypro/shared';
 import { emitConversionEvent } from './conversion-events';
+import { reactivationClears } from './stripe-webhook-service';
 
 // ---------------------------------------------------------------------------
 // Main entry point — called from webhook handler
@@ -136,6 +137,8 @@ async function convertCommunity(params: ConvertCommunityParams): Promise<boolean
       demoExpiresAt: null,
       trialEndsAt: null,
       updatedAt: new Date(),
+      // A converted demo is a live subscription — drop any cancellation state.
+      ...reactivationClears('active'),
     })
     .where(
       and(

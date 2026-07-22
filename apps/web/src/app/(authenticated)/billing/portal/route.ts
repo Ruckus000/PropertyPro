@@ -22,6 +22,7 @@ import { ReauthRequiredError } from '@/lib/api/errors';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requirePermission } from '@/lib/db/access-control';
 import { headers } from 'next/headers';
 
 export const GET = async (req: NextRequest): Promise<never> => {
@@ -50,8 +51,16 @@ export const GET = async (req: NextRequest): Promise<never> => {
     redirect('/dashboard');
   }
 
-  // 3. Verify membership (403 if not a member)
-  await requireCommunityMembership(context.communityId, userId);
+  // 3. Verify membership AND billing authority.
+  //
+  // Membership alone is not enough: the Stripe Customer Portal exposes
+  // invoices and payment methods and lets the visitor CANCEL the subscription.
+  // Without this check any member who could pass the reauth prompt — including
+  // a tenant — could cancel the community's subscription. Billing is
+  // management-tier only (`settings.write` is true solely on the `manager`
+  // matrix row), matching /api/v1/subscribe and /api/v1/subscribe/change-plan.
+  const membership = await requireCommunityMembership(context.communityId, userId);
+  requirePermission(membership, 'settings', 'write');
 
   // 4. Look up the Stripe customer ID
   const db = createUnscopedClient();
