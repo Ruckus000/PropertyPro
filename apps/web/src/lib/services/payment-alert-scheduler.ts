@@ -33,6 +33,7 @@ import {
   PAID_GRACE_DAYS,
   type CommunityRole,
 } from '@propertypro/shared';
+import { getBaseUrl } from '@/lib/utils/url';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -46,12 +47,6 @@ const CONDO_HOA_ADMIN_ROLES: readonly CommunityRole[] = MANAGER_TIER_DB_ROLES;
 /** Roles that receive billing alerts for apartment communities. */
 // BILINGUAL (role-v3): collapse to v3-only at Phase 4 cleanup
 const APARTMENT_ADMIN_ROLES: readonly CommunityRole[] = ADMIN_TIER_DB_ROLES;
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 function daysDiff(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / MS_PER_DAY);

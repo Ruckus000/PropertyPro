@@ -1,6 +1,6 @@
 /**
- * Document category constants — extracted to avoid circular imports
- * between access-policies.ts and manager-permissions.ts.
+ * Document category constants — extracted to avoid a circular import with
+ * access-policies.ts.
  */
 
 export const KNOWN_DOCUMENT_CATEGORY_KEYS = [

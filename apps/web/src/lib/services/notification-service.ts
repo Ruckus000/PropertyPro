@@ -43,6 +43,7 @@ import {
   type EnqueueDigestItemInput,
   type DigestSourceType,
 } from './notification-digest-queue';
+import { getBaseUrl } from '@/lib/utils/url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -183,12 +184,6 @@ function isInAppEnabled(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getBaseUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts?: { isUnitOwner?: boolean; designation?: string | null }): boolean {
   if (filter === 'all') return true;

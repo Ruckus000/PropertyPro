@@ -16,8 +16,9 @@
  * drafts to published.
  *
  * AUTHZ: This file is allowlisted in scripts/verify-scoped-db-access.ts
- * for `createUnscopedClient` import. Callers MUST verify pm_admin / cam
- * membership and the `hasSiteEditor` plan feature at the route layer.
+ * for `createUnscopedClient` import. Callers MUST verify management-tier
+ * (property_manager / root_manager) membership and the `hasSiteEditor` plan
+ * feature at the route layer.
  */
 import {
   complianceAuditLog,
@@ -26,7 +27,7 @@ import {
   type AuditAction,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
-// AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies pm_admin + hasSiteEditor.
+// AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies management-tier (property_manager / root_manager) + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { TOMBSTONE_BLOCK_TYPE, type HeroBlockContent } from '@propertypro/shared';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -429,7 +430,7 @@ interface MergedContentBlock {
  * place, shadowed, until publish. No order-mutating UPDATE runs, so there is no
  * mid-transaction uniqueness collision (no park-then-renumber needed).
  *
- * AUTHZ: caller (route layer) verifies pm_admin/cam membership + hasSiteEditor.
+ * AUTHZ: caller (route layer) verifies management-tier (property_manager / root_manager) membership + hasSiteEditor.
  */
 export async function reorderSiteBlock({
   communityId,
@@ -597,7 +598,7 @@ export interface RemoveSiteBlockResult {
  * merged draft-wins row the PM is looking at — deleting both layers by order
  * would silently drop the wrong section from the live site.
  *
- * AUTHZ: caller (route layer) verifies pm_admin/cam membership + hasSiteEditor.
+ * AUTHZ: caller (route layer) verifies management-tier (property_manager / root_manager) membership + hasSiteEditor.
  */
 export async function removeSiteBlock({
   communityId,
@@ -703,7 +704,7 @@ export interface DiscardSiteDraftsResult {
  * untouched, so the editor snaps back to exactly what the live site shows.
  * Without this, a staged change could only be escaped by publishing it.
  *
- * AUTHZ: caller (route layer) verifies pm_admin/cam membership + hasSiteEditor.
+ * AUTHZ: caller (route layer) verifies management-tier (property_manager / root_manager) membership + hasSiteEditor.
  */
 export async function discardSiteDrafts({
   communityId,
