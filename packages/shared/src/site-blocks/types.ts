@@ -65,8 +65,16 @@ export const ctaTargetSchema = z
   .min(1)
   .max(512)
   .refine(
-    (v) => (v.startsWith('/') && !v.startsWith('//')) || v.startsWith('https://'),
-    'CTA target must be an internal path (starting with /, not //) or an https URL',
+    (v) => {
+      // Browsers normalize backslashes to forward slashes when resolving a
+      // URL, so "/\evil.com", "/\/\evil.com", and "\\evil.com" all behave like
+      // the protocol-relative "//evil.com" and would open-redirect off-site.
+      // Normalize first, then reject anything that resolves protocol-relative.
+      const normalized = v.replace(/\\/g, '/');
+      if (normalized.startsWith('//')) return false;
+      return v.startsWith('/') || v.startsWith('https://');
+    },
+    'CTA target must be an internal path (starting with /, not // or a backslash variant) or an https URL',
   );
 
 /** SoR block configuration limits used across documents/meetings/announcements. */
