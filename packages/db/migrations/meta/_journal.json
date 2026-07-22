@@ -171,6 +171,13 @@
       "breakpoints": true
     },
     {
+      "idx": 24,
+      "version": "7",
+      "when": 1782995253852,
+      "tag": "0024_canonicalize_onboarding_checklist_trigger",
+      "breakpoints": true
+    },
+    {
       "idx": 25,
       "version": "7",
       "when": 1783832536018,

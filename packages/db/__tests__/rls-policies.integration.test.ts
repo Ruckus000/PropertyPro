@@ -1412,6 +1412,17 @@ describeDb('P4-55 RLS policies (integration)', () => {
       esign_consent: ['pp_esign_consent_admin_delete', 'pp_esign_consent_insert', 'pp_esign_consent_update', 'pp_tenant_select'],
       support_consent_grants: ['consent_community_read', 'consent_service_bypass'],
       support_access_log: ['access_log_community_read', 'access_log_service_bypass'],
+      // onboarding_checklist_items (tenant_user_scoped): bespoke per-user policy
+      // names, and no DELETE policy (rows are soft-deleted via UPDATE; authenticated
+      // hard-delete fails closed). Names repaired-in-place by 0023, not renamed.
+      onboarding_checklist_items: [
+        'checklist_items_insert_own',
+        'checklist_items_select_own',
+        'checklist_items_update_own',
+      ],
+      // site_blocks (public_read_service_write): anon + authenticated published-row
+      // read, service-role-only writes. Bespoke names; no pp_* family standard.
+      site_blocks: ['site_blocks_anon_read', 'site_blocks_read_published', 'site_blocks_service_role'],
     };
 
     const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
@@ -1544,6 +1555,9 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'service_only',
         'audit_log_restricted',
         'tenant_append_only',
+        // public_read_service_write (site_blocks): writes are service-role only,
+        // so there is no authenticated write path for a write-scope trigger to guard.
+        'public_read_service_write',
       ]);
 
       const expectedTables = RLS_TENANT_TABLES.filter(
@@ -1784,6 +1798,25 @@ describeDb('P4-55 RLS policies (integration)', () => {
         select id from public.site_blocks where id = ${publishedBlockAId}
       `;
       expect(rows).toHaveLength(0);
+    });
+
+    it('0024: onboarding_checklist_items carries the canonical write-scope trigger, not the legacy name', async () => {
+      // 0024 renamed enforce_community_scope_onboarding_checklist_items to the
+      // canonical pp_rls_enforce_tenant_scope (same function), bringing the table
+      // into taxonomy compliance. The generic trigger-coverage test in the 0021
+      // block asserts presence; here we also assert the legacy name is gone.
+      const rows = await adminSql<{ tgname: string }[]>`
+        select t.tgname
+        from pg_trigger t
+        join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public'
+          and c.relname = 'onboarding_checklist_items'
+          and not t.tgisinternal
+      `;
+      const names = new Set(rows.map((r) => r.tgname));
+      expect(names.has('pp_rls_enforce_tenant_scope')).toBe(true);
+      expect(names.has('enforce_community_scope_onboarding_checklist_items')).toBe(false);
     });
   });
 });
