@@ -18,7 +18,7 @@
  *             `{ data: { data, meta } }` (already-generated / race / empty)
  *   - PATCH → `{ data: result }`
  */
-import { createScopedClient, documents, logAuditEvent } from '@propertypro/db';
+import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
@@ -38,6 +38,7 @@ import {
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
+import { getDocumentDeletedAtByIds } from '@/lib/services/documents-service';
 import {
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
@@ -115,27 +116,21 @@ export const GET = withErrorHandler(
 
     const rows = await listComplianceChecklistItems(communityId);
 
-    // Resolve `documents.deleted_at` for every linked document so a
+    // Resolve `documents.deleted_at` for the linked documents so a
     // soft-deleted document does not silently keep its checklist item
-    // satisfied. queryIncludingDeleted lets us detect the deletion explicitly
-    // rather than having the document silently drop out of a scoped read.
-    const linkedDocumentIds = new Set(
-      rows
-        .map((r) => r['documentId'] as number | null)
-        .filter((v): v is number => typeof v === 'number'),
+    // satisfied. Targeted inArray lookup over just the linked ids — this is
+    // a hot route, so it must never become a full-table read.
+    const linkedDocumentIds = [
+      ...new Set(
+        rows
+          .map((r) => r['documentId'] as number | null)
+          .filter((v): v is number => typeof v === 'number'),
+      ),
+    ];
+    const documentDeletedAtById = await getDocumentDeletedAtByIds(
+      communityId,
+      linkedDocumentIds,
     );
-    const documentDeletedAtById = new Map<number, Date | null>();
-    if (linkedDocumentIds.size > 0) {
-      const scoped = createScopedClient(communityId);
-      const allDocs = await scoped.queryIncludingDeleted(documents);
-      for (const doc of allDocs) {
-        const id = doc['id'] as number;
-        if (linkedDocumentIds.has(id)) {
-          const deletedAtRaw = doc['deletedAt'] as string | Date | null;
-          documentDeletedAtById.set(id, deletedAtRaw ? new Date(deletedAtRaw) : null);
-        }
-      }
-    }
 
     const data = rows.map((row) => withDerivedStatus(row, documentDeletedAtById));
 

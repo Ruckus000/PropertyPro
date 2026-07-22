@@ -10,7 +10,7 @@
  *      and status flips to 'overdue' (deadline already in the past) or
  *      'unsatisfied' (deadline still in the future).
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
@@ -21,7 +21,6 @@ import {
   teardownTestKit,
   requireCommunity,
   setActor,
-  requireCurrentActor,
   apiUrl,
   jsonRequest,
   parseJson,
@@ -33,21 +32,14 @@ requireDatabaseUrlInCI('Compliance × document soft-delete integration tests');
 
 const describeDb = getDescribeDb();
 
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-vi.mock('@/lib/middleware/subscription-guard', () => ({
-  requireActiveSubscriptionForMutation: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('@/lib/middleware/demo-grace-guard', () => ({
-  assertNotDemoGrace: vi.fn().mockResolvedValue(undefined),
-}));
+// Nothing is mocked here — no-mock-guard forbids it under __tests__/integration/,
+// and none of it was needed:
+//   - auth: setup-integration.ts installs the shared `@/lib/api/auth` double
+//     globally via providers/test-auth-provider; initTestKit() registers this
+//     suite's state with it, so setActor() drives requireAuthenticatedUserId.
+//   - subscription-guard: seedCommunities() leaves subscriptionStatus null,
+//     which requireActiveSubscriptionForMutation explicitly treats as allowed.
+//   - demo-grace-guard: seeded communities are not demo-grace communities.
 
 type ComplianceRouteModule = typeof import('../../src/app/api/v1/compliance/route');
 type DocumentsRouteModule = typeof import('../../src/app/api/v1/documents/route');
@@ -85,9 +77,7 @@ describeDb('compliance × document soft-delete (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     if (!state) return;
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(state!));
     setActor(state, 'actorA');
   });
 

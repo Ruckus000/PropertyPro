@@ -311,8 +311,8 @@ export function createScopedClient(
       return rows[0] ?? null;
     },
 
-    async queryWhere(table, additionalWhere) {
-      const filters = buildScopeFilters(table, ctx.communityId);
+    async queryWhere(table, additionalWhere, options = {}) {
+      const filters = buildScopeFilters(table, ctx.communityId, options);
       if (additionalWhere) filters.push(additionalWhere);
       return execSelect(database, table, combineFilters(filters));
     },

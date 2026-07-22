@@ -60,10 +60,16 @@ export interface ScopedClient {
    * the primary key; use `queryWhere` for lookups keyed on non-id columns
    * (e.g. `userId`, composite filters) so the predicate runs in SQL instead
    * of a full-table scan + in-memory `.find`.
+   *
+   * Pass `{ includeSoftDeleted: true }` to drop the soft-delete filter, so
+   * soft-deleted rows are returned and the caller can inspect `deletedAt`
+   * explicitly instead of having the row silently vanish. Mirrors the option
+   * on `queryById`; callers are responsible for auth gating.
    */
   queryWhere: (
     table: ScopedTable,
     additionalWhere: SQL | undefined,
+    options?: { includeSoftDeleted?: boolean },
   ) => Promise<ScopedRow[]>;
 
   /**

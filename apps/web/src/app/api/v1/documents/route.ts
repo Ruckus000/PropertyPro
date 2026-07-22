@@ -23,8 +23,7 @@
  */
 import { NextResponse } from 'next/server';
 import { runRoute } from '@propertypro/api-contract';
-import { complianceChecklistItems, createScopedClient, logAuditEvent } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { logAuditEvent } from '@propertypro/db';
 import type { DocumentMutationWarning } from '@/lib/documents/types';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
@@ -42,6 +41,7 @@ import {
   paginateAccessibleDocuments,
   softDeleteDocument,
 } from '@/lib/services/documents-service';
+import { unlinkChecklistItemsForDocument } from '@/lib/services/compliance-service';
 import {
   documentsCreateContract,
   documentsDeleteContract,
@@ -162,21 +162,9 @@ export const DELETE = withErrorHandler(
     }
 
     // Unlink any compliance checklist items that satisfy themselves via this
-    // document. The compliance calculator also defends against this at read
-    // time (treating documentDeletedAt as unlinked), but clearing the FK keeps
-    // the data model honest and avoids confusing audit trails. The two writes
-    // are not strictly atomic here — the calculator's read-time defense covers
-    // the brief window where the checklist row still references the deleted doc.
-    const scoped = createScopedClient(communityId);
-    await scoped.update(
-      complianceChecklistItems,
-      {
-        documentId: null,
-        documentPostedAt: null,
-        lastModifiedBy: userId,
-      },
-      eq(complianceChecklistItems.documentId, id),
-    );
+    // document, so a deleted document cannot keep an item "satisfied".
+    // The compliance calculator also defends against this at read time.
+    await unlinkChecklistItemsForDocument(communityId, id, userId);
 
     // Perform soft delete
     const deletedRows = await softDeleteDocument(communityId, id);

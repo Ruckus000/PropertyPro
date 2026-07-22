@@ -23,6 +23,7 @@ const {
     communities: Symbol('communities'),
     complianceChecklistItems: Symbol('compliance_checklist_items'),
     visitorLog: Symbol('visitor_log'),
+    documents: Symbol('documents'),
   },
 }));
 
@@ -31,6 +32,7 @@ vi.mock('@propertypro/db', () => ({
   communities: tables.communities,
   complianceChecklistItems: tables.complianceChecklistItems,
   visitorLog: tables.visitorLog,
+  documents: tables.documents,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -59,9 +61,19 @@ const NOW = new Date('2026-03-15T12:00:00.000Z');
 const pastDate = new Date('2026-02-01T00:00:00.000Z').toISOString();
 const futureDate = new Date('2026-04-15T00:00:00.000Z').toISOString();
 
-function setupChecklistMock(rows: Array<Record<string, unknown>>) {
+/**
+ * @param rows            checklist rows returned by `scoped.query`
+ * @param documentRows    `documents` rows returned by `scoped.queryWhere`
+ *                        (soft-delete-inclusive lookup used to decide whether
+ *                        a linked document still counts as satisfying an item)
+ */
+function setupChecklistMock(
+  rows: Array<Record<string, unknown>>,
+  documentRows: Array<Record<string, unknown>> = [],
+) {
   createScopedClientMock.mockReturnValue({
     query: vi.fn(async () => rows),
+    queryWhere: vi.fn(async () => documentRows),
   });
 }
 
@@ -91,7 +103,30 @@ describe('checkAndAlertOverdueItems', () => {
     expect(sendNotificationMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does not flag items with linked documents', async () => {
+  it('does not flag items whose document was posted on time', async () => {
+    setupChecklistMock([
+      {
+        title: 'Annual Budget',
+        description: 'Must post annual budget',
+        deadline: pastDate,
+        documentId: 42,
+        // Posted BEFORE the deadline — genuinely satisfied.
+        documentPostedAt: new Date('2026-01-20T00:00:00.000Z').toISOString(),
+        rollingWindow: null,
+        isApplicable: true,
+        statuteReference: '§718.112(2)(f)',
+      },
+    ]);
+
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(result.overdueCount).toBe(0);
+    expect(result.notifiedCount).toBe(0);
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+  });
+
+  it('flags items whose document was posted after the deadline', async () => {
+    // A document posted late does not retroactively satisfy the item — the
+    // statutory deadline was still missed, so admins must still see the gap.
     setupChecklistMock([
       {
         title: 'Annual Budget',
@@ -106,9 +141,33 @@ describe('checkAndAlertOverdueItems', () => {
     ]);
 
     const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
-    expect(result.overdueCount).toBe(0);
-    expect(result.notifiedCount).toBe(0);
-    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(result.overdueCount).toBe(1);
+    expect(result.notifiedCount).toBe(1);
+  });
+
+  it('flags items whose linked document has been soft-deleted', async () => {
+    // Alert parity: the compliance UI threads documents.deleted_at into the
+    // calculator, so the alert path must too — otherwise a soft-deleted
+    // document reads as "satisfied" in email while the UI shows it overdue.
+    setupChecklistMock(
+      [
+        {
+          title: 'Annual Budget',
+          description: 'Must post annual budget',
+          deadline: pastDate,
+          documentId: 42,
+          documentPostedAt: new Date('2026-01-20T00:00:00.000Z').toISOString(),
+          rollingWindow: null,
+          isApplicable: true,
+          statuteReference: '§718.112(2)(f)',
+        },
+      ],
+      [{ id: 42, deletedAt: new Date('2026-03-01T00:00:00.000Z').toISOString() }],
+    );
+
+    const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+    expect(result.overdueCount).toBe(1);
+    expect(result.notifiedCount).toBe(1);
   });
 
   it('does not flag items with future deadlines', async () => {
