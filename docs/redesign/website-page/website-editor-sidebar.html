@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PM "Website" Editor — Sidebar (app chrome) export</title>
+<!--
+  Static, self-contained export of the SIDEBAR (app-shell navigation rail) that
+  surrounds the PM-facing "Website" editor page (/pm/settings/website).
+
+  Accurate to source, not an approximation:
+    • Because the route starts with /pm/, the app shell renders the PM-PORTAL
+      rail (isPmContext = true in AppSidebar), NOT the community rail. Items come
+      from PM_NAV_ITEMS in apps/web/src/components/layout/nav-config.ts:
+      Communities · Website (active) · Templates · Reports.
+    • Markup/classes reproduced from packages/ui/src/components/NavRail.tsx,
+      the static brand header from SidebarTenantSwitcher (staticOnly = PM portal),
+      the profile footer from AppSidebar, and the plan pill from PlanBadge.tsx.
+    • Icons are the exact lucide-react v0.501.0 paths the app imports
+      (Building2, Paintbrush, LayoutTemplate, BarChart3→chart-column, Building);
+      the collapse control uses NavRail's own inline 20×20 panel icons.
+    • Tokens/hex are the "Florida Modern" values from packages/tokens; 18px root.
+
+  Pairs with website-editor-spec.md, website-editor-mockup.html, and
+  website-editor-design-system.md. No build step, no external JS.
+-->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap');
+
+/* ── Real design tokens (copied from packages/ui/src/styles/tokens.css) ── */
+:root{
+  /* primitives used here */
+  --gray-0:#FFFFFF; --gray-400:#9CA3AF; --gray-500:#6B7280; --gray-600:#4B5563;
+  --gray-700:#374151; --gray-900:#111827; --gray-950:#0D1117;
+  --sand-0:#FFFEFC; --sand-25:#FDFAF6; --sand-50:#FBF7F1; --sand-100:#F6EFE6;
+  --sand-200:#EFE7DC; --sand-300:#E3D8C9;
+  --coral-500:#CB6047; --coral-600:#C2533A; --coral-700:#A8412C; --coral-800:#87331F;
+  --gold-100:#FAE9C2; --gold-200:#F3D488; --gold-800:#6F4C13;
+
+  /* semantic */
+  --text-primary:var(--gray-900); --text-secondary:var(--gray-600);
+  --text-tertiary:var(--gray-500); --text-inverse:var(--gray-0);
+  --surface-page:var(--sand-50); --surface-card:var(--sand-0); --surface-muted:var(--sand-100);
+  --surface-hover:var(--sand-50);
+  --border-default:var(--sand-200); --border-subtle:var(--sand-100); --border-strong:var(--sand-300);
+  --interactive-primary:var(--coral-600);
+  --status-premium:var(--gold-800); --status-premium-subtle:var(--gold-100); --status-premium-border:var(--gold-200);
+
+  --radius-sm:6px; --radius-md:10px; --radius-full:9999px;
+  --elevation-e1:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+  --focus-ring:var(--coral-500);
+
+  --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Fraunces",Georgia,"Times New Roman",serif;
+
+  /* nav (light rail) — packages/tokens/src/static.ts `nav` block */
+  --nav-surface:var(--surface-card);
+  --nav-text-active:var(--text-primary);
+  --nav-text-inactive:var(--text-secondary);
+  --nav-text-muted:var(--text-tertiary);
+  --nav-bg-active:var(--surface-muted);
+  --nav-bg-hover:var(--surface-hover);
+  --nav-divider:var(--border-subtle);
+  --nav-border-divider:var(--border-default);
+  --nav-indicator:var(--interactive-primary);
+}
+
+/* The running app sets :root font-size:18px (globals.css) → 1rem = 18px.
+   Font sizes below are rem-based; spacing is px, exactly as in the app. */
+html{font-size:18px;}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--sand-25); color:var(--text-primary);
+  font-family:var(--font-sans); font-size:1rem; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;}
+p{margin:0;}
+code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82em;
+  background:var(--surface-muted);padding:1px 5px;border-radius:5px;}
+a{color:inherit;text-decoration:none;}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:inherit;}
+
+/* ── Document frame ── */
+.wrap{max-width:1080px;margin:0 auto;padding:40px 28px 72px;}
+.doc-h{font-family:var(--font-display);font-size:1.5rem;font-weight:600;letter-spacing:-.01em;color:var(--text-primary);}
+.doc-sub{color:var(--text-secondary);font-size:.9375rem;margin-top:6px;max-width:74ch;}
+.doc-intro{margin-top:14px;padding:14px 16px;border:1px solid var(--border-default);border-radius:var(--radius-md);
+  background:var(--surface-card);max-width:80ch;}
+.doc-intro p{color:var(--text-secondary);font-size:.875rem;margin-top:7px;}
+.doc-intro p:first-child{margin-top:0;}
+.doc-intro strong{color:var(--text-primary);font-weight:600;}
+
+.section-title{font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--text-tertiary);margin:40px 0 14px;}
+
+/* ── Specimen stage (simulates the app canvas behind the rail) ── */
+.stage{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;}
+.specimen{display:flex;flex-direction:column;gap:10px;}
+.specimen .cap{font-size:.8125rem;color:var(--text-tertiary);font-weight:500;}
+.specimen .cap b{color:var(--text-secondary);font-weight:600;}
+.frame{height:680px;border:1px solid var(--border-strong);border-radius:14px;overflow:hidden;
+  box-shadow:var(--elevation-e1);background:var(--surface-page);display:flex;}
+
+/* ── The rail (faithful reproduction of NavRail) ── */
+.rail{height:100%;display:flex;flex-direction:column;overflow:hidden;
+  border-right:1px solid var(--nav-border-divider);background:var(--nav-surface);
+  color:var(--nav-text-inactive);}
+.rail.expanded{width:260px;}
+.rail.collapsed{width:72px;}
+
+/* header — static brand (SidebarTenantSwitcher, staticOnly) */
+.rail-head{height:64px;flex:none;display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border-default);padding:0 12px;}
+.brand-mark{width:36px;height:36px;flex:none;border-radius:var(--radius-md);
+  background:var(--interactive-primary);color:#fff;display:flex;align-items:center;justify-content:center;}
+.brand-label{display:flex;flex-direction:column;min-width:0;overflow:hidden;white-space:nowrap;}
+.brand-label .app{font-size:1rem;font-weight:600;color:var(--text-primary);line-height:1.15;}
+.brand-label .community{font-size:.875rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;}
+.rail.collapsed .brand-label{display:none;}
+
+/* nav list */
+.rail-nav{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;}
+.nav-item{position:relative;display:flex;height:44px;align-items:center;gap:12px;
+  border-radius:var(--radius-md);border:1px solid transparent;padding:0 12px;
+  transition:background-color .15s cubic-bezier(.4,0,.2,1),color .15s cubic-bezier(.4,0,.2,1);}
+.nav-item:hover{background:var(--nav-bg-hover);color:var(--nav-text-active);}
+.nav-item.is-active{background:var(--nav-bg-active);color:var(--nav-text-active);}
+.nav-item.is-active::before{content:"";position:absolute;left:0;top:50%;height:28px;width:4px;
+  transform:translateY(-50%);border-radius:0 6px 6px 0;background:var(--nav-indicator);}
+.nav-ico{width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--nav-text-inactive);}
+.nav-item.is-active .nav-ico{color:var(--nav-text-active);}
+.nav-label{font-size:.9375rem;line-height:1.35;font-weight:500;color:var(--nav-text-inactive);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nav-item.is-active .nav-label{font-weight:600;color:var(--nav-text-active);}
+.rail.collapsed .nav-label{display:none;}
+
+/* collapse control (NavRail's own inline panel icon) */
+.rail-toggle{flex:none;border-top:1px solid var(--nav-divider);}
+.rail-toggle button{display:flex;width:100%;align-items:center;gap:8px;padding:8px 10px;
+  background:transparent;border:0;color:var(--nav-text-muted);font-family:inherit;cursor:pointer;
+  transition:background-color .15s,color .15s;}
+.rail-toggle button:hover{background:var(--nav-bg-hover);color:var(--nav-text-active);}
+.rail-toggle .lbl{font-size:.875rem;}
+.rail.collapsed .rail-toggle button{justify-content:center;}
+.rail.collapsed .rail-toggle .lbl{display:none;}
+
+/* footer — profile (AppSidebar) */
+.rail-foot{flex:none;border-top:1px solid var(--border-default);padding:12px;}
+.rail-foot .row{display:flex;align-items:center;gap:12px;}
+.avatar{width:36px;height:36px;flex:none;border-radius:var(--radius-full);background:var(--surface-muted);
+  display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:500;color:var(--text-secondary);}
+.profile{display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.profile .name{font-size:.875rem;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.profile .meta{display:flex;align-items:center;gap:6px;}
+.profile .role{font-size:.75rem;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.plan-badge{display:inline-flex;height:20px;flex:none;align-items:center;border-radius:var(--radius-full);
+  padding:0 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+  background:var(--status-premium-subtle);color:var(--status-premium);
+  box-shadow:inset 0 0 0 1px var(--status-premium-border);}
+.rail.collapsed .profile{display:none;}
+
+/* sample-data caption pill */
+.sample{display:inline-flex;align-items:center;gap:6px;font-size:.75rem;color:var(--coral-800);
+  background:var(--sand-100);border:1px solid var(--border-strong);border-radius:var(--radius-full);
+  padding:2px 10px;font-weight:600;}
+
+/* ── Reference tables ── */
+.ref{border:1px solid var(--border-default);border-radius:var(--radius-md);overflow:hidden;background:var(--surface-card);}
+table{width:100%;border-collapse:collapse;font-size:.875rem;}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border-subtle);vertical-align:top;}
+th{background:var(--surface-muted);color:var(--text-secondary);font-weight:600;font-size:.8125rem;}
+tr:last-child td{border-bottom:0;}
+td .ic{display:inline-flex;vertical-align:middle;color:var(--text-secondary);margin-right:2px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media (max-width:720px){.grid2{grid-template-columns:1fr;}}
+.notes{font-size:.875rem;color:var(--text-secondary);}
+.notes li{margin:7px 0;}
+.notes b{color:var(--text-primary);font-weight:600;}
+.k{color:var(--text-primary);font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 class="doc-h">PM "Website" Editor — Sidebar (app chrome)</h1>
+  <p class="doc-sub">The navigation rail that surrounds the Website editor, exported on its own so a
+    redesign renders the surrounding chrome correctly. This is the real, on-route sidebar — not the
+    approximation drawn inside <code>website-editor-mockup.html</code>.</p>
+
+  <div class="doc-intro">
+    <p><strong>Why this rail (and not the community one).</strong> The editor lives at
+      <code>/pm/settings/website</code>. Because that path starts with <code>/pm/</code>, the app shell
+      sets <code>isPmContext = true</code> and renders the <strong>PM-portal rail</strong> from
+      <code>PM_NAV_ITEMS</code> — four items only: <strong>Communities · Website (active) · Templates ·
+      Reports</strong>. The richer community rail (Dashboard + Community / Management / Admin) is the
+      <em>entry point</em> you click <em>Website</em> from — it is not what shows on the editor route.</p>
+    <p><strong>Fidelity.</strong> Markup and classes come from <code>NavRail.tsx</code>,
+      <code>SidebarTenantSwitcher.tsx</code> (static brand header), <code>AppSidebar.tsx</code> (profile
+      footer) and <code>PlanBadge.tsx</code>; icons are the exact <code>lucide-react v0.501.0</code> paths
+      the app imports; colors, radii and the 18px root are the "Florida Modern" tokens from
+      <code>packages/tokens</code>. Redesign inside the constraints in
+      <code>website-editor-design-system.md</code>.</p>
+    <p><span class="sample">Sample data</span> &nbsp;Community name <em>“Sunset Condos”</em> and the
+      profile block (<em>Jordan Rivera · Property Manager · Professional</em>) are placeholders — structure
+      is real, the specific strings are illustrative.</p>
+  </div>
+
+  <div class="section-title">Specimen — expanded (260px) &amp; collapsed (72px)</div>
+  <div class="stage">
+
+    <!-- ─────────── EXPANDED ─────────── -->
+    <div class="specimen">
+      <div class="cap"><b>Expanded</b> — 260px (default)</div>
+      <div class="frame">
+        <nav class="rail expanded" aria-label="Main navigation">
+
+          <!-- header: static brand (PM portal) -->
+          <div class="rail-head">
+            <span class="brand-mark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/>
+                <path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>
+              </svg>
+            </span>
+            <span class="brand-label">
+              <span class="app">PropertyPro</span>
+              <span class="community">Sunset Condos</span>
+            </span>
+          </div>
+
+          <!-- nav: PM_NAV_ITEMS (single null-label section) -->
+          <div class="rail-nav" role="list">
+            <a class="nav-item" href="/pm/dashboard/communities" role="listitem" aria-label="Communities">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>
+                </svg>
+              </span>
+              <span class="nav-label">Communities</span>
+            </a>
+
+            <a class="nav-item is-active" href="/pm/settings/website" role="listitem" aria-label="Website" aria-current="page">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/>
+                </svg>
+              </span>
+              <span class="nav-label">Website</span>
+            </a>
+
+            <a class="nav-item" href="/pm/portfolio/templates" role="listitem" aria-label="Templates">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>
+                </svg>
+              </span>
+              <span class="nav-label">Templates</span>
+            </a>
+
+            <a class="nav-item" href="/pm/reports" role="listitem" aria-label="Reports">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+                </svg>
+              </span>
+              <span class="nav-label">Reports</span>
+            </a>
+          </div>
+
+          <!-- collapse control (NavRail inline PanelLeftClose, 20×20) -->
+          <div class="rail-toggle">
+            <button type="button" aria-label="Collapse sidebar">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.75"/>
+                <path d="M8 4V16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                <path d="M12.5 7L10.25 10L12.5 13" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="lbl">Collapse</span>
+            </button>
+          </div>
+
+          <!-- footer: profile -->
+          <div class="rail-foot">
+            <div class="row">
+              <span class="avatar" aria-hidden="true">JR</span>
+              <span class="profile">
+                <span class="name">Jordan Rivera</span>
+                <span class="meta">
+                  <span class="role">Property Manager</span>
+                  <span class="plan-badge" aria-label="Professional plan">Professional</span>
+                </span>
+              </span>
+            </div>
+          </div>
+
+        </nav>
+      </div>
+    </div>
+
+    <!-- ─────────── COLLAPSED ─────────── -->
+    <div class="specimen">
+      <div class="cap"><b>Collapsed</b> — 72px (icon-only)</div>
+      <div class="frame">
+        <nav class="rail collapsed" aria-label="Main navigation">
+
+          <div class="rail-head">
+            <span class="brand-mark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/>
+                <path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>
+              </svg>
+            </span>
+            <span class="brand-label"><span class="app">PropertyPro</span><span class="community">Sunset Condos</span></span>
+          </div>
+
+          <div class="rail-nav" role="list">
+            <a class="nav-item" href="/pm/dashboard/communities" role="listitem" aria-label="Communities">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>
+                </svg>
+              </span>
+              <span class="nav-label">Communities</span>
+            </a>
+            <a class="nav-item is-active" href="/pm/settings/website" role="listitem" aria-label="Website" aria-current="page">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/>
+                </svg>
+              </span>
+              <span class="nav-label">Website</span>
+            </a>
+            <a class="nav-item" href="/pm/portfolio/templates" role="listitem" aria-label="Templates">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/>
+                </svg>
+              </span>
+              <span class="nav-label">Templates</span>
+            </a>
+            <a class="nav-item" href="/pm/reports" role="listitem" aria-label="Reports">
+              <span class="nav-ico" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+                </svg>
+              </span>
+              <span class="nav-label">Reports</span>
+            </a>
+          </div>
+
+          <div class="rail-toggle">
+            <button type="button" aria-label="Expand sidebar">
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.75"/>
+                <path d="M8 4V16" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+              </svg>
+              <span class="lbl">Collapse</span>
+            </button>
+          </div>
+
+          <div class="rail-foot">
+            <div class="row">
+              <span class="avatar" aria-hidden="true">JR</span>
+              <span class="profile">
+                <span class="name">Jordan Rivera</span>
+                <span class="meta"><span class="role">Property Manager</span><span class="plan-badge">Professional</span></span>
+              </span>
+            </div>
+          </div>
+
+        </nav>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─────────── REFERENCE ─────────── -->
+  <div class="section-title">Navigation items (PM_NAV_ITEMS)</div>
+  <div class="ref">
+    <table>
+      <thead><tr><th>Item</th><th>Icon (lucide)</th><th>Destination</th><th>Active on</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Communities</td><td>Building2</td><td><code>/pm/dashboard/communities</code></td><td><code>/pm/dashboard*</code></td></tr>
+        <tr><td class="k">Website <span style="color:var(--text-tertiary);font-weight:500">(active here)</span></td><td>Paintbrush</td><td><code>/pm/settings/website</code></td><td><code>/pm/settings*</code></td></tr>
+        <tr><td class="k">Templates</td><td>LayoutTemplate</td><td><code>/pm/portfolio/templates</code></td><td><code>/pm/portfolio*</code></td></tr>
+        <tr><td class="k">Reports</td><td>BarChart3</td><td><code>/pm/reports</code></td><td><code>/pm/reports*</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Dimensions, tokens &amp; behavior</div>
+  <div class="grid2">
+    <div class="ref">
+      <table>
+        <thead><tr><th>Element</th><th>Spec</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Rail width</td><td>260px expanded · 72px collapsed · <code>border-right</code> <code>--nav-border-divider</code></td></tr>
+          <tr><td class="k">Surface</td><td><code>--nav-surface</code> (<code>--surface-card</code>, #FFFEFC) — light rail</td></tr>
+          <tr><td class="k">Brand header</td><td>height 64px · mark 36px <code>radius-md</code> on <code>--interactive-primary</code> · title <code>text-base</code>/600</td></tr>
+          <tr><td class="k">Nav item</td><td>height 44px · <code>radius-md</code> · gap 12px · icon 22px · label <code>0.9375rem</code></td></tr>
+          <tr><td class="k">Active item</td><td>bg <code>--nav-bg-active</code> · text <code>--nav-text-active</code>/600 · 4px coral indicator (<code>--nav-indicator</code>), 28px tall, <code>radius 0 6 6 0</code></td></tr>
+          <tr><td class="k">Inactive item</td><td>text <code>--nav-text-inactive</code>/500 · icon stroke 1.75 · hover bg <code>--nav-bg-hover</code></td></tr>
+          <tr><td class="k">Footer</td><td>avatar 36px <code>radius-full</code> on <code>--surface-muted</code> · name <code>text-sm</code>/500 · role <code>text-xs</code> · plan pill = <code>PlanBadge</code> (gold <code>--status-premium</code>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ref" style="padding:16px 18px;">
+      <ul class="notes" style="margin:0;padding-left:18px;">
+        <li><b>Active-state signal</b> is threefold and lockstep: background fill + bolder label/darker text + the 4px coral left indicator bar. Never color alone.</li>
+        <li><b>Collapse toggle</b> flips the rail 260↔72px; collapsed shows icons only (labels clipped) and the brand/profile text is hidden. Uses NavRail's own 20×20 panel icon.</li>
+        <li><b>Header is static</b> here — the PM portal always shows the brand block (no community switcher popover), unlike multi-community members in community context.</li>
+        <li><b>Focus ring</b> on every item: 2px <code>--border-focus</code> (coral) at 2px offset. Do not suppress.</li>
+        <li><b>Plan pill</b> reflects the community's plan; on <em>Essentials</em> it reads "Essentials" and Pro-only surfaces elsewhere carry a gold "Pro" <code>PlanBadge</code>.</li>
+        <li><b>Not shown</b>: the top bar / breadcrumbs (shell-owned, see spec §7) and the page body (see <code>website-editor-mockup.html</code>). This file is the left rail only.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
