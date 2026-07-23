@@ -13,6 +13,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['apps/web/__tests__/**/*integration.test.ts'],
+    // Runs once in the main process (survives worker crashes/timeouts) — sweeps
+    // orphaned test communities left by prior crashed runs. See the file header.
+    globalSetup: ['apps/web/__tests__/integration/global-setup-integration.ts'],
     setupFiles: ['apps/web/__tests__/integration/setup-integration.ts'],
     hookTimeout: 30_000,
     testTimeout: 30_000,

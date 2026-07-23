@@ -15,6 +15,7 @@
     "seed:demo": "tsx --tsconfig apps/web/tsconfig.json scripts/seed-demo.ts",
     "reset:demo": "tsx --tsconfig apps/web/tsconfig.json scripts/reset-demo.ts",
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
+    "reap:test-communities": "tsx --tsconfig apps/web/tsconfig.json scripts/reap-test-communities.ts",
     "address-index:build": "tsx scripts/address-index/build.ts",
     "plan:verify:phase2": "tsx scripts/verify-phase2-plan-status.ts",
     "plan:verify:phase3": "tsx scripts/verify-phase3-plan-status.ts",
