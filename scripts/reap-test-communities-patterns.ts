@@ -8,10 +8,16 @@
 /**
  * POSIX regexes (Postgres `~`) identifying integration-test community slugs.
  *
- * Add a new entry whenever a test/script introduces a new leak-prone slug shape.
+ * Each pattern is ANCHORED to a known test slug base — a bare `-[0-9a-f]{8}$`
+ * suffix match was deliberately avoided because real, user-chosen community
+ * slugs could end in 8 hex chars and must never be reaped from production.
+ *
+ * Add a new entry whenever a test/script introduces a new leak-prone slug shape
+ * (e.g. a new `seedCommunities` fixture slug base).
  */
 export const TEST_COMMUNITY_SLUG_PATTERNS: readonly string[] = [
-  '-[0-9a-f]{8}$', // kit run-suffix (`p2-43-*-<8hex>`) and advisory-* (`advisory-taken-<8hex>`)
+  '^p2-43-.*-[0-9a-f]{8}$', // kit fixtures (`p2-43-<name>-<8hex runSuffix>`)
+  '^advisory-.*-[0-9a-f]{8}$', // signup-subdomain direct inserts (`advisory-taken-<8hex>`)
   '^p4_55_rls_', // RLS multi-community fixtures (`p4_55_rls_<ts>_<hex>-a/-b`)
   '^reconcile-test-', // ledger reconcile fixtures
   '^t-bootstrap-', // stripe bootstrap fixtures (`t-bootstrap-multi-1/2`)

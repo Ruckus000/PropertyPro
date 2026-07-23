@@ -32,6 +32,10 @@ describe('matchesTestCommunitySlug', () => {
       'demo-oceanview-towers-6510a3',
       'demo-test-condo-demo-2bd0f9',
       'demo-fake-apartment-3573ba',
+      // Real user-chosen slug that happens to end in 8 hex chars — must NOT be
+      // reaped. Guards against the earlier bare `-[0-9a-f]{8}$` pattern.
+      'oakwood-villas-a3f9c2e1',
+      'building-b-deadbeef',
     ];
     for (const slug of realSlugs) {
       expect(matchesTestCommunitySlug(slug), slug).toBe(false);
