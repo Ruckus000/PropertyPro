@@ -64,10 +64,17 @@ pnpm seed:verify                # Verify seed integrity
 pnpm perf:check                 # Performance budget check
 pnpm --filter @propertypro/db db:migrate  # Run migrations
 
-# Integration tests (requires DATABASE_URL)
+# Integration tests — LOCAL isolated DB (recommended). Creates/migrates a
+# disposable localhost Postgres mirroring CI, then runs the suite. NEVER prod.
+pnpm test:integration:local                       # whole suite (add a path for one file)
+pnpm db:test-local:setup                           # just create/migrate the local DB
+pnpm db:test-local:reset                           # clean slate (drop + recreate + migrate)
+
+# ⚠️ Integration tests against .env.local's DATABASE_URL — which is PRODUCTION.
+# Avoid; this is how test communities leaked into prod. Prefer the local runner above.
 scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts
 
-# Full integration preflight
+# Full integration preflight (also uses .env.local → prod; prefer the local runner)
 scripts/with-env-local.sh pnpm test:integration:preflight
 
 # E2E (Playwright)
