@@ -4,6 +4,13 @@
 
 **DO NOT read `.env.local` or try to extract credentials.** Use the `/dev/agent-login` endpoint instead.
 
+**Integration tests: use the LOCAL DB runner, never prod.** `.env.local`'s
+`DATABASE_URL` points at **production**, so running the integration suite via
+`scripts/with-env-local.sh` seeds/mutates prod (this is how test communities
+leaked). Instead run `pnpm test:integration:local` (or `pnpm db:test-local:setup`
+/ `:reset`) — it uses a disposable localhost Postgres mirroring CI. See
+[integration README](../../apps/web/__tests__/integration/README.md).
+
 ## How to Log In as a Demo User
 
 The dev server exposes `/dev/agent-login?as=<role>` which authenticates the browser session as a demo user without needing any passwords or env vars.
