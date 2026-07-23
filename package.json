@@ -48,6 +48,7 @@
     "guard:page-padding": "tsx scripts/verify-page-padding.ts",
     "guard:audit-log-trigger-overrides": "tsx scripts/verify-audit-log-trigger-overrides.ts",
     "guard:sanitizer-deps": "tsx scripts/verify-sanitizer-deps.ts",
+    "guard:read-entitlement": "tsx scripts/verify-read-entitlement-coverage.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",

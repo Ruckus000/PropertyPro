@@ -11,6 +11,7 @@ import {
   requireFinanceReadPermission,
 } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { listActorUnitIdsForFinance, listLedgerForCommunity } from '@/lib/services/finance-service';
 import { ledgerListContract } from './contract';
 
@@ -64,6 +65,11 @@ export const GET = withErrorHandler(
       }
     } else {
       requireFinanceReadPermission(membership);
+      // Lapsed communities lose ADMIN reads (residents keep theirs — the resident-
+      // owner branch above never reaches here, and the guard also short-circuits on
+      // membership.isAdmin === false). Mirrors the write-side
+      // requireActiveSubscriptionForMutation.
+      await requireEntitledForAdminRead(communityId, membership);
       if (rawUnitId) {
         unitId = parsePositiveInt(rawUnitId, 'unitId');
       }
