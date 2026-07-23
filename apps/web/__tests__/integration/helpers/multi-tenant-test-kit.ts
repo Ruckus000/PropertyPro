@@ -49,6 +49,8 @@ export interface TestKitState {
   communities: Map<MultiTenantCommunityKey, SeededCommunity>;
   users: Map<MultiTenantUserKey, SeededUser>;
   runtimeCleanupUserIds: Set<string>;
+  /** Community ids seeded outside `state.communities` (e.g. direct inserts). */
+  runtimeCleanupCommunityIds: Set<number>;
   currentActorUserId: string | null;
 }
 
@@ -84,6 +86,7 @@ export async function initTestKit(): Promise<TestKitState> {
     communities: new Map(),
     users: new Map(),
     runtimeCleanupUserIds: new Set(),
+    runtimeCleanupCommunityIds: new Set(),
     currentActorUserId: null,
   };
 
@@ -164,27 +167,57 @@ export async function seedUsers(
 /**
  * Tears down all seeded data. Community cascading deletes handle most
  * child rows. Users are in a global table and must be deleted explicitly.
+ *
+ * The community delete set is the UNION of:
+ *  - tracked seeded communities (`state.communities`),
+ *  - communities explicitly tracked via `trackCommunityForCleanup`, and
+ *  - a run-suffix safety-net sweep of any community whose slug OR name still
+ *    carries this run's `runSuffix` — this catches communities seeded by direct
+ *    inserts that were never registered in `state.communities` (which would
+ *    otherwise leak on every run). The suffix scopes the sweep strictly to THIS
+ *    run, so it can never touch another run's or real data.
+ *
+ * NOTE: this only helps when `afterAll` actually runs. Leaks from a killed worker
+ * (timeout/crash) are swept by the `globalSetup` reaper on the next run
+ * (`scripts/reap-test-communities.ts`).
  */
 export async function teardownTestKit(state: TestKitState): Promise<void> {
-  const communityIds = [...state.communities.values()].map((c) => c.id);
+  const trackedCommunityIds = [
+    ...[...state.communities.values()].map((c) => c.id),
+    ...state.runtimeCleanupCommunityIds,
+  ];
   const seededUserIds = [...state.users.values()].map((u) => u.id);
   const runtimeUserIds = [...state.runtimeCleanupUserIds];
   const userIds = [...new Set([...seededUserIds, ...runtimeUserIds])];
 
+  const suffixMatch = `%${state.runSuffix}`;
+
   try {
-    if (communityIds.length > 0) {
-      // Audited mutations write append-only rows with RESTRICT FKs to their
-      // communities. The trigger override is transactional (Postgres rolls it
-      // back on failure) and advisory-locked so parallel test teardowns cannot
-      // re-enable it between another worker's DISABLE and DELETE statements.
-      await state.db.transaction(async (tx) => {
-        await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(${AUDIT_LOG_MAINTENANCE_LOCK_NAMESPACE}, ${AUDIT_LOG_MAINTENANCE_LOCK_KEY})`,
-        );
-        await tx.execute(
-          sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
+    // Audited mutations write append-only rows with RESTRICT FKs to their
+    // communities. The trigger override is transactional (Postgres rolls it
+    // back on failure) and advisory-locked so parallel test teardowns cannot
+    // re-enable it between another worker's DISABLE and DELETE statements.
+    await state.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(${AUDIT_LOG_MAINTENANCE_LOCK_NAMESPACE}, ${AUDIT_LOG_MAINTENANCE_LOCK_KEY})`,
+      );
+      await tx.execute(
+        sql`ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard`,
+      );
+
+      // Safety-net: sweep any community still tagged with this run's suffix.
+      const swept = await tx
+        .select({ id: state.dbModule.communities.id })
+        .from(state.dbModule.communities)
+        .where(
+          sql`${state.dbModule.communities.slug} LIKE ${suffixMatch} OR ${state.dbModule.communities.name} LIKE ${suffixMatch}`,
         );
 
+      const communityIds = [
+        ...new Set<number>([...trackedCommunityIds, ...swept.map((row) => row.id)]),
+      ];
+
+      if (communityIds.length > 0) {
         // Remove the RESTRICT / NO-ACTION children that block the community delete.
         await tx
           .delete(state.dbModule.complianceAuditLog)
@@ -199,11 +232,12 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
         await tx
           .delete(state.dbModule.communities)
           .where(inArray(state.dbModule.communities.id, communityIds));
-        await tx.execute(
-          sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`,
-        );
-      });
-    }
+      }
+
+      await tx.execute(
+        sql`ALTER TABLE compliance_audit_log ENABLE TRIGGER compliance_audit_log_append_only_guard`,
+      );
+    });
 
     if (userIds.length > 0) {
       try {
@@ -222,6 +256,15 @@ export async function teardownTestKit(state: TestKitState): Promise<void> {
 
 export function trackUserForCleanup(state: TestKitState, userId: string): void {
   state.runtimeCleanupUserIds.add(userId);
+}
+
+/**
+ * Registers a community that was inserted outside `seedCommunities` (e.g. a raw
+ * `state.db.insert(communities)` in a test) so `teardownTestKit` deletes it.
+ * Prefer this over relying solely on the run-suffix sweep.
+ */
+export function trackCommunityForCleanup(state: TestKitState, communityId: number): void {
+  state.runtimeCleanupCommunityIds.add(communityId);
 }
 
 // ---------------------------------------------------------------------------

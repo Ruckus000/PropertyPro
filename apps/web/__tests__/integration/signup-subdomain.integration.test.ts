@@ -23,6 +23,7 @@ import {
   parseJson,
   requireDatabaseUrlInCI,
   teardownTestKit,
+  trackCommunityForCleanup,
 } from './helpers/multi-tenant-test-kit';
 
 requireDatabaseUrlInCI('signup subdomain advisory integration tests');
@@ -56,6 +57,10 @@ async function seedCommunityWithSlug(slug: string): Promise<number> {
     })
     .returning({ id: s.dbModule.communities.id });
   if (!inserted) throw new Error('Failed to seed community');
+  // Register for teardown — these communities are inserted directly rather than
+  // through `seedCommunities`, so they are NOT in `state.communities` and would
+  // otherwise leak on every run.
+  trackCommunityForCleanup(s, inserted.id);
   return inserted.id;
 }
 
