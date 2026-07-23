@@ -27,6 +27,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { listAllDocumentCategoryNames } from '@/lib/services/document-category-service';
 import { getDocumentDraftAuthorship } from '@/lib/services/document-draft-service';
 import { documentsDraftsDocumentSearchGetContract } from './contract';
@@ -41,6 +42,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     // Ensure the draft exists in this community and the caller can edit it
     // (so we don't expose this picker as a side-channel).

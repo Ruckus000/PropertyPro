@@ -44,6 +44,7 @@ import {
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   getAccountingMapping,
   updateAccountingMapping,
@@ -61,6 +62,8 @@ export const GET = withErrorHandler(
 
     requireAccountingEnabled(membership);
     requireAccountingReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return getAccountingMapping(communityId, query.provider);
   }),

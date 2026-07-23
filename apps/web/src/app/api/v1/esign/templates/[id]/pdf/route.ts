@@ -24,6 +24,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getTemplate } from '@/lib/services/esign-service';
 import { assertCommunityOwnedStoragePath } from '@/lib/services/storage-validators';
 import { createPresignedDownloadUrl } from '@propertypro/db';
@@ -36,6 +37,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const template = await getTemplate(communityId, params.id);
 

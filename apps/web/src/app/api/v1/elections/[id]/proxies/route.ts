@@ -6,6 +6,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { requireElectionsEnabled } from '@/lib/elections/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { createElectionProxyForCommunity, listElectionProxiesForCommunity } from '@/lib/services/elections-service';
 import { electionsProxiesCreateContract, electionsProxiesListContract } from './contract';
@@ -19,6 +20,8 @@ export const GET = withErrorHandler(
 
     requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return listElectionProxiesForCommunity(communityId, electionId);
   }),

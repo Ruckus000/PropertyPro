@@ -7,6 +7,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole } from '@propertypro/shared';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   createMoveChecklist,
   listMoveChecklists,
@@ -44,6 +45,8 @@ export const GET = withErrorHandler(
     if (!isAdminRole(membership.role)) {
       throw new ForbiddenError('Forbidden');
     }
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return listMoveChecklists(communityId, filters);
   }),

@@ -21,6 +21,7 @@ import {
 } from '@/lib/violations/common';
 import { getViolationForCommunity, updateViolationForCommunity } from '@/lib/services/violations-service';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import {
   violationDetailGetContract,
@@ -35,6 +36,8 @@ export const GET = withErrorHandler(
 
     await requireViolationsEnabled(membership);
     requirePermission(membership, 'violations', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const residentUnitIds = isResidentRole(membership.role)

@@ -11,6 +11,7 @@ import {
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   createTemplate,
@@ -44,6 +45,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const rawStatus = searchParams.get('status');

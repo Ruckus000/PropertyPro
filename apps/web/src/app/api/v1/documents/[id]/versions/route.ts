@@ -34,6 +34,7 @@ import { NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { documentsVersionsGetContract } from './contract';
 
 interface DocRow {
@@ -54,6 +55,8 @@ export const GET = withErrorHandler(
     const documentId = params.id;
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const accessContext = {
       communityId,

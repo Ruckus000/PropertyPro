@@ -29,6 +29,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { parseRequiredCalendarDateRange } from '@/lib/calendar/date-range';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   listAggregateAssessmentDueRecords,
   listCommunityCalendarMeetings,
@@ -42,6 +43,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId ?? null);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'meetings', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const range = parseRequiredCalendarDateRange(searchParams, membership.timezone);

@@ -10,6 +10,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
@@ -26,6 +27,8 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req as NextRequest);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const searchParams = new URL(req.url).searchParams;
     const rawUnitId = searchParams.get('unitId');

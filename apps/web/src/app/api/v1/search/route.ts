@@ -26,6 +26,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { searchAccessibleGroups } from '@/lib/search/data-search-service';
 import type { AggregatedSearchResponse } from '@/lib/search/data-search-types';
 import { aggregatedSearchContract } from './contract';
@@ -35,6 +36,8 @@ export const GET = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, query.communityId ?? null);
     const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const q = query.q?.trim() ?? '';
     // Range validation lives in the contract schema (`min(1).max(20)`); the

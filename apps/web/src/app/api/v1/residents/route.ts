@@ -20,6 +20,7 @@ import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-servi
 import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 import { isResidentTierRole, validateRoleAssignment } from '@/lib/utils/role-validator';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import {
@@ -60,6 +61,8 @@ export const GET = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'residents', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const validRoles = new Set(COMMUNITY_ROLES as unknown as string[]);

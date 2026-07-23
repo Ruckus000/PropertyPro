@@ -1,3 +1,4 @@
+// read-entitlement:exempt — OAuth callback completes a connection flow, not a community-data read
 /**
  * Accounting OAuth Callback API
  *

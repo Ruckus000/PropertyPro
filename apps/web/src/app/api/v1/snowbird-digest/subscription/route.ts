@@ -12,6 +12,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
   getCommunitySnowbirdEnabled,
@@ -26,6 +27,8 @@ export const GET = withErrorHandler(
     const actorUserId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'settings', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const [row, enabled] = await Promise.all([

@@ -15,6 +15,7 @@ import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -45,6 +46,8 @@ export const GET = withErrorHandler(
 
     await requireVisitorLoggingEnabled(membership);
     requireVisitorsReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const rawHostUnitId = searchParams.get('hostUnitId');

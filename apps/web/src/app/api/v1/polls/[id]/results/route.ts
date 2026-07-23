@@ -45,6 +45,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePollReadPermission, requirePollsEnabled } from '@/lib/polls/common';
 import { getPollResultsForCommunity } from '@/lib/services/polls-service';
 import { pollResultsContract } from './contract';
@@ -57,6 +58,8 @@ export const GET = withErrorHandler(
 
     requirePollsEnabled(membership);
     requirePollReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return await getPollResultsForCommunity(communityId, params.id);
   }),

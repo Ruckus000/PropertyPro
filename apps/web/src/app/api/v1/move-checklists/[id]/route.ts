@@ -34,6 +34,7 @@ import { ForbiddenError, NotFoundError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { isAdminRole } from '@propertypro/shared';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getMoveChecklist, completeChecklist } from '@/lib/services/move-checklist-service';
 import { getMoveChecklistContract, completeMoveChecklistContract } from './contract';
 
@@ -47,6 +48,8 @@ export const GET = withErrorHandler(
     if (!isAdminRole(membership.role)) {
       throw new ForbiddenError('Insufficient permissions');
     }
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const checklist = await getMoveChecklist(communityId, checklistId);
     if (!checklist) {

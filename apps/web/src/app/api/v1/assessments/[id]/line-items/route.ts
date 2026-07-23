@@ -36,6 +36,7 @@ import {
   requireFinanceEnabled,
   requireFinanceReadPermission,
 } from '@/lib/finance/common';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   listActorUnitIdsForFinance,
   listAssessmentLineItemsForCommunity,
@@ -50,6 +51,8 @@ export const GET = withErrorHandler(
 
     await requireFinanceEnabled(membership);
     requireFinanceReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     let unitId = query.unitId;
 

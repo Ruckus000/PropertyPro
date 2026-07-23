@@ -31,6 +31,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   calculateComplianceStatus,
   calculatePostingDeadline,
@@ -113,6 +114,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requireCondoCommunity(membership.communityType);
     requirePermission(membership, 'compliance', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const rows = await listComplianceChecklistItems(communityId);
 

@@ -15,6 +15,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   isResidentRole,
   requireActorUnitIds,
@@ -41,6 +42,8 @@ export const GET = withErrorHandler(
 
     await requireVisitorLoggingEnabled(membership);
     requireVisitorsReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     if (!isResidentRole(membership.role)) {
       throw new ForbiddenError('Only residents can use the my-visitors view');

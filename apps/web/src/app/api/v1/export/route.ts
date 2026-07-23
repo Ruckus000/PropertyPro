@@ -19,6 +19,7 @@ import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   exportResidents,
   exportDocuments,
@@ -45,6 +46,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'settings', 'read');
+  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+  await requireEntitledForAdminRead(communityId, membership);
 
   // Run all four exports in parallel
   const [residents, documents, maintenance, announcements] = await Promise.all([

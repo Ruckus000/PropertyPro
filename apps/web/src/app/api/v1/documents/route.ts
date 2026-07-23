@@ -33,6 +33,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { validateUploadFilePath } from '@/lib/api/upload-path';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
@@ -56,6 +57,8 @@ export const GET = withErrorHandler(
     const categoryId = query.categoryId ?? null;
 
     const membership = await requireCommunityMembership(effectiveCommunityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(effectiveCommunityId, membership);
 
     const result = await paginateAccessibleDocuments({
       filter: {

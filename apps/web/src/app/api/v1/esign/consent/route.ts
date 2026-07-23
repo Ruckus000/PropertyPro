@@ -43,6 +43,7 @@ import {
   requireEsignReadPermission,
   requireEsignWritePermission,
 } from '@/lib/esign/esign-route-helpers';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getConsentStatus, revokeConsent } from '@/lib/services/esign-service';
 import {
   esignConsentGetContract,
@@ -56,6 +57,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return getConsentStatus(communityId, actorUserId);
   }),

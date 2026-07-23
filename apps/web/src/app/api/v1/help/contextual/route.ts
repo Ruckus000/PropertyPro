@@ -20,6 +20,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { getContextualArticles } from '@/lib/services/help-article-service';
 import { helpContextualGetContract } from './contract';
@@ -31,6 +32,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const userId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
     const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
 
     // All contextual matches, capped defensively. The modal's search panel

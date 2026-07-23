@@ -43,6 +43,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   requireWorkOrderAdminWrite,
@@ -65,6 +66,8 @@ export const GET = withErrorHandler(
     requireWorkOrdersEnabled(membership);
     await requirePlanFeature(communityId, 'hasWorkOrders');
     requireWorkOrdersReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const result = await paginateVendorsForCommunity(communityId, {
       cursor: query.cursor,

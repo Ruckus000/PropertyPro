@@ -42,6 +42,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   getCommunityContact,
   updateCommunityContact,
@@ -55,7 +56,9 @@ export const GET = withErrorHandler(
   runRoute(getCommunityContactContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const userId = await requireAuthenticatedUserId();
-    await requireCommunityMembership(communityId, userId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return getCommunityContact(communityId);
   }),

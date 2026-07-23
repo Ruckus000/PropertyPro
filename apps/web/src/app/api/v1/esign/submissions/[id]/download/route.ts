@@ -27,6 +27,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireEsignReadPermission } from '@/lib/esign/esign-route-helpers';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getSubmission } from '@/lib/services/esign-service';
 import { esignSubmissionDownloadContract } from './contract';
 
@@ -37,6 +38,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireEsignReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { submission } = await getSubmission(communityId, params.id);
 

@@ -12,6 +12,7 @@ import {
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { createForumThreadForCommunity, paginateForumThreadsForCommunity } from '@/lib/services/polls-service';
 import { forumThreadsCreateContract, forumThreadsListContract } from './contract';
 
@@ -34,6 +35,8 @@ export const GET = withErrorHandler(
 
     requireCommunityBoardEnabled(membership);
     requirePollReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const parsedQuery = listThreadsQuerySchema.safeParse({

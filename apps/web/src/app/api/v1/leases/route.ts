@@ -57,6 +57,7 @@ import {
 } from '@/lib/services/lease-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   leasesGetContract,
   leasesPostContract,
@@ -197,6 +198,8 @@ export const GET = withErrorHandler(
 
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireApartmentCommunity(membership.communityType);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const rows = await listLeasesForCommunity(communityId);
     let leaseRecords = rows.map(coerceLeaseRecord);

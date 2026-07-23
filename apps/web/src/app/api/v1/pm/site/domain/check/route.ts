@@ -17,6 +17,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { checkPurchasableDomain } from '@/lib/services/custom-domain-service';
 import { domainCheckContract } from './contract';
 import type { NextRequest } from 'next/server';
@@ -28,12 +29,14 @@ async function gate(req: NextRequest, communityIdInput: number) {
   const membership = await requireCommunityMembership(communityId, userId);
   requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can manage the custom domain');
   await requirePlanFeature(communityId, 'hasSiteCustomDomain');
-  return { userId, communityId };
+  return { userId, communityId, membership };
 }
 
 export const GET = withErrorHandler(
   runRoute(domainCheckContract, async ({ query, req }) => {
-    await gate(req, query.communityId);
+    const { communityId, membership } = await gate(req, query.communityId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
     return checkPurchasableDomain(query.name);
   }),
 );

@@ -12,6 +12,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { listPendingJoinRequestsForCommunity } from '@/lib/join-requests/approve-request';
 import { adminJoinRequestsListContract } from './contract';
@@ -22,6 +23,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, null);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'residents', 'write');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return listPendingJoinRequestsForCommunity(communityId);
   }),

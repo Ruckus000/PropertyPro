@@ -13,6 +13,7 @@ import {
 import { createAmenityForCommunity, paginateAmenitiesForCommunity } from '@/lib/services/work-orders-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   amenitiesCreateContract,
   amenitiesListContract,
@@ -50,6 +51,8 @@ export const GET = withErrorHandler(
     requireAmenitiesEnabled(membership);
     await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return paginateAmenitiesForCommunity(communityId, {
       cursor: query.cursor,

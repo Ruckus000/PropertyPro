@@ -60,6 +60,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import {
   ensureTransparencyChecklistInitialized,
@@ -87,6 +88,8 @@ export const GET = withErrorHandler(
     }
 
     requirePermission(membership, 'settings', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const settings = await getTransparencySettings(communityId);
     if (!settings) {

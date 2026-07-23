@@ -29,6 +29,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   requireStaffOperator,
   requireVisitorLoggingEnabled,
@@ -46,6 +47,8 @@ export const GET = withErrorHandler(
     await requireVisitorLoggingEnabled(membership);
     requireVisitorsReadPermission(membership);
     requireStaffOperator(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return matchDeniedVisitors(communityId, query.name ?? null, query.plate ?? null);
   }),

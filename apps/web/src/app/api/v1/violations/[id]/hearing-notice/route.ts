@@ -5,6 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
   requireViolationAdminWrite,
@@ -32,6 +33,8 @@ export const GET = withErrorHandler(
 
     await requireViolationsEnabled(membership);
     requireViolationAdminWrite(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const violation = await getViolationForCommunity(communityId, id);
 

@@ -1,3 +1,4 @@
+// read-entitlement:exempt — PM-owned cross-community resource (site_portfolio_templates keyed by owner_user_id; GET authorizes via isPmAdminInAnyCommunity across all the PM's communities). There is no single community whose lapsed state applies, so per-community read gating does not fit this route.
 /**
  * Portfolio-template library routes — GET/POST/PATCH/DELETE
  * `/api/v1/pm/portfolio/templates` (PT-PR4).

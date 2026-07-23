@@ -31,6 +31,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { getContractExpirationAlerts } from '@/lib/services/contract-renewal-alerts';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   createContractBidForCommunity,
   createContractForCommunity,
@@ -179,6 +180,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireComplianceCommunity(membership.communityType);
     requirePermission(membership, 'contracts', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const contractRows = await listContractsForCommunity(scoped);

@@ -25,6 +25,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { paginateDocumentCategories } from '@/lib/services/document-category-service';
 import { documentCategoriesListContract } from './contract';
 
@@ -32,7 +33,9 @@ export const GET = withErrorHandler(
   runRoute(documentCategoriesListContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
-    await requireCommunityMembership(communityId, userId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const result = await paginateDocumentCategories({
       communityId,

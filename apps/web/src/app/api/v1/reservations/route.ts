@@ -2,6 +2,7 @@ import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
@@ -25,6 +26,8 @@ export const GET = withErrorHandler(
     requireAmenitiesEnabled(membership);
     await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const rawPage = searchParams.get('page');

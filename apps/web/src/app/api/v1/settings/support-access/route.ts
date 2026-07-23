@@ -10,6 +10,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { logAuditEvent } from '@propertypro/db';
 import {
@@ -24,6 +25,8 @@ export const GET = withErrorHandler(
 
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'settings', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const supabase = createAdminTypedClient();
 
