@@ -40,6 +40,7 @@ const {
 // Mock the access-request service. The list path now delegates to
 // `paginatePendingAccessRequests` (A3 Phase 2 service wrapper), so the route
 // no longer imports `@propertypro/db` directly.
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@/lib/services/access-request-service', () => ({
   submitAccessRequest: submitAccessRequestMock,
   verifyOtp: verifyOtpMock,

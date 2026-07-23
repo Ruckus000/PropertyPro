@@ -31,6 +31,7 @@ const {
   cancelBroadcastMock: vi.fn(),
 }));
 
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
 }));

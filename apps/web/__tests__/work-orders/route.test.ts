@@ -57,6 +57,7 @@ const {
   requireWorkOrdersWritePermissionMock: vi.fn(),
 }));
 
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@propertypro/db', () => ({
   workOrders: workOrdersTable,
   createScopedClient: createScopedClientMock,

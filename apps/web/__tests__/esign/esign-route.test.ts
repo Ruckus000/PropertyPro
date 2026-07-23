@@ -40,6 +40,7 @@ const {
 }));
 
 // Mock the esign service
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@/lib/services/esign-service', () => ({
   getSignerContext: getSignerContextMock,
   submitSignature: submitSignatureMock,

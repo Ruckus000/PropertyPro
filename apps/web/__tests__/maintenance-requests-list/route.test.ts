@@ -49,6 +49,7 @@ const {
   requirePlanFeatureMock: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   createPresignedDownloadUrl: vi.fn(),
