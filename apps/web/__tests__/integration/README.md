@@ -25,25 +25,43 @@ The naming convention is enforced by [`scripts/verify-integration-test-discovery
 
 ## Running Integration Tests
 
-### Prerequisites
+### Recommended: the local isolated DB runner
 
-Integration tests require a PostgreSQL database. Set the `DATABASE_URL` environment variable:
+Use the local runner — it creates/migrates a **disposable localhost Postgres** that
+mirrors CI's ephemeral container exactly (same [Supabase stub](../../../../scripts/sql/local-supabase-stub.sql),
+same migrations, same privileged `postgres` role), so "green locally" == "green in
+CI". It **never** touches production.
 
 ```bash
-export DATABASE_URL="postgresql://user:password@localhost:5432/getpropertypro_test"
+pnpm test:integration:local                 # whole suite
+pnpm test:integration:local apps/web/__tests__/integration/onboarding-flow.integration.test.ts  # one file
+pnpm db:test-local:setup                     # just prepare the local DB
+pnpm db:test-local:reset                     # clean slate (drop + recreate + migrate)
 ```
 
-### Commands
+Requires a local Postgres server on `localhost:5432` (e.g. Postgres.app / Homebrew).
+Config via `PROPERTYPRO_TEST_DB_*` env vars — see [`scripts/local-test-db.sh`](../../../../scripts/local-test-db.sh).
+The runner connects as the `postgres` role because the scoped client relies on a
+privileged role (`pp_rls_is_privileged()`) rather than setting the tenant GUC.
+
+> ⚠️ **Do NOT run the suite through `scripts/with-env-local.sh`** — that loads
+> `.env.local`, whose `DATABASE_URL` points at **production**. Running integration
+> tests that way seeds/mutates prod (this is how test communities leaked). Use the
+> local runner above.
+
+### Manual / advanced
+
+Integration tests require a PostgreSQL database via `DATABASE_URL`. If you wire it
+yourself, point it at a **local, disposable** database — never prod:
 
 ```bash
-# Run all integration tests (DB required)
+export DATABASE_URL="postgresql://postgres@localhost:5432/propertypro_test"
+
+# Run all integration tests
 pnpm exec vitest run --config apps/web/vitest.integration.config.ts
 
 # Run a specific integration test
 pnpm exec vitest run --config apps/web/vitest.integration.config.ts apps/web/__tests__/integration/onboarding-flow.integration.test.ts
-
-# Run full preflight suite (DB migrations + seeding + integration tests)
-pnpm test:integration:preflight
 ```
 
 ### Behavior Without DATABASE_URL
