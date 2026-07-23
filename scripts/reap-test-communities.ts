@@ -34,9 +34,7 @@ import {
   provisioningJobs,
 } from '@propertypro/db';
 import { and, inArray, notInArray, or, sql } from '@propertypro/db/filters';
-// AUTHZ: maintenance CLI / test-infra reaper — deletes cross-community test rows
-// out-of-band of tenant scoping, with explicit operator authorization. Never runs
-// against non-test slugs (see SAFETY above).
+// AUTHZ: maintenance CLI / test-infra reaper — deletes cross-community test rows out-of-band of tenant scoping, with explicit operator authorization; only ever touches test-pattern slugs (see SAFETY above).
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   PROTECTED_COMMUNITY_IDS,
