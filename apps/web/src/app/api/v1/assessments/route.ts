@@ -13,6 +13,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError } from '@/lib/api/errors';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   requireFinanceAdminWrite,
   requireFinanceEnabled,
@@ -40,6 +41,8 @@ export const GET = withErrorHandler(
 
     await requireFinanceEnabled(membership);
     requireFinanceReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const searchParams = new URL(req.url).searchParams;
     const parsedQuery = listAssessmentsQuerySchema.safeParse({

@@ -27,6 +27,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
 import {
   createStormDamageReport,
@@ -85,6 +86,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireStormToolsCommunity(membership.communityType);
     requirePermission(membership, 'storm_damage', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const result = await paginateStormDamageReports(scoped, {

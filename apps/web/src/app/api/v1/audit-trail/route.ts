@@ -40,6 +40,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { generateCSV } from '@/lib/services/csv-export';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 import {
@@ -154,6 +155,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'audit', 'read');
+  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+  await requireEntitledForAdminRead(communityId, membership);
 
   // --- Pagination params (validated; paginate() clamps pageSize to [1, 100]) ---
   // Use `||` to collapse empty-string params to undefined/null. paginate's

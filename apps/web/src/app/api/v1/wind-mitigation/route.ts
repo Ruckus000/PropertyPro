@@ -27,6 +27,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { classifyWindMitigationExpiry } from '@/lib/services/wind-mitigation-expiry';
 import {
   createWindMitigationReportForCommunity,
@@ -121,6 +122,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireInsuranceHubCommunity(membership.communityType);
     requirePermission(membership, 'insurance', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const reports = await listWindMitigationReportsForCommunity(scoped);

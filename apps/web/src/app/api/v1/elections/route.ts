@@ -13,6 +13,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { requireElectionsEnabled } from '@/lib/elections/common';
 import { listElectionsForCommunity } from '@/lib/services/elections-service';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { electionsListContract } from './contract';
 
@@ -35,6 +36,8 @@ export const GET = withErrorHandler(
 
     requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const statuses = parseStatusesFilter(new URL(req.url).searchParams.get('statuses'));
 

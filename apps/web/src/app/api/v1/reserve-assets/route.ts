@@ -30,6 +30,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { classifyReserveAssetRul } from '@/lib/services/reserve-asset-rul';
 import {
   createReserveAssetForCommunity,
@@ -99,6 +100,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireReserveTransparencyCommunity(membership.communityType);
     requirePermission(membership, 'reserve_assets', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const result = await paginateReserveAssetsForCommunity(scoped, {

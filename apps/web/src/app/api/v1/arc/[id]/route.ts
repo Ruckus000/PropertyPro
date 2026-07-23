@@ -33,6 +33,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { getActorUnitIds, isResidentRole, requireArcEnabled } from '@/lib/violations/common';
 import { getArcSubmissionForCommunity } from '@/lib/services/violations-service';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { arcDetailContract } from './contract';
 
@@ -44,6 +45,8 @@ export const GET = withErrorHandler(
 
     await requireArcEnabled(membership);
     requirePermission(membership, 'arc_submissions', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
     const residentUnitIds = isResidentRole(membership.role)

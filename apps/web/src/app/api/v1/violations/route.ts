@@ -35,6 +35,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import { getActorUnitIds, isResidentRole, requireViolationsEnabled } from '@/lib/violations/common';
 import { requirePermission } from '@/lib/db/access-control';
@@ -65,6 +66,8 @@ export const GET = withErrorHandler(
 
     await requireViolationsEnabled(membership);
     requirePermission(membership, 'violations', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const rawUnitId = searchParams.get('unitId');

@@ -35,6 +35,7 @@ import {
 } from '@/lib/services/violations-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { z } from 'zod';
 import { arcCreateContract, arcListContract } from './contract';
@@ -55,6 +56,8 @@ export const GET = withErrorHandler(
 
     await requireArcEnabled(membership);
     requirePermission(membership, 'arc_submissions', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const rawStatus = searchParams.get('status');

@@ -6,6 +6,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { listDelinquentUnits } from '@/lib/services/finance-service';
 import { delinquencyGetContract } from './contract';
 
@@ -25,6 +26,8 @@ export const GET = withErrorHandler(
     if (!DELINQUENCY_READ_ROLES.has(membership.role)) {
       throw new ForbiddenError('Only community finance staff can access delinquency reporting');
     }
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const searchParams = new URL(req.url).searchParams;
     const rawThreshold = searchParams.get('lienThresholdDays');

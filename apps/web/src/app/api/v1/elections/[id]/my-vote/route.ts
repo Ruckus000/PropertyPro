@@ -28,6 +28,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireElectionsEnabled } from '@/lib/elections/common';
 import { getMyElectionVoteReceiptForCommunity } from '@/lib/services/elections-service';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { electionsMyVoteGetContract } from './contract';
 
@@ -39,6 +40,8 @@ export const GET = withErrorHandler(
 
     requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return await getMyElectionVoteReceiptForCommunity(communityId, params.id, actorUserId);
   }),
