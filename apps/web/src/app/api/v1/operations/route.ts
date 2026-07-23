@@ -13,6 +13,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { listOperationsForCommunity } from '@/lib/services/operations-service';
 import { operationsListContract } from './contract';
 
@@ -44,6 +45,9 @@ const runOperationsList = runRoute(
     }
     requirePermission(membership, 'maintenance', 'read');
     requirePermission(membership, 'work_orders', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — residents are
+    // already rejected above; guard also short-circuits on isAdmin=false).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const payload = await listOperationsForCommunity(communityId, {
       cursor: query.cursor,

@@ -13,6 +13,7 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { parseOptionalCalendarDateRange } from '@/lib/calendar/date-range';
 import { requirePermission, requireBoardDesignation } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import {
@@ -115,6 +116,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = parseCommunityIdFromQuery(req);
   const membership = await requireCommunityMembership(communityId, actorUserId);
   requirePermission(membership, 'meetings', 'read');
+  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+  await requireEntitledForAdminRead(communityId, membership);
 
   const { searchParams } = new URL(req.url);
   const range = parseOptionalCalendarDateRange(searchParams, membership.timezone);

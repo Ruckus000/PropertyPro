@@ -28,6 +28,7 @@ import {
 } from '@/lib/work-orders/common';
 import { getAmenityScheduleForCommunity } from '@/lib/services/work-orders-service';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { amenitiesScheduleGetContract } from './contract';
 
 export const GET = withErrorHandler(
@@ -39,6 +40,8 @@ export const GET = withErrorHandler(
     requireAmenitiesEnabled(membership);
     await requirePlanFeature(communityId, 'hasAmenities');
     requireAmenitiesReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return getAmenityScheduleForCommunity(communityId, params.id);
   }),

@@ -1,3 +1,4 @@
+// read-entitlement:exempt — OAuth callback completes a connection flow, not a community-data read
 /**
  * GET /api/v1/calendar/google/callback
  *

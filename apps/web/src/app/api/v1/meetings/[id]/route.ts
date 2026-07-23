@@ -25,6 +25,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { NotFoundError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
 import {
   getMeetingDetail,
@@ -41,6 +42,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requirePermission(membership, 'meetings', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const meeting = await getMeetingDetail(communityId, meetingId);
     if (!meeting) {

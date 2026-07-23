@@ -25,6 +25,7 @@ import {
   listVisibleFaqsPage,
 } from '@/lib/services/faq-service';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import { faqsCreateContract, faqsListContract } from './contract';
 
@@ -33,6 +34,8 @@ export const GET = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     await ensureFaqsExist(communityId);
 

@@ -5,6 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   exportCommunityStatementPdf,
   exportStatementPdf,
@@ -62,6 +63,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
 
   // Staff / manager path — unit-scoped when unitId provided, else community rollup.
   requireFinanceReadPermission(membership);
+  // Lapsed communities lose admin reads (residents unaffected — resident-owner
+  // branch above returns early; guard also short-circuits on isAdmin=false).
+  await requireEntitledForAdminRead(communityId, membership);
 
   if (rawUnitId) {
     const unitId = parsePositiveInt(rawUnitId, 'unitId');

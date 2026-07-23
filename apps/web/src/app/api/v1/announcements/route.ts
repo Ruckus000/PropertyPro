@@ -29,6 +29,7 @@ import {
 } from '@/lib/services/announcement-delivery';
 import { createNotificationsForEvent } from '@/lib/services/notification-service';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { ForbiddenError } from '@/lib/api/errors/ForbiddenError';
@@ -132,6 +133,8 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const communityId = resolveEffectiveCommunityId(req, parsedCommunityId);
   const membership = await requireCommunityMembership(communityId, userId);
   requirePermission(membership, 'announcements', 'read');
+  // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+  await requireEntitledForAdminRead(communityId, membership);
   const parsedQuery = listAnnouncementsQuerySchema.safeParse({
     cursor: searchParams.get('cursor') || undefined,
     pageSize: searchParams.get('pageSize') || undefined,

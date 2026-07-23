@@ -11,6 +11,7 @@ import {
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   deleteForumThreadForCommunity,
   getForumThreadWithRepliesForCommunity,
@@ -30,6 +31,8 @@ export const GET = withErrorHandler(
 
     requireCommunityBoardEnabled(membership);
     requirePollReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return getForumThreadWithRepliesForCommunity(communityId, params.id);
   }),

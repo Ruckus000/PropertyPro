@@ -5,6 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
 import { parseDateOnly, parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { exportLedgerCsv, listActorUnitIdsForFinance } from '@/lib/services/finance-service';
 
 export const GET = withErrorHandler(async (req: NextRequest) => {
@@ -44,6 +45,9 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
     }
   } else {
     requireFinanceReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — resident-owner
+    // branch above never reaches here; guard also short-circuits on isAdmin=false).
+    await requireEntitledForAdminRead(communityId, membership);
     if (rawUnitId) {
       unitId = parsePositiveInt(rawUnitId, 'unitId');
     }
