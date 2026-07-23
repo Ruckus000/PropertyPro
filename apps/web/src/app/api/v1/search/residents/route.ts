@@ -15,6 +15,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
 import { searchResidentsByTrigram } from '@propertypro/db';
 import { escapeLikePattern } from '@/lib/utils/escape-like';
@@ -28,6 +29,8 @@ export const GET = withErrorHandler(
 
     // Residents cannot search other residents (privacy)
     requirePermission(membership, 'residents', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const q = query.q?.trim() ?? '';
     const limit = Math.min(Math.max(query.limit ?? 3, 1), 20);

@@ -22,6 +22,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { searchDocuments } from '@propertypro/db';
 import { requirePermission } from '@/lib/db/access-control';
 import { getDocumentCategoryNames } from '@/lib/services/document-category-service';
@@ -33,6 +34,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId ?? null);
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const q = query.q?.trim() ?? '';
     const limit = Math.min(Math.max(query.limit ?? 3, 1), 20);

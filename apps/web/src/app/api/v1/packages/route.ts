@@ -26,6 +26,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { ValidationError, ForbiddenError } from '@/lib/api/errors';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -51,6 +52,8 @@ export const GET = withErrorHandler(
 
     await requirePackageLoggingEnabled(membership);
     requirePackagesReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const status = query.status;
     const unitId = query.unitId;

@@ -27,6 +27,7 @@ import { NotFoundError } from '@/lib/api/errors/NotFoundError';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { resolveHelpViewerRoleFromMembership } from '@/lib/help/viewer-role';
 import {
   getAllArticles,
@@ -52,6 +53,8 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const userId = await requireAuthenticatedUserId();
     const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
     const features = getFeaturesForCommunity(membership.communityType);
     const effectiveRole = resolveHelpViewerRoleFromMembership(membership);
 

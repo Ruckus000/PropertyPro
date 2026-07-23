@@ -15,6 +15,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import { operationsHubHref } from '@/lib/operations/routes';
@@ -50,6 +51,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requirePlanFeature(communityId, 'hasMaintenanceRequests');
     requirePermission(membership, 'maintenance', 'read');
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
     const isResident = membership.role === 'resident';
 
     const scoped = createScopedClient(communityId);

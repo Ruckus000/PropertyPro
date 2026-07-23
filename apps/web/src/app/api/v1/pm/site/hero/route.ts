@@ -19,6 +19,7 @@ import { requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { heroBlockSchema } from '@propertypro/shared';
 import { upsertPublishedHero } from '@/lib/services/site-blocks-service';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
@@ -31,12 +32,14 @@ async function ensurePmAccess(req: NextRequest, communityId: number) {
   const membership = await requireCommunityMembership(effective, userId);
   requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can edit the community site');
   await requirePlanFeature(effective, 'hasSiteEditor');
-  return { userId, communityId: effective };
+  return { userId, communityId: effective, membership };
 }
 
 export const GET = withErrorHandler(
   runRoute(heroBlockGetContract, async ({ query, req }) => {
-    const { communityId } = await ensurePmAccess(req, query.communityId);
+    const { communityId, membership } = await ensurePmAccess(req, query.communityId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
     const reader = getPublicCommunityScopedReader(communityId);
     // PR #8e — the editor view merges draft + published (draft wins). If a
     // hero draft exists, return it so the editor form seeds with the draft

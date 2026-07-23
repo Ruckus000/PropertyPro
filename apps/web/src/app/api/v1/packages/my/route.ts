@@ -41,6 +41,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { ForbiddenError } from '@/lib/api/errors';
 import {
   isResidentRole,
@@ -59,6 +60,8 @@ export const GET = withErrorHandler(
 
     await requirePackageLoggingEnabled(membership);
     requirePackagesReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     if (!isResidentRole(membership.role)) {
       throw new ForbiddenError('Only residents can use the my-packages view');

@@ -21,6 +21,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   requirePollCreatorRole,
   requirePollReadPermission,
@@ -50,6 +51,8 @@ export const GET = withErrorHandler(
 
     requirePollsEnabled(membership);
     requirePollReadPermission(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const { searchParams } = new URL(req.url);
     const isActive = parseBooleanQuery(searchParams.get('isActive'), true);

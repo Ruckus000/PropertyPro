@@ -61,51 +61,7 @@ const REACTIVATION_CRITICAL: readonly string[] = [
 ];
 
 /** TEMPORARY — PR #2 broad-gate backlog. Shrink-only; remove as each is gated. */
-const PENDING_BROAD_GATE: readonly string[] = [
-  'apps/web/src/app/api/v1/access-requests/route.ts',
-  'apps/web/src/app/api/v1/admin/join-requests/route.ts',
-  'apps/web/src/app/api/v1/help/article/route.ts',
-  'apps/web/src/app/api/v1/help/contextual/route.ts',
-  'apps/web/src/app/api/v1/help/featured/route.ts',
-  'apps/web/src/app/api/v1/help/feedback/route.ts',
-  'apps/web/src/app/api/v1/help/search/route.ts',
-  'apps/web/src/app/api/v1/help/views/route.ts',
-  'apps/web/src/app/api/v1/ledger/balance/[unitId]/route.ts',
-  'apps/web/src/app/api/v1/maintenance-requests/[id]/route.ts',
-  'apps/web/src/app/api/v1/maintenance-requests/route.ts',
-  'apps/web/src/app/api/v1/packages/my/route.ts',
-  'apps/web/src/app/api/v1/packages/route.ts',
-  'apps/web/src/app/api/v1/payments/history/route.ts',
-  'apps/web/src/app/api/v1/payments/statement/route.ts',
-  'apps/web/src/app/api/v1/pm/branding/route.ts',
-  'apps/web/src/app/api/v1/pm/portfolio/templates/route.ts',
-  'apps/web/src/app/api/v1/pm/site/blocks/route.ts',
-  'apps/web/src/app/api/v1/pm/site/domain/check/route.ts',
-  'apps/web/src/app/api/v1/pm/site/domain/route.ts',
-  'apps/web/src/app/api/v1/pm/site/hero/route.ts',
-  'apps/web/src/app/api/v1/polls/[id]/my-vote/route.ts',
-  'apps/web/src/app/api/v1/polls/[id]/results/route.ts',
-  'apps/web/src/app/api/v1/polls/route.ts',
-  'apps/web/src/app/api/v1/reservations/route.ts',
-  'apps/web/src/app/api/v1/residents/route.ts',
-  'apps/web/src/app/api/v1/search/announcements/route.ts',
-  'apps/web/src/app/api/v1/search/documents/route.ts',
-  'apps/web/src/app/api/v1/search/maintenance/route.ts',
-  'apps/web/src/app/api/v1/search/meetings/route.ts',
-  'apps/web/src/app/api/v1/search/residents/route.ts',
-  'apps/web/src/app/api/v1/search/route.ts',
-  'apps/web/src/app/api/v1/search/units/route.ts',
-  'apps/web/src/app/api/v1/search/users/route.ts',
-  'apps/web/src/app/api/v1/search/violations/route.ts',
-  'apps/web/src/app/api/v1/settings/support-access/route.ts',
-  'apps/web/src/app/api/v1/snowbird-digest/subscription/route.ts',
-  'apps/web/src/app/api/v1/transparency/settings/route.ts',
-  'apps/web/src/app/api/v1/units/route.ts',
-  'apps/web/src/app/api/v1/visitors/denied/match/route.ts',
-  'apps/web/src/app/api/v1/visitors/denied/route.ts',
-  'apps/web/src/app/api/v1/visitors/my/route.ts',
-  'apps/web/src/app/api/v1/visitors/route.ts',
-];
+const PENDING_BROAD_GATE: readonly string[] = [];
 
 const ALLOWLISTED = new Set<string>([...REACTIVATION_CRITICAL, ...PENDING_BROAD_GATE]);
 

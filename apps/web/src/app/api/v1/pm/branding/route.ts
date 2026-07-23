@@ -23,6 +23,7 @@ import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getBrandingForCommunity, updateBrandingForCommunity } from '@/lib/api/branding';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -89,6 +90,8 @@ export const GET = withErrorHandler(
     if (!(PM_SCOPE_DB_ROLES as readonly string[]).includes(membership.role)) {
       throw new ForbiddenError('Only property managers can access branding settings');
     }
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     const branding = await getBrandingForCommunity(communityId);
     return branding ?? {};

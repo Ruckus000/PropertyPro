@@ -38,6 +38,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { getLedgerBalanceForUnit, listActorUnitIdsForFinance } from '@/lib/services/finance-service';
@@ -50,6 +51,8 @@ export const GET = withErrorHandler(
     const requestedUnitId = params.unitId;
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     if (membership.role === 'resident' && membership.isUnitOwner) {
       const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);

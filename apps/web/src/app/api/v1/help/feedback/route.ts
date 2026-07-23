@@ -13,6 +13,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
+import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   getMyArticleFeedback,
   upsertArticleFeedback,
@@ -25,7 +26,9 @@ export const GET = withErrorHandler(
   runRoute(getHelpFeedbackContract, async ({ query, req }) => {
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const userId = await requireAuthenticatedUserId();
-    await requireCommunityMembership(communityId, userId);
+    const membership = await requireCommunityMembership(communityId, userId);
+    // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
+    await requireEntitledForAdminRead(communityId, membership);
 
     return getMyArticleFeedback(communityId, userId, query.articleSlug);
   }),
