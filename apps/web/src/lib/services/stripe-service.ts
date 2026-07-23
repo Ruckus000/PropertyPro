@@ -64,7 +64,35 @@ export async function resolveStripePrice(
       'STRIPE_PRICE_CONFIG_MISSING',
     );
   }
+  await assertPriceRetrievable(row.stripePriceId);
   return row.stripePriceId;
+}
+
+/**
+ * Confirm the configured Stripe key can actually see this price.
+ *
+ * `stripe_prices` holds ids created in one Stripe mode; the runtime key may be
+ * the other mode (test vs live). Querying a live price with a test key — or the
+ * reverse — raises `resource_missing`. Without this, the first real upgrade
+ * click 500s deep inside checkout with an opaque error. Surface a named,
+ * operator-facing failure instead. Re-checked on every call, so it keeps working
+ * across key rotations rather than trusting a one-time manual verification.
+ */
+async function assertPriceRetrievable(priceId: string): Promise<void> {
+  const stripe = getStripe();
+  try {
+    await stripe.prices.retrieve(priceId);
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'resource_missing') {
+      throw new AppError(
+        `Stripe price ${priceId} is not visible to the configured key — the key and the stored price ids are in different Stripe modes (test vs live). Fix STRIPE_SECRET_KEY or re-seed stripe_prices.`,
+        500,
+        'STRIPE_MODE_MISMATCH',
+      );
+    }
+    throw err; // network / rate-limit / anything else: surface unchanged.
+  }
 }
 
 /**

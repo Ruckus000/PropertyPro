@@ -23,6 +23,7 @@ const {
   subscriptionsRetrieveMock,
   invoicesRetrieveMock,
   billingPortalSessionsCreateMock,
+  pricesRetrieveMock,
   createUnscopedClientMock,
   eqMock,
   pendingSignupsTable,
@@ -39,6 +40,7 @@ const {
   const subscriptionsRetrieveMock = vi.fn();
   const invoicesRetrieveMock = vi.fn();
   const billingPortalSessionsCreateMock = vi.fn();
+  const pricesRetrieveMock = vi.fn();
 
   const dbWhereMock = vi.fn();
   const dbSetMock = vi.fn(() => ({ where: dbWhereMock }));
@@ -59,6 +61,7 @@ const {
     subscriptionsRetrieveMock,
     invoicesRetrieveMock,
     billingPortalSessionsCreateMock,
+    pricesRetrieveMock,
     createUnscopedClientMock,
     eqMock,
     pendingSignupsTable,
@@ -85,6 +88,7 @@ vi.mock('stripe', () => ({
     },
     subscriptions: { retrieve: subscriptionsRetrieveMock },
     invoices: { retrieve: invoicesRetrieveMock },
+    prices: { retrieve: pricesRetrieveMock },
     billingPortal: {
       sessions: { create: billingPortalSessionsCreateMock },
     },
@@ -129,6 +133,10 @@ describe('stripe-service', () => {
     dbSelectWhereMock.mockReturnValue({ limit: dbSelectLimitMock });
     dbSelectFromMock.mockReturnValue({ where: dbSelectWhereMock });
     dbSelectMock.mockReturnValue({ from: dbSelectFromMock });
+
+    // resolveStripePrice now verifies the resolved price is retrievable with the
+    // configured key (STRIPE_MODE_MISMATCH guard); default it to succeed.
+    pricesRetrieveMock.mockResolvedValue({ id: 'price_test_abc' });
 
     // Default env
     process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
