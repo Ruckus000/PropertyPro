@@ -25,7 +25,6 @@ import { NextRequest } from 'next/server';
 // Sentry mock — must be hoisted so withErrorHandler (which imports @sentry/nextjs)
 // doesn't attempt a real Sentry network call in tests.
 // ---------------------------------------------------------------------------
-vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({
   withScope: vi.fn((cb: (scope: unknown) => void) =>
     cb({ setTag: vi.fn(), setUser: vi.fn() }),

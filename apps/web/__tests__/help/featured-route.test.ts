@@ -4,7 +4,6 @@ import { NextRequest } from 'next/server';
 // Sentry mock — required because we use the real withErrorHandler below
 // (so UnauthorizedError translates to a 401 response). withErrorHandler
 // imports @sentry/nextjs; mock it to avoid a real network call.
-vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@sentry/nextjs', () => ({
   withScope: vi.fn((cb: (scope: unknown) => void) =>
     cb({ setTag: vi.fn(), setUser: vi.fn() }),

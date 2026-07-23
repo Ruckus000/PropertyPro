@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+// setup.ts globally no-ops this guard for route tests; THIS file tests the real
+// implementation, so restore it (its @propertypro/db deps are mocked below).
+vi.mock('@/lib/middleware/read-entitlement-guard', async (importActual) =>
+  importActual<typeof import('@/lib/middleware/read-entitlement-guard')>(),
+);
+
 const { limitMock } = vi.hoisted(() => ({ limitMock: vi.fn() }));
 
 vi.mock('@propertypro/db/unsafe', () => ({

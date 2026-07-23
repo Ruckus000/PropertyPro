@@ -46,7 +46,6 @@ const {
   createArcSubmissionForCommunityMock: vi.fn(),
 }));
 
-vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@propertypro/db', () => ({
   arcSubmissions: arcSubmissionsTable,
   createScopedClient: createScopedClientMock,

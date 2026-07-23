@@ -63,7 +63,6 @@ const {
   createNotificationsForEventMock: vi.fn().mockResolvedValue({ created: 0 }),
 }));
 
-vi.mock('@/lib/middleware/read-entitlement-guard', () => ({ requireEntitledForAdminRead: vi.fn() }));
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
