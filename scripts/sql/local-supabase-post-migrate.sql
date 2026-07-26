@@ -27,15 +27,17 @@
 -- guessed. Verified posture there: service_role can read all 99; anon and
 -- authenticated can read 88.
 --
--- ⚠️ EIGHT OF THESE ELEVEN ARE NOT REPRODUCIBLE FROM THE MIGRATIONS. Only
--- site_theme_presets / site_starter_packs / site_layout_metadata are revoked by
--- a migration (0005). The other eight are live-database state with no migration
--- that would recreate them, so a database rebuilt purely from this repo's
--- history would be more permissive than production. That is defence-in-depth
--- rather than an open door — all eight have RLS enabled, and all but
--- denied_visitors have zero policies, so RLS denies non-privileged access
--- regardless — but it IS drift, and this list is the only place it is written
--- down. See the PR that added this block.
+-- All eleven are now reproducible from the migrations: 0005 revokes the three
+-- site_* platform tables, and 0035 codifies the other eight, which until then
+-- were live-database state with nothing in this repo that would recreate them.
+--
+-- So why does this file still exist, if the migrations now do the same thing?
+-- Because the STUB runs before migrations and grants blanket privileges,
+-- including on tables that already exist. On a persistent local database — where
+-- re-running `local-test-db.sh setup` is the normal path — the migrations do NOT
+-- re-run (the drizzle ledger records them as applied), so nothing re-narrows what
+-- the stub just re-opened. This file is that backstop, and it is why a second
+-- `setup` does not silently leave platform_admin_users readable by anon.
 --
 -- Guarded on existence so this is a no-op for tables a given migration state
 -- has not created yet.
@@ -47,7 +49,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     -- Revoked by migration 0005.
     'site_theme_presets', 'site_starter_packs', 'site_layout_metadata',
-    -- Live-database state only; no migration recreates these.
+    -- Revoked by migration 0035. Keep this list and that migration in sync.
     'access_plans', 'account_deletion_requests', 'conversion_events',
     'denied_visitors', 'platform_admin_users', 'public_site_templates',
     'revenue_snapshots', 'stripe_prices'
