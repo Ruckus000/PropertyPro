@@ -178,6 +178,33 @@ describe('siteIssues — the cross-section rules', () => {
     expect(publishBlocked(issues)).toBe(false);
   });
 
+  it('stamps the offending SLOT on section issues, which is not the array index', () => {
+    // The whole point of `Issue.slot`. With sparse slots the array index and
+    // the block_order diverge, and a consumer parsing `sections.<i>` from
+    // `field` would send "Fix this" to the wrong section — silently, with no
+    // type error and nothing here to catch it.
+    const issues = siteIssues(
+      base({
+        sections: [
+          { slot: 2, blockType: 'text', content: { body: 'A perfectly fine paragraph.' } },
+          { slot: 9, blockType: 'text', content: { body: '' } },
+        ],
+      }),
+    );
+
+    const offender = errors(issues)[0]!;
+    expect(offender.field).toMatch(/^sections\.1\./); // array index 1
+    expect(offender.slot).toBe(9); // …but slot 9
+    expect(offender.blockType).toBe('text');
+  });
+
+  it('stamps the slot on the slot-shape errors too', () => {
+    const issues = siteIssues(
+      base({ sections: [{ slot: 3, blockType: 'hero', content: { headline: 'X' } }] }),
+    );
+    expect(errors(issues)[0]).toMatchObject({ slot: 3, blockType: 'hero' });
+  });
+
   it('reports section content errors with a path that identifies the section', () => {
     const issues = siteIssues(
       base({

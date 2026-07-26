@@ -19,8 +19,15 @@ const PreviewDialog = dynamic(
   () => import('./PreviewDialog').then((m) => m.PreviewDialog),
   { loading: () => null },
 );
+
+// Same reasoning as the preview: opened on demand, so it has no business in the
+// initial payload of a route sitting inside 50 KiB of a hard budget.
+const PublishSheet = dynamic(
+  () => import('./publish/PublishSheet').then((m) => m.PublishSheet),
+  { loading: () => null },
+);
 import { Canvas } from './canvas/Canvas';
-import { SiteEditorProvider } from './editor-context';
+import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
 
@@ -54,11 +61,17 @@ export function EditorRoot({
   const { data: blocks } = useContentBlocks(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   // Selecting a section on the canvas pulls the Sections panel forward, so the
   // controls for what you just clicked are visible without a second action.
   const handleSelect = useCallback(() => setActiveTool('sections'), []);
   const handlePreview = useCallback(() => setPreviewOpen(true), []);
+  const handlePublish = useCallback(() => setPublishOpen(true), []);
+  // "Fix this" hands back a block_order slot. Surfacing the Sections panel is
+  // this component's job; selecting the row needs the editor context, so it
+  // happens one level down in PublishSheetMount.
+  const handleSelectSlot = useCallback(() => setActiveTool('sections'), []);
 
   return (
     <SiteEditorProvider
@@ -73,6 +86,7 @@ export function EditorRoot({
         activeTool={activeTool}
         onActiveToolChange={setActiveTool}
         onPreview={handlePreview}
+        onPublish={handlePublish}
         // Mounted idle. `useAutosave` drives this once the per-block inspector
         // forms exist — they are the only thing in the editor that autosaves,
         // and they arrive with the inspector body. Until then StatusLine
@@ -108,7 +122,69 @@ export function EditorRoot({
           context={canvasContext}
         />
       ) : null}
+
+      {publishOpen ? (
+        <PublishSheetMount
+          communityId={communityId}
+          theme={canvasContext?.theme ?? null}
+          onOpenChange={setPublishOpen}
+          onFixIssue={handleSelectSlot}
+        />
+      ) : null}
     </SiteEditorProvider>
+  );
+}
+
+/**
+ * Renders the publish sheet inside the editor context, so "Fix this" can
+ * actually select the offending section.
+ *
+ * A separate component because `EditorRoot` is the provider's PARENT and cannot
+ * call `useSiteEditor` itself.
+ */
+function PublishSheetMount({
+  communityId,
+  theme,
+  onOpenChange,
+  onFixIssue,
+}: {
+  communityId: number;
+  theme: CanvasContext['theme'] | null;
+  onOpenChange: (open: boolean) => void;
+  onFixIssue: (slot: number) => void;
+}) {
+  const { movableSections, select } = useSiteEditor();
+
+  const handleFixIssue = useCallback(
+    (slot: number) => {
+      onFixIssue(slot);
+      // `Issue.slot` is a block_order, not an index — resolve it against the
+      // current list rather than treating it as a position.
+      const target = movableSections.find((b) => b.blockOrder === slot);
+      if (target) select(target.id);
+    },
+    [movableSections, onFixIssue, select],
+  );
+
+  return (
+    <PublishSheet
+      open
+      onOpenChange={onOpenChange}
+      communityId={communityId}
+      // The canvas context already carries the RESOLVED theme (resolveTheme
+      // ran server-side in loadCanvasContext), so the contrast advisories get
+      // real colours without pulling packages/theme into this bundle. Without
+      // this the gate silently reports nothing at all.
+      {...(theme
+        ? {
+            brandColors: {
+              primaryColor: theme.primaryColor,
+              accentColor: theme.accentColor,
+            },
+          }
+        : {})}
+      onFixIssue={handleFixIssue}
+    />
   );
 }
 

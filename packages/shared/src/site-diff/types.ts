@@ -114,8 +114,26 @@ export interface DiffResult {
 export type IssueSeverity = 'error' | 'warning';
 
 export interface Issue {
-  /** Dotted path, matching the API's `{ error: { message, fields } }` envelope. */
+  /**
+   * Dotted path, matching the API's `{ error: { message, fields } }` envelope.
+   *
+   * NOTE the grammar: `sections.<i>` indexes the `sections` ARRAY, not the
+   * `block_order` slot. Do not parse this to find the offending section — use
+   * `slot` below.
+   */
   field: string;
   message: string;
   severity: IssueSeverity;
+  /**
+   * `block_order` of the section this issue is about, when it is about one.
+   *
+   * Emitted so a consumer can offer "fix this" without reverse-engineering the
+   * `field` grammar. Parsing `field` for an array index and treating it as a
+   * slot is wrong (they diverge the moment slots are sparse), and it is wrong
+   * *silently* — no type error, and no test in this package would catch a
+   * consumer getting it backwards.
+   */
+  slot?: number;
+  /** Block type of the offending section, for labelling the fix affordance. */
+  blockType?: string;
 }

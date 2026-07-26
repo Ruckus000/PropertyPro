@@ -159,6 +159,18 @@ export function heroIssues(content: unknown, prefix = 'hero'): Issue[] {
 }
 
 /**
+ * Stamps the offending section onto a batch of issues.
+ *
+ * Consumers need slot + type to offer "fix this"; without it they are forced to
+ * parse `field`, whose `sections.<i>` segment is an ARRAY INDEX and diverges
+ * from the slot as soon as slots are sparse. That mistake is silent — no type
+ * error, and nothing in this package would fail — so the producer supplies it.
+ */
+function withTarget(issues: Issue[], slot: number, blockType: string): Issue[] {
+  return issues.map((issue) => ({ ...issue, slot, blockType }));
+}
+
+/**
  * Whole-site issues: the cross-section rules no single block schema can see.
  *
  * The slot rules deliberately reuse the wording of
@@ -179,7 +191,7 @@ export function siteIssues(next: SiteSnapshot): Issue[] {
       severity: 'warning',
     });
   } else {
-    issues.push(...heroIssues(next.hero.content));
+    issues.push(...withTarget(heroIssues(next.hero.content), next.hero.slot, 'hero'));
     if (next.hero.slot !== HERO_SLOT) {
       issues.push({
         field: 'hero.slot',
@@ -192,42 +204,37 @@ export function siteIssues(next: SiteSnapshot): Issue[] {
   const seen = new Set<number>();
   next.sections.forEach((section, i) => {
     const field = `sections.${i}`;
+    // Every issue raised in this loop is about THIS section, so they all carry
+    // its slot and type.
+    const shape = (f: string, message: string): Issue => ({
+      field: f, message, severity: 'error', slot: section.slot, blockType: section.blockType,
+    });
 
     if (seen.has(section.slot)) {
-      issues.push({
-        field: `${field}.slot`,
-        message: `Duplicate blockOrder ${section.slot}`,
-        severity: 'error',
-      });
+      issues.push(shape(`${field}.slot`, `Duplicate blockOrder ${section.slot}`));
     }
     seen.add(section.slot);
 
     if (section.slot === HERO_SLOT && section.blockType !== 'hero') {
-      issues.push({
-        field: `${field}.slot`,
-        message: 'Non-hero blocks must be at blockOrder 2 or higher',
-        severity: 'error',
-      });
+      issues.push(shape(`${field}.slot`, 'Non-hero blocks must be at blockOrder 2 or higher'));
     }
     if (section.blockType === 'hero' && section.slot !== HERO_SLOT) {
-      issues.push({
-        field: `${field}.slot`,
-        message: 'The hero block must be at blockOrder 1',
-        severity: 'error',
-      });
+      issues.push(shape(`${field}.slot`, 'The hero block must be at blockOrder 1'));
     }
     if (!Number.isInteger(section.slot) || section.slot < HERO_SLOT || section.slot > MAX_SLOT) {
-      issues.push({
-        field: `${field}.slot`,
-        message: `blockOrder must be a whole number between 1 and ${MAX_SLOT}`,
-        severity: 'error',
-      });
+      issues.push(shape(`${field}.slot`, `blockOrder must be a whole number between 1 and ${MAX_SLOT}`));
     }
 
     // A slot staged for deletion is not going to be published, so validating
     // its content would block a publish on a section that is being removed.
     if (tombstoned.has(section.slot)) return;
-    issues.push(...blockIssues(section.blockType, section.content, `${field}.content`));
+    issues.push(
+      ...withTarget(
+        blockIssues(section.blockType, section.content, `${field}.content`),
+        section.slot,
+        section.blockType,
+      ),
+    );
   });
 
   return issues;

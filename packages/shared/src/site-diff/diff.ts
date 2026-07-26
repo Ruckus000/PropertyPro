@@ -75,6 +75,13 @@ const refD = (slot: number): SectionRef => `d${slot}`;
  * `published === null` means the site has never been published: everything is
  * `added`, and no `order` change is emitted — there is no previous order to
  * have changed.
+ *
+ * **Callers must pass `null`, not an empty snapshot, for a never-published
+ * site.** The published side arrives over the wire as an empty ARRAY, and an
+ * empty-but-present snapshot reports `firstPublish: false` with every section
+ * as a plain `added` — which is not wrong, but loses the distinction the review
+ * sheet uses to say "this will be your site's first publish". Coerce at the
+ * boundary where you know the site has never been published.
  */
 export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): DiffResult {
   const group = next.pageId ?? 'site';
