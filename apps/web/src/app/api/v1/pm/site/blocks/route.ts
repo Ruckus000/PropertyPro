@@ -63,19 +63,28 @@ export const GET = withErrorHandler(
     // latestPublishedAt is the authoritative publish token (max over ALL
     // published rows, incl. those shadowed in the merge) so the editor never
     // derives a stale-low token from the merged list.
-    const [rows, latestPublishedAt] = await Promise.all([
+    // The second read is the published side, with no opts — published rows
+    // only, no drafts, no tombstones. The change model (Phase 4) diffs it
+    // against the merged view; without it the editor can show WHAT the site
+    // says but not what CHANGED, which is the whole point of the review sheet.
+    const [rows, publishedRows, latestPublishedAt] = await Promise.all([
       reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true }),
+      reader.listSiteBlocks(),
       reader.getLatestPublishedAt(),
     ]);
-    const blocks = rows.map((r) => ({
+    const toSummary = (r: (typeof rows)[number]) => ({
       id: r.id,
       blockType: r.blockType,
       blockOrder: r.blockOrder,
       content: r.content,
       isDraft: r.isDraft,
       publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
-    }));
-    return { blocks, latestPublishedAt: latestPublishedAt ? latestPublishedAt.toISOString() : null };
+    });
+    return {
+      blocks: rows.map(toSummary),
+      publishedBlocks: publishedRows.map(toSummary),
+      latestPublishedAt: latestPublishedAt ? latestPublishedAt.toISOString() : null,
+    };
   }),
 );
 

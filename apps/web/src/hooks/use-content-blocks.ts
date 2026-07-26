@@ -60,6 +60,8 @@ async function readError(res: Response): Promise<string> {
 
 interface BlocksPayload {
   blocks: SiteBlockSummary[];
+  /** The last published state — no drafts, no tombstones. Diffed against `blocks`. */
+  publishedBlocks: SiteBlockSummary[];
   /** Authoritative publish token — max published_at over all published rows. */
   latestPublishedAt: string | null;
 }
@@ -68,7 +70,23 @@ async function fetchBlocks(communityId: number, signal?: AbortSignal): Promise<B
   const res = await fetch(`/api/v1/pm/site/blocks?communityId=${communityId}`, { signal });
   if (!res.ok) throw new Error(await readError(res));
   const body = (await res.json()) as { data: BlocksPayload };
-  return { blocks: body.data.blocks, latestPublishedAt: body.data.latestPublishedAt ?? null };
+  return {
+    blocks: body.data.blocks,
+    publishedBlocks: body.data.publishedBlocks ?? [],
+    latestPublishedAt: body.data.latestPublishedAt ?? null,
+  };
+}
+
+/**
+ * The last published state, for the change model. Shares the blocks query key,
+ * so it adds no request.
+ */
+export function usePublishedBlocks(communityId: number) {
+  return useQuery<BlocksPayload, Error, SiteBlockSummary[]>({
+    queryKey: blocksKey(communityId),
+    queryFn: ({ signal }) => fetchBlocks(communityId, signal),
+    select: (payload) => payload.publishedBlocks,
+  });
 }
 
 export function useContentBlocks(communityId: number) {

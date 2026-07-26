@@ -91,6 +91,12 @@ describe('GET /api/v1/pm/site/blocks', () => {
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
     getLatestPublishedAtMock.mockResolvedValue(null);
+    // The GET now reads the reader TWICE — the merged editor view and the
+    // published-only side the change model diffs against. Individual tests
+    // still use mockResolvedValueOnce for the first (merged) call; this
+    // default catches the second, which would otherwise resolve undefined and
+    // fail response validation with an opaque 500.
+    listSiteBlocksMock.mockResolvedValue([]);
   });
 
   it('200s and returns the ordered block list plus the publish token', async () => {
@@ -101,7 +107,11 @@ describe('GET /api/v1/pm/site/blocks', () => {
       { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
       { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt },
     ];
-    listSiteBlocksMock.mockResolvedValueOnce(rawBlocks);
+    // First call = merged editor view; second = published-only side.
+    const publishedOnly = [rawBlocks[0]!, rawBlocks[2]!];
+    listSiteBlocksMock
+      .mockResolvedValueOnce(rawBlocks)
+      .mockResolvedValueOnce(publishedOnly);
     getLatestPublishedAtMock.mockResolvedValueOnce(publishedAt);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
@@ -113,9 +123,25 @@ describe('GET /api/v1/pm/site/blocks', () => {
           { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
           { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
         ],
+        publishedBlocks: [
+          { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt: publishedAt.toISOString() },
+          { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
+        ],
         latestPublishedAt: publishedAt.toISOString(),
       },
     });
+  });
+
+  it('reads the published side with NO opts, so it carries no drafts or tombstones', async () => {
+    // The change model diffs `blocks` against `publishedBlocks`. If the second
+    // read leaked drafts, every draft would diff against itself and the editor
+    // would report nothing to publish.
+    await GET(makeGetRequest());
+    expect(listSiteBlocksMock).toHaveBeenNthCalledWith(1, {
+      includeDrafts: true,
+      includeTombstones: true,
+    });
+    expect(listSiteBlocksMock).toHaveBeenNthCalledWith(2);
   });
 
   it('passes includeDrafts + includeTombstones to the reader so the editor sees the merged view incl. staged deletions', async () => {
@@ -138,7 +164,9 @@ describe('GET /api/v1/pm/site/blocks', () => {
     getLatestPublishedAtMock.mockResolvedValueOnce(null);
     const res = await GET(makeGetRequest());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ data: { blocks: [], latestPublishedAt: null } });
+    expect(await res.json()).toEqual({
+      data: { blocks: [], publishedBlocks: [], latestPublishedAt: null },
+    });
   });
 
   it('400s when communityId query param is missing', async () => {
