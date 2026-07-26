@@ -211,7 +211,20 @@ disables the panel transition.
 
 ---
 
-### Phase 2a — Split the data-fetching renderers *(pure refactor, touches the live site)*
+### Phase 2a — Split the data-fetching renderers ✅ *shipped*
+
+> **One design change made during the split.** `AnnouncementsBlockView` no longer calls
+> `sanitizeHtml` — the shell sanitizes and passes `bodyHtml` through. Sanitisation is a
+> server concern (the write path uses the same helper), and `isomorphic-dompurify` drags
+> jsdom in behind it; importing it from a view the canvas renders client-side would have put
+> a very large dependency into the editor bundle for no benefit. The trade is that
+> `bodyHtml` is now trusted by the view, which is stated in its doc comment and pinned by a
+> test.
+>
+> **Evidence the split is behaviour-neutral:** the 96 existing public-site tests pass
+> untouched, and the public-site perf group moved 365.4 → 365.9 KiB (noise). The 20 new view
+> tests pass with `DATABASE_URL` unset, which is the real proof that the views carry no DB
+> import chain.
 
 **Goal.** Make the four SoR blocks renderable in a client canvas without forking them.
 
