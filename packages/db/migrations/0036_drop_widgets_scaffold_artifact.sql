@@ -1,0 +1,53 @@
+-- Drop `widgets` — a scaffolding artifact that reached production by accident.
+--
+-- WHAT IT WAS
+--
+-- `widgets` is the example resource from `pnpm new:resource widgets`, the
+-- "Plan A4 reference resource" in docs/contributing/new-resource.md. The table
+-- in production matches
+-- scripts/scaffold-resource.test/fixtures/widgets/packages/db/migrations/0004_create_widgets.sql
+-- exactly: same columns, the same four policies (pp_tenant_select,
+-- pp_widgets_insert, pp_widgets_update, pp_widgets_delete), the same
+-- pp_rls_enforce_tenant_scope trigger, the same FK name.
+--
+-- HOW IT GOT THERE
+--
+-- The scaffolder writes files and then tells you to run
+-- `pnpm --filter @propertypro/db db:migrate`. In this repo's default
+-- environment `.env.local`'s DATABASE_URL points at PRODUCTION, so following
+-- the contributor guide verbatim applies the generated migration to prod.
+-- The generated files were then never committed — there is no trace of them in
+-- git history or in migrations/_archive.
+--
+-- That is why it appears in NEITHER migration ledger: no drizzle
+-- __drizzle_migrations row and no supabase_migrations.schema_migrations row.
+-- Its OID (108300) places creation between the squash baseline (~67k) and
+-- migration 0019 (~115.9k), which matches the Plan A4 era.
+--
+-- The instruction that caused this is fixed in the same change as this
+-- migration — see scripts/scaffold-resource.ts and
+-- docs/contributing/new-resource.md, which now point at the disposable local
+-- database instead.
+--
+-- WHY DROPPING IS SAFE
+--
+-- Verified against production immediately before authoring:
+--   - 0 rows, and pg_stat_user_tables reports 0 inserts / 0 updates / 0 deletes
+--     for its entire lifetime — nothing has ever written to it;
+--   - 0 inbound foreign keys and 0 dependent views;
+--   - no reference anywhere in packages/db/src/schema, apps/, or scripts/
+--     outside the scaffolder's own test fixtures.
+--
+-- There was no data exposure to undo, either: the SELECT policy is
+-- `pp_rls_can_access_community(community_id)`, which is false for anon, so even
+-- had rows existed they were never anon-readable.
+--
+-- REVERSIBILITY
+--
+-- The exact CREATE that produced this table is preserved in the scaffold
+-- fixture named above, so re-creating it is a copy-paste if it is ever wanted
+-- as a real feature. `IF EXISTS` makes this migration a no-op on any database
+-- that never received the stray table — which is every database except
+-- production, including CI and every local one.
+
+DROP TABLE IF EXISTS "public"."widgets";

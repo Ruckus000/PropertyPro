@@ -115,12 +115,28 @@ loosen the policies to match your resource's access rules.
 
 ### 4. Apply the migration and verify
 
+Apply it to the **disposable local database**, never to production:
+
 ```bash
-pnpm --filter @propertypro/db db:migrate
+pnpm db:test-local:setup
 pnpm typecheck
-pnpm lint           # all 11 guards
+pnpm lint
 pnpm test
 ```
+
+> **⚠️ Do not run `pnpm --filter @propertypro/db db:migrate` here.**
+>
+> `.env.local`'s `DATABASE_URL` points at **production**, so that command
+> applies your freshly-scaffolded table to the live database.
+>
+> This is not hypothetical. A stray `widgets` table — this guide's own example
+> resource — reached production exactly this way and sat there unnoticed,
+> recorded in *neither* migration ledger, until it was found by diffing prod
+> against the migrations. It was removed in migration `0036`.
+>
+> Production migrations are applied **deliberately and manually** via the
+> Supabase MCP, then verified against `information_schema` and recorded in the
+> drizzle ledger. See [`.claude/rules/migration-safety.md`](../../.claude/rules/migration-safety.md).
 
 ## Why option (b): the scaffolder does not auto-edit RBAC
 

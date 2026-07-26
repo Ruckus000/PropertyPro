@@ -253,6 +253,13 @@
       "when": 1784511014576,
       "tag": "0035_platform_table_grant_reconciliation",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784511074576,
+      "tag": "0036_drop_widgets_scaffold_artifact",
+      "breakpoints": true
     }
   ]
 }
