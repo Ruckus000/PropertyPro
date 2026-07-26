@@ -1,10 +1,35 @@
 # G1 — applying `0034_site_publish_snapshots` to production
 
-> **Status: NOT APPLIED.** The migration file, journal entry, drizzle snapshot,
-> schema module and RLS registration are all on the branch. The database has not
-> been touched. This is the policy-mandated hard stop from the implementation
-> plan §1: migrations reach production through a deliberate manual apply, never
-> through CI.
+> **Status: APPLIED AND VERIFIED 2026-07-26** to project `vbqobyagjzvlfpfozvmx`
+> ("PropertyPro", us-west-2), on the user's explicit instruction. Ledger row
+> **id 64** recorded (`hash` = sha256 of the migration file,
+> `created_at` = 1784510954576, the journal `when` for idx 34). Ledger is now
+> 35 rows, tip 64.
+>
+> Verified against `pg_catalog` / `information_schema`, not the success flag:
+> ten columns with `snapshot` and `change_labels` nullable; RLS **enabled and
+> forced**; exactly one `ALL` policy on `pp_rls_is_privileged()`; both FKs
+> present including the cross-schema `auth.users` one with `ON DELETE SET NULL`;
+> both indexes; zero user triggers (trigger-exempt, as designed). Supabase's
+> security advisors report **nothing** against this table.
+>
+> RLS was proved rather than inferred: a probe row was inserted, read attempted
+> as `anon` and `authenticated`, and both saw **0 rows** while `service_role`
+> saw it; the probe was then deleted (table is empty, 0 rows).
+>
+> **Testing trap worth keeping.** A first probe used `SET LOCAL ROLE anon` alone
+> and reported a false leak. `pp_rls_effective_role()` falls back to
+> **`session_user`**, and `SET ROLE` changes `current_user` but not
+> `session_user` — so the function still saw `postgres` and returned privileged.
+> The correct simulation sets `request.jwt.claim.role`, which the function reads
+> first and which is what PostgREST sets per request. Any future RLS probe
+> against this schema must set that GUC, or it will report the opposite of the
+> truth.
+>
+> This is an **expand** migration, so the table correctly exists ahead of the
+> code that uses it. Phase 6's code is on `claude/website-editor-v3-7d3ff7` and
+> is not deployed yet; nothing reads or writes this table in production until
+> that merges and deploys.
 
 ## Why this is a manual step
 
