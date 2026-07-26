@@ -30,6 +30,7 @@ import { ContentSectionsList } from '@/components/pm/site-editor/ContentSections
 import { PublishBar } from '@/components/pm/site-editor/PublishBar';
 import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
 import { PageBody } from '@/components/shared/page-body';
+import { isSiteEditorV3Enabled, siteEditorV3Path } from '@/lib/site-editor/flag';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -109,6 +110,7 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   // final-step publish. Null = wizard never completed → show the banner.
   // (Replaces the prior branding.layoutId-unset substitute heuristic.)
   const showWizardBanner = onboardingCompletedAt === null;
+  const v3Enabled = isSiteEditorV3Enabled();
 
   return (
     <PageBody width="reading" spacing="none">
@@ -139,6 +141,19 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* Phase 0 of the v3 rollout: while both editors coexist, this is the
+              only way into the new one. Next.js forbids two parallel pages at
+              the same path, so v3 lives at its own URL until Phase 12 retires
+              this page and redirects here. */}
+          {v3Enabled && (
+            <a
+              href={siteEditorV3Path(communityId)}
+              data-testid="site-editor-v3-link"
+              className="inline-flex items-center rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+            >
+              Try the new editor
+            </a>
+          )}
           <a
             href={`/pm/onboarding/website?communityId=${communityId}`}
             data-testid="run-wizard-link"

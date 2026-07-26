@@ -61,6 +61,16 @@ const APPS: readonly AppSpec[] = [
         '/(public)/[subdomain]/page',
         '/public-site/page',
       ],
+      // Website editor v3 (docs/redesign/website-page/). Budgeted from Phase 0,
+      // before the canvas exists, so bundle growth shows up as it lands rather
+      // than as a single 700 KiB surprise at Phase 2b. The canvas pulls in the
+      // public-site block views, so this is the route most at risk in the
+      // program — block views are dynamically imported through the registry to
+      // keep only the rendered types in the initial payload.
+      'site-editor': [
+        '/(site-editor)/pm/website-editor/page',
+        '/pm/website-editor/page',
+      ],
     },
     aggregateBudgetBytes: HARD_TOTAL_BUDGET_BYTES,
   },

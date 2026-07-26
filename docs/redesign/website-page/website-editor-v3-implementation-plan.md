@@ -106,20 +106,44 @@ No phase is done without, at minimum:
 
 ## 3. The phases
 
-### Phase 0 — Editor route group and rollout flag
+### Phase 0 — Editor route group and rollout flag ✅ *shipped*
 
 **Goal.** A shell-less route that is exactly as protected as the page it replaces.
 
-**Files.**
-- `apps/web/src/app/(site-editor)/layout.tsx` — new. Auth, community resolution, PM role,
-  `hasSiteEditor` plan gate, lapsed-community gate, **`AppQueryProvider`**, collapsed
-  `NavRail`, `Toaster`.
-- `apps/web/src/app/(site-editor)/pm/settings/website/page.tsx` — new; renders the v3 shell
-  when the flag is on.
-- `apps/web/src/app/(authenticated)/pm/settings/website/page.tsx` — unchanged; the flag
-  decides which is served.
-- `scripts/perf-check.ts` — add a `site-editor` group so the canvas bundle is budgeted from
-  day one rather than discovered at 700 KiB.
+> **Deviation 1 — the v3 editor is at `/pm/website-editor`, not `/pm/settings/website`.**
+> Next.js refuses two parallel pages that resolve to the same path, and route groups
+> organise the tree without creating separate URL namespaces — so the flag cannot select
+> between two same-URL pages. The v3 editor takes its own path while both editors coexist;
+> Phase 12 retires the legacy page and redirects to it. The path stays under `/pm` so it
+> remains covered by `PROTECTED_PATH_PREFIXES`.
+>
+> **Deviation 2 — no `Toaster` in this layout.** The root layout already mounts one
+> (`apps/web/src/app/layout.tsx`). A second renders every toast twice.
+
+**Files (as built).**
+- `apps/web/src/lib/site-editor/flag.ts` — `isSiteEditorV3Enabled()`, `siteEditorV3Path()`.
+- `apps/web/src/app/(site-editor)/layout.tsx` — theme vars, `AuthSessionSync`,
+  `IdleSessionManager`, **`AppQueryProvider`**. No `AppShell`.
+- `apps/web/src/app/(site-editor)/pm/website-editor/page.tsx` — flag gate, community scope,
+  auth, PM role, `hasSiteEditor`, lapsed-community route gate.
+- `apps/web/src/components/pm/site-editor-v3/EditorFrame.tsx` — collapsed `AppSidebar`
+  (lazy) + the single `<main id="main-content">`.
+- `apps/web/src/app/(authenticated)/pm/settings/website/page.tsx` — entry point when the
+  flag is on; otherwise untouched.
+- `scripts/perf-check.ts` — `site-editor` budget group.
+
+**What the budget group caught immediately.** With a *placeholder* page and no canvas, the
+route measured **712.1 KiB — already over the 700 KiB hard budget**, because without the app
+shell `AppSidebar` and its transitive nav config landed in the editor's initial payload.
+Lazy-loading the sidebar behind a 72 px reserved placeholder (navigation is not needed to
+paint an editor) brought it to **369.7 KiB**, first-load JS 217 kB → 110 kB. This is the
+entire argument for adding the group in Phase 0 rather than Phase 2b.
+
+**A correctness trap found while measuring.** `membership` — not `getPageShellContext()` —
+is the source for the lapsed-community gate. The PM portal carries no tenant header, so the
+shell context resolves a *null* community with null subscription fields; gating on it would
+have checked no community at all and let every lapsed community through. Pinned by a
+regression test.
 
 **The flag.** Server-side `SITE_EDITOR_V3_ENABLED`, read in the RSC — **not**
 `NEXT_PUBLIC_*`. A rollout flag is not an entitlement, it does not belong in the client
