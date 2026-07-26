@@ -30,7 +30,10 @@ import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { getPageShellContext } from '@/lib/request/page-shell-context';
 import { isSiteEditorV3Enabled } from '@/lib/site-editor/flag';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
+import { getCommunityPublicInfo } from '@/lib/api/branding';
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
+import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,11 +67,12 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
-  const [features, shellContext] = await Promise.all([
+  const [features, shellContext, communityInfo] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
     // comes from `membership` — see the lifecycle note below.
     getPageShellContext(),
+    getCommunityPublicInfo(communityId),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -107,6 +111,13 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
       features={features}
       userName={shellContext.user?.fullName ?? null}
       plan={membership.subscriptionPlan}
-    />
+    >
+      <EditorRoot
+        communityId={communityId}
+        communityName={membership.communityName}
+        publicSiteUrl={communityInfo ? buildCommunityUrl(communityInfo.slug, '/') : null}
+        hasProTools={features.hasSiteCustomCss}
+      />
+    </EditorFrame>
   );
 }

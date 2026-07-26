@@ -43,6 +43,19 @@ vi.mock('@/lib/site-editor/flag', () => ({
 vi.mock('@/components/pm/site-editor-v3/EditorFrame', () => ({
   EditorFrame: () => null,
 }));
+vi.mock('@/components/pm/site-editor-v3/EditorRoot', () => ({
+  EditorRoot: () => null,
+}));
+// `@/lib/api/branding` constructs a DB client at module scope. Without this
+// mock the file fails to LOAD in the DB-less CI unit job while passing locally
+// — the exact split-brain failure the test strategy warns about. Repro the CI
+// condition with `env -u DATABASE_URL pnpm exec vitest run <file>`.
+vi.mock('@/lib/api/branding', () => ({
+  getCommunityPublicInfo: vi.fn().mockResolvedValue({ slug: 'sunset-condos', name: 'Sunset Condos' }),
+}));
+vi.mock('@/lib/utils/community-url', () => ({
+  buildCommunityUrl: (slug: string, path: string) => `https://${slug}.example.com${path}`,
+}));
 
 import WebsiteEditorV3Page from '@/app/(site-editor)/pm/website-editor/page';
 

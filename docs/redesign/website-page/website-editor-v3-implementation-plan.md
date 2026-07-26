@@ -173,12 +173,27 @@ boundary. Add to Vercel for Preview and Production before merge.
 
 ---
 
-### Phase 1 — Editor shell
+### Phase 1 — Editor shell ✅ *shipped*
 
 **Goal.** Three-column chrome with the existing forms inside it. No behaviour change.
 
-**Files.** `apps/web/src/components/pm/site-editor-v3/` — `EditorShell.tsx`,
-`ToolPanel.tsx`, `ToolTabs.tsx`, `PanelResizer.tsx`, `PhoneGate.tsx`, `EditorTopBar.tsx`.
+**Files (as built).** `apps/web/src/components/pm/site-editor-v3/` — `EditorShell.tsx`,
+`EditorTopBar.tsx`, `ToolTabs.tsx`, `PanelResizer.tsx`, `PhoneGate.tsx`, `EditorRoot.tsx`,
+`tools.ts`, `use-panel-width.ts`.
+
+**Two notes for later phases.**
+
+*Tabs are hand-rolled, not Radix.* Six icon+label tiles with count badges in a fixed row
+would have been fighting `components/ui/tabs.tsx` the whole way. The cost is that the ARIA
+contract Radix gives free — `role="tablist"`, roving tabindex, wrapping arrow traversal,
+Home/End, `aria-controls` — is ours to keep correct, so it is asserted explicitly in
+`ToolTabs.test.tsx`. Do not "simplify" those tests away.
+
+*A clamp bug the tests caught.* `clampPanelWidth` originally coerced with `Number(value)`.
+`Number('')`, `Number(null)` and `Number([])` are all `0` — finite — so an empty or corrupt
+`localStorage` entry clamped to the *minimum* width rather than the default, and the panel
+came back collapsed with no obvious way to fix it. The type check before coercion is
+load-bearing.
 
 **Tests.**
 | Test | Asserts |
