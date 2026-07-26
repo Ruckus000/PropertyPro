@@ -510,17 +510,63 @@ export async function publishCommunitySite({
       .returning({ id: siteBlocks.id });
     const promotedCount = promotedResult.length;
 
+    // Step 5c: reconcile the stamp with what actually landed.
+    //
+    // A REMOVAL-ONLY publish promotes zero rows: the only pending draft was a
+    // tombstone, and step 4b already retired it. `publishedAt` above was
+    // generated before the UPDATE, so in that case it denotes a moment no
+    // version of the site ever corresponded to — nothing carries it. Handing
+    // that value to the history row makes the log answer "what did this page
+    // show in March" with a timestamp the site never had, which is the one
+    // question a statutory records site keeps this table to answer.
+    //
+    // So when nothing was promoted, fall back to the stamp the SURVIVING
+    // published rows carry. That is the site's real current version.
+    //
+    // This does not lose "when did the removal happen" — `site_publish_snapshots`
+    // has its own `created_at DEFAULT now()`, which is the publish event's clock.
+    // `published_at` is the site-version stamp; the two are different questions
+    // and the table already has a column for each.
+    //
+    // Known limitation, deliberately not changed here: a removal-only publish
+    // therefore does not advance MAX(published_at), so a concurrent editor
+    // holding the older token can still publish. That is benign — their publish
+    // promotes their own drafts and cannot resurrect the removed section — and
+    // making removals advance the token would mean rewriting `published_at` on
+    // rows whose content did not change, destroying its per-row meaning.
+    let effectivePublishedAt = publishedAt;
+    if (promotedCount === 0) {
+      const survivors = await tx
+        .select({ publishedAt: siteBlocks.publishedAt })
+        .from(siteBlocks)
+        .where(
+          and(
+            eq(siteBlocks.communityId, communityId),
+            eq(siteBlocks.isDraft, false),
+            isNull(siteBlocks.deletedAt),
+            isNotNull(siteBlocks.publishedAt),
+          ),
+        )
+        .orderBy(desc(siteBlocks.publishedAt))
+        .limit(1);
+      // No survivor at all (every published row retired) is not reachable today
+      // — the hero cannot be removed — but falling back to the fresh stamp
+      // keeps the NOT NULL column satisfied rather than throwing.
+      const survivorStamp = survivors[0]?.publishedAt;
+      if (survivorStamp) effectivePublishedAt = survivorStamp;
+    }
+
     // Step 5b (Phase 6): record the publish in the history log — same tx, same
     // community lock, AFTER the promote, so the row describes what actually
     // shipped and a rollback takes the history entry with it.
     //
     // `winners` is already the post-publish published set (draft-wins per slot,
     // tombstoned slots dropped), which is exactly what steps 4-5 just made
-    // live, so no re-read is needed. `publishedAt` is the promote's own stamp.
+    // live, so no re-read is needed.
     await captureSnapshot(tx as unknown as SnapshotInsertExecutor, {
       communityId,
       actorUserId,
-      publishedAt,
+      publishedAt: effectivePublishedAt,
       blocks: [...winners]
         .sort((a, b) => a.blockOrder - b.blockOrder)
         .map((w) => ({
@@ -539,13 +585,25 @@ export async function publishCommunitySite({
       action: 'update',
       resourceType: 'community_site',
       resourceId: String(communityId),
-      metadata: { retiredCount, promotedCount, publishedAt: publishedAt.toISOString() },
+      metadata: {
+        retiredCount,
+        promotedCount,
+        publishedAt: effectivePublishedAt.toISOString(),
+      },
     });
 
     // Mark Drizzle that we want to keep the work — the explicit return
     // here means the implicit COMMIT runs.
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    return { published: true as const, publishedAt, promotedCount, retiredCount };
+    // `effectivePublishedAt`, not the pre-promote stamp: the caller may echo
+    // this back as its optimistic-concurrency token, and it must therefore be a
+    // value MAX(published_at) will actually agree with.
+    return {
+      published: true as const,
+      publishedAt: effectivePublishedAt,
+      promotedCount,
+      retiredCount,
+    };
   })
     .catch((err: unknown) => {
       if (err instanceof NothingToPublishRollback) {

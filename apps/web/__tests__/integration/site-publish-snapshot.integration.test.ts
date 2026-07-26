@@ -51,6 +51,8 @@ interface SnapshotRow {
   changeCount: number;
   changeLabels: string[] | null;
   snapshot: { blocks: { blockOrder: number; blockType: string; content: unknown }[] } | null;
+  /** The publish EVENT's clock — distinct from `publishedAt`, the site VERSION. */
+  createdAt: Date;
 }
 
 interface BlockRow {
@@ -131,6 +133,9 @@ describeDb('site publish snapshots (db-backed integration)', () => {
         changeCount: state.dbModule.sitePublishSnapshots.changeCount,
         changeLabels: state.dbModule.sitePublishSnapshots.changeLabels,
         snapshot: state.dbModule.sitePublishSnapshots.snapshot,
+        // The publish EVENT's clock, as distinct from published_at (the site
+        // VERSION stamp). Step 5c relies on these being different questions.
+        createdAt: state.dbModule.sitePublishSnapshots.createdAt,
       })
       .from(state.dbModule.sitePublishSnapshots)
       .where(eq(state.dbModule.sitePublishSnapshots.communityId, communityId));
@@ -571,8 +576,8 @@ describeDb('site publish snapshots (db-backed integration)', () => {
   });
 
   it(
-    'CHARACTERIZATION: a removal-only publish stamps the history row with a publishedAt ' +
-      'that no site_blocks row carries',
+    'a removal-only publish stamps the history row with a publishedAt that a real ' +
+      'site_blocks row carries',
     async () => {
       const communityId = await createCommunity('token-removal-only');
 
@@ -597,41 +602,45 @@ describeDb('site publish snapshots (db-backed integration)', () => {
       if (!v2.published) throw new Error('v2 publish failed');
       expect(v2.promotedCount).toBe(0);
 
-      // BUG (reported, not fixed) — and note the blast radius, which is
-      // narrower than it first looks.
-      //
-      // `publishedAt` is created unconditionally before the promote UPDATE, but
-      // a removal-only publish promotes zero rows (step 4b retired the only
-      // draft, the tombstone). So the publish result AND the history row carry
-      // a stamp no `site_blocks` row has — the surviving hero still holds v1's.
-      //
-      // What this does NOT do: lock the editor out. Nothing reads
-      // `result.publishedAt`. `usePublishSite` invalidates the blocks query and
-      // the token is re-read from the server as MAX(published_at), which is
-      // still v1 — correct. A caller that DID echo the returned value back
-      // would spuriously 409, which is why this is worth fixing, but no caller
-      // does today.
-      //
-      // What it DOES break: the publish-history row's `published_at` denotes a
-      // moment the site never existed in. On a statutory records site "what did
-      // the page show in March" is the question this table exists to answer, and
-      // `CaptureSnapshotInput`'s own doc comment warns against exactly this.
-      //
-      // Fix would be to reuse MAX(published_at) when promotedCount === 0, or to
-      // skip the history row entirely for a pure-removal publish. Inverting
-      // this test is the signal that it landed.
-      expect((await publishToken(communityId))?.getTime()).toBe(v1.publishedAt.getTime());
-      expect(v2.publishedAt.getTime()).toBeGreaterThan(v1.publishedAt.getTime());
+      // The stamp generated before the promote denotes no site state when the
+      // promote matches zero rows, so step 5c falls back to the stamp the
+      // surviving published rows actually carry. Everything the publish emits
+      // must agree with MAX(published_at).
+      const token = await publishToken(communityId);
+      expect(token?.getTime()).toBe(v1.publishedAt.getTime());
+      expect(v2.publishedAt.getTime()).toBe(v1.publishedAt.getTime());
 
+      // The history row names a version of the site that existed — this is the
+      // property that makes "what did this page show in March" answerable.
       const snapshots = await snapshotRows(communityId);
-      expect(snapshots[1]!.publishedAt.getTime()).toBe(v2.publishedAt.getTime());
+      expect(snapshots[1]!.publishedAt.getTime()).toBe(v1.publishedAt.getTime());
 
-      // Consequence: the editor, holding the token the publish just handed it,
-      // is locked out of its own next publish.
+      // …and the removal is still recorded rather than swallowed: the payload
+      // no longer contains the removed section, and `created_at` (not
+      // `published_at`) is what dates the publish event itself.
+      expect(snapshots[1]!.changeLabels).toEqual(['Removed Text']);
+      expect(
+        (snapshots[1]!.snapshot as { blocks: { blockOrder: number }[] }).blocks.map(
+          (b) => b.blockOrder,
+        ),
+      ).toEqual([1]);
+      expect(snapshots[1]!.createdAt.getTime()).toBeGreaterThanOrEqual(
+        v1.publishedAt.getTime(),
+      );
+
+      // The token the publish handed back is usable: echoing it into the next
+      // publish must NOT spuriously conflict.
       await writeBlock(communityId, 3, 'text', { body: 'The next perfectly ordinary edit.' }, true);
-      await expect(
-        publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: v2.publishedAt }),
-      ).rejects.toThrow(ConflictError);
+      const v3 = await publishCommunitySite({
+        communityId,
+        actorUserId,
+        expectedPublishedAt: v2.publishedAt,
+      });
+      if (!v3.published) throw new Error('v3 publish failed');
+      expect(v3.promotedCount).toBe(1);
+      // A publish that DOES promote still advances the token.
+      expect(v3.publishedAt.getTime()).toBeGreaterThan(v1.publishedAt.getTime());
+      expect((await publishToken(communityId))?.getTime()).toBe(v3.publishedAt.getTime());
     },
   );
 
