@@ -1411,6 +1411,49 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
+  describe('user_search_index hardening (0037)', () => {
+    // Until 0037 this table had NO row-level security of any kind — no ENABLE, no
+    // policies, no REVOKE — while holding full_name and email, both trigram-indexed.
+    // Under Supabase's open grant baseline that made every user's name and email
+    // directly readable by anon and authenticated. 0037 gives it the same posture as
+    // the seven sibling platform tables: RLS enabled and forced, zero policies, ACL
+    // revoked. These assertions are what keep it from silently regressing.
+    //
+    // Deny is a hard permission error, not zero rows — same as platform_admin_users
+    // below, and for the same reason: the ACL rejects before any policy is consulted.
+
+    it('has RLS enabled and forced', async () => {
+      const [row] = await adminSql<{ relrowsecurity: boolean; relforcerowsecurity: boolean }[]>`
+        select c.relrowsecurity, c.relforcerowsecurity
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relname = 'user_search_index'
+      `;
+      expect(row?.relrowsecurity).toBe(true);
+      expect(row?.relforcerowsecurity).toBe(true);
+    });
+
+    it('authenticated user is denied SELECT on user_search_index', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await expect(authSql`select user_id from public.user_search_index`).rejects.toThrow();
+    });
+
+    it('anon is denied SELECT on user_search_index', async () => {
+      await setAnonContext(authSql, seed.communityAId);
+      await expect(authSql`select user_id from public.user_search_index`).rejects.toThrow();
+    });
+
+    it('service_role retains full CRUD privilege on user_search_index', async () => {
+      await setServiceRoleContext(serviceSql);
+      for (const privilege of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
+        const [row] = await serviceSql<{ has_privilege: boolean }[]>`
+          select has_table_privilege('service_role', 'public.user_search_index', ${privilege}) as has_privilege
+        `;
+        expect(row?.has_privilege, `service_role should retain ${privilege}`).toBe(true);
+      }
+    });
+  });
+
   describe('platform_admin_users RLS (service_role only)', () => {
     // platform_admin_users uses REVOKE ALL from anon/authenticated + GRANT to service_role.
     // This means authenticated users get a hard "permission denied" error (not just 0 rows).
@@ -1804,13 +1847,12 @@ describeDb('P4-55 RLS policies (integration)', () => {
         notifications: 'notifications_enforce_tenant_scope',
       };
 
-      // KNOWN GAP, not a naming quirk: these two have community_id and
-      // tenant-scoped policies but NO write-scope trigger under any name, so
-      // community_id on write is guarded only by the policy WITH CHECK. Every
-      // other tenant_crud table has one. Recorded here so the rest of the loop
-      // can be a hard assertion; closing it needs its own migration.
-      const tablesWithoutTrigger = new Set(['emergency_broadcasts', 'emergency_broadcast_recipients']);
-
+      // No per-table exemptions. emergency_broadcasts and
+      // emergency_broadcast_recipients were exempted here when they were
+      // registered — they had no write-scope trigger under any name — and 0037
+      // installed the canonical trigger on both, so the exemption is gone. The
+      // self-destruct assertion that forced this removal has been deleted with
+      // it; the loop below is now unconditional for every non-exempt family.
       const expectedTables = RLS_TENANT_TABLES.filter(
         (entry) => !familiesWithoutTrigger.has(entry.policyFamily),
       ).map((entry) => entry.tableName);
@@ -1822,22 +1864,44 @@ describeDb('P4-55 RLS policies (integration)', () => {
       );
 
       for (const tableName of expectedTables) {
-        if (tablesWithoutTrigger.has(tableName)) continue;
         const expectedName = legacyTriggerNames[tableName] ?? 'pp_rls_enforce_tenant_scope';
         expect(
           [...(triggerNamesByTable.get(tableName) ?? [])],
           `${tableName} should have a write-scope trigger named ${expectedName}`,
         ).toContain(expectedName);
       }
+    });
 
-      // Guard the exemption list itself: if a follow-up migration adds the two
-      // missing triggers, this fails and forces the exemption to be deleted
-      // rather than left behind as a stale excuse.
-      for (const tableName of tablesWithoutTrigger) {
-        expect(
-          triggerNamesByTable.has(tableName),
-          `${tableName} now has a write-scope trigger — remove it from tablesWithoutTrigger`,
-        ).toBe(false);
+    it('rewrites a forged community_id on emergency_broadcasts INSERT (0037)', async () => {
+      // The behavioural reason gap 2 mattered. The four tenant policies only ever
+      // checked that the caller CAN access the community_id they supplied — and a
+      // user who belongs to two communities passes that check for either one. So
+      // before 0037 installed the write-scope trigger, such a caller could write a
+      // broadcast into whichever of their communities they named, regardless of the
+      // tenant context the request resolved to. The trigger rewrites it instead.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+      const inserted = await authSql<{ id: number; community_id: number }[]>`
+        insert into public.emergency_broadcasts (
+          community_id,
+          title,
+          body,
+          initiated_by
+        ) values (
+          ${seed.communityBId},
+          ${`${seed.runTag}-eb-forge`},
+          'forged tenant test',
+          ${seed.tenantAUserId}
+        )
+        returning id, community_id
+      `;
+
+      expect(inserted).toHaveLength(1);
+      // Written into the ACTIVE tenant (A), not the forged one (B).
+      expect(Number(inserted[0]?.community_id)).toBe(seed.communityAId);
+
+      if (inserted[0]) {
+        await serviceSql`delete from public.emergency_broadcasts where id = ${Number(inserted[0].id)}`;
       }
     });
 
