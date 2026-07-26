@@ -189,6 +189,15 @@ contract Radix gives free — `role="tablist"`, roving tabindex, wrapping arrow 
 Home/End, `aria-controls` — is ours to keep correct, so it is asserted explicitly in
 `ToolTabs.test.tsx`. Do not "simplify" those tests away.
 
+*The mockup's type scale is not this app's type scale — this will keep biting.* The v3
+mockup renders at a 16px root, the app at **18px** (`globals.css`). Anything sized from the
+mockup's rem values therefore comes out ~12% larger here, and the difference is enough to
+break layouts that looked fine in the design: six equal tool tabs at the mockup's 11px
+labels fit a 340px panel, at the app's scale they do not. The tabs now wrap to two rows of
+three on a narrow panel and relax to one row of six at ~440px+, verified live at both
+widths. **Do not port pixel or rem values from the mockup without re-measuring** —
+especially in Phase 2b, where the canvas has far more text than the chrome does.
+
 *A clamp bug the tests caught.* `clampPanelWidth` originally coerced with `Number(value)`.
 `Number('')`, `Number(null)` and `Number([])` are all `0` — finite — so an empty or corrupt
 `localStorage` entry clamped to the *minimum* width rather than the default, and the panel

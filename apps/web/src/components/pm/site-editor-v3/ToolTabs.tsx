@@ -59,7 +59,16 @@ export function ToolTabs({ active, onSelect, counts, hasProTools, panelId }: Too
       role="tablist"
       aria-label="Website tools"
       aria-orientation="horizontal"
-      className="flex shrink-0 items-stretch gap-1 border-b border-edge px-2 py-1.5"
+      /* Wraps rather than truncates.
+       *
+       * Six equal tabs do not fit a 280px panel at this app's type scale — the
+       * root font-size is 18px (globals.css), so `text-xs` renders ~12.4px and
+       * "Sections" alone needs ~57px of a ~51px tab. The design's own note
+       * makes the labels a deliberate decision ("tool tabs — labelled"), so
+       * clipping them to "Sectio…" is not an option. `min-w-20` forces a wrap
+       * to two rows of three on a narrow panel and relaxes back to one row of
+       * six once the panel is wide enough. */
+      className="flex shrink-0 flex-wrap items-stretch gap-1 border-b border-edge px-2 py-1.5"
     >
       {EDITOR_TOOLS.map((tool, index) => {
         const isActive = tool.id === active;
@@ -82,7 +91,7 @@ export function ToolTabs({ active, onSelect, counts, hasProTools, panelId }: Too
             onClick={() => onSelect(tool.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(
-              'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-md)] px-0.5 pb-1.5 pt-2 text-xs font-medium leading-tight transition-colors duration-quick',
+              'relative flex min-w-20 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-md)] px-1 pb-1.5 pt-2 text-xs font-medium leading-tight transition-colors duration-quick',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               isActive
                 ? 'bg-interactive-subtle font-semibold text-brand'
@@ -90,7 +99,7 @@ export function ToolTabs({ active, onSelect, counts, hasProTools, panelId }: Too
             )}
           >
             <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-            <span className="truncate">{tool.label}</span>
+            <span>{tool.label}</span>
             {count > 0 && (
               <span className="absolute right-1 top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-interactive px-1 text-[0.625rem] font-bold text-content-inverse">
                 {count}
