@@ -316,6 +316,106 @@ export const RLS_TENANT_TABLES = [
     notes:
       'Publish history for the public site (website editor v3, Phase 6). Deliberately NOT the public_read_service_write family its sibling site_blocks uses: the `snapshot` column holds the full block payload of a PAST publish, so an anon read would expose site content the association may since have deliberately taken down. All ops require pp_rls_is_privileged() (single pp_site_publish_snapshots_service policy, 0034) — admin access to the history list is authorized at the ROUTE, not by RLS, and the list response omits `snapshot` entirely. Trigger-exempt for the same reason site_blocks is: captureSnapshot writes inside publishCommunitySite\'s service-role transaction, so there is no authenticated write path for pp_rls_enforce_tenant_community_id() to police. `snapshot` is nullable and pruned by the retention sweep; the log row persists indefinitely.',
   },
+  // ---------------------------------------------------------------------------
+  // Registered 2026-07-26. These fifteen tables have a community_id and RLS
+  // enabled in production, but had never been listed here — so
+  // validateRlsConfigInvariant(), the family policy-name loop and the trigger
+  // loop all skipped them for their entire lives. Classification below is from
+  // the actual CREATE POLICY statements in migrations 0000 / 0019, not guessed.
+  // Most predate the pp_* naming convention and carry per-table entries in
+  // `expectedPolicyOverrides` (rls-policies.integration.test.ts) recording that
+  // only the NAME diverges, never the shape.
+  // ---------------------------------------------------------------------------
+  {
+    tableName: 'denied_visitors',
+    policyFamily: 'tenant_admin_write',
+    notes:
+      'Visitor deny-list. SELECT on community membership (denied_visitors_select); INSERT/UPDATE/DELETE additionally require pp_rls_is_privileged() OR pp_rls_can_read_audit_log(community_id), i.e. admin-tier. Baseline policy names (denied_visitors_*) predate the pp_ convention — override entry in the suite. NOTE: anon/authenticated are REVOKED on this table (0035, codifying production), so these policies are defence-in-depth for direct access; the app reads it through createScopedClient under a privileged role (package-visitor-service.ts). Deliberately NOT service_only despite the revoke — that family behaviourally asserts authenticated SELECT returns zero rows rather than a permission error, which a revoked table cannot satisfy.',
+  },
+  {
+    tableName: 'document_drafts',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Authored-document drafts. Four membership-scoped policies (document_drafts_community_{read,insert,update,delete}) on pp_rls_can_access_community(community_id), plus an explicit document_drafts_service_bypass FOR ALL on pp_rls_is_privileged(). Baseline names; write-scope trigger present under the legacy name document_drafts_tenant_scope. The UPDATE policy has USING but no WITH CHECK — the trigger is what stops a row being moved out of its community.',
+  },
+  {
+    tableName: 'faqs',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Per-community FAQ entries. Same baseline shape as document_drafts: faqs_community_{read,insert,update,delete} on pp_rls_can_access_community(community_id) plus faqs_service_bypass FOR ALL. Legacy trigger name faqs_tenant_scope.',
+  },
+  {
+    tableName: 'help_article_feedback',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Was-this-helpful votes on MDX help articles. Same baseline shape: help_article_feedback_community_{read,insert,update,delete} plus a service bypass. Legacy trigger name help_article_feedback_tenant_scope.',
+  },
+  {
+    tableName: 'help_article_views',
+    policyFamily: 'tenant_append_only',
+    notes:
+      'View counter for help articles. Only INSERT and SELECT policies exist (help_article_views_community_{insert,read}) plus a service bypass — no UPDATE or DELETE policy, so authenticated mutation fails closed. That is the append-only posture, reached by omission rather than by an explicit drop. Bespoke names, so an override entry rather than the family default pp_help_article_views_insert / pp_tenant_select. Carries a legacy-named write-scope trigger even though the family is trigger-exempt.',
+  },
+  {
+    tableName: 'move_checklists',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Move-in/move-out checklists. Same baseline shape: move_checklists_community_{read,insert,update,delete} plus a service bypass. Legacy trigger name move_checklists_tenant_scope.',
+  },
+  {
+    tableName: 'elections',
+    policyFamily: 'tenant_admin_write',
+    notes:
+      'Election definitions (§718.128). SELECT open to community members (pp_tenant_select); INSERT/UPDATE/DELETE require pp_rls_can_read_audit_log(community_id). Policy names carry an _admin_ infix (pp_elections_admin_insert) where the family default expects pp_elections_insert — name-only divergence, override entry in the suite. Canonical pp_rls_enforce_tenant_scope trigger.',
+  },
+  {
+    tableName: 'election_candidates',
+    policyFamily: 'tenant_admin_write',
+    notes:
+      'Candidate roster for an election. Identical shape and identical _admin_ infix divergence as elections. Canonical trigger.',
+  },
+  {
+    tableName: 'election_ballots',
+    policyFamily: 'tenant_append_only',
+    notes:
+      'Cast ballots — immutable once submitted (no updatedAt, no deletedAt on the table). pp_election_ballots_insert + pp_tenant_select match the family default exactly, so no override entry is needed. Trigger is INSERT-only, consistent with the family being trigger-exempt.',
+  },
+  {
+    tableName: 'election_eligibility_snapshots',
+    policyFamily: 'tenant_append_only',
+    notes:
+      'Point-in-time voter-eligibility snapshot per election; immutable by design. INSERT policy is named pp_election_eligibility_insert — the table name truncated — where the family default expects pp_election_eligibility_snapshots_insert. Name-only divergence, override entry in the suite.',
+  },
+  {
+    tableName: 'election_proxies',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Proxy designations for election voting (§718.128 proxy support). Uses the canonical pp_tenant_{select,insert,update,delete} set verbatim, so no override entry is needed. Canonical trigger.',
+  },
+  {
+    tableName: 'emergency_broadcasts',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Emergency broadcast messages. Four policies (pp_emergency_broadcasts_{select,insert,update,delete}) sharing one predicate: pp_rls_is_privileged() OR (auth.uid() IS NOT NULL AND pp_rls_can_access_community(community_id)) — the membership check with an explicit not-anon guard, so equivalent to tenant_crud for any authenticated caller. Bespoke names, so an override entry. GAP: this table has NO write-scope trigger of any name; community_id on write is guarded only by the policy WITH CHECK. Recorded as a documented exception in the suite pending a follow-up migration.',
+  },
+  {
+    tableName: 'emergency_broadcast_recipients',
+    policyFamily: 'tenant_crud',
+    notes:
+      'Per-recipient delivery rows for an emergency broadcast. Identical policy shape and identical missing-trigger gap as emergency_broadcasts.',
+  },
+  {
+    tableName: 'notifications',
+    policyFamily: 'tenant_user_scoped',
+    notes:
+      'In-app notification inbox. Only two policies exist — notifications_user_select and notifications_user_update — both gated purely on user_id = auth.uid(). They never reference community_id: strictly narrower than a membership check (a user only ever reads their own rows regardless of tenant), so this is not a cross-tenant leak, but it is off-idiom for the family. No INSERT or DELETE policy, so authenticated writes fail closed; notifications are created by the service role. Write-scope trigger present under the legacy name notifications_enforce_tenant_scope.',
+  },
+  {
+    tableName: 'root_claim_disputes',
+    policyFamily: 'audit_log_restricted',
+    notes:
+      'Disputes raised against a root-manager claim (0019). Not a log by name, but an exact behavioural match for the family definition: SELECT requires admin-tier (pp_root_claim_disputes_select on pp_rls_can_read_audit_log(community_id)), INSERT requires privilege (pp_root_claim_disputes_insert WITH CHECK pp_rls_is_privileged()), and there is no UPDATE or DELETE policy — the record is immutable once filed. Bespoke names, so an override entry. Carries a canonical trigger even though the family is trigger-exempt.',
+  },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -330,6 +430,24 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'stripe_prices', reason: 'Billing configuration — global, not community-scoped. Managed by platform ops.' },
   { tableName: 'conversion_events', reason: 'Analytics table — must survive demo soft-deletion and community conversion lifecycle. Not tenant-scoped because events span the demo→paid transition.' },
   { tableName: 'public_site_templates', reason: 'Platform-level public site template library for demos. Managed by platform admins and consumed through service-role admin APIs.' },
+  // ---------------------------------------------------------------------------
+  // Registered 2026-07-26 alongside the fifteen tenant tables above. None of
+  // these has a community_id column, so community_id FK-based scoping does not
+  // apply to any of them. Verified against the migrations, not assumed.
+  // ---------------------------------------------------------------------------
+  { tableName: 'billing_groups', reason: 'Cross-community billing rollup keyed on owner_user_id, not community_id — one group can span several communities, which is the point of it. RLS enabled: billing_groups_owner_read (SELECT where owner_user_id = auth.uid()) plus billing_groups_service_write (FOR ALL). Off-idiom in one respect: the service policy tests auth.role() = \'service_role\' directly rather than pp_rls_is_privileged() like every other table here.' },
+  { tableName: 'demo_instances', reason: 'Platform demo-provisioning ledger — references a seeded_community_id but is not scoped by it (a row can outlive the community it seeded). RLS is enabled with ZERO policies, which denies every non-privileged caller outright; access is service-role only. Enabled without FORCE, unlike the tenant tables.' },
+  { tableName: 'revenue_snapshots', reason: 'Platform-level revenue aggregates across all communities (by_community_type is a jsonb rollup, not a scoping column). RLS enabled with zero policies, plus REVOKE ALL from anon/authenticated (0035). Service-role only.' },
+  { tableName: 'site_layout_metadata', reason: 'Platform-level layout catalogue for the public-site editor. Not community-scoped. RLS enabled with zero policies, plus REVOKE ALL from anon/authenticated (0005).' },
+  { tableName: 'site_starter_packs', reason: 'Platform-level starter content packs for the public-site editor, keyed by community_type (a category, not a tenant). RLS enabled with zero policies, plus REVOKE ALL from anon/authenticated (0005).' },
+  { tableName: 'site_theme_presets', reason: 'Platform-level theme preset library for the public-site editor. Not community-scoped. RLS enabled with zero policies, plus REVOKE ALL from anon/authenticated (0005).' },
+  { tableName: 'site_portfolio_templates', reason: 'Per-user saved portfolio templates for property managers — scoped on owner_user_id, not community_id, so one template is reusable across the manager\'s whole portfolio. Four own-row policies (site_portfolio_templates_{select,insert,update,delete}_own) on owner_user_id = auth.uid() (0013). Enabled without FORCE.' },
+  { tableName: 'user_preferences', reason: 'Per-user application preferences (theme, density) that deliberately span communities — a user gets one set, not one per tenant. Four own-row policies on user_id = auth.uid() (0011). Enabled without FORCE.' },
+  {
+    tableName: 'user_search_index',
+    reason:
+      'Global cross-community user search index (no community_id), so tenant scoping does not apply. GAP, NOT A CLEAN EXCLUSION: this table has no row-level security of any kind — no ENABLE ROW LEVEL SECURITY, no policies, and no REVOKE anywhere in the migrations — while holding full_name and email (both trigram-indexed). Under Supabase\'s open grant baseline that leaves it directly readable by anon and authenticated; it is the table behind Supabase\'s "RLS Disabled in Public" advisor entry. Listed here so the registry is complete and the drift guard passes; hardening it needs its own migration (enable RLS + REVOKE ALL from anon/authenticated, matching the 0035 posture) and is deliberately out of scope for this config-only change.',
+  },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 
 export const RLS_TENANT_TABLE_NAMES = RLS_TENANT_TABLES.map((entry) => entry.tableName);
@@ -352,7 +470,12 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // 62 on main + site_publish_snapshots (0034) = 63. RE-DERIVE THIS AT MERGE:
 // parallel PRs each bump +1 and git merges both silently, so the second PR to
 // merge has to set the true total rather than trusting this number.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 63;
+// 63 on main + the fifteen tables registered 2026-07-26 = 78. That, plus the 20
+// global exclusions, now accounts for all 98 tables in public — which is the
+// invariant the drift-guard test in rls-policies.integration.test.ts enforces,
+// so an unregistered table can no longer go unnoticed. SAME RE-DERIVE WARNING
+// APPLIES: this jumped by 15, so a parallel +1 will silently merge on top of it.
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 78;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

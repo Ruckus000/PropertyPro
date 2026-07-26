@@ -519,8 +519,13 @@ function hasTableRlsForce(sql: string, tableName: string): boolean {
   return pattern.test(sql);
 }
 
-function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
+function hasTenantWriteScopeTrigger(
+  sql: string,
+  tableName: string,
+  triggerName = 'pp_rls_enforce_tenant_scope',
+): boolean {
   const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedTriggerName = triggerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Direct CREATE TRIGGER form, e.g.
   //   CREATE TRIGGER "pp_rls_enforce_tenant_scope" BEFORE INSERT OR UPDATE
   //   ON "public"."tableName" FOR EACH ROW EXECUTE FUNCTION ...
@@ -541,7 +546,7 @@ function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
   //    a CREATE TRIGGER with some later `ON "public"."other_table"` (e.g. a
   //    CREATE POLICY), reporting a trigger that does not exist.
   const directPattern = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
     'i',
   );
   if (directPattern.test(sql)) return true;
@@ -554,7 +559,10 @@ function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
     `unnest\\s*\\(\\s*ARRAY\\s*\\[[\\s\\S]*?'${escapedTableName}'[\\s\\S]*?\\]`,
     'i',
   );
-  const hasLoopTriggerInstall = /CREATE\s+TRIGGER\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)/i;
+  const hasLoopTriggerInstall = new RegExp(
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)`,
+    'i',
+  );
   return arrayContainsTable.test(sql) && hasLoopTriggerInstall.test(sql);
 }
 
@@ -739,6 +747,34 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
     'public_read_service_write',
   ]);
 
+  // Tables whose write-scope trigger runs the canonical
+  // pp_rls_enforce_tenant_community_id() function under a PRE-CONVENTION NAME.
+  // Each was confirmed in migration 0000: same BEFORE INSERT OR UPDATE timing,
+  // same function body — only the trigger's name differs, so renaming them would
+  // be churn requiring a production apply. Asserted by exact name, so dropping or
+  // swapping one of these triggers still fails DB005.
+  // Keep in sync with `legacyTriggerNames` in
+  // packages/db/__tests__/rls-policies.integration.test.ts, which asserts the
+  // same names against the live database.
+  const LEGACY_WRITE_SCOPE_TRIGGER_NAMES: Record<string, string> = {
+    denied_visitors: 'enforce_denied_visitors_community_scope',
+    document_drafts: 'document_drafts_tenant_scope',
+    faqs: 'faqs_tenant_scope',
+    help_article_feedback: 'help_article_feedback_tenant_scope',
+    move_checklists: 'move_checklists_tenant_scope',
+    notifications: 'notifications_enforce_tenant_scope',
+  };
+
+  // KNOWN GAP, not a naming quirk: these two have community_id and tenant-scoped
+  // policies but NO write-scope trigger under any name, so community_id on write
+  // is guarded only by the policy WITH CHECK. Every other tenant_crud table has
+  // one. Registered in rls-config on 2026-07-26 with the gap documented; closing
+  // it needs its own migration, at which point this set should be emptied.
+  const TABLES_WITHOUT_WRITE_SCOPE_TRIGGER = new Set([
+    'emergency_broadcasts',
+    'emergency_broadcast_recipients',
+  ]);
+
   const violations: Violation[] = [];
   for (const entry of RLS_TENANT_TABLES) {
     const t = entry.tableName;
@@ -766,16 +802,33 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
     // scan for CREATE POLICY is both redundant and brittle against the
     // quote-wrapped baseline DDL. FORCE + write-scope-trigger coverage below
     // is what no other gate enforces, which is the gap this check fills.
+    const expectedTriggerName = LEGACY_WRITE_SCOPE_TRIGGER_NAMES[t] ?? 'pp_rls_enforce_tenant_scope';
     if (
       !FAMILIES_WITHOUT_TRIGGER.has(entry.policyFamily) &&
-      !hasTenantWriteScopeTrigger(corpus, t)
+      !TABLES_WITHOUT_WRITE_SCOPE_TRIGGER.has(t) &&
+      !hasTenantWriteScopeTrigger(corpus, t, expectedTriggerName)
     ) {
       violations.push({
         file: migrationsRoot,
         line: 0,
         column: 0,
         code: 'DB005',
-        message: `Tenant table "${t}" (${entry.policyFamily}) has no pp_rls_enforce_tenant_scope trigger in any migration.`,
+        message: `Tenant table "${t}" (${entry.policyFamily}) has no ${expectedTriggerName} trigger in any migration.`,
+      });
+    }
+    // Guard the exemption itself: once a follow-up migration adds the missing
+    // trigger, this fires and forces the entry to be removed rather than left
+    // behind as a stale excuse.
+    if (
+      TABLES_WITHOUT_WRITE_SCOPE_TRIGGER.has(t) &&
+      hasTenantWriteScopeTrigger(corpus, t, expectedTriggerName)
+    ) {
+      violations.push({
+        file: migrationsRoot,
+        line: 0,
+        column: 0,
+        code: 'DB005',
+        message: `Tenant table "${t}" now has a write-scope trigger — remove it from TABLES_WITHOUT_WRITE_SCOPE_TRIGGER.`,
       });
     }
   }

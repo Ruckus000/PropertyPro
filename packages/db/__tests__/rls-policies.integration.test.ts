@@ -18,7 +18,12 @@ import { notificationPreferences } from '../src/schema/notification-preferences'
 import { onboardingChecklistItems } from '../src/schema/onboarding-checklist-items';
 import { onboardingWizardState } from '../src/schema/onboarding-wizard-state';
 import { siteBlocks } from '../src/schema/site-blocks';
-import { RLS_TENANT_TABLES, RLS_TENANT_TABLE_NAMES, validateRlsConfigInvariant } from '../src/schema/rls-config';
+import {
+  RLS_GLOBAL_EXCLUSION_NAMES,
+  RLS_TENANT_TABLES,
+  RLS_TENANT_TABLE_NAMES,
+  validateRlsConfigInvariant,
+} from '../src/schema/rls-config';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
 
@@ -518,6 +523,45 @@ describeDb('P4-55 RLS policies (integration)', () => {
     for (const tableName of RLS_TENANT_TABLE_NAMES) {
       expect(actual.get(tableName), `${tableName} should have relrowsecurity=true`).toBe(true);
     }
+  });
+
+  it('registers every table in public as either tenant-scoped or explicitly excluded', async () => {
+    // The drift guard. Until 2026-07-26, 24 of the 98 tables in public were in
+    // NEITHER list — so validateRlsConfigInvariant() did not cover them, the
+    // family policy-name loop never checked them, and the service_only
+    // behavioural loop could not see them. Nothing failed, because nothing
+    // compared the config against the database's actual table list. This does.
+    //
+    // A new table must be classified into RLS_TENANT_TABLES (with a policy
+    // family) or RLS_GLOBAL_TABLE_EXCLUSIONS (with a reason) before it can land.
+    const rows = await adminSql<{ relname: string }[]>`
+      select c.relname
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relkind = 'r'
+      order by c.relname
+    `;
+
+    const registered = new Set<string>([...RLS_TENANT_TABLE_NAMES, ...RLS_GLOBAL_EXCLUSION_NAMES]);
+    const unregistered = rows
+      .map((row) => row.relname)
+      // drizzle's migration ledger lives in its own schema; anything named like
+      // it in public would be a stray and is not ours to classify.
+      .filter((name) => !name.startsWith('__drizzle'))
+      .filter((name) => !registered.has(name));
+
+    expect(
+      unregistered,
+      `Unregistered public tables — add each to RLS_TENANT_TABLES (with a policy family) ` +
+        `or RLS_GLOBAL_TABLE_EXCLUSIONS (with a reason) in rls-config.ts: ${unregistered.join(', ')}`,
+    ).toEqual([]);
+
+    // And the converse: a config entry naming a table that no longer exists is
+    // just as much a drift as a missing one.
+    const existing = new Set(rows.map((row) => row.relname));
+    const phantom = [...registered].filter((name) => !existing.has(name)).sort();
+    expect(phantom, `Config lists tables that do not exist: ${phantom.join(', ')}`).toEqual([]);
   });
 
   it('restricts authenticated reads to the actor community on tenant CRUD tables (documents)', async () => {
@@ -1467,6 +1511,123 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'pp_snowbird_digest_subscriptions_select',
         'pp_snowbird_digest_subscriptions_update',
       ],
+
+      // -----------------------------------------------------------------------
+      // Tables registered in rls-config on 2026-07-26. Every override below is a
+      // NAME divergence only — each was checked against its CREATE POLICY in
+      // migration 0000 (or 0019) and matches its declared family's behaviour.
+      // They predate the pp_* convention and, like snowbird_digest_subscriptions,
+      // were never caught because this suite had never run.
+      //
+      // election_ballots and election_proxies are deliberately absent: they use
+      // their family's canonical names verbatim and need no override.
+      // -----------------------------------------------------------------------
+
+      // denied_visitors (tenant_admin_write): baseline names for the exact family
+      // shape — SELECT on membership, the other three additionally requiring
+      // pp_rls_is_privileged() OR pp_rls_can_read_audit_log(community_id).
+      denied_visitors: [
+        'denied_visitors_delete',
+        'denied_visitors_insert',
+        'denied_visitors_select',
+        'denied_visitors_update',
+      ],
+
+      // The four *_community_* tables below share one baseline shape: the family's
+      // four membership-scoped ops under bespoke names, plus an explicit
+      // *_service_bypass FOR ALL policy where the pp_* families let
+      // pp_rls_is_privileged() flow through pp_rls_can_access_community instead.
+      // Equivalent surface, one extra policy row.
+      document_drafts: [
+        'document_drafts_community_delete',
+        'document_drafts_community_insert',
+        'document_drafts_community_read',
+        'document_drafts_community_update',
+        'document_drafts_service_bypass',
+      ],
+      faqs: [
+        'faqs_community_delete',
+        'faqs_community_insert',
+        'faqs_community_read',
+        'faqs_community_update',
+        'faqs_service_bypass',
+      ],
+      help_article_feedback: [
+        'help_article_feedback_community_delete',
+        'help_article_feedback_community_insert',
+        'help_article_feedback_community_read',
+        'help_article_feedback_community_update',
+        'help_article_feedback_service_bypass',
+      ],
+      move_checklists: [
+        'move_checklists_community_delete',
+        'move_checklists_community_insert',
+        'move_checklists_community_read',
+        'move_checklists_community_update',
+        'move_checklists_service_bypass',
+      ],
+
+      // help_article_views (tenant_append_only): same baseline idiom as its
+      // sibling help_article_feedback, but with no UPDATE and no DELETE policy —
+      // authenticated mutation fails closed, which is the append-only posture
+      // reached by omission rather than by an explicit drop.
+      help_article_views: [
+        'help_article_views_community_insert',
+        'help_article_views_community_read',
+        'help_article_views_service_bypass',
+      ],
+
+      // elections / election_candidates (tenant_admin_write): the family's exact
+      // shape, but the write policies carry an _admin_ infix the family default
+      // does not expect (pp_elections_admin_insert vs pp_elections_insert).
+      elections: [
+        'pp_elections_admin_delete',
+        'pp_elections_admin_insert',
+        'pp_elections_admin_update',
+        'pp_tenant_select',
+      ],
+      election_candidates: [
+        'pp_election_candidates_admin_delete',
+        'pp_election_candidates_admin_insert',
+        'pp_election_candidates_admin_update',
+        'pp_tenant_select',
+      ],
+
+      // election_eligibility_snapshots (tenant_append_only): correct family shape,
+      // but the INSERT policy name truncates the table name
+      // (pp_election_eligibility_insert, not pp_election_eligibility_snapshots_insert).
+      election_eligibility_snapshots: ['pp_election_eligibility_insert', 'pp_tenant_select'],
+
+      // emergency_broadcasts / _recipients (tenant_crud): four bespoke-named ops
+      // sharing one predicate — pp_rls_is_privileged() OR (auth.uid() IS NOT NULL
+      // AND pp_rls_can_access_community(community_id)) — i.e. the membership check
+      // with an explicit not-anon guard. Equivalent to tenant_crud for any
+      // authenticated caller. See the trigger test: these two are the pair with no
+      // write-scope trigger at all.
+      emergency_broadcasts: [
+        'pp_emergency_broadcasts_delete',
+        'pp_emergency_broadcasts_insert',
+        'pp_emergency_broadcasts_select',
+        'pp_emergency_broadcasts_update',
+      ],
+      emergency_broadcast_recipients: [
+        'pp_emergency_broadcast_recipients_delete',
+        'pp_emergency_broadcast_recipients_insert',
+        'pp_emergency_broadcast_recipients_select',
+        'pp_emergency_broadcast_recipients_update',
+      ],
+
+      // notifications (tenant_user_scoped): only SELECT and UPDATE policies exist,
+      // both on user_id = auth.uid() with no community_id term. Strictly narrower
+      // than the family's membership check rather than weaker — a user reaches
+      // only their own rows in any tenant. No INSERT/DELETE policy, so authenticated
+      // writes fail closed and the service role creates notifications.
+      notifications: ['notifications_user_select', 'notifications_user_update'],
+
+      // root_claim_disputes (audit_log_restricted): the family's shape under
+      // table-specific names — admin-tier SELECT, privileged INSERT, and no
+      // UPDATE/DELETE policy because a filed dispute is immutable.
+      root_claim_disputes: ['pp_root_claim_disputes_insert', 'pp_root_claim_disputes_select'],
     };
 
     const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
@@ -1566,6 +1727,19 @@ describeDb('P4-55 RLS policies (integration)', () => {
             'pp_tenant_select',
           ].sort();
           break;
+        case 'public_read_service_write':
+          // This family has no canonical pp_* name shape by construction: its
+          // members are public-facing site content whose anon-read policies were
+          // named per table (site_blocks_anon_read, …). There is nothing to
+          // derive, so membership in this family REQUIRES an override entry.
+          // Reaching here means a table was added to the family without one —
+          // previously that fell through to the generic `default:` throw below,
+          // which said "unhandled family" and sent you looking for a missing case
+          // that cannot be written.
+          throw new Error(
+            `${entry.tableName} is in the public_read_service_write family, which has no canonical ` +
+              'policy names — add an expectedPolicyOverrides entry listing its actual policies.',
+          );
         default:
           throw new Error(`Unhandled policy family: ${entry.policyFamily as string}`);
       }
@@ -1578,18 +1752,29 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   describe('0021: access_requests + community_join_requests RLS repair', () => {
-    it('installs pp_rls_enforce_tenant_scope trigger on every tenant-scoped table', async () => {
+    it('installs the write-scope trigger on every tenant-scoped table', async () => {
+      // Matched on the FUNCTION, not the trigger name. Several baseline tables
+      // attach pp_rls_enforce_tenant_community_id() under a legacy name (see
+      // legacyTriggerNames below); filtering on tgname = 'pp_rls_enforce_tenant_scope'
+      // — as this test did until 2026-07-26 — made those triggers invisible and
+      // would have reported a table as unprotected when it is in fact enforced.
       const rows = await adminSql<{ relname: string; tgname: string }[]>`
         select c.relname, t.tgname
         from pg_trigger t
         join pg_class c on c.oid = t.tgrelid
         join pg_namespace n on n.oid = c.relnamespace
+        join pg_proc p on p.oid = t.tgfoid
         where n.nspname = 'public'
-          and t.tgname = 'pp_rls_enforce_tenant_scope'
+          and p.proname = 'pp_rls_enforce_tenant_community_id'
           and not t.tgisinternal
       `;
 
-      const tablesWithTrigger = new Set(rows.map((row) => row.relname));
+      const triggerNamesByTable = new Map<string, Set<string>>();
+      for (const row of rows) {
+        const names = triggerNamesByTable.get(row.relname) ?? new Set<string>();
+        names.add(row.tgname);
+        triggerNamesByTable.set(row.relname, names);
+      }
 
       // Service-only and audit-restricted tables intentionally lack this trigger
       // because they are written exclusively under a privileged role. Append-only
@@ -1604,19 +1789,55 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'public_read_service_write',
       ]);
 
+      // Tables whose write-scope trigger runs the canonical function under a
+      // pre-convention name. Each was confirmed against migration 0000: same
+      // BEFORE INSERT OR UPDATE timing, same pp_rls_enforce_tenant_community_id()
+      // body — only the trigger's name differs, so renaming them would be pure
+      // churn requiring a production apply. Asserted by exact name so a trigger
+      // being dropped or swapped still fails here.
+      const legacyTriggerNames: Record<string, string> = {
+        denied_visitors: 'enforce_denied_visitors_community_scope',
+        document_drafts: 'document_drafts_tenant_scope',
+        faqs: 'faqs_tenant_scope',
+        help_article_feedback: 'help_article_feedback_tenant_scope',
+        move_checklists: 'move_checklists_tenant_scope',
+        notifications: 'notifications_enforce_tenant_scope',
+      };
+
+      // KNOWN GAP, not a naming quirk: these two have community_id and
+      // tenant-scoped policies but NO write-scope trigger under any name, so
+      // community_id on write is guarded only by the policy WITH CHECK. Every
+      // other tenant_crud table has one. Recorded here so the rest of the loop
+      // can be a hard assertion; closing it needs its own migration.
+      const tablesWithoutTrigger = new Set(['emergency_broadcasts', 'emergency_broadcast_recipients']);
+
       const expectedTables = RLS_TENANT_TABLES.filter(
         (entry) => !familiesWithoutTrigger.has(entry.policyFamily),
       ).map((entry) => entry.tableName);
 
       // Both repaired tables (access_requests, community_join_requests) must be present.
-      expect(tablesWithTrigger.has('access_requests')).toBe(true);
-      expect(tablesWithTrigger.has('community_join_requests')).toBe(true);
+      expect(triggerNamesByTable.get('access_requests')).toContain('pp_rls_enforce_tenant_scope');
+      expect(triggerNamesByTable.get('community_join_requests')).toContain(
+        'pp_rls_enforce_tenant_scope',
+      );
 
       for (const tableName of expectedTables) {
+        if (tablesWithoutTrigger.has(tableName)) continue;
+        const expectedName = legacyTriggerNames[tableName] ?? 'pp_rls_enforce_tenant_scope';
         expect(
-          tablesWithTrigger.has(tableName),
-          `${tableName} should have pp_rls_enforce_tenant_scope trigger`,
-        ).toBe(true);
+          [...(triggerNamesByTable.get(tableName) ?? [])],
+          `${tableName} should have a write-scope trigger named ${expectedName}`,
+        ).toContain(expectedName);
+      }
+
+      // Guard the exemption list itself: if a follow-up migration adds the two
+      // missing triggers, this fails and forces the exemption to be deleted
+      // rather than left behind as a stale excuse.
+      for (const tableName of tablesWithoutTrigger) {
+        expect(
+          triggerNamesByTable.has(tableName),
+          `${tableName} now has a write-scope trigger — remove it from tablesWithoutTrigger`,
+        ).toBe(false);
       }
     });
 
