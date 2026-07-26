@@ -1,0 +1,171 @@
+'use client';
+
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useReorderBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import {
+  useCanvasSelection,
+  type CanvasSelection,
+} from './canvas/use-canvas-selection';
+import { sectionLabel } from './section-label';
+
+export type MoveDirection = 'up' | 'down';
+
+export interface SiteEditorContextValue {
+  /** Merged draft-wins blocks, exactly as the canvas renders them. */
+  blocks: readonly SiteBlockSummary[];
+  /** Reorderable sections, slot-ordered, hero and tombstones excluded. */
+  movableSections: SiteBlockSummary[];
+
+  selection: CanvasSelection | null;
+  isSelected: (blockId: number) => boolean;
+  select: (blockId: number) => void;
+  clear: () => void;
+
+  canMove: (blockId: number, direction: MoveDirection) => boolean;
+  /** Move one position. No-op (not an error) at the ends. */
+  move: (blockId: number, direction: MoveDirection) => void;
+  /** Move to an absolute slot — the drag-and-drop drop target. */
+  moveTo: (blockId: number, toOrder: number) => void;
+  isMoving: boolean;
+}
+
+const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
+
+export interface SiteEditorProviderProps {
+  communityId: number;
+  blocks: readonly SiteBlockSummary[];
+  /** Fired when a section is selected, so the shell can reveal its panel. */
+  onSelect?: (blockId: number) => void;
+  children: React.ReactNode;
+}
+
+/**
+ * Shared editing state for the v3 editor: which section is selected, and how
+ * sections move.
+ *
+ * This is a context rather than a hook because the two surfaces that drive it
+ * live in different columns — the canvas (`SectionShell` / `FloatControls`) and
+ * the Sections tool panel (`SectionList`). Two independent hook instances would
+ * mean two selections that silently disagree, and two screen-reader live
+ * regions announcing the same move twice.
+ *
+ * The provider renders the single live region. Both surfaces mutate through
+ * `move` / `moveTo`, so a reorder is announced exactly once no matter which one
+ * initiated it.
+ */
+export function SiteEditorProvider({
+  communityId,
+  blocks,
+  onSelect,
+  children,
+}: SiteEditorProviderProps) {
+  const {
+    selection,
+    isSelected,
+    select: selectInternal,
+    clear,
+    movableSections,
+  } = useCanvasSelection(blocks);
+  const reorder = useReorderBlocks(communityId);
+  const [announcement, setAnnouncement] = useState('');
+
+  const select = useCallback(
+    (blockId: number) => {
+      selectInternal(blockId);
+      onSelect?.(blockId);
+    },
+    [onSelect, selectInternal],
+  );
+
+  const indexOf = useCallback(
+    (blockId: number) => movableSections.findIndex((b) => b.id === blockId),
+    [movableSections],
+  );
+
+  const canMove = useCallback(
+    (blockId: number, direction: MoveDirection) => {
+      const index = indexOf(blockId);
+      if (index === -1) return false;
+      return direction === 'up' ? index > 0 : index < movableSections.length - 1;
+    },
+    [indexOf, movableSections.length],
+  );
+
+  const announceMove = useCallback(
+    (block: SiteBlockSummary, position: number) => {
+      setAnnouncement(
+        `${sectionLabel(block.blockType)} moved to position ${position} of ${movableSections.length}.`,
+      );
+    },
+    [movableSections.length],
+  );
+
+  const move = useCallback(
+    (blockId: number, direction: MoveDirection) => {
+      // Moving the first section up or the last one down is a no-op rather than
+      // an error — the control is reachable by keyboard, and a PM holding
+      // Alt+Up should hit a soft stop, not a toast.
+      if (!canMove(blockId, direction)) return;
+      const index = indexOf(blockId);
+      const block = movableSections[index]!;
+      announceMove(block, direction === 'up' ? index : index + 2);
+      reorder.mutate({ blockId, direction });
+    },
+    [announceMove, canMove, indexOf, movableSections, reorder],
+  );
+
+  const moveTo = useCallback(
+    (blockId: number, toOrder: number) => {
+      const index = indexOf(blockId);
+      const targetIndex = movableSections.findIndex((b) => b.blockOrder === toOrder);
+      if (index === -1 || targetIndex === -1 || targetIndex === index) return;
+      announceMove(movableSections[index]!, targetIndex + 1);
+      reorder.mutate({ blockId, toOrder });
+    },
+    [announceMove, indexOf, movableSections, reorder],
+  );
+
+  const value = useMemo<SiteEditorContextValue>(
+    () => ({
+      blocks,
+      movableSections,
+      selection,
+      isSelected,
+      select,
+      clear,
+      canMove,
+      move,
+      moveTo,
+      isMoving: reorder.isPending,
+    }),
+    [
+      blocks,
+      movableSections,
+      selection,
+      isSelected,
+      select,
+      clear,
+      canMove,
+      move,
+      moveTo,
+      reorder.isPending,
+    ],
+  );
+
+  return (
+    <SiteEditorContext.Provider value={value}>
+      {children}
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
+    </SiteEditorContext.Provider>
+  );
+}
+
+export function useSiteEditor(): SiteEditorContextValue {
+  const value = useContext(SiteEditorContext);
+  if (!value) {
+    throw new Error('useSiteEditor must be used inside a SiteEditorProvider');
+  }
+  return value;
+}

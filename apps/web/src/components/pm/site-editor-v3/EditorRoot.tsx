@@ -1,8 +1,11 @@
 'use client';
 
+import { useCallback, useState } from 'react';
+import { useContentBlocks } from '@/hooks/use-content-blocks';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { EditorShell } from './EditorShell';
 import { Canvas } from './canvas/Canvas';
+import { SiteEditorProvider } from './editor-context';
 import type { EditorToolId, ProToolAccess } from './tools';
 
 export interface EditorRootProps {
@@ -15,12 +18,15 @@ export interface EditorRootProps {
 }
 
 /**
- * Client root of the v3 editor — the seam where state will live.
+ * Client root of the v3 editor — the seam where state lives.
  *
- * Phase 1 wires the shell with placeholder panels so the chrome, keyboard
- * behaviour and budget are all real and testable before any editing exists.
- * Phase 2b replaces the canvas placeholder, Phase 3 adds the status line, and
- * Phase 4 hangs the change model off here.
+ * Phase 2b-2 mounts `SiteEditorProvider` here rather than inside the canvas,
+ * because selection and reordering are driven from two different columns: the
+ * canvas and the Sections tool panel. Both read the same block list; the query
+ * key is shared with `Canvas`'s own `useContentBlocks` call, so this adds no
+ * second request.
+ *
+ * Phase 3 adds the status line, and Phase 4 hangs the change model off here.
  */
 export function EditorRoot({
   communityId,
@@ -29,25 +35,40 @@ export function EditorRoot({
   proToolAccess,
   canvasContext,
 }: EditorRootProps) {
+  const { data: blocks } = useContentBlocks(communityId);
+  const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
+
+  // Selecting a section on the canvas pulls the Sections panel forward, so the
+  // controls for what you just clicked are visible without a second action.
+  const handleSelect = useCallback(() => setActiveTool('sections'), []);
+
   return (
-    <EditorShell
-      communityName={communityName}
-      publicSiteUrl={publicSiteUrl}
-      proToolAccess={proToolAccess}
-      renderToolPanel={(tool) => <ToolPanelPlaceholder tool={tool} />}
+    <SiteEditorProvider
+      communityId={communityId}
+      blocks={blocks ?? []}
+      onSelect={handleSelect}
     >
-      {canvasContext ? (
-        <Canvas communityId={communityId} context={canvasContext} />
-      ) : (
-        <div className="mx-auto max-w-[1000px] px-5 py-4">
-          <div className="rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-card p-10 text-center">
-            <p className="text-sm text-content-secondary">
-              We couldn&apos;t load this community&apos;s site settings.
-            </p>
+      <EditorShell
+        communityName={communityName}
+        publicSiteUrl={publicSiteUrl}
+        proToolAccess={proToolAccess}
+        activeTool={activeTool}
+        onActiveToolChange={setActiveTool}
+        renderToolPanel={(tool) => <ToolPanelPlaceholder tool={tool} />}
+      >
+        {canvasContext ? (
+          <Canvas communityId={communityId} context={canvasContext} />
+        ) : (
+          <div className="mx-auto max-w-[1000px] px-5 py-4">
+            <div className="rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-card p-10 text-center">
+              <p className="text-sm text-content-secondary">
+                We couldn&apos;t load this community&apos;s site settings.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-    </EditorShell>
+        )}
+      </EditorShell>
+    </SiteEditorProvider>
   );
 }
 

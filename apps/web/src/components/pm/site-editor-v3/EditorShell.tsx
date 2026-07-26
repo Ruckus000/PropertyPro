@@ -23,6 +23,15 @@ export interface EditorShellProps {
   status?: React.ReactNode;
   onPreview?: () => void;
   onPublish?: () => void;
+  /**
+   * Controlled active tool. Supply both to let something outside the shell
+   * drive the panel — selecting a section on the canvas switches to Sections.
+   * Omit both and the shell keeps its own state.
+   */
+  activeTool?: EditorToolId;
+  onActiveToolChange?: (tool: EditorToolId) => void;
+  /** The inspector column. Rendered at >=1280px; below that it overlays. */
+  inspector?: React.ReactNode;
 }
 
 /**
@@ -42,8 +51,13 @@ export function EditorShell({
   status,
   onPreview,
   onPublish,
+  activeTool: controlledTool,
+  onActiveToolChange,
+  inspector,
 }: EditorShellProps) {
-  const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
+  const [uncontrolledTool, setUncontrolledTool] = useState<EditorToolId>('sections');
+  const activeTool = controlledTool ?? uncontrolledTool;
+  const setActiveTool = onActiveToolChange ?? setUncontrolledTool;
   const [panelWidth, setPanelWidth] = usePanelWidth();
   // Deliberately phrased as max-width, not min-width.
   //
@@ -103,6 +117,8 @@ export function EditorShell({
         <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
 
         <div className="min-w-0 flex-1 overflow-y-auto bg-surface-page">{children}</div>
+
+        {inspector}
       </div>
     </div>
   );

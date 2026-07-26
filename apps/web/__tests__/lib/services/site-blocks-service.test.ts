@@ -665,7 +665,7 @@ describe('reorderSiteBlock', () => {
     });
 
     // A (order 2) swaps with B (order 3): A→3, B→2.
-    expect(result).toEqual({ movedBlockId: 12, fromOrder: 2, toOrder: 3 });
+    expect(result).toEqual({ movedBlockId: 12, fromOrder: 2, toOrder: 3, unchanged: false });
     expect(scopedClient.insert).toHaveBeenCalledTimes(2);
     // Moving block A gets the neighbor's order (3) with A's content + type.
     expect(scopedClient.insert).toHaveBeenCalledWith(
@@ -677,6 +677,108 @@ describe('reorderSiteBlock', () => {
       expect.anything(),
       expect.objectContaining({ blockType: 'image', blockOrder: 2, isDraft: true, publishedAt: null, content: { imagePath: '42/c/b.webp', altText: 'B' } }),
     );
+  });
+
+  // --- absolute moves (v3 Phase 2b-2 drag-and-drop) -----------------------
+
+  it('moves a block to an absolute slot, rotating the span it crosses', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    // Drag C (order 4) to the top slot (order 2). This is a rotation, not a
+    // swap: A and B each shift down one. A swap would have put C at 2 and A
+    // at 4, silently reversing A and B as well.
+    const result = await reorderSiteBlock({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockId: 14,
+      toOrder: 2,
+    });
+
+    expect(result).toEqual({ movedBlockId: 14, fromOrder: 4, toOrder: 2, unchanged: false });
+    expect(scopedClient.insert).toHaveBeenCalledTimes(3);
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 2, isDraft: true, content: { body: 'C' } }),
+    );
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'text', blockOrder: 3, isDraft: true, content: { body: 'A' } }),
+    );
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ blockType: 'image', blockOrder: 4, isDraft: true }),
+    );
+  });
+
+  it('reuses the existing sparse slot values rather than renumbering', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    // Slots 2, 5, 9 — a gap-riddled ordering left by earlier deletions.
+    setSelectQueue([[
+      { id: 21, blockType: 'text', blockOrder: 2, content: { body: 'A' }, isDraft: false },
+      { id: 22, blockType: 'text', blockOrder: 5, content: { body: 'B' }, isDraft: false },
+      { id: 23, blockType: 'text', blockOrder: 9, content: { body: 'C' }, isDraft: false },
+    ]]);
+
+    const result = await reorderSiteBlock({
+      communityId: 42, actorUserId: 'user-1', blockId: 23, toOrder: 2,
+    });
+
+    // C lands on slot 2; A and B take 5 and 9. No slot value is invented, so
+    // an unrelated block's block_order never changes underneath the PM.
+    expect(result).toEqual({ movedBlockId: 23, fromOrder: 9, toOrder: 2, unchanged: false });
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ blockOrder: 2, content: { body: 'C' } }),
+    );
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ blockOrder: 5, content: { body: 'A' } }),
+    );
+    expect(scopedClient.insert).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({ blockOrder: 9, content: { body: 'B' } }),
+    );
+  });
+
+  it('writes nothing when a section is dropped where it already sat', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    const result = await reorderSiteBlock({
+      communityId: 42, actorUserId: 'user-1', blockId: 13, toOrder: 3,
+    });
+
+    // A cancelled drag must not manufacture a pending change.
+    expect(result).toEqual({ movedBlockId: 13, fromOrder: 3, toOrder: 3, unchanged: true });
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+    expect(scopedClient.softDelete).not.toHaveBeenCalled();
+  });
+
+  it('rejects a toOrder that is not an existing content slot', async () => {
+    const scopedClient = buildScopedClient();
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    setSelectQueue([threeContentBlocks()]);
+
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12, toOrder: 77 }),
+    ).rejects.toThrow(/no longer a content section/);
+    expect(scopedClient.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects supplying both direction and toOrder', async () => {
+    await expect(
+      reorderSiteBlock({
+        communityId: 42, actorUserId: 'user-1', blockId: 12,
+        direction: 'up', toOrder: 4,
+      }),
+    ).rejects.toThrow(/exactly one of direction or toOrder/);
+  });
+
+  it('rejects supplying neither direction nor toOrder', async () => {
+    await expect(
+      reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 12 }),
+    ).rejects.toThrow(/exactly one of direction or toOrder/);
   });
 
   it('moves a block UP: swaps its order with the previous block', async () => {
@@ -691,7 +793,7 @@ describe('reorderSiteBlock', () => {
       direction: 'up',
     });
 
-    expect(result).toEqual({ movedBlockId: 13, fromOrder: 3, toOrder: 2 });
+    expect(result).toEqual({ movedBlockId: 13, fromOrder: 3, toOrder: 2, unchanged: false });
     expect(scopedClient.insert).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ blockType: 'image', blockOrder: 2, content: { imagePath: '42/c/b.webp', altText: 'B' } }),
@@ -733,7 +835,7 @@ describe('reorderSiteBlock', () => {
 
     const result = await reorderSiteBlock({ communityId: 42, actorUserId: 'user-1', blockId: 99, direction: 'down' });
 
-    expect(result).toEqual({ movedBlockId: 99, fromOrder: 2, toOrder: 3 });
+    expect(result).toEqual({ movedBlockId: 99, fromOrder: 2, toOrder: 3, unchanged: false });
     expect(scopedClient.insert).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ blockOrder: 3, content: { body: 'draft-wins' } }),
@@ -1077,7 +1179,7 @@ describe('reorderSiteBlock with tombstone drafts', () => {
       direction: 'down',
     });
 
-    expect(result).toEqual({ movedBlockId: 12, fromOrder: 2, toOrder: 4 });
+    expect(result).toEqual({ movedBlockId: 12, fromOrder: 2, toOrder: 4, unchanged: false });
     expect(scopedClient.insert).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ blockType: 'text', blockOrder: 4, content: { body: 'A' } }),

@@ -393,15 +393,29 @@ export interface ReorderSiteBlockInput {
    * (block_order >= 2); the hero is not reorderable.
    */
   blockId: number;
-  direction: 'up' | 'down';
+  /**
+   * Relative move by one position (the ↑/↓ controls and the keyboard grip).
+   * Exactly one of `direction` / `toOrder` must be supplied.
+   */
+  direction?: 'up' | 'down';
+  /**
+   * Absolute move (drag-and-drop): the `block_order` slot the moved block
+   * should end up occupying. Everything between its old and new position
+   * shifts by one to close the gap — this is a rotation, not a swap, which is
+   * why a drag cannot be expressed as a sequence of `direction` calls without
+   * N round-trips and a partial-failure window.
+   */
+  toOrder?: number;
 }
 
 export interface ReorderSiteBlockResult {
   movedBlockId: number;
-  /** The moved block's order before the swap. */
+  /** The moved block's order before the move. */
   fromOrder: number;
-  /** The moved block's order after the swap (the neighbor's old order). */
+  /** The moved block's order after the move. */
   toOrder: number;
+  /** True when the requested move was a no-op (dropped where it started). */
+  unchanged: boolean;
 }
 
 interface MergedContentBlock {
@@ -413,8 +427,16 @@ interface MergedContentBlock {
 }
 
 /**
- * Moves a content block one position up or down by swapping its `block_order`
- * with the adjacent content block, writing the result to the DRAFT layer.
+ * Moves a content block to a new position, writing the result to the DRAFT
+ * layer. Accepts either a relative `direction` (one position) or an absolute
+ * `toOrder` (a drag-and-drop drop target).
+ *
+ * Both are the same operation: rotate the merged list between the source and
+ * target positions, then re-stamp the existing slot values onto the new
+ * sequence. A one-position move touches two slots and is therefore exactly the
+ * swap this function used to perform; a drag touches the whole span it crosses.
+ * Slot values are reused rather than recomputed, so a sparse ordering (2, 3, 7)
+ * stays sparse and no unrelated block's `block_order` changes.
  *
  * Mirrors the per-block edit model (upsertPublishedBlock with isDraft=true):
  * the swap is expressed as draft rows so the public site keeps serving the
@@ -437,7 +459,14 @@ export async function reorderSiteBlock({
   actorUserId,
   blockId,
   direction,
+  toOrder: requestedOrder,
 }: ReorderSiteBlockInput): Promise<ReorderSiteBlockResult> {
+  if ((direction === undefined) === (requestedOrder === undefined)) {
+    throw new ValidationError(
+      'Specify exactly one of direction or toOrder when moving a section.',
+    );
+  }
+
   const db = createUnscopedClient();
 
   return db.transaction(async (tx) => {
@@ -492,50 +521,74 @@ export async function reorderSiteBlock({
       throw new NotFoundError('Content section not found for this community');
     }
 
-    const neighborIndex = direction === 'up' ? index - 1 : index + 1;
-    if (neighborIndex < 0 || neighborIndex >= merged.length) {
-      throw new ValidationError(
-        `Cannot move this section ${direction}: it is already ${direction === 'up' ? 'first' : 'last'}.`,
-      );
+    let targetIndex: number;
+    if (direction !== undefined) {
+      targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= merged.length) {
+        throw new ValidationError(
+          `Cannot move this section ${direction}: it is already ${direction === 'up' ? 'first' : 'last'}.`,
+        );
+      }
+    } else {
+      targetIndex = merged.findIndex((b) => b.blockOrder === requestedOrder);
+      if (targetIndex === -1) {
+        // The slot is empty, holds the hero, or holds a tombstone. Rejecting
+        // rather than clamping keeps a stale client from silently moving a
+        // section somewhere the PM did not drop it.
+        throw new ValidationError(
+          'That position is no longer a content section. Reload the page and try again.',
+        );
+      }
     }
 
-    // Both indices are in-bounds: `index` was found above and `neighborIndex`
-    // passed the bounds check, so the elements are present.
+    // `index` was found above and `targetIndex` is bounds-checked, so both
+    // elements are present.
     const moving = merged[index]!;
-    const neighbor = merged[neighborIndex]!;
     const fromOrder = moving.blockOrder;
-    const toOrder = neighbor.blockOrder;
+    const destOrder = merged[targetIndex]!.blockOrder;
 
-    // Step 1: clear any existing draft rows at the two affected slots so the
-    // inserts below can't collide on the partial unique index.
+    // Dropping a section where it already sits is a no-op, not an error — the
+    // PM did nothing wrong, and writing a draft row here would manufacture a
+    // pending change out of a cancelled drag.
+    if (targetIndex === index) {
+      return { movedBlockId: blockId, fromOrder, toOrder: destOrder, unchanged: true };
+    }
+
+    // Rotate the span between source and target, then re-stamp the span's
+    // existing slot values onto the new sequence.
+    const rotated = [...merged];
+    rotated.splice(index, 1);
+    rotated.splice(targetIndex, 0, moving);
+
+    const low = Math.min(index, targetIndex);
+    const high = Math.max(index, targetIndex);
+    const affectedSlots = merged.slice(low, high + 1).map((b) => b.blockOrder);
+
+    // Step 1: clear existing draft rows at every affected slot so the inserts
+    // below can't collide on the partial unique index.
     await scoped.softDelete(
       siteBlocks,
       and(
-        inArray(siteBlocks.blockOrder, [fromOrder, toOrder]),
+        inArray(siteBlocks.blockOrder, affectedSlots),
         eq(siteBlocks.isDraft, true),
         isNull(siteBlocks.deletedAt),
       ),
     );
 
-    // Step 2: write the swapped draft rows. Each carries the winning row's
-    // content + type, so a published-only block becomes a draft copy at its
-    // new order.
-    await scoped.insert(siteBlocks, {
-      communityId,
-      blockType: moving.blockType,
-      blockOrder: toOrder,
-      isDraft: true,
-      publishedAt: null,
-      content: moving.content as Record<string, unknown>,
-    });
-    await scoped.insert(siteBlocks, {
-      communityId,
-      blockType: neighbor.blockType,
-      blockOrder: fromOrder,
-      isDraft: true,
-      publishedAt: null,
-      content: neighbor.content as Record<string, unknown>,
-    });
+    // Step 2: write a draft row per affected slot. Each carries the winning
+    // row's content + type, so a published-only block becomes a draft copy at
+    // its new order.
+    for (let position = low; position <= high; position += 1) {
+      const occupant = rotated[position]!;
+      await scoped.insert(siteBlocks, {
+        communityId,
+        blockType: occupant.blockType,
+        blockOrder: affectedSlots[position - low]!,
+        isDraft: true,
+        publishedAt: null,
+        content: occupant.content as Record<string, unknown>,
+      });
+    }
 
     // Step 3: audit row inside the same tx.
     await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
@@ -546,14 +599,14 @@ export async function reorderSiteBlock({
       resourceId: String(blockId),
       metadata: {
         reorder: true,
-        direction,
+        ...(direction !== undefined ? { direction } : { absolute: true }),
         fromOrder,
-        toOrder,
-        swappedWithBlockId: neighbor.id,
+        toOrder: destOrder,
+        affectedSlots,
       },
     });
 
-    return { movedBlockId: blockId, fromOrder, toOrder };
+    return { movedBlockId: blockId, fromOrder, toOrder: destOrder, unchanged: false };
   });
 }
 
