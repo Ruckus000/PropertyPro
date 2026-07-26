@@ -132,3 +132,8 @@ export * from './billing/paid-grace';
 export * from './billing/format-billing-date';
 export * from './site/custom-domain';
 export * from './site/portfolio-template-branding';
+
+// The site change model (website editor v3, Phase 4). Shared rather than
+// editor-local because publish-time validation has to run server-side too —
+// a gate that exists only in the client is a suggestion.
+export * from './site-diff/index';

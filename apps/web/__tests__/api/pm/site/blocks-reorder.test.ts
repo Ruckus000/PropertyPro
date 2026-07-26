@@ -60,14 +60,14 @@ describe('POST /api/v1/pm/site/blocks/reorder', () => {
     requireMembershipMock.mockResolvedValue({ role: 'property_manager', communityId: 42 });
     resolveEffectiveCommunityIdMock.mockImplementation((_req: unknown, id: number) => id);
     requirePlanFeatureMock.mockResolvedValue(undefined);
-    reorderSiteBlockMock.mockResolvedValue({ movedBlockId: 12, fromOrder: 2, toOrder: 3 });
+    reorderSiteBlockMock.mockResolvedValue({ movedBlockId: 12, fromOrder: 2, toOrder: 3, unchanged: false });
   });
 
   it('200s and forwards args, returning the move result in the canonical envelope', async () => {
     const res = await POST(makeRequest(VALID_BODY));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      data: { ok: true, movedBlockId: 12, fromOrder: 2, toOrder: 3 },
+      data: { ok: true, movedBlockId: 12, fromOrder: 2, toOrder: 3, unchanged: false },
     });
     expect(reorderSiteBlockMock).toHaveBeenCalledWith({
       communityId: 42,
@@ -78,7 +78,7 @@ describe('POST /api/v1/pm/site/blocks/reorder', () => {
   });
 
   it('200s for direction=up', async () => {
-    reorderSiteBlockMock.mockResolvedValueOnce({ movedBlockId: 13, fromOrder: 3, toOrder: 2 });
+    reorderSiteBlockMock.mockResolvedValueOnce({ movedBlockId: 13, fromOrder: 3, toOrder: 2, unchanged: false });
     const res = await POST(makeRequest({ communityId: 42, blockId: 13, direction: 'up' }));
     expect(res.status).toBe(200);
     expect(reorderSiteBlockMock).toHaveBeenCalledWith(expect.objectContaining({ blockId: 13, direction: 'up' }));
@@ -101,6 +101,73 @@ describe('POST /api/v1/pm/site/blocks/reorder', () => {
     reorderSiteBlockMock.mockRejectedValueOnce(new ValidationError('Cannot move this section up: it is already first.'));
     const res = await POST(makeRequest({ ...VALID_BODY, direction: 'up' }));
     expect(res.status).toBe(400);
+  });
+
+  // --- absolute moves (v3 Phase 2b-2 drag-and-drop) -----------------------
+
+  it('200s for an absolute toOrder and forwards it without a direction', async () => {
+    reorderSiteBlockMock.mockResolvedValueOnce({
+      movedBlockId: 12, fromOrder: 5, toOrder: 2, unchanged: false,
+    });
+    const res = await POST(makeRequest({ communityId: 42, blockId: 12, toOrder: 2 }));
+    expect(res.status).toBe(200);
+    // The service rejects "both supplied", so the route must omit the key
+    // entirely rather than pass an explicit undefined alongside it.
+    expect(reorderSiteBlockMock).toHaveBeenCalledWith({
+      communityId: 42,
+      actorUserId: 'user-1',
+      blockId: 12,
+      toOrder: 2,
+    });
+    expect(reorderSiteBlockMock.mock.calls[0]![0]).not.toHaveProperty('direction');
+  });
+
+  it('reports a no-op drop without pretending something moved', async () => {
+    reorderSiteBlockMock.mockResolvedValueOnce({
+      movedBlockId: 12, fromOrder: 3, toOrder: 3, unchanged: true,
+    });
+    const res = await POST(makeRequest({ communityId: 42, blockId: 12, toOrder: 3 }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      data: { ok: true, movedBlockId: 12, fromOrder: 3, toOrder: 3, unchanged: true },
+    });
+  });
+
+  it('400s when neither direction nor toOrder is supplied', async () => {
+    const res = await POST(makeRequest({ communityId: 42, blockId: 12 }));
+    expect(res.status).toBe(400);
+    expect(reorderSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s when BOTH direction and toOrder are supplied', async () => {
+    // Ambiguous input must be rejected, not silently resolved by precedence.
+    const res = await POST(
+      makeRequest({ communityId: 42, blockId: 12, direction: 'up', toOrder: 4 }),
+    );
+    expect(res.status).toBe(400);
+    expect(reorderSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s when toOrder targets the hero slot', async () => {
+    // Order 1 is the hero: not reorderable and never a legal drop target.
+    const res = await POST(makeRequest({ communityId: 42, blockId: 12, toOrder: 1 }));
+    expect(res.status).toBe(400);
+    expect(reorderSiteBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s when toOrder is out of range', async () => {
+    for (const toOrder of [0, -3, 100, 1.5]) {
+      reorderSiteBlockMock.mockClear();
+      const res = await POST(makeRequest({ communityId: 42, blockId: 12, toOrder }));
+      expect(res.status, `toOrder=${toOrder}`).toBe(400);
+      expect(reorderSiteBlockMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it('400s on an unknown body field', async () => {
+    const res = await POST(makeRequest({ ...VALID_BODY, sneaky: true }));
+    expect(res.status).toBe(400);
+    expect(reorderSiteBlockMock).not.toHaveBeenCalled();
   });
 
   it('400s when direction is not up/down', async () => {

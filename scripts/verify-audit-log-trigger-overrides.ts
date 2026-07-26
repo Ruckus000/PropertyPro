@@ -27,12 +27,30 @@ for (const file of approvedFiles) {
   }
 }
 
+/**
+ * Build output must never be scanned. Bundlers inline approved source (e.g.
+ * `packages/db/src/seed/seed-community.ts`) into compiled chunks, so a local
+ * `pnpm build` would otherwise surface artifacts such as
+ * `apps/admin/.next/server/app/api/admin/demos/route.js` as "unauthorized"
+ * overrides and fail `pnpm lint` for anyone who has built.
+ * Excluded: node_modules, .next, dist, build, .turbo, .vercel, coverage.
+ */
+const SKIP_DIR_NAMES = new Set([
+  'node_modules',
+  '.next',
+  'dist',
+  'build',
+  '.turbo',
+  '.vercel',
+  'coverage',
+]);
+
 function findSourceFiles(directory: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === 'dist' || path === resolve(repoRoot, 'packages/db/migrations')) {
+      if (SKIP_DIR_NAMES.has(entry.name) || path === resolve(repoRoot, 'packages/db/migrations')) {
         continue;
       }
       files.push(...findSourceFiles(path));

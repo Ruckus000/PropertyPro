@@ -13,6 +13,9 @@
 import { z } from 'zod';
 import { blockTypeSchema, type BlockType } from './types';
 import { blockSchemaRegistry } from './index';
+// Shared with the Phase 4 site validators so the admin-facing and PM-facing
+// messages for the same malformed block cannot drift apart.
+import { zodIssuesToFields } from '../site-diff/canonical';
 
 export const starterPackBlockSchema = z
   .object({
@@ -62,10 +65,7 @@ export type ValidateStarterPackBlocksResult =
 export function validateStarterPackBlocks(blocks: unknown): ValidateStarterPackBlocksResult {
   const structural = starterPackBlocksSchema.safeParse(blocks);
   if (!structural.success) {
-    return {
-      ok: false,
-      fields: structural.error.issues.map((i) => ({ field: i.path.join('.'), message: i.message })),
-    };
+    return { ok: false, fields: zodIssuesToFields(structural.error) };
   }
 
   const fields: StarterPackFieldError[] = [];
@@ -73,10 +73,7 @@ export function validateStarterPackBlocks(blocks: unknown): ValidateStarterPackB
     const schema = blockSchemaRegistry[block.blockType];
     const parsed = schema.safeParse(block.content);
     if (!parsed.success) {
-      parsed.error.issues.forEach((issue) => {
-        const suffix = issue.path.length > 0 ? `.${issue.path.join('.')}` : '';
-        fields.push({ field: `${i}.content${suffix}`, message: issue.message });
-      });
+      fields.push(...zodIssuesToFields(parsed.error, `${i}.content`));
     }
   });
   if (fields.length > 0) return { ok: false, fields };

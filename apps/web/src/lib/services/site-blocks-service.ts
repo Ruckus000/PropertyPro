@@ -23,13 +23,22 @@
 import {
   complianceAuditLog,
   createScopedClient,
+  paginate,
   siteBlocks,
+  sitePublishSnapshots,
   type AuditAction,
+  type SitePublishSnapshotPayload,
 } from '@propertypro/db';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies management-tier (property_manager / root_manager) + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { TOMBSTONE_BLOCK_TYPE, type HeroBlockContent } from '@propertypro/shared';
+import {
+  TOMBSTONE_BLOCK_TYPE,
+  publishBlocked,
+  siteIssues,
+  type HeroBlockContent,
+  type SiteSnapshot,
+} from '@propertypro/shared';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 
 /**
@@ -37,6 +46,8 @@ import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors'
  * (spec §2.7). Reorder operates only on content blocks, so reads start here.
  */
 const MIN_CONTENT_BLOCK_ORDER = 2;
+/** Slot 1 is the hero: pinned, not reorderable, not removable. */
+const HERO_BLOCK_ORDER = 1;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -73,6 +84,106 @@ async function insertAuditEventInTransaction(
     resourceType: params.resourceType,
     resourceId: params.resourceId,
     metadata: params.metadata ?? null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Publish history (website editor v3, Phase 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many publishes per community keep their `snapshot` payload. Older log
+ * rows survive with `snapshot = NULL` — see `pruneSitePublishSnapshots`.
+ */
+export const SITE_PUBLISH_SNAPSHOT_KEEP = 20;
+
+/**
+ * Narrowed transaction shape for the history-row insert. Same pattern (and
+ * same reason) as `AuditInsertExecutor`: the helper needs one table's
+ * `insert(...).values(...)`, not the whole drizzle transaction surface.
+ */
+type SnapshotInsertExecutor = {
+  insert(table: typeof sitePublishSnapshots): {
+    values(payload: Record<string, unknown>): Promise<unknown>;
+  };
+};
+
+/** `announcements` → `Announcements`, `faq` → `Faq`. Label text, not an id. */
+function humanizeBlockType(blockType: string): string {
+  return blockType
+    .split(/[_-]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+/**
+ * Human labels for what a publish carried, derived from the same pre-publish
+ * row set the validation step already read (no extra query).
+ *
+ * These are persisted on the history row precisely so the list endpoint can
+ * render without touching `snapshot` — which it must never return, and which
+ * retention nulls out anyway.
+ */
+export function summarizePublishChanges(
+  liveRows: readonly { blockOrder: number; blockType: string; isDraft: boolean }[],
+  draftOrders: readonly number[],
+): string[] {
+  return [...draftOrders]
+    .sort((a, b) => a - b)
+    .map((order) => {
+      const draft = liveRows.find((r) => r.isDraft && r.blockOrder === order);
+      const published = liveRows.find((r) => !r.isDraft && r.blockOrder === order);
+      if (draft?.blockType === TOMBSTONE_BLOCK_TYPE) {
+        return `Removed ${humanizeBlockType(published?.blockType ?? 'section')}`;
+      }
+      if (published) {
+        return `Updated ${humanizeBlockType(draft?.blockType ?? published.blockType)}`;
+      }
+      return `Added ${humanizeBlockType(draft?.blockType ?? 'section')}`;
+    });
+}
+
+export interface CaptureSnapshotInput {
+  communityId: number;
+  actorUserId: string;
+  /**
+   * The SAME `published_at` the publish stamped across every promoted row —
+   * passed in, never regenerated. A second `new Date()` here would produce a
+   * history entry whose timestamp does not correspond to any site state, and
+   * `published_at` doubles as the optimistic-concurrency token.
+   */
+  publishedAt: Date;
+  /** The post-publish published block set. Tombstones are already excluded. */
+  blocks: SitePublishSnapshotPayload['blocks'];
+  /** Human labels for the history list — see `summarizePublishChanges`. */
+  changeLabels: string[];
+}
+
+/**
+ * Writes one publish-history row.
+ *
+ * MUST be called inside `publishCommunitySite`'s transaction, under the same
+ * `SELECT ... FOR UPDATE` community lock and AFTER the promote step. Both
+ * halves matter: inside the transaction so a rolled-back publish leaves no
+ * history claiming something shipped, and after the promote so the row records
+ * what was actually published rather than what was merely intended.
+ *
+ * AUTHZ: no gate of its own — it is an internal step of an already-authorized
+ * publish.
+ */
+export async function captureSnapshot(
+  tx: SnapshotInsertExecutor,
+  { communityId, actorUserId, publishedAt, blocks, changeLabels }: CaptureSnapshotInput,
+): Promise<void> {
+  const payload: SitePublishSnapshotPayload = { blocks };
+  await tx.insert(sitePublishSnapshots).values({
+    communityId,
+    publishedAt,
+    actorUserId,
+    changeCount: changeLabels.length,
+    changeLabels,
+    snapshot: payload,
   });
 }
 
@@ -292,6 +403,62 @@ export async function publishCommunitySite({
       throw new NothingToPublishRollback();
     }
 
+    // Step 3b: validate what this publish would make PUBLIC, and refuse if it
+    // is invalid.
+    //
+    // This is not a duplicate of the editor's review sheet — it is the actual
+    // gate. The sheet runs the same shared validator, but a validator that
+    // lives only in the client is a suggestion: the publish route is reachable
+    // by any authorized PM with an HTTP client, and the legacy editor writes
+    // through the same endpoints. So the check runs here, inside the
+    // transaction and before any mutation, and a failure rolls the whole thing
+    // back rather than half-publishing.
+    //
+    // The snapshot is the POST-publish state, not the draft layer: draft wins
+    // per slot, tombstoned slots disappear, and published rows at slots with no
+    // draft survive. That is exactly what steps 4-6 below produce, so this
+    // validates the outcome rather than the intent.
+    const liveRows = await tx
+      .select({
+        blockOrder: siteBlocks.blockOrder,
+        blockType: siteBlocks.blockType,
+        content: siteBlocks.content,
+        isDraft: siteBlocks.isDraft,
+      })
+      .from(siteBlocks)
+      .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
+
+    const winnerByOrder = new Map<number, (typeof liveRows)[number]>();
+    for (const row of liveRows) {
+      const existing = winnerByOrder.get(row.blockOrder);
+      if (!existing || (row.isDraft && !existing.isDraft)) {
+        winnerByOrder.set(row.blockOrder, row);
+      }
+    }
+    const winners = [...winnerByOrder.values()].filter(
+      (r) => r.blockType !== TOMBSTONE_BLOCK_TYPE,
+    );
+    const heroRow = winners.find((r) => r.blockOrder === HERO_BLOCK_ORDER);
+    const snapshot: SiteSnapshot = {
+      hero: heroRow
+        ? { slot: heroRow.blockOrder, blockType: heroRow.blockType, content: heroRow.content }
+        : null,
+      sections: winners
+        .filter((r) => r.blockOrder !== HERO_BLOCK_ORDER)
+        .map((r) => ({ slot: r.blockOrder, blockType: r.blockType, content: r.content })),
+    };
+
+    const issues = siteIssues(snapshot);
+    if (publishBlocked(issues)) {
+      // Only errors are surfaced; warnings are the sheet's business, not a
+      // reason to refuse a publish.
+      throw new ValidationError('This site cannot be published yet.', {
+        fields: issues
+          .filter((i) => i.severity === 'error')
+          .map((i) => ({ field: i.field, message: i.message })),
+      });
+    }
+
     // Step 4: soft-delete the published rows AT the slots being republished
     // only — published blocks at slots without a draft survive untouched.
     // Returns the count of rows affected so we can surface it in the audit
@@ -343,6 +510,27 @@ export async function publishCommunitySite({
       .returning({ id: siteBlocks.id });
     const promotedCount = promotedResult.length;
 
+    // Step 5b (Phase 6): record the publish in the history log — same tx, same
+    // community lock, AFTER the promote, so the row describes what actually
+    // shipped and a rollback takes the history entry with it.
+    //
+    // `winners` is already the post-publish published set (draft-wins per slot,
+    // tombstoned slots dropped), which is exactly what steps 4-5 just made
+    // live, so no re-read is needed. `publishedAt` is the promote's own stamp.
+    await captureSnapshot(tx as unknown as SnapshotInsertExecutor, {
+      communityId,
+      actorUserId,
+      publishedAt,
+      blocks: [...winners]
+        .sort((a, b) => a.blockOrder - b.blockOrder)
+        .map((w) => ({
+          blockOrder: w.blockOrder,
+          blockType: w.blockType,
+          content: w.content,
+        })),
+      changeLabels: summarizePublishChanges(liveRows, draftOrders),
+    });
+
     // Step 6: audit row inside the same tx so the publish has atomic
     // provenance.
     await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
@@ -393,15 +581,29 @@ export interface ReorderSiteBlockInput {
    * (block_order >= 2); the hero is not reorderable.
    */
   blockId: number;
-  direction: 'up' | 'down';
+  /**
+   * Relative move by one position (the ↑/↓ controls and the keyboard grip).
+   * Exactly one of `direction` / `toOrder` must be supplied.
+   */
+  direction?: 'up' | 'down';
+  /**
+   * Absolute move (drag-and-drop): the `block_order` slot the moved block
+   * should end up occupying. Everything between its old and new position
+   * shifts by one to close the gap — this is a rotation, not a swap, which is
+   * why a drag cannot be expressed as a sequence of `direction` calls without
+   * N round-trips and a partial-failure window.
+   */
+  toOrder?: number;
 }
 
 export interface ReorderSiteBlockResult {
   movedBlockId: number;
-  /** The moved block's order before the swap. */
+  /** The moved block's order before the move. */
   fromOrder: number;
-  /** The moved block's order after the swap (the neighbor's old order). */
+  /** The moved block's order after the move. */
   toOrder: number;
+  /** True when the requested move was a no-op (dropped where it started). */
+  unchanged: boolean;
 }
 
 interface MergedContentBlock {
@@ -413,8 +615,16 @@ interface MergedContentBlock {
 }
 
 /**
- * Moves a content block one position up or down by swapping its `block_order`
- * with the adjacent content block, writing the result to the DRAFT layer.
+ * Moves a content block to a new position, writing the result to the DRAFT
+ * layer. Accepts either a relative `direction` (one position) or an absolute
+ * `toOrder` (a drag-and-drop drop target).
+ *
+ * Both are the same operation: rotate the merged list between the source and
+ * target positions, then re-stamp the existing slot values onto the new
+ * sequence. A one-position move touches two slots and is therefore exactly the
+ * swap this function used to perform; a drag touches the whole span it crosses.
+ * Slot values are reused rather than recomputed, so a sparse ordering (2, 3, 7)
+ * stays sparse and no unrelated block's `block_order` changes.
  *
  * Mirrors the per-block edit model (upsertPublishedBlock with isDraft=true):
  * the swap is expressed as draft rows so the public site keeps serving the
@@ -437,7 +647,14 @@ export async function reorderSiteBlock({
   actorUserId,
   blockId,
   direction,
+  toOrder: requestedOrder,
 }: ReorderSiteBlockInput): Promise<ReorderSiteBlockResult> {
+  if ((direction === undefined) === (requestedOrder === undefined)) {
+    throw new ValidationError(
+      'Specify exactly one of direction or toOrder when moving a section.',
+    );
+  }
+
   const db = createUnscopedClient();
 
   return db.transaction(async (tx) => {
@@ -492,50 +709,74 @@ export async function reorderSiteBlock({
       throw new NotFoundError('Content section not found for this community');
     }
 
-    const neighborIndex = direction === 'up' ? index - 1 : index + 1;
-    if (neighborIndex < 0 || neighborIndex >= merged.length) {
-      throw new ValidationError(
-        `Cannot move this section ${direction}: it is already ${direction === 'up' ? 'first' : 'last'}.`,
-      );
+    let targetIndex: number;
+    if (direction !== undefined) {
+      targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= merged.length) {
+        throw new ValidationError(
+          `Cannot move this section ${direction}: it is already ${direction === 'up' ? 'first' : 'last'}.`,
+        );
+      }
+    } else {
+      targetIndex = merged.findIndex((b) => b.blockOrder === requestedOrder);
+      if (targetIndex === -1) {
+        // The slot is empty, holds the hero, or holds a tombstone. Rejecting
+        // rather than clamping keeps a stale client from silently moving a
+        // section somewhere the PM did not drop it.
+        throw new ValidationError(
+          'That position is no longer a content section. Reload the page and try again.',
+        );
+      }
     }
 
-    // Both indices are in-bounds: `index` was found above and `neighborIndex`
-    // passed the bounds check, so the elements are present.
+    // `index` was found above and `targetIndex` is bounds-checked, so both
+    // elements are present.
     const moving = merged[index]!;
-    const neighbor = merged[neighborIndex]!;
     const fromOrder = moving.blockOrder;
-    const toOrder = neighbor.blockOrder;
+    const destOrder = merged[targetIndex]!.blockOrder;
 
-    // Step 1: clear any existing draft rows at the two affected slots so the
-    // inserts below can't collide on the partial unique index.
+    // Dropping a section where it already sits is a no-op, not an error — the
+    // PM did nothing wrong, and writing a draft row here would manufacture a
+    // pending change out of a cancelled drag.
+    if (targetIndex === index) {
+      return { movedBlockId: blockId, fromOrder, toOrder: destOrder, unchanged: true };
+    }
+
+    // Rotate the span between source and target, then re-stamp the span's
+    // existing slot values onto the new sequence.
+    const rotated = [...merged];
+    rotated.splice(index, 1);
+    rotated.splice(targetIndex, 0, moving);
+
+    const low = Math.min(index, targetIndex);
+    const high = Math.max(index, targetIndex);
+    const affectedSlots = merged.slice(low, high + 1).map((b) => b.blockOrder);
+
+    // Step 1: clear existing draft rows at every affected slot so the inserts
+    // below can't collide on the partial unique index.
     await scoped.softDelete(
       siteBlocks,
       and(
-        inArray(siteBlocks.blockOrder, [fromOrder, toOrder]),
+        inArray(siteBlocks.blockOrder, affectedSlots),
         eq(siteBlocks.isDraft, true),
         isNull(siteBlocks.deletedAt),
       ),
     );
 
-    // Step 2: write the swapped draft rows. Each carries the winning row's
-    // content + type, so a published-only block becomes a draft copy at its
-    // new order.
-    await scoped.insert(siteBlocks, {
-      communityId,
-      blockType: moving.blockType,
-      blockOrder: toOrder,
-      isDraft: true,
-      publishedAt: null,
-      content: moving.content as Record<string, unknown>,
-    });
-    await scoped.insert(siteBlocks, {
-      communityId,
-      blockType: neighbor.blockType,
-      blockOrder: fromOrder,
-      isDraft: true,
-      publishedAt: null,
-      content: neighbor.content as Record<string, unknown>,
-    });
+    // Step 2: write a draft row per affected slot. Each carries the winning
+    // row's content + type, so a published-only block becomes a draft copy at
+    // its new order.
+    for (let position = low; position <= high; position += 1) {
+      const occupant = rotated[position]!;
+      await scoped.insert(siteBlocks, {
+        communityId,
+        blockType: occupant.blockType,
+        blockOrder: affectedSlots[position - low]!,
+        isDraft: true,
+        publishedAt: null,
+        content: occupant.content as Record<string, unknown>,
+      });
+    }
 
     // Step 3: audit row inside the same tx.
     await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
@@ -546,14 +787,14 @@ export async function reorderSiteBlock({
       resourceId: String(blockId),
       metadata: {
         reorder: true,
-        direction,
+        ...(direction !== undefined ? { direction } : { absolute: true }),
         fromOrder,
-        toOrder,
-        swappedWithBlockId: neighbor.id,
+        toOrder: destOrder,
+        affectedSlots,
       },
     });
 
-    return { movedBlockId: blockId, fromOrder, toOrder };
+    return { movedBlockId: blockId, fromOrder, toOrder: destOrder, unchanged: false };
   });
 }
 
@@ -746,6 +987,354 @@ export async function discardSiteDrafts({
 
     return { discardedCount };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Publish-history list (website editor v3, Phase 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * One publish-history entry as the API exposes it.
+ *
+ * There is deliberately NO `snapshot` member. The payload is read here (the
+ * scoped select returns every column) and converted to the single bit callers
+ * need — `restorable` — so the block content of a past publish cannot reach a
+ * client through this path even if a future handler spreads the row.
+ */
+export interface SitePublishHistoryEntry {
+  id: number;
+  publishedAt: Date;
+  actorUserId: string | null;
+  changeCount: number;
+  changeLabels: string[];
+  /** False once retention has cleared the payload; the log row remains. */
+  restorable: boolean;
+}
+
+export interface PaginateSitePublishHistoryInput {
+  communityId: number;
+  cursor?: string | undefined;
+  pageSize?: number | undefined;
+}
+
+export interface PaginatedSitePublishHistory {
+  data: SitePublishHistoryEntry[];
+  pagination: { nextCursor: string | null; hasMore: boolean; pageSize: number };
+}
+
+/**
+ * A page of the community's publish log, newest first.
+ *
+ * Ordering is `id desc`, which for an append-only log is equivalent to
+ * `published_at desc` — the id-keyed `paginate()` helper is therefore the right
+ * tool rather than a hard-tier sort-preserving cursor (see ADR-003).
+ *
+ * AUTHZ: caller (route layer) verifies management-tier membership +
+ * hasSiteEditor + admin-read entitlement. Tenant isolation is the scoped
+ * client's — the query cannot see another community's log.
+ */
+export async function paginateSitePublishHistory({
+  communityId,
+  cursor,
+  pageSize,
+}: PaginateSitePublishHistoryInput): Promise<PaginatedSitePublishHistory> {
+  const scoped = createScopedClient(communityId);
+  const result = await paginate<{
+    id: number;
+    publishedAt: Date;
+    actorUserId: string | null;
+    changeCount: number | null;
+    changeLabels: string[] | null;
+    snapshot: SitePublishSnapshotPayload | null;
+    [key: string]: unknown;
+  }>(scoped, sitePublishSnapshots, { cursor, pageSize });
+
+  return {
+    data: result.data.map((row) => ({
+      id: row.id,
+      publishedAt: row.publishedAt,
+      actorUserId: row.actorUserId ?? null,
+      changeCount: row.changeCount ?? 0,
+      changeLabels: row.changeLabels ?? [],
+      // The ONLY thing the stored payload contributes to the response.
+      restorable: row.snapshot !== null && row.snapshot !== undefined,
+    })),
+    pagination: result.pagination,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Revert to a past publish (website editor v3, Phase 6)
+// ---------------------------------------------------------------------------
+
+export interface RevertToSnapshotInput {
+  communityId: number;
+  actorUserId: string;
+  /**
+   * The `site_publish_snapshots.id` to restore. NEVER trusted on its own — the
+   * lookup is filtered by `communityId` as well, so an id belonging to another
+   * association simply does not resolve.
+   */
+  snapshotId: number;
+}
+
+export interface RevertToSnapshotResult {
+  snapshotId: number;
+  /** The `published_at` of the version that was restored (not a new stamp). */
+  restoredPublishedAt: Date;
+  /** Draft rows written from the snapshot payload. */
+  restoredCount: number;
+  /** Tombstone drafts staged for sections the snapshot did not contain. */
+  stagedRemovalCount: number;
+  /** Pending drafts cleared to make room for the restore. */
+  clearedDraftCount: number;
+}
+
+/**
+ * Restores a past publish into the DRAFT layer. The PM then reviews and clicks
+ * Publish to make it live again.
+ *
+ * WHY DRAFT AND NOT STRAIGHT TO PUBLISHED. Both are defensible; draft wins on
+ * three counts. (1) It is how every other editor mutation in this file behaves
+ * — edit, reorder, and remove all stage into the draft layer, so a revert that
+ * bypassed it would be the one action in the editor with no review step. (2) A
+ * revert is a recovery action taken under stress, frequently by someone who is
+ * not certain which version they want; publishing it immediately makes a
+ * mis-click a second public-site incident on top of the first, on a statutory
+ * page. (3) The publish path already carries the server-side validation gate
+ * (step 3b) — routing the restore through it means an old snapshot that no
+ * longer satisfies the current block schemas is caught at publish rather than
+ * silently re-published. The cost is one extra click; the PM keeps the undo.
+ *
+ * Atomic, under the same community `FOR UPDATE` lock as publish/reorder/discard,
+ * so a revert racing a publish sees a settled draft layer rather than half of one.
+ *
+ * PARTIAL-UNIQUE-INDEX SAFETY. `site_blocks_community_order_draft_partial` is
+ * keyed on `(community_id, block_order, is_draft) WHERE deleted_at IS NULL`, so
+ * every live draft row is soft-deleted BEFORE any insert runs — the same
+ * delete-then-insert ordering `reorderSiteBlock` and `upsertPublishedBlock`
+ * depend on. Reversing it collides on the index and surfaces as an opaque 500.
+ *
+ * TOMBSTONES ARE NOT RESURRECTED. Tombstone entries are filtered out of the
+ * snapshot payload before the restore (a tombstone is a staged deletion, not
+ * content — and `captureSnapshot` never records one, so this is belt-and-braces
+ * against a hand-written or legacy payload). Separately, published slots the
+ * snapshot does NOT contain get a FRESH tombstone draft: reverting to a version
+ * that predates a section has to stage that section's removal, or the "revert"
+ * would leave it live.
+ *
+ * AUTHZ: caller (route layer) verifies management-tier (property_manager /
+ * root_manager) membership + hasSiteEditor.
+ */
+export async function revertToSnapshot({
+  communityId,
+  actorUserId,
+  snapshotId,
+}: RevertToSnapshotInput): Promise<RevertToSnapshotResult> {
+  const db = createUnscopedClient();
+
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
+    const scoped = createScopedClient(
+      communityId,
+      tx as unknown as Parameters<typeof createScopedClient>[1],
+    );
+
+    // IDOR GUARD. `communityId` is part of the predicate, not a post-hoc
+    // check on the fetched row: a snapshot belonging to community A can never
+    // be loaded — let alone restored — while acting on community B. The route
+    // layer's membership check establishes WHICH community; this pins the row
+    // to it.
+    const snapshotRows = await tx
+      .select({
+        id: sitePublishSnapshots.id,
+        publishedAt: sitePublishSnapshots.publishedAt,
+        snapshot: sitePublishSnapshots.snapshot,
+      })
+      .from(sitePublishSnapshots)
+      .where(
+        and(
+          eq(sitePublishSnapshots.id, snapshotId),
+          eq(sitePublishSnapshots.communityId, communityId),
+          isNull(sitePublishSnapshots.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    const snapshotRow = snapshotRows[0];
+    if (!snapshotRow) {
+      throw new NotFoundError('That published version was not found for this community');
+    }
+
+    // Retention nulls `snapshot` while keeping the log row, so a perfectly
+    // real history entry can be un-restorable. That is a 400 with an
+    // explanation, never a 500 on a null dereference.
+    if (!snapshotRow.snapshot) {
+      throw new ValidationError(
+        'This version is too old to restore — its saved content has been cleared. The entry remains in the publish history.',
+      );
+    }
+
+    // Dedupe defensively by slot (first wins) and drop tombstones: two rows at
+    // one block_order would collide on the partial unique index below.
+    const bySlot = new Map<number, SitePublishSnapshotPayload['blocks'][number]>();
+    for (const block of snapshotRow.snapshot.blocks ?? []) {
+      if (block.blockType === TOMBSTONE_BLOCK_TYPE) continue;
+      if (!bySlot.has(block.blockOrder)) bySlot.set(block.blockOrder, block);
+    }
+    const restoreBlocks = [...bySlot.values()].sort((a, b) => a.blockOrder - b.blockOrder);
+
+    // Current live state: how many drafts we are about to clear, and which
+    // slots are published (so sections missing from the snapshot get staged
+    // for removal rather than silently surviving the "revert").
+    const liveRows = await tx
+      .select({
+        blockOrder: siteBlocks.blockOrder,
+        isDraft: siteBlocks.isDraft,
+      })
+      .from(siteBlocks)
+      .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
+
+    const clearedDraftCount = liveRows.filter((r) => r.isDraft).length;
+    const restoredSlots = new Set(restoreBlocks.map((b) => b.blockOrder));
+    const removalSlots = [
+      ...new Set(liveRows.filter((r) => !r.isDraft).map((r) => r.blockOrder)),
+    ]
+      // The hero is required by every layout and cannot be removed
+      // (removeSiteBlock rejects it), so it is never staged for deletion.
+      .filter((order) => order !== HERO_BLOCK_ORDER && !restoredSlots.has(order))
+      .sort((a, b) => a - b);
+
+    // STEP 1 — clear the whole live draft layer (edits, staged reorders, and
+    // staged deletions alike). This MUST precede every insert below: it is
+    // what takes the existing rows out of the partial unique index.
+    await scoped.softDelete(
+      siteBlocks,
+      and(eq(siteBlocks.isDraft, true), isNull(siteBlocks.deletedAt)),
+    );
+
+    // STEP 2 — write the snapshot back as drafts.
+    for (const block of restoreBlocks) {
+      await scoped.insert(siteBlocks, {
+        communityId,
+        blockType: block.blockType,
+        blockOrder: block.blockOrder,
+        isDraft: true,
+        publishedAt: null,
+        content: (block.content ?? {}) as Record<string, unknown>,
+      });
+    }
+
+    // STEP 3 — stage removal of published sections the snapshot predates.
+    for (const order of removalSlots) {
+      await scoped.insert(siteBlocks, {
+        communityId,
+        blockType: TOMBSTONE_BLOCK_TYPE,
+        blockOrder: order,
+        isDraft: true,
+        publishedAt: null,
+        content: {},
+      });
+    }
+
+    await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
+      userId: actorUserId,
+      communityId,
+      action: 'update',
+      resourceType: 'community_site',
+      resourceId: String(communityId),
+      metadata: {
+        revert: true,
+        snapshotId,
+        restoredPublishedAt: snapshotRow.publishedAt.toISOString(),
+        restoredCount: restoreBlocks.length,
+        stagedRemovalCount: removalSlots.length,
+        clearedDraftCount,
+      },
+    });
+
+    return {
+      snapshotId,
+      restoredPublishedAt: snapshotRow.publishedAt,
+      restoredCount: restoreBlocks.length,
+      stagedRemovalCount: removalSlots.length,
+      clearedDraftCount,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Publish-history retention (website editor v3, Phase 6 — decision 12)
+// ---------------------------------------------------------------------------
+
+/**
+ * Nulls the `snapshot` payload on every publish-history row beyond the most
+ * recent `keepPerCommunity` publishes per community, and KEEPS THE LOG ROW.
+ *
+ * The row is the point: on a statutory site "what did the public page show in
+ * March, and who published it" stays answerable indefinitely, while the bulky
+ * block payload — the only part with real storage cost — ages out. Revert is
+ * therefore offered only where `snapshot IS NOT NULL`; `revertToSnapshot`
+ * refuses a pruned row with a 400 rather than a null dereference, and the list
+ * endpoint surfaces `restorable` so the UI can say so before the click.
+ *
+ * Cross-tenant by design — this is the daily-cron shape, modelled on
+ * `cleanupSoftDeletedSiteBlocks`. It is exported but NOT yet wired into the
+ * lifecycle cron.
+ *
+ * The rank-and-prune is done in two statements rather than one window-function
+ * UPDATE deliberately: the read is already bounded (it only scans rows that
+ * still HAVE a payload, i.e. roughly `keepPerCommunity` per community plus the
+ * new arrivals since the last sweep), and keeping it in the query builder means
+ * it stays inside the same tenant-column conventions as the rest of the file
+ * instead of a raw-SQL CTE whose result shape varies by driver.
+ *
+ * AUTHZ: caller (the cron route) verifies the cron secret. Uses
+ * `createUnscopedClient` (already allowlisted for this file) because the sweep
+ * is intentionally cross-community.
+ */
+export async function pruneSitePublishSnapshots(
+  keepPerCommunity: number = SITE_PUBLISH_SNAPSHOT_KEEP,
+): Promise<{ pruned: number }> {
+  const db = createUnscopedClient();
+
+  const rows = await db
+    .select({
+      id: sitePublishSnapshots.id,
+      communityId: sitePublishSnapshots.communityId,
+    })
+    .from(sitePublishSnapshots)
+    .where(
+      and(
+        isNotNull(sitePublishSnapshots.snapshot),
+        isNull(sitePublishSnapshots.deletedAt),
+      ),
+    )
+    // Newest publish first; `id` breaks ties so two publishes sharing a
+    // timestamp still rank deterministically.
+    .orderBy(desc(sitePublishSnapshots.publishedAt), desc(sitePublishSnapshots.id));
+
+  const seenPerCommunity = new Map<number, number>();
+  const staleIds: number[] = [];
+  for (const row of rows) {
+    const seen = (seenPerCommunity.get(row.communityId) ?? 0) + 1;
+    seenPerCommunity.set(row.communityId, seen);
+    if (seen > keepPerCommunity) staleIds.push(row.id);
+  }
+
+  if (staleIds.length === 0) return { pruned: 0 };
+
+  // UPDATE, not DELETE — the log row outlives its payload.
+  const pruned = await db
+    .update(sitePublishSnapshots)
+    .set({ snapshot: null, updatedAt: new Date() })
+    .where(inArray(sitePublishSnapshots.id, staleIds))
+    .returning({ id: sitePublishSnapshots.id });
+
+  return { pruned: pruned.length };
 }
 
 // ---------------------------------------------------------------------------

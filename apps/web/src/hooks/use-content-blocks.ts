@@ -60,6 +60,8 @@ async function readError(res: Response): Promise<string> {
 
 interface BlocksPayload {
   blocks: SiteBlockSummary[];
+  /** The last published state — no drafts, no tombstones. Diffed against `blocks`. */
+  publishedBlocks: SiteBlockSummary[];
   /** Authoritative publish token — max published_at over all published rows. */
   latestPublishedAt: string | null;
 }
@@ -68,7 +70,23 @@ async function fetchBlocks(communityId: number, signal?: AbortSignal): Promise<B
   const res = await fetch(`/api/v1/pm/site/blocks?communityId=${communityId}`, { signal });
   if (!res.ok) throw new Error(await readError(res));
   const body = (await res.json()) as { data: BlocksPayload };
-  return { blocks: body.data.blocks, latestPublishedAt: body.data.latestPublishedAt ?? null };
+  return {
+    blocks: body.data.blocks,
+    publishedBlocks: body.data.publishedBlocks ?? [],
+    latestPublishedAt: body.data.latestPublishedAt ?? null,
+  };
+}
+
+/**
+ * The last published state, for the change model. Shares the blocks query key,
+ * so it adds no request.
+ */
+export function usePublishedBlocks(communityId: number) {
+  return useQuery<BlocksPayload, Error, SiteBlockSummary[]>({
+    queryKey: blocksKey(communityId),
+    queryFn: ({ signal }) => fetchBlocks(communityId, signal),
+    select: (payload) => payload.publishedBlocks,
+  });
 }
 
 export function useContentBlocks(communityId: number) {
@@ -187,72 +205,104 @@ export function useDiscardDrafts(communityId: number) {
  */
 const MIN_CONTENT_BLOCK_ORDER = 2;
 
-export interface ReorderBlockInput {
+export type ReorderBlockInput = {
   /** The winning (merged draft-wins) content-block row id to move. */
   blockId: number;
-  direction: 'up' | 'down';
-}
+} & (
+  | { direction: 'up' | 'down'; toOrder?: never }
+  /** Absolute drop target (drag-and-drop): the block_order slot to land on. */
+  | { toOrder: number; direction?: never }
+);
 
 /**
- * Pure optimistic-swap helper: returns a new block list with the moved block's
- * `blockOrder` swapped with its adjacent content block, order-sorted. The hero
- * (order 1) is excluded from the swap. Returns the input unchanged when the
- * block isn't found or has no neighbor in the requested direction.
+ * Pure optimistic-move helper: returns a new block list with the moved block
+ * rotated into its new position and the span it crossed shifted to close the
+ * gap, order-sorted.
+ *
+ * Mirrors `reorderSiteBlock` exactly — slot values are re-stamped onto the
+ * rotated sequence rather than recomputed, so a sparse ordering stays sparse
+ * and the optimistic result matches what the server will return. A one-position
+ * `direction` move is the two-element case and reduces to a plain swap.
+ *
+ * Returns the input unchanged when the block isn't found, has no neighbor in
+ * the requested direction, or was dropped where it already sat.
  */
-function swapAdjacent(
+function moveWithin(
   blocks: SiteBlockSummary[],
-  blockId: number,
-  direction: 'up' | 'down',
+  input: ReorderBlockInput,
 ): SiteBlockSummary[] {
   const content = [...blocks]
     // Exclude tombstones (staged deletions) — they're hidden from the editor
     // list and the server's reorderSiteBlock skips them too, so the optimistic
-    // swap must not treat one as a neighbor (else the visible order desyncs).
+    // move must not treat one as a neighbor (else the visible order desyncs).
     .filter((b) => b.blockOrder >= MIN_CONTENT_BLOCK_ORDER && b.blockType !== TOMBSTONE_BLOCK_TYPE)
     .sort((a, b) => a.blockOrder - b.blockOrder);
-  const index = content.findIndex((b) => b.id === blockId);
+  const index = content.findIndex((b) => b.id === input.blockId);
   if (index === -1) return blocks;
-  const neighborIndex = direction === 'up' ? index - 1 : index + 1;
-  if (neighborIndex < 0 || neighborIndex >= content.length) return blocks;
 
-  const moving = content[index]!;
-  const neighbor = content[neighborIndex]!;
+  const targetIndex =
+    input.direction !== undefined
+      ? input.direction === 'up'
+        ? index - 1
+        : index + 1
+      : content.findIndex((b) => b.blockOrder === input.toOrder);
+  if (targetIndex < 0 || targetIndex >= content.length || targetIndex === index) {
+    return blocks;
+  }
+
+  const rotated = [...content];
+  const [moving] = rotated.splice(index, 1);
+  rotated.splice(targetIndex, 0, moving!);
+
+  // Re-stamp the original slot sequence onto the rotated occupants.
+  const slots = content.map((b) => b.blockOrder);
+  const nextOrderById = new Map<number, number>();
+  rotated.forEach((block, position) => nextOrderById.set(block.id, slots[position]!));
+
   return blocks
     .map((b) => {
-      if (b.id === moving.id) return { ...b, blockOrder: neighbor.blockOrder };
-      if (b.id === neighbor.id) return { ...b, blockOrder: moving.blockOrder };
-      return b;
+      const nextOrder = nextOrderById.get(b.id);
+      return nextOrder === undefined ? b : { ...b, blockOrder: nextOrder };
     })
     .sort((a, b) => a.blockOrder - b.blockOrder);
 }
 
 /**
- * Moves a content block up/down one position via
- * POST /api/v1/pm/site/blocks/reorder. Optimistically swaps the two blocks in
- * the editor cache so the list reorders instantly, rolls back on error, and
- * invalidates on settle so the canonical server order (and any new draft row
- * ids) replace the optimistic state.
+ * Moves a content block via POST /api/v1/pm/site/blocks/reorder — one position
+ * (`direction`) or to an absolute slot (`toOrder`, drag-and-drop).
+ * Optimistically rotates the affected span in the editor cache so the list
+ * reorders instantly, rolls back on error, and invalidates on settle so the
+ * canonical server order (and any new draft row ids) replace the optimistic
+ * state.
  */
 export function useReorderBlocks(communityId: number) {
   const qc = useQueryClient();
   return useMutation<void, Error, ReorderBlockInput, { previous?: BlocksPayload }>({
-    mutationFn: async ({ blockId, direction }) => {
+    mutationFn: async (input) => {
       const res = await fetch('/api/v1/pm/site/blocks/reorder', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, blockId, direction }),
+        // Send exactly one of direction/toOrder — the contract is `.strict()`
+        // with a refine, so an explicit `undefined` sibling would fail it.
+        body: JSON.stringify({
+          communityId,
+          blockId: input.blockId,
+          ...(input.direction !== undefined
+            ? { direction: input.direction }
+            : { toOrder: input.toOrder }),
+        }),
       });
       if (!res.ok) throw new Error(await readError(res));
     },
-    onMutate: async ({ blockId, direction }) => {
+    onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: blocksKey(communityId) });
-      // The cache holds the full BlocksPayload; swap within its `blocks` and
+      // The cache holds the full BlocksPayload; move within its `blocks` and
       // preserve latestPublishedAt (a reorder never changes the publish token).
       const previous = qc.getQueryData<BlocksPayload>(blocksKey(communityId));
       if (previous) {
         qc.setQueryData<BlocksPayload>(blocksKey(communityId), {
           ...previous,
-          blocks: swapAdjacent(previous.blocks, blockId, direction),
+          blocks: moveWithin(previous.blocks, input),
         });
       }
       return { previous };

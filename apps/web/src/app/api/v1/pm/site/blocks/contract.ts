@@ -24,7 +24,19 @@ export const blocksListContract = defineRoute({
     }),
   },
   response: z.object({
+    // The MERGED draft-wins editor view, including tombstones.
     blocks: z.array(siteBlockSchema),
+    /**
+     * The last PUBLISHED state — published rows only, no drafts, no tombstones.
+     *
+     * Additive in Phase 4, and load-bearing for it: `blocks` alone is the
+     * merged view, so a client holding only that literally cannot tell what
+     * changed. The change model diffs this against `blocks`, and it has to come
+     * from the server because publish-time validation runs against the same
+     * pair — a diff the client computed against a published side it invented
+     * would be a diff of nothing.
+     */
+    publishedBlocks: z.array(siteBlockSchema),
     // Authoritative optimistic-concurrency token (max published_at over all
     // published rows). The editor echoes it back on publish. Null before the
     // first publish.

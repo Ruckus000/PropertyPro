@@ -1,14 +1,16 @@
 /**
  * DocumentsBlock — SoR block that reads community documents from the DB.
  *
- * Async server component. Validates block.content via documentsBlockSchema,
- * fetches via getPublicCommunityScopedReader, and renders download links.
+ * Async server component: validates block.content via documentsBlockSchema,
+ * fetches via getPublicCommunityScopedReader, and hands the result to the pure
+ * view. Markup lives in DocumentsBlockView so the editor canvas renders exactly
+ * what the public site renders — see BlockViewProps in ./types.
  *
  * Download URL strategy (v1): links to the authenticated download route
- * /api/v1/documents/[id]/download?communityId=X. This route requires an
- * active session, so visitors will be redirected to login. A follow-up PR
- * will add a public presigned-URL path for unauthenticated access once the
- * per-document public_access boolean is added to the documents table.
+ * /api/v1/documents/[id]/download?communityId=X. This route requires an active
+ * session, so visitors will be redirected to login. A follow-up PR will add a
+ * public presigned-URL path for unauthenticated access once the per-document
+ * public_access boolean is added to the documents table.
  *
  * Category note: the documentsBlockSchema includeCategories enum values
  * ('budget', 'minutes', 'financial', 'rules', 'other') are matched against
@@ -17,17 +19,8 @@
  */
 import { documentsBlockSchema, type DocumentsBlockContent } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import { DocumentsBlockView } from './DocumentsBlockView';
 import type { BlockRendererProps } from './types';
-
-function formatDate(value: Date, timezone: string): string {
-  const tz = timezone || 'America/New_York';
-  try {
-    return value.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: tz });
-  } catch {
-    // Invalid timezone (legacy DB data); fall back to default.
-    return value.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
-  }
-}
 
 export async function DocumentsBlock(props: BlockRendererProps) {
   const parsed = documentsBlockSchema.safeParse(props.block.content);
@@ -46,49 +39,11 @@ export async function DocumentsBlock(props: BlockRendererProps) {
   });
 
   return (
-    <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`documents-${props.block.id}`}>
-      <div className="mx-auto max-w-3xl">
-        <h2 id={`documents-${props.block.id}`} className="font-heading text-2xl font-semibold text-content mb-6">
-          Documents
-        </h2>
-        {items.length === 0 ? (
-          <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
-            No documents available.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {items.map((doc) => (
-              <li key={doc.id} className="rounded-md border border-default bg-surface-card p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-base font-medium text-content truncate">{doc.title}</p>
-                    {doc.description && (
-                      <p className="mt-1 text-sm text-content-secondary">{doc.description}</p>
-                    )}
-                    <div className="mt-1 flex items-center gap-3 flex-wrap">
-                      {doc.categoryName && (
-                        <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary capitalize">
-                          {doc.categoryName}
-                        </span>
-                      )}
-                      <time className="text-xs text-content-secondary" dateTime={doc.createdAt.toISOString()}>
-                        {formatDate(doc.createdAt, props.community.timezone)}
-                      </time>
-                    </div>
-                  </div>
-                  <a
-                    href={`/api/v1/documents/${doc.id}/download?communityId=${props.community.id}&attachment=true`}
-                    className="shrink-0 inline-flex items-center rounded-md border border-default px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-                    aria-label={`Download ${doc.title}`}
-                  >
-                    Download
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+    <DocumentsBlockView
+      blockId={props.block.id}
+      content={config}
+      data={items}
+      community={props.community}
+    />
   );
 }

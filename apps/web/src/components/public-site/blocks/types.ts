@@ -47,3 +47,27 @@ export interface BlockRendererProps<TContent = unknown> {
 export type BlockRenderer<TContent = unknown> = (
   props: BlockRendererProps<TContent>,
 ) => Promise<ReactNode> | ReactNode;
+
+/**
+ * Props for a presentational block *view*.
+ *
+ * The four system-of-record blocks (announcements, documents, meetings,
+ * contact) are split in two: an async server shell that validates content and
+ * fetches, and a pure view that renders what it is given. The split exists so
+ * the editor canvas can render the real published markup — a view is a plain
+ * synchronous component, an async server component is not renderable inside a
+ * client tree that updates on every keystroke.
+ *
+ * **Views must stay hook-free, synchronous and prop-driven.** Adding data
+ * access, `async`, or a hook to a view silently breaks the editor canvas while
+ * leaving the public site working, so the failure shows up nowhere near the
+ * change. The authored blocks (hero, text, image, faq, gallery, amenities) are
+ * already pure and need no split.
+ */
+export interface BlockViewProps<TContent, TData> {
+  /** Used for the heading id that `aria-labelledby` points at. */
+  blockId: number;
+  content: TContent;
+  data: TData;
+  community: PublicCommunity;
+}

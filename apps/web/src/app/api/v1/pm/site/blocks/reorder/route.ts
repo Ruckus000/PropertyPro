@@ -1,10 +1,10 @@
 /**
  * PR #8 (deferred): PM site editor — per-block reorder endpoint.
  *
- * POST /api/v1/pm/site/blocks/reorder — move a content block up or down one
- * position, swapping its block_order with the adjacent content block. The swap
- * is written to the draft layer (spec §2.7); the public site keeps serving the
- * last-published order until the PM publishes.
+ * POST /api/v1/pm/site/blocks/reorder — move a content block, either one
+ * position (`direction`) or to an absolute slot (`toOrder`, the v3 editor's
+ * drag-and-drop). The move is written to the draft layer (spec §2.7); the
+ * public site keeps serving the last-published order until the PM publishes.
  *
  * Authorization: caller must hold pm_admin or cam in the community AND the
  * community's plan must include hasSiteEditor — the same gate the sibling
@@ -37,13 +37,21 @@ export const POST = withErrorHandler(
 
     // reorderSiteBlock throws NotFoundError (404) when the block isn't a
     // content block of this community, and ValidationError (400) when the block
-    // is already at the end in the requested direction. withErrorHandler maps
-    // both to the canonical error envelope.
+    // is already at the end in the requested direction or when `toOrder` names
+    // a slot that is not a content section. withErrorHandler maps both to the
+    // canonical error envelope.
+    //
+    // The contract guarantees exactly one of direction/toOrder is present, so
+    // the keys are spread conditionally rather than passed as `undefined` —
+    // the service rejects "both supplied", and an explicit `undefined` value
+    // would still read as supplied to `in`-style checks.
     const result = await reorderSiteBlock({
       communityId,
       actorUserId: userId,
       blockId: body.blockId,
-      direction: body.direction,
+      ...(body.direction !== undefined
+        ? { direction: body.direction }
+        : { toOrder: body.toOrder }),
     });
 
     return { ok: true as const, ...result };

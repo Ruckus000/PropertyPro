@@ -62,6 +62,7 @@ export * from './snowbird-digest-subscriptions';
 export * from './insurance-policies';
 export * from './reserve-assets';
 export * from './storm-damage-reports';
+export * from './site-publish-snapshots';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';

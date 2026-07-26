@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website Editor v3 — shell-integration layout options</title>
+<style>
+:root{
+  /* primitives (packages/tokens/src/primitives.ts) */
+  --gray-0:#FFFFFF; --gray-400:#9CA3AF; --gray-500:#6B7280; --gray-600:#4B5563;
+  --gray-700:#374151; --gray-900:#111827; --gray-950:#0D1117;
+  --sand-0:#FFFEFC; --sand-25:#FDFAF6; --sand-50:#FBF7F1; --sand-100:#F6EFE6;
+  --sand-200:#EFE7DC; --sand-300:#E3D8C9;
+  --coral-50:#FCF1ED; --coral-100:#F7DCD2; --coral-500:#CB6047; --coral-600:#C2533A; --coral-700:#A8412C;
+  --green-50:#ECFDF5; --green-200:#A7F3D0; --green-700:#047857;
+  --amber-50:#FFFBEB; --amber-200:#FDE68A; --amber-700:#B45309;
+  --red-50:#FEF2F2; --red-200:#FECACA; --red-700:#B91C1C;
+
+  /* semantic (packages/tokens/src/semantic.ts) */
+  --text-primary:var(--gray-900); --text-secondary:var(--gray-600);
+  --text-tertiary:var(--gray-500); --text-placeholder:var(--gray-400);
+  --text-inverse:var(--gray-0); --text-brand:var(--coral-700);
+  --surface-page:var(--sand-50); --surface-card:var(--sand-0);
+  --surface-muted:var(--sand-100); --surface-hover:var(--sand-50); --surface-subtle:var(--sand-25);
+  --border-default:var(--sand-200); --border-subtle:var(--sand-100); --border-strong:var(--sand-300);
+  --interactive-primary:var(--coral-600); --interactive-primary-hover:var(--coral-700);
+  --interactive-subtle:var(--coral-50);
+  --status-success:var(--green-700); --status-success-bg:var(--green-50); --status-success-border:var(--green-200);
+  --status-warning:var(--amber-700); --status-warning-bg:var(--amber-50); --status-warning-border:var(--amber-200);
+  --status-danger:var(--red-700); --status-danger-bg:var(--red-50); --status-danger-border:var(--red-200);
+
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-full:9999px;
+  --elevation-e1:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+  --elevation-e2:0 4px 6px rgba(15,23,42,.06),0 2px 4px rgba(15,23,42,.04);
+  --elevation-e3:0 10px 15px rgba(15,23,42,.08),0 4px 6px rgba(15,23,42,.04);
+  --focus-ring:var(--coral-500);
+  --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --font-display:"Fraunces",Georgia,"Times New Roman",serif;
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* annotation colours — document chrome only, not part of the app design */
+  --ink:#0D1117; --ink-2:#B9C0CC;
+}
+
+/* The running app sets :root font-size:18px (globals.css), so 1rem = 18px.
+   Text inside the frames is rem-based; all chrome dimensions are px, exactly
+   as in the app. */
+html{font-size:18px;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--sand-25);color:var(--text-primary);font-family:var(--font-sans);
+  font-size:1rem;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+h1,h2,h3,h4{margin:0;}
+p{margin:0;}
+code{font-family:var(--font-mono);font-size:.82em;background:var(--surface-muted);
+  padding:1px 5px;border-radius:4px;}
+button{font-family:inherit;cursor:pointer;}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+
+/* ── document chrome ───────────────────────────────────────────────────── */
+.legend{position:sticky;top:0;z-index:50;background:var(--ink);color:#fff;padding:11px 20px;
+  display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;font-size:.8125rem;}
+.legend strong{font-weight:600;}
+.legend .muted{color:var(--ink-2);}
+.doc{max-width:1380px;margin:0 auto;padding:26px 20px 100px;}
+.doc-h{font-family:var(--font-display);font-size:1.5rem;font-weight:600;letter-spacing:-.01em;
+  margin:52px 0 6px;}
+.doc-h:first-of-type{margin-top:20px;}
+.doc-sub{color:var(--text-secondary);font-size:.9375rem;margin-bottom:18px;max-width:78ch;}
+.doc-sub + .doc-sub{margin-top:-10px;}
+.rec{border:1px solid var(--status-success-border);background:var(--status-success-bg);
+  border-radius:var(--radius-md);padding:14px 16px;font-size:.9375rem;line-height:1.55;
+  max-width:96ch;margin-bottom:8px;}
+.rec b{color:var(--status-success);}
+.note{border:1px solid var(--border-default);background:var(--surface-card);
+  border-radius:var(--radius-md);padding:14px 16px;font-size:.875rem;line-height:1.6;
+  color:var(--text-secondary);max-width:96ch;}
+.note b{color:var(--text-primary);}
+
+table.ref{width:100%;border-collapse:collapse;font-size:.8125rem;background:var(--surface-card);
+  border:1px solid var(--border-default);border-radius:var(--radius-md);overflow:hidden;}
+table.ref th{background:var(--surface-muted);color:var(--text-secondary);text-align:left;
+  font-weight:600;padding:9px 12px;white-space:nowrap;}
+table.ref td{border-top:1px solid var(--border-subtle);padding:9px 12px;vertical-align:top;}
+table.ref td.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap;}
+table.ref .win{color:var(--status-success);font-weight:600;}
+table.ref .lose{color:var(--status-danger);font-weight:600;}
+.scroll-x{overflow-x:auto;}
+
+/* ── frame plumbing ───────────────────────────────────────────────────── */
+.scaler{position:relative;overflow:hidden;border:1px solid var(--border-strong);
+  border-radius:var(--radius-md);background:var(--sand-200);box-shadow:var(--elevation-e1);}
+.scaler.actual{overflow:auto;}
+.frame{width:1440px;height:900px;transform-origin:top left;display:flex;flex-direction:column;
+  background:var(--surface-page);font-size:1rem;}
+
+.compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;}
+@media (max-width:900px){.compare{grid-template-columns:1fr;}}
+.compare .cap{display:flex;align-items:baseline;gap:8px;margin-bottom:7px;}
+.compare .cap .k{font-family:var(--font-display);font-size:1.0625rem;font-weight:600;}
+.compare .cap .s{font-size:.75rem;color:var(--text-secondary);}
+
+.switcher{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.seg{display:inline-flex;background:var(--surface-muted);border-radius:var(--radius-md);padding:3px;gap:2px;}
+.seg button{border:0;background:transparent;color:var(--text-secondary);font-size:.8125rem;
+  font-weight:500;height:32px;padding:0 14px;border-radius:7px;}
+.seg button[aria-pressed="true"]{background:var(--surface-card);color:var(--text-primary);
+  font-weight:600;box-shadow:var(--elevation-e1);}
+.scale-read{font-size:.75rem;color:var(--text-secondary);font-variant-numeric:tabular-nums;
+  margin-left:auto;}
+
+/* ── option annotation cards ──────────────────────────────────────────── */
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;}
+@media (max-width:900px){.cards{grid-template-columns:1fr;}}
+.card{background:var(--surface-card);border:1px solid var(--border-default);
+  border-radius:var(--radius-md);padding:16px 17px;font-size:.8125rem;line-height:1.6;}
+.card h3{font-size:.9375rem;margin-bottom:2px;}
+.card .verdict{display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-full);
+  padding:2px 10px;font-size:.6875rem;font-weight:600;margin:8px 0 10px;}
+.v-rec{background:var(--status-success-bg);color:var(--status-success);}
+.v-warn{background:var(--status-warning-bg);color:var(--status-warning);}
+.v-no{background:var(--status-danger-bg);color:var(--status-danger);}
+.card dt{font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text-tertiary);margin-top:11px;}
+.card dd{margin:2px 0 0;color:var(--text-secondary);}
+.card dd code{font-size:.78em;}
+.card ul{margin:2px 0 0;padding-left:17px;color:var(--text-secondary);}
+.card li{margin-bottom:3px;}
+
+/* ── the mock editor (shared by all three frames) ─────────────────────── */
+.frame .rail{width:72px;flex:none;background:var(--surface-card);
+  border-right:1px solid var(--border-default);display:flex;flex-direction:column;align-items:center;
+  padding:0;}
+.frame .rail .brand{height:56px;display:flex;align-items:center;justify-content:center;
+  width:100%;border-bottom:1px solid var(--border-default);}
+.frame .rail .nav{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;width:100%;}
+.frame .rail .ni{position:relative;width:44px;height:44px;border-radius:var(--radius-md);
+  display:flex;align-items:center;justify-content:center;color:var(--text-tertiary);}
+.frame .rail .ni.on{background:var(--surface-muted);color:var(--interactive-primary);}
+.frame .rail .ni.on::before{content:"";position:absolute;left:-14px;top:8px;bottom:8px;width:4px;
+  border-radius:0 6px 6px 0;background:var(--interactive-primary);}
+.frame .rail .foot{height:60px;display:flex;align-items:center;justify-content:center;width:100%;
+  border-top:1px solid var(--border-default);}
+.brand-mark{width:32px;height:32px;border-radius:var(--radius-md);background:var(--interactive-primary);
+  display:flex;align-items:center;justify-content:center;color:#fff;flex:none;}
+.avatar{width:32px;height:32px;border-radius:var(--radius-full);background:var(--surface-muted);
+  display:flex;align-items:center;justify-content:center;font-size:.6875rem;font-weight:600;
+  color:var(--text-secondary);}
+
+.frame .topbar{height:56px;flex:none;background:var(--surface-card);
+  border-bottom:1px solid var(--border-default);display:flex;align-items:center;gap:12px;padding:0 24px;}
+.frame .topbar .search{height:40px;flex:1;max-width:560px;border:1px solid var(--border-default);
+  border-radius:var(--radius-md);display:flex;align-items:center;padding:0 14px;
+  color:var(--text-placeholder);font-size:.8125rem;gap:10px;}
+.frame .topbar .icons{margin-left:auto;display:flex;gap:8px;color:var(--text-tertiary);}
+.frame .topbar .icons span{width:36px;height:36px;border-radius:var(--radius-md);
+  display:flex;align-items:center;justify-content:center;}
+
+.frame .crumbs{flex:none;background:var(--surface-page);border-bottom:1px solid var(--border-default);
+  padding:8px 32px;font-size:.8125rem;color:var(--text-secondary);display:flex;gap:7px;align-items:center;}
+.frame .crumbs .cur{color:var(--text-secondary);font-weight:500;}
+.frame .crumbs .sep{color:var(--text-tertiary);}
+
+/* editor proper */
+.ed{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface-page);}
+.ed .edbar{height:52px;flex:none;background:var(--surface-card);
+  border-bottom:1px solid var(--border-default);display:flex;align-items:center;gap:12px;padding:0 14px;}
+.ed .edbar .ttl{display:flex;flex-direction:column;line-height:1.15;}
+.ed .edbar .ttl b{font-family:var(--font-display);font-size:.9375rem;font-weight:600;}
+.ed .edbar .ttl span{font-size:.75rem;color:var(--text-secondary);}
+.ed .edbar .right{margin-left:auto;display:flex;align-items:center;gap:9px;}
+.ed .body{flex:1;min-height:0;display:flex;}
+
+.ed .tools{width:340px;flex:none;background:var(--surface-card);
+  border-right:1px solid var(--border-default);display:flex;flex-direction:column;min-height:0;}
+.ed .tools .tabs{flex:none;display:flex;gap:3px;padding:7px 8px;
+  border-bottom:1px solid var(--border-default);}
+.tool-tab{flex:1 1 0;min-width:0;border:0;border-radius:var(--radius-md);background:transparent;
+  color:var(--text-secondary);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:7px 2px 6px;font-size:.6875rem;font-weight:500;line-height:1.1;}
+.tool-tab.on{background:var(--interactive-subtle);color:var(--text-brand);font-weight:600;}
+.ed .tools .phead{flex:none;padding:12px 16px;border-bottom:1px solid var(--border-default);
+  font-size:1rem;font-weight:600;}
+.ed .tools .plist{flex:1;min-height:0;overflow:hidden;padding:14px 16px;
+  display:flex;flex-direction:column;gap:4px;}
+.row{display:flex;align-items:center;gap:11px;border-radius:var(--radius-md);padding:10px 6px;min-height:56px;}
+.row.sel{background:var(--interactive-subtle);}
+.br-icon{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--interactive-subtle);
+  color:var(--text-brand);display:flex;align-items:center;justify-content:center;flex:none;}
+.row.sel .br-icon{background:var(--surface-card);}
+.br-title{font-size:.875rem;font-weight:600;line-height:1.25;}
+.br-sum{font-size:.75rem;color:var(--text-secondary);line-height:1.35;margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+.ed .canvas{flex:1;min-width:0;background:var(--surface-page);display:flex;flex-direction:column;
+  overflow:hidden;}
+.ed .canvasbar{flex:none;min-height:46px;display:flex;align-items:center;gap:10px;padding:7px 14px;
+  background:var(--surface-card);border-bottom:1px solid var(--border-default);font-size:.8125rem;
+  color:var(--text-secondary);}
+.miniseg{display:inline-flex;background:var(--surface-muted);border-radius:var(--radius-md);
+  padding:3px;gap:2px;}
+.miniseg i{font-style:normal;font-size:.75rem;font-weight:500;color:var(--text-secondary);
+  height:26px;padding:0 10px;border-radius:6px;display:inline-flex;align-items:center;}
+.miniseg i.on{background:var(--surface-card);color:var(--text-primary);font-weight:600;
+  box-shadow:var(--elevation-e1);}
+.ed .cscroll{flex:1;min-height:0;overflow:hidden;padding:16px 20px;}
+.site{background:var(--surface-card);border:1px solid var(--border-default);
+  border-radius:var(--radius-md);overflow:hidden;margin:0 auto;}
+.site .snav{display:flex;align-items:center;gap:10px;padding:14px 28px;
+  border-bottom:1px solid var(--border-default);font-size:.875rem;font-weight:600;}
+.site .snav .pages{margin-left:auto;display:flex;gap:4px;font-size:.8125rem;font-weight:500;
+  color:var(--text-secondary);}
+.site .hero{padding:40px 32px;background:linear-gradient(var(--interactive-subtle),var(--surface-card));
+  display:grid;grid-template-columns:1.05fr .95fr;gap:26px;align-items:center;}
+.site .hero h4{font-family:var(--font-display);font-size:1.5rem;font-weight:600;
+  letter-spacing:-.01em;line-height:1.18;}
+.site .hero p{margin-top:11px;font-size:.9375rem;color:var(--text-secondary);line-height:1.6;}
+.site .hero .cta{display:inline-flex;align-items:center;height:40px;padding:0 19px;margin-top:17px;
+  border-radius:var(--radius-md);background:var(--interactive-primary);color:#fff;
+  font-size:.875rem;font-weight:500;}
+.photo{height:190px;border-radius:var(--radius-md);border:1px dashed var(--border-strong);
+  background:repeating-linear-gradient(45deg,var(--surface-muted),var(--surface-muted) 8px,
+  var(--surface-subtle) 8px,var(--surface-subtle) 16px);display:flex;align-items:center;
+  justify-content:center;color:var(--text-tertiary);font-family:var(--font-mono);font-size:.75rem;}
+.site .sec{padding:26px 32px;border-top:1px solid var(--border-subtle);}
+.site .sec h5{font-size:1.125rem;font-weight:600;margin-bottom:10px;}
+.site .sec p{font-size:.875rem;color:var(--text-secondary);line-height:1.65;max-width:62ch;}
+.selwrap{position:relative;outline:3px solid var(--interactive-primary);outline-offset:-3px;}
+.selwrap .fc{position:absolute;top:8px;right:8px;display:flex;align-items:center;gap:2px;
+  background:var(--surface-card);border:1px solid var(--border-strong);border-radius:var(--radius-md);
+  box-shadow:var(--elevation-e2);padding:3px 3px 3px 8px;font-size:.75rem;font-weight:600;
+  color:var(--text-secondary);}
+.selwrap .fc em{font-style:normal;padding-right:5px;}
+.selwrap .fc b{width:26px;height:26px;border-radius:var(--radius-sm);display:flex;
+  align-items:center;justify-content:center;color:var(--text-secondary);}
+
+.ed .insp{width:380px;flex:none;background:var(--surface-card);
+  border-left:1px solid var(--border-default);display:flex;flex-direction:column;min-height:0;}
+.ed .insp .ih{flex:none;display:flex;align-items:center;gap:9px;padding:11px 14px;
+  border-bottom:1px solid var(--border-default);}
+.ed .insp .ib{flex:1;min-height:0;overflow:hidden;padding:16px;}
+.field{margin-bottom:14px;}
+.label{display:block;font-size:.875rem;font-weight:500;margin-bottom:5px;}
+.input{display:block;width:100%;border:1px solid var(--border-default);border-radius:var(--radius-sm);
+  padding:8px 11px;font-size:.875rem;background:var(--surface-card);color:var(--text-placeholder);}
+.input.tall{min-height:78px;}
+.hint{margin-top:4px;font-size:.75rem;color:var(--text-secondary);}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;
+  border-radius:var(--radius-md);font-size:.8125rem;font-weight:500;border:1px solid transparent;
+  line-height:1;white-space:nowrap;}
+.btn-sm{height:32px;padding:0 13px;}
+.btn-primary{background:var(--interactive-primary);color:#fff;}
+.btn-outline{background:var(--surface-card);border-color:var(--border-default);color:var(--text-primary);}
+.btn-ghost{background:transparent;color:var(--text-secondary);}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-full);
+  padding:3px 10px;font-size:.75rem;font-weight:500;white-space:nowrap;}
+.pill-accent{background:var(--interactive-subtle);color:var(--text-brand);}
+.statusline{display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--text-secondary);}
+
+/* option C only: the padded, capped page column */
+.gutter-band{background:repeating-linear-gradient(135deg,rgba(194,83,58,.10),
+  rgba(194,83,58,.10) 6px,transparent 6px,transparent 12px);}
+.main-scroll{flex:1;min-height:0;overflow:hidden;display:flex;}
+.page-container{margin:0 auto;width:100%;max-width:1400px;display:flex;}
+.card-editor{flex:1;min-width:0;border:1px solid var(--border-default);border-radius:var(--radius-md);
+  background:var(--surface-card);overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:var(--elevation-e1);}
+
+/* measurement overlays */
+.measure{position:absolute;z-index:20;pointer-events:none;font-family:var(--font-mono);
+  font-size:11px;font-weight:600;color:#fff;background:rgba(13,17,23,.82);border-radius:4px;
+  padding:2px 6px;white-space:nowrap;}
+.frame{position:relative;}
+.mline{position:absolute;z-index:19;pointer-events:none;border:0;
+  background:rgba(194,83,58,.55);}
+</style>
+</head>
+<body>
+
+<div class="legend">
+  <strong>Website Editor v3 — shell-integration options</strong>
+  <span class="muted">DECIDED: Option B (+ collapsed NavRail) · frames are 1440&times;900 at true scale · chrome dimensions read from source</span>
+  <span class="muted">Companion to <code style="background:rgba(255,255,255,.12);color:#fff">website-editor-v3-gap-analysis.md</code></span>
+</div>
+
+<div class="doc">
+
+  <h2 class="doc-h">What was being decided</h2>
+  <p class="doc-sub">
+    v3 is authored as a full-viewport application: <code>#root{height:100dvh}</code>,
+    <code>body{overflow:hidden}</code>, its own 72&nbsp;px navigation rail, and three
+    independently-scrolling columns. The repo's authenticated shell has its own opinion —
+    it owns the sidebar, the top bar, the breadcrumb trail, and a page gutter that
+    <code>guard:page-padding</code> keeps single-sourced in <code>PageContainer</code>.
+    Those two facts have to be reconciled before any of v3 gets built.
+  </p>
+  <p class="doc-sub">
+    All three frames below render the <em>same</em> editor content — 340&nbsp;px tool panel,
+    canvas, 380&nbsp;px inspector — so the only variable is the chrome around it.
+  </p>
+
+  <div class="rec" style="border-color:var(--interactive-primary);background:var(--interactive-subtle)">
+    <b style="color:var(--text-brand)">Decided 2026-07-25: Option B</b>, with one amendment —
+    the collapsed <code>NavRail</code> (72&nbsp;px) is reused inside the editor's own layout, so
+    app navigation is not lost. B's remaining win over A is the 93&nbsp;px of vertical chrome
+    (top bar + breadcrumbs) it does not render, and not having to edit
+    <code>AppShell</code>, which every authenticated page shares. Its cost is that a new
+    route group must re-establish auth, community resolution, feature gating, the
+    lapsed-community lockout and <code>AppQueryProvider</code> for itself.
+    See <code>website-editor-v3-gap-analysis.md</code> §9.
+  </div>
+
+  <div class="note" style="margin-top:12px">
+    <b>The original recommendation was Option A</b>, and the frames below still present all
+    three as they were built for the decision. Keeping them is deliberate: the canvas-width
+    table is the reason multi-page and the desktop preview behave the way they do, and it
+    will be worth re-reading if the layout is ever revisited.
+  </div>
+
+  <h2 class="doc-h">Side by side</h2>
+  <p class="doc-sub">Each frame is a 1440&times;900 viewport scaled to fit. Coral hatching marks
+    the page gutter; the dark labels call out the measurements that differ between options.</p>
+
+  <div class="compare" id="compare"></div>
+
+  <h2 class="doc-h">Full size</h2>
+  <p class="doc-sub">Same frames, one at a time. “Actual size” disables scaling and scrolls
+    inside the frame rather than the page.</p>
+
+  <div class="switcher">
+    <div class="seg" role="group" aria-label="Layout option">
+      <button type="button" data-opt="A" aria-pressed="true">A — Full-bleed in shell</button>
+      <button type="button" data-opt="B" aria-pressed="false">B — No shell</button>
+      <button type="button" data-opt="C" aria-pressed="false">C — Standard gutter</button>
+    </div>
+    <div class="seg" role="group" aria-label="Zoom">
+      <button type="button" id="zoom-fit" aria-pressed="true">Fit</button>
+      <button type="button" id="zoom-1" aria-pressed="false">Actual size</button>
+    </div>
+    <span class="scale-read" id="scale-read">—</span>
+  </div>
+  <div class="scaler" id="stage-wrap"><div class="frame" id="stage"></div></div>
+
+  <h2 class="doc-h">The number that decides it</h2>
+  <p class="doc-sub">
+    Canvas width is what is left after the tool panel (340) and the inspector (380). v3's
+    desktop preview is authored at <b>1000&nbsp;px</b>
+    (<code>const width = {phone:400, tablet:760, desktop:1000}</code> in
+    <code>editor-v3.jsx</code>), so anything below that scales or scrolls.
+  </p>
+  <div class="scroll-x">
+  <table class="ref">
+    <thead><tr><th>Viewport</th><th>A — full-bleed in shell</th><th>B — no shell</th><th>C — standard gutter</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1440 &times; 900</td><td class="num">648 px</td><td class="num">720 px</td><td class="num">568 px</td></tr>
+      <tr><td class="num">1920 &times; 1080</td><td class="num">1128 px</td><td class="num">1200 px</td><td class="num">600 px</td></tr>
+      <tr><td class="num">2560 &times; 1440</td><td class="num win">1768 px</td><td class="num win">1840 px</td><td class="num lose">600 px</td></tr>
+      <tr><td>Reaches the 1000 px desktop preview?</td><td>at ≈1790 px wide</td><td>at ≈1720 px wide</td><td class="lose">never</td></tr>
+      <tr><td>Vertical space for the canvas at 900 px tall</td><td class="num">755 px</td><td class="num win">848 px</td><td class="num lose">≈743 px, and it scrolls with the page</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note" style="margin-top:14px;border-color:var(--interactive-primary)">
+    <b>What was actually chosen sits between A and B.</b> B was decided <em>with</em> the
+    collapsed <code>NavRail</code> reinstated, so it gives back the 72&nbsp;px the “no shell”
+    column above saves horizontally: canvas <b>648 px</b> at 1440, <b>1128 px</b> at 1920,
+    <b>1768 px</b> at 2560 — identical to Option&nbsp;A. The difference that survives is
+    <em>vertical</em>: without the shell's top bar and breadcrumb strip the canvas gets
+    <b>848 px</b> of height instead of A's 755, and no shared shell file has to be edited.
+    Read the B column above as “B as originally drawn”, and the A column as the width B
+    actually ships with.
+  </div>
+
+  <p class="doc-sub" style="margin-top:10px">
+    C's cap is <code>max-w-[1400px]</code> in <code>PageContainer</code>. Subtract the
+    <code>lg:px-10</code> gutter (40&nbsp;px each side) and the two panels, and the canvas
+    settles at 600&nbsp;px on every monitor wider than about 1560&nbsp;px. Widening the cap for
+    one route would mean either a per-page override of the single-sourced gutter — the thing
+    <code>guard:page-padding</code> exists to prevent — or raising it app-wide.
+  </p>
+
+  <h2 class="doc-h">What each option costs</h2>
+  <div class="cards">
+
+    <div class="card">
+      <h3>A — Full-bleed inside the shell</h3>
+      <span class="verdict v-warn">Original recommendation — not chosen</span>
+      <p>The app's real sidebar, top bar and breadcrumb trail stay. Below them the editor fills
+        the viewport with no gutter and manages its own scrolling.</p>
+
+      <dt>Shell change required</dt>
+      <dd>This is <b>not possible today</b>. <code>AppShell</code> renders
+        <code>&lt;PageContainer&gt;</code> unconditionally around <code>{children}</code>
+        (<code>app-shell.tsx:232</code>) and <code>&lt;main&gt;</code> is
+        <code>overflow-y-auto</code>. Needs a full-bleed opt-out: skip
+        <code>PageContainer</code> and switch <code>&lt;main&gt;</code> to
+        <code>overflow-hidden</code> + <code>min-h-0</code> for flagged routes. One prop or one
+        route predicate — but it is a shell edit, and every authenticated page shares that file.</dd>
+
+      <dt>Guards</dt>
+      <dd><code>guard:page-padding</code> scans
+        <code>(authenticated)/**/page.tsx</code> for root <code>px-*</code>/<code>py-*</code> and
+        page-level <code>&lt;main&gt;</code>. The editor adds neither, so a
+        <code>// page-padding:exempt</code> is likely unnecessary — but the guard should be
+        re-read when the opt-out lands rather than assumed.</dd>
+
+      <dt>Chrome stack</dt>
+      <dd>56 (top bar) + 37 (breadcrumbs) + 52 (v3's own bar) = <b>145 px</b> before the canvas.
+        v3's bar repeats the page title the breadcrumb already shows. Merging them — moving
+        Preview/Publish and the save status into the shell's top bar, or dropping v3's bar and
+        letting the breadcrumb strip carry the actions — recovers 52 px and removes the
+        duplication. Worth doing.</dd>
+
+      <dt>Accessibility</dt>
+      <dd>The shell's single <code>&lt;main id="main-content"&gt;</code> stays the skip-link
+        target, and it now contains three scroll regions — each needs a label and a reachable
+        scroll container. Focus order stays sidebar → top bar → editor, which matches every
+        other page.</dd>
+
+      <dt>Below 1024 px</dt>
+      <dd>Sidebar is already a drawer. v3's phone gate takes over under 768 px; 768–1023 px
+        gets the editor with the inspector as an overlay panel, which v3 already models
+        (<code>overlay-panel</code> + <code>useMedia("(max-width:1279px)")</code>).</dd>
+    </div>
+
+    <div class="card">
+      <h3>B — Full-bleed, no app shell</h3>
+      <span class="verdict v-rec">Chosen — with the collapsed NavRail reinstated</span>
+      <p>The editor owns the entire viewport, with its own back affordance. Closest to the
+        mockup, which draws its own nav rail.</p>
+
+      <dt>Shell change required</dt>
+      <dd>A route outside the <code>(authenticated)</code> group's shell layout, or a shell
+        bypass. Auth, community resolution, feature gating and the billing-lockout banners are
+        all wired through that layout today, so each has to be re-established on the new route
+        rather than inherited.</dd>
+
+      <dt>What is lost</dt>
+      <dd><ul>
+        <li>Sidebar navigation — leaving the editor becomes a deliberate act.</li>
+        <li>Command palette (⌘K) entry point.</li>
+        <li>Breadcrumb trail, which is how the app answers “where am I”.</li>
+        <li>The subscription/free-access banner strip. That one matters: a lapsed community
+          would sit in the editor with no indication.</li>
+      </ul></dd>
+
+      <dt>What is gained</dt>
+      <dd>93 px of height over A, and no edit to <code>AppShell</code> — a file every
+        authenticated page shares. The 72 px of width is given back by the decision to
+        reinstate the collapsed <code>NavRail</code>, so the canvas ends up the same width
+        as A.</dd>
+
+      <dt>Decision</dt>
+      <dd><b>Chosen</b>, with the collapsed <code>NavRail</code> reused inside the editor's
+        own layout — so the sidebar is not lost, only the top bar and breadcrumbs are. The
+        accepted cost is that the new route group re-establishes auth, community resolution,
+        feature gating, the lapsed-community lockout and <code>AppQueryProvider</code> for
+        itself. Command palette and the billing banner strip are addressed separately
+        (gap analysis §9, rows 2 and 4).</dd>
+    </div>
+
+    <div class="card">
+      <h3>C — Standard page gutter</h3>
+      <span class="verdict v-no">Not viable for a canvas editor</span>
+      <p>The editor renders as a card inside the normal padded, capped column — exactly like
+        every other authenticated page.</p>
+
+      <dt>Shell change required</dt>
+      <dd>None. No guard work, no exemption, no risk to other pages. This is its entire
+        argument.</dd>
+
+      <dt>Why it fails</dt>
+      <dd><ul>
+        <li>Canvas is capped at <b>600 px</b> forever (see the table above) — 60% of the
+          desktop preview it is supposed to show.</li>
+        <li>The editor's internal scroll regions fight the page scroll: <code>&lt;main&gt;</code>
+          is <code>overflow-y-auto</code>, so a fixed-height editor either clips or the whole
+          page scrolls and the tool panel scrolls away with it.</li>
+        <li>The sticky canvas bar and the inspector both assume a viewport-height column.</li>
+      </ul></dd>
+
+      <dt>If chosen anyway</dt>
+      <dd>The panels have to shrink — roughly 280 px tools, 320 px inspector — and the design's
+        resizable tool panel (280–560 px range) loses most of its range. The canvas becomes a
+        scaled thumbnail rather than a preview, which undermines the reason to build a canvas
+        editor at all.</dd>
+    </div>
+
+  </div>
+
+  <h2 class="doc-h">Dimensions, and where they came from</h2>
+  <p class="doc-sub">Every measurement in the frames above is read from source, not estimated.</p>
+  <div class="scroll-x">
+  <table class="ref">
+    <thead><tr><th>Chrome</th><th>Value</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>App sidebar, collapsed / expanded</td><td class="num">72 / 260 px</td>
+        <td><code>packages/ui/src/components/NavRail.tsx:422</code></td></tr>
+      <tr><td>Top bar height (desktop)</td><td class="num">56 px</td>
+        <td><code>apps/web/src/components/layout/app-top-bar.tsx:29</code> — <code>lg:h-14</code></td></tr>
+      <tr><td>Breadcrumb strip</td><td class="num">≈37 px</td>
+        <td><code>shell-breadcrumbs.tsx:141</code> — <code>px-6 py-2 lg:px-8</code> + border</td></tr>
+      <tr><td>Page gutter / cap</td><td class="num">24→32→40 px, 1400 px</td>
+        <td><code>page-container.tsx</code> — <code>px-6 sm:px-8 lg:px-10 py-8</code>,
+          <code>max-w-[1400px]</code></td></tr>
+      <tr><td>Shell root / main</td><td class="num">—</td>
+        <td><code>app-shell.tsx:167</code> <code>flex h-screen overflow-hidden</code>;
+          <code>:230</code> <code>&lt;main class="flex-1 overflow-y-auto"&gt;</code></td></tr>
+      <tr><td>v3 editor top bar</td><td class="num">52 px</td>
+        <td><code>editor-v3.jsx</code> — <code>height: 52</code></td></tr>
+      <tr><td>v3 tool panel (resizable)</td><td class="num">340 px default, 280–560</td>
+        <td><code>editor-v3.jsx</code> — <code>sbWidth</code>, clamped in the resizer handler</td></tr>
+      <tr><td>v3 inspector</td><td class="num">380 px docked / 400 overlay</td>
+        <td><code>editor-v3.jsx</code> — <code>Inspector</code></td></tr>
+      <tr><td>v3 preview widths</td><td class="num">400 / 760 / 1000</td>
+        <td><code>editor-v3.jsx</code> — <code>{phone, tablet, desktop}</code></td></tr>
+      <tr><td>Root font size</td><td class="num">18 px</td>
+        <td><code>apps/web/src/app/globals.css</code> — 1 rem = 18 px, applied here too</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note" style="margin-top:20px">
+    <b>One thing the frames deliberately do not show.</b> v3 draws its own navigation rail
+    (<code>Rail()</code> in <code>editor-v3.jsx</code>: pinnable, hover-expands to 248 px,
+    overlays rather than pushes). That is a mockup stand-in for the sidebar the app already
+    has, and it is close to — but not the same as — <code>AppSidebar</code>/<code>NavRail</code>
+    (72 / 260 px, click-to-expand, persisted in a context provider). Options A and C render the
+    <em>real</em> one. Shipping v3's rail would fork navigation for a single route; the
+    behaviours worth keeping from it (hover-expand, overlay-instead-of-push) belong in
+    <code>NavRail</code> for the whole app or nowhere.
+  </div>
+
+</div>
+
+<template id="tpl-editor">
+  <div class="ed">
+    <div class="edbar">
+      <span class="ttl"><b>Website</b><span>Sunset Condos</span></span>
+      <span class="right">
+        <span class="statusline">✓ Draft saved</span>
+        <span class="btn btn-ghost btn-sm">3 changes waiting</span>
+        <span class="btn btn-outline btn-sm">Preview</span>
+        <span class="btn btn-primary">Publish…</span>
+      </span>
+    </div>
+    <div class="body">
+      <div class="tools">
+        <div class="tabs">
+          <span class="tool-tab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V7l6-4 6 4v14"/></svg><span>Site</span></span>
+          <span class="tool-tab on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg><span>Sections</span></span>
+          <span class="tool-tab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></span>
+          <span class="tool-tab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/></svg><span>Colours</span></span>
+          <span class="tool-tab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg><span>Address</span></span>
+          <span class="tool-tab"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg><span>Help</span></span>
+        </div>
+        <div class="phead">Sections</div>
+        <div class="plist">
+          <div class="row sel">
+            <span class="br-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg></span>
+            <span style="flex:1;min-width:0">
+              <span style="display:flex;align-items:center;gap:7px">
+                <span class="br-title">Welcome</span><span class="pill pill-accent" style="padding:1px 8px;font-size:.6875rem">Draft</span>
+              </span>
+              <span class="br-sum">Welcome to Sunset Condos</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="br-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg></span>
+            <span style="flex:1;min-width:0"><span class="br-title">Text</span>
+              <span class="br-sum">About our community</span></span>
+          </div>
+          <div class="row">
+            <span class="br-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-5v12L3 14v-3z"/></svg></span>
+            <span style="flex:1;min-width:0"><span class="br-title">Announcements</span>
+              <span class="br-sum">Latest 5 · past 30 days</span></span>
+          </div>
+          <div class="row">
+            <span class="br-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+            <span style="flex:1;min-width:0"><span class="br-title">Documents</span>
+              <span class="br-sum">Up to 5 · Budget, Minutes, Rules</span></span>
+          </div>
+          <div class="row">
+            <span class="br-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+            <span style="flex:1;min-width:0"><span class="br-title">Meetings</span>
+              <span class="br-sum">Next 10 · next 30 days</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas">
+        <div class="canvasbar">
+          <span class="miniseg"><i class="on">Desktop</i><i>Tablet</i><i>Phone</i></span>
+          <span>Home</span>
+          <span style="margin-left:auto">Editing a draft — nothing goes live until you publish</span>
+        </div>
+        <div class="cscroll">
+          <div class="site" data-canvas>
+            <div class="snav">
+              <span class="brand-mark" style="width:28px;height:28px;border-radius:8px"></span>
+              Sunset Condos
+              <span class="pages"><span style="padding:6px 10px">Documents</span><span style="padding:6px 10px">Meetings</span></span>
+            </div>
+            <div class="selwrap">
+              <div class="hero">
+                <div>
+                  <h4>Welcome to Sunset Condos</h4>
+                  <p>A 120-unit oceanfront community in Miami Beach — records, meetings and
+                     announcements in one place.</p>
+                  <span class="cta">Resident Login</span>
+                </div>
+                <div class="photo">community photo</div>
+              </div>
+              <span class="fc"><em>Welcome</em><b>↑</b><b>↓</b><b>✎</b><b>🗑</b></span>
+            </div>
+            <div class="sec">
+              <h5>About our community</h5>
+              <p>Sunset Condos is a self-managed oceanfront association established in 1998.
+                 This site is the official home for our governing documents, budgets and
+                 meeting notices.</p>
+            </div>
+            <div class="sec">
+              <h5>Announcements</h5>
+              <p>Pool deck resurfacing begins Monday · Annual meeting notice posted ·
+                 Garage gate remote replacement</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="insp">
+        <div class="ih">
+          <span class="br-icon" style="width:30px;height:30px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg></span>
+          <span style="flex:1">
+            <span style="display:block;font-size:.9375rem;font-weight:600">Welcome</span>
+            <span class="statusline">✓ Draft saved</span>
+          </span>
+          <span style="color:var(--text-tertiary)">✕</span>
+        </div>
+        <div class="ib">
+          <p style="font-size:.8125rem;color:var(--text-secondary);margin-bottom:14px">
+            The first thing visitors see. Changes appear on the canvas as you type.</p>
+          <div class="field"><span class="label">Headline</span>
+            <span class="input">Welcome to Sunset Condos</span></div>
+          <div class="field"><span class="label">Subtitle</span>
+            <span class="input tall">A 120-unit oceanfront community in Miami Beach…</span>
+            <span class="hint">Keep it under two lines on a phone.</span></div>
+          <div class="field"><span class="label">Button label</span>
+            <span class="input">Resident Login</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+(function () {
+  "use strict";
+
+  var FRAME_W = 1440, FRAME_H = 900;
+
+  function el(tag, cls, txt) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (txt != null) n.textContent = txt;
+    return n;
+  }
+
+  function railIcon(paths, on) {
+    var s = el("span", "ni" + (on ? " on" : ""));
+    s.innerHTML = '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + "</svg>";
+    return s;
+  }
+
+  /* the app's real collapsed sidebar (72px) */
+  function appRail() {
+    var rail = el("div", "rail");
+    var brand = el("div", "brand");
+    brand.appendChild(el("span", "brand-mark"));
+    rail.appendChild(brand);
+    var nav = el("div", "nav");
+    var items = [
+      ['<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>', false],
+      ['<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>', false],
+      ['<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>', false],
+      ['<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', false],
+      ['<path d="M3 11l18-5v12L3 14v-3z"/>', false],
+      ['<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/>', true],
+      ['<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3"/>', false]
+    ];
+    items.forEach(function (it) { nav.appendChild(railIcon(it[0], it[1])); });
+    rail.appendChild(nav);
+    var foot = el("div", "foot");
+    foot.appendChild(el("div", "avatar", "JR"));
+    rail.appendChild(foot);
+    return rail;
+  }
+
+  function appTopBar() {
+    var bar = el("div", "topbar");
+    var s = el("div", "search");
+    s.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span>Search…</span>';
+    bar.appendChild(s);
+    var ic = el("div", "icons");
+    ic.innerHTML = "<span>?</span><span>🔔</span><span>JR</span>";
+    bar.appendChild(ic);
+    return bar;
+  }
+
+  function crumbs() {
+    var c = el("div", "crumbs");
+    c.innerHTML = '<span>PM Portal</span><span class="sep">/</span><span>Settings</span>' +
+      '<span class="sep">/</span><span class="cur">Website</span>';
+    return c;
+  }
+
+  function editor() {
+    return document.getElementById("tpl-editor").content.cloneNode(true);
+  }
+
+  function measure(text, style) {
+    var m = el("div", "measure", text);
+    Object.keys(style).forEach(function (k) { m.style[k] = style[k]; });
+    return m;
+  }
+
+  /* Build one option's 1440x900 frame. */
+  function build(opt) {
+    var frame = el("div", "frame");
+
+    if (opt === "B") {
+      var edB = editor();
+      var wrapB = el("div");
+      wrapB.style.cssText = "flex:1;min-height:0;display:flex;flex-direction:column";
+      wrapB.appendChild(edB);
+      /* back affordance lives inside the editor's own top bar — it stands in for the
+         navigation the shell would otherwise provide */
+      var barB = wrapB.querySelector(".edbar");
+      var back = el("span", null, "← Back to PropertyPro");
+      back.style.cssText = "font-size:.75rem;font-weight:600;color:var(--text-secondary);" +
+        "border:1px solid var(--border-default);border-radius:9999px;padding:5px 12px;" +
+        "margin-right:4px;white-space:nowrap;";
+      barB.insertBefore(back, barB.firstChild);
+      frame.appendChild(wrapB);
+      frame.appendChild(measure("canvas 720 px", { left: "700px", bottom: "10px" }));
+      return frame;
+    }
+
+    /* A and C both keep the real shell */
+    var shell = el("div");
+    shell.style.cssText = "flex:1;min-height:0;display:flex;overflow:hidden";
+    shell.appendChild(appRail());
+
+    var col = el("div");
+    col.style.cssText = "flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden";
+    col.appendChild(appTopBar());
+    col.appendChild(crumbs());
+
+    if (opt === "A") {
+      var main = el("div");
+      main.style.cssText = "flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden";
+      main.appendChild(editor());
+      col.appendChild(main);
+      frame.appendChild(shell);
+      shell.appendChild(col);
+      frame.appendChild(measure("56 + 37 + 52 = 145 px of chrome", { right: "16px", top: "62px" }));
+      frame.appendChild(measure("canvas 648 px", { left: "772px", bottom: "10px" }));
+      return frame;
+    }
+
+    /* C — PageContainer: py-8 (32px), lg:px-10 (40px), max-w-[1400px] */
+    var main2 = el("div", "main-scroll");
+    main2.style.padding = "32px 0";
+    var pc = el("div", "page-container gutter-band");
+    pc.style.padding = "0 40px";
+    var cardEd = el("div", "card-editor");
+    cardEd.appendChild(editor());
+    pc.appendChild(cardEd);
+    main2.appendChild(pc);
+    col.appendChild(main2);
+    shell.appendChild(col);
+    frame.appendChild(shell);
+    frame.appendChild(measure("gutter 40 px", { left: "76px", top: "500px" }));
+    frame.appendChild(measure("canvas 568 px", { left: "760px", bottom: "44px" }));
+    return frame;
+  }
+
+  /* ── scaling ───────────────────────────────────────────────────────── */
+  function fit(wrap, frame, forceOne) {
+    var k = forceOne ? 1 : Math.min(1, wrap.clientWidth / FRAME_W);
+    frame.style.transform = "scale(" + k + ")";
+    wrap.style.height = Math.round(FRAME_H * k) + "px";
+    return k;
+  }
+
+  /* comparison strip */
+  var compare = document.getElementById("compare");
+  var strips = [
+    ["A", "Full-bleed in shell", "canvas 648 px"],
+    ["B", "No shell", "canvas 720 px"],
+    ["C", "Standard gutter", "canvas 568 px"]
+  ].map(function (o) {
+    var cell = el("div");
+    var cap = el("div", "cap");
+    cap.appendChild(el("span", "k", o[0] + " — " + o[1]));
+    cap.appendChild(el("span", "s", o[2]));
+    cell.appendChild(cap);
+    var wrap = el("div", "scaler");
+    var f = build(o[0]);
+    wrap.appendChild(f);
+    cell.appendChild(wrap);
+    compare.appendChild(cell);
+    return { wrap: wrap, frame: f };
+  });
+
+  /* full-size stage */
+  var stageWrap = document.getElementById("stage-wrap");
+  var stage = document.getElementById("stage");
+  var read = document.getElementById("scale-read");
+  var current = "A", actual = false;
+
+  function renderStage() {
+    var next = build(current);
+    next.id = "stage";
+    stageWrap.replaceChild(next, stage);
+    stage = next;
+    stageWrap.classList.toggle("actual", actual);
+    var k = fit(stageWrap, stage, actual);
+    read.textContent = actual
+      ? "Actual size (1440 × 900) — scroll inside the frame"
+      : "Scaled to " + Math.round(k * 100) + "% of 1440 × 900";
+  }
+
+  Array.prototype.forEach.call(
+    document.querySelectorAll("[data-opt]"),
+    function (b) {
+      b.addEventListener("click", function () {
+        current = b.getAttribute("data-opt");
+        Array.prototype.forEach.call(
+          document.querySelectorAll("[data-opt]"),
+          function (x) { x.setAttribute("aria-pressed", String(x === b)); }
+        );
+        renderStage();
+      });
+    }
+  );
+  document.getElementById("zoom-fit").addEventListener("click", function () {
+    actual = false;
+    this.setAttribute("aria-pressed", "true");
+    document.getElementById("zoom-1").setAttribute("aria-pressed", "false");
+    renderStage();
+  });
+  document.getElementById("zoom-1").addEventListener("click", function () {
+    actual = true;
+    this.setAttribute("aria-pressed", "true");
+    document.getElementById("zoom-fit").setAttribute("aria-pressed", "false");
+    renderStage();
+  });
+
+  function relayout() {
+    strips.forEach(function (s) { fit(s.wrap, s.frame, false); });
+    var k = fit(stageWrap, stage, actual);
+    read.textContent = actual
+      ? "Actual size (1440 × 900) — scroll inside the frame"
+      : "Scaled to " + Math.round(k * 100) + "% of 1440 × 900";
+  }
+
+  window.addEventListener("resize", relayout);
+  renderStage();
+  relayout();
+})();
+</script>
+</body>
+</html>
