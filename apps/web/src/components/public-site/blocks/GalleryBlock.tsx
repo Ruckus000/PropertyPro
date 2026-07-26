@@ -6,7 +6,9 @@
  * fallback src must point at the 1600w variant (never content.imagePath).
  */
 import { galleryBlockSchema, type GalleryBlockContent } from '@propertypro/shared';
-import { buildPublicAssetUrl } from '@/lib/site-assets/storage-paths';
+// Import from ./public-url, NOT ./storage-paths — the latter pulls in
+// `node:crypto` for write-side path generation and cannot be bundled client-side.
+import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 import type { BlockRendererProps } from './types';
 
 export function GalleryBlock(props: BlockRendererProps) {

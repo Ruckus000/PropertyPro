@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { HeroBlock } from '@/components/public-site/blocks/HeroBlock';
 import type { BlockRendererProps } from '@/components/public-site/blocks/types';
@@ -30,6 +30,15 @@ function makeProps(content: unknown): BlockRendererProps {
     layout: 'tidewater',
   };
 }
+
+const savedEnv = process.env.NEXT_PUBLIC_SUPABASE_URL;
+beforeEach(() => {
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+});
+afterEach(() => {
+  if (savedEnv === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  else process.env.NEXT_PUBLIC_SUPABASE_URL = savedEnv;
+});
 
 describe('<HeroBlock>', () => {
   it('renders headline as an h1', () => {
@@ -81,5 +90,38 @@ describe('<HeroBlock>', () => {
     );
     const img = screen.getByRole('img', { name: 'The pool at golden hour' });
     expect(img).toBeInTheDocument();
+  });
+
+  it('builds the hero image src from the Supabase CDN base when configured', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
+    render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          heroImagePath: '1/hero/test.1600w.webp',
+          heroImageAlt: 'The pool at golden hour',
+        })}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'The pool at golden hour' })).toHaveAttribute(
+      'src',
+      'https://example.supabase.co/storage/v1/object/public/community-site-assets/1/hero/test.1600w.webp',
+    );
+  });
+
+  it('falls back to a relative path when NEXT_PUBLIC_SUPABASE_URL is unset', () => {
+    render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          heroImagePath: '1/hero/test.1600w.webp',
+          heroImageAlt: 'The pool at golden hour',
+        })}
+      />,
+    );
+    expect(screen.getByRole('img', { name: 'The pool at golden hour' })).toHaveAttribute(
+      'src',
+      '/site-assets/1/hero/test.1600w.webp',
+    );
   });
 });
