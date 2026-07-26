@@ -6,6 +6,14 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
+  # Manual trigger. Deploys are otherwise reachable ONLY by landing a commit on
+  # main, which makes two ordinary operations awkward: applying a changed Vercel
+  # env var (values are baked in at `vercel pull` + `vercel build`, so an existing
+  # deployment never picks one up), and re-deploying after an infrastructure-only
+  # fix. This repo has previously had production deploys silently blocked for two
+  # weeks; not being able to deploy without inventing a commit is what made that
+  # slow to recover from.
+  workflow_dispatch:
   # PR previews are handled by the native Vercel GitHub integration.
 
 concurrency:
@@ -15,9 +23,14 @@ concurrency:
 jobs:
   deploy-production:
     name: Deploy to Production
+    # Auto: only when CI actually succeeded. Manual: the operator has decided,
+    # and a dispatch carries no workflow_run conclusion to check — without this
+    # second branch the dispatch trigger above would be accepted and then
+    # silently skip every job.
     if: >-
-      github.event_name == 'workflow_run'
-      && github.event.workflow_run.conclusion == 'success'
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production

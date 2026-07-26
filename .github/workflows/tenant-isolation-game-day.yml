@@ -63,5 +63,11 @@ jobs:
       - name: Run migrations
         run: pnpm --filter @propertypro/db db:migrate
 
+      - name: Reconcile table privileges
+        # AFTER migrations: the stub's ALTER DEFAULT PRIVILEGES grants every
+        # table the migrations just created, so production's revocations have to
+        # be re-applied now those tables exist.
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sql/local-supabase-post-migrate.sql
+
       - name: Run tenant isolation game day
         run: pnpm test:tenant-isolation-game-day

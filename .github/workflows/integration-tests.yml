@@ -60,5 +60,31 @@ jobs:
       - name: Run migrations
         run: pnpm --filter @propertypro/db db:migrate
 
+      - name: Reconcile table privileges
+        # AFTER migrations: the stub's ALTER DEFAULT PRIVILEGES grants every
+        # table the migrations just created, so production's revocations have to
+        # be re-applied now those tables exist.
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sql/local-supabase-post-migrate.sql
+
       - name: Run integration tests
         run: pnpm exec vitest run --config apps/web/vitest.integration.config.ts
+
+      - name: Run database RLS policy tests
+        # packages/db has its own integration config that no workflow ever
+        # invoked, so this suite — the only end-to-end proof that tenant
+        # isolation holds at the DATABASE layer rather than just the app layer —
+        # ran nowhere. DATABASE_URL and DIRECT_URL are already set at job level,
+        # which the suite requires to not skip itself.
+        #
+        # Scoped to this ONE file on purpose. The rest of packages/db's
+        # integration config has pre-existing failures unrelated to RLS
+        # (seed-demo / reset-demo / schema-gate0 need seeded demo data;
+        # document-access, pm-portfolio-unsafe, reconcile-auth-user-id and
+        # audit-log-append-only-db fail on this vanilla-Postgres harness).
+        # Enabling all of it here would land CI red on day one and get this step
+        # reverted, taking the RLS coverage with it. Widening the glob is its own
+        # task, tracked separately.
+        run: >-
+          pnpm --filter @propertypro/db exec vitest run
+          --config vitest.integration.config.ts
+          __tests__/rls-policies.integration.test.ts

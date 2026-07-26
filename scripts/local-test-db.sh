@@ -37,6 +37,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 stub_sql="$script_dir/sql/local-supabase-stub.sql"
+post_migrate_sql="$script_dir/sql/local-supabase-post-migrate.sql"
 
 # Homebrew/libpq on macOS otherwise renegotiates GSS and stalls local sockets.
 export PGGSSENCMODE="${PGGSSENCMODE:-disable}"
@@ -90,6 +91,13 @@ apply_stub() {
   psql "$database_url" -v ON_ERROR_STOP=1 -q -f "$stub_sql"
 }
 
+# Must run AFTER migrations: the stub's ALTER DEFAULT PRIVILEGES grants every
+# table the migrations then create, so the revocations have to be re-applied
+# once those tables exist.
+apply_post_migrate() {
+  psql "$database_url" -v ON_ERROR_STOP=1 -q -f "$post_migrate_sql"
+}
+
 run_migrations() {
   # drizzle.config.ts reads DIRECT_URL; the runtime reads DATABASE_URL. Set both
   # to the local DB and do NOT source .env.local, so migrations hit LOCAL only.
@@ -113,6 +121,7 @@ case "$cmd" in
     createdb -h "$db_host" -p "$db_port" -U "$admin_user" -O "$db_user" "$db_name"
     apply_stub
     run_migrations
+    apply_post_migrate
     echo "Reset complete: $database_url"
     ;;
   setup)
@@ -131,6 +140,7 @@ case "$cmd" in
       echo "    pnpm db:test-local:reset" >&2
       exit 1
     fi
+    apply_post_migrate
     echo "Ready: $database_url"
     ;;
   *)

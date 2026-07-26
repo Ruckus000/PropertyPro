@@ -916,21 +916,48 @@ describeDb('P4-55 RLS policies (integration)', () => {
   });
 
   describe('service_only table coverage', () => {
-    it('blocks authenticated SELECT on service_only tables', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+    // Derived from the config, NOT a hardcoded list.
+    //
+    // This block used to name four tables literally, which meant a newly
+    // registered service_only table got zero behavioural coverage — it would be
+    // checked for policy NAMES by the family loop and nothing else. Driving it
+    // from RLS_TENANT_TABLES is what stops the next table landing in the same
+    // blind spot; `site_publish_snapshots` is the one that exposed it.
+    const serviceOnlyTables = RLS_TENANT_TABLES.filter(
+      (entry) => entry.policyFamily === 'service_only',
+    ).map((entry) => entry.tableName);
 
-      const registryRows = await authSql`select * from public.demo_seed_registry limit 1`;
-      expect(registryRows).toHaveLength(0);
-
-      const deliveryRows = await authSql`select * from public.announcement_delivery_log limit 1`;
-      expect(deliveryRows).toHaveLength(0);
-
-      const digestRows = await authSql`select * from public.notification_digest_queue limit 1`;
-      expect(digestRows).toHaveLength(0);
-
-      const provisioningRows = await authSql`select * from public.provisioning_jobs limit 1`;
-      expect(provisioningRows).toHaveLength(0);
+    it('covers every service_only table in the config, not a hardcoded subset', () => {
+      // Guards the guard: if the filter ever silently yields nothing (a rename,
+      // a family retired), the loops below would vacuously pass.
+      expect(serviceOnlyTables.length).toBeGreaterThanOrEqual(6);
+      expect(serviceOnlyTables).toContain('site_publish_snapshots');
     });
+
+    it.each(serviceOnlyTables)(
+      'blocks authenticated SELECT on service_only table %s',
+      async (tableName) => {
+        await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+
+        // Zero rows, not an error: production grants authenticated SELECT on
+        // these tables and relies on RLS to return nothing. An error here would
+        // mean the ACL denied before any policy ran — which is what the missing
+        // stub GRANTs used to cause, making this suite pass for the wrong reason.
+        const rows = await authSql`select * from public.${authSql(tableName)} limit 1`;
+        expect(rows).toHaveLength(0);
+      },
+    );
+
+    it.each(serviceOnlyTables)(
+      'blocks anon SELECT on service_only table %s',
+      async (tableName) => {
+        // Reuses authSql with `SET ROLE anon` — the file's existing precedent
+        // (see the 0023 wrong-GUC block); there is no separate anon connection.
+        await setAnonContext(authSql, seed.communityAId);
+        const rows = await authSql`select * from public.${authSql(tableName)} limit 1`;
+        expect(rows).toHaveLength(0);
+      },
+    );
 
     it('blocks authenticated INSERT on service_only tables', async () => {
       await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
@@ -1423,6 +1450,23 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // site_blocks (public_read_service_write): anon + authenticated published-row
       // read, service-role-only writes. Bespoke names; no pp_* family standard.
       site_blocks: ['site_blocks_anon_read', 'site_blocks_read_published', 'site_blocks_service_role'],
+      // site_publish_snapshots (service_only): migration 0034 grants the family's
+      // whole surface with ONE `FOR ALL` policy rather than the four per-command
+      // pp_service_* policies. Functionally identical — same predicate
+      // (pp_rls_is_privileged()) applied to every command — and the single-policy
+      // shape was verified against production after 0034 was applied.
+      site_publish_snapshots: ['pp_site_publish_snapshots_service'],
+      // snowbird_digest_subscriptions (tenant_user_scoped): bespoke INSERT policy
+      // name where the family's generic `pp_tenant_insert` is expected. Predates
+      // this suite ever running — the guard that would have caught it has never
+      // executed until now. Behaviour is covered by the family's own assertions;
+      // only the NAME diverges.
+      snowbird_digest_subscriptions: [
+        'pp_snowbird_digest_subscriptions_delete',
+        'pp_snowbird_digest_subscriptions_insert',
+        'pp_snowbird_digest_subscriptions_select',
+        'pp_snowbird_digest_subscriptions_update',
+      ],
     };
 
     const rows = await adminSql<{ schemaname: string; tablename: string; policyname: string }[]>`
