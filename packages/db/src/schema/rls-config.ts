@@ -336,7 +336,7 @@ export const RLS_TENANT_TABLES = [
     tableName: 'document_drafts',
     policyFamily: 'tenant_crud',
     notes:
-      'Authored-document drafts. Four membership-scoped policies (document_drafts_community_{read,insert,update,delete}) on pp_rls_can_access_community(community_id), plus an explicit document_drafts_service_bypass FOR ALL on pp_rls_is_privileged(). Baseline names; write-scope trigger present under the legacy name document_drafts_tenant_scope. The UPDATE policy has USING but no WITH CHECK — the trigger is what stops a row being moved out of its community.',
+      'Authored-document drafts. Four membership-scoped policies (document_drafts_community_{read,insert,update,delete}) on pp_rls_can_access_community(community_id), plus an explicit document_drafts_service_bypass FOR ALL on pp_rls_is_privileged(). Baseline names; write-scope trigger present under the legacy name document_drafts_tenant_scope. The UPDATE policy declares only USING, which Postgres applies as the WITH CHECK too — so the new row IS constrained, but only to a community the caller can access. The trigger is what pins it to the ACTIVE tenant, which matters for a caller who belongs to more than one.',
   },
   {
     tableName: 'faqs',

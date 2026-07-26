@@ -549,8 +549,19 @@ function hasTenantWriteScopeTrigger(
   //    bridge across unrelated statements in the concatenated corpus and pair
   //    a CREATE TRIGGER with some later `ON "public"."other_table"` (e.g. a
   //    CREATE POLICY), reporting a trigger that does not exist.
+  // 3. The statement must also EXECUTE the enforcement function. Matching the
+  //    trigger NAME alone was a safe proxy only while the name was hardcoded to
+  //    the convention; now that per-table names are declarable via
+  //    LEGACY_WRITE_SCOPE_TRIGGER_NAMES, a trigger called `foo_tenant_scope` that
+  //    actually runs set_updated_at() would satisfy a name-only check and report
+  //    a table as write-scoped when nothing enforces its community_id. Both
+  //    spellings appear in the corpus: bare, and "public"."…" schema-qualified.
+  //    Still bounded by [^;] so the whole match stays inside one statement.
+  const enforcementFn =
+    '[^;]*?EXECUTE\\s+(?:FUNCTION|PROCEDURE)\\s+(?:(?:"[^"]+"|\\w+)\\.)?' +
+    '(?:"pp_rls_enforce_tenant_community_id"|\\bpp_rls_enforce_tenant_community_id\\b)';
   const directPattern = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)${enforcementFn}`,
     'i',
   );
   if (directPattern.test(sql)) return true;
@@ -564,7 +575,7 @@ function hasTenantWriteScopeTrigger(
     'i',
   );
   const hasLoopTriggerInstall = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)`,
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)${enforcementFn}`,
     'i',
   );
   return arrayContainsTable.test(sql) && hasLoopTriggerInstall.test(sql);

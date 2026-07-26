@@ -62,6 +62,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   const createdDemoSeedRegistryIds = new Set<number>();
   const createdAnnouncementDeliveryLogIds = new Set<number>();
   const createdAccessRequestIds = new Set<number>();
+  const createdEmergencyBroadcastIds = new Set<number>();
   const createdCommunityJoinRequestIds = new Set<number>();
   const createdChecklistItemIds = new Set<number>();
   const createdSiteBlockIds = new Set<number>();
@@ -401,6 +402,11 @@ describeDb('P4-55 RLS policies (integration)', () => {
       const accessRequestIds = [...createdAccessRequestIds];
       if (accessRequestIds.length > 0) {
         await db.delete(accessRequests).where(inArray(accessRequests.id, accessRequestIds));
+      }
+
+      const emergencyBroadcastIds = [...createdEmergencyBroadcastIds];
+      if (emergencyBroadcastIds.length > 0) {
+        await adminSql`delete from public.emergency_broadcasts where id in ${adminSql(emergencyBroadcastIds)}`;
       }
 
       const communityJoinRequestIds = [...createdCommunityJoinRequestIds];
@@ -1896,13 +1902,18 @@ describeDb('P4-55 RLS policies (integration)', () => {
         returning id, community_id
       `;
 
+      // Track BEFORE asserting. If an assertion throws — which is exactly the
+      // failure this test exists to catch — an inline delete after it would never
+      // run and the row would leak into the shared local/CI database. afterAll
+      // cleanup is the pattern the documents and access_requests forged-insert
+      // tests already use, for the same reason.
+      if (inserted[0]) {
+        createdEmergencyBroadcastIds.add(Number(inserted[0].id));
+      }
+
       expect(inserted).toHaveLength(1);
       // Written into the ACTIVE tenant (A), not the forged one (B).
       expect(Number(inserted[0]?.community_id)).toBe(seed.communityAId);
-
-      if (inserted[0]) {
-        await serviceSql`delete from public.emergency_broadcasts where id = ${Number(inserted[0].id)}`;
-      }
     });
 
     it('rewrites a forged community_id on access_requests INSERT to the active tenant', async () => {
