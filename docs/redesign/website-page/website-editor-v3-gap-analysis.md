@@ -138,7 +138,7 @@ column, and needs no change to the block model.
 | `community_id` | `bigint` NOT NULL → `communities.id` `ON DELETE CASCADE` |
 | `published_at` | the publish's timestamp — matches the `published_at` stamped on the promoted rows |
 | `published_by` | `uuid` actor |
-| `snapshot` | `jsonb` — the full published set as of this publish (blocks + branding +, later, pages/site/footer) |
+| `snapshot` | `jsonb` **nullable** — the full published set as of this publish (blocks + branding +, later, pages/site/footer). Nulled by the pruning sweep; see *Retention* below |
 | `change_count` / `kept_count` | for the history line "8 changes by Jordan Rivera · 2 kept as draft" |
 | `labels` | `jsonb` string array — the human labels from `diffSite` |
 | `kind` | `'publish' \| 'revert' \| 'urgent_notice'` — v3's history mixes all three |
@@ -175,10 +175,19 @@ Three details that are easy to get wrong:
   timestamp, an editor holding a stale token gets the existing `ConflictError` rather than
   silently clobbering the revert. Free correctness — do not bypass it.
 
-**Retention.** One jsonb snapshot per publish grows without bound. Prune to the most
-recent N (30 is generous for a "revert one step" product) or 12 months, whichever is
-larger, in the daily lifecycle cron — `app/api/v1/internal/account-lifecycle/route.ts`
-already calls `cleanupSoftDeletedSiteBlocks()` from there, so the hook exists.
+**Retention — decided: split the row from its payload.** One jsonb snapshot per publish
+grows without bound, but the *log line* does not. So:
+
+- **History rows are kept indefinitely.** `published_at`, `published_by`, the counts, the
+  labels and `kind` are a few hundred bytes each. They are what answers "what did our site
+  show in March", which on a statutory site has evidentiary value worth not discarding.
+- **The `snapshot` jsonb is pruned** beyond the most recent ~30 publishes, in the daily
+  lifecycle cron — `app/api/v1/internal/account-lifecycle/route.ts` already calls
+  `cleanupSoftDeletedSiteBlocks()` from there, so the hook exists.
+
+Two consequences to build for: `snapshot` must be **nullable**, and the UI has to
+distinguish "you can restore this version" from "this happened, but the content is no
+longer retained". Revert is only ever offered where `snapshot IS NOT NULL`.
 
 **Scope of the UI it unlocks:** v3 items 12, 13, 15. Item 14 (per-change revert) needs the
 change model from Phase 4, not this.
@@ -214,11 +223,22 @@ needs a page dimension. `publishCommunitySite`'s "which `block_order`s have a li
 step (`:275`) becomes "which `(page_id, block_order)` pairs".
 
 **Public site.** `app/public-site/page.tsx` is a single route. Multi-page needs a
-`[[...slug]]` catch-all, nav in `PublicSiteHeader` driven by `in_nav` + `sort_order`, a
-404 for unknown slugs, and redirect handling for renamed pages — v3 already surfaces the
-consequence in its change list ("address changed from /documents — old links will break"
-vs "(redirect kept)"), so the product decision is made; it just has to be honoured
-server-side. Sitemap and `robots` behaviour follow from §4.4's indexing flag.
+`[[...slug]]` catch-all, nav in `PublicSiteHeader` driven by `in_nav` + `sort_order`, and
+a 404 for unknown slugs. Sitemap and `robots` behaviour follow from §4.4's indexing flag.
+
+**Renames always keep a permanent redirect** (decided — §9 row 11). Association URLs get
+printed in mailed notices and cited in governing documents, so a rename must not break an
+old link, and a PM mid-rename is not the right person to be adjudicating that. There is no
+toggle: v3's change-list copy simplifies to "redirect kept" in every case, and the
+"old links will break" branch is dropped. Two things follow —
+
+- `site_pages` needs a slug-history relation, not a single `redirect_from` column: a page
+  renamed three times must honour all three old slugs. A small `site_page_redirects`
+  table (`community_id`, `from_slug`, `page_id`) is the honest shape.
+- **A retired slug is reserved.** A new page cannot claim a slug an existing redirect
+  holds, so `pageIssues()` gains a third check alongside duplicate-name and duplicate-slug:
+  "another page used to live at this address". Say so in the validation copy rather than
+  failing mysteriously.
 
 **Migration ordering** (manual applies, expand-before-code):
 
@@ -272,7 +292,7 @@ Smallest of the four and the most self-contained user-facing win.
 | Site settings (19) | New fields (title/description/language/favicon/indexing) in the branding jsonb or their own columns; consumed by the public-site `metadata` export and `robots` |
 | Footer (20) | Editable fields in branding; `PublicSiteFooter` reads them. The statutory line must stay **opt-in** with the counsel warning — see §5 |
 | Hero photos (21) | `heroBlockSchema` gains a `photos: [{path, alt, decorative}]` array; the single `heroImagePath`/`heroImageAlt` pair becomes the migration source. Existing rows are content, not columns, so this is a jsonb shape change with a read-time upgrade, not a DDL migration |
-| `payments` block (23) | New Zod schema + `BLOCK_TYPES` entry + **a migration to extend `site_blocks_block_type_check`**. Easy to forget: the type list is a CHECK constraint, not an enum |
+| `payments` block (23) | New Zod schema + `BLOCK_TYPES` entry + **a migration to extend `site_blocks_block_type_check`**. Easy to forget: the type list is a CHECK constraint, not an enum. **Target** (decided — §9 row 13): defaults to the resident portal's `/payments` via `buildCommunityUrl()` when the community has payments enabled, with an optional PM-supplied override validated by the **existing `ctaTargetSchema`** (`packages/shared/src/site-blocks/types.ts:63`), which already rejects protocol-relative and backslash open-redirects. Most Florida associations use ClickPay/Zego/PayLease, so a portal-only link would make the block unusable for them. Keep v3's "no card details touch your website" copy accurate — when an override is set, the block links out and takes no payment itself |
 | Block layout variants (24), empty text (25) | Additive optional fields on existing block schemas — no migration |
 | Attribution (32) | `site_blocks.updated_by uuid` + the same on `site_pages` |
 
@@ -391,7 +411,7 @@ trade-off is recorded rather than argued again.
 
 | # | Decision | Consequence for the build |
 |---|---|---|
-| 1 | **Layout: Option B** — full-bleed, no app shell | Recommendation had been A. Accepted trade-off: the editor gives up the shell's sidebar, command palette, breadcrumb trail and banner strip, and a new route group must re-establish auth, community resolution, feature gating and **`AppQueryProvider`** (mounted per route-group layout, not at root — React Query hooks 500 without it). Buys ~72 px of width and ~93 px of height over A, and avoids editing `AppShell`, which every authenticated page shares |
+| 1 | **Layout: Option B** — full-bleed, no app shell | Recommendation had been A. Accepted trade-off: the editor gives up the shell's sidebar, command palette, breadcrumb trail and banner strip, and a new route group must re-establish auth, community resolution, feature gating and **`AppQueryProvider`** (mounted per route-group layout, not at root — React Query hooks 500 without it). Buys ~93 px of canvas height over A and avoids editing `AppShell`, which every authenticated page shares. The 72 px of width is handed back by row 2 |
 | 2 | **Nav chrome: reuse the collapsed `NavRail`** | Full app navigation returns inside the editor at its 72 px width, single-sourced with the sidebar's own gating and labels. v3's hand-rolled `Rail()` is discarded. Net width vs Option A is therefore roughly a wash — B's real win is the 93 px of vertical chrome and not touching the shell |
 | 3 | **Canvas: reuse `components/public-site/blocks/*`** | Selection chrome wraps *around* each block, as v3's `wrapSection` does. What you see is literally what publishes. New standing constraint: the ten renderers must stay hook-free and prop-driven so they work inside a client tree — worth a comment in `blocks/registry.ts` so a future edit doesn't break the canvas silently |
 | 4 | **Billing: route gate + compact status strip** | Reuse the existing lapsed-community lockout (#835 / #837) so a lapsed community never reaches the editor. States that still allow entry — trial ending, free access expiring — get a condensed strip in the editor's own top bar rather than the full shell banners |
@@ -401,18 +421,11 @@ trade-off is recorded rather than argued again.
 | 8 | **Phone gate: as designed** | Below 768 px, show the gate — view the public site, or post an urgent notice. No mobile editing fallback to maintain |
 | 9 | **Content additions: all four in scope** | Hero photo array + carousel; block layout variants + per-block empty text; the `payments` block (**needs a migration** — block types are a CHECK constraint, not an enum); site settings + footer entities. Phases 10 and 11 are both confirmed scope, not optional |
 | 10 | **Multi-page sequenced after publish history** | Unchanged from §8. Multi-page is the only change that touches the published site's URL surface, and it is far less risky once a bad publish is one click from being undone |
+| 11 | **Page renames always keep a permanent redirect** | No toggle. Needs a `site_page_redirects` relation rather than a single column (a page renamed repeatedly must honour every old slug), and a retired slug is reserved — `pageIssues()` gains a "another page used to live at this address" check. v3's "old links will break" branch is dropped from the change-list copy. Detail in §4.2 |
+| 12 | **Snapshot retention: keep log rows forever, prune payloads** | `snapshot` becomes nullable and is nulled beyond the most recent ~30 publishes by the daily lifecycle cron. History rows persist indefinitely — they are small, and on a statutory site "what did the public page show in March" is worth being able to answer. Revert is offered only where `snapshot IS NOT NULL`, so the UI must distinguish restorable versions from logged-only ones. Detail in §4.1 |
+| 13 | **`payments` block: portal default, https override allowed** | Deep-links to the resident portal's `/payments` when the community has payments enabled; otherwise a PM-supplied `https://` URL validated by the existing `ctaTargetSchema`. Reflects that most Florida associations already use a third-party processor. Detail in §4.5 |
 
-### Still to decide, later
-
-Not blocking Phase 0, but they will come up:
-
-- **Redirect retention on page rename.** v3 surfaces the consequence in its change list
-  ("old links will break" vs "redirect kept") but leaves the default unstated. Decide when
-  Phase 8 is specified.
-- **Snapshot retention window.** §4.1 proposes 30 publishes or 12 months. Confirm before
-  Phase 6 ships, since it determines how far back "restore" can reach.
-- **`payments` block target.** Whether the button deep-links to the resident portal's
-  payment page or to a community-specific URL the PM supplies.
+Nothing is outstanding. Phase 0 can be specified from this document.
 
 ---
 
