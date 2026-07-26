@@ -445,7 +445,22 @@ function main(): void {
   console.log(`     packages/db/src/schema/${opts.plural}.ts and the matching CREATE TABLE in`);
   console.log(`     packages/db/migrations/${padIndex(result.migrationIndex)}_create_${opts.plural.replaceAll('-', '_')}.sql.`);
   console.log('');
-  console.log('  4. Apply the migration:  pnpm --filter @propertypro/db db:migrate');
+  // Step 4 used to read `pnpm --filter @propertypro/db db:migrate`, with no
+  // warning. In this repo's default environment `.env.local`'s DATABASE_URL
+  // points at PRODUCTION, so following that instruction verbatim applies a
+  // freshly-scaffolded table to the live database. That is not hypothetical:
+  // it is how a stray `widgets` table — this scaffolder's own example resource
+  // — reached production and sat there, in neither migration ledger, until it
+  // was found by diffing prod against the migrations (dropped in 0036).
+  console.log('  4. Apply the migration to your LOCAL database:');
+  console.log('                           pnpm db:test-local:setup');
+  console.log('');
+  console.log('     ⚠️  Do NOT run `pnpm --filter @propertypro/db db:migrate` here.');
+  console.log("     `.env.local`'s DATABASE_URL points at PRODUCTION, so that command");
+  console.log('     applies this scaffold to the live database. Production migrations');
+  console.log('     are applied deliberately and manually — see');
+  console.log('     .claude/rules/migration-safety.md.');
+  console.log('');
   console.log('  5. Verify:               pnpm typecheck && pnpm lint && pnpm test');
   console.log('');
   console.log('See docs/contributing/new-resource.md for the full recipe.');
