@@ -506,6 +506,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const tenantContext = resolveCommunityContext({
       searchParams: request.nextUrl.searchParams,
       host: request.headers.get('host'),
+      // `foreignHost()` needs this to classify a non-root host as
+      // 'custom_domain'. Without it a foreign host fell through to the
+      // subdomain path and its FIRST LABEL was read as a PropertyPro slug —
+      // so `sunset-condos.example.com/dashboard` resolved the real
+      // `sunset-condos` community and forwarded its x-community-id from a host
+      // we do not control. Membership checks downstream still gated the data,
+      // but tenant context must not be resolvable off a foreign host at all.
+      //
+      // Per design decision D4 a custom domain serves the public `/` site
+      // ONLY — residents authenticate on the subdomain — so there is
+      // deliberately no custom-domain resolution here. 'custom_domain' carries
+      // null communityId AND null tenantSlug, so every branch below is skipped
+      // and the request falls through to the missing-tenant redirect. See
+      // docs/superpowers/specs/2026-06-03-custom-domain-support-design.md
+      // (D4, and "Out of scope: Custom domain on /auth/* and /dashboard").
+      rootDomain,
     });
 
     if (tenantContext.isReservedSubdomain) {
@@ -690,7 +706,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const tenantContext = resolveCommunityContext({
       searchParams: request.nextUrl.searchParams,
       host: request.headers.get('host'),
-      rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
+      rootDomain,
     });
 
     if (tenantContext.source === 'custom_domain' && tenantContext.customDomainHost) {
@@ -796,7 +812,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const tenantContext = resolveCommunityContext({
       searchParams: request.nextUrl.searchParams,
       host: request.headers.get('host'),
-      rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
+      rootDomain,
     });
 
     const hasCommunityContext =
@@ -845,6 +861,14 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const authTenantContext = resolveCommunityContext({
       searchParams: request.nextUrl.searchParams,
       host: request.headers.get('host'),
+      // Same reason as the protected-route call site: without this, a foreign
+      // host's first label is read as a PropertyPro slug, so
+      // `sunset-condos.example.com/auth/login` would render the real
+      // `sunset-condos` community's branding on a host we do not control.
+      // Branded auth on a custom domain is an explicit non-goal (D4), and a
+      // foreign host never carries a PropertyPro session, so 'custom_domain'
+      // is intentionally left to fall through to generic login.
+      rootDomain,
     });
 
     if (!authTenantContext.isReservedSubdomain && authTenantContext.source !== 'none') {
