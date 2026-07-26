@@ -21,6 +21,7 @@ const editor = vi.hoisted(() => ({
 }));
 
 const deleteMutate = vi.hoisted(() => vi.fn());
+const upsertMutate = vi.hoisted(() => vi.fn());
 
 vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   useSiteEditor: () => ({
@@ -34,6 +35,8 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
 
 vi.mock('@/hooks/use-content-blocks', () => ({
   useDeleteContentBlock: () => ({ mutate: deleteMutate, isPending: false }),
+  // FloatControls' undo replays the removed section through the upsert.
+  useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
 }));
 
 const toastSuccess = vi.hoisted(() => vi.fn());
@@ -199,20 +202,22 @@ describe('FloatControls', () => {
     expect(editor.select).not.toHaveBeenCalled();
   });
 
-  it('removes by block order and reports the staged case', async () => {
+  it('asks before removing — the trash control confirms, it does not delete', async () => {
+    // Phase 3 put a Radix alert-dialog in front of the delete. The removal
+    // flow itself (confirm/cancel, toast copy, undo) lives in
+    // undo-toast.test.tsx; here we only assert the shell's control no longer
+    // mutates on a single click.
     const user = userEvent.setup();
-    deleteMutate.mockImplementation((_input, opts) => opts.onSuccess({ staged: true }));
     renderShell();
 
     await user.click(screen.getByRole('button', { name: 'Remove Text section' }));
 
-    expect(deleteMutate).toHaveBeenCalledWith(
-      { blockOrder: 2 },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    // The dialog is code-split and mounted on demand, so it resolves a tick
+    // after the click.
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent(
+      'Remove the Text section?',
     );
-    expect(toastSuccess).toHaveBeenCalledWith(
-      'Text section will be removed when you publish.',
-    );
+    expect(deleteMutate).not.toHaveBeenCalled();
   });
 });
 

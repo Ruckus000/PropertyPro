@@ -15,6 +15,8 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useContentBlocks: () => ({ ...blocksState.value, refetch }),
   // Reached through SectionShell → FloatControls, which wraps every block.
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
+  // Same path — FloatControls' undo replays a removed section through the upsert.
+  useUpsertContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // The canvas now renders inside the editor context (mounted by EditorRoot).

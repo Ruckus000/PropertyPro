@@ -22,9 +22,14 @@ import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
+// Mock this module COMPLETELY. A partial factory here fails only at module
+// load, and only for whichever component reaches the missing export — so it
+// reads as an unrelated component breaking rather than a mock being short.
+// Anything FloatControls' undo path reaches has to be listed.
 vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
 // The inspector docks at >=1280px; false = wide. Both modes are audited.

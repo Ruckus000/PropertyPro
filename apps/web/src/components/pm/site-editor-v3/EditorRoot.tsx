@@ -3,8 +3,22 @@
 import { useCallback, useState } from 'react';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
+import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
 import { Inspector } from './Inspector';
+import { StatusLine } from './StatusLine';
+
+// Code-split, and mounted only once opened.
+//
+// The preview pulls the whole read-only render path — every block view, the
+// dialog chrome, the loading/error/empty surfaces — and a PM who never presses
+// Preview should not pay for it. The editor route sits at ~697 KiB against a
+// 700 KiB HARD budget with this imported statically; deferring it is the
+// difference between passing and blocking every later phase.
+const PreviewDialog = dynamic(
+  () => import('./PreviewDialog').then((m) => m.PreviewDialog),
+  { loading: () => null },
+);
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider } from './editor-context';
 import { SectionList } from './panels/SectionList';
@@ -39,10 +53,12 @@ export function EditorRoot({
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // Selecting a section on the canvas pulls the Sections panel forward, so the
   // controls for what you just clicked are visible without a second action.
   const handleSelect = useCallback(() => setActiveTool('sections'), []);
+  const handlePreview = useCallback(() => setPreviewOpen(true), []);
 
   return (
     <SiteEditorProvider
@@ -56,6 +72,14 @@ export function EditorRoot({
         proToolAccess={proToolAccess}
         activeTool={activeTool}
         onActiveToolChange={setActiveTool}
+        onPreview={handlePreview}
+        // Mounted idle. `useAutosave` drives this once the per-block inspector
+        // forms exist — they are the only thing in the editor that autosaves,
+        // and they arrive with the inspector body. Until then StatusLine
+        // renders nothing (it deliberately shows no "Saved" without a save),
+        // so mounting it now costs nothing and means the top bar does not have
+        // to change when the forms land.
+        status={<StatusLine status="idle" lastSavedAt={null} />}
         renderToolPanel={(tool) =>
           tool === 'sections' ? <SectionList /> : <ToolPanelPlaceholder tool={tool} />
         }
@@ -75,6 +99,15 @@ export function EditorRoot({
           </div>
         )}
       </EditorShell>
+
+      {previewOpen && canvasContext ? (
+        <PreviewDialog
+          open
+          onOpenChange={setPreviewOpen}
+          communityId={communityId}
+          context={canvasContext}
+        />
+      ) : null}
     </SiteEditorProvider>
   );
 }
