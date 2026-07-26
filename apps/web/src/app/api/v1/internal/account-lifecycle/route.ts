@@ -5,6 +5,8 @@
  * 1. Deletion cooling → soft-delete (30-day cooling expired)
  * 2. Deletion purge (6-month purge window expired)
  * 3. Free access expiry notifications (14d, 7d, expired)
+ * 4. site_blocks soft-delete cleanup (30-day retention)
+ * 5. site_publish_snapshots payload retention (keep the log, drop the payload)
  *
  * All cross-tenant DB ops live in account-lifecycle-service (A3 drain #63);
  * the route is now pure orchestration: cron-secret check, per-row dispatch
@@ -34,7 +36,10 @@ import {
   purgeCommunityData,
   purgeUserPII,
 } from '@/lib/services/account-lifecycle-service';
-import { cleanupSoftDeletedSiteBlocks } from '@/lib/services/site-blocks-service';
+import {
+  cleanupSoftDeletedSiteBlocks,
+  pruneSitePublishSnapshots,
+} from '@/lib/services/site-blocks-service';
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
   requireCronSecret(req, process.env.ACCOUNT_LIFECYCLE_CRON_SECRET);
@@ -48,6 +53,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     purged: { users: 0, communities: 0 },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     siteBlocksCleaned: 0,
+    sitePublishSnapshotsPruned: 0,
     errors: [] as string[],
   };
 
@@ -199,6 +205,27 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     summary.siteBlocksCleaned = result.deleted;
   } catch (err) {
     summary.errors.push(`cleanup site_blocks: ${String(err)}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // 5. Publish-snapshot retention (website editor v3 — Phase 6)
+  //
+  // NULLs the `snapshot` payload beyond the newest N publishes per community
+  // and KEEPS the log row. The two halves are the whole design: the payload is
+  // full page content an association may have deliberately taken down, so it
+  // should not be retained forever; the log row is the answer to "what changed
+  // on this statutory site, and when", so it must persist.
+  //
+  // Deliberately after the site_blocks sweep and in its own try/catch: a
+  // failure here is a retention miss, not a correctness problem, and must not
+  // cost the caller the soft-delete and purge work already done above. Errors
+  // land in `summary.errors` for the same reason the sibling sweep's do.
+  // -------------------------------------------------------------------------
+  try {
+    const result = await pruneSitePublishSnapshots();
+    summary.sitePublishSnapshotsPruned = result.pruned;
+  } catch (err) {
+    summary.errors.push(`prune site_publish_snapshots: ${String(err)}`);
   }
 
   return NextResponse.json({ ok: true, summary });
