@@ -301,9 +301,36 @@ source-reading test passed under `vitest` in `apps/web` and failed under `pnpm t
 the repo root; and the page's new `loadCanvasContext` import broke the route auth test's
 module load. Both are fixed with comments naming the cause.
 
-### Phase 2b-2 — Selection, inline controls, inspector
+### Phase 2b-2 — Selection, inline controls, inspector ✅ *shipped*
 
 **Goal.** The redesign proper.
+
+> **What the build changed about this phase.**
+>
+> *The state seam is a context, not a hook.* Selection and reordering are driven
+> from two different columns — the canvas and the Sections panel — so two hook
+> instances would mean two selections that silently disagree and two live
+> regions announcing the same move twice. `SiteEditorProvider` owns both and
+> renders the single live region.
+>
+> *Selection is a bare `blockId`, re-resolved every render.* Every write
+> soft-deletes the old row and INSERTs a fresh one, so a block's `id` changes
+> whenever it is edited or moved. Resolve-or-clear gives two of this phase's
+> stated edge cases for free, with no effect and no cleanup path.
+>
+> *The reorder API could not express a drag.* `POST …/blocks/reorder` took
+> `direction: 'up'|'down'` only; a drag across several positions is a rotation,
+> not a swap, and would have needed N round-trips with a half-applied window. It
+> now also accepts an absolute `toOrder`, and both forms share one code path.
+>
+> *No new dependency for drag.* `@dnd-kit/sortable` is not installed; native
+> HTML5 drag plus the required keyboard grip path covers it at zero KiB.
+>
+> **The budget lever in this plan was wrong.** §2b-1 says to dynamic-import the
+> Pro-only block views first if the route nears ~650 KiB. Measured, that was
+> worth **2.6 KiB** — those components are small. The real costs were Radix
+> dialog stacks reachable only after a click. Deferring the inspector's overlay
+> returned **35.9 KiB**. *Measure the route's chunks; do not trust this list.*
 
 **Files.** `site-editor-v3/canvas/` — `Canvas.tsx`, `SectionShell.tsx`, `FloatControls.tsx`,
 `SectionInserter.tsx`, `SectionList.tsx`, `Inspector.tsx`.
@@ -328,7 +355,18 @@ every section. `pnpm perf:check` must pass with the new `site-editor` group.
 
 ---
 
-### Phase 3 — Autosave, toasts, dialogs, preview
+### Phase 3 — Autosave, toasts, dialogs, preview ✅ *shipped*
+
+> **Notes from the build.** `useAutosave`'s consumer (the per-block inspector
+> forms) does not exist yet, so `StatusLine` is mounted idle — it deliberately
+> shows no "Saved" without a save. Undo replays the captured
+> blockType/blockOrder/content through the upsert, because there is no undelete
+> endpoint; that clears the tombstone a staged removal left, and expiry is
+> enforced by both a timer and a monotonic token so a stale undo cannot write to
+> a reused slot. A Radix alert-dialog driven only by external `open` state
+> restores focus to `<body>` (its `triggerRef` is null) — required knowledge once
+> the dialog is code-split, since a lazily-mounted one has no trigger to
+> register.
 
 **Files.** `site-editor-v3/useAutosave.ts`, `StatusLine.tsx`, `PreviewDialog.tsx`; confirms
 on `components/ui/alert-dialog.tsx`; toasts on `sonner` (already mounted in
@@ -349,9 +387,34 @@ editor that writes on open produces phantom "changes waiting".
 
 ---
 
-### Phase 4 — The change model *(the pivot — checkpoint here)*
+### Phase 4 — The change model ✅ *shipped*
 
 **Goal.** A typed diff between draft and last published.
+
+> **Three things in this section could not be built as written.** Full reasoning
+> and the algorithm are in `website-editor-v3-phase4-change-model-design.md`;
+> the short version:
+>
+> 1. **`block:<id>` is not implementable.** Row ids are unstable and
+>    draft/published rows correlate only by `block_order`. Identity is derived
+>    by content fingerprint; keys are `p<slot>` / `d<slot>`.
+> 2. **`style`, `footer` and `site` have no producer.** `communities.branding` is
+>    unstaged and reaches the live site immediately, and no footer model exists,
+>    so both sides of the diff carry the same value. `style` stays in the key
+>    union with no producer so Phase 8 turns it on without a breaking change.
+> 3. **The `applySel` round-trip property is unwritable** now that selective
+>    publish is cut. Replaced with: a site never differs from itself (300
+>    generated snapshots), a permutation is exactly one order change, and keys
+>    are unique.
+>
+> **Also missed by this plan:** `GET /api/v1/pm/site/blocks` returned only the
+> merged draft-wins view, so no client could see the published side to diff
+> against. It now also returns `publishedBlocks`.
+>
+> **And a real finding:** the app's own default primary (coral-600 `#C2533A`) is
+> **4.28:1 on sand-50** — under AA for normal text. Implementing "contrast blocks
+> publish" literally would refuse a publish for every community on defaults, so
+> only white-on-primary blocks and primary-on-page warns.
 
 **Files.** `packages/shared/src/site-diff/` — `diff.ts`, `validate.ts`, `types.ts`. Shared,
 because publish-time validation must run **server-side too**; a client-only gate is a

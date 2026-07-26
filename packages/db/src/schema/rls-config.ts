@@ -310,6 +310,12 @@ export const RLS_TENANT_TABLES = [
     notes:
       'Public per-community site content. anon + authenticated SELECT expose only published (is_draft=false) rows of the GUC-selected community (site_blocks_anon_read / site_blocks_read_published); all writes are service-role only (site_blocks_service_role). Wrong-GUC drift repaired in 0023. No write-scope trigger — there is no authenticated write path (trigger-exempt family). Bespoke policy names retained — see the per-table override in rls-policies.integration.test.ts. Runtime reads via createUnscopedClient (public-community-reader) so RLS here is defense-in-depth for direct anon/authenticated access.',
   },
+  {
+    tableName: 'site_publish_snapshots',
+    policyFamily: 'service_only',
+    notes:
+      'Publish history for the public site (website editor v3, Phase 6). Deliberately NOT the public_read_service_write family its sibling site_blocks uses: the `snapshot` column holds the full block payload of a PAST publish, so an anon read would expose site content the association may since have deliberately taken down. All ops require pp_rls_is_privileged() (single pp_site_publish_snapshots_service policy, 0034) — admin access to the history list is authorized at the ROUTE, not by RLS, and the list response omits `snapshot` entirely. Trigger-exempt for the same reason site_blocks is: captureSnapshot writes inside publishCommunitySite\'s service-role transaction, so there is no authenticated write path for pp_rls_enforce_tenant_community_id() to police. `snapshot` is nullable and pruned by the retention sweep; the log row persists indefinitely.',
+  },
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
@@ -343,7 +349,10 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // 60 on main + onboarding_checklist_items + site_blocks = 62. This PR was
 // authored when the count was 54 (→56); the true total must be re-derived at
 // merge time because parallel PRs each bump +1 and git merges both silently.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 62;
+// 62 on main + site_publish_snapshots (0034) = 63. RE-DERIVE THIS AT MERGE:
+// parallel PRs each bump +1 and git merges both silently, so the second PR to
+// merge has to set the true total rather than trusting this number.
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 63;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

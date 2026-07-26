@@ -239,6 +239,13 @@
       "when": 1784510894576,
       "tag": "0033_reserve_assets",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784510954576,
+      "tag": "0034_site_publish_snapshots",
+      "breakpoints": true
     }
   ]
 }
