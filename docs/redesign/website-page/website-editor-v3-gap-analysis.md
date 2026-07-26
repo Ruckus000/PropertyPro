@@ -385,22 +385,35 @@ Each phase is PR-sized and ships something. Phases 1–5 need no migration.
 | **3** | Autosave + status line; undo toasts on destructive actions via `sonner`; confirm dialogs on Radix; in-editor preview dialog | 1 | "saved" becomes trustworthy | Low |
 | **4** | **Change model.** `diffSite` equivalent over draft vs published; the "N changes waiting" counter, Draft badges on the canvas, the Site panel's named change list, publish-time validation with "Fix this" deep links, contrast gate | 2, 3 | the spine of everything after | Medium |
 | **5** | Review-and-publish sheet — grouped, labelled, with blocking issues. **Atomic publish for now** (every listed change goes); failure state and persistent receipt | 4 | real confidence before publishing | Low |
-| **6** | **Publish history + revert** (§4.1). Migration 0034: `site_publish_snapshots`. One-step revert + per-change revert on every plan; the history log Pro-gated | 4, 5 | publishing becomes reversible | Medium |
-| **7** | Selective publish (§4.3) — the tick boxes go live; `order:<page>` as its own change | 4, 6 | drafts can be held back | Medium |
-| **8** | **Multi-page** (§4.2). Two migrations, two deploys. Pages manager, per-page blocks, public-site catch-all route, nav, redirects | 6, 7 | more than one page | **High** |
-| **9** | Urgent notice (§4.4) + the phone fast path | 1 | emergency comms on the public site | Low |
-| **10** | Site settings + footer entities, SERP preview, indexing flag | 5 | SEO and footer control | Low |
-| **11** | Content additions: hero photo array + carousel, `payments` block (CHECK-constraint migration), block layout variants, per-block empty text | 2 | richer pages | Low each |
-| **12** | Guided setup presentation moved in-editor, still persisting to `site_onboarding_progress` / `onboarding_wizard_state`; Help tab | 1 | setup survives interruption **and** a device change | Low |
-| **13** | Flag flip and retirement of the stacked-form editor | all | one editor | Low |
+| **6** | **Publish history + revert** (§4.1). Migration: `site_publish_snapshots`. One-step revert + per-change revert on every plan; the history log Pro-gated | 4, 5 | publishing becomes reversible | Medium |
+| **7** | Urgent notice (§4.4) + the phone fast path | 1 | emergency comms on the public site | Low |
+| **8** | Site settings + footer entities, SERP preview, indexing flag | 5 | SEO and footer control | Low |
+| **9** | Content additions: hero photo array + carousel, `payments` block (CHECK-constraint migration), block layout variants, per-block empty text | 2 | richer pages | Low each |
+| **10** | Guided setup presentation moved in-editor, still persisting to `site_onboarding_progress` / `onboarding_wizard_state`; Help tab | 1 | setup survives interruption **and** a device change | Low |
+| **11** | **Multi-page** (§4.2). Middleware host-precedence fix, two migrations, two deploys. Pages manager, per-page blocks, public-site catch-all, nav, redirects | 6 | more than one page | **High** |
+| **12** | Flag flip and retirement of the stacked-form editor | 0–10 | one editor | Low |
 
-Two things worth saying about the order. **Phase 4 is the pivot** — six later capabilities
-are all views of the same change model, and building any of them before it means building
-them twice. And **Phase 6 before Phase 8** is deliberate: multi-page is the riskiest change
-to the published site, and it is much less frightening once a bad publish can be reverted
-in one click.
+### Two changes to the original ordering
 
-Phases 9–12 are independent of the 4→8 spine and can be interleaved by whoever is free.
+**Selective publish is cut.** It had the worst complexity-to-value ratio in the program —
+per-key promotion against a slot-based `block_order` model, parent/child dependency rules
+between pages and their blocks, and a failure mode that produces an incoherent *published*
+site. The need it served ("I'm not ready to publish this one thing") is met by Phase 6's
+one-step and per-change revert at a fraction of the cost. The review sheet in Phase 5 is
+therefore **atomic permanently**, not atomic-for-now — which simplifies it: no tick boxes,
+no dependency gating, no partial-promotion path in `publishCommunitySite`. The change list
+still names every change and still blocks on validation; it just publishes all of them.
+
+**Multi-page moved from 3rd-to-last to 2nd-to-last.** It is the only phase that touches the
+published site's URL surface, and with the middleware host-precedence fix (see the
+implementation plan's Phase 11a) it also touches the request path of every request in the
+app. Everything cheap and reversible now ships before it, so a slip or a decision to spin
+multi-page out as its own project costs nothing already built. Phase 12 does not depend on
+it — the old editor can be retired whether or not multi-page lands.
+
+**Phase 4 remains the pivot.** Five later capabilities are views of the same change model.
+It defines the `page:<id>` / `order:<pageId>` keys even though nothing emits them until
+Phase 11, so multi-page slots in without reopening it.
 
 ---
 

@@ -10,27 +10,27 @@
 
 ---
 
-## 1. Can all thirteen phases run without stopping?
+## 1. Can all phases run without stopping?
 
 The honest answer is **no, and the blockers are repo policy rather than preference.**
-Ten of thirteen phases are continuous. Three points cannot be automated away:
+Ten of the twelve phases are continuous. Three points cannot be automated away:
 
 | Gate | Where | Why it is a hard stop |
 |---|---|---|
 | **G1** | Phase 6, before the code merges | Migration `site_publish_snapshots` must be applied to production **manually** via Supabase MCP `apply_migration`, then verified against `information_schema`. `CLAUDE.md` and `.claude/rules/migration-safety.md` make this the single deliberate apply path — CI does not migrate |
-| **G2** | Phase 8a, before the code merges | The multi-page **expand** migration (new tables, nullable `page_id`, backfill, new index) must be applied before any code reads `page_id` |
-| **G3** | Phase 8c, after 8b is **live in production** | The **contract** migration (drop the old index, `SET NOT NULL`) can only run once the old code that depends on the 3-column index is gone. Applying it early breaks the live public site. This gate is a *deploy wait*, not just an apply |
+| **G2** | Phase 11a, before the code merges | The multi-page **expand** migration (new tables, nullable `page_id`, backfill, new index) must be applied before any code reads `page_id` |
+| **G3** | Phase 11c, after 11b is **live in production** | The **contract** migration (drop the old index, `SET NOT NULL`) can only run once the old code that depends on the 3-column index is gone. Applying it early breaks the live public site. This gate is a *deploy wait*, not just an apply |
 
 A fourth, softer one: `RLS_EXPECTED_TENANT_TABLE_COUNT` in
 `packages/db/src/schema/rls-config.ts` must be **re-derived at merge time**, not
 authored ahead. The file says so itself — parallel PRs each bump `+1` and git merges both
 silently, so the second PR to merge has to set the true total.
 
-**Recommended human checkpoint beyond the gates:** after **Phase 4**. Six later
-capabilities are views of the change model; if its shape is wrong, everything from Phase 5
-onward is built twice. Fifteen minutes of review there is cheaper than re-doing 5–8.
+**Recommended human checkpoints beyond the gates:** after **Phase 4** — five later
+capabilities are views of the change model, so if its shape is wrong everything from
+Phase 5 onward is built twice — and before **Phase 11a**, the middleware reorder.
 
-Everything else — Phases 0–3, 5, 7, 9–13 — can run continuously provided each phase's
+Everything else — Phases 0–10 and 12 — can run continuously provided each phase's
 verification gate passes before the next begins.
 
 ---
@@ -280,15 +280,22 @@ suggestion, not a gate.
 
 ---
 
-### Phase 5 — Review-and-publish sheet (atomic)
+### Phase 5 — Review-and-publish sheet (atomic, permanently)
 
 **Files.** `site-editor-v3/publish/PublishSheet.tsx`, `Receipt.tsx`; extend
 `hooks/use-publish-site.ts`.
 
-**Tests.** Grouped by page with Site-wide first; blocking issues disable only their own
-change; "Fix this" navigates and closes; failure renders a **persistent** receipt, not a
-toast; the existing `ConflictError` from a concurrent publish is surfaced as "someone else
-published", not a generic 500.
+**Atomic, by decision.** With selective publish cut, the sheet has no tick boxes and no
+dependency gating — it lists every change, blocks on validation, and publishes all of them.
+Any change with a blocking issue makes the whole publish unavailable until it is fixed or
+reverted, which is why per-change **Revert** (Phase 6) is the escape hatch and needs to be
+reachable from this sheet, not only from the Site panel.
+
+**Tests.** Grouped by page with Site-wide first; a single blocking issue disables the
+publish button and names the offender; "Fix this" navigates and closes; failure renders a
+**persistent** receipt, not a toast; the existing `ConflictError` from a concurrent publish
+is surfaced as "someone else published", not a generic 500; publishing with zero changes is
+impossible rather than a no-op request.
 
 **Server-side validation is mandatory here.** The sheet may not be the only thing standing
 between an invalid draft and the public site — `publishCommunitySite` validates with the
@@ -339,41 +346,26 @@ ledger row (`hash` = sha256 of the file bytes, `created_at` = the journal `when`
 
 ---
 
-### Phase 7 — Selective publish
-
-**See §5 — I recommend cutting or deferring this phase.** If it proceeds:
-
-`publishCommunitySite` takes an explicit key list. `order:<page>` publishes with its page,
-never independently — otherwise a partially-promoted reorder leaves the published order
-incoherent.
-
-**Tests.** Publishing a subset leaves the rest as drafts; excluding a parent page
-auto-excludes its children; publishing a reorder without the blocks it reorders is refused;
-**integration**: the published set after a partial publish is exactly `applySel`'s
-prediction (the same property the Phase 4 round-trip test establishes).
-
----
-
-### Phase 8 — Multi-page  ⟵ **GATES G2, G3**
+### Phase 11 — Multi-page  ⟵ **GATES G2, G3**
 
 Three sub-phases, two migrations, two deploys.
 
-**8a — expand (G2).** New `site_pages` and `site_page_redirects`; `site_blocks.page_id`
+**11a — expand (G2).** New `site_pages` and `site_page_redirects`; `site_blocks.page_id`
 nullable; backfill to each community's home page; create the 4-column partial index
 alongside the 3-column one. Both new tables are read anonymously by the public site →
 `public_read_service_write`, matching `site_blocks`. Two `RLS_EXPECTED_TENANT_TABLE_COUNT`
 bumps, re-derived at merge.
 
-**8b — code.** *(preceded by 8b-0, below)* Pages manager; `page_id` threaded through `reorderSiteBlock`,
+**11b — code.** *(preceded by 11b-0, below)* Pages manager; `page_id` threaded through `reorderSiteBlock`,
 `removeSiteBlock`, `upsertPublishedBlock`, `discardSiteDrafts`, `publishCommunitySite`
 (its "which `block_order`s have a live draft" step becomes `(page_id, block_order)`);
 `app/public-site/[[...slug]]/page.tsx`; nav in `PublicSiteHeader`; redirect resolution;
 404.
 
-**8c — contract (G3).** Only after 8b is **live in production**: drop the 3-column index,
+**11c — contract (G3).** Only after 11b is **live in production**: drop the 3-column index,
 `SET NOT NULL` on `page_id`.
 
-**8b is blocked by middleware ordering — found during this review, and it is not small.**
+**11b is blocked by middleware ordering — found during this review, and it is not small.**
 
 `isProtectedPath(pathname)` runs at `apps/web/src/middleware.ts:564`. The community-host
 public-site rewrite runs at `:770`. So on `sunset-condos.getpropertypro.com`, a request to
@@ -402,7 +394,7 @@ common words from page names is a product failure.
 This is a **middleware reordering on the request path of every request in the app**, so it
 is its own sub-phase, landed and verified alone:
 
-**8b-0 — middleware host-precedence fix.** Reorder host resolution ahead of
+**11b-0 — middleware host-precedence fix.** Reorder host resolution ahead of
 `isProtectedPath`; preserve the slug through the rewrite. Tests:
 `__tests__/middleware/*.test.ts` for every combination of {app host, community subdomain,
 custom domain} × {protected path, public slug, api path} × {authenticated, anonymous}; plus
@@ -410,17 +402,17 @@ the existing `apps/web/e2e/community-tenant-host-precedence.spec.ts`, extended. 
 route may become reachable without auth on the app host** — that is the regression this
 phase risks, and the assertion that must be loudest.
 
-**Open behaviour question for 8b-0.** An *authenticated* user on a community host is
+**Open behaviour question for 11b-0.** An *authenticated* user on a community host is
 currently redirected to the dashboard (`:760`). With multi-page, a logged-in resident
 following a link to `sunset-condos.getpropertypro.com/documents` would be bounced to the app
-instead of seeing the public page. Today that only affects `/`. Decide before 8b-0 ships:
+instead of seeing the public page. Today that only affects `/`. Decide before 11b-0 ships:
 keep the redirect (public pages are for the public) or serve the public page to everyone.
 
 **Security.** Slugs are attacker-adjacent input on a public surface.
 - Reserved-slug list, sourced from `PATH_PUBLIC_SUFFIXES` and `PROTECTED_FIRST_SEGMENTS` in
   `apps/web/src/lib/middleware/public-host-routes.ts` — the authoritative list, not a
   hand-copied one. `transparency`, `notices`, `request-access`, `unavailable` are already
-  served on the public host and must stay reserved even after 8b-0.
+  served on the public host and must stay reserved even after 11b-0.
 - `slugify` output must be validated, not trusted: reject empty, `.`/`..` segments, and
   anything not matching `^/[a-z0-9-]+(/[a-z0-9-]+)*$`.
 - Case-collision: `/Docs` and `/docs` must not coexist.
@@ -437,12 +429,12 @@ keep the redirect (public pages are for the public) or serve the public page to 
 | `packages/db/__tests__/rls-policies.integration.test.ts` | anon reads **published** pages only — never drafts |
 | E2E `apps/web/e2e/site-editor-multipage.spec.ts` | create page → add section → publish → visit the public URL → rename → old URL still resolves |
 
-**Rollback.** 8b is revertible while the 3-column index still exists — which is exactly why
+**Rollback.** 11b is revertible while the 3-column index still exists — which is exactly why
 G3 waits.
 
 ---
 
-### Phase 9 — Urgent notice
+### Phase 7 — Urgent notice
 
 **The highest-blast-radius write in the product**: it bypasses the draft layer and is public
 immediately. Treat it accordingly.
@@ -461,7 +453,7 @@ notice not rendered even if the row persists; removal is undoable within the toa
 
 ---
 
-### Phase 10 — Site settings + footer
+### Phase 8 — Site settings + footer
 
 **Tests.** Title/description length limits server-side; the indexing flag actually reaches
 `robots`; the SERP preview is `aria-hidden` decoration, not content; the statutory footer
@@ -470,10 +462,10 @@ compliance constraint, not copy polish).
 
 ---
 
-### Phase 11 — Content additions
+### Phase 9 — Content additions
 
 Hero photo array + carousel · block layout variants + empty text · `payments` block ·
-(site settings/footer are Phase 10).
+(site settings/footer are Phase 8).
 
 **`payments` needs a migration** to extend `site_blocks_block_type_check` — the block-type
 list is a CHECK constraint, not an enum. Its target defaults to the portal's `/payments`
@@ -491,7 +483,7 @@ protocol-relative and backslash open-redirect forms.
 
 ---
 
-### Phase 12 — Guided setup in-editor + Help tab
+### Phase 10 — Guided setup in-editor + Help tab
 
 Progress persists to `communities.site_onboarding_progress` / `onboarding_wizard_state` —
 v3's `localStorage` resume is **not** ported.
@@ -502,7 +494,7 @@ proves the decision); re-running setup shows a diff before it overwrites; comple
 
 ---
 
-### Phase 13 — Flag flip and retirement
+### Phase 12 — Flag flip and retirement
 
 Delete `(authenticated)/pm/settings/website/page.tsx` and any component only it used; remove
 the flag; drain `scripts/design-token-baseline.json` entries the deleted files held.
@@ -523,12 +515,12 @@ the baselines ratcheted **down**.
 | Revert endpoint | IDOR via `snapshotId` | Scoped client; the id is filtered by `communityId`, never trusted alone | 6 |
 | History endpoint | Leaking draft content | Response schema omits `snapshot`; table RLS is `service_only` | 6 |
 | Admin GETs | Lapsed-community read | `requireEntitledForAdminRead`, enforced by `guard:read-entitlement` | 0, 6 |
-| Urgent notice | Immediate public XSS | Text-only render; server-side length cap; audit log | 9 |
-| Page slugs | Traversal / route collision | Strict pattern, reserved list sourced from `public-host-routes.ts`, redirect-cycle cap | 8 |
-| **Middleware reorder (8b-0)** | **An app route becoming reachable without auth** | Host resolved first, but protected-path enforcement dropped *only* on community public hosts; exhaustive host × path × auth matrix tests | 8 |
-| Payments target | Open redirect | Existing `ctaTargetSchema`; `rel="noopener noreferrer"` | 11 |
-| All content writes | Mass assignment | Every block schema `.strict()` — as `heroBlockSchema` already is | 2b, 11 |
-| Uploads | Unvalidated media | Existing `/api/v1/site/uploads/presign` + `images/finalize` + `validate-upload.ts` — reuse, do not add a second path | 11 |
+| Urgent notice | Immediate public XSS | Text-only render; server-side length cap; audit log | 7 |
+| Page slugs | Traversal / route collision | Strict pattern, reserved list sourced from `public-host-routes.ts`, redirect-cycle cap | 11 |
+| **Middleware reorder (11b-0)** | **An app route becoming reachable without auth** | Host resolved first, but protected-path enforcement dropped *only* on community public hosts; exhaustive host × path × auth matrix tests | 11 |
+| Payments target | Open redirect | Existing `ctaTargetSchema`; `rel="noopener noreferrer"` | 9 |
+| All content writes | Mass assignment | Every block schema `.strict()` — as `heroBlockSchema` already is | 2b, 9 |
+| Uploads | Unvalidated media | Existing `/api/v1/site/uploads/presign` + `images/finalize` + `validate-upload.ts` — reuse, do not add a second path | 9 |
 
 No credentials, tokens or PII are introduced by this program. Nothing new is logged that
 was not already logged.
@@ -541,7 +533,7 @@ was not already logged.
 - Dynamic-import block views via the registry — only rendered types load.
 - Memoise per section; a keystroke must not re-render the whole canvas.
 - Autosave debounces and coalesces; the canvas never refetches SoR data per keystroke.
-- The public site is a statutory entry point with its own perf group — Phase 2a and Phase 8
+- The public site is a statutory entry point with its own perf group — Phase 2a and Phase 11
   must not regress it.
 
 ### 4.3 Database and storage
@@ -552,7 +544,7 @@ was not already logged.
 - All writes are service-role, so all three are trigger-exempt like `site_blocks` — record
   the rationale in each `notes` field, because `rls-policies.integration.test.ts` keys its
   per-table overrides off them.
-- `RLS_EXPECTED_TENANT_TABLE_COUNT` (62 today) rises by 3 across Phases 6 and 8 —
+- `RLS_EXPECTED_TENANT_TABLE_COUNT` (62 today) rises by 3 across Phases 6 and 11 —
   **re-derive at merge**, never author ahead.
 - RLS policies ship **in the migration SQL**, never applied by hand.
 - Storage: no new bucket. Hero photo arrays reuse the existing presign/finalize path and
@@ -573,17 +565,18 @@ to use an external image CDN — it must be raised before dependent code is writ
 
 Where I think the plan is weak, or the design is wrong.
 
-**1. Phase 7 (selective publish) should be cut, or at least deferred past Phase 8.**
-It is the highest complexity-to-value ratio in the program. It requires per-key promotion
-against a slot-based `block_order` model, it introduces parent/child dependency rules
-between pages and their blocks, and its failure mode is an incoherent *published* site.
-Meanwhile the user need it serves — "I'm not ready to publish this one thing" — is largely
-met by Phase 6's revert plus per-change revert, which are far cheaper and already in scope.
-My recommendation: ship Phases 0–6, then decide whether anyone has actually asked for 7.
+**1. Selective publish was cut — accepted 2026-07-25.**
+It had the highest complexity-to-value ratio in the program: per-key promotion against a
+slot-based `block_order` model, parent/child dependency rules between pages and their
+blocks, and a failure mode that produces an incoherent *published* site. The need it served
+— "I'm not ready to publish this one thing" — is met by Phase 6's one-step and per-change
+revert at a fraction of the cost. Phase 5's review sheet is therefore atomic **permanently**:
+no tick boxes, no dependency gating, no partial-promotion path in `publishCommunitySite`.
+If it is ever revived, the Phase 4 round-trip property test is the foundation it needs.
 
 **2. Two editors coexisting is real debt, and the flag must have an expiry.**
 Phases 0–12 run with both editors live against shared write routes. That is the right call
-for safety, but "temporary" dual maintenance has a way of becoming permanent. Phase 13
+for safety, but "temporary" dual maintenance has a way of becoming permanent. Phase 12
 should be scheduled, not aspirational.
 
 **3. The concurrency story is thinner than it looks.**
@@ -606,16 +599,16 @@ is exactly the kind of shortcut this checklist exists to catch. Corrected in gap
 §9 row 3, and Phase 2a now exists because of it.
 
 **6. Multi-page is bigger than the gap analysis said, because of the middleware ordering.**
-Phase 8 now contains a reordering of the request path for *every request in the
-application* (8b-0). That is a materially higher risk than "add a page dimension to a
+Phase 11 now contains a reordering of the request path for *every request in the
+application* (11b-0). That is a materially higher risk than "add a page dimension to a
 table", and it is the one change in this program that could plausibly expose an
 authenticated route. It deserves its own PR, its own review, and the most paranoid test
-matrix in the plan. If the appetite for that is low, the honest alternative is to ship
-Phases 0–7 and 9–13 and treat multi-page as a separate project.
+matrix in the plan. It is now sequenced second-to-last precisely so that
+dropping it costs nothing already built — Phase 12 does not depend on it.
 
 **7. Thirteen phases in one unattended run is a lot of code with no human eye on it.**
 The gates in §1 are policy-mandated. The Phase 4 checkpoint is my recommendation and is
-worth taking even though nothing enforces it. 8b-0 is a second place I would want a human
+worth taking even though nothing enforces it. 11b-0 is a second place I would want a human
 to look before it merges.
 
 ---
@@ -632,15 +625,15 @@ itself all-green is not a plan that was checked.
 | Root cause, not symptoms | ✅ | The absence of a draft-vs-published diff, not the visual design. Named in gap analysis §1 and made Phase 4, the pivot the roadmap is built around |
 | Industry best practices | ✅ | WCAG 2.1 AA — 2.4.7 focus visible (never suppress `:focus-visible`), 2.5.8 target size (36 px per repo rule, above v3's 32), 1.4.3 contrast (the 4.5:1 publish gate). ARIA Authoring Practices for tabs, carousel (`aria-roledescription`, pause control) and live regions. OWASP — open redirect (A01), IDOR (A01), XSS (A03), mass assignment via `.strict()`. Expand/contract migration discipline for zero-downtime schema change |
 | Existing codebase patterns | ✅ | Contract auto-suite, `paginate()` + ADR-003 envelope, `runRoute` + `tenantScope`, RLS policy families, `sonner`, Radix dialogs, `ctaTargetSchema`, `buildCommunityUrl`, `requireEntitledForAdminRead`, the perf-check groups — all reused rather than reinvented |
-| Additional research where needed | ✅ | Two findings came only from reading source: the four data-fetching renderers (§Phase 2a) and the middleware ordering blocker (§Phase 8b-0). Both changed the plan |
+| Additional research where needed | ✅ | Two findings came only from reading source: the four data-fetching renderers (§Phase 2a) and the middleware ordering blocker (§Phase 11b-0). Both changed the plan |
 
 ### Architecture & design
 
 | Item | State | Evidence |
 |---|---|---|
-| Current architecture fit | ✅ | Three genuine mismatches named: Option B fights the shell (route group must re-establish five things), `block_order` fights multi-page (index change + backfill), `is_draft` rows fight selective publish (no diff to scope) |
+| Current architecture fit | ✅ | Three genuine mismatches named: Option B fights the shell (route group must re-establish five things), `block_order` fights multi-page (index change + backfill), `is_draft` rows fought selective publish, which is why that phase was cut |
 | Recommended changes where beneficial | ✅ | Container/presentational split for four renderers; middleware host-precedence reorder; change model in `packages/shared` so validation is server-enforceable |
-| Technical debt impact | ✅ | §5.2 — dual editors for twelve phases, with Phase 13 scheduled rather than aspirational. Also noted: `public_read_service_write` has no write trigger, so the new tables inherit that trust-the-service-role posture |
+| Technical debt impact | ✅ | §5.2 — dual editors for eleven phases, with Phase 12 scheduled rather than aspirational. Also noted: `public_read_service_write` has no write trigger, so the new tables inherit that trust-the-service-role posture |
 | Challenged suboptimal patterns | ✅ | §5.1 recommends **cutting Phase 7** despite it being agreed scope. §5.3 says the attribution UI implies a concurrency guarantee that does not exist. §5.6 says multi-page may deserve to be a separate project |
 | Not a yes-man | ✅ | §5.5 records that I got the renderer reuse wrong and why. §5.6 pushes back on the scope the user approved |
 
@@ -662,13 +655,13 @@ itself all-green is not a plan that was checked.
 | Input validation & sanitisation | ✅ | Zod `.strict()` on every content schema; server-side length caps; slug pattern + reserved list; `ctaTargetSchema` for URLs; urgent-notice text rendered as a React child, never `dangerouslySetInnerHTML`, with an explicit XSS test |
 | Authn/authz | ✅ | Middleware `/pm` prefix preserved; page re-asserts role + tenancy + plan; `requirePermission` per route; contract auto-suite validates the RBAC label; cross-tenant test on every new endpoint; IDOR test on revert |
 | Sensitive data protected | ✅ | Snapshots are `service_only` RLS and omitted from the history response. No credentials, tokens or PII introduced; no new logging of existing sensitive fields |
-| OWASP followed | ✅ | A01 broken access control (IDOR, cross-tenant, the 8b-0 regression risk), A03 injection (XSS in the notice), A01 open redirect (payments target), mass assignment (`.strict()`) |
+| OWASP followed | ✅ | A01 broken access control (IDOR, cross-tenant, the 11b-0 regression risk), A03 injection (XSS in the notice), A01 open redirect (payments target), mass assignment (`.strict()`) |
 
 ### Integration & testing
 
 | Item | State | Evidence |
 |---|---|---|
-| Upstream/downstream impacts | ✅ | Public site (2a, 8), middleware (8b-0), perf budget (0), RLS count (6, 8), audit log, existing hooks (`use-publish-site`), the legacy editor sharing the same write routes |
+| Upstream/downstream impacts | ✅ | Public site (2a, 11), middleware (11b-0), perf budget (0), RLS count (6, 11), audit log, existing hooks (`use-publish-site`), the legacy editor sharing the same write routes |
 | All affected files updated | ⚠️ **Named, not yet edited** | This is a plan; §3 lists the files per phase. The claim is that the *list* is complete, and it was derived by reading the modules rather than guessing |
 | Consistent with valuable patterns | ✅ | See "existing codebase patterns" above |
 | Fully integrated, no silos | ✅ | Shared validators; one renderer per block; reused upload path; reused toast/dialog/table primitives; no parallel help system, no second progress store |
