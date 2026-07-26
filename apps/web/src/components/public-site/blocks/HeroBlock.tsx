@@ -7,17 +7,14 @@
  * Note: uses a plain <img> element instead of next/image because the test
  * environment (jsdom) cannot configure a Next.js image loader. The image
  * dimensions and loading priority are set via HTML attributes to preserve
- * the equivalent hints for real browsers. When the public-site moves to a
- * production CDN (PR #2), the loader can be wired up and this element
- * can be upgraded to <Image> without changing any tests.
+ * the equivalent hints for real browsers. If a Next.js image loader is wired
+ * up later, this element can be upgraded to <Image> without changing any tests.
  */
 import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
+// Import from ./public-url, NOT ./storage-paths — the latter pulls in
+// `node:crypto` for write-side path generation and cannot be bundled client-side.
+import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 import type { BlockRendererProps } from './types';
-
-function buildPublicAssetUrl(path: string): string {
-  // PR #2 wires the real bucket URL builder; for v1b, return the storage path as-is.
-  return `/site-assets/${path}`;
-}
 
 export function HeroBlock(props: BlockRendererProps) {
   const parsed = heroBlockSchema.safeParse(props.block.content);
