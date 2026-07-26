@@ -11,7 +11,7 @@
  * PM edits block config, so no request fires per keystroke. See
  * `./preview-data.ts` for where that is exact and where it approximates.
  */
-import type { CommunityType } from '@propertypro/shared';
+import { DOCUMENT_CATEGORIES, type CommunityType } from '@propertypro/shared';
 import { resolveTheme } from '@propertypro/theme';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
@@ -65,7 +65,11 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
   const reader = getPublicCommunityScopedReader(communityId);
   const [announcements, documents, meetings, contact] = await Promise.all([
     reader.listAnnouncements({ limit: PREVIEW_LIMIT, timeWindowDays: PREVIEW_WINDOW_DAYS }),
-    reader.listDocuments({ limit: PREVIEW_LIMIT }),
+    // ALL categories, explicitly. `listDocuments` returns [] when the category
+    // list is empty — omitting it here would make the superset permanently
+    // empty and the documents block preview permanently blank. The block's own
+    // category selection is applied later by `selectDocuments`.
+    reader.listDocuments({ limit: PREVIEW_LIMIT, includeCategories: [...DOCUMENT_CATEGORIES] }),
     reader.listMeetings({ limit: PREVIEW_LIMIT, timeWindowDays: PREVIEW_WINDOW_DAYS }),
     reader.getContactInfo({ showBoard: true, showManagement: true }),
   ]);

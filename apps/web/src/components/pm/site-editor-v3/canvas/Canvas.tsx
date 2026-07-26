@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { hasView } from '@/components/public-site/blocks/view-registry';
 import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { CanvasBlock } from './CanvasBlock';
@@ -61,7 +62,11 @@ export function Canvas({ communityId, context, now }: CanvasProps) {
     );
   }
 
-  const ordered = sortBlocks(blocks ?? []);
+  // Filter BEFORE the empty check. The PM blocks endpoint returns tombstone
+  // rows (staged deletions) and could return a type this build has no view for;
+  // both render as null. Counting them would skip the empty state and leave a
+  // bare bordered box with no explanation.
+  const ordered = sortBlocks(blocks ?? []).filter((b) => hasView(b.blockType as never));
 
   return (
     <div className="mx-auto max-w-[1000px] px-5 py-4">

@@ -2,15 +2,15 @@
 
 import { useRef, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
-import { EDITOR_TOOLS, PRO_TOOLS, type EditorToolId } from './tools';
+import { EDITOR_TOOLS, TOOL_PLAN_FEATURE, type EditorToolId, type ProToolAccess, type ProToolId } from './tools';
 
 export interface ToolTabsProps {
   active: EditorToolId;
   onSelect: (id: EditorToolId) => void;
   /** Count badge per tool — currently only `site` uses one (pending changes). */
   counts?: Partial<Record<EditorToolId, number>>;
-  /** False when the community's plan excludes the Pro tools. */
-  hasProTools: boolean;
+  /** Per-tool unlock state — the two Pro tools have separate plan features. */
+  proToolAccess: ProToolAccess;
   panelId: string;
 }
 
@@ -23,7 +23,7 @@ export interface ToolTabsProps {
  * same and is asserted in tests: `role="tablist"`, roving tabindex, arrow-key
  * traversal that wraps, Home/End, and `aria-controls` pointing at the panel.
  */
-export function ToolTabs({ active, onSelect, counts, hasProTools, panelId }: ToolTabsProps) {
+export function ToolTabs({ active, onSelect, counts, proToolAccess, panelId }: ToolTabsProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -73,7 +73,8 @@ export function ToolTabs({ active, onSelect, counts, hasProTools, panelId }: Too
       {EDITOR_TOOLS.map((tool, index) => {
         const isActive = tool.id === active;
         const count = counts?.[tool.id] ?? 0;
-        const isProLocked = PRO_TOOLS.has(tool.id) && !hasProTools;
+        const isProTool = tool.id in TOOL_PLAN_FEATURE;
+        const isProLocked = isProTool && !proToolAccess[tool.id as ProToolId];
         const Icon = tool.icon;
 
         return (

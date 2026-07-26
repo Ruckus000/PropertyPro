@@ -104,10 +104,13 @@ describe('selectMeetings', () => {
 describe('selectDocuments', () => {
   const all = [doc(1, 'budget'), doc(2, 'minutes'), doc(3, null), doc(4, 'rules')];
 
-  it('treats an empty category list as "all categories"', () => {
-    // Matches the public renderer's convention — an empty list is not "none".
+  it('returns nothing for an empty category list', () => {
+    // Matches the published site: listDocuments() returns [] when no categories
+    // are selected ("a DocumentsBlock with no category selection is a no-op").
+    // Reading empty as "all" is the intuitive guess and it is wrong — it would
+    // show every public document in the canvas where the live page shows none.
     const out = selectDocuments({ limit: 20, includeCategories: [] as never }, all);
-    expect(out).toHaveLength(4);
+    expect(out).toEqual([]);
   });
 
   it('filters to the selected categories', () => {
@@ -115,9 +118,10 @@ describe('selectDocuments', () => {
     expect(out.map((d) => d.id)).toEqual([1, 4]);
   });
 
-  it('excludes uncategorised documents once a filter is set', () => {
-    // A document with no category has no name to match, so it can only appear
-    // in the all-categories case.
+  it('excludes uncategorised documents', () => {
+    // A document with no category has no name to match, so it is never
+    // selectable — the same as on the published site, where the query joins on
+    // the category name.
     const out = selectDocuments({ limit: 20, includeCategories: ['budget'] as never }, all);
     expect(out.map((d) => d.id)).not.toContain(3);
   });
@@ -127,9 +131,9 @@ describe('selectDocuments', () => {
     expect(out.map((d) => d.id)).toEqual([1]);
   });
 
-  it('tolerates a missing category list', () => {
+  it('treats a missing category list the same as an empty one', () => {
     const out = selectDocuments({ limit: 20, includeCategories: undefined as never }, all);
-    expect(out).toHaveLength(4);
+    expect(out).toEqual([]);
   });
 });
 

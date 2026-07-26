@@ -19,7 +19,7 @@ function renderTabs(overrides: Partial<React.ComponentProps<typeof ToolTabs>> = 
     <ToolTabs
       active="sections"
       onSelect={onSelect}
-      hasProTools
+      proToolAccess={{ styling: true, domain: true }}
       panelId="panel-1"
       {...overrides}
     />,
@@ -125,15 +125,33 @@ describe('ToolTabs — badges and gating', () => {
   });
 
   it('announces Pro tools as gated without hiding them', () => {
-    renderTabs({ hasProTools: false });
+    renderTabs({ proToolAccess: { styling: false, domain: false } });
     // Visible and reachable — the upsell only works if the tool is discoverable.
     expect(screen.getByRole('tab', { name: /Colours/ })).toBeEnabled();
     expect(screen.getByRole('tab', { name: /Colours/ })).toHaveAccessibleName(/Professional feature/);
     expect(screen.getByRole('tab', { name: /Address/ })).toHaveAccessibleName(/Professional feature/);
   });
 
+  it('gates each Pro tool on its OWN plan feature', () => {
+    // hasSiteCustomCss and hasSiteCustomDomain are independent — a community
+    // can hold one without the other. Collapsing them mislabels a tab.
+    renderTabs({ proToolAccess: { styling: false, domain: true } });
+    expect(screen.getByRole('tab', { name: /Colours/ })).toHaveAccessibleName(/Professional feature/);
+    expect(screen.getByRole('tab', { name: /Address/ })).not.toHaveAccessibleName(
+      /Professional feature/,
+    );
+  });
+
+  it('gates the styling tool independently of the domain tool', () => {
+    renderTabs({ proToolAccess: { styling: true, domain: false } });
+    expect(screen.getByRole('tab', { name: /Colours/ })).not.toHaveAccessibleName(
+      /Professional feature/,
+    );
+    expect(screen.getByRole('tab', { name: /Address/ })).toHaveAccessibleName(/Professional feature/);
+  });
+
   it('does not mark non-Pro tools as gated', () => {
-    renderTabs({ hasProTools: false });
+    renderTabs({ proToolAccess: { styling: false, domain: false } });
     expect(screen.getByRole('tab', { name: /Sections/ })).not.toHaveAccessibleName(
       /Professional feature/,
     );

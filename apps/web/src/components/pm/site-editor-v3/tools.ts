@@ -28,5 +28,20 @@ export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
   help: 'Help',
 };
 
-/** Tools gated behind the Professional plan (`hasSiteCustomCss` / `hasSiteCustomDomain`). */
-export const PRO_TOOLS: ReadonlySet<EditorToolId> = new Set(['styling', 'domain']);
+/**
+ * Which plan feature gates each Pro tool.
+ *
+ * These are two INDEPENDENT flags, not one "is Professional" boolean — a
+ * community can carry `hasSiteCustomDomain` without `hasSiteCustomCss` via the
+ * per-community overrides in `packages/shared/src/features`. Collapsing them
+ * mislabels one tab or the other. The legacy editor keeps them distinct too.
+ */
+export const TOOL_PLAN_FEATURE = {
+  styling: 'hasSiteCustomCss',
+  domain: 'hasSiteCustomDomain',
+} as const satisfies Partial<Record<EditorToolId, string>>;
+
+export type ProToolId = keyof typeof TOOL_PLAN_FEATURE;
+
+/** Per-tool unlock state, keyed by tool id. */
+export type ProToolAccess = Record<ProToolId, boolean>;

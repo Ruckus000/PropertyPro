@@ -164,6 +164,22 @@ describe('Canvas — rendering blocks', () => {
     expect(screen.getByRole('heading', { name: 'Announcements' })).toBeInTheDocument();
   });
 
+  it('shows the empty state when every block is unrenderable', () => {
+    // The PM blocks endpoint returns tombstone rows (staged deletions). Counting
+    // them before filtering left a bare bordered box with no explanation.
+    blocksState.value = {
+      data: [
+        { id: 20, blockType: 'tombstone', blockOrder: 0, content: {}, isDraft: true, publishedAt: null },
+        { id: 21, blockType: 'tombstone', blockOrder: 1, content: {}, isDraft: true, publishedAt: null },
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvas();
+    expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+  });
+
   it('skips a block type it has no view for instead of crashing', () => {
     blocksState.value = {
       data: [

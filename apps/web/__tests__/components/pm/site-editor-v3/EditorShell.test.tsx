@@ -6,10 +6,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorShell } from '@/components/pm/site-editor-v3/EditorShell';
 
-const matchesMock = vi.hoisted(() => ({ value: true }));
+// The shell asks `(max-width: 767px)` — see the comment on EditorShell. This
+// mock therefore reports NARROWNESS, not width: false = desktop.
+const isNarrowMock = vi.hoisted(() => ({ value: false }));
 vi.mock('@/hooks/use-media-query', () => ({
-  useMediaQuery: () => matchesMock.value,
-  useIsDesktop: () => matchesMock.value,
+  useMediaQuery: () => isNarrowMock.value,
+  useIsDesktop: () => !isNarrowMock.value,
 }));
 
 function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>> = {}) {
@@ -17,7 +19,7 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>
     <EditorShell
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
-      hasProTools
+      proToolAccess={{ styling: true, domain: true }}
       renderToolPanel={(tool) => <p>panel:{tool}</p>}
       {...overrides}
     >
@@ -28,12 +30,12 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  matchesMock.value = true;
+  isNarrowMock.value = false;
 });
 
 describe('EditorShell — phone gate', () => {
   it('renders the gate instead of the editor below the breakpoint', () => {
-    matchesMock.value = false;
+    isNarrowMock.value = true;
     renderShell();
     expect(screen.getByRole('heading', { name: /bigger screen/i })).toBeInTheDocument();
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
@@ -41,14 +43,14 @@ describe('EditorShell — phone gate', () => {
 
   it('unmounts the editor entirely rather than hiding it', () => {
     // A hidden editor still costs its JS, its timers and its focus stops.
-    matchesMock.value = false;
+    isNarrowMock.value = true;
     renderShell();
     expect(screen.queryByText('canvas')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Publish/ })).not.toBeInTheDocument();
   });
 
   it('offers the public site as the one useful phone action', () => {
-    matchesMock.value = false;
+    isNarrowMock.value = true;
     renderShell();
     const link = screen.getByRole('link', { name: /View the public site/i });
     expect(link).toHaveAttribute('href', 'https://sunset-condos.example.com/');
@@ -56,7 +58,7 @@ describe('EditorShell — phone gate', () => {
   });
 
   it('omits the link when the community has no public site yet', () => {
-    matchesMock.value = false;
+    isNarrowMock.value = true;
     renderShell({ publicSiteUrl: null });
     expect(screen.queryByRole('link', { name: /View the public site/i })).not.toBeInTheDocument();
   });

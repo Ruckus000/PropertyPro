@@ -7,14 +7,14 @@ import { PanelResizer } from './PanelResizer';
 import { PhoneGate } from './PhoneGate';
 import { ToolTabs } from './ToolTabs';
 import { usePanelWidth } from './use-panel-width';
-import { TOOL_PANEL_TITLES, type EditorToolId } from './tools';
+import { TOOL_PANEL_TITLES, type EditorToolId, type ProToolAccess } from './tools';
 
 const PANEL_ID = 'site-editor-tool-panel';
 
 export interface EditorShellProps {
   communityName: string;
   publicSiteUrl: string | null;
-  hasProTools: boolean;
+  proToolAccess: ProToolAccess;
   /** Panel body per tool. Phase 1 passes placeholders; later phases pass real panels. */
   renderToolPanel: (tool: EditorToolId) => React.ReactNode;
   /** The canvas column. Phase 2b fills this in. */
@@ -35,7 +35,7 @@ export interface EditorShellProps {
 export function EditorShell({
   communityName,
   publicSiteUrl,
-  hasProTools,
+  proToolAccess,
   renderToolPanel,
   children,
   changeCount = 0,
@@ -45,9 +45,18 @@ export function EditorShell({
 }: EditorShellProps) {
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [panelWidth, setPanelWidth] = usePanelWidth();
-  const isWideEnough = useMediaQuery('(min-width: 768px)');
+  // Deliberately phrased as max-width, not min-width.
+  //
+  // `useMediaQuery` returns false on the server and on the first client render
+  // so hydration matches. Asking `(min-width: 768px)` therefore makes the phone
+  // gate the server-rendered output for EVERY user — a desktop PM would be
+  // served "Editing needs a bigger screen" and only see the editor once
+  // hydration ran. Inverting the query moves that initial false to the common
+  // case: desktop renders immediately, and the small handful of phone users get
+  // the gate one effect later.
+  const isNarrow = useMediaQuery('(max-width: 767px)');
 
-  if (!isWideEnough) {
+  if (isNarrow) {
     return <PhoneGate publicSiteUrl={publicSiteUrl} />;
   }
 
@@ -70,7 +79,7 @@ export function EditorShell({
             active={activeTool}
             onSelect={setActiveTool}
             counts={{ site: changeCount }}
-            hasProTools={hasProTools}
+            proToolAccess={proToolAccess}
             panelId={PANEL_ID}
           />
 

@@ -3,13 +3,13 @@
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { EditorShell } from './EditorShell';
 import { Canvas } from './canvas/Canvas';
-import type { EditorToolId } from './tools';
+import type { EditorToolId, ProToolAccess } from './tools';
 
 export interface EditorRootProps {
   communityId: number;
   communityName: string;
   publicSiteUrl: string | null;
-  hasProTools: boolean;
+  proToolAccess: ProToolAccess;
   /** Null when the community row could not be read; the canvas degrades. */
   canvasContext: CanvasContext | null;
 }
@@ -26,14 +26,14 @@ export function EditorRoot({
   communityId,
   communityName,
   publicSiteUrl,
-  hasProTools,
+  proToolAccess,
   canvasContext,
 }: EditorRootProps) {
   return (
     <EditorShell
       communityName={communityName}
       publicSiteUrl={publicSiteUrl}
-      hasProTools={hasProTools}
+      proToolAccess={proToolAccess}
       renderToolPanel={(tool) => <ToolPanelPlaceholder tool={tool} />}
     >
       {canvasContext ? (

@@ -80,20 +80,24 @@ export function selectAnnouncements(
 /**
  * Documents in the selected categories.
  *
- * An empty `includeCategories` means "all categories" — the same convention the
- * public renderer uses. Documents with no category are only ever included by
- * that all-categories case, since there is no category name to match.
+ * An empty `includeCategories` yields **nothing**, not everything. That is the
+ * published site's actual behaviour: `listDocuments` returns `[]` when no
+ * categories are selected, because "a DocumentsBlock with no category
+ * selection is a no-op" (see `public-community-reader.ts`). Reading the empty
+ * list as "all categories" is the intuitive guess and it is wrong — it would
+ * make the canvas show every public document where the live page shows none,
+ * which is precisely the kind of divergence the shared-view design exists to
+ * prevent.
  */
 export function selectDocuments(
   content: Pick<DocumentsBlockContent, 'limit' | 'includeCategories'>,
   all: readonly PublicDocument[],
 ): PublicDocument[] {
   const categories = content.includeCategories ?? [];
-  const filtered =
-    categories.length === 0
-      ? all
-      : all.filter((d) => d.categoryName !== null && categories.includes(d.categoryName as never));
-  return filtered.slice(0, content.limit);
+  if (categories.length === 0) return [];
+  return all
+    .filter((d) => d.categoryName !== null && categories.includes(d.categoryName as never))
+    .slice(0, content.limit);
 }
 
 /** Meetings starting within the window, soonest-first order preserved. */

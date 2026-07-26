@@ -118,7 +118,10 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         communityId={communityId}
         communityName={membership.communityName}
         publicSiteUrl={communityInfo ? buildCommunityUrl(communityInfo.slug, '/') : null}
-        hasProTools={features.hasSiteCustomCss}
+        proToolAccess={{
+          styling: features.hasSiteCustomCss,
+          domain: features.hasSiteCustomDomain,
+        }}
         canvasContext={canvasContext}
       />
     </EditorFrame>

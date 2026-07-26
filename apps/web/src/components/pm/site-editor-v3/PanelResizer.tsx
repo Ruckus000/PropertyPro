@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_DEFAULT_WIDTH } from './use-panel-width';
 
 const STEP = 16;
@@ -21,6 +21,33 @@ export interface PanelResizerProps {
  * can — hence the 12px hit area over a 1px visual line.
  */
 export function PanelResizer({ width, onWidthChange }: PanelResizerProps) {
+  const [dragOrigin, setDragOrigin] = useState<{ x: number; width: number } | null>(null);
+  // Read through a ref so the drag effect does not resubscribe on every width
+  // change — it only ever needs the latest callback.
+  const onWidthChangeRef = useRef(onWidthChange);
+  onWidthChangeRef.current = onWidthChange;
+
+  // The drag lives in an effect rather than in the pointerdown handler so React
+  // tears the listeners down on unmount. Registering them imperatively leaks:
+  // drag the divider while narrowing the window past the phone-gate breakpoint
+  // and this component unmounts mid-drag, leaving `pointermove` bound to
+  // `window` and still writing widths to localStorage.
+  useEffect(() => {
+    if (!dragOrigin) return;
+    const onMove = (event: globalThis.PointerEvent) => {
+      onWidthChangeRef.current(dragOrigin.width + (event.clientX - dragOrigin.x));
+    };
+    const onUp = () => setDragOrigin(null);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [dragOrigin]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       const step = event.shiftKey ? COARSE_STEP : STEP;
@@ -51,21 +78,9 @@ export function PanelResizer({ width, onWidthChange }: PanelResizerProps) {
   const handlePointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const startX = event.clientX;
-      const startWidth = width;
-
-      const onMove = (moveEvent: globalThis.PointerEvent) => {
-        onWidthChange(startWidth + (moveEvent.clientX - startX));
-      };
-      const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-      };
-
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
+      setDragOrigin({ x: event.clientX, width });
     },
-    [width, onWidthChange],
+    [width],
   );
 
   return (
