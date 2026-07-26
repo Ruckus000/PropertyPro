@@ -1,6 +1,8 @@
 'use client';
 
+import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { EditorShell } from './EditorShell';
+import { Canvas } from './canvas/Canvas';
 import type { EditorToolId } from './tools';
 
 export interface EditorRootProps {
@@ -8,6 +10,8 @@ export interface EditorRootProps {
   communityName: string;
   publicSiteUrl: string | null;
   hasProTools: boolean;
+  /** Null when the community row could not be read; the canvas degrades. */
+  canvasContext: CanvasContext | null;
 }
 
 /**
@@ -18,7 +22,13 @@ export interface EditorRootProps {
  * Phase 2b replaces the canvas placeholder, Phase 3 adds the status line, and
  * Phase 4 hangs the change model off here.
  */
-export function EditorRoot({ communityName, publicSiteUrl, hasProTools }: EditorRootProps) {
+export function EditorRoot({
+  communityId,
+  communityName,
+  publicSiteUrl,
+  hasProTools,
+  canvasContext,
+}: EditorRootProps) {
   return (
     <EditorShell
       communityName={communityName}
@@ -26,13 +36,17 @@ export function EditorRoot({ communityName, publicSiteUrl, hasProTools }: Editor
       hasProTools={hasProTools}
       renderToolPanel={(tool) => <ToolPanelPlaceholder tool={tool} />}
     >
-      <div className="mx-auto max-w-[1000px] px-5 py-4">
-        <div className="rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-card p-10 text-center">
-          <p className="text-sm text-content-secondary">
-            The canvas arrives in the next phase.
-          </p>
+      {canvasContext ? (
+        <Canvas communityId={communityId} context={canvasContext} />
+      ) : (
+        <div className="mx-auto max-w-[1000px] px-5 py-4">
+          <div className="rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-card p-10 text-center">
+            <p className="text-sm text-content-secondary">
+              We couldn&apos;t load this community&apos;s site settings.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </EditorShell>
   );
 }

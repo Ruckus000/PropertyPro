@@ -34,6 +34,7 @@ import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { getCommunityPublicInfo } from '@/lib/api/branding';
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
+import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,12 +68,13 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
-  const [features, shellContext, communityInfo] = await Promise.all([
+  const [features, shellContext, communityInfo, canvasContext] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
     // comes from `membership` — see the lifecycle note below.
     getPageShellContext(),
     getCommunityPublicInfo(communityId),
+    loadCanvasContext(communityId),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -117,6 +119,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         communityName={membership.communityName}
         publicSiteUrl={communityInfo ? buildCommunityUrl(communityInfo.slug, '/') : null}
         hasProTools={features.hasSiteCustomCss}
+        canvasContext={canvasContext}
       />
     </EditorFrame>
   );

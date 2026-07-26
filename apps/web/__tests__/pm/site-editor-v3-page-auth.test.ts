@@ -56,6 +56,11 @@ vi.mock('@/lib/api/branding', () => ({
 vi.mock('@/lib/utils/community-url', () => ({
   buildCommunityUrl: (slug: string, path: string) => `https://${slug}.example.com${path}`,
 }));
+// Same reason as the branding mock above: the canvas loader reaches
+// @propertypro/db for presigned URLs and constructs a client at module scope.
+vi.mock('@/lib/site-editor/load-canvas-context', () => ({
+  loadCanvasContext: vi.fn().mockResolvedValue(null),
+}));
 
 import WebsiteEditorV3Page from '@/app/(site-editor)/pm/website-editor/page';
 

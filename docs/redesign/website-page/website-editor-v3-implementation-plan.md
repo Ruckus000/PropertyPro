@@ -266,7 +266,42 @@ is verified **before** 2b starts.
 
 ---
 
-### Phase 2b — The canvas
+### Phase 2b-1 — View registry and canvas render path ✅ *shipped*
+
+**Files.** `components/public-site/blocks/view-registry.ts`;
+`lib/site-editor/preview-data.ts`; `lib/site-editor/load-canvas-context.ts`;
+`components/pm/site-editor-v3/canvas/{Canvas,CanvasBlock}.tsx`.
+
+**The system-of-record problem, and how it is solved.** The four SoR views need rows, and
+the canvas cannot query per keystroke. The page therefore loads **one generous superset per
+type** (`PREVIEW_LIMIT = 100` rows over `PREVIEW_WINDOW_DAYS = 365`, both far above the
+per-block caps of 20 and 365) and the canvas narrows it in memory with pure selectors.
+Where this is exact and where it approximates is documented on `preview-data.ts`: narrowing
+reproduces the published query unless an item the site would show ranks below
+`PREVIEW_LIMIT` in the wider one, which needs 100+ items ordered above it.
+
+**A build-only hazard caught before it landed.** `ImageBlock` and `GalleryBlock` imported
+`buildPublicAssetUrl` from `@/lib/site-assets/storage-paths`, which imports `node:crypto`.
+That is fine while they render server-side and fails at `next build` the moment the canvas
+renders them client-side — passing typecheck and every test on the way. The codebase
+already anticipated this: `@/lib/site-assets/public-url` exists for exactly this reason and
+`storage-paths`'s own header says components must import from it directly. Both now do.
+`view-registry.test.ts` reads the view sources and asserts the invariants that have no
+runtime signal: no `node:` imports, no `storage-paths`, no data access, no `export async`.
+
+**Budget.** Route JS 412.4 → **605.0 KiB** against the 700 KiB hard budget. Passing, with
+95 KiB of headroom for 2b-2. Block views are statically imported deliberately — a canvas
+that lazy-loads its own content flashes empty on open, which is the wrong trade for a
+WYSIWYG surface. If 2b-2 pushes past ~650 KiB, dynamic-import the Pro-only views
+(`gallery`, `faq`, `amenities`) first: they are the least likely to be present on any given
+page.
+
+**Two test-harness traps hit here, both already in §2.3.** A cwd-relative path in the new
+source-reading test passed under `vitest` in `apps/web` and failed under `pnpm test` from
+the repo root; and the page's new `loadCanvasContext` import broke the route auth test's
+module load. Both are fixed with comments naming the cause.
+
+### Phase 2b-2 — Selection, inline controls, inspector
 
 **Goal.** The redesign proper.
 
