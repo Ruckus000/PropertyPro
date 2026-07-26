@@ -13,6 +13,20 @@ const refetch = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-content-blocks', () => ({
   useContentBlocks: () => ({ ...blocksState.value, refetch }),
+  // Reached through SectionShell → FloatControls, which wraps every block.
+  useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// The canvas now renders inside the editor context (mounted by EditorRoot).
+// Stubbed here so these tests stay about the render path, not selection.
+vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
+  useSiteEditor: () => ({
+    isSelected: () => false,
+    select: vi.fn(),
+    move: vi.fn(),
+    canMove: () => true,
+    isMoving: false,
+  }),
 }));
 
 const NOW = new Date('2026-06-15T12:00:00Z').getTime();

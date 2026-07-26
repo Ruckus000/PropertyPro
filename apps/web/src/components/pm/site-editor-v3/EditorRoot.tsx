@@ -4,8 +4,10 @@ import { useCallback, useState } from 'react';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { EditorShell } from './EditorShell';
+import { Inspector } from './Inspector';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider } from './editor-context';
+import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
 
 export interface EditorRootProps {
@@ -54,7 +56,12 @@ export function EditorRoot({
         proToolAccess={proToolAccess}
         activeTool={activeTool}
         onActiveToolChange={setActiveTool}
-        renderToolPanel={(tool) => <ToolPanelPlaceholder tool={tool} />}
+        renderToolPanel={(tool) =>
+          tool === 'sections' ? <SectionList /> : <ToolPanelPlaceholder tool={tool} />
+        }
+        // Returns null when nothing is selected, so passing it unconditionally
+        // costs an empty render rather than a branch here.
+        inspector={<Inspector />}
       >
         {canvasContext ? (
           <Canvas communityId={communityId} context={canvasContext} />

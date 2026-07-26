@@ -1,0 +1,231 @@
+/**
+ * SectionShell + FloatControls — the canvas selection chrome.
+ *
+ * The editor context is mocked rather than provided for real: these assertions
+ * are about the chrome's own contract (does a click select, does Alt+Arrow ask
+ * the context to move, are the controls reachable without a mouse), and
+ * `editor-context.test.tsx` already covers the move semantics behind it.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
+import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
+
+const editor = vi.hoisted(() => ({
+  selectedId: null as number | null,
+  select: vi.fn(),
+  move: vi.fn(),
+  canMove: vi.fn((_id: number, _dir: 'up' | 'down') => true),
+  isMoving: false,
+}));
+
+const deleteMutate = vi.hoisted(() => vi.fn());
+
+vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
+  useSiteEditor: () => ({
+    isSelected: (id: number) => editor.selectedId === id,
+    select: editor.select,
+    move: editor.move,
+    canMove: editor.canMove,
+    isMoving: editor.isMoving,
+  }),
+}));
+
+vi.mock('@/hooks/use-content-blocks', () => ({
+  useDeleteContentBlock: () => ({ mutate: deleteMutate, isPending: false }),
+}));
+
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: toastError } }));
+
+function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
+  return {
+    blockType: 'text',
+    blockOrder: 2,
+    content: {},
+    isDraft: false,
+    publishedAt: null,
+    ...overrides,
+  };
+}
+
+const TEXT = block({ id: 2 });
+const HERO = block({ id: 1, blockType: 'hero', blockOrder: 1 });
+
+function renderShell(b: SiteBlockSummary = TEXT) {
+  return render(
+    <SectionShell block={b} communityId={7}>
+      <p>Section body</p>
+    </SectionShell>,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  editor.selectedId = null;
+  editor.isMoving = false;
+  editor.canMove = vi.fn(() => true);
+});
+
+describe('SectionShell — selection', () => {
+  it('selects on click', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByText('Section body'));
+    expect(editor.select).toHaveBeenCalledWith(2);
+  });
+
+  it('is reachable and selectable by keyboard, not mouse-only', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    const shell = screen.getByRole('group', { name: 'Text section' });
+    await user.tab();
+    expect(shell).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    expect(editor.select).toHaveBeenCalledWith(2);
+  });
+
+  it('marks the selected section for styling', () => {
+    editor.selectedId = 2;
+    renderShell();
+    expect(screen.getByRole('group', { name: 'Text section' })).toHaveAttribute(
+      'data-selected',
+      'true',
+    );
+  });
+});
+
+describe('SectionShell — Alt+Arrow reordering', () => {
+  it('moves up on Alt+ArrowUp when selected', async () => {
+    const user = userEvent.setup();
+    editor.selectedId = 2;
+    renderShell();
+
+    screen.getByRole('group', { name: 'Text section' }).focus();
+    await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+
+    expect(editor.move).toHaveBeenCalledWith(2, 'up');
+  });
+
+  it('moves down on Alt+ArrowDown when selected', async () => {
+    const user = userEvent.setup();
+    editor.selectedId = 2;
+    renderShell();
+
+    screen.getByRole('group', { name: 'Text section' }).focus();
+    await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
+
+    expect(editor.move).toHaveBeenCalledWith(2, 'down');
+  });
+
+  it('ignores Alt+Arrow on a section that is not selected', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    screen.getByRole('group', { name: 'Text section' }).focus();
+    await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+
+    expect(editor.move).not.toHaveBeenCalled();
+  });
+
+  it('does not re-check bounds itself — the context owns the soft stop', async () => {
+    // First-up / last-down must be a silent no-op, and the shell must not
+    // duplicate that test (two predicates drift). It always delegates.
+    const user = userEvent.setup();
+    editor.selectedId = 2;
+    editor.canMove = vi.fn(() => false);
+    renderShell();
+
+    screen.getByRole('group', { name: 'Text section' }).focus();
+    await user.keyboard('{Alt>}{ArrowUp}{/Alt}');
+
+    expect(editor.move).toHaveBeenCalledWith(2, 'up');
+    expect(toastError).not.toHaveBeenCalled();
+  });
+});
+
+describe('FloatControls', () => {
+  it('renders the controls without any hover event — they are not hover-only', () => {
+    renderShell();
+
+    const up = screen.getByRole('button', { name: 'Move Text section up' });
+    const down = screen.getByRole('button', { name: 'Move Text section down' });
+    const remove = screen.getByRole('button', { name: 'Remove Text section' });
+
+    for (const control of [up, down, remove]) {
+      expect(control).toBeInTheDocument();
+      control.focus();
+      expect(control).toHaveFocus();
+    }
+  });
+
+  it('is reachable by Tab straight after the section', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.tab(); // the section
+    await user.tab(); // move up
+    expect(screen.getByRole('button', { name: 'Move Text section up' })).toHaveFocus();
+  });
+
+  it('disables rather than hides move-up at the top of the list', () => {
+    editor.canMove = vi.fn((_id, dir) => dir !== 'up');
+    renderShell();
+
+    expect(screen.getByRole('button', { name: 'Move Text section up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move Text section down' })).toBeEnabled();
+  });
+
+  it('disables rather than hides move-down at the bottom of the list', () => {
+    editor.canMove = vi.fn((_id, dir) => dir !== 'down');
+    renderShell();
+
+    expect(screen.getByRole('button', { name: 'Move Text section down' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move Text section up' })).toBeEnabled();
+  });
+
+  it('moves without also selecting — the click must not double-fire', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole('button', { name: 'Move Text section down' }));
+
+    expect(editor.move).toHaveBeenCalledWith(2, 'down');
+    expect(editor.select).not.toHaveBeenCalled();
+  });
+
+  it('removes by block order and reports the staged case', async () => {
+    const user = userEvent.setup();
+    deleteMutate.mockImplementation((_input, opts) => opts.onSuccess({ staged: true }));
+    renderShell();
+
+    await user.click(screen.getByRole('button', { name: 'Remove Text section' }));
+
+    expect(deleteMutate).toHaveBeenCalledWith(
+      { blockOrder: 2 },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(toastSuccess).toHaveBeenCalledWith(
+      'Text section will be removed when you publish.',
+    );
+  });
+});
+
+describe('SectionShell — the hero', () => {
+  it('is selectable but exposes no move or remove controls', async () => {
+    const user = userEvent.setup();
+    renderShell(HERO);
+
+    await user.click(screen.getByText('Section body'));
+    expect(editor.select).toHaveBeenCalledWith(1);
+
+    expect(screen.queryByRole('button', { name: /Move Welcome section/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remove Welcome section/ })).toBeNull();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+});

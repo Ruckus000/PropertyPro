@@ -29,16 +29,33 @@
  *
  * Breaking any of these leaves the public site working while breaking the
  * editor, so the symptom appears far from the change that caused it.
+ *
+ * ## Static vs dynamic imports — a deliberate split, not an oversight
+ *
+ * Most views are imported STATICALLY. A WYSIWYG canvas that lazy-loads its own
+ * content flashes empty on open, which is the wrong trade for a surface whose
+ * entire purpose is showing the PM what the page looks like.
+ *
+ * The three Pro-only authored types (`faq`, `gallery`, `amenities`) are the
+ * exception. Phase 2b-2 took the editor route from 605.3 KiB to 686.5 KiB
+ * against a 700 KiB hard budget, past the ~650 KiB line the roadmap set as the
+ * trigger for exactly this change. These three are the right ones to split:
+ * they are plan-gated, so most communities have none of them on the page, and
+ * they are authored (content arrives as props) so a suspended render cannot
+ * cause a data refetch. `loading` reserves height so a section that IS present
+ * does not reflow the canvas underneath the PM.
+ *
+ * Note this file is reachable only from the editor canvas — the public site
+ * renders through `./registry.ts` — so the split cannot regress the public
+ * site's own perf group.
  */
 import type { BlockType } from '@propertypro/shared';
-import type { ComponentType } from 'react';
+import { createElement, type ComponentType } from 'react';
+import dynamic from 'next/dynamic';
 
 import { HeroBlock } from './HeroBlock';
 import { TextBlock } from './TextBlock';
 import { ImageBlock } from './ImageBlock';
-import { FaqBlock } from './FaqBlock';
-import { GalleryBlock } from './GalleryBlock';
-import { AmenitiesBlock } from './AmenitiesBlock';
 
 import { AnnouncementsBlockView } from './AnnouncementsBlockView';
 import { DocumentsBlockView } from './DocumentsBlockView';
@@ -67,6 +84,31 @@ export const BLOCK_VIEW_KINDS = {
 } as const satisfies Partial<Record<BlockType, 'renderer' | 'view'>>;
 
 export type BlockViewKind = (typeof BLOCK_VIEW_KINDS)[keyof typeof BLOCK_VIEW_KINDS];
+
+/**
+ * Height-reserving placeholder for a code-split view. Written with
+ * `createElement` rather than JSX so this module stays a `.ts` file and every
+ * existing import path (and the source-invariant test) is untouched.
+ */
+function BlockViewSkeleton() {
+  return createElement('div', {
+    className: 'min-h-40 animate-pulse bg-surface-muted',
+    'aria-hidden': 'true',
+  });
+}
+
+// The three Pro-only authored views are code-split — see the header. `dynamic`
+// still returns a component, so `hasView` and the coverage tests are unaffected.
+const FaqBlock = dynamic(() => import('./FaqBlock').then((m) => m.FaqBlock), {
+  loading: BlockViewSkeleton,
+});
+const GalleryBlock = dynamic(() => import('./GalleryBlock').then((m) => m.GalleryBlock), {
+  loading: BlockViewSkeleton,
+});
+const AmenitiesBlock = dynamic(
+  () => import('./AmenitiesBlock').then((m) => m.AmenitiesBlock),
+  { loading: BlockViewSkeleton },
+);
 
 /** True when this block type needs system-of-record rows supplied to its view. */
 export function isDataDrivenBlock(

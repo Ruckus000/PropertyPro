@@ -9,6 +9,7 @@ import { hasView } from '@/components/public-site/blocks/view-registry';
 import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { CanvasBlock } from './CanvasBlock';
+import { SectionShell } from './SectionShell';
 
 export interface CanvasProps {
   communityId: number;
@@ -25,14 +26,47 @@ export interface CanvasProps {
  * the same view component the public site uses (see `view-registry.ts`), which
  * is what makes "what you see is what publishes" true rather than aspirational.
  *
- * Selection, inline controls and reordering land in the next slice; this one
- * establishes the render path.
+ * Each block is wrapped in a `SectionShell`, which owns the selection chrome
+ * and the hover/focus control cluster. The shell must be mounted inside a
+ * `SiteEditorProvider` (see `EditorRoot`).
  */
 export function Canvas({ communityId, context, now }: CanvasProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
   // One timestamp for the whole render pass — otherwise two blocks with the
   // same window could disagree about where the cutoff falls.
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
+
+  // Filter BEFORE the empty check. The PM blocks endpoint returns tombstone
+  // rows (staged deletions) and could return a type this build has no view for;
+  // both render as null. Counting them would skip the empty state and leave a
+  // bare bordered box with no explanation.
+  const ordered = useMemo(
+    () => sortBlocks(blocks ?? []).filter((b) => hasView(b.blockType as never)),
+    [blocks],
+  );
+
+  // Built once per block-list change rather than per render. `SectionShell`
+  // subscribes to the editor context, so it re-renders on every selection
+  // change — but it receives the same `children` element each time, which is
+  // what keeps `CanvasBlock`'s `memo` effective. Rebuilding these elements
+  // inline would hand every block a fresh element on each keystroke in the
+  // inspector and defeat that memo.
+  const sections = useMemo(
+    () =>
+      ordered.map((block) => (
+        <SectionShell key={block.id} block={block} communityId={communityId}>
+          <CanvasBlock
+            block={block}
+            community={context.community}
+            theme={context.theme}
+            layout={context.layout}
+            preview={context.preview}
+            now={renderedAt}
+          />
+        </SectionShell>
+      )),
+    [ordered, communityId, context, renderedAt],
+  );
 
   if (isPending) {
     return (
@@ -62,12 +96,6 @@ export function Canvas({ communityId, context, now }: CanvasProps) {
     );
   }
 
-  // Filter BEFORE the empty check. The PM blocks endpoint returns tombstone
-  // rows (staged deletions) and could return a type this build has no view for;
-  // both render as null. Counting them would skip the empty state and leave a
-  // bare bordered box with no explanation.
-  const ordered = sortBlocks(blocks ?? []).filter((b) => hasView(b.blockType as never));
-
   return (
     <div className="mx-auto max-w-[1000px] px-5 py-4">
       <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
@@ -77,17 +105,7 @@ export function Canvas({ communityId, context, now }: CanvasProps) {
             description="Add your first section to give visitors something to read."
           />
         ) : (
-          ordered.map((block) => (
-            <CanvasBlock
-              key={block.id}
-              block={block}
-              community={context.community}
-              theme={context.theme}
-              layout={context.layout}
-              preview={context.preview}
-              now={renderedAt}
-            />
-          ))
+          sections
         )}
       </div>
     </div>
