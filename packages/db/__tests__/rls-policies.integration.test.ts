@@ -1417,6 +1417,90 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
+  describe('function hardening (0039)', () => {
+    it('pins search_path on every SECURITY DEFINER function in public', async () => {
+      // Derived from pg_catalog, NOT a hardcoded list — so a SECURITY DEFINER
+      // function added LATER without a pin fails here too, rather than only the
+      // 13 known when 0039 was written being covered.
+      //
+      // SECURITY DEFINER + mutable search_path is the actual escalation vector:
+      // the function runs as its owner, so an attacker who can shadow an
+      // unqualified object it references executes their own code as that owner.
+      const rows = await adminSql<{ proname: string }[]>`
+        select p.proname
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.prosecdef
+          and p.proconfig is null
+        order by p.proname
+      `;
+      const unpinned = rows.map((r) => r.proname);
+      expect(
+        unpinned,
+        `SECURITY DEFINER functions with a mutable search_path: ${unpinned.join(', ')}. ` +
+          "Add SET search_path TO 'public', 'pg_catalog' (plus 'auth' only if it calls auth.uid()/auth.role()).",
+      ).toEqual([]);
+    });
+
+    it('denies anon and authenticated CREATE on schema public, while keeping USAGE', async () => {
+      // CREATE was revoked in 0039. It is the precondition that makes any
+      // search_path hijack possible at all — without somewhere to create a
+      // shadowing object, an unpinned search_path is untidy rather than
+      // exploitable. Supabase's bootstrap grants it; nothing here uses it
+      // (zero objects in public are owned by either role).
+      //
+      // USAGE is asserted in the other direction on purpose: the local stub and
+      // PostgREST both need it, so an over-broad `REVOKE ALL ON SCHEMA` would
+      // break the suite here rather than somewhere confusing.
+      for (const role of ['anon', 'authenticated']) {
+        const [row] = await adminSql<{ can_create: boolean; can_use: boolean }[]>`
+          select has_schema_privilege(${role}, 'public', 'CREATE') as can_create,
+                 has_schema_privilege(${role}, 'public', 'USAGE')  as can_use
+        `;
+        expect(row?.can_create, `${role} must NOT hold CREATE on schema public`).toBe(false);
+        expect(row?.can_use, `${role} must retain USAGE on schema public`).toBe(true);
+      }
+    });
+
+    it('KEEPS EXECUTE on the RLS policy helpers for anon and authenticated', async () => {
+      // Deliberately the inverse of what Supabase's advisor recommends (lints
+      // 0028/0029 flag these as "callable without signing in" and suggest
+      // revoking EXECUTE). Postgres evaluates a policy expression with the
+      // privileges of the role running the query, so that role MUST hold EXECUTE
+      // on every function the policy calls. Revoking turns silent 0-row tenant
+      // filtering into `permission denied for function` on every authenticated
+      // read — verified by experiment, not assumed.
+      //
+      // These helpers back 144 / 85 / 70 / 12 / 2 policies. This test exists so
+      // that acting on the advisor's advice fails here instead of in production.
+      const helpers = [
+        'pp_rls_can_read_audit_log',
+        'pp_rls_has_community_membership',
+        'pp_rls_community_allows_member_writes',
+        'pp_rls_can_access_community',
+        'pp_rls_is_privileged',
+      ];
+      for (const fn of helpers) {
+        const [row] = await adminSql<{ anon_exec: boolean; auth_exec: boolean }[]>`
+          select has_function_privilege('anon', p.oid, 'EXECUTE') as anon_exec,
+                 has_function_privilege('authenticated', p.oid, 'EXECUTE') as auth_exec
+          from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname = ${fn}
+          limit 1
+        `;
+        expect(row?.anon_exec, `anon must retain EXECUTE on ${fn} (RLS policies call it)`).toBe(
+          true,
+        );
+        expect(
+          row?.auth_exec,
+          `authenticated must retain EXECUTE on ${fn} (RLS policies call it)`,
+        ).toBe(true);
+      }
+    });
+  });
+
   describe('locked-down platform tables (0037, 0038)', () => {
     // Four tables that held PII or integrity-critical state while reachable by
     // anon and/or authenticated, each closed by giving it the posture eleven

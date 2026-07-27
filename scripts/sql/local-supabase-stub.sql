@@ -25,6 +25,14 @@ DO $$ BEGIN
 END $$;
 
 -- Grant usage so policies referencing these roles can be created.
+--
+-- USAGE ONLY — do not widen this to GRANT ALL / GRANT CREATE. Supabase's own
+-- bootstrap grants CREATE on public to anon and authenticated; migration 0039
+-- revokes it, because being able to create an object in public is the
+-- precondition for shadowing a real one and hijacking an unpinned search_path.
+-- Nothing needs it: zero objects in public are owned by either role. The RLS
+-- suite asserts both halves (CREATE denied, USAGE retained), so widening this
+-- line fails there rather than silently re-opening the hole.
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
 -- Auth schema and helpers.
