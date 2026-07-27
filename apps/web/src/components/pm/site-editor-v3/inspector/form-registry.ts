@@ -43,10 +43,29 @@ import type { BlockType } from '@propertypro/shared';
 import { InspectorFormSkeleton } from './InspectorFormSkeleton';
 import type { BlockFormProps } from './types';
 
+const sorEmptyTextForm = dynamic(
+  () => import('./forms/SorEmptyTextForm').then((m) => m.SorEmptyTextForm),
+  { loading: InspectorFormSkeleton },
+);
+
 export const blockFormRegistry: Partial<Record<BlockType, ComponentType<BlockFormProps>>> = {
   text: dynamic(() => import('./forms/TextForm').then((m) => m.TextForm), {
     loading: InspectorFormSkeleton,
   }),
+  image: dynamic(() => import('./forms/ImageForm').then((m) => m.ImageForm), {
+    loading: InspectorFormSkeleton,
+  }),
+  amenities: dynamic(() => import('./forms/AmenitiesForm').then((m) => m.AmenitiesForm), {
+    loading: InspectorFormSkeleton,
+  }),
+
+  // One component, three entries. These blocks differ only in the type they
+  // write and the placeholder they show, and `SorEmptyTextForm` reads both
+  // from `blockType`. `contact` is deliberately absent — it renders fields,
+  // not a list, so it has no empty state to override.
+  announcements: sorEmptyTextForm,
+  documents: sorEmptyTextForm,
+  meetings: sorEmptyTextForm,
 };
 
 /** Whether this block type has an edit form yet. Coverage is incremental. */

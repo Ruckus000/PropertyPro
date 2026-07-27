@@ -18,7 +18,7 @@ function formatDate(value: Date, timezone: string): string {
 
 export type DocumentsBlockViewProps = BlockViewProps<DocumentsBlockContent, PublicDocument[]>;
 
-export function DocumentsBlockView({ blockId, data, community }: DocumentsBlockViewProps) {
+export function DocumentsBlockView({ content, blockId, data, community }: DocumentsBlockViewProps) {
   return (
     <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`documents-${blockId}`}>
       <div className="mx-auto max-w-3xl">
@@ -30,7 +30,7 @@ export function DocumentsBlockView({ blockId, data, community }: DocumentsBlockV
         </h2>
         {data.length === 0 ? (
           <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
-            No documents available.
+            {content?.emptyText ?? "No documents available."}
           </p>
         ) : (
           <ul className="space-y-3">

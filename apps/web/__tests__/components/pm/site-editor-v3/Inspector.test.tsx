@@ -114,7 +114,7 @@ describe('Inspector — presentation', () => {
   });
 
   it('explains itself for a section type with no form yet, rather than showing an empty panel', () => {
-    editorMock.selection = { ...TEXT_SELECTION, blockType: 'documents' };
+    editorMock.selection = { ...TEXT_SELECTION, blockType: 'contact' };
     render(<Inspector communityId={42} />);
     expect(screen.getByText(/arrive in a later update/i)).toBeInTheDocument();
   });

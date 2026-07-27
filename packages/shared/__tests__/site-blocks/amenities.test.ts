@@ -75,3 +75,23 @@ describe('amenitiesBlockSchema', () => {
     ).toBe(false);
   });
 });
+
+describe('amenities block — layout variant', () => {
+  const base = { items: [{ name: 'Pool' }] };
+
+  it('accepts each known variant', () => {
+    for (const variant of ['standard', 'wide', 'compact'] as const) {
+      expect(amenitiesBlockSchema.safeParse({ ...base, variant }).success).toBe(true);
+    }
+  });
+
+  it('accepts content with no variant — absent means standard', () => {
+    // Every stored row predates this field, so absent must stay valid or the
+    // public site loses every amenities block the moment this ships.
+    expect(amenitiesBlockSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('rejects an unknown variant', () => {
+    expect(amenitiesBlockSchema.safeParse({ ...base, variant: 'enormous' }).success).toBe(false);
+  });
+});

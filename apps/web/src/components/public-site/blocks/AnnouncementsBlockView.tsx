@@ -44,6 +44,7 @@ export type AnnouncementsBlockViewProps = BlockViewProps<
 >;
 
 export function AnnouncementsBlockView({
+  content,
   blockId,
   data,
   community,
@@ -59,7 +60,7 @@ export function AnnouncementsBlockView({
         </h2>
         {data.length === 0 ? (
           <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
-            No announcements yet.
+            {content?.emptyText ?? "No announcements yet."}
           </p>
         ) : (
           <ul className="space-y-4">

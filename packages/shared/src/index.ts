@@ -76,6 +76,8 @@ export {
   BLOCK_TYPES,
   blockTypeSchema,
   TOMBSTONE_BLOCK_TYPE,
+  BLOCK_VARIANTS,
+  blockVariantSchema,
   blockSchemaRegistry,
   heroBlockSchema,
   textBlockSchema,
@@ -91,6 +93,7 @@ export {
 } from './site-blocks/index';
 export type {
   BlockType,
+  BlockVariant,
   DocumentCategory,
   HeroBlockContent,
   TextBlockContent,

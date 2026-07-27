@@ -41,3 +41,23 @@ describe('textBlockSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('text block — layout variant', () => {
+  const base = { body: 'Some body text.' };
+
+  it('accepts each known variant', () => {
+    for (const variant of ['standard', 'wide', 'compact'] as const) {
+      expect(textBlockSchema.safeParse({ ...base, variant }).success).toBe(true);
+    }
+  });
+
+  it('accepts content with no variant — absent means standard', () => {
+    // Every stored row predates this field, so absent must stay valid or the
+    // public site loses every text block the moment this ships.
+    expect(textBlockSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('rejects an unknown variant', () => {
+    expect(textBlockSchema.safeParse({ ...base, variant: 'enormous' }).success).toBe(false);
+  });
+});

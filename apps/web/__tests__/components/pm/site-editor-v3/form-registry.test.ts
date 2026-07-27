@@ -45,7 +45,9 @@ describe('form registry — dispatch', () => {
   it('returns undefined for a type with no form, so the body can fall back', () => {
     // The registry is Partial by design — coverage is incremental, and a
     // section with no form must render an explanation rather than throw.
-    expect(blockFormRegistry['contact' as keyof typeof blockFormRegistry]).toBeUndefined();
+    // `contact` specifically has no empty-state to override (it renders
+    // fields, not a list), so it is not merely unbuilt — it is excluded.
+    expect(blockFormRegistry.contact).toBeUndefined();
   });
 
   it('does not report coverage for inherited Object properties', () => {
@@ -64,9 +66,12 @@ describe('form registry — budget invariants', () => {
     // No static import from ./forms/…
     expect(code).not.toMatch(/^\s*import\s[^\n]*from\s+['"]\.\/forms\//m);
 
-    // Every registry value is a dynamic() call. Count entries vs dynamic( calls.
+    // Every DISTINCT registry value comes from a dynamic() call. Distinct,
+    // not per-key: one component legitimately serves several block types
+    // (the SoR empty-text form covers three).
     const dynamicCalls = code.match(/dynamic\(/g) ?? [];
-    expect(dynamicCalls.length).toBe(Object.keys(blockFormRegistry).length);
+    const distinctComponents = new Set(Object.values(blockFormRegistry));
+    expect(dynamicCalls.length).toBe(distinctComponents.size);
   });
 
   it('keeps Radix and react-image-crop out of every inspector form', () => {

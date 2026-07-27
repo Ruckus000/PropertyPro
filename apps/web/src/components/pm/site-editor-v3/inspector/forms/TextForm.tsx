@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback } from 'react';
-import { textBlockSchema } from '@propertypro/shared';
+import { textBlockSchema, type BlockVariant } from '@propertypro/shared';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { useBlockForm } from '../use-block-form';
+import { VariantField } from './fields/VariantField';
 import type { BlockFormProps } from '../types';
 
 const HEADING_MAX = 120;
@@ -15,6 +16,7 @@ const BODY_MAX = 2000;
 interface TextDraft {
   heading: string;
   body: string;
+  variant: BlockVariant;
 }
 
 /**
@@ -26,12 +28,19 @@ interface TextDraft {
 function toDraft(content: unknown): TextDraft {
   const parsed = textBlockSchema.safeParse(content);
   if (parsed.success) {
-    return { heading: parsed.data.heading ?? '', body: parsed.data.body };
+    return {
+      heading: parsed.data.heading ?? '',
+      body: parsed.data.body,
+      // Absent means standard — see blockVariantSchema. Normalising here means
+      // the form never has to render an indeterminate radio group.
+      variant: parsed.data.variant ?? 'standard',
+    };
   }
   const loose = (content ?? {}) as Record<string, unknown>;
   return {
     heading: typeof loose.heading === 'string' ? loose.heading : '',
     body: typeof loose.body === 'string' ? loose.body : '',
+    variant: 'standard',
   };
 }
 
@@ -47,7 +56,14 @@ function toCanonical(draft: TextDraft): unknown | null {
   const body = draft.body.trim();
   if (body.length === 0) return null;
   const heading = draft.heading.trim();
-  return heading.length > 0 ? { heading, body } : { body };
+  return {
+    ...(heading.length > 0 ? { heading } : {}),
+    body,
+    // `standard` is the default, so omit it rather than writing it. Storing it
+    // explicitly would make two identical-looking sections differ by content
+    // key, and show up as a spurious change in the publish diff.
+    ...(draft.variant !== 'standard' ? { variant: draft.variant } : {}),
+  };
 }
 
 export function TextForm({ communityId, blockOrder, content }: BlockFormProps) {
@@ -86,6 +102,12 @@ export function TextForm({ communityId, blockOrder, content }: BlockFormProps) {
           placeholder="Optional"
         />
       </div>
+
+      <VariantField
+        idPrefix={`text-${blockOrder}`}
+        value={draft.variant}
+        onChange={(variant) => setDraft((prev) => ({ ...prev, variant }))}
+      />
 
       <div className="space-y-1.5">
         <Label htmlFor={bodyId}>

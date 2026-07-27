@@ -282,3 +282,57 @@ describe('ContactBlockView', () => {
     expect(screen.queryByText('Phone')).not.toBeInTheDocument();
   });
 });
+
+describe('per-block empty text (Phase 9)', () => {
+  // A schema field with no consumer is dead config, so these assert the
+  // override actually reaches the DOM — and that omitting it keeps the copy
+  // every existing published site already renders.
+  it('overrides the built-in announcements copy', () => {
+    render(
+      <AnnouncementsBlockView
+        blockId={1}
+        content={{ limit: 5, timeWindowDays: 30, emptyText: 'Check back after the board meeting.' }}
+        data={[]}
+        community={COMMUNITY}
+      />,
+    );
+    expect(screen.getByText('Check back after the board meeting.')).toBeInTheDocument();
+    expect(screen.queryByText('No announcements yet.')).not.toBeInTheDocument();
+  });
+
+  it('overrides the built-in documents copy', () => {
+    render(
+      <DocumentsBlockView
+        blockId={2}
+        content={{ limit: 5, emptyText: 'Records are posted after each meeting.' }}
+        data={[]}
+        community={COMMUNITY}
+      />,
+    );
+    expect(screen.getByText('Records are posted after each meeting.')).toBeInTheDocument();
+  });
+
+  it('overrides the built-in meetings copy', () => {
+    render(
+      <MeetingsBlockView
+        blockId={3}
+        content={{ limit: 10, timeWindowDays: 30, emptyText: 'No meetings scheduled this quarter.' }}
+        data={[]}
+        community={COMMUNITY}
+      />,
+    );
+    expect(screen.getByText('No meetings scheduled this quarter.')).toBeInTheDocument();
+  });
+
+  it('keeps the built-in copy when no override is set', () => {
+    render(
+      <MeetingsBlockView
+        blockId={3}
+        content={{ limit: 10, timeWindowDays: 30 }}
+        data={[]}
+        community={COMMUNITY}
+      />,
+    );
+    expect(screen.getByText('No upcoming meetings.')).toBeInTheDocument();
+  });
+});
