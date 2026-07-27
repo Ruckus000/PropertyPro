@@ -57,8 +57,24 @@ jobs:
         # Shared single source of truth (see scripts/sql/local-supabase-stub.sql).
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sql/local-supabase-stub.sql
 
-      - name: Build packages
-        run: pnpm --filter @propertypro/shared --filter @propertypro/email --filter @propertypro/db build
+      - name: Build workspace packages
+        # MUST stay in sync with the identical step in ci.yml ("Build workspace
+        # packages"). Every package listed here resolves through `exports` →
+        # `./dist/…` with NO source fallback, so an unbuilt one is not a slow
+        # import — it is a hard Vite `packageEntryFailure` that kills the run at
+        # transform time. (`@propertypro/theme` exports `./src/index.ts`
+        # directly, which is why it survives being unbuilt; do not infer from
+        # that which others can be dropped.)
+        #
+        # This list was short three packages, and `@propertypro/api-contract`
+        # was one of them. When `apps/web/src/lib/api/error-handler.ts` began
+        # importing it, every scheduled run started dying on
+        # `import { isContractValidationError } from "@propertypro/api-contract"`
+        # — reported as `Test Files 1 failed / Tests 4 skipped`, which reads
+        # like an env skip and is not one. The suite ran zero assertions from
+        # 2026-06-08 until this fix. Prefer over-listing here to re-deriving
+        # the minimal set: the failure mode is silent and weekly.
+        run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
 
       - name: Run migrations
         run: pnpm --filter @propertypro/db db:migrate
@@ -70,4 +86,53 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/sql/local-supabase-post-migrate.sql
 
       - name: Run tenant isolation game day
-        run: pnpm test:tenant-isolation-game-day
+        # Goes through the npm script so the vitest config and the suite path
+        # stay single-sourced in package.json. The extra flags forward WITHOUT
+        # a `--` separator (with one, pnpm swallows them and no json report is
+        # written — the suite still runs, so the omission is silent).
+        #
+        # `--reporter=default` keeps the human-readable log; the json copy is
+        # what the next step inspects.
+        run: >-
+          pnpm test:tenant-isolation-game-day
+          --reporter=default --reporter=json --outputFile.json=game-day-report.json
+
+      - name: Assert the game day actually ran
+        # A green job is not the goal — EXECUTED ASSERTIONS are.
+        #
+        # `getDescribeDb()` degrades to `describe.skip` when DATABASE_URL is
+        # absent, and a stray `.skip`/`.todo` would do the same. Either way
+        # vitest exits 0 and this workflow reports success having verified
+        # nothing about tenant isolation. Since this is a weekly scheduled
+        # canary that nobody watches, "silently vacuous" is the failure mode
+        # that would actually hurt — so assert on the counts, not the exit code.
+        #
+        # `always()` so a run that dies before writing the report still reaches
+        # this step and says why, rather than being masked by the earlier
+        # failure.
+        if: always()
+        run: |
+          if [ ! -f game-day-report.json ]; then
+            echo "::error::No vitest report was written — the suite failed before producing one."
+            exit 1
+          fi
+          node -e '
+            const r = require("./game-day-report.json");
+            const passed = r.numPassedTests ?? 0;
+            const pending = r.numPendingTests ?? 0;
+            const failed = r.numFailedTests ?? 0;
+            console.log(`game day: ${passed} passed, ${failed} failed, ${pending} skipped`);
+            if (failed > 0) {
+              console.log("::error::Tenant isolation assertions FAILED.");
+              process.exit(1);
+            }
+            if (passed === 0 || pending > 0) {
+              console.log(
+                "::error::The tenant-isolation suite did not execute (" +
+                passed + " passed, " + pending + " skipped). A skipped game day " +
+                "is not a passing one — check DATABASE_URL and that no describe/it " +
+                "is marked .skip."
+              );
+              process.exit(1);
+            }
+          '
