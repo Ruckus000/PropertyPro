@@ -125,3 +125,120 @@ describe('<HeroBlock>', () => {
     );
   });
 });
+
+describe('<HeroBlock> — hero photos (Phase 9)', () => {
+  const PATH = '1/hero/pool.jpg';
+
+  it('still renders a legacy single image, upgraded on read', () => {
+    // The regression that matters most: every community that set a hero image
+    // before `photos` existed must keep it, with no backfill.
+    render(
+      <HeroBlock
+        {...makeProps({ headline: 'X', heroImagePath: PATH, heroImageAlt: 'The pool' })}
+      />,
+    );
+    const img = screen.getByAltText('The pool');
+    expect(img).toHaveAttribute('src', expect.stringContaining(`${PATH}.1600w.webp`));
+  });
+
+  it('strips a stored variant suffix rather than doubling it', () => {
+    // The onboarding wizard stored the already-suffixed 1600w path. Without
+    // the strip this requests `pool.jpg.1600w.webp.1600w.webp` and 404s.
+    render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          heroImagePath: `${PATH}.1600w.webp`,
+          heroImageAlt: 'The pool',
+        })}
+      />,
+    );
+    const src = screen.getByAltText('The pool').getAttribute('src')!;
+    expect(src).toContain(`${PATH}.1600w.webp`);
+    expect(src).not.toContain('.1600w.webp.1600w.webp');
+  });
+
+  it('serves a srcset, which the old single-path convention could not', () => {
+    render(
+      <HeroBlock {...makeProps({ headline: 'X', photos: [{ path: PATH, alt: 'The pool' }] })} />,
+    );
+    expect(screen.getByAltText('The pool')).toHaveAttribute(
+      'srcset',
+      expect.stringContaining('800w'),
+    );
+  });
+
+  it('renders a single photo without the carousel chrome', () => {
+    render(
+      <HeroBlock {...makeProps({ headline: 'X', photos: [{ path: PATH, alt: 'The pool' }] })} />,
+    );
+    expect(screen.queryByRole('group', { name: /Community photos/ })).not.toBeInTheDocument();
+  });
+
+  it('renders two or more photos as a labelled carousel', () => {
+    render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          photos: [
+            { path: PATH, alt: 'The pool' },
+            { path: '1/hero/gym.jpg', alt: 'The gym' },
+          ],
+        })}
+      />,
+    );
+    const carousel = screen.getByRole('group', { name: 'Community photos, 2 total' });
+    expect(carousel).toHaveAttribute('aria-roledescription', 'carousel');
+
+    // Each slide is individually identified...
+    expect(screen.getByRole('group', { name: 'Photo 1 of 2' })).toHaveAttribute(
+      'aria-roledescription',
+      'slide',
+    );
+    // ...and reachable by a labelled dot.
+    expect(screen.getByRole('link', { name: 'Go to photo 2 of 2' })).toHaveAttribute(
+      'href',
+      '#hero-10-photo-1',
+    );
+  });
+
+  it('gives a decorative photo an empty alt so screen readers skip it', () => {
+    const { container } = render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          photos: [
+            { path: PATH, alt: 'The pool' },
+            { path: '1/hero/texture.jpg', decorative: true },
+          ],
+        })}
+      />,
+    );
+    const imgs = Array.from(container.querySelectorAll('img'));
+    expect(imgs.map((i) => i.getAttribute('alt'))).toEqual(['The pool', '']);
+  });
+
+  it('loads the first photo eagerly and defers the rest', () => {
+    const { container } = render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          photos: [
+            { path: PATH, alt: 'One' },
+            { path: '1/hero/two.jpg', alt: 'Two' },
+            { path: '1/hero/three.jpg', alt: 'Three' },
+          ],
+        })}
+      />,
+    );
+    const loading = Array.from(container.querySelectorAll('img')).map((i) =>
+      i.getAttribute('loading'),
+    );
+    expect(loading).toEqual(['eager', 'lazy', 'lazy']);
+  });
+
+  it('renders no imagery at all for a hero with none', () => {
+    const { container } = render(<HeroBlock {...makeProps({ headline: 'X' })} />);
+    expect(container.querySelector('img')).toBeNull();
+  });
+});

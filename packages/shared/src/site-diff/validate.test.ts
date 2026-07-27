@@ -24,7 +24,10 @@ describe('blockIssues — errors come from zod', () => {
   });
 
   it('errors on a block type this site cannot render', () => {
-    const issues = blockIssues('payments', {});
+    // Was 'payments' until Phase 9 made that a real type — which is exactly
+    // the signal this test is meant to give. 'jsx_template' is retired
+    // (migration 0008) and will not come back.
+    const issues = blockIssues('jsx_template', {});
     expect(errors(issues)).toHaveLength(1);
     expect(issues[0]!.message).toMatch(/not a section type/);
   });

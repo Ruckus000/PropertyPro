@@ -17,6 +17,7 @@ const SECTION_LABELS: Record<string, string> = {
   faq: 'FAQ',
   gallery: 'Gallery',
   amenities: 'Amenities',
+  payments: 'Payments',
 };
 
 /**

@@ -7,9 +7,14 @@
 import { z } from 'zod';
 
 /**
- * All supported block types. The first 7 are v1 (Essentials+); the final 3
- * (`faq`, `gallery`, `amenities`) are the Pro+ "polish blocks" added in PR #10,
- * gated to the `hasSitePolishBlocks` plan feature at the write path.
+ * All supported block types. The first 7 are v1 (Essentials+); `faq`,
+ * `gallery` and `amenities` are the Pro+ "polish blocks" added in PR #10,
+ * gated to the `hasSitePolishBlocks` plan feature at the write path;
+ * `payments` was added in website-editor-v3 Phase 9.
+ *
+ * This list is duplicated, without a compile-time link, in the
+ * `site_blocks_block_type_check` CHECK constraint (migration 0044) and in the
+ * upsert contract's z.enum. Adding a type means touching all three.
  */
 export const BLOCK_TYPES = [
   'hero',
@@ -22,6 +27,7 @@ export const BLOCK_TYPES = [
   'faq',
   'gallery',
   'amenities',
+  'payments',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
@@ -79,3 +85,32 @@ export const ctaTargetSchema = z
 
 /** SoR block configuration limits used across documents/meetings/announcements. */
 export const sorLimitSchema = z.number().int().min(1).max(20);
+
+/**
+ * Layout variants for the authored blocks (text, image, amenities).
+ *
+ * Named `variant`, NOT `layout`: `BlockRendererProps.layout` is already the
+ * site-wide template id (tidewater / boulevard / sable), and two different
+ * `layout`s in one component body is a bug waiting to be written.
+ *
+ * `standard` is the shape every block rendered before this field existed, so
+ * an absent value and an explicit `standard` mean the same thing. Renderers
+ * treat `undefined` as `standard` rather than requiring a backfill.
+ */
+export const BLOCK_VARIANTS = ['standard', 'wide', 'compact'] as const;
+export type BlockVariant = (typeof BLOCK_VARIANTS)[number];
+export const blockVariantSchema = z.enum(BLOCK_VARIANTS);
+
+/**
+ * PM-authored replacement for a system-of-record block's built-in empty copy.
+ *
+ * Only meaningful on blocks that CAN render empty — the SoR types, whose rows
+ * arrive as props and are legitimately sometimes zero. The authored blocks
+ * cannot be empty by construction (`textBlockSchema.body` is `min(1)`,
+ * `imageBlockSchema.imagePath` is required, `amenitiesBlockSchema.items` is
+ * `min(1)`), so this field is deliberately not on them.
+ *
+ * `contact` is excluded for the same reason: it renders fields, not a list, so
+ * it has no zero-rows branch to override.
+ */
+export const emptyTextSchema = z.string().min(1).max(200);

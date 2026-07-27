@@ -73,18 +73,31 @@ export const PATCH = withErrorHandler(
     // a cross-tenant reference. The storage bucket is anon-readable by
     // design (no access boundary crossed), but the schema's own contract
     // says the leading segment IS the community id, so enforce it here.
-    if (
-      heroParse.data.heroImagePath &&
-      !heroParse.data.heroImagePath.startsWith(`${communityId}/`)
-    ) {
-      throw new ValidationError('heroImagePath must reference this community', {
-        fields: [
-          {
-            field: 'heroImagePath',
-            message: `Path must start with "${communityId}/" (got "${heroParse.data.heroImagePath.slice(0, 32)}…")`,
-          },
-        ],
-      });
+    //
+    // EVERY stored path goes through this, not just the legacy single image.
+    // `photos[]` would otherwise route straight around a control this route
+    // deliberately has — the check is invisible from the schema, so a new
+    // path-bearing field is exactly how it gets lost.
+    const scopedPaths: { field: string; value: string }[] = [
+      ...(heroParse.data.heroImagePath
+        ? [{ field: 'heroImagePath', value: heroParse.data.heroImagePath }]
+        : []),
+      ...(heroParse.data.photos ?? []).map((photo, index) => ({
+        field: `photos.${index}.path`,
+        value: photo.path,
+      })),
+    ];
+    for (const { field, value } of scopedPaths) {
+      if (!value.startsWith(`${communityId}/`)) {
+        throw new ValidationError(`${field} must reference this community`, {
+          fields: [
+            {
+              field,
+              message: `Path must start with "${communityId}/" (got "${value.slice(0, 32)}…")`,
+            },
+          ],
+        });
+      }
     }
 
     // PR #8e — hero edits write to the draft row at block_order=1. The

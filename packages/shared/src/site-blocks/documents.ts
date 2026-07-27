@@ -3,7 +3,7 @@
  * documents table at render time, filtered to public_access=true.
  */
 import { z } from 'zod';
-import { sorLimitSchema } from './types';
+import { emptyTextSchema, sorLimitSchema } from './types';
 
 /**
  * The closed set of document categories a documents block may filter to.
@@ -26,6 +26,8 @@ export const documentsBlockSchema = z
   .object({
     limit: sorLimitSchema.default(5),
     includeCategories: z.array(documentCategorySchema).optional(),
+    /** Replaces the renderer's built-in empty copy when there are no rows. */
+    emptyText: emptyTextSchema.optional(),
   })
   .strict();
 

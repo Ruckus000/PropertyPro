@@ -52,3 +52,21 @@ describe('documentsBlockSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('documents block — empty text override', () => {
+  it('accepts a custom empty-state message', () => {
+    expect(documentsBlockSchema.safeParse({ emptyText: 'Nothing here right now.' }).success).toBe(true);
+  });
+
+  it('accepts content with none — the renderer keeps its built-in copy', () => {
+    expect(documentsBlockSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('rejects an empty string rather than rendering a blank empty state', () => {
+    expect(documentsBlockSchema.safeParse({ emptyText: '' }).success).toBe(false);
+  });
+
+  it('rejects an over-long message', () => {
+    expect(documentsBlockSchema.safeParse({ emptyText: 'a'.repeat(201) }).success).toBe(false);
+  });
+});

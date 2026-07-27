@@ -34,7 +34,7 @@ function formatMeetingType(meetingType: string): string {
 
 export type MeetingsBlockViewProps = BlockViewProps<MeetingsBlockContent, PublicMeeting[]>;
 
-export function MeetingsBlockView({ blockId, data, community }: MeetingsBlockViewProps) {
+export function MeetingsBlockView({ content, blockId, data, community }: MeetingsBlockViewProps) {
   return (
     <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={`meetings-${blockId}`}>
       <div className="mx-auto max-w-3xl">
@@ -46,7 +46,7 @@ export function MeetingsBlockView({ blockId, data, community }: MeetingsBlockVie
         </h2>
         {data.length === 0 ? (
           <p className="rounded-md border border-default bg-surface-card p-4 text-sm text-content-secondary">
-            No upcoming meetings.
+            {content?.emptyText ?? "No upcoming meetings."}
           </p>
         ) : (
           <ul className="space-y-4">

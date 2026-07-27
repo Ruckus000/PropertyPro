@@ -7,7 +7,7 @@
  * `next build`, which is the reason this file exists at all.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BLOCK_TYPES } from '@propertypro/shared';
 
@@ -84,6 +84,9 @@ describe('view registry — client-safety invariants', () => {
     'FaqBlock.tsx',
     'GalleryBlock.tsx',
     'AmenitiesBlock.tsx',
+    // Reached from HeroBlock, so it inherits every one of these constraints
+    // even though it is not itself a registry entry.
+    'HeroPhotoStrip.tsx',
   ];
 
   it.each(viewFiles)('%s imports no Node built-in', (file) => {
@@ -114,5 +117,30 @@ describe('view registry — client-safety invariants', () => {
   it('does not import the sanitizer into a view — jsdom must stay server-side', () => {
     const src = readFileSync(join(BLOCKS_DIR, 'AnnouncementsBlockView.tsx'), 'utf8');
     expect(src).not.toMatch(/html-sanitizer/);
+  });
+});
+
+describe('public site — no client components (Phase 9)', () => {
+  // The public site is a statutory-transparency entry point that ships zero
+  // hydration runtime. `perf-check` sums every chunk the manifest lists for a
+  // route regardless of which branch renders, so a single 'use client' here
+  // puts React's client entry on that route for every visitor — it cannot be
+  // scoped to "only communities that use the feature".
+  //
+  // This is the assertion that makes the CSS-only hero strip a decision rather
+  // than an accident.
+  it('has no "use client" directive anywhere under public-site/blocks', () => {
+    const offenders = readdirSync(BLOCKS_DIR)
+      .filter((f) => f.endsWith('.tsx'))
+      .filter((f) => /^\s*['"]use client['"]/m.test(readFileSync(join(BLOCKS_DIR, f), 'utf8')));
+    expect(offenders).toEqual([]);
+  });
+
+  it('ships no React hooks in the hero photo strip', () => {
+    // No hooks means no state means no autoplay — which is why the strip has
+    // no pause control and no prefers-reduced-motion branch: there is nothing
+    // moving to pause or reduce.
+    const src = readFileSync(join(BLOCKS_DIR, 'HeroPhotoStrip.tsx'), 'utf8');
+    expect(src).not.toMatch(/\buseState\b|\buseEffect\b|\buseRef\b|\bsetInterval\b/);
   });
 });

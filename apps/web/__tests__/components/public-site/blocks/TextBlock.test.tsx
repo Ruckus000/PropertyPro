@@ -43,3 +43,41 @@ describe('<TextBlock>', () => {
     expect(paragraphs.length).toBe(2);
   });
 });
+
+describe('<TextBlock> — layout variant (Phase 9)', () => {
+  // The variant is a container width. Asserting the class is asserting the
+  // only observable effect it has; a schema field the renderer ignores is
+  // dead config, which is exactly what these guard against.
+  function widthClass(container: HTMLElement): string | undefined {
+    return Array.from(container.querySelector('section > div')?.classList ?? []).find((c) =>
+      c.startsWith('max-w-'),
+    );
+  }
+
+  it('renders the standard width when no variant is set', () => {
+    // Every row stored before this field existed takes this path.
+    const { container } = render(<TextBlock {...makeProps({ body: 'Body.' })} />);
+    expect(widthClass(container)).toBe('max-w-3xl');
+  });
+
+  it('widens for the wide variant', () => {
+    const { container } = render(
+      <TextBlock {...makeProps({ body: 'Body.', variant: 'wide' })} />,
+    );
+    expect(widthClass(container)).toBe('max-w-5xl');
+  });
+
+  it('narrows for the compact variant', () => {
+    const { container } = render(
+      <TextBlock {...makeProps({ body: 'Body.', variant: 'compact' })} />,
+    );
+    expect(widthClass(container)).toBe('max-w-xl');
+  });
+
+  it('treats an explicit standard exactly like an absent variant', () => {
+    const { container } = render(
+      <TextBlock {...makeProps({ body: 'Body.', variant: 'standard' })} />,
+    );
+    expect(widthClass(container)).toBe('max-w-3xl');
+  });
+});
