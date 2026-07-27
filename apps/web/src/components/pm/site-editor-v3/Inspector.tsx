@@ -107,7 +107,7 @@ export function Inspector({ className }: InspectorProps) {
   const label = sectionLabel(selection.blockType);
 
   if (isNarrow) {
-    return <InspectorSheet label={label} body={PLACEHOLDER_BODY} onClose={clear} />;
+    return <InspectorSheet label={label} description={PLACEHOLDER_BODY} onClose={clear} />;
   }
 
   return (

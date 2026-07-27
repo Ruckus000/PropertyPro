@@ -75,6 +75,30 @@ describe('useUpdateHeroBlock', () => {
     expect(body).toEqual({ communityId: 42, headline: 'NewHead' });
   });
 
+  it('invalidates the whole pm/site subtree, not just the hero query', async () => {
+    // Regression: this invalidated only ['pm','site','hero', id]. The hero IS
+    // block_order 1 of the site, so a hero write changes the same rows the
+    // canvas, the change count and the publish gate read through
+    // ['pm','site','blocks', id] — all of which stayed stale. The save
+    // succeeded and nothing on screen moved.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    function Wrapper({ children }: { children: React.ReactNode }) {
+      return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    }
+
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { ok: true } }),
+    });
+    const { result } = renderHook(() => useUpdateHeroBlock(42), { wrapper: Wrapper });
+    await result.current.mutateAsync({ headline: 'NewHead' });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['pm', 'site'] });
+  });
+
   it('surfaces server validation errors', async () => {
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: false,
