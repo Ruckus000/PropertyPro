@@ -40,7 +40,18 @@ export {
   emptyTextSchema,
 } from './types';
 export type { BlockType, BlockVariant } from './types';
-export { heroBlockSchema, type HeroBlockContent } from './hero';
+export {
+  heroBlockSchema,
+  heroPhotoSchema,
+  MAX_HERO_PHOTOS,
+  type HeroBlockContent,
+  type HeroPhoto,
+} from './hero';
+export {
+  resolveHeroPhotos,
+  stripVariantSuffix,
+  type ResolvedHeroPhoto,
+} from './hero-photos';
 export { textBlockSchema, type TextBlockContent } from './text';
 export { imageBlockSchema, type ImageBlockContent } from './image';
 export { documentsBlockSchema, DOCUMENT_CATEGORIES, type DocumentsBlockContent, type DocumentCategory } from './documents';

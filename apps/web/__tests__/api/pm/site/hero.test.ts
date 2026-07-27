@@ -171,6 +171,60 @@ describe('PATCH /api/v1/pm/site/hero', () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
+  // Phase 9: the same control has to cover `photos[]`. It is invisible from
+  // the schema — imagePathSchema only enforces `{numeric}/{kind}/...` and does
+  // NOT bind the leading segment to the editing community — so a new
+  // path-bearing field is exactly how this check gets lost.
+  it('400s when any photo references a different community', async () => {
+    const res = await PATCH(
+      makeRequest({
+        ...VALID_BODY,
+        photos: [
+          { path: '42/hero/ours.webp', alt: 'ours' },
+          { path: '999/hero/sneaky.webp', alt: 'theirs' },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
+  it('names the offending photo by index so the error is actionable', async () => {
+    const res = await PATCH(
+      makeRequest({
+        ...VALID_BODY,
+        photos: [
+          { path: '42/hero/ours.webp', alt: 'ours' },
+          { path: '999/hero/sneaky.webp', alt: 'theirs' },
+        ],
+      }),
+    );
+    const body = await res.json();
+    expect(JSON.stringify(body)).toContain('photos.1.path');
+  });
+
+  it('200s when every photo belongs to the editing community', async () => {
+    const res = await PATCH(
+      makeRequest({
+        ...VALID_BODY,
+        photos: [
+          { path: '42/hero/one.webp', alt: 'One' },
+          { path: '42/hero/two.webp', decorative: true },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(upsertMock).toHaveBeenCalled();
+  });
+
+  it('400s on a photo with neither alt text nor a decorative flag', async () => {
+    const res = await PATCH(
+      makeRequest({ ...VALID_BODY, photos: [{ path: '42/hero/one.webp' }] }),
+    );
+    expect(res.status).toBe(400);
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+
   it('200s when heroImagePath matches the editing community', async () => {
     const res = await PATCH(
       makeRequest({
