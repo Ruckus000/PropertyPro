@@ -323,7 +323,11 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'contracts',
   'contract_bids',
   'maintenance_comments',
-  // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
+  // user_search_index — created by 0002, ENABLE RLS covered by 0037_close_rls_gaps.
+  // This check is per-file, so a table hardened in a LATER migration still needs the
+  // entry; that is what this allowlist is for. The reason has changed though: it used
+  // to read "no community_id, not tenant-scoped", which was true but was quietly
+  // excusing a table that had no RLS at all rather than one hardened elsewhere.
   'user_search_index',
   // PR #1a: site_blocks platform tables — ENABLE RLS covered by 0005_site_blocks_rls_hardening
   'site_theme_presets',
@@ -519,8 +523,13 @@ function hasTableRlsForce(sql: string, tableName: string): boolean {
   return pattern.test(sql);
 }
 
-function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
+function hasTenantWriteScopeTrigger(
+  sql: string,
+  tableName: string,
+  triggerName = 'pp_rls_enforce_tenant_scope',
+): boolean {
   const escapedTableName = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedTriggerName = triggerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Direct CREATE TRIGGER form, e.g.
   //   CREATE TRIGGER "pp_rls_enforce_tenant_scope" BEFORE INSERT OR UPDATE
   //   ON "public"."tableName" FOR EACH ROW EXECUTE FUNCTION ...
@@ -540,8 +549,19 @@ function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
   //    bridge across unrelated statements in the concatenated corpus and pair
   //    a CREATE TRIGGER with some later `ON "public"."other_table"` (e.g. a
   //    CREATE POLICY), reporting a trigger that does not exist.
+  // 3. The statement must also EXECUTE the enforcement function. Matching the
+  //    trigger NAME alone was a safe proxy only while the name was hardcoded to
+  //    the convention; now that per-table names are declarable via
+  //    LEGACY_WRITE_SCOPE_TRIGGER_NAMES, a trigger called `foo_tenant_scope` that
+  //    actually runs set_updated_at() would satisfy a name-only check and report
+  //    a table as write-scoped when nothing enforces its community_id. Both
+  //    spellings appear in the corpus: bare, and "public"."…" schema-qualified.
+  //    Still bounded by [^;] so the whole match stays inside one statement.
+  const enforcementFn =
+    '[^;]*?EXECUTE\\s+(?:FUNCTION|PROCEDURE)\\s+(?:(?:"[^"]+"|\\w+)\\.)?' +
+    '(?:"pp_rls_enforce_tenant_community_id"|\\bpp_rls_enforce_tenant_community_id\\b)';
   const directPattern = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)${enforcementFn}`,
     'i',
   );
   if (directPattern.test(sql)) return true;
@@ -554,7 +574,10 @@ function hasTenantWriteScopeTrigger(sql: string, tableName: string): boolean {
     `unnest\\s*\\(\\s*ARRAY\\s*\\[[\\s\\S]*?'${escapedTableName}'[\\s\\S]*?\\]`,
     'i',
   );
-  const hasLoopTriggerInstall = /CREATE\s+TRIGGER\s+(?:"pp_rls_enforce_tenant_scope"|pp_rls_enforce_tenant_scope)/i;
+  const hasLoopTriggerInstall = new RegExp(
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)${enforcementFn}`,
+    'i',
+  );
   return arrayContainsTable.test(sql) && hasLoopTriggerInstall.test(sql);
 }
 
@@ -739,6 +762,24 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
     'public_read_service_write',
   ]);
 
+  // Tables whose write-scope trigger runs the canonical
+  // pp_rls_enforce_tenant_community_id() function under a PRE-CONVENTION NAME.
+  // Each was confirmed in migration 0000: same BEFORE INSERT OR UPDATE timing,
+  // same function body — only the trigger's name differs, so renaming them would
+  // be churn requiring a production apply. Asserted by exact name, so dropping or
+  // swapping one of these triggers still fails DB005.
+  // Keep in sync with `legacyTriggerNames` in
+  // packages/db/__tests__/rls-policies.integration.test.ts, which asserts the
+  // same names against the live database.
+  const LEGACY_WRITE_SCOPE_TRIGGER_NAMES: Record<string, string> = {
+    denied_visitors: 'enforce_denied_visitors_community_scope',
+    document_drafts: 'document_drafts_tenant_scope',
+    faqs: 'faqs_tenant_scope',
+    help_article_feedback: 'help_article_feedback_tenant_scope',
+    move_checklists: 'move_checklists_tenant_scope',
+    notifications: 'notifications_enforce_tenant_scope',
+  };
+
   const violations: Violation[] = [];
   for (const entry of RLS_TENANT_TABLES) {
     const t = entry.tableName;
@@ -766,16 +807,22 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
     // scan for CREATE POLICY is both redundant and brittle against the
     // quote-wrapped baseline DDL. FORCE + write-scope-trigger coverage below
     // is what no other gate enforces, which is the gap this check fills.
+    // No per-table exemptions. emergency_broadcasts and
+    // emergency_broadcast_recipients were exempted here when they were registered
+    // — neither had a write-scope trigger under any name — and 0037 installed the
+    // canonical trigger on both, so the exemption and its self-destruct assertion
+    // are gone. Every non-exempt family is now checked unconditionally.
+    const expectedTriggerName = LEGACY_WRITE_SCOPE_TRIGGER_NAMES[t] ?? 'pp_rls_enforce_tenant_scope';
     if (
       !FAMILIES_WITHOUT_TRIGGER.has(entry.policyFamily) &&
-      !hasTenantWriteScopeTrigger(corpus, t)
+      !hasTenantWriteScopeTrigger(corpus, t, expectedTriggerName)
     ) {
       violations.push({
         file: migrationsRoot,
         line: 0,
         column: 0,
         code: 'DB005',
-        message: `Tenant table "${t}" (${entry.policyFamily}) has no pp_rls_enforce_tenant_scope trigger in any migration.`,
+        message: `Tenant table "${t}" (${entry.policyFamily}) has no ${expectedTriggerName} trigger in any migration.`,
       });
     }
   }

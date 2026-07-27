@@ -52,7 +52,15 @@ BEGIN
     -- Revoked by migration 0035. Keep this list and that migration in sync.
     'access_plans', 'account_deletion_requests', 'conversion_events',
     'denied_visitors', 'platform_admin_users', 'public_site_templates',
-    'revenue_snapshots', 'stripe_prices'
+    'revenue_snapshots', 'stripe_prices',
+    -- Revoked by migration 0037, which also enabled RLS on it for the first
+    -- time. Unlike the eleven above, this one was NOT already revoked in
+    -- production — 0037 changes prod rather than codifying it.
+    'user_search_index',
+    -- Revoked by migration 0038, likewise a real change to prod rather than a
+    -- codification: all three had RLS off, anon holding SELECT and authenticated
+    -- holding SELECT/INSERT/UPDATE/DELETE. Keep this list and 0038 in sync.
+    'users', 'pending_signups', 'stripe_webhook_events'
   ]
   LOOP
     IF EXISTS (
