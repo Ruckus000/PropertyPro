@@ -66,6 +66,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   const createdCommunityJoinRequestIds = new Set<number>();
   const createdChecklistItemIds = new Set<number>();
   const createdSiteBlockIds = new Set<number>();
+  const createdRentGuardCommunityIds = new Set<number>();
 
   async function resetSession(sqlClient: SqlClient): Promise<void> {
     await sqlClient.unsafe('reset role');
@@ -499,6 +500,17 @@ describeDb('P4-55 RLS policies (integration)', () => {
           .where(inArray(communities.id, [seed.communityAId, seed.communityBId]));
       } catch {
         // tolerate FK-restricted cleanup when audit rows were written
+      }
+
+      // Rent-guard fixtures own their own communities; units and leases go with
+      // them via ON DELETE CASCADE, so one delete per community is enough.
+      const rentGuardCommunityIds = [...createdRentGuardCommunityIds];
+      if (rentGuardCommunityIds.length > 0) {
+        try {
+          await db.delete(communities).where(inArray(communities.id, rentGuardCommunityIds));
+        } catch {
+          // tolerate FK-restricted cleanup when audit rows were written
+        }
       }
     }
 
@@ -1414,6 +1426,87 @@ describeDb('P4-55 RLS policies (integration)', () => {
         'pp_communities_select',
         'pp_communities_update',
       ]);
+    });
+  });
+
+  describe('units.rent_amount derived-column guard (0040)', () => {
+    // units.rent_amount is DERIVED from the active lease. Until 0040 the guard
+    // that was supposed to enforce that had condition `pg_trigger_depth() = 0`,
+    // which inside a trigger is never true (depth is >= 1 by definition), so it
+    // had NEVER fired — a direct UPDATE succeeded silently for the table's whole
+    // life. The guard had no test, which is exactly why nobody noticed.
+    //
+    // BOTH directions are asserted on purpose. A guard checked only in the
+    // negative can be dead again and still pass; the cascade test is what pins
+    // the condition to 1 rather than 0 or 2.
+
+    const makeFixture = async () => {
+      const [community] = await adminSql<{ id: number }[]>`
+        insert into communities (name, slug, community_type, is_demo)
+        values (${`Rent Guard ${seed.runTag}`}, ${`rent-guard-${seed.runTag}-${createdRentGuardCommunityIds.size}`}, 'apartment', false)
+        returning id
+      `;
+      // Track BEFORE anything can throw, so a failure cannot leak the fixture.
+      createdRentGuardCommunityIds.add(Number(community!.id));
+      const [unit] = await adminSql<{ id: number }[]>`
+        insert into units (community_id, unit_number) values (${Number(community!.id)}, 'RG-1')
+        returning id
+      `;
+      return { communityId: Number(community!.id), unitId: Number(unit!.id) };
+    };
+
+    it('rejects a direct UPDATE of units.rent_amount', async () => {
+      const { unitId } = await makeFixture();
+
+      // Matched on the message, not a bare rejects.toThrow(): the RAISE carries
+      // no custom SQLSTATE, and a bare throw-assertion would also pass if the
+      // row simply did not exist — which is how a dead guard looks.
+      await expect(
+        adminSql`update units set rent_amount = 555.00 where id = ${unitId}`,
+      ).rejects.toThrow(/units\.rent_amount is derived/);
+
+      const [row] = await adminSql<{ rent_amount: string | null }[]>`
+        select rent_amount from units where id = ${unitId}
+      `;
+      expect(row?.rent_amount, 'the rejected write must not have persisted').toBeNull();
+    });
+
+    it('still allows the lease-sync cascade to set units.rent_amount', async () => {
+      const { communityId, unitId } = await makeFixture();
+
+      // leases write -> leases_sync_unit_rent_amount (depth 1)
+      //   -> pp_sync_unit_rent_amount_from_lease -> UPDATE units (depth 2) -> allowed.
+      const [lease] = await adminSql<{ id: number }[]>`
+        insert into leases (community_id, unit_id, resident_id, status, start_date, end_date, rent_amount)
+        values (${communityId}, ${unitId}, ${seed.tenantAUserId}, 'active',
+                current_date - 1, current_date + 365, 2345.67)
+        returning id
+      `;
+
+      const [afterInsert] = await adminSql<{ rent_amount: string | null }[]>`
+        select rent_amount from units where id = ${unitId}
+      `;
+      expect(Number(afterInsert?.rent_amount)).toBeCloseTo(2345.67, 2);
+
+      await adminSql`update leases set rent_amount = 999.99 where id = ${Number(lease!.id)}`;
+      const [afterUpdate] = await adminSql<{ rent_amount: string | null }[]>`
+        select rent_amount from units where id = ${unitId}
+      `;
+      expect(Number(afterUpdate?.rent_amount)).toBeCloseTo(999.99, 2);
+    });
+
+    it('keeps the guard function search_path pinned (0039 must not regress)', async () => {
+      // 0040 CREATE OR REPLACEs this function, so it has to carry 0039's
+      // SET search_path clause forward. The derived test in the 0039 block only
+      // covers SECURITY DEFINER functions, and this one is INVOKER — so without
+      // this assertion, 0040 could silently un-pin it.
+      const [row] = await adminSql<{ proconfig: string[] | null }[]>`
+        select p.proconfig
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'pp_block_direct_unit_rent_amount_write'
+      `;
+      expect(row?.proconfig, 'search_path must still be pinned').not.toBeNull();
+      expect(String(row?.proconfig)).toContain('search_path');
     });
   });
 
