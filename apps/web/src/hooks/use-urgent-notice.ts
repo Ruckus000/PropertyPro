@@ -5,12 +5,19 @@
  *
  * `/api/v1/pm/site/urgent-notice` — GET / POST / DELETE.
  *
+ * Goes through `requestJson` (Plan B6) rather than raw `fetch`: it unwraps the
+ * canonical `{ data: T }` envelope and turns a non-2xx into an Error carrying
+ * the server's own message. That matters here — the panel surfaces that message
+ * verbatim, and the two refusals worth reading (409 "publish your website
+ * first", 400 over-length) are both server-authored.
+ *
  * Deliberately NOT wired into the publish invalidation set in
  * `use-publish-site.ts`: the notice bypasses the draft layer entirely, so a
  * publish neither posts nor clears it and there is nothing to refetch.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
 
 /** Wire shape — timestamps are ISO strings by the time they reach the client. */
 export interface UrgentNotice {
@@ -29,15 +36,6 @@ export function urgentNoticeQueryKey(communityId: number) {
   return ['pm', 'site', 'urgent-notice', communityId] as const;
 }
 
-async function readJsonError(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: { message?: string } };
-    return body.error?.message ?? `Request failed (HTTP ${res.status})`;
-  } catch {
-    return `Request failed (HTTP ${res.status})`;
-  }
-}
-
 /**
  * The stored notice, expired or not.
  *
@@ -49,12 +47,10 @@ export function useUrgentNotice(communityId: number, initialData?: UrgentNotice 
   return useQuery<UrgentNotice | null>({
     queryKey: urgentNoticeQueryKey(communityId),
     queryFn: async () => {
-      const res = await fetch(
+      const data = await requestJson<{ urgentNotice: UrgentNotice | null }>(
         `/api/v1/pm/site/urgent-notice?communityId=${communityId}`,
       );
-      if (!res.ok) throw new Error(await readJsonError(res));
-      const body = (await res.json()) as { data: { urgentNotice: UrgentNotice | null } };
-      return body.data.urgentNotice;
+      return data.urgentNotice;
     },
     ...(initialData !== undefined ? { initialData } : {}),
   });
@@ -64,14 +60,15 @@ export function useSetUrgentNotice(communityId: number) {
   const qc = useQueryClient();
   return useMutation<UrgentNotice | null, Error, SetUrgentNoticeVariables>({
     mutationFn: async ({ text, expiresAt }) => {
-      const res = await fetch('/api/v1/pm/site/urgent-notice', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, text, expiresAt }),
-      });
-      if (!res.ok) throw new Error(await readJsonError(res));
-      const body = (await res.json()) as { data: { urgentNotice: UrgentNotice | null } };
-      return body.data.urgentNotice;
+      const data = await requestJson<{ urgentNotice: UrgentNotice | null }>(
+        '/api/v1/pm/site/urgent-notice',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, text, expiresAt }),
+        },
+      );
+      return data.urgentNotice;
     },
     onSuccess: (notice) => {
       // Write straight into the cache rather than invalidating: the response
@@ -86,11 +83,10 @@ export function useClearUrgentNotice(communityId: number) {
   const qc = useQueryClient();
   return useMutation<void, Error, void>({
     mutationFn: async () => {
-      const res = await fetch(
+      await requestJson<{ ok: true }>(
         `/api/v1/pm/site/urgent-notice?communityId=${communityId}`,
         { method: 'DELETE' },
       );
-      if (!res.ok) throw new Error(await readJsonError(res));
     },
     onSuccess: () => {
       qc.setQueryData(urgentNoticeQueryKey(communityId), null);

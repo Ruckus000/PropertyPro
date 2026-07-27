@@ -107,6 +107,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Caller authorization is verified upstream at the route layer (management-tier
   // property_manager/root_manager membership + hasSiteEditor plan feature).
   resolve(repoRoot, 'apps/web/src/lib/services/site-blocks-service.ts'),
+  // Phase 7 urgent notice — communities is the root tenant table (no
+  // community_id column to scope by; it IS the community_id), so the four
+  // urgent_notice_* columns can only be read/written by primary key. Same
+  // shape as branding.ts and custom-domain-service.ts above. Caller authz
+  // (management-tier property_manager/root_manager membership in the TARGET
+  // community + hasSiteEditor plan) is verified upstream by ensurePmAccess in
+  // the route, which is the same gate publish uses.
+  resolve(repoRoot, 'apps/web/src/lib/services/urgent-notice-service.ts'),
   // Community-scoped user display-name resolution for board/forum and elections UX
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing

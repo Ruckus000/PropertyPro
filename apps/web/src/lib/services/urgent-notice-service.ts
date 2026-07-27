@@ -10,11 +10,14 @@
  */
 import { eq } from '@propertypro/db/filters';
 import { communities, logAuditEvent } from '@propertypro/db';
-// AUTHZ: Phase 7 urgent notice — reads and writes the communities row by primary
-// key. communities is the ROOT tenant table: it has no community_id column to
-// scope by (it IS the community_id), so createScopedClient cannot address it.
-// Callers are gated by ensurePmAccess in the route (PM role + membership in the
-// target community + hasSiteEditor) before reaching here.
+// Phase 7 urgent notice — communities is the ROOT tenant table: it has no
+// community_id column to scope by (it IS the community_id), so
+// createScopedClient cannot address it and the urgent_notice_* columns can only
+// be reached by primary key. Callers are gated by `ensurePmAccess` in the route
+// — PM role + membership in the TARGET community + hasSiteEditor, the same gate
+// publish uses — before reaching here.
+//
+// AUTHZ: Phase 7 urgent notice — communities is the root tenant table (no community_id column); the urgent_notice_* columns are readable/writable only by primary key. Route-layer ensurePmAccess verifies management-tier membership in the target community plus the hasSiteEditor plan feature.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { ConflictError, ValidationError } from '@/lib/api/errors';
 import { normalizeUrgentNoticeText } from '@/lib/site-editor/urgent-notice';
