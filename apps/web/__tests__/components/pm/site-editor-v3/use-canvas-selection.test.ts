@@ -109,6 +109,126 @@ describe('useCanvasSelection', () => {
     });
   });
 
+  it('keeps the selection when a save replaces the row with a new id at the same slot', () => {
+    // The bug this fixes. Every write soft-deletes the selected row and INSERTs
+    // a fresh one, so `id` changes but `blockOrder` does not. Resolving by id
+    // alone cleared the selection on the FIRST autosave — the inspector
+    // unmounted and the panel closed while the PM was still typing.
+    const { result, rerender } = renderHook(
+      ({ blocks }) => useCanvasSelection(blocks),
+      { initialProps: { blocks: [HERO, TEXT, IMAGE] as SiteBlockSummary[] } },
+    );
+
+    act(() => result.current.select(2));
+    expect(result.current.selection?.blockId).toBe(2);
+
+    // The save lands: same section, same slot, brand-new row id.
+    rerender({
+      blocks: [HERO, block({ id: 99, blockType: 'text', blockOrder: 2 }), IMAGE],
+    });
+
+    expect(result.current.selection).toEqual({
+      blockId: 99,
+      blockOrder: 2,
+      blockType: 'text',
+      isMovable: true,
+    });
+    // And the re-stamped id is what selection-dependent chrome keys off.
+    expect(result.current.isSelected(99)).toBe(true);
+    expect(result.current.isSelected(2)).toBe(false);
+  });
+
+  it('follows the section through a reorder that changes both id and slot', () => {
+    // A reorder changes the slot AND (after the refetch) the id, so neither
+    // key survives on its own. `useReorderBlocks` updates the cache
+    // optimistically by re-stamping blockOrder while PRESERVING ids, which is
+    // the window in which the anchor re-anchors to the new slot; the refetch
+    // that follows then resolves by slot.
+    const { result, rerender } = renderHook(
+      ({ blocks }) => useCanvasSelection(blocks),
+      { initialProps: { blocks: [HERO, TEXT, IMAGE] as SiteBlockSummary[] } },
+    );
+
+    act(() => result.current.select(3));
+    expect(result.current.selection?.blockOrder).toBe(3);
+
+    // 1. Optimistic rotation: ids preserved, slots swapped.
+    rerender({
+      blocks: [
+        HERO,
+        block({ id: 3, blockType: 'image', blockOrder: 2 }),
+        block({ id: 2, blockType: 'text', blockOrder: 3 }),
+      ],
+    });
+    expect(result.current.selection?.blockOrder).toBe(2);
+
+    // 2. Settle: the server returns the same order with fresh row ids.
+    rerender({
+      blocks: [
+        HERO,
+        block({ id: 31, blockType: 'image', blockOrder: 2 }),
+        block({ id: 21, blockType: 'text', blockOrder: 3 }),
+      ],
+    });
+    expect(result.current.selection).toEqual({
+      blockId: 31,
+      blockOrder: 2,
+      blockType: 'image',
+      isMovable: true,
+    });
+  });
+
+  it('does not resurrect the selection onto a different section that took the slot', () => {
+    // The slot fallback is deliberately type-guarded. Without it, a section
+    // that vanished while a DIFFERENT type slid into its slot (a cross-tab
+    // reorder, a discard) would silently transfer the selection — and the
+    // inspector would edit a section the PM never chose. Clearing is the safe
+    // failure here.
+    const { result, rerender } = renderHook(
+      ({ blocks }) => useCanvasSelection(blocks),
+      { initialProps: { blocks: [HERO, TEXT, IMAGE] as SiteBlockSummary[] } },
+    );
+
+    act(() => result.current.select(3));
+
+    rerender({
+      blocks: [HERO, TEXT, block({ id: 77, blockType: 'faq', blockOrder: 3 })],
+    });
+    expect(result.current.selection).toBeNull();
+  });
+
+  it('does not fall back onto a tombstone occupying the slot', () => {
+    const { result, rerender } = renderHook(
+      ({ blocks }) => useCanvasSelection(blocks),
+      { initialProps: { blocks: [HERO, TEXT] as SiteBlockSummary[] } },
+    );
+
+    act(() => result.current.select(2));
+
+    // Staged deletion: new row id, same slot, tombstone type.
+    rerender({
+      blocks: [HERO, block({ id: 88, blockType: TOMBSTONE_BLOCK_TYPE, blockOrder: 2 })],
+    });
+    expect(result.current.selection).toBeNull();
+  });
+
+  it('recovers the selection after a transient empty list', () => {
+    // A refetch can briefly hand the canvas an empty list. That must not be
+    // treated as a deletion — the anchor is kept so the selection comes back
+    // rather than the panel closing under the PM for a frame.
+    const { result, rerender } = renderHook(
+      ({ blocks }) => useCanvasSelection(blocks),
+      { initialProps: { blocks: [HERO, TEXT, IMAGE] as SiteBlockSummary[] } },
+    );
+
+    act(() => result.current.select(2));
+    rerender({ blocks: [] });
+    expect(result.current.selection).toBeNull();
+
+    rerender({ blocks: [HERO, TEXT, IMAGE] });
+    expect(result.current.selection?.blockId).toBe(2);
+  });
+
   it('excludes the hero and tombstones from movableSections, slot-ordered', () => {
     const { result } = renderHook(() =>
       useCanvasSelection([
