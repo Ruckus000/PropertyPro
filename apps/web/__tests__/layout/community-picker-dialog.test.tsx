@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommunityPickerDialog } from '@/components/layout/community-picker-dialog';
@@ -92,6 +92,35 @@ describe('<CommunityPickerDialog>', () => {
     expect(href).toContain('communityId=12');
     expect(href).not.toContain('999');
     expect(href).toContain('tab=open');
+  });
+
+  it('offers no search for a short list, but filters once past the threshold', () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      ...COMMUNITIES[0]!,
+      id: i + 1,
+      name: `Community ${i + 1}`,
+    }));
+
+    // Two communities — below SEARCH_THRESHOLD, no search box.
+    const { unmount } = renderDialog((id) => `/dashboard?communityId=${id}`);
+    expect(screen.queryByLabelText('Search communities')).toBeNull();
+    unmount();
+
+    useUserCommunitiesMock.mockReturnValue({ data: many, isPending: false, isError: false });
+    renderDialog((id) => `/dashboard?communityId=${id}`);
+
+    const search = screen.getByLabelText('Search communities');
+    expect(screen.getAllByRole('link')).toHaveLength(8);
+
+    fireEvent.change(search, { target: { value: 'community 3' } });
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByText('Community 3')).toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'nothing matches' } });
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText('No communities found.')).toBeInTheDocument();
+    // The no-match state must not be confused with having no memberships.
+    expect(screen.queryByText('You are not a member of any community yet.')).toBeNull();
   });
 
   it('renders a loading state while the communities load', () => {

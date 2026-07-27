@@ -21,6 +21,7 @@
  *     resolution has no path-based branch — without the injected `?communityId=`
  *     the click would bounce straight back to /select-community.
  */
+import { useMemo, useState } from 'react';
 import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import {
@@ -33,6 +34,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserCommunities } from '@/hooks/use-user-communities';
 import { applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
+import { SEARCH_THRESHOLD } from './sidebar-tenant-switcher';
 
 export interface CommunityPickerDialogProps {
   open: boolean;
@@ -56,6 +58,17 @@ export function CommunityPickerDialog({
   // to pick for. The query key is shared with SidebarTenantSwitcher, so the list
   // is usually already cached and the dialog paints without a request.
   const { data: communities, isPending, isError } = useUserCommunities();
+  const [query, setQuery] = useState('');
+
+  // Same threshold as SidebarTenantSwitcher: a short list doesn't need a filter,
+  // but a PM with a large portfolio shouldn't have to scroll it blind.
+  const showSearch = (communities?.length ?? 0) > SEARCH_THRESHOLD;
+  const filtered = useMemo(() => {
+    if (!communities) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return communities;
+    return communities.filter((c) => c.name.toLowerCase().includes(q));
+  }, [communities, query]);
 
   const destinationFor = (communityId: number): string =>
     applyCommunityIdToReturnTo(
@@ -88,25 +101,43 @@ export function CommunityPickerDialog({
             description="Please close this and try again."
           />
         ) : communities && communities.length > 0 ? (
-          <ul role="list" className="max-h-80 space-y-1 overflow-y-auto">
-            {communities.map((community) => (
-              <li key={community.id}>
-                <a
-                  href={destinationFor(community.id)}
-                  className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-3 text-left transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  aria-label={`Open ${itemLabel ?? 'this page'} for ${community.name}`}
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-content">
-                    {community.name}
-                  </span>
-                  <span className="shrink-0 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
-                    {COMMUNITY_TYPE_DISPLAY_NAMES[community.communityType] ??
-                      community.communityType}
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
+          <>
+            {showSearch && (
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search communities…"
+                aria-label="Search communities"
+                className="h-9 w-full rounded-sm border border-edge bg-surface-card px-2.5 text-sm text-content placeholder:text-content-disabled focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              />
+            )}
+            {filtered.length === 0 ? (
+              <p className="px-2 py-6 text-center text-sm text-content-tertiary">
+                No communities found.
+              </p>
+            ) : (
+              <ul role="list" className="max-h-80 space-y-1 overflow-y-auto">
+                {filtered.map((community) => (
+                  <li key={community.id}>
+                    <a
+                      href={destinationFor(community.id)}
+                      className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-3 text-left transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      aria-label={`Open ${itemLabel ?? 'this page'} for ${community.name}`}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-content">
+                        {community.name}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
+                        {COMMUNITY_TYPE_DISPLAY_NAMES[community.communityType] ??
+                          community.communityType}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         ) : (
           <div className="rounded-md border border-dashed border-edge-strong bg-surface-hover px-6 py-10 text-center">
             <p className="text-sm font-medium text-content-secondary">

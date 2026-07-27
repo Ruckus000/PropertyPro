@@ -108,6 +108,12 @@ export function AppSidebar({
   const isPmContext = isPmPortfolioPath(pathname);
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
 
+  // With no community in scope, community-scoped items can't build a real
+  // destination. Rather than sending every one of them to /select-community —
+  // which throws the destination away and, on that page, navigates nowhere at
+  // all — render them as buttons that open the picker and keep the destination.
+  const needsCommunityPicker = !isPmContext && communityId === null;
+
   const allVisible: NavItemWithGateStatus[] = isPmContext
     ? PM_NAV_ITEMS.map((i) => ({
         ...i,
@@ -116,7 +122,19 @@ export function AppSidebar({
         upgradePlanId: null,
         upgradeFeatureKey: null,
       }))
-    : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId, isUnitOwner);
+    : getVisibleItemsWithPlanGate(
+        NAV_ITEMS,
+        role,
+        features,
+        communityType,
+        resolvedPlanId,
+        isUnitOwner,
+      )
+        // Without a community there is no role, so itemVisibleForRole lets every
+        // role-gated item through. Harmless when they were inert links to
+        // /select-community; now that the picker makes them navigate, keep them
+        // out rather than route someone into a permission-denied page.
+        .filter((item) => !(needsCommunityPicker && item.visibility));
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
   const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);
@@ -134,12 +152,6 @@ export function AppSidebar({
       }
     }
   }
-
-  // With no community in scope, community-scoped items can't build a real
-  // destination. Rather than sending every one of them to /select-community —
-  // which throws the destination away and, on that page, navigates nowhere at
-  // all — render them as buttons that open the picker and keep the destination.
-  const needsCommunityPicker = !isPmContext && communityId === null;
 
   const toNavRailItem = (item: NavItemWithGateStatus): NavRailItem => {
     // Items that open a dialog instead of navigating carry no href, which is

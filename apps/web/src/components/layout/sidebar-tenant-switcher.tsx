@@ -23,8 +23,11 @@ import { buildCommunityDashboardUrl } from '@/lib/utils/community-url';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 
-/** Show the search box only once the list is long enough to warrant it. */
-const SEARCH_THRESHOLD = 7;
+/**
+ * Show the search box only once the list is long enough to warrant it.
+ * Shared with CommunityPickerDialog so both community lists behave the same.
+ */
+export const SEARCH_THRESHOLD = 7;
 
 interface SidebarTenantSwitcherProps {
   communityId: number | null;

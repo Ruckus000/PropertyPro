@@ -87,6 +87,17 @@ describe('AppSidebar with no community in scope', () => {
     expect(screen.getByTestId('picker-destination')).toHaveTextContent('/communities/7/documents');
   });
 
+  it('hides role-gated items, since the role is unknowable without a community', async () => {
+    renderSidebar(null);
+
+    // Documents has no visibility gate, so it stays.
+    expect(await screen.findByRole('button', { name: /documents/i })).toBeInTheDocument();
+    // Residents is visibility: 'admin'. A null role would otherwise let it
+    // through, and picking a community would land on a permission-denied page.
+    expect(screen.queryByRole('button', { name: /residents/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /audit trail/i })).toBeNull();
+  });
+
   it('renders normal links and never mounts the picker once a community is in scope', async () => {
     renderSidebar(42);
 
