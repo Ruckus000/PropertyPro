@@ -49,6 +49,9 @@ const sorEmptyTextForm = dynamic(
 );
 
 export const blockFormRegistry: Partial<Record<BlockType, ComponentType<BlockFormProps>>> = {
+  hero: dynamic(() => import('./forms/HeroForm').then((m) => m.HeroForm), {
+    loading: InspectorFormSkeleton,
+  }),
   text: dynamic(() => import('./forms/TextForm').then((m) => m.TextForm), {
     loading: InspectorFormSkeleton,
   }),

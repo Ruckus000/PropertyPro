@@ -39,7 +39,9 @@ function formFiles(): string[] {
 describe('form registry — dispatch', () => {
   it('reports coverage through hasForm rather than a hard-coded type list', () => {
     expect(hasForm('text')).toBe(true);
-    expect(hasForm('hero')).toBe(false);
+    expect(hasForm('hero')).toBe(true);
+    // `faq` and `gallery` have no Phase 9 fields, so no form yet.
+    expect(hasForm('faq')).toBe(false);
   });
 
   it('returns undefined for a type with no form, so the body can fall back', () => {
