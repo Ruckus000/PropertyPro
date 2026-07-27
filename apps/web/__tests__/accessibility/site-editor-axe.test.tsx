@@ -104,7 +104,7 @@ function renderEditorSurfaces() {
             </SectionShell>
           ))}
         </div>
-        <Inspector />
+        <Inspector communityId={7} />
       </div>
     </SiteEditorProvider>,
   );
@@ -128,6 +128,9 @@ describe('Website editor v3 — axe', () => {
     await user.click(screen.getByRole('group', { name: 'Text section' }));
     // The inspector is now open as a docked landmark.
     expect(screen.getByRole('complementary')).toBeInTheDocument();
+    // The per-block form is code-split. Auditing before it resolves would
+    // audit the loading skeleton and pass for the wrong reason.
+    await screen.findByLabelText(/Body/);
 
     expect(await axe(container)).toHaveNoViolations();
   });
@@ -141,6 +144,8 @@ describe('Website editor v3 — axe', () => {
     // The overlay is code-split; auditing before it resolves would audit an
     // empty placeholder and pass for the wrong reason.
     await screen.findByRole('dialog');
+    // ...and wait for the code-split form inside it, for the same reason.
+    await screen.findByLabelText(/Body/);
 
     // Radix portals the sheet outside the container, so audit baseElement.
     expect(await axe(baseElement)).toHaveNoViolations();
