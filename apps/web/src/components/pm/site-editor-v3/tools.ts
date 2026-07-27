@@ -1,14 +1,20 @@
 import type { LucideIcon } from 'lucide-react';
-import { Building2, Layers, Plus, Palette, Globe, CircleHelp } from 'lucide-react';
+import { Building2, Layers, Plus, Palette, Globe, CircleHelp, TriangleAlert } from 'lucide-react';
 
 /**
- * The six editor tools, in tab order.
+ * The seven editor tools, in tab order.
  *
  * Labels are the design's, deliberately plain: "Colours" not "Theme",
  * "Address" not "Domain". The audience is a property manager, not a designer.
+ *
+ * "Notice" sits directly after "Site" rather than at the end: it is the tool a
+ * manager reaches for under time pressure, and it is also the only one whose
+ * writes skip the draft layer, so burying it behind Help would be the wrong
+ * trade in both directions.
  */
 export const EDITOR_TOOLS = [
   { id: 'site', label: 'Site', icon: Building2 },
+  { id: 'notice', label: 'Notice', icon: TriangleAlert },
   { id: 'sections', label: 'Sections', icon: Layers },
   { id: 'add', label: 'Add', icon: Plus },
   { id: 'styling', label: 'Colours', icon: Palette },
@@ -21,6 +27,7 @@ export type EditorToolId = (typeof EDITOR_TOOLS)[number]['id'];
 /** Panel heading per tool — the tab label is abbreviated, this is not. */
 export const TOOL_PANEL_TITLES: Record<EditorToolId, string> = {
   site: 'Site',
+  notice: 'Urgent notice',
   sections: 'Sections',
   add: 'Add a section',
   styling: 'Colours & fonts',

@@ -13,6 +13,7 @@ import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
 import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 
 /**
  * Resolve community ID from middleware-injected headers.
@@ -134,16 +135,31 @@ export default async function PublicSitePage() {
           <link key={href} rel="stylesheet" href={href} />
         ))}
         <div style={cssVars}>
-          {isPreview && (
-            <div
-              role="status"
-              aria-live="polite"
-              data-testid="preview-banner"
-              className="sticky top-0 z-50 border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
-            >
-              Preview mode — showing unpublished drafts. Visitors see the last published version.
-            </div>
-          )}
+          {/*
+            ONE sticky container for both banners, so they stack vertically and
+            travel together. Two independent `sticky top-0` siblings would each
+            stick to the same offset and the later one would paint over the
+            other as soon as the page scrolled.
+
+            The urgent notice comes first, above the preview banner and above
+            the layout's own header, because an emergency notice outranks both.
+            It renders null when there is no active notice — the component
+            evaluates expiry itself, on every request, so a missed sweep cannot
+            strand a stale banner here.
+          */}
+          <div className="sticky top-0 z-50">
+            <UrgentNoticeBanner notice={community} />
+            {isPreview && (
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="preview-banner"
+                className="border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
+              >
+                Preview mode — showing unpublished drafts. Visitors see the last published version.
+              </div>
+            )}
+          </div>
           <Layout
             community={{
               id: community.id,
@@ -184,6 +200,9 @@ export default async function PublicSitePage() {
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <div style={cssVars} className="min-h-screen flex flex-col font-body">
+        {/* Same banner in the legacy fallback branch: "every page" has to mean
+            every render path, not just the one that is currently reachable. */}
+        <UrgentNoticeBanner notice={community} />
         <PublicSiteHeader theme={theme} />
 
         <main id="main-content" className="flex-1">

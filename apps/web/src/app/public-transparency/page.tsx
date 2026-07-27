@@ -7,6 +7,7 @@ import { getCommunityPublicInfo } from '@/lib/api/branding';
 import { TransparencyPage } from '@/components/transparency/transparency-page';
 import { TransparencyDisabledEmptyState } from '@/components/transparency/transparency-disabled-empty-state';
 import { getTransparencyPageData } from '@/lib/services/transparency-service';
+import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 import { resolveTimezone } from '@/lib/utils/timezone';
 
 async function resolveCommunityId(): Promise<number | null> {
@@ -78,8 +79,17 @@ export default async function PublicTransparencyHostPage() {
     notFound();
   }
 
+  // This page has no shared layout with /public-site, so the banner is rendered
+  // here explicitly. It belongs on both: a resident checking the statutory
+  // transparency page during a storm is exactly the reader an urgent notice is
+  // for, and "every page of the public site" has to include this one.
   if (!communityRow.transparencyEnabled) {
-    return <TransparencyDisabledEmptyState communityName={community.name} />;
+    return (
+      <>
+        <UrgentNoticeBanner notice={community} />
+        <TransparencyDisabledEmptyState communityName={community.name} />
+      </>
+    );
   }
 
   const data = await getTransparencyPageData({
@@ -95,5 +105,10 @@ export default async function PublicTransparencyHostPage() {
     zipCode: communityRow.zipCode,
   });
 
-  return <TransparencyPage data={data} />;
+  return (
+    <>
+      <UrgentNoticeBanner notice={community} />
+      <TransparencyPage data={data} />
+    </>
+  );
 }

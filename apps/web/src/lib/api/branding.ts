@@ -23,6 +23,17 @@ export interface CommunityPublicInfo {
   slug: string;
   communityType: string;
   sitePublishedAt: Date | null;
+  /**
+   * Website editor v3 Phase 7 — the urgent notice banner.
+   *
+   * Carried on this read rather than fetched separately: every public page
+   * already SELECTs this row once per request, so the banner costs the
+   * statutory public entry point nothing. Consumers must gate on
+   * `isUrgentNoticeActive` — the stored row is deliberately NOT swept when it
+   * expires, so a non-null `urgentNoticeText` does not mean "show this".
+   */
+  urgentNoticeText: string | null;
+  urgentNoticeExpiresAt: Date | null;
 }
 
 /**
@@ -43,6 +54,8 @@ export const getCommunityPublicInfo = cache(async (
       slug: communities.slug,
       communityType: communities.communityType,
       sitePublishedAt: communities.sitePublishedAt,
+      urgentNoticeText: communities.urgentNoticeText,
+      urgentNoticeExpiresAt: communities.urgentNoticeExpiresAt,
     })
     .from(communities)
     .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))

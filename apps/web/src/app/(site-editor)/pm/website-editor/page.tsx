@@ -123,6 +123,20 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
           domain: features.hasSiteCustomDomain,
         }}
         canvasContext={canvasContext}
+        // Phase 7. Both derived from the `getCommunityPublicInfo` read above, so
+        // the notice panel and the phone-gate fast path open with real state and
+        // no extra query. `hasPublishedSite` is only a UI affordance — the route
+        // refuses the write independently (409) whatever this says.
+        hasPublishedSite={communityInfo?.sitePublishedAt != null}
+        initialNotice={
+          communityInfo?.urgentNoticeText
+            ? {
+                text: communityInfo.urgentNoticeText,
+                expiresAt: communityInfo.urgentNoticeExpiresAt?.toISOString() ?? null,
+                setAt: null,
+              }
+            : null
+        }
       />
     </EditorFrame>
   );

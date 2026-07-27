@@ -20,6 +20,8 @@ import { SiteEditorProvider } from '@/components/pm/site-editor-v3/editor-contex
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
+import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
+import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 // Mock this module COMPLETELY. A partial factory here fails only at module
@@ -30,6 +32,15 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
+// Phase 7. Same rule as above — every export the notice panel's tree reaches.
+vi.mock('@/hooks/use-urgent-notice', () => ({
+  useUrgentNotice: () => ({ data: null }),
+  useSetUrgentNotice: () => ({ mutate: vi.fn(), isPending: false }),
+  useClearUrgentNotice: () => ({ mutate: vi.fn(), isPending: false }),
+  urgentNoticeQueryKey: (communityId: number) =>
+    ['pm', 'site', 'urgent-notice', communityId] as const,
 }));
 
 // The inspector docks at >=1280px; false = wide. Both modes are audited.
@@ -109,5 +120,32 @@ describe('Website editor v3 — axe', () => {
 
     // Radix portals the sheet outside the container, so audit baseElement.
     expect(await axe(baseElement)).toHaveNoViolations();
+  });
+});
+
+describe('Urgent notice — axe (Phase 7)', () => {
+  it('has no violations in the notice tool panel', async () => {
+    const { container } = render(
+      <UrgentNoticePanel communityId={7} hasPublishedSite initialNotice={null} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the "publish first" state', async () => {
+    const { container } = render(
+      <UrgentNoticePanel communityId={7} hasPublishedSite={false} initialNotice={null} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations on the PUBLIC banner', async () => {
+    // The banner is the surface a resident meets, so it gets its own audit
+    // rather than riding on the editor's.
+    const { container } = render(
+      <UrgentNoticeBanner
+        notice={{ urgentNoticeText: 'Boil water order in effect', urgentNoticeExpiresAt: null }}
+      />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
   });
 });

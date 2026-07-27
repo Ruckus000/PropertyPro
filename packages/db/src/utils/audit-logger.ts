@@ -50,6 +50,10 @@ export type AuditAction =
   | 'mark_not_applicable' | 'mark_applicable'                    // Applicability toggling
   // Custom domain audit actions
   | 'custom_domain_set' | 'custom_domain_verified' | 'custom_domain_removed'
+  // Website editor v3 Phase 7 — the urgent notice banner. This is the one
+  // write in the product that goes public with no review step, so who posted
+  // what, and when it came down, is the only after-the-fact record there is.
+  | 'urgent_notice_set' | 'urgent_notice_cleared'
   // Portfolio template audit actions
   | 'portfolio_template_created' | 'portfolio_template_renamed' | 'portfolio_template_deleted'
   | 'portfolio_template_applied'
