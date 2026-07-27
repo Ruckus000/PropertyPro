@@ -288,6 +288,13 @@
       "when": 1784511314576,
       "tag": "0040_fix_rent_guard_trigger_depth",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784511374576,
+      "tag": "0041_scope_site_assets_read",
+      "breakpoints": true
     }
   ]
 }
