@@ -373,7 +373,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   ]),
 ];
 
-/** PM-specific navigation items (shown when pathname starts with /pm/) */
+/** PM-specific navigation items (shown on the PM portfolio routes — see isPmPortfolioPath) */
 export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
   {
     id: 'communities',
@@ -406,6 +406,35 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/pm/reports'],
   },
 ];
+
+/**
+ * Cross-community PM *portfolio* routes — the only paths that should swap the
+ * community sidebar for PM_NAV_ITEMS.
+ *
+ * Everything else under /pm/ is community-scoped: it requires `?communityId=`
+ * and the shell resolves a real tenant for it (/pm is in the middleware's
+ * PROTECTED_PATH_PREFIXES, so the query param is forwarded as x-community-id).
+ * Those pages — /pm/settings/website, /pm/settings/branding, /pm/site-preview,
+ * /pm/onboarding/website, /pm/website-editor, /pm/dashboard/[community_id] —
+ * must keep the normal community nav. Testing the bare '/pm/' prefix instead
+ * conflated the two and made the "Website" tab replace the whole sidebar.
+ *
+ * The deeper fix is moving the community-scoped editor out from under the
+ * portfolio prefix entirely (e.g. /communities/[id]/website); this allowlist
+ * keeps that debt visible until then.
+ */
+export const PM_PORTFOLIO_PATH_PREFIXES = [
+  '/pm/dashboard/communities',
+  '/pm/portfolio',
+  '/pm/reports',
+] as const;
+
+/** True when `pathname` is a cross-community PM portfolio route. */
+export function isPmPortfolioPath(pathname: string): boolean {
+  return PM_PORTFOLIO_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 /**
  * Resolve a sidebar item's destination href.

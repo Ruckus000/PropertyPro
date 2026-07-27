@@ -22,7 +22,14 @@ import type { LucideIcon } from 'lucide-react';
 import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { useRecentPages } from '@/hooks/use-recent-pages';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
-import { NAV_ITEMS, PM_NAV_ITEMS, PAGE_TITLES, getActiveItemId, getVisibleItems } from './nav-config';
+import {
+  NAV_ITEMS,
+  PM_NAV_ITEMS,
+  PAGE_TITLES,
+  getActiveItemId,
+  getVisibleItems,
+  isPmPortfolioPath,
+} from './nav-config';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -130,7 +137,7 @@ export function CommandPalette({
 
   // Track page visits for recent pages using nav-config's route matching
   useEffect(() => {
-    const navItems = pathname.startsWith('/pm/') ? PM_NAV_ITEMS : NAV_ITEMS;
+    const navItems = isPmPortfolioPath(pathname) ? PM_NAV_ITEMS : NAV_ITEMS;
     const activeId = getActiveItemId(navItems, pathname, searchParams.toString());
     if (activeId) {
       const matchingItem = items.find((item) => item.id === activeId);

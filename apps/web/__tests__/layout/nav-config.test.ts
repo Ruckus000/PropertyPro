@@ -5,6 +5,7 @@ import {
   PM_NAV_ITEMS,
   getVisibleItems,
   getActiveItemId,
+  isPmPortfolioPath,
   resolveDashboardHref,
   resolveNavItemHref,
   PAGE_TITLES,
@@ -288,6 +289,33 @@ describe('getActiveItemId', () => {
 
   it('returns null for unmatched paths', () => {
     expect(getActiveItemId(NAV_ITEMS, '/unknown')).toBeNull();
+  });
+});
+
+describe('isPmPortfolioPath', () => {
+  it('matches the cross-community portfolio routes', () => {
+    expect(isPmPortfolioPath('/pm/dashboard/communities')).toBe(true);
+    expect(isPmPortfolioPath('/pm/dashboard/communities/new')).toBe(true);
+    expect(isPmPortfolioPath('/pm/portfolio/templates')).toBe(true);
+    expect(isPmPortfolioPath('/pm/reports')).toBe(true);
+  });
+
+  it('does NOT match community-scoped pages that merely live under /pm/', () => {
+    // Each of these requires ?communityId= and must keep the community nav —
+    // the "Website tab swaps the whole sidebar" regression.
+    expect(isPmPortfolioPath('/pm/settings/website')).toBe(false);
+    expect(isPmPortfolioPath('/pm/settings/branding')).toBe(false);
+    expect(isPmPortfolioPath('/pm/site-preview')).toBe(false);
+    expect(isPmPortfolioPath('/pm/onboarding/website')).toBe(false);
+    expect(isPmPortfolioPath('/pm/website-editor')).toBe(false);
+    // Per-community PM dashboard redirect — not the portfolio list.
+    expect(isPmPortfolioPath('/pm/dashboard/12')).toBe(false);
+  });
+
+  it('does not match non-PM paths or partial segment collisions', () => {
+    expect(isPmPortfolioPath('/dashboard')).toBe(false);
+    expect(isPmPortfolioPath('/select-community')).toBe(false);
+    expect(isPmPortfolioPath('/pm/reports-archive')).toBe(false);
   });
 });
 

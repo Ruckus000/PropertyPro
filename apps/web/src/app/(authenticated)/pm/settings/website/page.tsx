@@ -40,21 +40,12 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const rawId = Number(params['communityId']);
 
+  // No community in scope — bounce to the portfolio rather than rendering a
+  // community-scoped page with none, which leaves the shell resolving
+  // community = null and swapping the PM rail for the community nav. Matches
+  // what /pm/site-preview already does.
   if (!Number.isInteger(rawId) || rawId <= 0) {
-    return (
-      <PageBody width="narrow" className="text-center">
-        <h1 className="text-xl font-semibold text-content">Select a Community</h1>
-        <p className="mt-2 text-sm text-content-secondary">
-          Choose a community from the Communities list to customize its public site.
-        </p>
-        <a
-          href="/pm/dashboard/communities"
-          className="mt-6 inline-block rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-        >
-          Go to Communities
-        </a>
-      </PageBody>
-    );
+    redirect('/pm/dashboard/communities');
   }
 
   const communityId = rawId;
