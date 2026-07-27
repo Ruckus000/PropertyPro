@@ -420,9 +420,28 @@ export const RLS_TENANT_TABLES = [
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply' },
-  { tableName: 'users', reason: 'Global identity mirror (no community_id column)' },
-  { tableName: 'pending_signups', reason: 'Pre-provisioning flow, not community-scoped yet' },
-  { tableName: 'stripe_webhook_events', reason: 'Global billing webhook log' },
+  // The three entries below carried reasons that explained only why COMMUNITY
+  // SCOPING does not apply to them — which was true, and which read for years as
+  // though it also settled the RLS question. It did not. All three sat with RLS
+  // off, anon holding SELECT and authenticated holding SELECT/INSERT/UPDATE/DELETE
+  // until 0038. "Not tenant-scoped" is not the same claim as "needs no RLS", and
+  // conflating the two is exactly what left user_search_index exposed as well.
+  // Each reason now states the actual posture, like the newer siblings do.
+  {
+    tableName: 'users',
+    reason:
+      'Global identity mirror of auth.users — no community_id, so tenant scoping does not apply. Holds email, full_name, phone, avatar_url and the OTP lockout columns. Locked down in 0038: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated, service_role retaining CRUD. Before that it was readable by anon and fully writable by any authenticated user. Every real reader is either the service-role Supabase client or the privileged Drizzle connection, both of which hold rolbypassrls; scoped-client.ts documents this table as reachable only through the unsafe escape hatch.',
+  },
+  {
+    tableName: 'pending_signups',
+    reason:
+      'Pre-provisioning signup flow — no community_id yet (the community does not exist until provisioning completes), so tenant scoping does not apply. Holds primary_contact_name, email, street address, county, zip and an opaque payload jsonb. Same 0038 lockdown and the same pre-0038 exposure as users.',
+  },
+  {
+    tableName: 'stripe_webhook_events',
+    reason:
+      'Global billing webhook idempotency journal (event_id + timestamps only) — platform-level, not community-scoped. Same 0038 lockdown as users. The write grant mattered more than the read here: with INSERT/DELETE, idempotency could be defeated by deleting a row to permit replay, or pre-inserting an event_id so the genuine webhook is skipped as a duplicate.',
+  },
   { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
   { tableName: 'access_plans', reason: 'Platform-level access management — not community-scoped. Managed by super_admin only.' },
   { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },

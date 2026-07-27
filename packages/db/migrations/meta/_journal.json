@@ -267,6 +267,13 @@
       "when": 1784511134576,
       "tag": "0037_close_rls_gaps",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784511194576,
+      "tag": "0038_lock_down_platform_identity_tables",
+      "breakpoints": true
     }
   ]
 }
