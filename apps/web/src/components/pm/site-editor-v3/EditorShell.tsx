@@ -8,6 +8,7 @@ import { PhoneGate } from './PhoneGate';
 import { ToolTabs } from './ToolTabs';
 import { usePanelWidth } from './use-panel-width';
 import { TOOL_PANEL_TITLES, type EditorToolId, type ProToolAccess } from './tools';
+import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 const PANEL_ID = 'site-editor-tool-panel';
 
@@ -15,6 +16,14 @@ export interface EditorShellProps {
   communityName: string;
   publicSiteUrl: string | null;
   proToolAccess: ProToolAccess;
+  /**
+   * Phone-gate urgent-notice fast path. Threaded through the shell rather than
+   * rendered by the caller because the shell owns the decision to show the gate
+   * at all, and the gate is the only consumer.
+   */
+  communityId: number;
+  hasPublishedSite: boolean;
+  initialNotice: UrgentNotice | null;
   /** Panel body per tool. Phase 1 passes placeholders; later phases pass real panels. */
   renderToolPanel: (tool: EditorToolId) => React.ReactNode;
   /** The canvas column. Phase 2b fills this in. */
@@ -45,6 +54,9 @@ export function EditorShell({
   communityName,
   publicSiteUrl,
   proToolAccess,
+  communityId,
+  hasPublishedSite,
+  initialNotice,
   renderToolPanel,
   children,
   changeCount = 0,
@@ -71,7 +83,14 @@ export function EditorShell({
   const isNarrow = useMediaQuery('(max-width: 767px)');
 
   if (isNarrow) {
-    return <PhoneGate publicSiteUrl={publicSiteUrl} />;
+    return (
+      <PhoneGate
+        publicSiteUrl={publicSiteUrl}
+        communityId={communityId}
+        hasPublishedSite={hasPublishedSite}
+        initialNotice={initialNotice}
+      />
+    );
   }
 
   return (

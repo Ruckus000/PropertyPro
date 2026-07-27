@@ -20,6 +20,9 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
       proToolAccess={{ styling: true, domain: true }}
+      communityId={42}
+      hasPublishedSite
+      initialNotice={null}
       renderToolPanel={(tool) => <p>panel:{tool}</p>}
       {...overrides}
     >
@@ -61,6 +64,43 @@ describe('EditorShell — phone gate', () => {
     isNarrowMock.value = true;
     renderShell({ publicSiteUrl: null });
     expect(screen.queryByRole('link', { name: /View the public site/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the urgent-notice fast path open on a phone (Phase 7)', () => {
+    // Editing is turned away; posting a closure notice is not. Standing in front
+    // of a flooded lobby with a phone is the case the notice exists for.
+    isNarrowMock.value = true;
+    renderShell();
+    expect(
+      screen.getByRole('button', { name: /Post an urgent notice/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the notice form on the phone without mounting the editor', async () => {
+    const user = userEvent.setup();
+    isNarrowMock.value = true;
+    renderShell();
+
+    await user.click(screen.getByRole('button', { name: /Post an urgent notice/i }));
+
+    expect(
+      await screen.findByRole('heading', { name: /post an urgent notice/i }),
+    ).toBeInTheDocument();
+    // Still no editor: the fast path is a sibling of the gate, not a way in.
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByText('canvas')).not.toBeInTheDocument();
+  });
+
+  it('lets a manager back out of the notice form to the gate', async () => {
+    const user = userEvent.setup();
+    isNarrowMock.value = true;
+    renderShell();
+
+    await user.click(screen.getByRole('button', { name: /Post an urgent notice/i }));
+    await screen.findByRole('heading', { name: /post an urgent notice/i });
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.getByRole('heading', { name: /bigger screen/i })).toBeInTheDocument();
   });
 });
 

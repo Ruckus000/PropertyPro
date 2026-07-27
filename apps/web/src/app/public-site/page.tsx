@@ -13,6 +13,7 @@ import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
 import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 
 /**
  * Resolve community ID from middleware-injected headers.
@@ -134,6 +135,13 @@ export default async function PublicSitePage() {
           <link key={href} rel="stylesheet" href={href} />
         ))}
         <div style={cssVars}>
+          {/*
+            Above the preview banner and above the layout's own header, because
+            an emergency notice outranks both. Renders null when there is no
+            active notice — the component evaluates expiry itself, on every
+            request, so a missed sweep cannot strand a stale banner here.
+          */}
+          <UrgentNoticeBanner notice={community} />
           {isPreview && (
             <div
               role="status"
@@ -184,6 +192,9 @@ export default async function PublicSitePage() {
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <div style={cssVars} className="min-h-screen flex flex-col font-body">
+        {/* Same banner in the legacy fallback branch: "every page" has to mean
+            every render path, not just the one that is currently reachable. */}
+        <UrgentNoticeBanner notice={community} />
         <PublicSiteHeader theme={theme} />
 
         <main id="main-content" className="flex-1">

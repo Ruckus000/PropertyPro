@@ -3,7 +3,7 @@
  * Every tenant-scoped table references communities.id.
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communityTypeEnum } from './enums';
 import { billingGroups } from './billing-groups';
 
@@ -103,6 +103,34 @@ export const communities = pgTable('communities', {
   transparencyAcknowledgedAt: timestamp('transparency_acknowledged_at', { withTimezone: true }),
   /** Snowbird digest board opt-in — when true, owners receive the periodic recap unless they opt out. */
   snowbirdDigestEnabled: boolean('snowbird_digest_enabled').notNull().default(false),
+  /**
+   * Website editor v3 Phase 7 — the urgent notice banner shown on every page of
+   * the community's public site.
+   *
+   * Columns on `communities` rather than a table because the banner is a
+   * per-community SINGLETON: exactly one is live at a time, and per-notice
+   * history is already covered by `compliance_audit_log`. The public renderer
+   * reads this row once per request anyway (`getCommunityPublicInfo`), so the
+   * banner costs the statutory public entry point zero extra queries.
+   *
+   * This write BYPASSES the draft/publish layer — it is public the moment it
+   * lands. The 240-character cap is therefore enforced three times: the Zod
+   * request schema, the service, and a DB CHECK (see below).
+   *
+   * Null `urgentNoticeText` means no notice. Null `urgentNoticeExpiresAt` means
+   * it stays up until a manager removes it. Expiry is compared at RENDER time,
+   * never by a sweep, so a missed cron can never strand a live banner.
+   */
+  urgentNoticeText: text('urgent_notice_text'),
+  urgentNoticeExpiresAt: timestamp('urgent_notice_expires_at', { withTimezone: true }),
+  urgentNoticeSetAt: timestamp('urgent_notice_set_at', { withTimezone: true }),
+  /**
+   * Who posted it. No FK declared here: this references `auth.users`, a
+   * different schema that drizzle cannot express. The constraint is added in
+   * migration 0042 instead — same convention as `site_publish_snapshots
+   * .actor_user_id` and `user_search_index`.
+   */
+  urgentNoticeSetBy: uuid('urgent_notice_set_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -118,4 +146,13 @@ export const communities = pgTable('communities', {
   uniqueIndex('communities_custom_domain_unique')
     .on(table.customDomain)
     .where(sql`custom_domain IS NOT NULL AND deleted_at IS NULL`),
+  // The urgent notice is public the instant it is written — no draft, no
+  // review. The 240-char cap is enforced at the Zod boundary and again in the
+  // service; this is the backstop that survives a future caller skipping both.
+  // Declared here so drizzle-kit generate does not emit a DROP CONSTRAINT on
+  // the next schema diff. Mirrors migration 0042.
+  check(
+    'communities_urgent_notice_text_len',
+    sql`${table.urgentNoticeText} IS NULL OR char_length(${table.urgentNoticeText}) <= 240`,
+  ),
 ]);

@@ -73,7 +73,11 @@ describe('ToolTabs — keyboard traversal', () => {
     renderTabs();
     await user.tab();
     await user.keyboard('{ArrowLeft}');
-    expect(onSelect).toHaveBeenCalledWith('site');
+    // The tool immediately left of `sections` in EDITOR_TOOLS. Phase 7 inserted
+    // `notice` between `site` and `sections`, so this reads from the registry
+    // rather than naming a tool, and a future reorder does not silently pass.
+    const previous = EDITOR_TOOLS[EDITOR_TOOLS.findIndex((t) => t.id === 'sections') - 1];
+    expect(onSelect).toHaveBeenCalledWith(previous!.id);
   });
 
   it('wraps from the last tool to the first', async () => {

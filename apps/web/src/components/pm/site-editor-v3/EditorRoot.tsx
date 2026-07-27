@@ -26,10 +26,20 @@ const PublishSheet = dynamic(
   () => import('./publish/PublishSheet').then((m) => m.PublishSheet),
   { loading: () => null },
 );
+
+// Phase 7. Deferred for the same budget reason, and it works because the panel
+// body is only rendered when its tab is active — so the chunk (form + the Radix
+// alert-dialog stack behind the remove confirmation) is requested on the click,
+// not on mount. A PM who never posts a notice never pays for it.
+const UrgentNoticePanel = dynamic(
+  () => import('./panels/UrgentNoticePanel').then((m) => m.UrgentNoticePanel),
+  { loading: () => null },
+);
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
+import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 export interface EditorRootProps {
   communityId: number;
@@ -38,6 +48,15 @@ export interface EditorRootProps {
   proToolAccess: ProToolAccess;
   /** Null when the community row could not be read; the canvas degrades. */
   canvasContext: CanvasContext | null;
+  /**
+   * Phase 7 urgent notice. Both values come from the page's existing
+   * `getCommunityPublicInfo` read, so they cost no extra query — and passing
+   * them down means the notice panel and the phone gate open with real state
+   * instead of a spinner, which matters for the one tool in this editor that
+   * gets used under time pressure.
+   */
+  hasPublishedSite: boolean;
+  initialNotice: UrgentNotice | null;
 }
 
 /**
@@ -57,6 +76,8 @@ export function EditorRoot({
   publicSiteUrl,
   proToolAccess,
   canvasContext,
+  hasPublishedSite,
+  initialNotice,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
@@ -83,6 +104,9 @@ export function EditorRoot({
         communityName={communityName}
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
+        communityId={communityId}
+        hasPublishedSite={hasPublishedSite}
+        initialNotice={initialNotice}
         activeTool={activeTool}
         onActiveToolChange={setActiveTool}
         onPreview={handlePreview}
@@ -94,9 +118,19 @@ export function EditorRoot({
         // so mounting it now costs nothing and means the top bar does not have
         // to change when the forms land.
         status={<StatusLine status="idle" lastSavedAt={null} />}
-        renderToolPanel={(tool) =>
-          tool === 'sections' ? <SectionList /> : <ToolPanelPlaceholder tool={tool} />
-        }
+        renderToolPanel={(tool) => {
+          if (tool === 'sections') return <SectionList />;
+          if (tool === 'notice') {
+            return (
+              <UrgentNoticePanel
+                communityId={communityId}
+                hasPublishedSite={hasPublishedSite}
+                initialNotice={initialNotice}
+              />
+            );
+          }
+          return <ToolPanelPlaceholder tool={tool} />;
+        }}
         // Returns null when nothing is selected, so passing it unconditionally
         // costs an empty render rather than a branch here.
         inspector={<Inspector />}
