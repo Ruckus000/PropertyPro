@@ -2,15 +2,19 @@
  * Phase 5 Migration Ordering Guard
  *
  * Validates that Drizzle migration journal entries maintain strict ordering:
- *   1. Journal `when` timestamps are strictly ascending
+ *   1. Journal `when` timestamps are strictly ascending (ties are called out
+ *      separately — a shared `when` makes drizzle's apply order undefined)
  *   2. No duplicate migration indices
  *   3. Migration files on disk match journal entries
+ *   4. No new entry reuses an idx or `when` already taken on the baseline ref —
+ *      the parallel-PR collision that checks 1-2 structurally cannot see
  *
  * This prevents the migration drift issues documented in AGENTS.md:
  *   - [2026-02-12]: duplicate table generation from journal/snapshot mismatch
  *   - [2026-02-14]: shared-env schema drift despite green tests
  *   - [2026-02-22]: drizzle-kit generating older-than-existing timestamps
  */
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,7 +73,18 @@ function checkTimestampOrdering(entries: JournalEntry[]): Problem[] {
     const prev = entries[i - 1];
     const curr = entries[i];
 
-    if (curr.when <= prev.when) {
+    // Equality is called out separately from mis-ordering. Two entries sharing a
+    // `when` is the signature of a parallel-PR collision (both branches derived
+    // their timestamp from the same predecessor), and drizzle orders by `when`,
+    // so a tie makes the apply order of those two migrations undefined.
+    if (curr.when === prev.when) {
+      problems.push({
+        severity: 'error',
+        message: `Duplicate journal when=${curr.when}: idx ${prev.idx} (${prev.tag}) `
+          + `and idx ${curr.idx} (${curr.tag}). Drizzle orders by \`when\`, so their `
+          + `apply order is undefined — give the later migration a strictly greater value.`,
+      });
+    } else if (curr.when < prev.when) {
       problems.push({
         severity: 'error',
         message: `Journal timestamp not strictly ascending: idx ${curr.idx} (${curr.tag}) `
@@ -79,6 +94,90 @@ function checkTimestampOrdering(entries: JournalEntry[]): Problem[] {
   }
 
   return problems;
+}
+
+/**
+ * Reject a migration that reuses an `idx` or `when` already taken on the base
+ * branch.
+ *
+ * checkTimestampOrdering and checkDuplicateIndices only see ONE journal, so they
+ * catch collisions within a branch. They cannot catch the case that actually
+ * bites: two branches open at once, each appending what looks locally like the
+ * next free slot. Both journals are internally valid, both pass CI, and the
+ * clash only surfaces as a merge conflict — or, worse, as a silent git
+ * auto-merge that leaves two entries sharing an idx.
+ *
+ * That is not hypothetical. PRs #852 and #853 both took idx 40 AND both derived
+ * `when` 1784511314576 by adding 60000 to 0039's, because the repo's
+ * hand-authored migrations copy that pattern rather than using wall-clock. It
+ * was caught by a merge conflict, not by a check.
+ *
+ * Compares against the baseline ref (default `origin/main`, override with
+ * MIGRATION_BASELINE_REF). Entries already on the baseline under the same tag
+ * are skipped — only what this branch ADDS is checked.
+ */
+export function checkBaselineCollisions(
+  entries: JournalEntry[],
+  baselineEntries: JournalEntry[],
+): Problem[] {
+  const problems: Problem[] = [];
+
+  const baselineTags = new Set(baselineEntries.map(e => e.tag));
+  const baselineByIdx = new Map(baselineEntries.map(e => [e.idx, e.tag] as const));
+  const baselineByWhen = new Map(baselineEntries.map(e => [e.when, e.tag] as const));
+
+  for (const entry of entries) {
+    // Already on the baseline under this tag — not a new migration.
+    if (baselineTags.has(entry.tag)) continue;
+
+    const idxOwner = baselineByIdx.get(entry.idx);
+    if (idxOwner !== undefined) {
+      problems.push({
+        severity: 'error',
+        message: `Migration idx ${entry.idx} ("${entry.tag}") is already used on the baseline `
+          + `by "${idxOwner}". Renumber this migration (and its NNNN_snapshot.json, `
+          + `re-chaining prevId) to the next free slot.`,
+      });
+    }
+
+    const whenOwner = baselineByWhen.get(entry.when);
+    if (whenOwner !== undefined) {
+      problems.push({
+        severity: 'error',
+        message: `Migration when=${entry.when} ("${entry.tag}") is already used on the baseline `
+          + `by "${whenOwner}". Pick a strictly greater timestamp — deriving it from the `
+          + `previous entry is what makes two branches collide.`,
+      });
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * Read the journal as it exists on the baseline ref. Returns null (and the
+ * caller degrades to a warning) when the ref is unreachable — a shallow
+ * checkout, a detached worktree, or a fresh clone with no remote. Never fails
+ * the build on its own, because "cannot see main" is an environment problem,
+ * not a migration problem.
+ */
+function readBaselineJournal(): { entries: JournalEntry[]; ref: string } | null {
+  const ref = process.env.MIGRATION_BASELINE_REF ?? 'origin/main';
+  const result = spawnSync(
+    'git',
+    ['show', `${ref}:packages/db/migrations/meta/_journal.json`],
+    { cwd: repoRoot, encoding: 'utf-8' },
+  );
+
+  if (result.status !== 0 || !result.stdout) return null;
+
+  try {
+    const parsed = JSON.parse(result.stdout) as Journal;
+    if (!Array.isArray(parsed.entries)) return null;
+    return { entries: parsed.entries, ref };
+  } catch {
+    return null;
+  }
 }
 
 function checkDuplicateIndices(entries: JournalEntry[]): Problem[] {
@@ -431,6 +530,20 @@ function main(): void {
   console.log('Checking migration files...');
   allProblems.push(...checkMigrationFilesExist(journal.entries));
 
+  console.log('Checking for collisions with the baseline branch...');
+  const baseline = readBaselineJournal();
+  if (baseline === null) {
+    allProblems.push({
+      severity: 'warning',
+      message: 'Skipped baseline-collision check: could not read '
+        + `${process.env.MIGRATION_BASELINE_REF ?? 'origin/main'}:packages/db/migrations/meta/_journal.json. `
+        + 'A shallow clone (actions/checkout defaults to fetch-depth 1) is the usual cause — '
+        + 'this check needs the base branch fetched.',
+    });
+  } else {
+    allProblems.push(...checkBaselineCollisions(journal.entries, baseline.entries));
+  }
+
   // Report reserved ranges
   console.log('\n📋 Phase 5 Reserved Migration Ranges:');
   for (const range of RESERVED_RANGES) {
@@ -460,4 +573,10 @@ function main(): void {
   process.exit(0);
 }
 
-main();
+// Only run when invoked as a script. Without this, importing the module to unit
+// test an exported check would execute main() and process.exit() out of the test
+// runner.
+const invokedPath = process.argv[1] ? resolve(process.argv[1]) : '';
+if (invokedPath === resolve(fileURLToPath(import.meta.url))) {
+  main();
+}
