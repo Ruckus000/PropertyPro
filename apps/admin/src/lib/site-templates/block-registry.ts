@@ -102,6 +102,13 @@ const BLOCK_META: Record<BlockType, BlockMeta> = {
     rendererPath: `${RENDERER_DIR}/AmenitiesBlock.tsx`,
     summary: 'Pro+ polish block — a list of community amenities with optional descriptions.',
   },
+  payments: {
+    label: 'Payments',
+    tier: 'essentials',
+    rendererPath: `${RENDERER_DIR}/PaymentsBlock.tsx`,
+    summary:
+      'Links residents to a payment page — the community portal by default, or a PM-supplied processor URL. Renders a link only; no card details are entered on the website.',
+  },
 };
 
 const DOC_BASE = 'docs/design-system/blocks';

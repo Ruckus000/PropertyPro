@@ -93,6 +93,7 @@ export {
   faqBlockSchema,
   galleryBlockSchema,
   amenitiesBlockSchema,
+  paymentsBlockSchema,
   DOCUMENT_CATEGORIES,
 } from './site-blocks/index';
 export type {
@@ -114,6 +115,7 @@ export type {
   GalleryImage,
   AmenitiesBlockContent,
   AmenityItem,
+  PaymentsBlockContent,
 } from './site-blocks/index';
 export {
   starterPackBlocksSchema,

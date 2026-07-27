@@ -88,6 +88,7 @@ export const blocksUpsertContract = defineRoute({
         'faq',
         'gallery',
         'amenities',
+        'payments',
       ]),
       blockOrder: z.number().int().min(2).max(99), // 1 is reserved for the hero block
       content: z.unknown(),

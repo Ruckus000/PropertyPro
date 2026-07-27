@@ -61,6 +61,9 @@ export const blockFormRegistry: Partial<Record<BlockType, ComponentType<BlockFor
   amenities: dynamic(() => import('./forms/AmenitiesForm').then((m) => m.AmenitiesForm), {
     loading: InspectorFormSkeleton,
   }),
+  payments: dynamic(() => import('./forms/PaymentsForm').then((m) => m.PaymentsForm), {
+    loading: InspectorFormSkeleton,
+  }),
 
   // One component, three entries. These blocks differ only in the type they
   // write and the placeholder they show, and `SorEmptyTextForm` reads both

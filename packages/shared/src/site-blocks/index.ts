@@ -17,6 +17,7 @@ import { contactBlockSchema } from './contact';
 import { faqBlockSchema } from './faq';
 import { galleryBlockSchema } from './gallery';
 import { amenitiesBlockSchema } from './amenities';
+import { paymentsBlockSchema } from './payments';
 
 export const blockSchemaRegistry = {
   hero: heroBlockSchema,
@@ -29,6 +30,7 @@ export const blockSchemaRegistry = {
   faq: faqBlockSchema,
   gallery: galleryBlockSchema,
   amenities: amenitiesBlockSchema,
+  payments: paymentsBlockSchema,
 } satisfies Record<BlockType, z.ZodType>;
 
 export {
@@ -65,6 +67,7 @@ export {
   type GalleryBlockContent,
   type GalleryImage,
 } from './gallery';
+export { paymentsBlockSchema, type PaymentsBlockContent } from './payments';
 export {
   amenitiesBlockSchema,
   amenityItemSchema,

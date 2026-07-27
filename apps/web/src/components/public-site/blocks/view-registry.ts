@@ -77,6 +77,7 @@ export const BLOCK_VIEW_KINDS = {
   faq: 'renderer',
   gallery: 'renderer',
   amenities: 'renderer',
+  payments: 'renderer',
   announcements: 'view',
   documents: 'view',
   meetings: 'view',
@@ -109,6 +110,13 @@ const AmenitiesBlock = dynamic(
   () => import('./AmenitiesBlock').then((m) => m.AmenitiesBlock),
   { loading: BlockViewSkeleton },
 );
+// Phase 9's payments block is split for the same reason: it is new, so almost
+// no community has one on the page yet, and it is authored (content arrives as
+// props) so a suspended render cannot trigger a data refetch.
+const PaymentsBlock = dynamic(
+  () => import('./PaymentsBlock').then((m) => m.PaymentsBlock),
+  { loading: BlockViewSkeleton },
+);
 
 /** True when this block type needs system-of-record rows supplied to its view. */
 export function isDataDrivenBlock(
@@ -125,6 +133,7 @@ export const blockViewRegistry: Partial<Record<BlockType, ComponentType<any>>> =
   faq: FaqBlock,
   gallery: GalleryBlock,
   amenities: AmenitiesBlock,
+  payments: PaymentsBlock,
   announcements: AnnouncementsBlockView,
   documents: DocumentsBlockView,
   meetings: MeetingsBlockView,

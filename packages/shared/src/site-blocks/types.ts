@@ -7,9 +7,14 @@
 import { z } from 'zod';
 
 /**
- * All supported block types. The first 7 are v1 (Essentials+); the final 3
- * (`faq`, `gallery`, `amenities`) are the Pro+ "polish blocks" added in PR #10,
- * gated to the `hasSitePolishBlocks` plan feature at the write path.
+ * All supported block types. The first 7 are v1 (Essentials+); `faq`,
+ * `gallery` and `amenities` are the Pro+ "polish blocks" added in PR #10,
+ * gated to the `hasSitePolishBlocks` plan feature at the write path;
+ * `payments` was added in website-editor-v3 Phase 9.
+ *
+ * This list is duplicated, without a compile-time link, in the
+ * `site_blocks_block_type_check` CHECK constraint (migration 0044) and in the
+ * upsert contract's z.enum. Adding a type means touching all three.
  */
 export const BLOCK_TYPES = [
   'hero',
@@ -22,6 +27,7 @@ export const BLOCK_TYPES = [
   'faq',
   'gallery',
   'amenities',
+  'payments',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];

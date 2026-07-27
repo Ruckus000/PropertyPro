@@ -36,6 +36,7 @@ const SECTION_TITLES: Record<string, string> = {
   faq: 'FAQ',
   gallery: 'Gallery',
   amenities: 'Amenities',
+  payments: 'Payments',
 };
 
 /**
