@@ -263,6 +263,54 @@ describe('UrgentNoticePanel — removal', () => {
     expect(options.duration).toBe(10_000);
   });
 
+  it('clears the textarea once the notice is gone, so a stray click cannot re-publish it', async () => {
+    // Regression: the fields were initialised once and never resynced, so after
+    // a removal the textarea still held the text that had just been taken down
+    // AND the button read "Post notice" and was enabled. One click put it back
+    // on every public page.
+    const user = userEvent.setup();
+    clearMutateMock.mockImplementation((_vars, opts) => {
+      opts.onSuccess();
+      // The mutation's onSuccess writes null into the cache; model that.
+      useUrgentNoticeMock.mockReturnValue({ data: null });
+    });
+    const { rerender } = renderPanel();
+
+    expect(screen.getByLabelText(/replace the notice/i)).toHaveValue('Pool closed');
+
+    await user.click(screen.getByRole('button', { name: 'Remove notice' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove notice' }));
+
+    rerender(
+      <UrgentNoticePanel communityId={COMMUNITY_ID} hasPublishedSite initialNotice={null} />,
+    );
+
+    expect(screen.getByLabelText('Notice text')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Post notice' })).toBeDisabled();
+  });
+
+  it('moves focus to the textarea after removal, keeping the Undo toast reachable', async () => {
+    // The Remove button lives inside the card that unmounts, so restoring focus
+    // to it drops focus on <body> — and the Undo action is the only way back.
+    const user = userEvent.setup();
+    clearMutateMock.mockImplementation((_vars, opts) => {
+      opts.onSuccess();
+      useUrgentNoticeMock.mockReturnValue({ data: null });
+    });
+    const { rerender } = renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Remove notice' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove notice' }));
+
+    rerender(
+      <UrgentNoticePanel communityId={COMMUNITY_ID} hasPublishedSite initialNotice={null} />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText('Notice text')).toHaveFocus());
+  });
+
   it('returns focus to the Remove button when the dialog closes', async () => {
     // Radix restores focus to a registered trigger. ConfirmDialog is code-split
     // and has none, so without the explicit `restoreFocusTo` handoff focus would

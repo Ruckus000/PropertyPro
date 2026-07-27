@@ -49,6 +49,16 @@ export interface UseUndoableNoticeRemoveResult {
 export function useUndoableNoticeRemove(
   communityId: number,
   notice: { text: string; expiresAt: string | null } | null,
+  /**
+   * Called once the removal has landed.
+   *
+   * The caller uses this to move focus somewhere that still exists. Radix hands
+   * focus back to the control that opened the confirmation, but that control
+   * lives inside the live-notice card, which unmounts the instant the notice
+   * clears — so focus would otherwise land on `<body>` and put the Undo action
+   * (the only way back) out of keyboard reach.
+   */
+  onRemoved?: () => void,
 ): UseUndoableNoticeRemoveResult {
   const clear = useClearUrgentNotice(communityId);
   const restore = useSetUrgentNotice(communityId);
@@ -123,11 +133,13 @@ export function useUndoableNoticeRemove(
           onDismiss: release,
           onAutoClose: release,
         });
+
+        onRemoved?.();
       },
       onError: (error) =>
         toast.error(`We couldn’t remove that notice. ${error.message}`),
     });
-  }, [clear, notice, release, undo]);
+  }, [clear, notice, onRemoved, release, undo]);
 
   const requestRemove = useCallback(() => setConfirmOpen(true), []);
 

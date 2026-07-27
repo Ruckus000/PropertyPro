@@ -36,7 +36,11 @@ export function UrgentNoticeBanner({ notice }: UrgentNoticeBannerProps) {
     <div
       role="alert"
       data-testid="urgent-notice-banner"
-      className="sticky top-0 z-50 flex items-start justify-center gap-2 border-b border-status-danger-border bg-status-danger-bg px-4 py-3 text-center text-base font-medium text-status-danger"
+      // NOT sticky itself. On the public site it shares a sticky container with
+      // the preview banner (see public-site/page.tsx) — two independent
+      // `sticky top-0` siblings would occupy the same offset and the later one
+      // would paint over this one as soon as the page scrolled.
+      className="flex items-start justify-center gap-2 border-b border-status-danger-border bg-status-danger-bg px-4 py-3 text-center text-base font-medium text-status-danger"
     >
       <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
       {/* Text child. See the note above before changing this line. */}

@@ -136,22 +136,30 @@ export default async function PublicSitePage() {
         ))}
         <div style={cssVars}>
           {/*
-            Above the preview banner and above the layout's own header, because
-            an emergency notice outranks both. Renders null when there is no
-            active notice — the component evaluates expiry itself, on every
-            request, so a missed sweep cannot strand a stale banner here.
+            ONE sticky container for both banners, so they stack vertically and
+            travel together. Two independent `sticky top-0` siblings would each
+            stick to the same offset and the later one would paint over the
+            other as soon as the page scrolled.
+
+            The urgent notice comes first, above the preview banner and above
+            the layout's own header, because an emergency notice outranks both.
+            It renders null when there is no active notice — the component
+            evaluates expiry itself, on every request, so a missed sweep cannot
+            strand a stale banner here.
           */}
-          <UrgentNoticeBanner notice={community} />
-          {isPreview && (
-            <div
-              role="status"
-              aria-live="polite"
-              data-testid="preview-banner"
-              className="sticky top-0 z-50 border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
-            >
-              Preview mode — showing unpublished drafts. Visitors see the last published version.
-            </div>
-          )}
+          <div className="sticky top-0 z-50">
+            <UrgentNoticeBanner notice={community} />
+            {isPreview && (
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="preview-banner"
+                className="border-b border-warning bg-warning-subtle px-4 py-2 text-center text-sm font-medium text-warning-strong"
+              >
+                Preview mode — showing unpublished drafts. Visitors see the last published version.
+              </div>
+            )}
+          </div>
           <Layout
             community={{
               id: community.id,
