@@ -1417,47 +1417,91 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
   });
 
-  describe('user_search_index hardening (0037)', () => {
-    // Until 0037 this table had NO row-level security of any kind — no ENABLE, no
-    // policies, no REVOKE — while holding full_name and email, both trigram-indexed.
-    // Under Supabase's open grant baseline that made every user's name and email
-    // directly readable by anon and authenticated. 0037 gives it the same posture as
-    // the seven sibling platform tables: RLS enabled and forced, zero policies, ACL
-    // revoked. These assertions are what keep it from silently regressing.
+  describe('locked-down platform tables (0037, 0038)', () => {
+    // Four tables that held PII or integrity-critical state while reachable by
+    // anon and/or authenticated, each closed by giving it the posture eleven
+    // sibling platform tables already had: RLS enabled AND forced, zero policies
+    // (the deny-everyone default), ACL revoked, service_role retaining CRUD.
     //
-    // Deny is a hard permission error, not zero rows — same as platform_admin_users
-    // below, and for the same reason: the ACL rejects before any policy is consulted.
+    // Measured in production immediately before each fix:
+    //   user_search_index (0037) — RLS off, anon+authenticated SELECT, over
+    //     trigram-indexed full_name and email.
+    //   users (0038) — RLS off, 1,660 rows of email/full_name/phone/avatar plus
+    //     OTP lockout state; anon SELECT, authenticated SELECT+INSERT+UPDATE+DELETE.
+    //   pending_signups (0038) — same grants; name, email, street address, zip.
+    //   stripe_webhook_events (0038) — same grants; the write half mattered most,
+    //     since INSERT/DELETE defeats webhook idempotency.
+    //
+    // Deny here is a HARD PERMISSION ERROR, not zero rows — the ACL rejects before
+    // any policy is consulted. That is the same idiom the platform_admin_users
+    // describe below uses, and it is why these cannot be folded into the
+    // service_only behavioural loop, which asserts zero rows instead.
+    const LOCKED_DOWN_TABLES = [
+      'user_search_index',
+      'users',
+      'pending_signups',
+      'stripe_webhook_events',
+    ] as const;
 
-    it('has RLS enabled and forced', async () => {
+    it.each(LOCKED_DOWN_TABLES)('%s has RLS enabled and forced', async (tableName) => {
       const [row] = await adminSql<{ relrowsecurity: boolean; relforcerowsecurity: boolean }[]>`
         select c.relrowsecurity, c.relforcerowsecurity
         from pg_class c
         join pg_namespace n on n.oid = c.relnamespace
-        where n.nspname = 'public' and c.relname = 'user_search_index'
+        where n.nspname = 'public' and c.relname = ${tableName}
       `;
-      expect(row?.relrowsecurity).toBe(true);
-      expect(row?.relforcerowsecurity).toBe(true);
+      expect(row?.relrowsecurity, `${tableName} should have RLS enabled`).toBe(true);
+      expect(row?.relforcerowsecurity, `${tableName} should have RLS forced`).toBe(true);
     });
 
-    it('authenticated user is denied SELECT on user_search_index', async () => {
-      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-      await expect(authSql`select user_id from public.user_search_index`).rejects.toThrow();
-    });
-
-    it('anon is denied SELECT on user_search_index', async () => {
-      await setAnonContext(authSql, seed.communityAId);
-      await expect(authSql`select user_id from public.user_search_index`).rejects.toThrow();
-    });
-
-    it('service_role retains full CRUD privilege on user_search_index', async () => {
-      await setServiceRoleContext(serviceSql);
-      for (const privilege of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
-        const [row] = await serviceSql<{ has_privilege: boolean }[]>`
-          select has_table_privilege('service_role', 'public.user_search_index', ${privilege}) as has_privilege
-        `;
-        expect(row?.has_privilege, `service_role should retain ${privilege}`).toBe(true);
+    // Assert the SQLSTATE, not merely "it threw". A bare rejects.toThrow() also
+    // passes on 42P01 (undefined_table), so a typo in LOCKED_DOWN_TABLES above
+    // would sail through as a green test asserting nothing. 42501 is
+    // insufficient_privilege — the ACL rejection we actually mean.
+    const expectPermissionDenied = async (promise: Promise<unknown>, tableName: string) => {
+      let error: unknown;
+      try {
+        await promise;
+      } catch (err) {
+        error = err;
       }
+      expect(error, `${tableName} should have rejected the read`).toBeDefined();
+      expect(
+        (error as { code?: string }).code,
+        `${tableName} should reject with 42501 insufficient_privilege, not ${(error as { code?: string }).code}`,
+      ).toBe('42501');
+    };
+
+    it.each(LOCKED_DOWN_TABLES)('authenticated is denied SELECT on %s', async (tableName) => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      await expectPermissionDenied(
+        authSql`select 1 from ${authSql(tableName)} limit 1`,
+        tableName,
+      );
     });
+
+    it.each(LOCKED_DOWN_TABLES)('anon is denied SELECT on %s', async (tableName) => {
+      await setAnonContext(authSql, seed.communityAId);
+      await expectPermissionDenied(
+        authSql`select 1 from ${authSql(tableName)} limit 1`,
+        tableName,
+      );
+    });
+
+    it.each(LOCKED_DOWN_TABLES)(
+      'service_role retains full CRUD privilege on %s',
+      async (tableName) => {
+        await setServiceRoleContext(serviceSql);
+        for (const privilege of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
+          const [row] = await serviceSql<{ has_privilege: boolean }[]>`
+            select has_table_privilege('service_role', ${`public.${tableName}`}, ${privilege}) as has_privilege
+          `;
+          expect(row?.has_privilege, `service_role should retain ${privilege} on ${tableName}`).toBe(
+            true,
+          );
+        }
+      },
+    );
   });
 
   describe('platform_admin_users RLS (service_role only)', () => {
