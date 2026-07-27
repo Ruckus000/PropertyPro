@@ -9,6 +9,7 @@
  * open an UpgradeDialog when clicked.
  */
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -29,6 +30,7 @@ import {
   PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
+  isPmPortfolioPath,
   resolveDashboardHref,
   resolveNavItemHref,
   shouldUseSlimNav,
@@ -39,6 +41,16 @@ import {
 import { useSidebar } from './sidebar-context';
 import { SidebarTenantSwitcher } from './sidebar-tenant-switcher';
 import { UpgradeDialog } from '../billing/upgrade-dialog';
+
+/**
+ * Only ever needed when the shell has no community in scope — a rare state that
+ * the middleware actively redirects away from. Loading it lazily keeps it out of
+ * the sidebar chunk, which the perf-budgeted /pm/website-editor route pulls in.
+ */
+const CommunityPickerDialog = dynamic(
+  () => import('./community-picker-dialog').then((m) => m.CommunityPickerDialog),
+  { ssr: false },
+);
 
 interface AppSidebarProps {
   communityId: number | null;
@@ -83,11 +95,24 @@ export function AppSidebar({
     featureKey: keyof CommunityFeatures | null;
     upgradePlanId: PlanId | null;
   } | null>(null);
+  const [pickerFor, setPickerFor] = useState<{
+    label: string;
+    href: (communityId: number) => string;
+  } | null>(null);
   const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
 
-  const isPmContext = pathname.startsWith('/pm/');
+  // Only the cross-community PM *portfolio* routes swap in PM_NAV_ITEMS.
+  // Community-scoped pages that merely live under /pm/ — the website editor
+  // above all — keep the normal community nav (see isPmPortfolioPath).
+  const isPmContext = isPmPortfolioPath(pathname);
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
+
+  // With no community in scope, community-scoped items can't build a real
+  // destination. Rather than sending every one of them to /select-community —
+  // which throws the destination away and, on that page, navigates nowhere at
+  // all — render them as buttons that open the picker and keep the destination.
+  const needsCommunityPicker = !isPmContext && communityId === null;
 
   const allVisible: NavItemWithGateStatus[] = isPmContext
     ? PM_NAV_ITEMS.map((i) => ({
@@ -97,7 +122,19 @@ export function AppSidebar({
         upgradePlanId: null,
         upgradeFeatureKey: null,
       }))
-    : getVisibleItemsWithPlanGate(NAV_ITEMS, role, features, communityType, resolvedPlanId, isUnitOwner);
+    : getVisibleItemsWithPlanGate(
+        NAV_ITEMS,
+        role,
+        features,
+        communityType,
+        resolvedPlanId,
+        isUnitOwner,
+      )
+        // Without a community there is no role, so itemVisibleForRole lets every
+        // role-gated item through. Harmless when they were inert links to
+        // /select-community; now that the picker makes them navigate, keep them
+        // out rather than route someone into a permission-denied page.
+        .filter((item) => !(needsCommunityPicker && item.visibility));
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
   const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);
@@ -116,28 +153,28 @@ export function AppSidebar({
     }
   }
 
-  // Fall back to /select-community when communityId is null. Without this,
-  // every nav item would render with href={undefined} and silently fail to
-  // navigate, which masked the www-subdomain bug for some time. The middleware
-  // now redirects authenticated users without tenant context, so this branch
-  // should rarely be reached — but if it is, send the user somewhere useful
-  // instead of producing a dead nav.
-  const toNavRailItem = (item: NavItemWithGateStatus): NavRailItem => ({
-    id: item.id,
-    label: item.label,
-    icon: item.icon,
-    href: item.planLocked
-      ? undefined
-      // One-hop destination for the dashboard item: avoids the /dashboard →
-      // /dashboard/apartment server redirect for lease-tracking communities.
-      // Everything else goes through resolveNavItemHref, which keeps PM
-      // portfolio items working with communityId = null.
-      : !isPmContext && communityId && item.id === 'dashboard'
-        ? resolveDashboardHref(communityId, features)
-        : resolveNavItemHref(item, communityId, isPmContext),
-    ariaHasPopup: item.planLocked ? 'dialog' : undefined,
-    trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
-  });
+  const toNavRailItem = (item: NavItemWithGateStatus): NavRailItem => {
+    // Items that open a dialog instead of navigating carry no href, which is
+    // what makes NavRail render them as buttons and fire onViewChange.
+    const opensDialog = item.planLocked || needsCommunityPicker;
+
+    return {
+      id: item.id,
+      label: item.label,
+      icon: item.icon,
+      href: opensDialog
+        ? undefined
+        : // One-hop destination for the dashboard item: avoids the /dashboard →
+          // /dashboard/apartment server redirect for lease-tracking communities.
+          // Everything else goes through resolveNavItemHref, which keeps PM
+          // portfolio items working with communityId = null.
+          !isPmContext && communityId && item.id === 'dashboard'
+          ? resolveDashboardHref(communityId, features)
+          : resolveNavItemHref(item, communityId, isPmContext),
+      ariaHasPopup: opensDialog ? 'dialog' : undefined,
+      trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
+    };
+  };
 
   const navRailSections: NavRailSection[] = baseSections
     .map((section) => ({
@@ -235,12 +272,16 @@ export function AppSidebar({
         activeView={activeId}
         onViewChange={(id) => {
           const clickedItem = visibleById.get(id);
-          if (clickedItem?.planLocked) {
+          if (!clickedItem) return;
+          // Neither branch calls onNavigate(): on mobile that closes the nav
+          // Sheet, which unmounts this sidebar and takes the dialog with it.
+          if (clickedItem.planLocked) {
             setUpgradeFor({
               featureKey: clickedItem.upgradeFeatureKey,
               upgradePlanId: clickedItem.upgradePlanId,
             });
-            onNavigate?.();
+          } else if (needsCommunityPicker) {
+            setPickerFor({ label: clickedItem.label, href: clickedItem.href });
           }
         }}
         expanded={resolvedExpanded}
@@ -278,6 +319,16 @@ export function AppSidebar({
         isUnitOwner={isUnitOwner}
         communityId={communityId}
       />
+      {needsCommunityPicker && (
+        <CommunityPickerDialog
+          open={pickerFor !== null}
+          onOpenChange={(open) => {
+            if (!open) setPickerFor(null);
+          }}
+          itemLabel={pickerFor?.label ?? null}
+          buildDestination={pickerFor?.href ?? null}
+        />
+      )}
     </>
   );
 }

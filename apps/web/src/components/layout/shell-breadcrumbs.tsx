@@ -28,7 +28,7 @@ import { ChevronRight } from 'lucide-react';
 import type { CommunityRole, CommunityFeatures } from '@propertypro/shared';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import type { BreadcrumbLink } from '@/lib/breadcrumbs/types';
-import { resolveDashboardHref } from './nav-config';
+import { isPmPortfolioPath, resolveDashboardHref } from './nav-config';
 import { resolveHomeDestination } from '@/lib/utils/home-destination';
 import { buildAutoTrail } from '@/lib/breadcrumbs/build-auto-trail';
 
@@ -184,10 +184,12 @@ function buildHomeCrumbs({
 }): BreadcrumbLink[] {
   const isPm = role != null && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role);
 
-  // On the PM portal itself, the root is always the communities list. Label
+  // On the PM portfolio itself, the root is always the communities list. Label
   // matches the PM sidebar entry for /pm/dashboard/communities ('Communities',
   // not 'Portfolio') per .claude/rules/design.md canonical mappings.
-  if (pathname.startsWith('/pm')) {
+  // Community-scoped /pm pages (e.g. /pm/settings/website?communityId=…) are
+  // deliberately excluded — they fall through to the normal community trail.
+  if (isPmPortfolioPath(pathname)) {
     return [{ label: 'Communities', href: '/pm/dashboard/communities' }];
   }
 
