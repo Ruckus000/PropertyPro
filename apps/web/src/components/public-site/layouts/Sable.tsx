@@ -50,7 +50,7 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
   );
 }
 
-export function Sable({ community, theme, blocks }: LayoutProps) {
+export function Sable({ community, theme, blocks, footer }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
 
   return (
@@ -76,7 +76,12 @@ export function Sable({ community, theme, blocks }: LayoutProps) {
           })}
         </div>
       </main>
-      <PublicSiteFooter communityName={community.name} />
+      <PublicSiteFooter
+        communityName={community.name}
+        associationName={footer?.associationName}
+        note={footer?.note}
+        showStatutoryLine={footer?.showStatutoryLine}
+      />
     </div>
   );
 }

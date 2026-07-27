@@ -439,7 +439,7 @@ suggestion, not a gate.
 
 ---
 
-### Phase 5 — Review-and-publish sheet (atomic, permanently)
+### Phase 5 — Review-and-publish sheet (atomic, permanently) ✅ *shipped*
 
 **Files.** `site-editor-v3/publish/PublishSheet.tsx`, `Receipt.tsx`; extend
 `hooks/use-publish-site.ts`.
@@ -462,7 +462,7 @@ shared validator and refuses.
 
 ---
 
-### Phase 6 — Publish history + revert  ⟵ **GATE G1**
+### Phase 6 — Publish history + revert ✅ *shipped*  ⟵ **GATE G1**
 
 **Migration.** Next free number — **re-check `packages/db/migrations/` before authoring**;
 `0034` at the time of writing. Creates `site_publish_snapshots`.
@@ -593,7 +593,7 @@ G3 waits.
 
 ---
 
-### Phase 7 — Urgent notice
+### Phase 7 — Urgent notice ✅ *shipped* (PR #855)
 
 **The highest-blast-radius write in the product**: it bypasses the draft layer and is public
 immediately. Treat it accordingly.
@@ -612,12 +612,34 @@ notice not rendered even if the row persists; removal is undoable within the toa
 
 ---
 
-### Phase 8 — Site settings + footer
+### Phase 8 — Site settings + footer ✅ *shipped*
 
 **Tests.** Title/description length limits server-side; the indexing flag actually reaches
 `robots`; the SERP preview is `aria-hidden` decoration, not content; the statutory footer
 line is **opt-in** and ships with its counsel warning (see gap analysis §5 — this is a
 compliance constraint, not copy polish).
+
+**As shipped.** Settings and footer live in `communities.branding`, so they are
+live-immediate like every other field on that row — the publish flow promotes `site_blocks`
+only. The draft layer that `site-diff/types.ts` once said this phase would add was NOT built;
+those comments have been corrected rather than left pointing at a phase that did not do it,
+and the `style` diff producer stays dormant.
+
+Scope as built: SEO title, description, favicon, the indexing flag, the SERP preview, and
+three footer fields. `language` was cut — `<html lang>` lives in the single static root
+layout, and threading a tenant header through it would make every route in `apps/web`
+dynamic, marketing pages included. That is an app-wide decision, not a Phase 8 field.
+
+The indexing flag reaches the `robots` meta tag on both public pages and empties the
+community's sitemap. `robots.ts` deliberately still ALLOWS those paths: a robots.txt
+Disallow stops a crawler fetching the page at all, so it never sees the `noindex` directive
+and an already-indexed URL can persist. Do not "tighten" it.
+
+**One migration, and it is not about this feature.** `0043_backfill_site_published_at` is
+DML-only. `communities.site_published_at` lost its last application writer in `eab4f36e`, so
+the Phase 7 urgent-notice gate ("publish your website first") had been refusing every
+community published through the current editor. The writer is restored in
+`publishCommunitySite`; the migration repairs the rows already broken.
 
 ---
 

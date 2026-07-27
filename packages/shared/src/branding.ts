@@ -57,6 +57,55 @@ export interface CommunityBranding {
    * overrides (the resolved theme applies unchanged).
    */
   customCssOverrides?: CustomCssOverrides | null;
+  /**
+   * Website editor v3, Phase 8 — PM-authored SEO overrides.
+   *
+   * Unstaged and live-immediate, like every other field on this object: the
+   * publish flow promotes `site_blocks` rows only, so a change here is public
+   * on the next request.
+   *
+   * NOTE this interface describes what is *persisted*, and the column is
+   * untyped `jsonb` — it is not a guarantee about what is in any given row.
+   * Readers must go through `resolveSiteSettings`
+   * (`apps/web/src/lib/site-editor/site-settings.ts`), which type-checks every
+   * field, rather than trusting this shape.
+   */
+  siteSettings?: SiteSettingsBranding | null;
+  /** Website editor v3, Phase 8 — PM-authored public-site footer. */
+  siteFooter?: SiteFooterBranding | null;
+}
+
+/** Persisted SEO overrides. Every field optional; absent means "derive it". */
+export interface SiteSettingsBranding {
+  /** Overrides the derived `<title>`. */
+  seoTitle?: string | null;
+  /** Overrides the derived meta description. */
+  seoDescription?: string | null;
+  /**
+   * Whether search engines may index this community's public pages.
+   *
+   * Absent means indexable. Only an explicit `false` de-indexes — see
+   * `isSearchIndexingEnabled`, where that default is enforced and tested.
+   */
+  searchIndexing?: boolean;
+  /** Processed variants, written by the favicon finalize route. */
+  favicon?: { icon32Path: string; appleTouch180Path: string } | null;
+}
+
+/** Persisted public-site footer fields. */
+export interface SiteFooterBranding {
+  /** Overrides the community name in the copyright line. */
+  associationName?: string | null;
+  /** Free-text line under the copyright. Rendered as text, never as HTML. */
+  note?: string | null;
+  /**
+   * The opt-in statutory records line. Defaults to false and must stay
+   * opt-in: PropertyPro presents factual data and does not assess compliance
+   * adequacy, so a line a community could read as the platform certifying its
+   * statutory compliance is exactly the claim to avoid. See
+   * `.claude/rules/florida-compliance.md` and the gap analysis §5.
+   */
+  showStatutoryLine?: boolean;
 }
 
 /**

@@ -11,6 +11,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(),
   siteBlocks: Symbol('siteBlocks'),
+  // Phase 8: publishCommunitySite now stamps communities.site_published_at.
+  communities: Symbol('communities'),
   complianceAuditLog: Symbol('complianceAuditLog'),
   // Phase 6 publish history. EVERY export the service imports has to be here —
   // a missing one throws at module load and fails every test in this file, and
@@ -402,6 +404,38 @@ describe('publishCommunitySite', () => {
     expect(txAuditValuesMock).not.toHaveBeenCalled();
   });
 
+  /**
+   * Website editor v3, Phase 8 — the stamp that had no writer.
+   *
+   * `communities.site_published_at` lost its only application writer in
+   * eab4f36e (the deleted admin site-builder publish route). Nothing has
+   * written it since, so it stayed NULL for every community published through
+   * the current editor — which silently disabled the urgent notice's "publish
+   * your website first" gate for all of them, and left the admin app's
+   * "Published" label wrong.
+   */
+  it('stamps communities.site_published_at with the same value the rows carry', async () => {
+    setSelectQueue([[{ blockOrder: 2 }]]);
+    setUpdateReturnQueue([
+      [{ id: 100 }], // retired
+      [], // tombstone sweep
+      [{ id: 200 }], // promoted
+      [], // the communities stamp
+    ]);
+
+    const result = await publishCommunitySite({
+      communityId: 42,
+      actorUserId: 'user-1',
+      expectedPublishedAt: null,
+    });
+
+    // Last UPDATE is the stamp, and it carries the SAME instant the promoted
+    // rows got — a community stamp that disagreed with its own blocks would be
+    // worse than none.
+    const stampCall = getUpdateCalls().at(-1);
+    expect(stampCall?.set).toEqual({ sitePublishedAt: result.publishedAt });
+  });
+
   it('retires ONLY published rows at block_orders that have a live draft (keeps un-drafted published blocks)', async () => {
     // Drafts exist at slots 2 and 3 only. The retire UPDATE must be scoped to
     // those slots via inArray — published rows at any other slot (e.g. the
@@ -416,7 +450,9 @@ describe('publishCommunitySite', () => {
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
     const updateCalls = getUpdateCalls();
-    expect(updateCalls).toHaveLength(3);
+    // Four UPDATEs: retire, tombstone sweep, promote, and the Phase 8
+    // communities.site_published_at stamp.
+    expect(updateCalls).toHaveLength(4);
     // First UPDATE = retire. Its predicate must include an inArray over the
     // draft block_orders [2, 3].
     const retireWhere = updateCalls[0].where;
@@ -1260,7 +1296,9 @@ describe('publishCommunitySite with tombstone drafts', () => {
 
     expect(result).toMatchObject({ published: true, retiredCount: 1, promotedCount: 0 });
     const updateCalls = getUpdateCalls();
-    expect(updateCalls).toHaveLength(3);
+    // Four UPDATEs: retire, tombstone sweep, promote, and the Phase 8
+    // communities.site_published_at stamp.
+    expect(updateCalls).toHaveLength(4);
     // The sweep (second UPDATE) soft-deletes and its predicate pins
     // blockType=tombstone + isDraft=true.
     expect(updateCalls[1].set).toHaveProperty('deletedAt');
@@ -1470,7 +1508,9 @@ describe('publishCommunitySite × captureSnapshot', () => {
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
     // Three UPDATEs (retire, tombstone sweep, promote) all ran before it.
-    expect(getUpdateCalls()).toHaveLength(3);
+    // Four UPDATEs: retire, tombstone sweep, promote, and the Phase 8
+    // communities.site_published_at stamp.
+    expect(getUpdateCalls()).toHaveLength(4);
     expect(order).toEqual(['history']);
   });
 });

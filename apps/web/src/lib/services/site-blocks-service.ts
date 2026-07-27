@@ -21,6 +21,7 @@
  * feature at the route layer.
  */
 import {
+  communities,
   complianceAuditLog,
   createScopedClient,
   paginate,
@@ -576,6 +577,29 @@ export async function publishCommunitySite({
         })),
       changeLabels: summarizePublishChanges(liveRows, draftOrders),
     });
+
+    // Step 5d: stamp `communities.site_published_at`.
+    //
+    // This column had NO application writer. The only one was the admin
+    // site-builder publish route, deleted in eab4f36e when the DnD builder was
+    // replaced — since then every publish has gone through this function, which
+    // stamped `site_blocks.published_at` and left the community column NULL
+    // forever.
+    //
+    // It is not decorative. `hasPublishedSite` in the v3 editor reads it, and
+    // so does the urgent notice's "publish your website first" gate
+    // (urgent-notice-service.ts) — which therefore refused every community
+    // published through the current editor, i.e. all of them. The admin app's
+    // "Published" label reads it too.
+    //
+    // Stamped inside the same transaction and from `effectivePublishedAt`, so
+    // it can never disagree with the site-version stamp the rows carry or
+    // survive a rolled-back publish. Existing rows are repaired by migration
+    // 0043; this stops the drift, that repairs it.
+    await tx
+      .update(communities)
+      .set({ sitePublishedAt: effectivePublishedAt })
+      .where(eq(communities.id, communityId));
 
     // Step 6: audit row inside the same tx so the publish has atomic
     // provenance.

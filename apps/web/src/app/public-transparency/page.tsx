@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 // AUTHZ: Host-native public transparency page; community ID injected by middleware before tenant context exists.
 import { findCommunityBySlugUnscoped } from '@propertypro/db/unsafe';
 import { getFeaturesForCommunity, resolveCommunityContext, resolveLifecycleState, type CommunityType } from '@propertypro/shared';
-import { getCommunityPublicInfo } from '@/lib/api/branding';
+import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
+import { isSearchIndexingEnabled } from '@/lib/site-editor/site-settings';
+import type { Metadata } from 'next';
 import { TransparencyPage } from '@/components/transparency/transparency-page';
 import { TransparencyDisabledEmptyState } from '@/components/transparency/transparency-disabled-empty-state';
 import { getTransparencyPageData } from '@/lib/services/transparency-service';
@@ -37,6 +39,34 @@ async function resolveCommunityId(): Promise<number | null> {
   }
 
   return null;
+}
+
+/**
+ * Website editor v3, Phase 8 — honour the PM's search-indexing choice here too.
+ *
+ * This page had no `generateMetadata` at all, so it inherited the root layout's
+ * and was indexable regardless. Applying the flag to only one of a community's
+ * two public pages would be a half-implementation: a PM who opts out would
+ * still find this page in search results.
+ *
+ * Honouring the opt-out is consistent with the statute. §718.111(12)(g)
+ * requires the records be posted on a website accessible to owners; it does not
+ * require search-engine indexing. Nothing about the page's availability changes
+ * — only whether crawlers are asked to list it.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const communityId = await resolveCommunityId();
+  if (!communityId) return {};
+  const community = await getCommunityPublicInfo(communityId);
+  if (!community) return {};
+
+  const branding = await getBrandingForCommunity(community.id);
+  const indexable = isSearchIndexingEnabled(branding);
+
+  return {
+    title: `Records & Transparency — ${community.name}`,
+    robots: indexable ? { index: true, follow: true } : { index: false, follow: false },
+  };
 }
 
 export default async function PublicTransparencyHostPage() {

@@ -77,3 +77,46 @@ export async function resizeSiteImage(input: Buffer): Promise<SiteImageVariants>
 
   return { at1600w, at800w };
 }
+
+/** Website editor v3, Phase 8 — favicon variants. */
+export interface FaviconVariants {
+  /** 32×32 PNG — the browser tab icon. */
+  icon32: Buffer;
+  /** 180×180 PNG — the iOS home-screen icon. */
+  appleTouch180: Buffer;
+}
+
+const FAVICON_SIZE = 32;
+const APPLE_TOUCH_SIZE = 180;
+
+/**
+ * Produce the two favicon variants from a raw upload.
+ *
+ * PNG rather than WebP, deliberately: `apple-touch-icon` has no WebP support
+ * across the iOS versions that matter, and PNG is the format every browser
+ * accepts for both slots. The sizes are small enough that WebP's advantage is
+ * noise.
+ *
+ * Square `cover` crop from the centre. A favicon is displayed square in every
+ * consumer, so letterboxing a non-square upload would just render as an image
+ * with transparent bars; cropping is what the user expects to see.
+ *
+ * Re-encoding through sharp is also the sanitisation step. The upload allowlist
+ * is JPEG/PNG/WebP — SVG is deliberately NOT accepted, since it is a scriptable
+ * document format — and decoding to raw pixels then re-encoding discards any
+ * metadata, colour profile or trailing payload the original carried.
+ */
+export async function resizeFavicon(input: Buffer): Promise<FaviconVariants> {
+  const [icon32, appleTouch180] = await Promise.all([
+    sharp(input)
+      .resize(FAVICON_SIZE, FAVICON_SIZE, { fit: 'cover', position: 'center' })
+      .png()
+      .toBuffer(),
+    sharp(input)
+      .resize(APPLE_TOUCH_SIZE, APPLE_TOUCH_SIZE, { fit: 'cover', position: 'center' })
+      .png()
+      .toBuffer(),
+  ]);
+
+  return { icon32, appleTouch180 };
+}

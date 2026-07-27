@@ -31,10 +31,14 @@ import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { getPageShellContext } from '@/lib/request/page-shell-context';
 import { isSiteEditorV3Enabled } from '@/lib/site-editor/flag';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
-import { getCommunityPublicInfo } from '@/lib/api/branding';
+import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
+import {
+  resolveFooterSettings,
+  resolveSiteSettings,
+} from '@/lib/site-editor/site-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,13 +72,17 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
-  const [features, shellContext, communityInfo, canvasContext] = await Promise.all([
+  const [features, shellContext, communityInfo, canvasContext, branding] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
     // comes from `membership` — see the lifecycle note below.
     getPageShellContext(),
     getCommunityPublicInfo(communityId),
     loadCanvasContext(communityId),
+    // Phase 8. Free: `getBrandingForCommunity` is React.cache'd and
+    // `loadCanvasContext` above already reads it, so this resolves from the
+    // same request-scoped result rather than issuing a second SELECT.
+    getBrandingForCommunity(communityId),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -137,6 +145,20 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
               }
             : null
         }
+        // Phase 8. Same trick as the notice: derived from reads already made,
+        // so the Site panel paints real values instead of a spinner. The
+        // resolvers are total, so malformed branding yields defaults here
+        // rather than throwing during render.
+        siteIdentity={{
+          name: membership.communityName,
+          slug: communityInfo?.slug ?? '',
+          communityType: membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+        }}
+        tagline={branding?.tagline ?? null}
+        initialSiteSettings={{
+          settings: resolveSiteSettings(branding),
+          footer: resolveFooterSettings(branding),
+        }}
       />
     </EditorFrame>
   );

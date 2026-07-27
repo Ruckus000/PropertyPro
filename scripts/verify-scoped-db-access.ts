@@ -115,6 +115,14 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // community + hasSiteEditor plan) is verified upstream by ensurePmAccess in
   // the route, which is the same gate publish uses.
   resolve(repoRoot, 'apps/web/src/lib/services/urgent-notice-service.ts'),
+  // Website editor v3 Phase 8 — site settings + footer. Same shape again:
+  // communities is the root tenant table, so the `branding` jsonb is reachable
+  // only by primary key. The merge runs as a single jsonb_set UPDATE rather
+  // than a read-modify-write, to avoid the lost update two concurrent managers
+  // would otherwise cause. Caller authz (management-tier membership in the
+  // TARGET community + hasSiteEditor) is verified upstream by ensurePmAccess in
+  // the route — the same gate publish uses.
+  resolve(repoRoot, 'apps/web/src/lib/services/site-settings-service.ts'),
   // Community-scoped user display-name resolution for board/forum and elections UX
   resolve(repoRoot, 'apps/web/src/lib/utils/resolve-users.ts'),
   // Community picker — cross-community user membership query for post-login routing
@@ -286,6 +294,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/services/esign-pdf-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/site-assets/cleanup.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/site/images/finalize/route.ts'),
+  // Website editor v3 Phase 8 — favicon finalize. Same admin-client use as its
+  // sibling above: download the raw upload, write the processed variants, and
+  // remove the original. Tenancy is enforced before any storage call by
+  // parseSiteAssetPath, which rejects a path outside the caller's community.
+  resolve(repoRoot, 'apps/web/src/app/api/v1/site/images/finalize-favicon/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/account/profile/route.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/documents/drafts/[id]/images/route.ts'),
 ]);

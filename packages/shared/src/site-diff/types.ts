@@ -40,9 +40,15 @@ export interface SiteSnapshot {
   /** Slots staged for deletion (tombstone drafts). Meaningful on `next` only. */
   tombstonedSlots?: number[];
   /**
-   * `communities.branding`, unparsed. Equal on both sides until Phase 8 gives
-   * branding a draft layer — it is unstaged today and reaches the live public
-   * site immediately, so there is nothing to diff yet.
+   * `communities.branding`, unparsed. Always equal on both sides today.
+   *
+   * Branding is unstaged: it has no draft layer, so every field on it — the
+   * colours, the tagline, and the Phase 8 site settings and footer — reaches
+   * the live public site immediately and there is nothing to diff. Phase 8 was
+   * once expected to change that and did not; giving branding a draft side
+   * means draft storage, promotion inside `publishCommunitySite`'s transaction,
+   * and inclusion in `site_publish_snapshots` so revert covers it. That work is
+   * still unbuilt and unassigned to a phase.
    */
   branding?: unknown;
 }
@@ -71,9 +77,12 @@ export type SectionRef = `p${number}` | `d${number}`;
  * will add `site`, `footer`, `page:<id>` and `pageorder`. Render from `kind`,
  * `group` and `title` instead — those are stable.
  *
- * `style` is declared but has no producer in Phase 4: branding is unstaged, so
- * both sides of the diff always carry the same value. Phase 8 turns it on. It
- * is declared now so the grouping code is written once.
+ * `style` is declared but has no producer: branding is unstaged, so both sides
+ * of the diff always carry the same value. Phase 8 was expected to turn it on
+ * and did not — it shipped site settings and the footer as live-immediate
+ * fields on `communities.branding`, which is the same unstaged storage. The key
+ * stays declared so the grouping code is written once, and so turning it on
+ * later is not a breaking change.
  */
 export type ChangeKey = 'hero' | 'style' | 'order' | `block:${SectionRef}`;
 
