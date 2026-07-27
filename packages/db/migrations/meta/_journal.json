@@ -281,6 +281,13 @@
       "when": 1784511254576,
       "tag": "0039_pin_function_search_path",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784511314576,
+      "tag": "0040_fix_rent_guard_trigger_depth",
+      "breakpoints": true
     }
   ]
 }
