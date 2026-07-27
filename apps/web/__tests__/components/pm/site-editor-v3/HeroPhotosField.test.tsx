@@ -14,14 +14,27 @@ import { HeroPhotosField } from '@/components/pm/site-editor-v3/inspector/forms/
 import type { HeroPhoto } from '@propertypro/shared';
 
 const uploadMock = vi.hoisted(() => vi.fn());
-vi.mock('@/hooks/use-hero-photos', () => ({
-  useHeroPhotos: () => ({
-    uploads: [],
-    upload: uploadMock,
-    dismiss: vi.fn(),
-    isUploading: false,
-  }),
+// Captured so a test can drive a completion the way the real queue would.
+const heroPhotosHook = vi.hoisted(() => ({
+  onUploaded: null as
+    | ((result: { storagePath: string; altText: string }, item: unknown) => void)
+    | null,
 }));
+vi.mock('@/hooks/use-hero-photos', () => ({
+  useHeroPhotos: ({ onUploaded }: { onUploaded: never }) => {
+    heroPhotosHook.onUploaded = onUploaded;
+    return { uploads: [], upload: uploadMock, dismiss: vi.fn(), isUploading: false };
+  },
+}));
+
+/** jsdom never fires img.onload, so an un-stubbed decode HANGS the test. */
+const okDimensions = () => Promise.resolve({ width: 1920, height: 1080 });
+
+function imageFile(name: string, bytes = 2048): File {
+  const f = new File(['x'], name, { type: 'image/jpeg' });
+  Object.defineProperty(f, 'size', { value: bytes });
+  return f;
+}
 
 const PHOTOS: HeroPhoto[] = [
   { path: '7/hero/pool.jpg', alt: 'The pool' },
@@ -32,13 +45,20 @@ const PHOTOS: HeroPhoto[] = [
 function renderField(photos: HeroPhoto[] = PHOTOS) {
   const onChange = vi.fn();
   const view = render(
-    <HeroPhotosField communityId={7} blockOrder={1} photos={photos} onChange={onChange} />,
+    <HeroPhotosField
+      communityId={7}
+      blockOrder={1}
+      photos={photos}
+      onChange={onChange}
+      readDimensions={okDimensions}
+    />,
   );
   return { onChange, view };
 }
 
 beforeEach(() => {
   uploadMock.mockReset();
+  heroPhotosHook.onUploaded = null;
 });
 
 describe('HeroPhotosField — labelling', () => {
@@ -213,5 +233,147 @@ describe('HeroPhotosField — the cap', () => {
   it('reports how many slots are left', () => {
     renderField();
     expect(screen.getByText(/5 of 8 remaining/)).toBeInTheDocument();
+  });
+});
+
+describe('HeroPhotosField — alt text is collected before the upload', () => {
+  it('stages a picked file for description instead of uploading it', async () => {
+    // The bug this replaces: the file went straight to the queue with an empty
+    // altText, which finalize rejects with a 400 *after* the bytes are stored.
+    const { view } = renderField([]);
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('pool.jpg'));
+
+    expect(await screen.findByLabelText('Alt text for pool.jpg')).toBeInTheDocument();
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(view.container.querySelectorAll('[data-staged-row]')).toHaveLength(1);
+  });
+
+  it('will not upload until every staged file is described or decorative', async () => {
+    renderField([]);
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('pool.jpg'));
+
+    const button = await screen.findByRole('button', { name: /add 1 photo to hero/i });
+    expect(button).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Alt text for pool.jpg'), 'The pool');
+    expect(button).toBeEnabled();
+
+    await userEvent.click(button);
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    expect(uploadMock.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ alt: 'The pool', decorative: false }),
+    ]);
+  });
+
+  it('lets a decorative file upload without alt text', async () => {
+    renderField([]);
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('texture.jpg'));
+    await userEvent.click(await screen.findByLabelText('Decorative — texture.jpg'));
+
+    const button = screen.getByRole('button', { name: /add 1 photo to hero/i });
+    expect(button).toBeEnabled();
+    await userEvent.click(button);
+
+    expect(uploadMock.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ decorative: true, alt: '' }),
+    ]);
+  });
+
+  it('commits the STAGED alt, never the value finalize echoes back', async () => {
+    // The regression for the placeholder bug: an auto-filled description is a
+    // valid-looking alt, so it sails through both `toCanonical` and the
+    // publish gate that exists to catch a missing one.
+    const { onChange } = renderField([]);
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('pool.jpg'));
+    await userEvent.type(
+      await screen.findByLabelText('Alt text for pool.jpg'),
+      'Sun deck by the pool',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
+
+    // Drive the completion the way the real queue does.
+    heroPhotosHook.onUploaded!(
+      { storagePath: '7/hero/abc.jpg', altText: 'SERVER ECHO' },
+      { id: 'staged-1', file: imageFile('pool.jpg'), alt: 'Sun deck by the pool', decorative: false },
+    );
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith([
+        { path: '7/hero/abc.jpg', alt: 'Sun deck by the pool' },
+      ]),
+    );
+  });
+
+  it('commits a decorative photo with no alt key at all', async () => {
+    // heroPhotoSchema is .strict() with an alt-XOR-decorative refine, so an
+    // empty `alt` alongside `decorative` would fail validation.
+    const { onChange } = renderField([]);
+    heroPhotosHook.onUploaded = null;
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('texture.jpg'));
+    await screen.findByLabelText('Decorative — texture.jpg');
+
+    heroPhotosHook.onUploaded!(
+      { storagePath: '7/hero/tex.jpg', altText: 'Decorative image' },
+      { id: 'staged-1', file: imageFile('texture.jpg'), alt: '', decorative: true },
+    );
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith([{ path: '7/hero/tex.jpg', decorative: true }]),
+    );
+  });
+
+  it('rejects an oversized file at pick time, before any network call', async () => {
+    renderField([]);
+    await userEvent.upload(
+      screen.getByLabelText('Add photos'),
+      imageFile('huge.jpg', 12 * 1024 * 1024),
+    );
+
+    expect(await screen.findByText(/huge\.jpg:/)).toBeInTheDocument();
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Alt text for huge.jpg')).not.toBeInTheDocument();
+  });
+
+  it('rejects an undersized image at pick time', async () => {
+    const onChange = vi.fn();
+    render(
+      <HeroPhotosField
+        communityId={7}
+        blockOrder={1}
+        photos={[]}
+        onChange={onChange}
+        readDimensions={() => Promise.resolve({ width: 800, height: 450 })}
+      />,
+    );
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('small.jpg'));
+
+    expect(await screen.findByText(/1600×900/)).toBeInTheDocument();
+    expect(uploadMock).not.toHaveBeenCalled();
+  });
+
+  it('counts staged files against the cap', async () => {
+    // Six committed + two staged is the maximum; the picker must close.
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      path: `7/hero/p${i}.jpg`,
+      alt: `Photo ${i}`,
+    }));
+    renderField(six);
+    await userEvent.upload(screen.getByLabelText('Add photos'), [
+      imageFile('a.jpg'),
+      imageFile('b.jpg'),
+    ]);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText('Add photos')).toBeDisabled();
+  });
+
+  it('still has exactly one live region with staged rows present', async () => {
+    const { view } = renderField([]);
+    await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('pool.jpg'));
+    await screen.findByLabelText('Alt text for pool.jpg');
+
+    expect(view.container.querySelectorAll('[aria-live]')).toHaveLength(1);
   });
 });

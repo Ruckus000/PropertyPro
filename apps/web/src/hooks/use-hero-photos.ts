@@ -7,8 +7,7 @@
  * adding a second upload path — the phase's security summary is explicit that
  * the existing pipeline and its `validate-upload` checks are the only one.
  *
- * What this adds on top is sequencing and per-file status, which a bare
- * mutation cannot express for a multi-file picker.
+ * What this adds on top is sequencing, per-file status, and per-file alt text.
  *
  * Lives in a hook, not a component, because `guard:component-api-calls`
  * forbids components calling `/api/v1` directly and its allowlist is empty.
@@ -18,12 +17,29 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
+import { DECORATIVE_PLACEHOLDER_ALT } from '@/lib/site-assets/client-image';
 import { useImageUpload, type ImageUploadResult } from './use-image-upload';
 
 export type HeroPhotoUploadStatus = 'pending' | 'uploading' | 'done' | 'error';
 
+/**
+ * One file to upload, already described by the PM.
+ *
+ * Alt text is collected BEFORE the upload starts, not after. finalize requires
+ * `altText: z.string().min(1)`, so there is no such thing as uploading first
+ * and describing later — that combination presigns, PUTs the bytes, and only
+ * then 400s, leaving an orphaned object behind every time.
+ */
+export interface HeroPhotoUploadItem {
+  /** Caller-owned identity; doubles as the queue row id. */
+  id: string;
+  file: File;
+  /** Destined for BLOCK CONTENT. Empty iff `decorative`. */
+  alt: string;
+  decorative: boolean;
+}
+
 export interface HeroPhotoUpload {
-  /** Client-side identity. Storage paths do not exist until finalize returns. */
   localId: string;
   filename: string;
   status: HeroPhotoUploadStatus;
@@ -41,14 +57,18 @@ export interface UseHeroPhotosOptions {
    * storage quota, but nothing references them until this lands in block
    * content. Reporting late would widen the window in which a PM who navigates
    * away leaves orphaned bytes behind.
+   *
+   * The ITEM is handed back alongside the result because the authoritative alt
+   * is the one the PM staged, never `result.altText` — which for a decorative
+   * photo is a pipeline placeholder.
    */
-  onUploaded: (result: ImageUploadResult) => void;
+  onUploaded: (result: ImageUploadResult, item: HeroPhotoUploadItem) => void;
 }
 
 export interface UseHeroPhotosResult {
   uploads: HeroPhotoUpload[];
-  /** Queue files. Resolves when the queue drains. */
-  upload: (files: File[], altText: string) => Promise<void>;
+  /** Queue described files. Resolves when the queue drains. */
+  upload: (items: HeroPhotoUploadItem[]) => Promise<void>;
   /** Forget a finished row (the caller owns the durable list). */
   dismiss: (localId: string) => void;
   isUploading: boolean;
@@ -67,8 +87,6 @@ export function useHeroPhotos({
   const onUploadedRef = useRef(onUploaded);
   onUploadedRef.current = onUploaded;
 
-  const seqRef = useRef(0);
-
   const patch = useCallback((localId: string, next: Partial<HeroPhotoUpload>) => {
     setUploads((prev) =>
       prev.map((row) => (row.localId === localId ? { ...row, ...next } : row)),
@@ -76,20 +94,19 @@ export function useHeroPhotos({
   }, []);
 
   const upload = useCallback(
-    async (files: File[], altText: string) => {
-      if (files.length === 0) return;
+    async (items: HeroPhotoUploadItem[]) => {
+      if (items.length === 0) return;
 
-      const queued: HeroPhotoUpload[] = files.map((file) => {
-        seqRef.current += 1;
-        return {
-          localId: `upload-${seqRef.current}`,
-          filename: file.name,
-          status: 'pending',
+      setUploads((prev) => [
+        ...prev,
+        ...items.map((item) => ({
+          localId: item.id,
+          filename: item.file.name,
+          status: 'pending' as const,
           error: null,
           result: null,
-        };
-      });
-      setUploads((prev) => [...prev, ...queued]);
+        })),
+      ]);
       setIsUploading(true);
 
       try {
@@ -99,16 +116,32 @@ export function useHeroPhotos({
         // parallel presigns race that check and can overshoot the plan limit.
         // Finalize also runs a sharp resize per file, so eight concurrent
         // 10 MB uploads is a load profile nothing here was sized for.
-        for (const [index, file] of files.entries()) {
-          const row = queued[index]!;
-          patch(row.localId, { status: 'uploading' });
+        for (const item of items) {
+          const alt = item.alt.trim();
+
+          // Belt and braces behind the UI gate. Sending '' is a guaranteed 400
+          // AFTER the bytes are already in storage, so fail the row here
+          // rather than stranding an object to prove the point.
+          if (!item.decorative && alt.length === 0) {
+            patch(item.id, {
+              status: 'error',
+              error: 'Describe this photo before adding it.',
+            });
+            continue;
+          }
+
+          patch(item.id, { status: 'uploading' });
           try {
-            const result = await mutateAsync({ file, kind: 'hero', altText });
-            patch(row.localId, { status: 'done', result });
-            onUploadedRef.current(result);
+            const result = await mutateAsync({
+              file: item.file,
+              kind: 'hero',
+              altText: item.decorative ? DECORATIVE_PLACEHOLDER_ALT : alt,
+            });
+            patch(item.id, { status: 'done', result });
+            onUploadedRef.current(result, item);
           } catch (caught) {
             // One bad file must not abandon the rest of the queue.
-            patch(row.localId, {
+            patch(item.id, {
               status: 'error',
               error: caught instanceof Error ? caught.message : 'Upload failed.',
             });

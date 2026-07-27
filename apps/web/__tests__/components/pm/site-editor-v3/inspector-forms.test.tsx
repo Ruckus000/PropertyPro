@@ -148,11 +148,15 @@ describe('AmenitiesForm', () => {
     await user.click(screen.getByRole('button', { name: 'Add amenity' }));
     await settleAutosave();
 
-    // The new blank row must not reach the wire — `name` is min(1).
+    // The new blank row must not reach the wire — `name` is min(1). A FULLY
+    // blank row is the transient state right after "Add amenity", so it is
+    // dropped silently rather than blocking the save.
     const sent = upsertMock.mock.calls.at(-1)?.[0]?.content as
       | Record<string, unknown>
       | undefined;
+    // Either nothing was written (canonical unchanged) or exactly Pool was.
     if (sent) expect(sent.items).toEqual([{ name: 'Pool' }]);
+    expect(screen.queryByText(/has a description but no name/)).not.toBeInTheDocument();
   });
 
   it('blocks saving when every row is blank', async () => {
@@ -186,6 +190,53 @@ describe('AmenitiesForm', () => {
     // list.
     expect(screen.getByRole('button', { name: 'Remove amenity 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove amenity 2' })).toBeInTheDocument();
+  });
+
+  it('blocks the save and names the row when a description has no name', async () => {
+    // REGRESSION. `toCanonical` used to filter out any row whose name was
+    // empty, so a PM who cleared a name to retype it — or typed a description
+    // first — had that amenity silently deleted from the stored content while
+    // the form carried on showing it.
+    const user = setupTimers();
+    render(
+      <AmenitiesForm
+        communityId={1}
+        blockType="amenities"
+        blockOrder={5}
+        content={{ items: [{ name: 'Pool' }, { name: 'Gym', description: 'Open 24h' }] }}
+      />,
+    );
+
+    const names = screen.getAllByLabelText('Name');
+    await user.clear(names[1]!);
+    await settleAutosave();
+
+    // Nothing written, and the message points at the offending row.
+    expect(upsertMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/Amenity 2 has a description but no name/)).toBeInTheDocument();
+  });
+
+  it('saves again once the nameless row is given a name', async () => {
+    const user = setupTimers();
+    render(
+      <AmenitiesForm
+        communityId={1}
+        blockType="amenities"
+        blockOrder={5}
+        content={{ items: [{ name: 'Pool' }, { name: 'Gym', description: 'Open 24h' }] }}
+      />,
+    );
+
+    const names = screen.getAllByLabelText('Name');
+    await user.clear(names[1]!);
+    await user.type(names[1]!, 'Fitness centre');
+    await settleAutosave();
+
+    const sent = upsertMock.mock.calls.at(-1)![0].content as Record<string, unknown>;
+    expect(sent.items).toEqual([
+      { name: 'Pool' },
+      { name: 'Fitness centre', description: 'Open 24h' },
+    ]);
   });
 });
 

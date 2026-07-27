@@ -69,11 +69,21 @@ export function useBlockForm<TDraft>({
   save,
 }: UseBlockFormOptions<TDraft>): UseBlockFormResult<TDraft> {
   const [draft, setDraft] = useState<TDraft>(() => toDraft(content));
-  // The server content this draft is reconciled against.
-  const [syncedKey, setSyncedKey] = useState(() => stableStringify(content));
+  // The server content this draft is reconciled against — the CONTENT, not
+  // just its key, because "has the PM edited anything" is answered by
+  // re-projecting it (see the comparison below).
+  const [synced, setSynced] = useState<{ content: unknown; key: string }>(() => ({
+    content,
+    key: stableStringify(content),
+  }));
 
   // What we last handed to `save` — used to recognise our own echo.
   const lastSentKeyRef = useRef<string | null>(null);
+
+  // Set during render when foreign content is adopted; consumed by the effect
+  // below, which reseats the autosave baseline so the adoption is not mistaken
+  // for a PM edit.
+  const adoptedRef = useRef(false);
 
   // Latest callbacks, read at fire time. `toCanonical`/`toDraft`/`save` are
   // typically inline arrows and change identity every render; capturing them
@@ -91,15 +101,41 @@ export function useBlockForm<TDraft>({
   // paint, which would show the PM one frame of content we are about to
   // replace. React re-runs this component immediately with the new state.
   const incomingKey = stableStringify(content);
-  if (incomingKey !== syncedKey) {
+  if (incomingKey !== synced.key) {
     const isEcho = incomingKey === lastSentKeyRef.current;
-    const isClean = stableStringify(canonical) === syncedKey;
+
+    // Projection vs projection, NOT projection vs raw stored content.
+    //
+    // Comparing `canonical` against the stored content directly only agrees
+    // when toDraft -> toCanonical round-trips exactly, and it deliberately
+    // does not everywhere: `HeroForm` migrates a legacy `heroImagePath` into
+    // `photos`, and any form that omits a default (a stored
+    // `variant: 'standard'`) drops it. Those blocks read as permanently dirty
+    // and would never adopt a foreign change.
+    const baselineDraft = toDraftRef.current(synced.content);
+    const baselineCanonical = toCanonicalRef.current(baselineDraft);
+    const isClean =
+      canonical === null || baselineCanonical === null
+        ? // One side is unsaveable, and `stableStringify(null)` is 'null' on
+          // both — so comparing projections here would call a PM who just
+          // cleared a required field "clean" against a stored block that is
+          // also incomplete, and clobber their draft. Fall back to comparing
+          // the drafts themselves: conservative, and still adopts when the
+          // draft is genuinely untouched.
+          stableStringify(draft) === stableStringify(baselineDraft)
+        : stableStringify(canonical) === stableStringify(baselineCanonical);
+
     // Advance the baseline unconditionally, so a foreign change arriving while
     // the PM has unsaved edits is recorded as seen rather than re-evaluated on
     // every subsequent render.
-    setSyncedKey(incomingKey);
+    setSynced({ content, key: incomingKey });
     if (!isEcho && isClean) {
       setDraft(toDraftRef.current(content));
+      // Adopting is not an edit. Without this the changed `canonical` arms the
+      // debounce and writes the adopted content back one window later — a
+      // write, and a publish-diff entry, that no PM action caused. Deferred to
+      // an effect because `markClean` cannot be called during render.
+      adoptedRef.current = true;
     }
   }
 
@@ -110,6 +146,16 @@ export function useBlockForm<TDraft>({
   }, []);
 
   const autosave = useAutosave(canonical, persist, { enabled: canonical !== null });
+
+  // Consume the adoption flag. Runs after the render that adopted, and after
+  // the debounce effect has armed — which is fine, because `markClean` cancels
+  // that debounce and `runSave` re-checks the baseline at fire time anyway.
+  const { markClean } = autosave;
+  useEffect(() => {
+    if (!adoptedRef.current) return;
+    adoptedRef.current = false;
+    markClean(canonical);
+  }, [markClean, canonical]);
 
   // Report save state to the top bar's StatusLine, and hand the slot back on
   // unmount so closing a panel mid-save does not strand a spinner.

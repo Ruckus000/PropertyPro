@@ -26,8 +26,15 @@ function resultFor(name: string) {
     storagePath: `7/hero/${name}`,
     variant1600Path: `7/hero/${name}.1600w.webp`,
     variant800Path: `7/hero/${name}.800w.webp`,
-    altText: '',
+    // finalize echoes back whatever it was sent. Deliberately NOT the alt the
+    // caller staged, so a test that reads this instead of the item fails.
+    altText: 'SERVER ECHO',
   };
+}
+
+/** A described file, ready to upload. */
+function item(name: string, alt = `A photo called ${name}`) {
+  return { id: `staged-${name}`, file: file(name), alt, decorative: false };
 }
 
 beforeEach(() => {
@@ -51,7 +58,7 @@ describe('useHeroPhotos', () => {
     const { result } = renderHook(() => useHeroPhotos({ communityId: 7, onUploaded }));
 
     await act(async () => {
-      await result.current.upload([file('a.jpg'), file('b.jpg'), file('c.jpg')], '');
+      await result.current.upload([item('a.jpg'), item('b.jpg'), item('c.jpg')]);
     });
 
     expect(maxInFlight).toBe(1);
@@ -69,7 +76,7 @@ describe('useHeroPhotos', () => {
     const { result } = renderHook(() => useHeroPhotos({ communityId: 7, onUploaded }));
 
     await act(async () => {
-      await result.current.upload([file('a.jpg'), file('b.jpg')], '');
+      await result.current.upload([item('a.jpg'), item('b.jpg')]);
     });
 
     expect(onUploaded).toHaveBeenCalledTimes(2);
@@ -84,10 +91,10 @@ describe('useHeroPhotos', () => {
     const { result } = renderHook(() => useHeroPhotos({ communityId: 7, onUploaded }));
 
     await act(async () => {
-      await result.current.upload([file('a.jpg')], '');
+      await result.current.upload([item('a.jpg')]);
     });
 
-    expect(onUploaded).toHaveBeenCalledWith(
+    expect(onUploaded.mock.calls[0]![0]).toEqual(
       expect.objectContaining({ storagePath: '7/hero/a.jpg' }),
     );
   });
@@ -101,7 +108,7 @@ describe('useHeroPhotos', () => {
     const { result } = renderHook(() => useHeroPhotos({ communityId: 7, onUploaded }));
 
     await act(async () => {
-      await result.current.upload([file('a.jpg'), file('b.jpg')], '');
+      await result.current.upload([item('a.jpg'), item('b.jpg')]);
     });
 
     // The good file still landed.
@@ -119,7 +126,7 @@ describe('useHeroPhotos', () => {
     const { result } = renderHook(() => useHeroPhotos({ communityId: 7, onUploaded }));
 
     await act(async () => {
-      await result.current.upload([], '');
+      await result.current.upload([]);
     });
 
     expect(mutateAsyncMock).not.toHaveBeenCalled();
@@ -140,7 +147,7 @@ describe('useHeroPhotos', () => {
 
     let pending: Promise<void>;
     act(() => {
-      pending = result.current.upload([file('a.jpg')], '');
+      pending = result.current.upload([item('a.jpg')]);
     });
 
     await waitFor(() => expect(result.current.isUploading).toBe(true));
@@ -151,5 +158,86 @@ describe('useHeroPhotos', () => {
     });
 
     expect(result.current.isUploading).toBe(false);
+  });
+
+  it('never sends an empty altText to finalize', async () => {
+    // THE regression. finalize requires `altText: z.string().min(1)`, so an
+    // empty string presigns, PUTs the bytes, and only then 400s — leaving an
+    // orphaned object every attempt. This is why alt is collected before the
+    // upload rather than typed into the row afterwards.
+    mutateAsyncMock.mockImplementation(async ({ file: f }: { file: File }) =>
+      resultFor(f.name),
+    );
+    const { result } = renderHook(() =>
+      useHeroPhotos({ communityId: 7, onUploaded: vi.fn() }),
+    );
+
+    await act(async () => {
+      await result.current.upload([
+        item('described.jpg', 'The pool at sunset'),
+        { id: 'staged-deco', file: file('deco.jpg'), alt: '', decorative: true },
+      ]);
+    });
+
+    for (const call of mutateAsyncMock.mock.calls) {
+      expect(call[0].altText).not.toBe('');
+      expect(call[0].altText.length).toBeGreaterThan(0);
+    }
+    // A decorative photo carries no block-content alt, so the pipeline gets a
+    // placeholder purely to satisfy the contract.
+    expect(mutateAsyncMock.mock.calls[1]![0].altText).toBe('Decorative image');
+  });
+
+  it('sends each file its own alt text', async () => {
+    mutateAsyncMock.mockImplementation(async ({ file: f }: { file: File }) =>
+      resultFor(f.name),
+    );
+    const { result } = renderHook(() =>
+      useHeroPhotos({ communityId: 7, onUploaded: vi.fn() }),
+    );
+
+    await act(async () => {
+      await result.current.upload([
+        item('a.jpg', 'The lobby'),
+        item('b.jpg', 'The gym'),
+      ]);
+    });
+
+    expect(mutateAsyncMock.mock.calls[0]![0].altText).toBe('The lobby');
+    expect(mutateAsyncMock.mock.calls[1]![0].altText).toBe('The gym');
+  });
+
+  it('hands the staged item back so the caller never needs result.altText', async () => {
+    mutateAsyncMock.mockResolvedValue(resultFor('a.jpg'));
+    const onUploaded = vi.fn();
+    const { result } = renderHook(() => useHeroPhotos({ communityId: 7, onUploaded }));
+
+    await act(async () => {
+      await result.current.upload([item('a.jpg', 'The real description')]);
+    });
+
+    expect(onUploaded.mock.calls[0]![1]).toEqual(
+      expect.objectContaining({ alt: 'The real description', decorative: false }),
+    );
+  });
+
+  it('errors a blank non-decorative row instead of uploading it', async () => {
+    // Belt and braces behind the UI gate: sending '' would strand bytes in the
+    // bucket before the 400 lands, so the row fails locally instead.
+    const { result } = renderHook(() =>
+      useHeroPhotos({ communityId: 7, onUploaded: vi.fn() }),
+    );
+
+    await act(async () => {
+      await result.current.upload([
+        { id: 'staged-blank', file: file('blank.jpg'), alt: '   ', decorative: false },
+      ]);
+    });
+
+    expect(mutateAsyncMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      const row = result.current.uploads.find((u) => u.localId === 'staged-blank');
+      expect(row?.status).toBe('error');
+    });
   });
 });

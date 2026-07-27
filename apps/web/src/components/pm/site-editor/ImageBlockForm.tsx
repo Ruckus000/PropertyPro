@@ -4,6 +4,7 @@ import ReactCrop, { type Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import type { ImageBlockContent } from '@propertypro/shared';
 import { useImageUpload } from '@/hooks/use-image-upload';
+import { DECORATIVE_PLACEHOLDER_ALT } from '@/lib/site-assets/client-image';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
 
 interface Props {
@@ -89,7 +90,10 @@ export function ImageBlockForm({ communityId, blockOrder, initial, onSaved }: Pr
         const result = await upload.mutateAsync({
           file,
           kind: 'content',
-          altText: decorative ? '' : altText.trim(),
+          // NOT '' — finalize requires altText.min(1), so an empty string
+        // presigns and PUTs the bytes and only then 400s. Same constant and
+        // same reason as GalleryBlockForm.
+        altText: decorative ? DECORATIVE_PLACEHOLDER_ALT : altText.trim(),
           cropBox: scaled ?? undefined,
         });
         imagePath = result.storagePath;

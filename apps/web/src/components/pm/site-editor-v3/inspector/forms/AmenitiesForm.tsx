@@ -56,14 +56,45 @@ function toDraft(content: unknown): AmenitiesDraft {
   };
 }
 
+/** Why this draft cannot be saved yet, if it cannot. */
+export type AmenitiesProblem = 'nameless-description' | 'no-items' | null;
+
+/**
+ * The single rule for what blocks a save, used by BOTH `toCanonical` and the
+ * message the PM reads. Two copies of this drift the first time either is
+ * edited, and then the form refuses to save without saying why.
+ *
+ * A FULLY blank row is fine and is dropped silently: that is the transient
+ * state right after "Add amenity", and `amenitiesBlockSchema.items` is
+ * `min(1)` so it could never be written anyway.
+ *
+ * A row with a description but no NAME is different — it holds text the PM
+ * typed. Dropping it silently is data loss, so it blocks the save instead.
+ * Returns the row index so the message can point at it.
+ */
+export function firstProblem(draft: AmenitiesDraft): {
+  problem: AmenitiesProblem;
+  index: number;
+} {
+  const index = draft.items.findIndex(
+    (item) => item.name.trim().length === 0 && item.description.trim().length > 0,
+  );
+  if (index >= 0) return { problem: 'nameless-description', index };
+  const hasNamed = draft.items.some((item) => item.name.trim().length > 0);
+  return { problem: hasNamed ? null : 'no-items', index: -1 };
+}
+
 /**
  * `amenitiesBlockSchema.items` is `min(1)`, so a draft whose rows are all blank
- * has nothing valid to write. Blank rows are dropped rather than sent — an
- * amenity with an empty name fails `min(1)` at publish.
+ * has nothing valid to write.
  */
 function toCanonical(draft: AmenitiesDraft): unknown | null {
+  if (firstProblem(draft).problem !== null) return null;
+
   const items = draft.items
     .map((item) => ({ name: item.name.trim(), description: item.description.trim() }))
+    // Safe now: `firstProblem` has already refused anything that carries text
+    // we would be discarding, so what remains is genuinely empty.
     .filter((item) => item.name.length > 0)
     .map((item) => ({
       name: item.name,
@@ -97,6 +128,12 @@ export function AmenitiesForm({ communityId, blockOrder, content }: BlockFormPro
   });
 
   const rows = draft.items.length > 0 ? draft.items : [{ name: '', description: '' }];
+
+  // Read from `draft.items`, which is what `firstProblem` inspects — the
+  // synthetic blank `rows` entry above is display-only, and `setRow`
+  // materialises it into `draft.items` before anything can be typed into it,
+  // so the reported index always matches the rendered row.
+  const { problem, index: problemIndex } = firstProblem(draft);
   const headingId = `amenities-heading-${blockOrder}`;
 
   const setRow = (index: number, next: Partial<AmenityDraft>) =>
@@ -194,7 +231,9 @@ export function AmenitiesForm({ communityId, blockOrder, content }: BlockFormPro
 
         {isIncomplete && (
           <p className="text-xs text-status-danger">
-            Name at least one amenity before this section can be saved.
+            {problem === 'nameless-description'
+              ? `Amenity ${problemIndex + 1} has a description but no name. Add a name, or clear the description.`
+              : 'Name at least one amenity before this section can be saved.'}
           </p>
         )}
       </div>

@@ -11,11 +11,27 @@ export interface AutosaveState {
   error: Error | null;
 }
 
-export interface UseAutosaveResult extends AutosaveState {
+// Defaulted so the common `UseAutosaveResult` spelling keeps working; only
+// `markClean` needs the parameter.
+export interface UseAutosaveResult<T = unknown> extends AutosaveState {
   /** Manual attempt after a failure (also resets the retry budget). */
   retry: () => void;
   /** Cancel the debounce and save now. Resolves when the write settles. */
   flush: () => Promise<void>;
+  /**
+   * Adopt `value` as the already-saved baseline, cancelling any pending write.
+   *
+   * For the case where the value changed but NOT because the user edited it —
+   * a consumer reconciling against fresh server content. Without this, adopting
+   * that content arms the debounce and writes it straight back one window
+   * later, producing a write (and a publish-diff entry) that no user action
+   * caused.
+   *
+   * Safe to call after the debounce effect has already armed: `runSave`
+   * re-reads `savedKeyRef` at fire time and returns early when the pending
+   * value matches it, and `flush()` goes through the same guard.
+   */
+  markClean: (value: T) => void;
 }
 
 export interface UseAutosaveOptions {
@@ -72,7 +88,7 @@ export function useAutosave<T>(
   value: T,
   save: (value: T) => Promise<void>,
   options: UseAutosaveOptions = {},
-): UseAutosaveResult {
+): UseAutosaveResult<T> {
   const { delayMs = DEFAULT_AUTOSAVE_DELAY_MS, enabled = true } = options;
 
   const [state, setState] = useState<AutosaveState>({
@@ -201,5 +217,19 @@ export function useAutosave<T>(
     await runSave();
   }, [clearDebounce, runSave]);
 
-  return { ...state, retry, flush };
+  const markClean = useCallback(
+    (next: T) => {
+      // Reseat the baseline the effect and the retry closure both read. They
+      // read `savedKeyRef` at fire time rather than capturing it, so this is
+      // observed by a debounce that has ALREADY been armed — `runSave` bails
+      // when the pending value matches the baseline.
+      clearDebounce();
+      clearRetry();
+      savedKeyRef.current = stableStringify(next);
+      attemptsRef.current = 0;
+    },
+    [clearDebounce, clearRetry],
+  );
+
+  return { ...state, retry, flush, markClean };
 }

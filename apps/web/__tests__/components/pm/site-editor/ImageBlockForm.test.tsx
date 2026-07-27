@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -114,6 +114,61 @@ describe('<ImageBlockForm>', () => {
     // Wait for error to appear
     await screen.findByRole('alert');
     expect(screen.getByRole('alert')).toHaveTextContent('Upload service unavailable.');
+  });
+
+  it('sends a non-empty altText to finalize for a decorative image', async () => {
+    // REGRESSION. finalize requires `altText: z.string().min(1)`, so sending
+    // '' presigned and PUT the bytes and only then 400'd — every decorative
+    // image upload failed with an object already stranded in the bucket.
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      // The PUT step's body is a File, not JSON — parsing it unguarded throws
+      // and the upload never reaches finalize.
+      let body: Record<string, unknown> = {};
+      if (typeof init?.body === 'string') {
+        try {
+          body = JSON.parse(init.body) as Record<string, unknown>;
+        } catch {
+          body = {};
+        }
+      }
+      calls.push({ url: String(url), body });
+      if (String(url).includes('/presign')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: { uploadUrl: 'https://x/up', token: 't', storagePath: '1/content/a.jpg' },
+          }),
+        } as Response;
+      }
+      if (String(url).includes('/finalize')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              variant1600Path: '1/content/a.jpg.1600w.webp',
+              variant800Path: '1/content/a.jpg.800w.webp',
+              altText: body.altText,
+            },
+          }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({ data: { ok: true } }) } as Response;
+    }) as unknown as typeof fetch;
+
+    render(wrap(<ImageBlockForm communityId={1} blockOrder={3} initial={null} />));
+
+    const file = new File(['x'], 'deco.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Image'), file);
+    await userEvent.click(screen.getByLabelText(/decorative image/i));
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      const finalize = calls.find((c) => c.url.includes('/finalize'));
+      expect(finalize).toBeDefined();
+      expect(finalize!.body.altText).not.toBe('');
+      expect(String(finalize!.body.altText).length).toBeGreaterThan(0);
+    });
   });
 });
 
