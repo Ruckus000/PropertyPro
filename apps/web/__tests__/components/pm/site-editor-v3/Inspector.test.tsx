@@ -18,12 +18,21 @@ vi.mock('@/hooks/use-media-query', () => ({
 const editorMock = vi.hoisted(() => ({
   selection: null as CanvasSelection | null,
   clear: vi.fn(),
+  blocks: [] as unknown[],
 }));
 vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   useSiteEditor: () => ({
     selection: editorMock.selection,
     clear: editorMock.clear,
+    blocks: editorMock.blocks,
   }),
+}));
+
+// The inspector now dispatches to a real form for types that have one, and
+// TextForm reaches the blocks hook. Mocked completely — a partial factory
+// fails at module load and reads as the inspector breaking.
+vi.mock('@/hooks/use-content-blocks', () => ({
+  useUpsertContentBlock: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 const TEXT_SELECTION: CanvasSelection = {
@@ -38,7 +47,7 @@ function Harness() {
   return (
     <div>
       <button type="button">Text section</button>
-      <Inspector />
+      <Inspector communityId={42} />
     </div>
   );
 }
@@ -47,17 +56,20 @@ beforeEach(() => {
   vi.clearAllMocks();
   isNarrowMock.value = false;
   editorMock.selection = null;
+  editorMock.blocks = [
+    { id: 7, blockType: 'text', blockOrder: 3, content: { body: 'Hello.' }, isDraft: false, publishedAt: null },
+  ];
 });
 
 describe('Inspector — empty selection', () => {
   it('renders nothing at all when no section is selected', () => {
-    const { container } = render(<Inspector />);
+    const { container } = render(<Inspector communityId={42} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing in overlay mode either', () => {
     isNarrowMock.value = true;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
@@ -65,7 +77,7 @@ describe('Inspector — empty selection', () => {
 describe('Inspector — presentation', () => {
   it('docks as a column at or above 1280px', () => {
     editorMock.selection = TEXT_SELECTION;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     expect(screen.getByRole('complementary', { name: 'Text settings' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -77,25 +89,33 @@ describe('Inspector — presentation', () => {
   it('overlays as a sheet below 1280px', async () => {
     isNarrowMock.value = true;
     editorMock.selection = TEXT_SELECTION;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
   it('names the selected section in both modes', async () => {
     editorMock.selection = { ...TEXT_SELECTION, blockType: 'documents' };
-    const docked = render(<Inspector />);
+    const docked = render(<Inspector communityId={42} />);
     expect(screen.getByText('Documents settings')).toBeInTheDocument();
     docked.unmount();
 
     isNarrowMock.value = true;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     expect(await screen.findByText('Documents settings')).toBeInTheDocument();
   });
 
-  it('says the per-block forms are still to come rather than showing an empty panel', () => {
+  it('renders the edit form for a section type that has one', async () => {
     editorMock.selection = TEXT_SELECTION;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
+    // The form is code-split, so `find*` is the assertion that it actually
+    // arrived rather than that the skeleton rendered.
+    expect(await screen.findByLabelText(/Body/)).toHaveValue('Hello.');
+  });
+
+  it('explains itself for a section type with no form yet, rather than showing an empty panel', () => {
+    editorMock.selection = { ...TEXT_SELECTION, blockType: 'contact' };
+    render(<Inspector communityId={42} />);
     expect(screen.getByText(/arrive in a later update/i)).toBeInTheDocument();
   });
 });
@@ -104,7 +124,7 @@ describe('Inspector — dismissal', () => {
   it('clears the selection from the docked close button', async () => {
     const user = userEvent.setup();
     editorMock.selection = TEXT_SELECTION;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     await user.click(screen.getByRole('button', { name: 'Close settings' }));
     expect(editorMock.clear).toHaveBeenCalledTimes(1);
   });
@@ -113,7 +133,7 @@ describe('Inspector — dismissal', () => {
     const user = userEvent.setup();
     isNarrowMock.value = true;
     editorMock.selection = TEXT_SELECTION;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     await user.click(await screen.findByRole('button', { name: /close/i }));
     expect(editorMock.clear).toHaveBeenCalledTimes(1);
   });
@@ -131,7 +151,7 @@ describe('Inspector — dismissal', () => {
     const user = userEvent.setup();
     isNarrowMock.value = true;
     editorMock.selection = TEXT_SELECTION;
-    render(<Inspector />);
+    render(<Inspector communityId={42} />);
     // Wait for the code-split sheet before pressing Escape — Radix owns the
     // key handling, so the assertion is meaningless until it has mounted.
     await screen.findByRole('dialog');
@@ -169,7 +189,7 @@ describe('Inspector — focus return', () => {
         <div>
           <button type="button">Text section</button>
           <button type="button">Image section</button>
-          <Inspector />
+          <Inspector communityId={42} />
         </div>
       );
     }
@@ -205,7 +225,7 @@ describe('Inspector — focus return', () => {
         <div>
           <button type="button">Text section</button>
           <button type="button">Somewhere else</button>
-          <Inspector />
+          <Inspector communityId={42} />
         </div>
       );
     }
@@ -231,6 +251,6 @@ describe('Inspector — focus return', () => {
 
     // The section the PM selected disappears (a discard, another PM's publish).
     editorMock.selection = null;
-    expect(() => view.rerender(<Inspector />)).not.toThrow();
+    expect(() => view.rerender(<Inspector communityId={42} />)).not.toThrow();
   });
 });

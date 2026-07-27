@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useHeroBlock, useUpdateHeroBlock } from '@/hooks/use-hero-block';
 import type { HeroBlockContent } from '@propertypro/shared';
+import { carryHeroImagery } from '@/lib/site-editor/hero-imagery';
 
 const BODY_MAX = 280;
 const BODY_SOFT_WARN = 200;
@@ -61,15 +62,17 @@ export function WelcomeMessageEditor({
     setOutcome(null);
     // Compose a full hero payload: keep all existing fields, replace
     // subtitle. If subtitle is empty, drop the field (it's optional).
+    //
+    // Imagery goes through `carryHeroImagery` rather than being spelled out
+    // here — this allowlist silently dropped `photos` when that field was
+    // added, so saving a welcome message destroyed the PM's whole gallery.
     const existing = heroQuery.data ?? null;
     const payload: HeroBlockContent = {
       headline: existing?.headline ?? defaultHeadline,
       ...(existing?.ctaText && existing?.ctaTarget
         ? { ctaText: existing.ctaText, ctaTarget: existing.ctaTarget }
         : {}),
-      ...(existing?.heroImagePath && existing?.heroImageAlt
-        ? { heroImagePath: existing.heroImagePath, heroImageAlt: existing.heroImageAlt }
-        : {}),
+      ...carryHeroImagery(existing),
       ...(trimmed.length > 0 ? { subtitle: trimmed } : {}),
     };
     try {
