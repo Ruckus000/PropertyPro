@@ -336,7 +336,7 @@ export const RLS_TENANT_TABLES = [
     tableName: 'document_drafts',
     policyFamily: 'tenant_crud',
     notes:
-      'Authored-document drafts. Four membership-scoped policies (document_drafts_community_{read,insert,update,delete}) on pp_rls_can_access_community(community_id), plus an explicit document_drafts_service_bypass FOR ALL on pp_rls_is_privileged(). Baseline names; write-scope trigger present under the legacy name document_drafts_tenant_scope. The UPDATE policy has USING but no WITH CHECK — the trigger is what stops a row being moved out of its community.',
+      'Authored-document drafts. Four membership-scoped policies (document_drafts_community_{read,insert,update,delete}) on pp_rls_can_access_community(community_id), plus an explicit document_drafts_service_bypass FOR ALL on pp_rls_is_privileged(). Baseline names; write-scope trigger present under the legacy name document_drafts_tenant_scope. The UPDATE policy declares only USING, which Postgres applies as the WITH CHECK too — so the new row IS constrained, but only to a community the caller can access. The trigger is what pins it to the ACTIVE tenant, which matters for a caller who belongs to more than one.',
   },
   {
     tableName: 'faqs',
@@ -396,13 +396,13 @@ export const RLS_TENANT_TABLES = [
     tableName: 'emergency_broadcasts',
     policyFamily: 'tenant_crud',
     notes:
-      'Emergency broadcast messages. Four policies (pp_emergency_broadcasts_{select,insert,update,delete}) sharing one predicate: pp_rls_is_privileged() OR (auth.uid() IS NOT NULL AND pp_rls_can_access_community(community_id)) — the membership check with an explicit not-anon guard, so equivalent to tenant_crud for any authenticated caller. Bespoke names, so an override entry. GAP: this table has NO write-scope trigger of any name; community_id on write is guarded only by the policy WITH CHECK. Recorded as a documented exception in the suite pending a follow-up migration.',
+      'Emergency broadcast messages. Four policies (pp_emergency_broadcasts_{select,insert,update,delete}) sharing one predicate: pp_rls_is_privileged() OR (auth.uid() IS NOT NULL AND pp_rls_can_access_community(community_id)) — the membership check with an explicit not-anon guard, so equivalent to tenant_crud for any authenticated caller. Bespoke names, so an override entry. Had no write-scope trigger of any name until 0037, which installed the canonical pp_rls_enforce_tenant_scope: the WITH CHECK alone only rejects a community_id the caller cannot access, so a member of two communities could write into whichever they named regardless of the resolved tenant context. The trigger rewrites it instead.',
   },
   {
     tableName: 'emergency_broadcast_recipients',
     policyFamily: 'tenant_crud',
     notes:
-      'Per-recipient delivery rows for an emergency broadcast. Identical policy shape and identical missing-trigger gap as emergency_broadcasts.',
+      'Per-recipient delivery rows for an emergency broadcast. Identical policy shape to emergency_broadcasts, and the same missing write-scope trigger — both closed by 0037.',
   },
   {
     tableName: 'notifications',
@@ -446,7 +446,7 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
   {
     tableName: 'user_search_index',
     reason:
-      'Global cross-community user search index (no community_id), so tenant scoping does not apply. GAP, NOT A CLEAN EXCLUSION: this table has no row-level security of any kind — no ENABLE ROW LEVEL SECURITY, no policies, and no REVOKE anywhere in the migrations — while holding full_name and email (both trigram-indexed). Under Supabase\'s open grant baseline that leaves it directly readable by anon and authenticated; it is the table behind Supabase\'s "RLS Disabled in Public" advisor entry. Listed here so the registry is complete and the drift guard passes; hardening it needs its own migration (enable RLS + REVOKE ALL from anon/authenticated, matching the 0035 posture) and is deliberately out of scope for this config-only change.',
+      'Global cross-community user search index (no community_id), so tenant scoping does not apply. Held full_name and email (both trigram-indexed) with NO row-level security of any kind until 0037 — no ENABLE, no policies, no REVOKE — which under Supabase\'s open grant baseline left it directly readable by anon and authenticated, and was the table behind Supabase\'s "RLS Disabled in Public" advisor entry. 0037 gives it the same posture as the seven sibling platform tables: RLS enabled and forced, zero policies (the deny-everyone default), and REVOKE ALL from anon/authenticated with service_role retaining CRUD. The sole runtime reader (packages/db/src/queries/trigram-search.ts) goes over the privileged connection and is unaffected.',
   },
 ] as const satisfies readonly RlsGlobalTableExclusion[];
 

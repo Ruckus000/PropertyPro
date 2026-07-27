@@ -323,7 +323,11 @@ const NO_RLS_ALLOWLIST = new Set<string>([
   'contracts',
   'contract_bids',
   'maintenance_comments',
-  // user_search_index mirrors auth.users for search — no community_id, not tenant-scoped
+  // user_search_index — created by 0002, ENABLE RLS covered by 0037_close_rls_gaps.
+  // This check is per-file, so a table hardened in a LATER migration still needs the
+  // entry; that is what this allowlist is for. The reason has changed though: it used
+  // to read "no community_id, not tenant-scoped", which was true but was quietly
+  // excusing a table that had no RLS at all rather than one hardened elsewhere.
   'user_search_index',
   // PR #1a: site_blocks platform tables — ENABLE RLS covered by 0005_site_blocks_rls_hardening
   'site_theme_presets',
@@ -545,8 +549,19 @@ function hasTenantWriteScopeTrigger(
   //    bridge across unrelated statements in the concatenated corpus and pair
   //    a CREATE TRIGGER with some later `ON "public"."other_table"` (e.g. a
   //    CREATE POLICY), reporting a trigger that does not exist.
+  // 3. The statement must also EXECUTE the enforcement function. Matching the
+  //    trigger NAME alone was a safe proxy only while the name was hardcoded to
+  //    the convention; now that per-table names are declarable via
+  //    LEGACY_WRITE_SCOPE_TRIGGER_NAMES, a trigger called `foo_tenant_scope` that
+  //    actually runs set_updated_at() would satisfy a name-only check and report
+  //    a table as write-scoped when nothing enforces its community_id. Both
+  //    spellings appear in the corpus: bare, and "public"."…" schema-qualified.
+  //    Still bounded by [^;] so the whole match stays inside one statement.
+  const enforcementFn =
+    '[^;]*?EXECUTE\\s+(?:FUNCTION|PROCEDURE)\\s+(?:(?:"[^"]+"|\\w+)\\.)?' +
+    '(?:"pp_rls_enforce_tenant_community_id"|\\bpp_rls_enforce_tenant_community_id\\b)';
   const directPattern = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)`,
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)[^;]*?\\sON\\s+(?:(?:"[^"]+"|\\w+)\\.)?(?:"${escapedTableName}"|\\b${escapedTableName}\\b)${enforcementFn}`,
     'i',
   );
   if (directPattern.test(sql)) return true;
@@ -560,7 +575,7 @@ function hasTenantWriteScopeTrigger(
     'i',
   );
   const hasLoopTriggerInstall = new RegExp(
-    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)`,
+    `CREATE\\s+TRIGGER\\s+(?:"${escapedTriggerName}"|\\b${escapedTriggerName}\\b)${enforcementFn}`,
     'i',
   );
   return arrayContainsTable.test(sql) && hasLoopTriggerInstall.test(sql);
@@ -765,16 +780,6 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
     notifications: 'notifications_enforce_tenant_scope',
   };
 
-  // KNOWN GAP, not a naming quirk: these two have community_id and tenant-scoped
-  // policies but NO write-scope trigger under any name, so community_id on write
-  // is guarded only by the policy WITH CHECK. Every other tenant_crud table has
-  // one. Registered in rls-config on 2026-07-26 with the gap documented; closing
-  // it needs its own migration, at which point this set should be emptied.
-  const TABLES_WITHOUT_WRITE_SCOPE_TRIGGER = new Set([
-    'emergency_broadcasts',
-    'emergency_broadcast_recipients',
-  ]);
-
   const violations: Violation[] = [];
   for (const entry of RLS_TENANT_TABLES) {
     const t = entry.tableName;
@@ -802,10 +807,14 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
     // scan for CREATE POLICY is both redundant and brittle against the
     // quote-wrapped baseline DDL. FORCE + write-scope-trigger coverage below
     // is what no other gate enforces, which is the gap this check fills.
+    // No per-table exemptions. emergency_broadcasts and
+    // emergency_broadcast_recipients were exempted here when they were registered
+    // — neither had a write-scope trigger under any name — and 0037 installed the
+    // canonical trigger on both, so the exemption and its self-destruct assertion
+    // are gone. Every non-exempt family is now checked unconditionally.
     const expectedTriggerName = LEGACY_WRITE_SCOPE_TRIGGER_NAMES[t] ?? 'pp_rls_enforce_tenant_scope';
     if (
       !FAMILIES_WITHOUT_TRIGGER.has(entry.policyFamily) &&
-      !TABLES_WITHOUT_WRITE_SCOPE_TRIGGER.has(t) &&
       !hasTenantWriteScopeTrigger(corpus, t, expectedTriggerName)
     ) {
       violations.push({
@@ -814,21 +823,6 @@ async function runRlsTenantTableCoverageCheck(): Promise<number> {
         column: 0,
         code: 'DB005',
         message: `Tenant table "${t}" (${entry.policyFamily}) has no ${expectedTriggerName} trigger in any migration.`,
-      });
-    }
-    // Guard the exemption itself: once a follow-up migration adds the missing
-    // trigger, this fires and forces the entry to be removed rather than left
-    // behind as a stale excuse.
-    if (
-      TABLES_WITHOUT_WRITE_SCOPE_TRIGGER.has(t) &&
-      hasTenantWriteScopeTrigger(corpus, t, expectedTriggerName)
-    ) {
-      violations.push({
-        file: migrationsRoot,
-        line: 0,
-        column: 0,
-        code: 'DB005',
-        message: `Tenant table "${t}" now has a write-scope trigger — remove it from TABLES_WITHOUT_WRITE_SCOPE_TRIGGER.`,
       });
     }
   }
