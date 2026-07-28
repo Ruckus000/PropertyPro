@@ -30,7 +30,7 @@ jobs:
         # anonymously made a Docker Hub blip block all merges: observed as three
         # consecutive `Get "https://registry-1.docker.io/v2/": context deadline
         # exceeded` failures, which failed the required check on an unrelated PR.
-        image: public.ecr.aws/docker/library/postgres:16
+        image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
