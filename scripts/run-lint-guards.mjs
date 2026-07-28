@@ -42,6 +42,7 @@ const GUARDS = [
   'guard:admin-error-leakage',
   'guard:internal-cron-auth',
   'guard:token-auth-routes',
+  'guard:shared-side-effects',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.
