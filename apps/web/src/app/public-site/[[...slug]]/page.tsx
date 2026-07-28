@@ -14,6 +14,8 @@ import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
 import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
+import { hasRenderer } from '@/components/public-site/blocks/registry';
+import { reportDegradedBlocks } from '@/lib/telemetry/site-block-render';
 import {
   getPublicCommunityScopedReader,
   type PublicNavPage,
@@ -296,6 +298,24 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       includeDrafts: isPreview,
       ...(pageId === null ? {} : { pageId }),
     });
+    // Every block renderer degrades a failed safeParse to `return null`, and
+    // all three layouts skip an unknown block type silently — so a section can
+    // disappear from a statutory-transparency page behind an HTTP 200 with
+    // nothing to alert on. Report it once per request, from the one server-only
+    // place that sees the whole list. Skipped in preview: a PM mid-edit
+    // legitimately has invalid draft content.
+    //
+    // Phase 11b note: `blocks` is now the RESOLVED PAGE's blocks, not the whole
+    // community's, so this reports per page rather than per site. That is the
+    // right granularity — a degraded section belongs to the page it renders on —
+    // but it means the throttle key varies by page, and a community with several
+    // broken pages can emit one warning per page per hour rather than one total.
+    if (!isPreview) {
+      reportDegradedBlocks(blocks, hasRenderer, {
+        communityId: community.id,
+        communitySlug: community.slug,
+      });
+    }
     return (
       <>
         {fontLinks.map((href) => (

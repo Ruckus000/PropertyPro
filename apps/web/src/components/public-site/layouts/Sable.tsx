@@ -64,6 +64,8 @@ export function Sable({ community, theme, blocks, footer, nav, page }: LayoutPro
         <div className="mx-auto max-w-6xl">
           {ordered.map((block) => {
             const blockType = block.blockType as BlockType;
+            // Unknown block type — skip. Reported once per request at the page level by
+            // `reportDegradedBlocks`; see Tidewater.tsx for why there is no capture here.
             if (!hasRenderer(blockType)) return null;
             // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             const Renderer = blockRendererRegistry[blockType]!;

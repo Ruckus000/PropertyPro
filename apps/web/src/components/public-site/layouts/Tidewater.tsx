@@ -81,9 +81,12 @@ export function Tidewater({ community, theme, blocks, footer, nav, page }: Layou
         {ordered.map((block) => {
           const blockType = block.blockType as BlockType;
           if (!hasRenderer(blockType)) {
-            // Unknown block type — skip silently. A console/Sentry warning will be
-            // added at the page level in a later PR (#1b Task 7 does not include it;
-            // PR #2+ may surface this through the Sentry plumbing per spec §8.2).
+            // Unknown block type — skip. Reported at the page level by
+            // `reportDegradedBlocks`, which sees the whole block list and emits
+            // one `public_site_blocks_degraded` warning per request. Do not add
+            // a per-block capture here: this component is shared with the
+            // editor's client canvas, and pulling @sentry/nextjs in would land
+            // the SDK on a route with a 700 KiB hard budget.
             return null;
           }
           // hasRenderer guard above ensures this entry exists.

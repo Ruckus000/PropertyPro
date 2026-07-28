@@ -11,8 +11,19 @@
  * Once a block type has both a schema entry AND a renderer entry, it is
  * "live" — the page renderer in PR #1b+ uses the registry to dispatch.
  *
- * Unknown block types in a community's site_blocks row are skipped at
- * render time with a Sentry warning (block-type-missing-renderer).
+ * Unknown block types in a community's site_blocks row are skipped at render
+ * time by each layout's `hasRenderer` guard. That skip is silent by itself —
+ * the reporting lives one level up, in `reportDegradedBlocks`
+ * (`@/lib/telemetry/site-block-render`), which the public-site page calls once
+ * per request with the whole block list and which emits a single
+ * `public_site_blocks_degraded` warning covering both unrenderable types and
+ * content that fails its schema.
+ *
+ * Until 2026-07 this comment claimed the skip itself emitted a Sentry warning
+ * named `block-type-missing-renderer`. It did not: no such call, and no such
+ * string, existed anywhere in the repo. If you move the reporting, fix this
+ * paragraph with it — a comment describing observability that isn't there is
+ * worse than no comment, because it stops anyone from looking.
  */
 import type { BlockType } from '@propertypro/shared';
 import type { BlockRenderer } from './types';
@@ -43,6 +54,16 @@ export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>
   payments: PaymentsBlock,
 };
 
-export function hasRenderer(blockType: BlockType): boolean {
+/**
+ * Takes `string`, not `BlockType`, on purpose.
+ *
+ * `site_blocks.block_type` is a `text` column guarded by a CHECK constraint,
+ * not a pgEnum, and the rows predate several of the current types. The whole
+ * job of this function is to answer "is this value one we can render?" — so
+ * narrowing the parameter to `BlockType` would assume the answer at the type
+ * level and make the unrenderable case, the only case worth asking about,
+ * unrepresentable.
+ */
+export function hasRenderer(blockType: string): boolean {
   return blockType in blockRendererRegistry;
 }
