@@ -62,6 +62,7 @@ import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import type { SitePanelProps } from './panels/SitePanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
+import { useSiteDiff } from './use-site-diff';
 
 /** Bridges the active inspector form's save state into the top bar. */
 function AutosaveStatusLine() {
@@ -126,6 +127,10 @@ export function EditorRoot({
   initialSiteSettings,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
+  // Shares the blocks query key, so this adds no request — and the publish
+  // sheet calls the same hook, so the button's state and the sheet's "N changes
+  // ready to publish" can never disagree.
+  const { diff, isError: diffFailed } = useSiteDiff(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -158,6 +163,10 @@ export function EditorRoot({
         onActiveToolChange={setActiveTool}
         onPreview={handlePreview}
         onPublish={handlePublish}
+        // Openable when there is something to publish — and also when the diff
+        // failed to load, because the sheet is the only surface that explains
+        // that failure and offers a retry.
+        canOpenPublish={diff.changes.length > 0 || diffFailed}
         // Driven by whichever inspector form is open. StatusLine renders
         // nothing while idle with no prior save, so this stays invisible until
         // the PM actually edits something.

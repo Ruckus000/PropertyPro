@@ -42,7 +42,6 @@ import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, Info } from 'lucide-react';
 import {
   contrastIssues,
-  diffSite,
   publishBlocked,
   siteIssues,
   type Change,
@@ -60,14 +59,15 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { useContentBlocks, usePublishedBlocks, useSitePublishToken } from '@/hooks/use-content-blocks';
+import { useSitePublishToken } from '@/hooks/use-content-blocks';
 import {
   usePublishSite,
   PublishConflictError,
   type PublishSiteResult,
 } from '@/hooks/use-publish-site';
-import { issueTarget, toSnapshot } from '@/lib/site-editor/to-snapshot';
+import { issueTarget } from '@/lib/site-editor/to-snapshot';
 import { cn } from '@/lib/utils';
+import { useSiteDiff } from '../use-site-diff';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 export interface PublishSheetProps {
@@ -198,8 +198,16 @@ interface BodyProps {
 }
 
 function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }: BodyProps) {
-  const draftQuery = useContentBlocks(communityId);
-  const publishedQuery = usePublishedBlocks(communityId);
+  // The same hook the top bar's Publish button reads, so the button's enabled
+  // state and this sheet's change count are one computation, not two.
+  const {
+    diff,
+    next,
+    isPending: diffPending,
+    isError,
+    error: diffError,
+    refetch: refetchDiff,
+  } = useSiteDiff(communityId);
   // The authoritative token: max(published_at) over ALL published rows,
   // including rows shadowed by a draft. Deriving it from the merged list would
   // drop exactly those rows and 409 against a publish nobody else made.
@@ -207,16 +215,6 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   const publish = usePublishSite(communityId);
 
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
-
-  const next: SiteSnapshot = useMemo(() => toSnapshot(draftQuery.data), [draftQuery.data]);
-
-  const published: SiteSnapshot | null = useMemo(() => {
-    const rows = publishedQuery.data;
-    if (!rows || rows.length === 0) return null;
-    return toSnapshot(rows);
-  }, [publishedQuery.data]);
-
-  const diff = useMemo(() => diffSite(published, next), [published, next]);
 
   const issues: Issue[] = useMemo(() => {
     const structural = siteIssues(next);
@@ -231,8 +229,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   const warnings = useMemo(() => issues.filter((i) => i.severity === 'warning'), [issues]);
   const blocked = publishBlocked(issues);
 
-  const isPending = draftQuery.isPending || publishedQuery.isPending || tokenQuery.isPending;
-  const isError = draftQuery.isError || publishedQuery.isError;
+  const isPending = diffPending || tokenQuery.isPending;
   const hasChanges = diff.changes.length > 0;
 
   function fixIssue(slot: number) {
@@ -291,22 +288,13 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   }
 
   if (isError) {
-    const message =
-      draftQuery.error?.message ?? publishedQuery.error?.message ?? 'Please try again.';
     return (
       <AlertBanner
         status="danger"
         title="We couldn't work out what's changed"
-        description={message}
+        description={diffError?.message ?? 'Please try again.'}
         action={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void draftQuery.refetch();
-              void publishedQuery.refetch();
-            }}
-          >
+          <Button variant="outline" size="sm" onClick={refetchDiff}>
             Try again
           </Button>
         }

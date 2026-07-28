@@ -1,10 +1,10 @@
 /**
  * Tool tabs — ARIA contract and keyboard traversal.
  *
- * These tabs are hand-rolled rather than built on Radix (icon+label tiles with
- * count badges in a fixed six-across row), which means the accessibility
- * contract Radix would have given for free has to be asserted explicitly. That
- * is what this file is for.
+ * These tabs are hand-rolled rather than built on Radix (icon+label tiles in a
+ * fixed six-across row), which means the accessibility contract Radix would
+ * have given for free has to be asserted explicitly. That is what this file is
+ * for.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -115,19 +115,7 @@ describe('ToolTabs — keyboard traversal', () => {
   });
 });
 
-describe('ToolTabs — badges and gating', () => {
-  it('shows a pending-change count with accessible text', () => {
-    renderTabs({ counts: { site: 3 } });
-    const siteTab = screen.getByRole('tab', { name: /Site/ });
-    expect(siteTab).toHaveTextContent('3');
-    expect(siteTab).toHaveAccessibleName(/pending changes/);
-  });
-
-  it('omits the badge at zero rather than showing "0"', () => {
-    renderTabs({ counts: { site: 0 } });
-    expect(screen.getByRole('tab', { name: /Site/ })).not.toHaveTextContent('0');
-  });
-
+describe('ToolTabs — gating', () => {
   it('announces Pro tools as gated without hiding them', () => {
     renderTabs({ proToolAccess: { styling: false, domain: false } });
     // Visible and reachable — the upsell only works if the tool is discoverable.

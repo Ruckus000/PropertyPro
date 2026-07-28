@@ -9,8 +9,18 @@ export interface EditorTopBarProps {
   status?: React.ReactNode;
   onPreview?: () => void;
   onPublish?: () => void;
-  /** Pending-change count; zero disables Publish. */
-  changeCount?: number;
+  /**
+   * Whether Publish opens the review sheet. Required and undefaulted on
+   * purpose: this prop shipped optional with a `= 0` default (as `changeCount`)
+   * and `EditorRoot` never passed it, so the button was disabled for every PM
+   * in production while the shell's own tests — which pass it explicitly —
+   * stayed green. A required prop makes forgetting it a compile error.
+   *
+   * True when there is something to publish, and also when the change model
+   * failed to load: the sheet is the only surface that can explain that failure
+   * and offer a retry, so a load error must not lock the PM out of it.
+   */
+  canOpenPublish: boolean;
 }
 
 /**
@@ -28,10 +38,8 @@ export function EditorTopBar({
   status,
   onPreview,
   onPublish,
-  changeCount = 0,
+  canOpenPublish,
 }: EditorTopBarProps) {
-  const hasChanges = changeCount > 0;
-
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3.5">
       <span className="flex min-w-0 flex-col leading-tight">
@@ -47,8 +55,8 @@ export function EditorTopBar({
         </Button>
         <Button
           onClick={onPublish}
-          disabled={!hasChanges}
-          title={hasChanges ? undefined : 'Nothing to publish yet'}
+          disabled={!canOpenPublish}
+          title={canOpenPublish ? undefined : 'Nothing to publish yet'}
         >
           Publish…
         </Button>
