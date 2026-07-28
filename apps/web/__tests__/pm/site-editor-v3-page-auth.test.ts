@@ -52,6 +52,11 @@ vi.mock('@/components/pm/site-editor-v3/EditorRoot', () => ({
 // condition with `env -u DATABASE_URL pnpm exec vitest run <file>`.
 vi.mock('@/lib/api/branding', () => ({
   getCommunityPublicInfo: vi.fn().mockResolvedValue({ slug: 'sunset-condos', name: 'Sunset Condos' }),
+  // Phase 8: the page reads branding to seed the Site panel. Mocked here for
+  // the same reason as the rest of this factory — the real module pulls
+  // `@propertypro/db/unsafe` → drizzle, which throws at module load without
+  // DATABASE_URL, i.e. green locally and red in the DB-less CI unit job.
+  getBrandingForCommunity: vi.fn().mockResolvedValue(null),
 }));
 vi.mock('@/lib/utils/community-url', () => ({
   buildCommunityUrl: (slug: string, path: string) => `https://${slug}.example.com${path}`,

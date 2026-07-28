@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { headersMock, resolveCommunityContextMock, listPublicDocumentsForSitemapMock, getReaderMock } = vi.hoisted(() => {
+const {
+  headersMock,
+  resolveCommunityContextMock,
+  listPublicDocumentsForSitemapMock,
+  getReaderMock,
+  getBrandingForCommunityMock,
+} = vi.hoisted(() => {
   const listPublicDocumentsForSitemapMock = vi.fn().mockResolvedValue([]);
   return {
     headersMock: vi.fn(),
     resolveCommunityContextMock: vi.fn(),
     listPublicDocumentsForSitemapMock,
+    getBrandingForCommunityMock: vi.fn().mockResolvedValue(null),
     getReaderMock: vi.fn(() => ({
       listPublicDocumentsForSitemap: listPublicDocumentsForSitemapMock,
       // The other reader methods aren't called by sitemap.ts; stubbed so the
@@ -28,6 +35,13 @@ vi.mock('@propertypro/shared', async () => {
 vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: getReaderMock,
 }));
+// Phase 8. Mocked for the same reason as the reader above: importing the real
+// module pulls `@propertypro/db/unsafe` → drizzle, which throws at module load
+// without DATABASE_URL — green locally against the real database, red in the
+// DB-less CI unit job. Repro with `env -u DATABASE_URL pnpm test`.
+vi.mock('@/lib/api/branding', () => ({
+  getBrandingForCommunity: getBrandingForCommunityMock,
+}));
 
 import sitemap from '@/app/sitemap';
 
@@ -35,6 +49,7 @@ describe('sitemap.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listPublicDocumentsForSitemapMock.mockResolvedValue([]);
+    getBrandingForCommunityMock.mockResolvedValue(null);
   });
 
   it('lists community public URLs on a subdomain host (no community id header → no doc URLs)', async () => {
@@ -137,5 +152,63 @@ describe('sitemap.ts', () => {
       expect(entry.url).not.toMatch(/\/api\//);
       expect(entry.url).not.toMatch(/\/pm\//);
     }
+  });
+
+  /**
+   * Website editor v3, Phase 8 — the search-indexing opt-out.
+   *
+   * The sitemap is the signal actively soliciting a crawl, so a community that
+   * has opted out lists nothing. `robots.ts` still ALLOWS these paths on
+   * purpose — see the comment in sitemap.ts — and `robots.test.ts` pins that.
+   */
+  describe('search-indexing opt-out', () => {
+    function subdomainHost() {
+      headersMock.mockResolvedValueOnce(
+        new Headers({ host: 'sunset-condos.getpropertypro.com', 'x-community-id': '42' }),
+      );
+      resolveCommunityContextMock.mockReturnValueOnce({
+        source: 'host_subdomain',
+        tenantSlug: 'sunset-condos',
+        isReservedSubdomain: false,
+        communityId: 42,
+      });
+    }
+
+    it('lists nothing when the PM has opted out', async () => {
+      subdomainHost();
+      getBrandingForCommunityMock.mockResolvedValue({ siteSettings: { searchIndexing: false } });
+      expect(await sitemap()).toEqual([]);
+    });
+
+    it('lists the community pages when indexing is on', async () => {
+      subdomainHost();
+      getBrandingForCommunityMock.mockResolvedValue({ siteSettings: { searchIndexing: true } });
+      expect((await sitemap()).length).toBeGreaterThan(0);
+    });
+
+    // The default. A community that never touched the setting must keep being
+    // listed — the failure here is silent and takes months of recrawl to undo.
+    it.each([
+      ['no branding at all', null],
+      ['branding with no siteSettings', {}],
+      ['a malformed siteSettings', { siteSettings: 'nope' }],
+      ['the string "false"', { siteSettings: { searchIndexing: 'false' } }],
+    ])('still lists the community for %s', async (_label, branding) => {
+      subdomainHost();
+      getBrandingForCommunityMock.mockResolvedValue(branding);
+      expect((await sitemap()).length).toBeGreaterThan(0);
+    });
+
+    it('does not consult branding on the marketing root', async () => {
+      headersMock.mockResolvedValueOnce(new Headers({ host: 'getpropertypro.com' }));
+      resolveCommunityContextMock.mockReturnValueOnce({
+        source: 'none',
+        tenantSlug: null,
+        isReservedSubdomain: false,
+        communityId: null,
+      });
+      await sitemap();
+      expect(getBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
   });
 });

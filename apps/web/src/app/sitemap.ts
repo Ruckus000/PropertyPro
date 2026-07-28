@@ -20,6 +20,8 @@ import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
 import { resolveCommunityContext } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import { getBrandingForCommunity } from '@/lib/api/branding';
+import { isSearchIndexingEnabled } from '@/lib/site-editor/site-settings';
 
 export const revalidate = 3600;
 
@@ -39,6 +41,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // route files under apps/web/src/app/(public)/[subdomain]/.
   if (context.source === 'host_subdomain' && context.tenantSlug && !context.isReservedSubdomain) {
     const base = `https://${host}`;
+
+    // Website editor v3, Phase 8 — a community that has opted out of search
+    // indexing lists nothing. Asking a crawler to index pages that carry
+    // `noindex` is contradictory, and the sitemap is the one signal actively
+    // soliciting a crawl.
+    //
+    // NOTE what is deliberately NOT done: `robots.ts` still ALLOWS these paths.
+    // A robots.txt Disallow stops the crawler fetching the page at all, so it
+    // never sees the `noindex` meta tag — and a URL that was already indexed
+    // can persist in results indefinitely. `noindex` is what de-indexes, and
+    // the crawler has to be let in to read it. Do not "tighten" this by adding
+    // a Disallow branch to robots.ts.
+    const communityIdForIndexing = hdrs.get('x-community-id');
+    const indexingId = communityIdForIndexing ? Number(communityIdForIndexing) : NaN;
+    if (Number.isInteger(indexingId) && indexingId > 0) {
+      const branding = await getBrandingForCommunity(indexingId);
+      if (!isSearchIndexingEnabled(branding)) return [];
+    }
+
     const staticEntries: MetadataRoute.Sitemap = [
       { url: `${base}/`, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
       { url: `${base}/transparency`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },

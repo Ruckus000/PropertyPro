@@ -67,10 +67,21 @@ export const getCommunityPublicInfo = cache(async (
 /**
  * Read the current branding for a community.
  * Returns null if no branding has been saved yet.
+ *
+ * Wrapped in React.cache for the same reason as getCommunityPublicInfo above:
+ * since Phase 8 both `generateMetadata` and the page body need branding (for
+ * the SEO overrides and the footer respectively), and without this the public
+ * site would issue two identical SELECTs per request on a statutory entry
+ * point.
+ *
+ * NOTE the return type is a CAST, not a parse — `communities.branding` is
+ * untyped jsonb and can hold any shape at all. Callers that index into nested
+ * objects must go through the total resolvers in
+ * `@/lib/site-editor/site-settings`, never trust this signature.
  */
-export async function getBrandingForCommunity(
+export const getBrandingForCommunity = cache(async (
   communityId: number,
-): Promise<CommunityBranding | null> {
+): Promise<CommunityBranding | null> => {
   // communities has no communityId column — query directly by primary key
   const db = createUnscopedClient();
   const rows = await db
@@ -83,7 +94,7 @@ export async function getBrandingForCommunity(
   const raw = row.branding;
   if (!raw || typeof raw !== 'object') return null;
   return raw as CommunityBranding;
-}
+});
 
 /**
  * Read the site-onboarding completion timestamp for a community.
@@ -152,6 +163,18 @@ export interface BrandingPatch {
   tagline?: string | null;
   /** PR #11 — Pro+ custom CSS token overrides; null clears them. */
   customCssOverrides?: CustomCssOverrides | null;
+  /**
+   * Website editor v3 Phase 8 — SEO overrides and public-site footer.
+   *
+   * Present so `updateBrandingForCommunity`'s shallow merge does not drop them
+   * when some OTHER caller (the branding PATCH, the onboarding wizard, the
+   * portfolio-template service) writes an unrelated field. The Phase 8 write
+   * path does not go through here — it merges in SQL, atomically, to avoid the
+   * lost update this shallow spread would otherwise cause. See
+   * `site-settings-service.ts`.
+   */
+  siteSettings?: CommunityBranding['siteSettings'];
+  siteFooter?: CommunityBranding['siteFooter'];
 }
 
 /**

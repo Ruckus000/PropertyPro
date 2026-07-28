@@ -21,8 +21,18 @@ import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
+import { SitePanel } from '@/components/pm/site-editor-v3/panels/SitePanel';
+import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
+
+// Radix Switch (shadcn), used by the Phase 8 Site panel, requires
+// ResizeObserver in jsdom.
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 // Mock this module COMPLETELY. A partial factory here fails only at module
 // load, and only for whichever component reaches the missing export — so it
@@ -32,6 +42,20 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
+// Phase 8. Same rule as above — mock the module COMPLETELY.
+vi.mock('@/hooks/use-site-settings', () => ({
+  useSiteSettings: () => ({
+    data: {
+      settings: { seoTitle: null, seoDescription: null, searchIndexing: true, favicon: null },
+      footer: { associationName: null, note: null, showStatutoryLine: false },
+    },
+  }),
+  useUpdateSiteSettings: () => ({ mutate: vi.fn(), isPending: false }),
+  useUploadFavicon: () => ({ mutate: vi.fn(), isPending: false }),
+  siteSettingsQueryKey: (communityId: number) =>
+    ['pm', 'site', 'settings', communityId] as const,
 }));
 
 // Phase 7. Same rule as above — every export the notice panel's tree reaches.
@@ -144,6 +168,37 @@ describe('Urgent notice — axe (Phase 7)', () => {
     const { container } = render(
       <UrgentNoticeBanner
         notice={{ urgentNoticeText: 'Boil water order in effect', urgentNoticeExpiresAt: null }}
+      />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Site settings + footer — axe (Phase 8)', () => {
+  const community = {
+    name: 'Sunset Condos',
+    slug: 'sunset-condos',
+    communityType: 'condo_718' as const,
+    city: 'Miami',
+  };
+
+  it('has no violations in the Site tool panel', async () => {
+    const { container } = render(
+      <SitePanel communityId={7} community={community} tagline={null} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations on the PUBLIC footer, with every optional line shown', async () => {
+    // The footer is a surface residents and the public meet, so it gets its
+    // own audit rather than riding on the editor's — and it is audited in its
+    // fullest form, since the extra lines are the part this phase added.
+    const { container } = render(
+      <PublicSiteFooter
+        communityName="Sunset Condos"
+        associationName="Sunset Condominium Association, Inc."
+        note="Managed by Acme Property Group."
+        showStatutoryLine
       />,
     );
     expect(await axe(container)).toHaveNoViolations();

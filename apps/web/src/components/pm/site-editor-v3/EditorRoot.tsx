@@ -35,11 +35,23 @@ const UrgentNoticePanel = dynamic(
   () => import('./panels/UrgentNoticePanel').then((m) => m.UrgentNoticePanel),
   { loading: () => null },
 );
+
+// Phase 8. Same reasoning as the notice panel: `renderToolPanel` only renders
+// the ACTIVE tool, so this chunk (the form, the switches, the favicon upload
+// path) is requested on the tab click rather than on mount. A PM who never
+// opens Site pays nothing for it — which is the whole reason this route is
+// still inside its 700 KiB budget.
+const SitePanel = dynamic(
+  () => import('./panels/SitePanel').then((m) => m.SitePanel),
+  { loading: () => null },
+);
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
+import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
+import type { SitePanelProps } from './panels/SitePanel';
 
 export interface EditorRootProps {
   communityId: number;
@@ -57,6 +69,14 @@ export interface EditorRootProps {
    */
   hasPublishedSite: boolean;
   initialNotice: UrgentNotice | null;
+  /**
+   * Phase 8 site settings. Like the notice above, both come from reads the page
+   * already makes, so the Site panel opens with real values rather than a
+   * spinner and costs no extra query.
+   */
+  siteIdentity: SitePanelProps['community'];
+  tagline: string | null;
+  initialSiteSettings: SiteSettingsRecord | undefined;
 }
 
 /**
@@ -78,6 +98,9 @@ export function EditorRoot({
   canvasContext,
   hasPublishedSite,
   initialNotice,
+  siteIdentity,
+  tagline,
+  initialSiteSettings,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
@@ -120,6 +143,16 @@ export function EditorRoot({
         status={<StatusLine status="idle" lastSavedAt={null} />}
         renderToolPanel={(tool) => {
           if (tool === 'sections') return <SectionList />;
+          if (tool === 'site') {
+            return (
+              <SitePanel
+                communityId={communityId}
+                community={siteIdentity}
+                tagline={tagline}
+                initialSettings={initialSiteSettings}
+              />
+            );
+          }
           if (tool === 'notice') {
             return (
               <UrgentNoticePanel

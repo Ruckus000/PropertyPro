@@ -2,8 +2,10 @@
  * Pure helpers for community-site-assets storage paths.
  *
  * Path shape: {community_id}/{kind}/{uuid}-{filename}
- * where kind ∈ {logo, hero, content}. The community_id prefix matches the
- * Supabase Storage RLS policies in migration 0006 (storage.foldername(name)[1]).
+ * where kind ∈ {logo, hero, content, favicon}. The community_id prefix matches
+ * the Supabase Storage RLS policies in migration 0006
+ * (storage.foldername(name)[1]) — those policies key on the FIRST segment only,
+ * so adding a kind is a pure code change and needs no storage migration.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -13,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 // this module's node:crypto import into the browser bundle.
 export { SITE_ASSETS_BUCKET, buildPublicAssetUrl } from './public-url';
 
-const VALID_KINDS = ['logo', 'hero', 'content'] as const;
+const VALID_KINDS = ['logo', 'hero', 'content', 'favicon'] as const;
 export type AssetKind = (typeof VALID_KINDS)[number];
 
 function sanitizeFilename(name: string): string {

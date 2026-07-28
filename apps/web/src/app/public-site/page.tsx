@@ -14,6 +14,10 @@ import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
+import {
+  resolveFooterSettings,
+  resolveSiteSettings,
+} from '@/lib/site-editor/site-settings';
 
 /**
  * Resolve community ID from middleware-injected headers.
@@ -45,11 +49,19 @@ export async function generateMetadata(): Promise<Metadata> {
   if (!communityId) return { title: 'PropertyPro' };
   const community = await getCommunityPublicInfo(communityId);
   if (!community) return { title: 'PropertyPro' };
+
+  // Phase 8. Both reads are React.cache'd, so this shares the SELECTs the page
+  // body issues rather than doubling them. `resolveSiteSettings` is total — a
+  // community whose branding jsonb is malformed gets default metadata, not a
+  // 500 on a statutory public page.
+  const branding = await getBrandingForCommunity(community.id);
   return buildCommunityMetadata({
     id: community.id,
     slug: community.slug,
     name: community.name,
     communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+    tagline: branding?.tagline,
+    siteSettings: resolveSiteSettings(branding),
   });
 }
 
@@ -186,6 +198,10 @@ export default async function PublicSitePage() {
               blockOrder: b.blockOrder,
               content: b.content,
             }))}
+            // Phase 8. Total resolver — malformed branding yields the default
+            // footer rather than throwing on a page with no feature flag in
+            // front of it.
+            footer={resolveFooterSettings(rawBranding)}
           />
         </div>
       </>
@@ -265,7 +281,13 @@ export default async function PublicSitePage() {
           </section>
         </main>
 
-        <PublicSiteFooter communityName={community.name} />
+        {/* Same Phase 8 footer fields in the legacy fallback branch: "the
+            footer a PM edited" has to mean every render path, not just the one
+            currently reachable. */}
+        <PublicSiteFooter
+          communityName={community.name}
+          {...resolveFooterSettings(rawBranding)}
+        />
       </div>
     </>
   );

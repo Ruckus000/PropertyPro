@@ -65,7 +65,7 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
   );
 }
 
-export function Tidewater({ community, theme, blocks }: LayoutProps) {
+export function Tidewater({ community, theme, blocks, footer }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
 
   return (
@@ -95,7 +95,12 @@ export function Tidewater({ community, theme, blocks }: LayoutProps) {
           );
         })}
       </main>
-      <PublicSiteFooter communityName={community.name} />
+      <PublicSiteFooter
+        communityName={community.name}
+        associationName={footer?.associationName}
+        note={footer?.note}
+        showStatutoryLine={footer?.showStatutoryLine}
+      />
     </div>
   );
 }

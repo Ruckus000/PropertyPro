@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(),
   siteBlocks: Symbol('siteBlocks'),
+  // Phase 8: publishCommunitySite now stamps communities.site_published_at.
+  communities: Symbol('communities'),
   siteStarterPacks: Symbol('siteStarterPacks'),
 }));
 
