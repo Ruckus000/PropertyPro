@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   expandToStoredObjects,
   referencedBasePaths,
@@ -151,5 +154,65 @@ describe('referencedSnapshotPaths', () => {
     expect(referencedSnapshotPaths({})).toEqual([]);
     expect(referencedSnapshotPaths({ blocks: 'nope' })).toEqual([]);
     expect(referencedSnapshotPaths({ blocks: [null, { blockType: 42 }] })).toEqual([]);
+  });
+});
+
+describe('block-type coverage', () => {
+  /**
+   * Mirrors the coverage test on `scoped-paths.ts`, and matters MORE here.
+   *
+   * If `scoped-paths.ts` misses a path-bearing type, a cross-tenant path slips
+   * past a validation check — bad, but bounded, and it surfaces as a 400. If
+   * THIS file misses one, that type's assets are reported as orphans, and the
+   * orphan list is the input to a future decision about deleting bytes from
+   * production. The guarded copy was the one whose gap causes a 400; the
+   * unguarded copy was the one whose gap argues for deleting a live asset.
+   */
+  const CARRIES_ASSET_PATHS: Record<string, boolean> = {
+    hero: true,
+    image: true,
+    gallery: true,
+    text: false,
+    documents: false,
+    meetings: false,
+    announcements: false,
+    contact: false,
+    faq: false,
+    amenities: false,
+    payments: false,
+  };
+
+  /**
+   * Read BLOCK_TYPES from source rather than importing @propertypro/shared:
+   * the `scripts` vitest project does not have the workspace package as a
+   * dependency, and the repo already uses source-reading for exactly this kind
+   * of invariant (see view-registry.test.ts).
+   */
+  const canonicalBlockTypes = (): string[] => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const typesFile = join(here, '..', '..', 'packages/shared/src/site-blocks/types.ts');
+    const source = readFileSync(typesFile, 'utf8');
+    const match = /export const BLOCK_TYPES = \[([^\]]*)\]/.exec(source);
+    if (!match?.[1]) throw new Error('could not parse BLOCK_TYPES from site-blocks/types.ts');
+    return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1] as string);
+  };
+
+  it('classifies every canonical block type', () => {
+    expect(Object.keys(CARRIES_ASSET_PATHS).sort()).toEqual(canonicalBlockTypes().sort());
+  });
+
+  it('returns paths for exactly the types classified as path-bearing', () => {
+    const samples: Record<string, unknown> = {
+      hero: { photos: [{ path: '1/hero/a.jpg' }] },
+      image: { imagePath: '1/content/a.jpg' },
+      gallery: { images: [{ imagePath: '1/content/a.jpg' }] },
+    };
+    for (const [blockType, carries] of Object.entries(CARRIES_ASSET_PATHS)) {
+      if (!carries) continue;
+      expect(
+        referencedBasePaths(blockType, samples[blockType]),
+        `${blockType} is classified as path-bearing but contributed no references`,
+      ).not.toEqual([]);
+    }
   });
 });
