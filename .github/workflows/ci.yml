@@ -216,6 +216,12 @@ jobs:
       # the build instead of silently constructing a client with a bogus key.
 
     steps:
+      # CHAOS EXPERIMENT — DO NOT MERGE. Forces perf-check to fail immediately so
+      # we can observe what the dependent `Build` gate reports and whether branch
+      # protection still blocks the merge.
+      - name: CHAOS - force perf-check failure
+        run: exit 1
+
       - name: Checkout
         uses: actions/checkout@v4
 
