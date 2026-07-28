@@ -36,6 +36,8 @@ jobs:
     environment: production
     permissions:
       contents: read
+      # Needed by the Integration Tests gate below to read another workflow's runs.
+      actions: read
 
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -43,6 +45,58 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
+      # `Integration Tests` is a required check for MERGING, but it is a separate
+      # workflow, and this one triggers on `workflow_run: [CI]` only. So green CI
+      # plus red integration-tests used to deploy to production anyway.
+      #
+      # Gating by adding `Integration Tests` to the `workflows:` trigger list does
+      # NOT work: workflow_run fires once PER workflow, each event carries only
+      # its own conclusion, and both events land in the same concurrency group
+      # (`github.ref` is refs/heads/main either way) with cancel-in-progress
+      # false — so the same commit would deploy twice, serially. Instead the CI
+      # event stays the single trigger and we resolve the sibling run here.
+      - name: Require Integration Tests to have passed for this commit
+        # Gates the AUTOMATIC path only. workflow_dispatch is the manual escape
+        # hatch that exists *because* this pipeline once silently blocked every
+        # production deploy for two weeks; giving it a new way to refuse would
+        # recreate exactly that failure mode. A human running it has decided.
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "Resolving Integration Tests for $HEAD_SHA"
+          deadline=$(( SECONDS + 900 ))
+
+          while :; do
+            run_json=$(gh api \
+              "repos/$REPO/actions/workflows/integration-tests.yml/runs?head_sha=$HEAD_SHA&per_page=1" \
+              --jq '[.workflow_runs[]][0] // {} | {status: (.status // "missing"), conclusion: (.conclusion // "")}' \
+              2>/dev/null || echo '{"status":"apierror","conclusion":""}')
+            status=$(echo "$run_json" | jq -r .status)
+            conclusion=$(echo "$run_json" | jq -r .conclusion)
+            echo "  status=$status conclusion=$conclusion"
+
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then
+                echo "Integration Tests passed for $HEAD_SHA — proceeding."
+                exit 0
+              fi
+              echo "::error::Integration Tests concluded '$conclusion' for $HEAD_SHA — refusing to deploy."
+              exit 1
+            fi
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              # Absence is NOT success. A required check that never reported is
+              # exactly how a skipped check silently satisfies a gate.
+              echo "::error::Integration Tests did not complete for $HEAD_SHA within 15m (last status='$status') — refusing to deploy."
+              exit 1
+            fi
+            sleep 20
+          done
+
       - name: Checkout
         uses: actions/checkout@v4
 
