@@ -1,7 +1,11 @@
 'use client';
 
 /**
- * Upload queue for hero photos.
+ * Sequential upload queue for a multi-image field.
+ *
+ * Named for the hero because that is where it started; the gallery block's
+ * image list now uses it too via the `kind` option. The sequencing, per-file
+ * status and alt-before-upload rules below are identical for both.
  *
  * Wraps the existing `useImageUpload` (presign → PUT → finalize) rather than
  * adding a second upload path — the phase's security summary is explicit that
@@ -50,6 +54,16 @@ export interface HeroPhotoUpload {
 export interface UseHeroPhotosOptions {
   communityId: number;
   /**
+   * Which storage kind the files land under. Defaults to `'hero'` — this queue
+   * predates the gallery block and every existing caller is the hero field.
+   *
+   * The queue itself is kind-agnostic: sequencing, per-file status and
+   * alt-before-upload are the same problem for any multi-file list. Only the
+   * presign `kind` differs, so the gallery reuses this rather than growing a
+   * second copy of the same sequential loop.
+   */
+  kind?: 'hero' | 'content';
+  /**
    * Called once per successfully finalized file, immediately.
    *
    * Deliberately per-file rather than once at the end of the queue: finalize
@@ -76,6 +90,7 @@ export interface UseHeroPhotosResult {
 
 export function useHeroPhotos({
   communityId,
+  kind = 'hero',
   onUploaded,
 }: UseHeroPhotosOptions): UseHeroPhotosResult {
   const { mutateAsync } = useImageUpload({ communityId });
@@ -134,7 +149,7 @@ export function useHeroPhotos({
           try {
             const result = await mutateAsync({
               file: item.file,
-              kind: 'hero',
+              kind,
               altText: item.decorative ? DECORATIVE_PLACEHOLDER_ALT : alt,
             });
             patch(item.id, { status: 'done', result });
@@ -151,7 +166,7 @@ export function useHeroPhotos({
         setIsUploading(false);
       }
     },
-    [mutateAsync, patch],
+    [mutateAsync, patch, kind],
   );
 
   const dismiss = useCallback((localId: string) => {

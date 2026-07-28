@@ -19,6 +19,17 @@ export interface SiteEditorContextValue {
   selection: CanvasSelection | null;
   isSelected: (blockId: number) => boolean;
   select: (blockId: number) => void;
+  /**
+   * Select by slot, for a section that may not exist in `blocks` yet — how the
+   * Add panel opens the inspector on what it just created.
+   *
+   * Unlike `select`, this deliberately does NOT fire `onSelect`. `onSelect`
+   * switches the shell to the Sections tab, which would unmount the Add panel
+   * the moment a section is added — breaking "add three sections in a row" and
+   * gaining nothing, since the inspector is its own column and opens whatever
+   * tab is active.
+   */
+  selectSlot: (blockOrder: number, blockType: string) => void;
   clear: () => void;
 
   canMove: (blockId: number, direction: MoveDirection) => boolean;
@@ -63,6 +74,7 @@ export function SiteEditorProvider({
     selection,
     isSelected,
     select: selectInternal,
+    selectSlot,
     clear,
     movableSections,
   } = useCanvasSelection(blocks);
@@ -132,6 +144,7 @@ export function SiteEditorProvider({
       selection,
       isSelected,
       select,
+      selectSlot,
       clear,
       canMove,
       move,
@@ -144,6 +157,7 @@ export function SiteEditorProvider({
       selection,
       isSelected,
       select,
+      selectSlot,
       clear,
       canMove,
       move,

@@ -240,4 +240,42 @@ describe('useHeroPhotos', () => {
       expect(row?.status).toBe('error');
     });
   });
+
+  describe('storage kind', () => {
+    // The queue is shared with the gallery block's image list now. The default
+    // is asserted explicitly because every pre-existing caller relies on it and
+    // nothing else would catch it flipping — the field-level tests mock this
+    // hook wholesale.
+    it('defaults to the hero kind', async () => {
+      const { result } = renderHook(() =>
+        useHeroPhotos({ communityId: 7, onUploaded: vi.fn() }),
+      );
+
+      await act(async () => {
+        await result.current.upload([
+          { id: 'a', file: file('a.jpg'), alt: 'A', decorative: false },
+        ]);
+      });
+
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'hero' }),
+      );
+    });
+
+    it('uploads under the content kind when asked', async () => {
+      const { result } = renderHook(() =>
+        useHeroPhotos({ communityId: 7, kind: 'content', onUploaded: vi.fn() }),
+      );
+
+      await act(async () => {
+        await result.current.upload([
+          { id: 'a', file: file('a.jpg'), alt: 'A', decorative: false },
+        ]);
+      });
+
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'content' }),
+      );
+    });
+  });
 });

@@ -17,6 +17,24 @@ export const HERO_MIN_WIDTH = 1600;
 export const HERO_MIN_HEIGHT = 900;
 
 /**
+ * In-page (`kind: 'content'`) image cap. Mirrors `MAX_FILE_SIZE_BYTES` in
+ * `/api/v1/site/uploads/presign`'s contract, so a file that would 400 there is
+ * refused before the round trip.
+ *
+ * Deliberately its own constant rather than an alias of `HERO_MAX_BYTES`:
+ * the two are numerically equal today but answer to different authorities (the
+ * bucket setting vs. the hero spec), and aliasing would make a future change to
+ * either one silently move the other.
+ *
+ * There is no content equivalent of `HERO_MIN_WIDTH`/`HEIGHT`, and there should
+ * not be: that floor exists so the server's 1600w variant does not upscale a
+ * full-bleed hero. An in-page image mirrors no such server rule, and applying
+ * 1600×900 to it would reject perfectly good photos to prevent a cosmetically
+ * soft 800w variant.
+ */
+export const CONTENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
  * What to send the upload pipeline as `altText` for a DECORATIVE image.
  *
  * `/api/v1/site/images/finalize` requires `altText: z.string().min(1)`, but a

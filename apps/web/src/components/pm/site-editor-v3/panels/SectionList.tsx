@@ -3,6 +3,7 @@
 import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
@@ -17,6 +18,12 @@ interface DragState {
 export interface SectionListProps {
   /** Optional wrapper class — the panel column owns padding, not this list. */
   className?: string;
+  /**
+   * Switches the shell to the Add tab. Optional so this list still renders
+   * standalone, but without it the empty state names an action it cannot
+   * perform — which is what it did before the Add panel existed.
+   */
+  onAddSection?: () => void;
 }
 
 /**
@@ -68,7 +75,7 @@ export interface SectionListProps {
  * direction (a one-section list) — disabling it on the first row would take
  * away that row's ability to move *down*.
  */
-export function SectionList({ className }: SectionListProps) {
+export function SectionList({ className, onAddSection }: SectionListProps) {
   const { movableSections, isSelected, select, canMove, move, moveTo, isMoving } =
     useSiteEditor();
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -84,6 +91,13 @@ export function SectionList({ className }: SectionListProps) {
           icon={Layers}
           title="Add your first section"
           description="Sections you add to your site show up here, ready to reorder."
+          action={
+            onAddSection && (
+              <Button type="button" size="sm" onClick={onAddSection}>
+                Add a section
+              </Button>
+            )
+          }
         />
       </div>
     );

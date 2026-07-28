@@ -64,17 +64,35 @@ export const blockFormRegistry: Partial<Record<BlockType, ComponentType<BlockFor
   payments: dynamic(() => import('./forms/PaymentsForm').then((m) => m.PaymentsForm), {
     loading: InspectorFormSkeleton,
   }),
+  contact: dynamic(() => import('./forms/ContactForm').then((m) => m.ContactForm), {
+    loading: InspectorFormSkeleton,
+  }),
+  faq: dynamic(() => import('./forms/FaqForm').then((m) => m.FaqForm), {
+    loading: InspectorFormSkeleton,
+  }),
+  gallery: dynamic(() => import('./forms/GalleryForm').then((m) => m.GalleryForm), {
+    loading: InspectorFormSkeleton,
+  }),
 
   // One component, three entries. These blocks differ only in the type they
   // write and the placeholder they show, and `SorEmptyTextForm` reads both
-  // from `blockType`. `contact` is deliberately absent — it renders fields,
-  // not a list, so it has no empty state to override.
+  // from `blockType`. `contact` is NOT among them: it renders two visibility
+  // toggles rather than a list, so it has no empty state to override and gets
+  // its own form above.
   announcements: sorEmptyTextForm,
   documents: sorEmptyTextForm,
   meetings: sorEmptyTextForm,
 };
 
-/** Whether this block type has an edit form yet. Coverage is incremental. */
+/**
+ * Whether this block type has an edit form.
+ *
+ * Every current `BlockType` is covered — the Add panel made that a requirement
+ * rather than a nicety, since offering a type the inspector cannot configure
+ * creates a section the PM is then stuck with. The map stays `Partial` anyway,
+ * because a NEW block type ships in `BLOCK_TYPES` before its form exists, and
+ * this guard is what keeps that intermediate state renderable.
+ */
 export function hasForm(blockType: string): boolean {
   return Object.prototype.hasOwnProperty.call(blockFormRegistry, blockType);
 }

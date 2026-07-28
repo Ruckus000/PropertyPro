@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { BLOCK_TYPES } from '@propertypro/shared';
 import { blockFormRegistry, hasForm } from '@/components/pm/site-editor-v3/inspector/form-registry';
 
 // The root `pnpm test` runner and a direct `vitest` run inside apps/web have
@@ -40,16 +41,24 @@ describe('form registry — dispatch', () => {
   it('reports coverage through hasForm rather than a hard-coded type list', () => {
     expect(hasForm('text')).toBe(true);
     expect(hasForm('hero')).toBe(true);
-    // `faq` and `gallery` have no Phase 9 fields, so no form yet.
-    expect(hasForm('faq')).toBe(false);
+    expect(hasForm('faq')).toBe(true);
+  });
+
+  it('covers every block type the Add panel can create', () => {
+    // The Add panel offers all ten creatable types, so a gap here would mean
+    // a PM could add a section they then could not configure anywhere in v3.
+    // This is the assertion that keeps those two lists honest.
+    for (const blockType of BLOCK_TYPES) {
+      expect(hasForm(blockType), `${blockType} has no inspector form`).toBe(true);
+    }
   });
 
   it('returns undefined for a type with no form, so the body can fall back', () => {
-    // The registry is Partial by design — coverage is incremental, and a
-    // section with no form must render an explanation rather than throw.
-    // `contact` specifically has no empty-state to override (it renders
-    // fields, not a list), so it is not merely unbuilt — it is excluded.
-    expect(blockFormRegistry.contact).toBeUndefined();
+    // The registry stays Partial by design: a NEW block type lands in
+    // BLOCK_TYPES before its form exists, and a section with no form must
+    // render an explanation rather than throw.
+    expect(blockFormRegistry['not-a-real-block' as never]).toBeUndefined();
+    expect(hasForm('not-a-real-block')).toBe(false);
   });
 
   it('does not report coverage for inherited Object properties', () => {
