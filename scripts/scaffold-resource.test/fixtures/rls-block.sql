@@ -1,6 +1,10 @@
--- 0004_create_widgets.sql
+-- RLS block template for a new tenant-scoped table.
 --
--- Scaffolded by `pnpm new:resource widgets` (Plan A4 reference resource).
+-- `pnpm new:resource widgets` PRINTS this with names substituted; it does not
+-- write a migration. Generate the migration with `db:generate` (which writes the
+-- .sql, the journal entry AND the snapshot together), then append the policies
+-- and trigger below — drizzle emits the CREATE TABLE and FK, but never RLS.
+--
 -- Replace the column list, RLS policies, and trigger as your resource needs.
 -- The shape below is the project's canonical tenant-scoped table template:
 --   - id bigserial PK

@@ -26,7 +26,6 @@ The generator writes:
 
 ```
 packages/db/src/schema/<plural>.ts
-packages/db/migrations/<NNNN>_create_<plural>.sql             (NNNN auto-picked)
 apps/web/src/lib/services/<plural>-service.ts
 apps/web/src/app/api/v1/<plural>/contract.ts
 apps/web/src/app/api/v1/<plural>/route.ts                     (runRoute-wrapped)
@@ -38,8 +37,31 @@ apps/web/__tests__/api/<plural>/route.test.ts
 apps/web/__tests__/integration/<plural>.integration.test.ts
 ```
 
-It also appends a re-export to `packages/db/src/schema/index.ts` and a journal
-entry to `packages/db/migrations/meta/_journal.json`.
+It also appends a re-export to `packages/db/src/schema/index.ts`.
+
+### It does not write the migration
+
+The scaffolder deliberately writes **nothing** under `packages/db/migrations/` —
+no `.sql`, no journal entry, no snapshot. Generate the migration yourself once
+the schema columns are right:
+
+```bash
+pnpm --filter @propertypro/db db:generate --name create_<plural>
+```
+
+That writes the `.sql`, the journal entry **and** the snapshot together, which is
+the only way they stay consistent. It used to append a journal entry, which was
+wrong twice over: an entry with no matching `meta/NNNN_snapshot.json` fails
+`checkSnapshotChainIntact`, so every scaffold run left `migration-ordering` red;
+and a hand-written `CREATE TABLE` could drift from `packages/db/src/schema/`,
+which is what drizzle actually diffs — so the next `db:generate` would emit a
+second migration re-creating the same table.
+
+Then **append the RLS block** the scaffolder prints to the generated `.sql`.
+drizzle emits the table and the FK, but never `ENABLE`/`FORCE ROW LEVEL
+SECURITY`, the four baseline policies, or the `pp_rls_enforce_tenant_scope`
+trigger — those are this repo's convention. The canonical template lives at
+`scripts/scaffold-resource.test/fixtures/rls-block.sql`.
 
 ## Plural / singular conventions
 

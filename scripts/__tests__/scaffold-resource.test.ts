@@ -83,9 +83,11 @@ describe('scaffoldResource()', () => {
   it('generates byte-identical files vs the committed widgets fixtures', () => {
     const result = scaffoldResource({ plural: 'widgets', target: tmpRoot });
 
-    expect(result.migrationIndex).toBe(4);
     expect(result.schemaBarrelTouched).toBe(true);
-    expect(result.journalTouched).toBe(true);
+    // The RLS block is returned for printing, never written — drizzle emits the
+    // table and FK from the schema file, but never the policies or trigger.
+    expect(result.rlsBlock).toContain('CREATE POLICY "pp_tenant_select" ON public."widgets"');
+    expect(result.rlsBlock).toContain('pp_rls_enforce_tenant_scope');
 
     const fixtureFiles = listFilesRel(FIXTURE_ROOT);
     expect(fixtureFiles.length).toBeGreaterThan(0);
@@ -110,29 +112,34 @@ describe('scaffoldResource()', () => {
     expect(barrel).toContain("export * from './communities';");
   });
 
-  it('appends a journal entry with the next index', () => {
+  it('does not touch the migration journal — db:generate owns it', () => {
+    const before = readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8');
+
     scaffoldResource({ plural: 'widgets', target: tmpRoot });
-    const raw = readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8');
-    const journal = JSON.parse(raw) as typeof STARTING_JOURNAL;
-    expect(journal.entries).toHaveLength(5);
-    const last = journal.entries[4]!;
-    expect(last.idx).toBe(4);
-    expect(last.tag).toBe('0004_create_widgets');
-    expect(last.version).toBe('7');
-    expect(last.breakpoints).toBe(true);
-    // `when` is Date.now() at scaffold-time; just assert it's a plausible
-    // ms-precision unix timestamp.
-    expect(typeof last.when).toBe('number');
-    expect(last.when).toBeGreaterThan(1_700_000_000_000);
+
+    // Byte-identical, not just "same length". A journal entry written here would
+    // have no matching meta/NNNN_snapshot.json, which fails
+    // checkSnapshotChainIntact and leaves `migration-ordering` red.
+    expect(readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8')).toBe(before);
   });
 
-  it('does not append a second journal entry when the resource is re-scaffolded after a cleanup', () => {
-    // The scenario appendJournalEntry's own comment claims to protect: the
-    // generated files were deleted by hand, but the journal entry was left.
-    // A re-run then picks migrationIdx = max+1, so the tag it builds is
-    // 0005_create_widgets while the journal holds 0004_create_widgets — a
-    // full-tag comparison never matches and silently appends a duplicate entry
-    // (and a second migration creating the same table).
+  it('writes nothing under packages/db/migrations/', () => {
+    scaffoldResource({ plural: 'widgets', target: tmpRoot });
+
+    const migrationFiles = listFilesRel(join(tmpRoot, 'packages/db/migrations'));
+    // Only the pre-existing journal fixture. A stray .sql here would be an
+    // orphan: checkMigrationFilesExist requires a journal entry for every file.
+    expect(migrationFiles).toEqual(['meta/_journal.json']);
+  });
+
+  it('leaves the journal untouched when re-scaffolded after a manual cleanup', () => {
+    // The scenario the old appendJournalEntry claimed to guard, and got wrong:
+    // it matched on the whole tag, but the tag embeds the index, so a re-run
+    // built `0005_create_widgets` against an existing `0004_create_widgets` and
+    // appended a duplicate. The pre-existing test for it filtered on
+    // `tag === '0004_create_widgets'` and so never saw the `0005` entry.
+    // Now the journal is never written at all, which removes the class.
+    const before = readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8');
     const first = scaffoldResource({ plural: 'widgets', target: tmpRoot });
     for (const rel of first.filesWritten) {
       rmSync(join(tmpRoot, rel), { force: true });
@@ -140,14 +147,7 @@ describe('scaffoldResource()', () => {
 
     scaffoldResource({ plural: 'widgets', target: tmpRoot });
 
-    const journal = JSON.parse(
-      readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8'),
-    ) as typeof STARTING_JOURNAL;
-    const widgetEntries = journal.entries.filter((e) => e.tag.endsWith('_create_widgets'));
-
-    expect(widgetEntries).toHaveLength(1);
-    expect(widgetEntries[0]!.tag).toBe('0004_create_widgets');
-    expect(journal.entries).toHaveLength(5);
+    expect(readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8')).toBe(before);
   });
 
   it('refuses to overwrite existing files', () => {
@@ -173,8 +173,6 @@ describe('scaffoldResource()', () => {
     // Use a different resource name + an explicit singular to avoid widget collision.
     const result = scaffoldResource({ plural: 'categories', singular: 'category', target: tmpRoot });
     expect(result.filesWritten.length).toBeGreaterThan(0);
-    // Migration index is picked from the journal — should be the next slot.
-    expect(result.migrationIndex).toBe(4);
 
     const schema = readFileSync(join(tmpRoot, 'packages/db/src/schema/categories.ts'), 'utf8');
     expect(schema).toContain("'categories'");
@@ -189,15 +187,11 @@ describe('scaffoldResource()', () => {
     expect(contract).toContain('categoryItemSchema');
     expect(contract).toContain("path: '/api/v1/categories'");
 
-    // Migration filename is renumbered AND the fixture token in the body is
-    // substituted to the new plural name.
-    const migration = readFileSync(
-      join(tmpRoot, 'packages/db/migrations/0004_create_categories.sql'),
-      'utf8',
-    );
-    expect(migration).toContain('"categories"');
-    expect(migration).not.toContain('widgets');
-    expect(migration).not.toContain('widget'); // no orphan singular either
+    // The RLS block is substituted too, even though it is printed rather than
+    // written — a stray `widgets` there would be pasted into a real migration.
+    expect(result.rlsBlock).toContain('"categories"');
+    expect(result.rlsBlock).not.toContain('widgets');
+    expect(result.rlsBlock).not.toContain('widget'); // no orphan singular either
   });
 
   it('substitutes correctly for names that contain fixture tokens as substrings (regression)', () => {
@@ -225,37 +219,15 @@ describe('scaffoldResource()', () => {
     expect(route).toContain('paginateAwidgets');
   });
 
-  it('throws a clear error when the migration journal is malformed JSON', () => {
-    writeFile(
-      join(tmpRoot, 'packages/db/migrations/meta/_journal.json'),
-      '{ not valid json',
-    );
+  it('throws a clear error when the target is not a repo root', () => {
+    // The scaffolder no longer PARSES the journal (db:generate owns it), but it
+    // still checks the file exists — cheapest proof that --target is right,
+    // before anything is written.
+    rmSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'));
     expect(() => scaffoldResource({ plural: 'widgets', target: tmpRoot })).toThrow(
-      /not valid JSON/,
+      /Cannot find migration journal/,
     );
+    expect(existsSync(join(tmpRoot, 'packages/db/src/schema/widgets.ts'))).toBe(false);
   });
 
-  it('does not double-append a journal entry on re-run after manual file cleanup', () => {
-    scaffoldResource({ plural: 'widgets', target: tmpRoot });
-
-    // Simulate "developer deleted the scaffolded files to retry" — keep the
-    // journal + barrel changes, drop the artifact files. The next run must
-    // pass `ensureNoCollisions` (files are gone) but MUST NOT add a second
-    // journal entry with the same tag.
-    rmSync(join(tmpRoot, 'packages/db/migrations/0004_create_widgets.sql'));
-    rmSync(join(tmpRoot, 'packages/db/src/schema/widgets.ts'));
-    rmSync(join(tmpRoot, 'apps/web/src/app/api/v1/widgets'), { recursive: true });
-    rmSync(join(tmpRoot, 'apps/web/src/lib/services/widgets-service.ts'));
-    rmSync(join(tmpRoot, 'apps/web/src/hooks/useWidgets.ts'));
-    rmSync(join(tmpRoot, 'apps/web/src/app/(authenticated)/widgets'), { recursive: true });
-    rmSync(join(tmpRoot, 'apps/web/__tests__/api/widgets'), { recursive: true });
-    rmSync(join(tmpRoot, 'apps/web/__tests__/integration/widgets.integration.test.ts'));
-
-    scaffoldResource({ plural: 'widgets', target: tmpRoot });
-
-    const raw = readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8');
-    const journal = JSON.parse(raw) as typeof STARTING_JOURNAL;
-    const widgetsEntries = journal.entries.filter((e) => e.tag === '0004_create_widgets');
-    expect(widgetsEntries).toHaveLength(1);
-  });
 });
