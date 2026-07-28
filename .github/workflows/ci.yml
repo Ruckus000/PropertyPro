@@ -192,6 +192,11 @@ jobs:
       - name: Verify migration ordering
         run: pnpm exec tsx scripts/verify-migration-ordering.ts
 
+  # This job owns the ONLY production build in CI. The `build` job below used to
+  # run an identical `pnpm build` a second time, gated behind every other job,
+  # which put ~5min of duplicated work on the critical path. The build lives here
+  # rather than there because both the PDF.js smoke test and `pnpm perf:check`
+  # read the emitted build output from disk, so they must share a job with it.
   perf-check:
     name: perf-check
     runs-on: ubuntu-latest
@@ -203,6 +208,10 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+      # Carried over from the former standalone `build` job so this job's env is
+      # a superset of both — the build already succeeded without it, but keeping
+      # it means the two builds were provably equivalent before they were merged.
+      SUPABASE_SERVICE_ROLE_KEY: placeholder
 
     steps:
       - name: Checkout
@@ -225,6 +234,21 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Next's incremental compiler cache. Turbo reports "0 cached, 8 total" on
+      # every run, so both Next apps are otherwise compiled cold each time.
+      # turbo.json already excludes .next/cache from the build `outputs`, so this
+      # does not fight turbo's own output handling.
+      - name: Cache Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/admin/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            nextjs-${{ runner.os }}-
+
       - name: Build
         run: pnpm build
 
@@ -236,37 +260,25 @@ jobs:
       - name: Run performance budget check
         run: pnpm perf:check
 
+  # Status-check alias, NOT a second build.
+  #
+  # `Build` is a required status check on main, so the context name has to keep
+  # reporting. The production build itself happens exactly once, in `perf-check`
+  # above, which needs the build output in-process for the bundle-size budget.
+  #
+  # This job previously ran its own identical `pnpm build` (287s) AND declared
+  # `needs: [lint, typecheck, test, no-mock-guard, migration-ordering, perf-check]`,
+  # so it did not start until ~12min into the run and then rebuilt what
+  # perf-check had already built. That cost ~5min of wall clock and ~5min of
+  # runner minutes on every single run, for no added signal.
+  #
+  # To retire this indirection: drop `Build` from main's required status checks
+  # and delete this job.
   build:
     name: Build
-    needs: [lint, typecheck, test, no-mock-guard, migration-ordering, perf-check]
+    needs: [perf-check]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    env:
-      # Build-time env stubs — no live services needed for build verification.
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
-      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
-      SUPABASE_SERVICE_ROLE_KEY: placeholder
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
+      - name: Production build verified in perf-check
+        run: echo "Production build succeeded in the perf-check job."
