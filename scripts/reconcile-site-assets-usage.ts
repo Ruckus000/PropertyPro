@@ -54,6 +54,11 @@
  *   gallery   content.images[].imagePath
  *   hero      content.photos[].path, content.heroImagePath
  *   branding  favicon.icon32Path, favicon.appleTouch180Path
+ *   snapshots site_publish_snapshots.snapshot->blocks[] (same per-type rules)
+ *
+ * Retained publish snapshots count because `revertToSnapshot` writes their
+ * block content back as live drafts — an asset no live row references can
+ * still be one click from being live, so calling it an orphan is wrong.
  *
  * Block paths are stored as the BASE path, and `finalize` deletes the raw
  * upload at that base path after writing `{path}.1600w.webp` and
@@ -83,6 +88,7 @@ import {
   expandToStoredObjects,
   referencedBasePaths,
   referencedBrandingPaths,
+  referencedSnapshotPaths,
 } from './lib/site-assets-reference-model';
 
 export interface CommunityReport {
@@ -137,6 +143,26 @@ export async function reconcileSiteAssetsUsage(
 
   const db = options.db ?? createUnscopedClient();
 
+  // Read the counter BEFORE the bucket, deliberately.
+  //
+  // A finalize landing between the two reads writes an object AND increments
+  // the counter. Counter-first means that object is absent from `counter` but
+  // present in `actual`, so the delta over-counts by its size: the quota gets
+  // stricter, and the next run corrects it. Bucket-first would produce the
+  // mirror image -- an object present in neither `actual` nor the drift, whose
+  // bytes the counter forgets permanently, letting the community exceed its
+  // real quota with no self-correcting path.
+  const communityRows = (await db.execute(sql`
+    SELECT id, slug, COALESCE((branding ->> 'assetsBytesUsed')::bigint, 0) AS counter_bytes, branding
+    FROM communities
+    WHERE deleted_at IS NULL
+  `)) as unknown as Array<{
+    id: number;
+    slug: string;
+    counter_bytes: string | number;
+    branding: unknown;
+  }>;
+
   // Objects grouped by their leading path segment, which IS the community id
   // (enforced on write by assertPathsScopedToCommunity + parseSiteAssetPath).
   const objectRows = (await db.execute(sql`
@@ -154,22 +180,20 @@ export async function reconcileSiteAssetsUsage(
     created_at: Date | string;
   }>;
 
-  const communityRows = (await db.execute(sql`
-    SELECT id, slug, COALESCE((branding ->> 'assetsBytesUsed')::bigint, 0) AS counter_bytes, branding
-    FROM communities
-    WHERE deleted_at IS NULL
-  `)) as unknown as Array<{
-    id: number;
-    slug: string;
-    counter_bytes: string | number;
-    branding: unknown;
-  }>;
-
   const blockRows = (await db.execute(sql`
     SELECT community_id, block_type, content
     FROM site_blocks
     WHERE deleted_at IS NULL
   `)) as unknown as Array<{ community_id: number; block_type: string; content: unknown }>;
+
+  // Retained publish snapshots are a reference source too: revertToSnapshot
+  // writes their block content back as live drafts, so their assets are one
+  // click from being live. A pruned (NULL) snapshot references nothing.
+  const snapshotRows = (await db.execute(sql`
+    SELECT community_id, snapshot
+    FROM site_publish_snapshots
+    WHERE snapshot IS NOT NULL
+  `)) as unknown as Array<{ community_id: number; snapshot: unknown }>;
 
   const referencedByCommunity = new Map<number, Set<string>>();
   const addReferences = (communityId: number, paths: Iterable<string>) => {
@@ -185,6 +209,12 @@ export async function reconcileSiteAssetsUsage(
     addReferences(
       Number(row.community_id),
       expandToStoredObjects(referencedBasePaths(row.block_type, row.content)),
+    );
+  }
+  for (const row of snapshotRows) {
+    addReferences(
+      Number(row.community_id),
+      expandToStoredObjects(referencedSnapshotPaths(row.snapshot)),
     );
   }
   for (const row of communityRows) {
@@ -310,19 +340,35 @@ function printReport(result: ReconcileResult): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const applyCounter = args.includes('--apply-counter');
-  const maxAgeArg = args.find((a) => a.startsWith('--max-age-hours='));
-  const capArg = args.find((a) => a.startsWith('--safety-cap='));
 
-  if (!process.env['DATABASE_URL']) {
-    console.error('DATABASE_URL is required.');
-    process.exit(1);
-  }
+  /**
+   * Parse a numeric flag strictly.
+   *
+   * `Number('none')` is NaN, and every comparison against NaN is false — so an
+   * unvalidated `--safety-cap=none` silently DISABLES the abort whose entire
+   * job is to stop a wrong reference model from rewriting every community's
+   * counter, and `--max-age-hours=x` silently reports in-flight uploads as
+   * orphans. A safety cap you can turn off with a typo is not a safety cap.
+   */
+  const numericFlag = (name: string): number | undefined => {
+    const arg = args.find((a) => a.startsWith(`${name}=`));
+    if (arg === undefined) return undefined;
+    const value = Number(arg.slice(name.length + 1));
+    if (!Number.isFinite(value) || value < 0) {
+      console.error(`${name} must be a non-negative number; got "${arg.slice(name.length + 1)}"`);
+      process.exit(1);
+    }
+    return value;
+  };
+
+  const maxAgeHours = numericFlag('--max-age-hours');
+  const safetyCap = numericFlag('--safety-cap');
 
   try {
     const result = await reconcileSiteAssetsUsage({
       applyCounter,
-      ...(maxAgeArg ? { maxAgeHours: Number(maxAgeArg.split('=')[1]) } : {}),
-      ...(capArg ? { safetyCap: Number(capArg.split('=')[1]) } : {}),
+      ...(maxAgeHours !== undefined ? { maxAgeHours } : {}),
+      ...(safetyCap !== undefined ? { safetyCap } : {}),
       log: (m) => console.log(m),
     });
 

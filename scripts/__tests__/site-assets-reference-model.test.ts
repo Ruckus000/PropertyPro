@@ -3,6 +3,7 @@ import {
   expandToStoredObjects,
   referencedBasePaths,
   referencedBrandingPaths,
+  referencedSnapshotPaths,
 } from '../lib/site-assets-reference-model';
 
 /**
@@ -116,5 +117,39 @@ describe('referencedBrandingPaths', () => {
     expect(
       referencedBrandingPaths({ logoPath: 'x/logo.png', siteLogoPath: 'x/site.png' }),
     ).toEqual([]);
+  });
+});
+
+describe('referencedSnapshotPaths', () => {
+  it('walks a retained snapshot payload through the per-type rules', () => {
+    // revertToSnapshot writes this content straight back as live drafts, so
+    // these assets are one click from being live. Omitting this source is what
+    // would make the reconciler argue for deleting a restorable asset.
+    expect(
+      referencedSnapshotPaths({
+        blocks: [
+          { blockOrder: 1, blockType: 'hero', content: { photos: [{ path: '1/hero/h.jpg' }] } },
+          { blockOrder: 2, blockType: 'text', content: { body: 'hi' } },
+          {
+            blockOrder: 3,
+            blockType: 'gallery',
+            content: { images: [{ imagePath: '1/content/g.jpg' }] },
+          },
+        ],
+      }),
+    ).toEqual(['1/hero/h.jpg', '1/content/g.jpg']);
+  });
+
+  it('treats a pruned (null) snapshot as referencing nothing', () => {
+    // Retention nulls the payload and revert is only offered where it is
+    // non-null, so those assets really are unreachable.
+    expect(referencedSnapshotPaths(null)).toEqual([]);
+    expect(referencedSnapshotPaths(undefined)).toEqual([]);
+  });
+
+  it('survives a malformed payload', () => {
+    expect(referencedSnapshotPaths({})).toEqual([]);
+    expect(referencedSnapshotPaths({ blocks: 'nope' })).toEqual([]);
+    expect(referencedSnapshotPaths({ blocks: [null, { blockType: 42 }] })).toEqual([]);
   });
 });

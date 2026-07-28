@@ -87,6 +87,40 @@ export function expandToStoredObjects(basePaths: readonly string[]): Set<string>
 }
 
 /**
+ * Base paths referenced by a retained publish snapshot.
+ *
+ * `site_publish_snapshots.snapshot` stores the full block payload of a past
+ * publish, and `revertToSnapshot` writes that content straight back into
+ * `site_blocks` as drafts. So an asset that no live row references can still
+ * be one click away from being live again.
+ *
+ * Without this, a gallery removed from the site last month has no draft row
+ * and no published row, but its objects are still restorable — and the
+ * reconciler would list them as orphans. Anything acting on that list would
+ * delete assets that a one-click revert then renders as broken images on a
+ * §718.111(12)(g) transparency page, with no error anywhere.
+ *
+ * The column is nullable: retention prunes old snapshots, and revert is only
+ * offered where `snapshot IS NOT NULL`. A pruned snapshot references nothing,
+ * which is correct — those assets really are unreachable.
+ */
+export function referencedSnapshotPaths(snapshot: unknown): string[] {
+  if (snapshot === null || typeof snapshot !== 'object') return [];
+  const blocks = (snapshot as Record<string, unknown>)['blocks'];
+  if (!Array.isArray(blocks)) return [];
+
+  const paths: string[] = [];
+  for (const block of blocks) {
+    if (block === null || typeof block !== 'object') continue;
+    const record = block as Record<string, unknown>;
+    const blockType = record['blockType'];
+    if (typeof blockType !== 'string') continue;
+    paths.push(...referencedBasePaths(blockType, record['content']));
+  }
+  return paths;
+}
+
+/**
  * Favicon object paths from a community's branding jsonb.
  *
  * Stored already-processed by `site/images/finalize-favicon`, so they are used
