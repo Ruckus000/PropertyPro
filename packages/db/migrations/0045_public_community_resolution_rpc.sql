@@ -54,6 +54,28 @@
 -- /transparency, /notices, /request-access and the unavailable page, so
 -- narrowing it here would trade one broken page for four.
 --
+-- ===========================================================================
+-- THE ADVISOR LINTS THIS ADDS ARE EXPECTED. DO NOT "FIX" THEM.
+-- ===========================================================================
+--
+-- Supabase's linter now reports these two functions under 0028
+-- (anon_security_definer_function_executable) and 0029 (the authenticated
+-- equivalent), and recommends revoking EXECUTE or switching to SECURITY
+-- INVOKER. Doing either takes the public site down again — being callable by
+-- `anon` IS the requirement, and SECURITY INVOKER would put us straight back
+-- behind the membership policy that caused the outage.
+--
+-- Migration 0039 already carries the same warning for the four pre-existing
+-- SECURITY DEFINER functions and explains the general rule; these two join that
+-- list, taking each lint from 4 functions to 6. Advisor state after applying:
+-- zero ERROR-level lints, which is the bar.
+--
+-- What makes them safe despite the lint: each takes one text argument, performs
+-- one lookup, and returns one bigint. There is no dynamic SQL, no side effect,
+-- `search_path` is pinned so `communities` cannot be shadowed, and the value
+-- returned is already public (the slug is the hostname; the id is in public
+-- URLs). They are STABLE, so they cannot write.
+--
 -- SAFETY: EXPAND. Adds two functions; changes no table, policy, or row. Apply
 -- BEFORE the code that calls it ships — and it must be, because the calling code
 -- 500s on its first request otherwise. No new tenant table, so
