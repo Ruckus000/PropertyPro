@@ -11,9 +11,17 @@ on:
       - pnpm-lock.yaml
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify-phase3-plan-status:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       PHASE3_PLAN_VERIFY_STRICT: '1'
     steps:
