@@ -1,0 +1,168 @@
+name: Postgres Image Digest Bump
+
+# The Postgres service image is pinned by digest in integration-tests.yml and
+# tenant-isolation-game-day.yml. A pin with no bump process is a pin that rots:
+# it silently freezes the Postgres patch level, including security patches, until
+# somebody happens to notice. This job is that process.
+#
+# Weekly it resolves what `postgres:16` currently points at on the ECR Public
+# mirror and, if that differs from what is pinned, opens a PR moving the pin.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — ahead of the working week, and before the
+    # tenant-isolation game day at 09:30 which uses the same image.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: bump-postgres-digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # Needed to push the bump branch and open the PR. Deliberately scoped to
+      # this job rather than the workflow, and nothing wider than these two.
+      contents: write
+      pull-requests: write
+
+    env:
+      IMAGE_REPO: docker/library/postgres
+      IMAGE_TAG: '16'
+      REGISTRY: public.ecr.aws
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve the current digest for the tag
+        id: resolve
+        run: |
+          set -euo pipefail
+
+          token=$(curl -fsS \
+            "https://${REGISTRY}/token/?scope=repository:${IMAGE_REPO}:pull&service=${REGISTRY}" \
+            | jq -r .token)
+
+          # The tag points at an OCI image INDEX (multi-arch). Pinning the index
+          # digest is what preserves multi-arch resolution — pinning a per-platform
+          # manifest would break any runner on a different architecture.
+          latest=$(curl -fsSI \
+            -H "Authorization: Bearer ${token}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json" \
+            "https://${REGISTRY}/v2/${IMAGE_REPO}/manifests/${IMAGE_TAG}" \
+            | tr -d '\r' \
+            | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}')
+
+          # Fail closed. Writing an unvalidated string into a workflow file would
+          # be worse than not bumping at all — a malformed pin breaks every job
+          # that uses the image, including a REQUIRED status check.
+          if ! printf '%s' "$latest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::Registry did not return a usable digest (got: '${latest:-<empty>}')"
+            exit 1
+          fi
+
+          current=$(grep -ohE 'postgres:16@sha256:[0-9a-f]{64}' .github/workflows/*.yml \
+            | sed 's/.*@//' | sort -u)
+
+          if [ -z "$current" ]; then
+            echo "::error::No pinned postgres digest found in .github/workflows — has the pin been removed or reformatted?"
+            exit 1
+          fi
+          if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
+            echo "::error::Workflows disagree on the pinned digest:"; printf '%s\n' "$current"
+            exit 1
+          fi
+
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest"   >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$latest" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Pin is current ($current)."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Pin is stale: $current -> $latest"
+          fi
+
+      - name: Open a bump PR
+        if: steps.resolve.outputs.changed == 'true'
+        env:
+          # A PR opened with the default GITHUB_TOKEN does NOT trigger other
+          # workflows — GitHub suppresses that to prevent recursion. This repo
+          # requires eight status checks to merge, so such a PR would sit with
+          # checks that never report and could never be merged.
+          #
+          # So: use POSTGRES_DIGEST_BUMP_TOKEN (a PAT with repo scope) when it
+          # exists, and fall back to GITHUB_TOKEN with a loud warning when it
+          # does not. The fallback still produces a correct PR; it just needs a
+          # human to nudge CI (close/reopen, or push an empty commit).
+          GH_TOKEN: ${{ secrets.POSTGRES_DIGEST_BUMP_TOKEN || github.token }}
+          HAS_PAT: ${{ secrets.POSTGRES_DIGEST_BUMP_TOKEN != '' }}
+          CURRENT: ${{ steps.resolve.outputs.current }}
+          LATEST: ${{ steps.resolve.outputs.latest }}
+        run: |
+          set -euo pipefail
+
+          short="${LATEST#sha256:}"; short="${short:0:12}"
+          branch="chore/postgres-digest-${short}"
+
+          # Deterministic branch name, so a digest that stays stale for several
+          # weeks produces ONE PR rather than one per run.
+          if gh pr list --head "$branch" --state open --json number \
+              --jq 'length' | grep -qv '^0$'; then
+            echo "A PR for $branch is already open — nothing to do."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+
+          # Replace the digest everywhere it appears, so the two workflows cannot
+          # drift apart.
+          grep -rlE "postgres:16@${CURRENT}" .github/workflows \
+            | xargs sed -i "s|postgres:16@${CURRENT}|postgres:16@${LATEST}|g"
+
+          git add .github/workflows
+
+          # Separate -m flags rather than one multi-line string: every line in a
+          # YAML block scalar must stay indented, and a column-0 continuation
+          # silently ends the block and breaks the whole workflow file.
+          git commit \
+            -m "chore(ci): bump pinned postgres:16 digest" \
+            -m "${CURRENT} -> ${LATEST}" \
+            -m "Opened automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:16 on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases."
+
+          git push origin "$branch"
+
+          {
+            printf 'Automated digest bump for the Postgres service container.\n\n'
+            printf '| | |\n|---|---|\n'
+            printf '| From | `%s` |\n' "$CURRENT"
+            printf '| To | `%s` |\n\n' "$LATEST"
+            printf '`postgres:16` on the ECR Public mirror now resolves to a new image\n'
+            printf 'index — that is how upstream ships patch releases. The tag is\n'
+            printf 'unchanged; only the pin moves.\n\n'
+            printf 'Merging is safe once `integration-tests` is green, since that job is\n'
+            printf 'the primary consumer of this image and will pull the new digest.\n'
+            if [ "$HAS_PAT" != "true" ]; then
+              printf '\n> **CI will not start on its own.** This PR was opened with\n'
+              printf '> `GITHUB_TOKEN`, and GitHub suppresses workflow triggers for such\n'
+              printf '> PRs. Close and reopen it (or push an empty commit) to run the\n'
+              printf '> required checks. To make this automatic, add a\n'
+              printf '> `POSTGRES_DIGEST_BUMP_TOKEN` repository secret.\n'
+            fi
+          } > /tmp/bump-body.md
+
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore(ci): bump pinned postgres:16 digest to ${short}" \
+            --body-file /tmp/bump-body.md
