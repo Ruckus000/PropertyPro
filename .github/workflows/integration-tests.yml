@@ -21,7 +21,16 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # AWS ECR Public's mirror of the Docker Hub official image, NOT a
+        # third-party rebuild — `docker/library/*` on public.ecr.aws is the
+        # official-images mirror, so this is the same artifact by a second route.
+        #
+        # This job is a REQUIRED status check, so its service container is on the
+        # critical path of every merge in the repo. Pulling it from Docker Hub
+        # anonymously made a Docker Hub blip block all merges: observed as three
+        # consecutive `Get "https://registry-1.docker.io/v2/": context deadline
+        # exceeded` failures, which failed the required check on an unrelated PR.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
