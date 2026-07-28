@@ -14,6 +14,12 @@ import { SectionShell } from './SectionShell';
 export interface CanvasProps {
   communityId: number;
   context: CanvasContext;
+  /**
+   * Switches the shell to the Add tab. Optional so the canvas still renders
+   * standalone, but without it the empty state tells the PM to add a section
+   * and offers no way to do so.
+   */
+  onAddSection?: () => void;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
 }
@@ -30,7 +36,7 @@ export interface CanvasProps {
  * and the hover/focus control cluster. The shell must be mounted inside a
  * `SiteEditorProvider` (see `EditorRoot`).
  */
-export function Canvas({ communityId, context, now }: CanvasProps) {
+export function Canvas({ communityId, context, onAddSection, now }: CanvasProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
   // One timestamp for the whole render pass — otherwise two blocks with the
   // same window could disagree about where the cutoff falls.
@@ -103,6 +109,13 @@ export function Canvas({ communityId, context, now }: CanvasProps) {
           <EmptyState
             title="Your site is empty"
             description="Add your first section to give visitors something to read."
+            action={
+              onAddSection && (
+                <Button type="button" onClick={onAddSection}>
+                  Add a section
+                </Button>
+              )
+            }
           />
         ) : (
           sections

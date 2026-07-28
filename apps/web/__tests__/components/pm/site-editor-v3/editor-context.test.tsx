@@ -76,6 +76,19 @@ describe('SiteEditorProvider', () => {
     expect(api.selection?.blockId).toBe(3);
   });
 
+  it('does NOT notify onSelect from selectSlot', () => {
+    // Deliberate asymmetry with `select`. `onSelect` switches the shell to the
+    // Sections tab, which unmounts the Add panel — right after adding, that
+    // breaks adding a second section and buys nothing, because the inspector
+    // is a separate column that opens regardless of the active tab.
+    const onSelect = vi.fn();
+    renderProvider(BLOCKS, onSelect);
+
+    act(() => api.selectSlot(3, 'image'));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(api.selection?.blockId).toBe(3);
+  });
+
   it('treats moving the first section up as a no-op, not an error', () => {
     renderProvider();
 

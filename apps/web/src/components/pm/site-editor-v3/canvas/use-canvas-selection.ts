@@ -19,6 +19,20 @@ export interface UseCanvasSelectionResult {
   selection: CanvasSelection | null;
   isSelected: (blockId: number) => boolean;
   select: (blockId: number) => void;
+  /**
+   * Select by SLOT, for a section that may not exist in `blocks` yet.
+   *
+   * `select` cannot do this job. It resolves the id against `blocks`, so it is
+   * memoized on `blocks` — and the Add panel's caller runs in the microtask
+   * after `await mutateAsync(...)`, holding the closure from the render BEFORE
+   * the new row arrived. It would find nothing and clear the anchor, and the
+   * inspector would silently not open.
+   *
+   * This sets the anchor directly from values the caller already has (it chose
+   * the slot and the type), so it closes over nothing and cannot go stale.
+   * Resolution step 2 then does the rest once the refetch lands.
+   */
+  selectSlot: (blockOrder: number, blockType: string) => void;
   clear: () => void;
   /** Sections the PM can reorder: hero and tombstones excluded, slot-ordered. */
   movableSections: SiteBlockSummary[];
@@ -28,9 +42,14 @@ export interface UseCanvasSelectionResult {
  * What we remember about the selected section between renders.
  *
  * Not just the id: see the resolution order documented on the hook.
+ *
+ * `id` is null for an anchor set by `selectSlot`, where the row does not exist
+ * yet and therefore has no id. Ids are numbers, so a null id simply never
+ * matches resolution step 1 and falls through to the `(order, blockType)`
+ * branch; the re-anchor below rewrites it with the real id on arrival.
  */
 interface SelectionAnchor {
-  id: number;
+  id: number | null;
   order: number;
   blockType: string;
 }
@@ -146,7 +165,17 @@ export function useCanvasSelection(
     },
     [blocks],
   );
+
+  // Empty dep array, and that is the whole point — see the interface docblock.
+  // A `blocks` dependency here would reintroduce exactly the stale-closure bug
+  // this exists to avoid.
+  const selectSlot = useCallback(
+    (blockOrder: number, blockType: string) =>
+      setAnchor({ id: null, order: blockOrder, blockType }),
+    [],
+  );
+
   const clear = useCallback(() => setAnchor(null), []);
 
-  return { selection, isSelected, select, clear, movableSections };
+  return { selection, isSelected, select, selectSlot, clear, movableSections };
 }

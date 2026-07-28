@@ -130,6 +130,9 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
           styling: features.hasSiteCustomCss,
           domain: features.hasSiteCustomDomain,
         }}
+        // Separate from `proToolAccess` on purpose: that map gates whole TOOLS
+        // and would lock the Add tab. This gates three rows inside it.
+        hasPolishBlocks={features.hasSitePolishBlocks}
         canvasContext={canvasContext}
         // Phase 7. Both derived from the `getCommunityPublicInfo` read above, so
         // the notice panel and the phone-gate fast path open with real state and

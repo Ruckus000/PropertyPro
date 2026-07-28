@@ -114,7 +114,13 @@ describe('Inspector — presentation', () => {
   });
 
   it('explains itself for a section type with no form yet, rather than showing an empty panel', () => {
-    editorMock.selection = { ...TEXT_SELECTION, blockType: 'contact' };
+    // Every CURRENT block type has a form now — the Add panel made that a
+    // requirement, since offering a type the inspector cannot configure leaves
+    // the PM stuck with the section. The fallback still matters because a new
+    // type lands in BLOCK_TYPES before its form does, and an older deploy can
+    // meet content written by a newer one. Hence a type that is genuinely
+    // unknown rather than one that merely used to be unbuilt.
+    editorMock.selection = { ...TEXT_SELECTION, blockType: 'not-a-real-block' };
     render(<Inspector communityId={42} />);
     expect(screen.getByText(/arrive in a later update/i)).toBeInTheDocument();
   });

@@ -44,6 +44,13 @@ const SitePanel = dynamic(
   () => import('./panels/SitePanel').then((m) => m.SitePanel),
   { loading: () => null },
 );
+
+// Same reasoning again: only the active tool's panel is rendered, so the Add
+// catalog — and, behind its own nested dynamic import, the image upload flow —
+// is fetched on the tab click. A PM editing existing sections never pays for it.
+const AddPanel = dynamic(() => import('./panels/AddPanel').then((m) => m.AddPanel), {
+  loading: () => null,
+});
 // Code-split, for the same reason as PreviewDialog/PublishSheet above: the
 // inspector renders nothing until a section is selected, but a static import
 // put its whole subtree — the form registry, and every form's shared field
@@ -82,6 +89,17 @@ export interface EditorRootProps {
   communityName: string;
   publicSiteUrl: string | null;
   proToolAccess: ProToolAccess;
+  /**
+   * `hasSitePolishBlocks` — whether the plan includes the FAQ / Gallery /
+   * Amenities blocks the Add panel offers.
+   *
+   * Deliberately NOT folded into `proToolAccess`. That map is keyed by
+   * `TOOL_PLAN_FEATURE`, and `ToolTabs` renders any tool present in it as
+   * Pro-locked — so adding `add` there would lock the Add TAB, which is false:
+   * seven of the ten types it offers are available on Essentials. This gates
+   * three rows inside the panel, not the panel.
+   */
+  hasPolishBlocks: boolean;
   /** Null when the community row could not be read; the canvas degrades. */
   canvasContext: CanvasContext | null;
   /**
@@ -119,6 +137,7 @@ export function EditorRoot({
   communityName,
   publicSiteUrl,
   proToolAccess,
+  hasPolishBlocks,
   canvasContext,
   hasPublishedSite,
   initialNotice,
@@ -144,6 +163,11 @@ export function EditorRoot({
   // this component's job; selecting the row needs the editor context, so it
   // happens one level down in PublishSheetMount.
   const handleSelectSlot = useCallback(() => setActiveTool('sections'), []);
+  // The empty states in the Sections panel and on the canvas both name adding a
+  // section; this is what makes them able to do it. Passed as a prop rather
+  // than read from context because `setActiveTool` lives HERE — the provider's
+  // parent — and only `useSiteEditor` is out of reach from this component.
+  const handleGoToAdd = useCallback(() => setActiveTool('add'), []);
 
   return (
     <SiteEditorProvider
@@ -172,7 +196,10 @@ export function EditorRoot({
         // the PM actually edits something.
         status={<AutosaveStatusLine />}
         renderToolPanel={(tool) => {
-          if (tool === 'sections') return <SectionList />;
+          if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
+          if (tool === 'add') {
+            return <AddPanel communityId={communityId} hasPolishBlocks={hasPolishBlocks} />;
+          }
           if (tool === 'site') {
             return (
               <SitePanel
@@ -199,7 +226,11 @@ export function EditorRoot({
         inspector={<Inspector communityId={communityId} />}
       >
         {canvasContext ? (
-          <Canvas communityId={communityId} context={canvasContext} />
+          <Canvas
+            communityId={communityId}
+            context={canvasContext}
+            onAddSection={handleGoToAdd}
+          />
         ) : (
           <div className="mx-auto max-w-[1000px] px-5 py-4">
             <div className="rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-card p-10 text-center">

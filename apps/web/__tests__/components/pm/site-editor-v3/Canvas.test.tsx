@@ -2,7 +2,7 @@
  * The editor canvas — render path, states, and ordering.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Canvas, sortBlocks } from '@/components/pm/site-editor-v3/canvas/Canvas';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 
@@ -111,6 +111,19 @@ describe('Canvas — states', () => {
   it('shows an empty state rather than a blank canvas', () => {
     renderCanvas();
     expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+    // No handler passed: the copy still stands on its own, and no dead button
+    // is rendered.
+    expect(screen.queryByRole('button', { name: 'Add a section' })).not.toBeInTheDocument();
+  });
+
+  it('offers a way to add from the empty canvas', () => {
+    const onAddSection = vi.fn();
+    render(
+      <Canvas communityId={7} context={CONTEXT} now={NOW} onAddSection={onAddSection} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a section' }));
+    expect(onAddSection).toHaveBeenCalled();
   });
 });
 

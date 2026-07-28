@@ -101,6 +101,24 @@ describe('SectionList — rendering', () => {
     expect(screen.getByText('Add your first section')).toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
   });
+
+  it('offers a way to add when the empty state names adding', () => {
+    // This empty state used to be titled "Add your first section" with no
+    // action at all — it named the one thing the v3 editor could not do.
+    state.sections = [];
+    const onAddSection = vi.fn();
+    render(<SectionList onAddSection={onAddSection} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a section' }));
+    expect(onAddSection).toHaveBeenCalled();
+  });
+
+  it('still renders standalone without an add handler', () => {
+    state.sections = [];
+    render(<SectionList />);
+    expect(screen.getByText('Add your first section')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a section' })).not.toBeInTheDocument();
+  });
 });
 
 describe('SectionList — drag reorder', () => {

@@ -229,6 +229,76 @@ describe('useCanvasSelection', () => {
     expect(result.current.selection?.blockId).toBe(2);
   });
 
+  describe('selectSlot', () => {
+    // The Add panel's problem: the write returns no id, and by the time the
+    // refetch lands the `select` closure is one render stale. `selectSlot`
+    // anchors on (order, blockType) instead, which resolve step 2 already
+    // handles, so there is no id to learn and no closure to go stale.
+
+    it('anchors a slot that does not exist yet and resolves when the row arrives', () => {
+      const { result, rerender } = renderHook(
+        ({ blocks }) => useCanvasSelection(blocks),
+        { initialProps: { blocks: [HERO, TEXT] as SiteBlockSummary[] } },
+      );
+
+      act(() => result.current.selectSlot(3, 'image'));
+      // Nothing at slot 3 yet: no selection, but the anchor is kept.
+      expect(result.current.selection).toBeNull();
+
+      rerender({ blocks: [HERO, TEXT, IMAGE] });
+      expect(result.current.selection).toEqual({
+        blockId: 3,
+        blockOrder: 3,
+        blockType: 'image',
+        isMovable: true,
+      });
+    });
+
+    it('re-anchors onto the real id, so a later save carries the selection', () => {
+      const { result, rerender } = renderHook(
+        ({ blocks }) => useCanvasSelection(blocks),
+        { initialProps: { blocks: [HERO, TEXT] as SiteBlockSummary[] } },
+      );
+
+      act(() => result.current.selectSlot(3, 'image'));
+      rerender({ blocks: [HERO, TEXT, IMAGE] });
+
+      // A save soft-deletes the row and inserts a fresh one at the same slot
+      // with a new id. That only survives if the anchor picked up id 3 above —
+      // the by-order fallback would still match, but a REORDER would not.
+      rerender({
+        blocks: [HERO, block({ id: 3, blockOrder: 9, blockType: 'image' })],
+      });
+      expect(result.current.selection?.blockOrder).toBe(9);
+    });
+
+    it('does not select a different block type that lands in the slot', () => {
+      // Same guard as resolve step 2: a section sliding into the slot must not
+      // silently inherit a selection the PM never made.
+      const { result, rerender } = renderHook(
+        ({ blocks }) => useCanvasSelection(blocks),
+        { initialProps: { blocks: [HERO, TEXT] as SiteBlockSummary[] } },
+      );
+
+      act(() => result.current.selectSlot(3, 'image'));
+      rerender({ blocks: [HERO, TEXT, block({ id: 3, blockOrder: 3, blockType: 'faq' })] });
+      expect(result.current.selection).toBeNull();
+    });
+
+    it('never resolves onto a tombstone at that slot', () => {
+      const { result, rerender } = renderHook(
+        ({ blocks }) => useCanvasSelection(blocks),
+        { initialProps: { blocks: [HERO, TEXT] as SiteBlockSummary[] } },
+      );
+
+      act(() => result.current.selectSlot(3, TOMBSTONE_BLOCK_TYPE));
+      rerender({
+        blocks: [HERO, TEXT, block({ id: 3, blockOrder: 3, blockType: TOMBSTONE_BLOCK_TYPE })],
+      });
+      expect(result.current.selection).toBeNull();
+    });
+  });
+
   it('excludes the hero and tombstones from movableSections, slot-ordered', () => {
     const { result } = renderHook(() =>
       useCanvasSelection([

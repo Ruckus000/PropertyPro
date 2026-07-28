@@ -18,6 +18,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
@@ -97,6 +98,7 @@ function renderRoot() {
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
       proToolAccess={{ styling: true, domain: true }}
+      hasPolishBlocks
       // Null on purpose: takes the degraded-canvas branch, so the whole
       // block-view tree stays out of this test.
       canvasContext={null}
@@ -183,5 +185,28 @@ describe('EditorRoot — Publish button wiring', () => {
     renderRoot();
 
     expect(publishButton()).toBeEnabled();
+  });
+});
+
+describe('EditorRoot — tool panels', () => {
+  it('no longer shows the unbuilt placeholder on the Add tab', async () => {
+    // `next/dynamic` is stubbed to render null in this file, so the Add panel
+    // itself cannot be asserted on here (AddPanel.test.tsx covers it). What
+    // this pins is that the tab no longer falls through to
+    // `ToolPanelPlaceholder` — the state that made v3 unable to add a section.
+    renderRoot();
+
+    // Exact: `/Add/` also matches the "Address" tab.
+    await userEvent.click(screen.getByRole('tab', { name: 'Add' }));
+
+    expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
+  });
+
+  it('still shows the placeholder for the tabs that really are unbuilt', async () => {
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('tab', { name: /Colours/ }));
+
+    expect(screen.getByText('This panel is not built yet.')).toBeInTheDocument();
   });
 });
