@@ -6,7 +6,6 @@ import {
   billingGroups,
   communities,
   complianceChecklistItems,
-  createAdminClient,
   documents,
   emergencyBroadcastRecipients,
   emergencyBroadcasts,
@@ -21,6 +20,9 @@ import {
   violations,
 } from '@propertypro/db';
 import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
+// AUTHZ: CLI/seed script — the service-role client is only reachable from this
+// guarded subpath (DBB-01, #803 removed the root-barrel re-export).
+import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
   ensureSeededDocumentStorage,
   ensureNotificationPreference,

@@ -1,14 +1,24 @@
 /* eslint-disable no-console */
 import postgres from 'postgres';
-import { createAdminClient } from '@propertypro/db';
+// AUTHZ: CLI/verification script — the service-role client is only reachable
+// from this guarded subpath (DBB-01, #803 removed the root-barrel re-export).
+import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { getDefaultDocumentCategories, type CommunityType } from '@propertypro/shared';
 
 const DEMO_SLUGS = ['sunset-condos', 'palm-shores-hoa', 'sunset-ridge-apartments'] as const;
 
-const EXPECTED_CATEGORY_COUNTS = {
-  'sunset-condos': 5,
-  'palm-shores-hoa': 5,
-  'sunset-ridge-apartments': 6,
-} as const satisfies Record<(typeof DEMO_SLUGS)[number], number>;
+/**
+ * Derived, never hard-coded.
+ *
+ * The seed provisions demo communities from `getDefaultDocumentCategories()` —
+ * the same list production uses — so a literal here is a copy of a list that
+ * grows without it. It had gone stale exactly that way: the expectation still
+ * said 5/5/6 while both default sets had grown to 8, so this check failed on a
+ * correctly-seeded database.
+ */
+function expectedCategoryCount(communityType: CommunityType): number {
+  return getDefaultDocumentCategories(communityType).length;
+}
 
 const EXPECTED_ESIGN_TEMPLATE_COUNTS = {
   'sunset-condos': 2,
@@ -283,17 +293,25 @@ async function run(): Promise<number> {
     const failures: string[] = [];
 
     const categoryTableRows: string[][] = DEMO_SLUGS.map((slug) => {
-      const expected = EXPECTED_CATEGORY_COUNTS[slug];
-      const actual = categoryBySlug.get(slug)?.category_count;
+      const row = categoryBySlug.get(slug);
+      // A missing community is its own failure — reporting it as a count
+      // mismatch against a guessed expectation would name the wrong problem.
+      if (!row) {
+        failures.push(`${slug}: community not found.`);
+        return [slug, 'n/a', 'missing', 'FAIL'];
+      }
+
+      const expected = expectedCategoryCount(row.community_type);
+      const actual = row.category_count;
       const status = actual === expected ? 'PASS' : 'FAIL';
 
       if (status === 'FAIL') {
         failures.push(
-          `${slug}: expected ${String(expected)} system categories, got ${String(actual ?? 'missing')}.`,
+          `${slug}: expected ${String(expected)} system categories, got ${String(actual)}.`,
         );
       }
 
-      return [slug, String(expected), String(actual ?? 'missing'), status];
+      return [slug, String(expected), String(actual), status];
     });
 
     const nullCategoryTableRows: string[][] = DEMO_SLUGS.map((slug) => {

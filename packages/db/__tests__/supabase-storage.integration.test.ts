@@ -8,11 +8,13 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  createAdminClient,
   createPresignedDownloadUrl,
   createPresignedUploadUrl,
   deleteStorageObject,
 } from '../src';
+// DBB-01 (#803) removed the root-barrel re-export; the service-role client is
+// only reachable from this subpath.
+import { createAdminClient } from '../src/supabase/admin';
 
 const hasStorageEnv =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
