@@ -199,6 +199,10 @@ jobs:
   # read the emitted build output from disk, so they must share a job with it.
   perf-check:
     name: perf-check
+    # CHAOS ROUND 2 — DO NOT MERGE. Skip the job entirely (simulating someone
+    # adding a paths filter or an `if:`) to see whether a SKIPPED required check
+    # plus a SKIPPED dependent Build gate still blocks the merge.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -216,12 +220,6 @@ jobs:
       # the build instead of silently constructing a client with a bogus key.
 
     steps:
-      # CHAOS EXPERIMENT — DO NOT MERGE. Forces perf-check to fail immediately so
-      # we can observe what the dependent `Build` gate reports and whether branch
-      # protection still blocks the merge.
-      - name: CHAOS - force perf-check failure
-        run: exit 1
-
       - name: Checkout
         uses: actions/checkout@v4
 
