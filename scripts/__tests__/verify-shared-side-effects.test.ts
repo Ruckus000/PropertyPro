@@ -87,6 +87,34 @@ describe('detects each import-time side effect', () => {
     expect(rules(found)).toEqual(['global-mutation']);
   });
 
+  it('flags a self-registering map laundered through a const', () => {
+    // The bypass: VariableStatement is a declaration, so a statement-kind
+    // check waves this through while the module mutates an imported map on
+    // import. This exact source passed the guard before check 4 existed.
+    const found = findViolationsInSource(
+      'probe.ts',
+      `import { REGISTRY } from './b';\nconst _registered = REGISTRY.set('x', 1);\n`,
+    );
+    expect(rules(found)).toEqual(['imported-mutation']);
+    expect(found[0]?.line).toBe(2);
+  });
+
+  it('flags Object.freeze applied to an IMPORTED binding', () => {
+    const found = findViolationsInSource(
+      'probe.ts',
+      `import { REGISTRY } from './b';\nconst _frozen = Object.freeze(REGISTRY);\n`,
+    );
+    expect(rules(found)).toEqual(['imported-mutation']);
+  });
+
+  it('flags a class static {} block, which runs on import', () => {
+    const found = findViolationsInSource(
+      'probe.ts',
+      `import { REGISTRY } from './b';\nexport class C { static { REGISTRY.set('y', 2); } }\n`,
+    );
+    expect(rules(found)).toContain('top-level-statement');
+  });
+
   it('flags Object.defineProperty', () => {
     const found = findViolationsInSource(
       'probe.ts',
@@ -120,6 +148,26 @@ describe('does not flag ordinary pure module code', () => {
     const found = findViolationsInSource(
       'probe.ts',
       `export const M: Record<\n  string,\n  number\n>= {};\n`,
+    );
+    expect(found).toEqual([]);
+  });
+
+  it('allows a Zod schema built at module scope from an imported binding', () => {
+    // z is imported and z.object() is a call on it. Check 4 must not fire:
+    // this shape is in nearly every file in the package.
+    const found = findViolationsInSource(
+      'probe.ts',
+      `import { z } from 'zod';\nexport const s = z.object({ a: z.string() });\n`,
+    );
+    expect(found).toEqual([]);
+  });
+
+  it('allows a mutating method on a binding the module OWNS', () => {
+    // `local` is declared here, not imported, so mutating it reaches nothing
+    // outside the module.
+    const found = findViolationsInSource(
+      'probe.ts',
+      `const local = new Map<string, number>();\nconst _ = local.set('a', 1);\n`,
     );
     expect(found).toEqual([]);
   });
