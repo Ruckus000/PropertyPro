@@ -33,3 +33,21 @@ describe('meetingsBlockSchema', () => {
     expect(meetingsBlockSchema.safeParse({ includeCancelled: true }).success).toBe(false);
   });
 });
+
+describe('meetings block — empty text override', () => {
+  it('accepts a custom empty-state message', () => {
+    expect(meetingsBlockSchema.safeParse({ emptyText: 'Nothing here right now.' }).success).toBe(true);
+  });
+
+  it('accepts content with none — the renderer keeps its built-in copy', () => {
+    expect(meetingsBlockSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('rejects an empty string rather than rendering a blank empty state', () => {
+    expect(meetingsBlockSchema.safeParse({ emptyText: '' }).success).toBe(false);
+  });
+
+  it('rejects an over-long message', () => {
+    expect(meetingsBlockSchema.safeParse({ emptyText: 'a'.repeat(201) }).success).toBe(false);
+  });
+});

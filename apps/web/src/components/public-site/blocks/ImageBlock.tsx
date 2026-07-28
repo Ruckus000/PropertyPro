@@ -3,6 +3,7 @@ import { imageBlockSchema, type ImageBlockContent } from '@propertypro/shared';
 // `node:crypto` for write-side path generation and cannot be bundled client-side.
 import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 import type { BlockRendererProps } from './types';
+import { variantWidth } from './block-variant';
 
 export function ImageBlock(props: BlockRendererProps) {
   const parsed = imageBlockSchema.safeParse(props.block.content);
@@ -29,7 +30,7 @@ export function ImageBlock(props: BlockRendererProps) {
 
   return (
     <section className="px-4 py-12 sm:px-6 lg:px-8">
-      <figure className="mx-auto max-w-4xl">
+      <figure className={`mx-auto ${variantWidth('grid', content.variant)}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={fallbackSrc}

@@ -1,5 +1,6 @@
 import { textBlockSchema, type TextBlockContent } from '@propertypro/shared';
 import type { BlockRendererProps } from './types';
+import { variantWidth } from './block-variant';
 
 export function TextBlock(props: BlockRendererProps) {
   const parsed = textBlockSchema.safeParse(props.block.content);
@@ -15,7 +16,7 @@ export function TextBlock(props: BlockRendererProps) {
 
   return (
     <section className="px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
+      <div className={`mx-auto ${variantWidth('prose', content.variant)}`}>
         {content.heading && (
           <h2 className="font-heading text-2xl font-semibold text-content mb-4">
             {content.heading}

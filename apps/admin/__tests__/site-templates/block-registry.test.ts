@@ -8,15 +8,17 @@ import {
 } from '../../src/lib/site-templates/block-registry';
 
 describe('describeBlockFields', () => {
-  it('introspects a plain object schema (text): required body, optional heading', () => {
+  it('introspects a plain object schema (text): required body, optional heading and variant', () => {
     const fields = describeBlockFields(textBlockSchema);
     expect(fields).toEqual(
       expect.arrayContaining([
         { name: 'heading', type: 'string', optional: true, nullable: false },
         { name: 'body', type: 'string', optional: false, nullable: false },
+        // Phase 9 layout variant — an enum, so it also covers the enum tag.
+        { name: 'variant', type: 'enum', optional: true, nullable: false },
       ]),
     );
-    expect(fields).toHaveLength(2);
+    expect(fields).toHaveLength(3);
   });
 
   it('reads .shape through .strict().refine() wrappers (hero)', () => {

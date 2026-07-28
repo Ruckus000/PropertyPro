@@ -65,3 +65,23 @@ describe('imageBlockSchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('image block — layout variant', () => {
+  const base = { imagePath: '1/content/a.jpg', altText: 'A' };
+
+  it('accepts each known variant', () => {
+    for (const variant of ['standard', 'wide', 'compact'] as const) {
+      expect(imageBlockSchema.safeParse({ ...base, variant }).success).toBe(true);
+    }
+  });
+
+  it('accepts content with no variant — absent means standard', () => {
+    // Every stored row predates this field, so absent must stay valid or the
+    // public site loses every image block the moment this ships.
+    expect(imageBlockSchema.safeParse(base).success).toBe(true);
+  });
+
+  it('rejects an unknown variant', () => {
+    expect(imageBlockSchema.safeParse({ ...base, variant: 'enormous' }).success).toBe(false);
+  });
+});

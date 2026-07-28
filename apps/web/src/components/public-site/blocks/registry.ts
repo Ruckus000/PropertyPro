@@ -26,6 +26,7 @@ import { ContactBlock } from './ContactBlock';
 import { FaqBlock } from './FaqBlock';
 import { GalleryBlock } from './GalleryBlock';
 import { AmenitiesBlock } from './AmenitiesBlock';
+import { PaymentsBlock } from './PaymentsBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
@@ -39,6 +40,7 @@ export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>
   faq: FaqBlock,
   gallery: GalleryBlock,
   amenities: AmenitiesBlock,
+  payments: PaymentsBlock,
 };
 
 export function hasRenderer(blockType: BlockType): boolean {

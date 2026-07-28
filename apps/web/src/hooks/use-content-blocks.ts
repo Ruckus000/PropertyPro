@@ -34,6 +34,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
+// Both type-only, so neither the contract module nor api-contract enters
+// this chunk.
+import type { InferBody } from '@propertypro/api-contract';
+import type { blocksUpsertContract } from '@/app/api/v1/pm/site/blocks/contract';
 
 export interface SiteBlockSummary {
   id: number;
@@ -116,16 +120,20 @@ export function useSitePublishToken(communityId: number) {
 }
 
 export interface UpsertContentBlockInput {
-  blockType:
-    | 'text'
-    | 'image'
-    | 'announcements'
-    | 'documents'
-    | 'meetings'
-    | 'contact'
-    | 'faq'
-    | 'gallery'
-    | 'amenities';
+  /**
+   * Derived from the route contract rather than restated here.
+   *
+   * `payments` (Phase 9) made this the FOURTH uncoordinated copy of the block
+   * type list — the CHECK constraint, `BLOCK_TYPES`, the contract enum and
+   * this one. The CHECK constraint and `BLOCK_TYPES` cannot be linked at
+   * compile time, but these two can, so they are. Adding a block type now
+   * means touching three places, not four, and this one can no longer drift
+   * from the contract that actually validates the request.
+   *
+   * `import type` only — the contract module is not pulled into the client
+   * bundle.
+   */
+  blockType: InferBody<typeof blocksUpsertContract>['blockType'];
   blockOrder: number;
   content: unknown;
 }

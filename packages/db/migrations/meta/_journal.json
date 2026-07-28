@@ -309,6 +309,13 @@
       "when": 1784511494576,
       "tag": "0043_backfill_site_published_at",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1784511554576,
+      "tag": "0044_site_blocks_payments_type",
+      "breakpoints": true
     }
   ]
 }

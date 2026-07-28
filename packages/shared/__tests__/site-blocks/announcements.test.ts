@@ -27,3 +27,21 @@ describe('announcementsBlockSchema', () => {
     expect(announcementsBlockSchema.safeParse({ pinnedOnly: true }).success).toBe(false);
   });
 });
+
+describe('announcements block — empty text override', () => {
+  it('accepts a custom empty-state message', () => {
+    expect(announcementsBlockSchema.safeParse({ emptyText: 'Nothing here right now.' }).success).toBe(true);
+  });
+
+  it('accepts content with none — the renderer keeps its built-in copy', () => {
+    expect(announcementsBlockSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('rejects an empty string rather than rendering a blank empty state', () => {
+    expect(announcementsBlockSchema.safeParse({ emptyText: '' }).success).toBe(false);
+  });
+
+  it('rejects an over-long message', () => {
+    expect(announcementsBlockSchema.safeParse({ emptyText: 'a'.repeat(201) }).success).toBe(false);
+  });
+});

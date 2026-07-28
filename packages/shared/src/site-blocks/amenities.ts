@@ -6,6 +6,7 @@
  * system). Plain text only — sanitization-free by construction.
  */
 import { z } from 'zod';
+import { blockVariantSchema } from './types';
 
 export const amenityItemSchema = z
   .object({
@@ -18,6 +19,8 @@ export const amenitiesBlockSchema = z
   .object({
     heading: z.string().min(1).max(120).optional(),
     items: z.array(amenityItemSchema).min(1).max(30),
+    /** Absent means `standard` — see blockVariantSchema. */
+    variant: blockVariantSchema.optional(),
   })
   .strict();
 

@@ -17,6 +17,7 @@ import { contactBlockSchema } from './contact';
 import { faqBlockSchema } from './faq';
 import { galleryBlockSchema } from './gallery';
 import { amenitiesBlockSchema } from './amenities';
+import { paymentsBlockSchema } from './payments';
 
 export const blockSchemaRegistry = {
   hero: heroBlockSchema,
@@ -29,11 +30,30 @@ export const blockSchemaRegistry = {
   faq: faqBlockSchema,
   gallery: galleryBlockSchema,
   amenities: amenitiesBlockSchema,
+  payments: paymentsBlockSchema,
 } satisfies Record<BlockType, z.ZodType>;
 
-export { BLOCK_TYPES, blockTypeSchema, TOMBSTONE_BLOCK_TYPE } from './types';
-export type { BlockType } from './types';
-export { heroBlockSchema, type HeroBlockContent } from './hero';
+export {
+  BLOCK_TYPES,
+  blockTypeSchema,
+  TOMBSTONE_BLOCK_TYPE,
+  BLOCK_VARIANTS,
+  blockVariantSchema,
+  emptyTextSchema,
+} from './types';
+export type { BlockType, BlockVariant } from './types';
+export {
+  heroBlockSchema,
+  heroPhotoSchema,
+  MAX_HERO_PHOTOS,
+  type HeroBlockContent,
+  type HeroPhoto,
+} from './hero';
+export {
+  resolveHeroPhotos,
+  stripVariantSuffix,
+  type ResolvedHeroPhoto,
+} from './hero-photos';
 export { textBlockSchema, type TextBlockContent } from './text';
 export { imageBlockSchema, type ImageBlockContent } from './image';
 export { documentsBlockSchema, DOCUMENT_CATEGORIES, type DocumentsBlockContent, type DocumentCategory } from './documents';
@@ -47,6 +67,7 @@ export {
   type GalleryBlockContent,
   type GalleryImage,
 } from './gallery';
+export { paymentsBlockSchema, type PaymentsBlockContent } from './payments';
 export {
   amenitiesBlockSchema,
   amenityItemSchema,

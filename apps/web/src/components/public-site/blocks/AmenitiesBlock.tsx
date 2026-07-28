@@ -7,6 +7,7 @@
  */
 import { amenitiesBlockSchema, type AmenitiesBlockContent } from '@propertypro/shared';
 import type { BlockRendererProps } from './types';
+import { variantWidth } from './block-variant';
 
 export function AmenitiesBlock(props: BlockRendererProps) {
   const parsed = amenitiesBlockSchema.safeParse(props.block.content);
@@ -22,7 +23,7 @@ export function AmenitiesBlock(props: BlockRendererProps) {
 
   return (
     <section className="px-4 py-12 sm:px-6 lg:px-8" aria-labelledby={headingId}>
-      <div className="mx-auto max-w-4xl">
+      <div className={`mx-auto ${variantWidth('grid', content.variant)}`}>
         {content.heading && (
           <h2 id={headingId} className="mb-6 font-heading text-2xl font-semibold text-content">
             {content.heading}
