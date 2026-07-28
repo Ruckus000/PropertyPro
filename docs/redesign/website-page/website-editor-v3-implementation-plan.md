@@ -643,7 +643,7 @@ community published through the current editor. The writer is restored in
 
 ---
 
-### Phase 9 — Content additions
+### Phase 9 — Content additions ✅ *shipped*
 
 Hero photo array + carousel · block layout variants + empty text · `payments` block ·
 (site settings/footer are Phase 8).
@@ -654,13 +654,76 @@ via `buildCommunityUrl()`, with an optional PM override validated by the existin
 `ctaTargetSchema` (`packages/shared/src/site-blocks/types.ts:63`), which already rejects
 protocol-relative and backslash open-redirect forms.
 
+> **What the build changed about this phase.**
+>
+> *The carousel has no JavaScript, and therefore no autoplay.* Nothing under
+> `components/public-site/` is a client component — the public site is a
+> statutory-transparency entry point shipping zero hydration runtime — and
+> `HeroBlock` is imported by both the public renderer registry and the editor's
+> view registry. `perf-check` sums every chunk the manifest lists for a route
+> regardless of which branch renders, so "only communities with 2+ photos pay"
+> would not have been true of the measurement: ~40-90 KiB on a statutory page
+> to buy ~3 KiB of slide logic. Scroll-snap plus in-page anchors gives swipe,
+> trackpad, keyboard and labelled per-photo navigation for nothing.
+> **Consequence: three of the four assertions in the table below have nothing
+> to assert.** `carousel.test.tsx` is replaced by `hero-photo-strip` assertions
+> plus a source-reading test that NO file under `public-site/blocks` carries
+> `'use client'`. Measured: public site group unchanged (364.2 -> 364.4 KiB).
+>
+> *`emptyText` went on the system-of-record blocks, not text/image/amenities.*
+> Those three cannot render empty (`body` is `min(1)`, `imagePath` is required,
+> `items` is `min(1)`), so the field would have had no consumer. It landed on
+> `announcements`/`documents`/`meetings` — the renderers that hard-code empty
+> copy — and NOT on `contact`, which renders fields rather than a list.
+>
+> *The layout field is `variant`, not `layout`.* `BlockRendererProps.layout` is
+> already the site template id.
+>
+> *This phase also built the per-block inspector forms*, which the plan never
+> assigned to a phase. Without them the new fields are unreachable from the
+> product. Six block types now have forms.
+>
+> *Shipped as TWO releases, split on the read/write seam.* Every block content
+> schema is `.strict()`, so an unrecognised key is a hard `safeParse` failure —
+> renderers return null (the section silently disappears behind a 200), and
+> `siteIssues` validates EVERY live row, so one unreadable row makes
+> `publishBlocked` freeze ALL publishing for that community. `DEPLOYMENT.md`
+> documents Vercel instant rollback as standard incident response, so "code one
+> release behind the rows" is routine. Shipping schemas+renderers and the
+> writers together would have meant the rollback button corrupts sites. R1 =
+> content model + renderers (nothing writes new shapes); R2 = the editor forms.
+> Once R1 has baked, R2 is safe to roll back. Same ordering migration 0010 used
+> for the polish blocks. `__tests__/components/public-site/forward-compat.test.tsx`
+> is the permanent assertion that R1 tolerates every shape R2 produces — keep it
+> after R2 ships; its value is in outliving it.
+>
+> *Adding a field to the hero broke three writers nobody was looking at.* The
+> onboarding wizard's welcome step, its hero-image step and the v2 hero form all
+> rebuilt hero content from hand-maintained allowlists. Two silently deleted the
+> whole photo array on any save; the third emitted both imagery shapes and
+> dead-ended on a 400 after the upload had been finalized and charged against
+> quota. Fixed via one shared helper (`lib/site-editor/hero-imagery.ts`) with a
+> regression test per surface. The general lesson: **an allowlist over a schema
+> other code can extend is a data-loss bug on a timer.**
+>
+> *The budget went DOWN.* `"sideEffects": false` on `packages/shared` was worth
+> -37.1 KiB on the editor route and -135.3 on mobile, on one line; making
+> `Inspector` `next/dynamic` paid for the entire form seam. Net for the phase:
+> 659.1 -> 625.0 KiB. The two narrower levers this plan had earmarked (a
+> `./site-blocks` subpath export, relocating `toInitials`) were implemented,
+> measured at ~0.1 KiB on top of that, and reverted as redundant.
+
 **Tests.**
 | Test | Asserts |
 |---|---|
-| `carousel.test.tsx` | pause control; dot navigation; `aria-roledescription`; live region announces slide changes; `prefers-reduced-motion` disables autoplay |
-| `hero-photos.test.ts` | non-decorative photo without alt blocks publish; the legacy single `heroImagePath` upgrades to a one-element array on read |
-| `payments-target.test.ts` | `//evil.com`, `/\evil.com`, `\\evil.com`, `javascript:` all rejected; `https://` accepted; external targets render `rel="noopener noreferrer"` |
-| block-type migration test | the CHECK constraint accepts `payments` and still rejects garbage |
+| `HeroBlock.test.tsx` + `view-registry.test.ts` | *(replaces `carousel.test.tsx`)* dot navigation; `aria-roledescription` carousel/slide; per-slide labels; decorative photos get empty alt; first photo eager, rest lazy; **no `'use client'` anywhere under `public-site/blocks`**, and no hooks in the strip — i.e. the absence of autoplay is deliberate |
+| `hero-photos.test.ts` | non-decorative photo without alt blocks publish (asserted against `siteIssues`, not just the schema); the legacy single `heroImagePath` upgrades to a one-element array on read, with its variant suffix stripped |
+| `payments.test.ts` + `PaymentsBlock.test.tsx` | `//evil.com`, `/\evil.com`, `\\evil.com`, `/\/\evil.com`, `javascript:`, `data:`, bare `http://` all rejected; `https://` accepted; external targets render `rel="noopener noreferrer"`, internal paths do not |
+| `site-blocks-block-type-check.integration.test.ts` | the CHECK constraint accepts `payments` and every `BLOCK_TYPES` member, and still rejects retired/near-miss/wrong-case/injection-shaped garbage |
+| `hero.test.ts` (route) | **cross-tenant**: a `photos[]` entry naming another community's id is rejected, with the offending index named |
+| `HeroPhotosField.test.tsx` | keyboard-only add/reorder/remove; single live region; focus lands on a real element after removal |
+| `TextForm.test.tsx` + `inspector-forms.test.tsx` | one write per burst; save echo does not clobber typing; SoR config survives an empty-text edit |
+| `form-registry.test.ts` | every form is `dynamic()`; no Radix/`react-image-crop`/`storage-paths` under `forms/`; `InspectorBody` never mentions `block.id` |
 
 ---
 

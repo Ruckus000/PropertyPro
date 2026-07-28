@@ -174,4 +174,52 @@ describe('<WelcomeMessageEditor>', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/hero save failed/i);
     });
   });
+
+  it('preserves an existing hero photo array when saving a welcome message', async () => {
+    // REGRESSION. This form rebuilds the hero payload from an allowlist, which
+    // silently dropped `photos` when that field was added — so saving a
+    // welcome message deleted the PM's whole gallery, with no warning and no
+    // undo. Imagery now goes through `carryHeroImagery`.
+    const photos = [
+      { path: '42/hero/pool.jpg', alt: 'The pool' },
+      { path: '42/hero/gym.jpg', decorative: true },
+    ];
+    installFetch({ heroBody: { headline: 'Welcome', photos } });
+
+    render(wrap(<WelcomeMessageEditor communityId={42} />));
+    const input = (await screen.findByTestId('wizard-welcome-input')) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'A new welcome message.' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    await waitFor(() => {
+      const patch = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(patch).toBeDefined();
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.photos).toEqual(photos);
+      // And never both shapes — the schema refuses content carrying each.
+      expect(body).not.toHaveProperty('heroImagePath');
+    });
+  });
+
+  it('still preserves a legacy single hero image', async () => {
+    installFetch({
+      heroBody: { headline: 'Welcome', heroImagePath: '42/hero/a.webp', heroImageAlt: 'A' },
+    });
+
+    render(wrap(<WelcomeMessageEditor communityId={42} />));
+    const input = (await screen.findByTestId('wizard-welcome-input')) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'Another message.' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    await waitFor(() => {
+      const patch = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      const body = JSON.parse((patch![1] as RequestInit).body as string);
+      expect(body.heroImagePath).toBe('42/hero/a.webp');
+      expect(body).not.toHaveProperty('photos');
+    });
+  });
 });

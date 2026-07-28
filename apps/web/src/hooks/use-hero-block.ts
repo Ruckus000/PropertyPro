@@ -66,7 +66,15 @@ export function useUpdateHeroBlock(communityId: number) {
       }
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: heroQueryKey(communityId) });
+      // Invalidate the whole ['pm','site'] subtree, not just the hero query.
+      //
+      // The hero is block_order 1 of the community's site, so a hero write
+      // changes the SAME rows the canvas, the change count and the publish
+      // gate read through ['pm','site','blocks', communityId]. Invalidating
+      // only ['pm','site','hero'] left every one of those stale: the save
+      // succeeded and nothing on screen moved. Matches `useDiscardDrafts`,
+      // which invalidates at the same prefix for the same reason.
+      await qc.invalidateQueries({ queryKey: ['pm', 'site'] });
     },
   });
 }

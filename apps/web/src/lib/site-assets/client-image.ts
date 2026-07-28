@@ -16,6 +16,25 @@ export const HERO_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 export const HERO_MIN_WIDTH = 1600;
 export const HERO_MIN_HEIGHT = 900;
 
+/**
+ * What to send the upload pipeline as `altText` for a DECORATIVE image.
+ *
+ * `/api/v1/site/images/finalize` requires `altText: z.string().min(1)`, but a
+ * decorative image carries no alt in block content — by definition, that is
+ * what decorative means. Sending `''` presigns and PUTs the bytes and only
+ * then 400s, stranding a raw object in the bucket every attempt.
+ *
+ * Sending the filename instead would be worse: presign accepts a filename up
+ * to 255 chars while finalize caps altText at 200, so a long filename
+ * reintroduces the same failure in a rarer form, and filenames are user data
+ * heading into an audit-log field.
+ *
+ * This value is never rendered. finalize writes it only to the audit-log
+ * `metadata` blob and echoes it back; the authoritative alt is the one stored
+ * in block content.
+ */
+export const DECORATIVE_PLACEHOLDER_ALT = 'Decorative image';
+
 export interface ImageDimensions {
   width: number;
   height: number;

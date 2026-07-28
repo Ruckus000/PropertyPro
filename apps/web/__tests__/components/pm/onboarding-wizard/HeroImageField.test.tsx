@@ -136,4 +136,38 @@ describe('<HeroImageField>', () => {
     expect(await screen.findByTestId('hero-image-server-error')).toHaveTextContent('Quota exceeded');
     expect(updateHeroMock).not.toHaveBeenCalled();
   });
+
+  it('writes into photos[0] when the hero already uses a photo array', async () => {
+    // REGRESSION. This spread `base` and then set `heroImagePath`, so on a
+    // hero that already had `photos` it produced content carrying BOTH imagery
+    // shapes — which heroBlockSchema refuses. The PM got a 400 with
+    // developer-facing copy in a wizard that has no photo UI to resolve it,
+    // AFTER the upload had been finalized and charged against their quota.
+    heroData.current = {
+      headline: 'Existing headline',
+      photos: [
+        { path: '42/hero/old.jpg', alt: 'Old' },
+        { path: '42/hero/gym.jpg', decorative: true },
+      ],
+    };
+    render(wrap(<HeroImageField communityId={42} fallbackHeadline="Welcome" readDimensions={okDims} />));
+    await userEvent.upload(screen.getByTestId('wizard-hero-image-input'), makeFile('hero.jpg', 'image/jpeg'));
+    await userEvent.type(await screen.findByTestId('wizard-hero-alt-input'), 'Pool deck');
+    fireEvent.click(screen.getByTestId('hero-image-save'));
+
+    await waitFor(() => expect(updateHeroMock).toHaveBeenCalledTimes(1));
+    const sent = updateHeroMock.mock.calls[0]![0];
+
+    // Slot 0 replaced, the rest of the gallery untouched...
+    expect(sent.photos).toEqual([
+      { path: '42/hero/abc-pool.jpg', alt: 'Pool deck' },
+      { path: '42/hero/gym.jpg', decorative: true },
+    ]);
+    // ...the BASE path stored, not the 1600w variant...
+    expect(sent.photos[0].path).not.toContain('1600w');
+    // ...and never both shapes.
+    expect(sent).not.toHaveProperty('heroImagePath');
+    expect(sent).not.toHaveProperty('heroImageAlt');
+    expect(await screen.findByTestId('hero-image-outcome')).toHaveTextContent(/saved/i);
+  });
 });

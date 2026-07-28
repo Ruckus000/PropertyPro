@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import type { HeroBlockContent } from '@propertypro/shared';
 import { useUpdateHeroBlock } from '@/hooks/use-hero-block';
+import { carryHeroImagery } from '@/lib/site-editor/hero-imagery';
 
 interface Props {
   communityId: number;
@@ -27,8 +28,10 @@ export function HeroBlockForm({ communityId, initial }: Props) {
       ...(subtitle.trim() ? { subtitle: subtitle.trim() } : {}),
       ...(ctaText.trim() ? { ctaText: ctaText.trim() } : {}),
       ...(ctaTarget.trim() ? { ctaTarget: ctaTarget.trim() } : {}),
-      ...(initial?.heroImagePath ? { heroImagePath: initial.heroImagePath } : {}),
-      ...(initial?.heroImageAlt ? { heroImageAlt: initial.heroImageAlt } : {}),
+      // Imagery via the shared helper — this allowlist silently dropped
+      // `photos` when that field was added, so saving a headline edit here
+      // destroyed the PM's whole gallery.
+      ...carryHeroImagery(initial),
     } as HeroBlockContent;
     try {
       await mutation.mutateAsync(payload);

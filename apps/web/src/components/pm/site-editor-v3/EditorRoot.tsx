@@ -5,7 +5,6 @@ import { useContentBlocks } from '@/hooks/use-content-blocks';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
-import { Inspector } from './Inspector';
 import { StatusLine } from './StatusLine';
 
 // Code-split, and mounted only once opened.
@@ -45,6 +44,16 @@ const SitePanel = dynamic(
   () => import('./panels/SitePanel').then((m) => m.SitePanel),
   { loading: () => null },
 );
+// Code-split, for the same reason as PreviewDialog/PublishSheet above: the
+// inspector renders nothing until a section is selected, but a static import
+// put its whole subtree — the form registry, and every form's shared field
+// chrome — in the initial payload of every PM's editor.
+const Inspector = dynamic(() => import('./Inspector').then((m) => m.Inspector), {
+  // No `loading`: the inspector's own resting state IS nothing, so a skeleton
+  // would appear where a blank column belongs.
+  loading: () => null,
+});
+
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
@@ -52,6 +61,20 @@ import type { EditorToolId, ProToolAccess } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import type { SitePanelProps } from './panels/SitePanel';
+import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
+
+/** Bridges the active inspector form's save state into the top bar. */
+function AutosaveStatusLine() {
+  const { status, lastSavedAt, error, onRetry } = useAutosaveStatus();
+  return (
+    <StatusLine
+      status={status}
+      lastSavedAt={lastSavedAt}
+      error={error}
+      onRetry={onRetry}
+    />
+  );
+}
 
 export interface EditorRootProps {
   communityId: number;
@@ -123,6 +146,7 @@ export function EditorRoot({
       blocks={blocks ?? []}
       onSelect={handleSelect}
     >
+      <AutosaveStatusProvider>
       <EditorShell
         communityName={communityName}
         publicSiteUrl={publicSiteUrl}
@@ -134,13 +158,10 @@ export function EditorRoot({
         onActiveToolChange={setActiveTool}
         onPreview={handlePreview}
         onPublish={handlePublish}
-        // Mounted idle. `useAutosave` drives this once the per-block inspector
-        // forms exist — they are the only thing in the editor that autosaves,
-        // and they arrive with the inspector body. Until then StatusLine
-        // renders nothing (it deliberately shows no "Saved" without a save),
-        // so mounting it now costs nothing and means the top bar does not have
-        // to change when the forms land.
-        status={<StatusLine status="idle" lastSavedAt={null} />}
+        // Driven by whichever inspector form is open. StatusLine renders
+        // nothing while idle with no prior save, so this stays invisible until
+        // the PM actually edits something.
+        status={<AutosaveStatusLine />}
         renderToolPanel={(tool) => {
           if (tool === 'sections') return <SectionList />;
           if (tool === 'site') {
@@ -166,7 +187,7 @@ export function EditorRoot({
         }}
         // Returns null when nothing is selected, so passing it unconditionally
         // costs an empty render rather than a branch here.
-        inspector={<Inspector />}
+        inspector={<Inspector communityId={communityId} />}
       >
         {canvasContext ? (
           <Canvas communityId={communityId} context={canvasContext} />
@@ -198,6 +219,7 @@ export function EditorRoot({
           onFixIssue={handleSelectSlot}
         />
       ) : null}
+      </AutosaveStatusProvider>
     </SiteEditorProvider>
   );
 }

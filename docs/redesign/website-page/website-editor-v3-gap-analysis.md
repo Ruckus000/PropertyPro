@@ -101,10 +101,10 @@ asks for · `missing` = no counterpart.
 | 18 | Urgent notice | **missing** | Closest relatives are announcements and `emergency_broadcasts`, neither of which reaches the public site |
 | 19 | Site settings entity | **missing** | Title/description/indexing are not editable; metadata is derived |
 | 20 | Footer entity | **partial** | `PublicSiteFooter.tsx` renders a footer; nothing about it is PM-editable |
-| 21–22 | Hero photos + carousel, layout styles | **partial** | `heroBlockSchema` has exactly one `heroImagePath` + `heroImageAlt`, and the editor cannot even set it (`spec §8.4`) |
-| 23 | `payments` block | **missing** | Not in `BLOCK_TYPES`, not in the `site_blocks_block_type_check` constraint |
-| 24 | Block layout variants | **missing** | No `layout` field on the text/image/amenities schemas |
-| 25 | Per-block empty text | **missing** | Public renderers hard-code their empty copy |
+| 21–22 | Hero photos + carousel, layout styles | **shipped (Phase 9)** | `heroBlockSchema` has exactly one `heroImagePath` + `heroImageAlt`, and the editor cannot even set it (`spec §8.4`) |
+| 23 | `payments` block | **shipped (Phase 9)** | Not in `BLOCK_TYPES`, not in the `site_blocks_block_type_check` constraint |
+| 24 | Block layout variants | **shipped (Phase 9)** | No `layout` field on the text/image/amenities schemas |
+| 25 | Per-block empty text | **shipped (Phase 9)** | Public renderers hard-code their empty copy |
 | 26 | Undo toasts | **partial** | `sonner` is mounted (`app/layout.tsx`) and already used by `ContentSectionsList`/`PublishBar` — but as notifications, with no undo action |
 | 27 | Confirm dialogs, focus trap | **exists** | `components/ui/alert-dialog.tsx` + `dialog.tsx` (Radix) already trap and restore focus. v3's hand-rolled `useTrap` should be discarded |
 | 28 | Preview | **partial** | "Preview Draft" opens the public site with `?preview=true` in a new tab. No in-editor device preview |

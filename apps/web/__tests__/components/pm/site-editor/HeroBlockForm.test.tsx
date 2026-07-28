@@ -94,4 +94,60 @@ describe('<HeroBlockForm>', () => {
     expect(body.heroImagePath).toBe('communities/42/site/hero-final.jpg');
     expect(body.heroImageAlt).toBe('Sunset over the courtyard');
   });
+
+  it('preserves an existing hero photo array on save', async () => {
+    // REGRESSION. This form rebuilds the payload from an allowlist that
+    // silently dropped `photos` when that field was added, so a headline typo
+    // fix deleted the PM's whole gallery.
+    const photos = [
+      { path: '42/hero/pool.jpg', alt: 'The pool' },
+      { path: '42/hero/gym.jpg', decorative: true },
+    ];
+    render(
+      wrap(
+        <HeroBlockForm
+          communityId={42}
+          initial={{ headline: 'Old headline', photos } as never}
+        />,
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText(/headline/i), {
+      target: { value: 'New headline' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      expect(body.photos).toEqual(photos);
+      expect(body.headline).toBe('New headline');
+      // Never both shapes — heroBlockSchema refuses content carrying each.
+      expect(body).not.toHaveProperty('heroImagePath');
+    });
+  });
+
+  it('still preserves a legacy single hero image on save', async () => {
+    render(
+      wrap(
+        <HeroBlockForm
+          communityId={42}
+          initial={
+            { headline: 'Old', heroImagePath: '42/hero/a.webp', heroImageAlt: 'A' } as never
+          }
+        />,
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText(/headline/i), { target: { value: 'New' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      expect(body.heroImagePath).toBe('42/hero/a.webp');
+      expect(body.heroImageAlt).toBe('A');
+      expect(body).not.toHaveProperty('photos');
+    });
+  });
 });

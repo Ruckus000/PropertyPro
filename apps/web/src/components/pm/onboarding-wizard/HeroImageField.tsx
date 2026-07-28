@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactCrop, { type Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import type { HeroBlockContent } from '@propertypro/shared';
+import { replacePrimaryHeroImage } from '@/lib/site-editor/hero-imagery';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { scaleCropToNatural } from '@/components/pm/site-editor/ImageBlockForm';
 import { useHeroBlock, useUpdateHeroBlock } from '@/hooks/use-hero-block';
@@ -135,12 +136,22 @@ export function HeroImageField({
       // Merge into the existing hero content so the headline/subtitle/CTA
       // the PM set in the Welcome step are preserved. Fall back to a headline
       // if no hero exists yet (schema requires one).
+      //
+      // Imagery goes through `replacePrimaryHeroImage`: on a hero that already
+      // uses `photos`, spreading `base` and then setting `heroImagePath` would
+      // produce content carrying BOTH shapes, which the schema refuses — a
+      // dead-end 400 in a wizard with no photo UI, after the upload had
+      // already been finalized and charged against the storage quota.
       const current = heroQuery.data;
       const base: HeroBlockContent = current ?? { headline: fallbackHeadline };
+      const { heroImagePath: _path, heroImageAlt: _alt, photos: _photos, ...rest } = base;
       const content: HeroBlockContent = {
-        ...base,
-        heroImagePath: result.variant1600Path,
-        heroImageAlt: result.altText,
+        ...rest,
+        ...replacePrimaryHeroImage(current, {
+          photoPath: result.storagePath,
+          legacyPath: result.variant1600Path,
+          alt: result.altText,
+        }),
       };
       await updateHero.mutateAsync(content);
       setOutcome('Hero image saved.');

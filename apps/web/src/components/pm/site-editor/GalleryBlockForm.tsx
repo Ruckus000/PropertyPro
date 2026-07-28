@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { GalleryBlockContent, GalleryImage } from '@propertypro/shared';
 import { useImageUpload } from '@/hooks/use-image-upload';
+import { DECORATIVE_PLACEHOLDER_ALT } from '@/lib/site-assets/client-image';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 
@@ -25,9 +26,6 @@ interface GalleryEntry {
 }
 
 const MAX_IMAGES = 24;
-// finalize requires altText.min(1); decorative images carry no block-content
-// alt, so we send this placeholder to the upload pipeline only.
-const DECORATIVE_PLACEHOLDER_ALT = 'Decorative image';
 
 const inputClass =
   'mt-1 block w-full rounded-sm border border-default px-3 py-2 focus:border-interactive focus:outline-none focus:ring-2 focus:ring-interactive';

@@ -8,6 +8,7 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { useSiteEditor } from './editor-context';
 import { sectionLabel } from './section-label';
+import { InspectorBody } from './inspector/InspectorBody';
 
 // Code-split: the Radix dialog stack behind the overlay is ~27 KiB and is only
 // reachable below 1280px, on a route already at 684 KiB of a 700 KiB hard
@@ -19,10 +20,16 @@ const InspectorSheet = dynamic(
   { loading: () => null },
 );
 
-const PLACEHOLDER_BODY =
-  'Settings for this section arrive in a later update. For now you can reorder sections from the canvas or the Sections panel.';
+/**
+ * One-line orientation for the overlay sheet's `SheetDescription`.
+ *
+ * The sheet needs a plain-string `aria-describedby` target regardless of which
+ * form renders below it, so this is generic rather than per-block.
+ */
+const SHEET_DESCRIPTION = 'Edit this section. Changes save automatically.';
 
 export interface InspectorProps {
+  communityId: number;
   /** Extra classes for the docked column. Ignored in overlay mode. */
   className?: string;
 }
@@ -34,8 +41,8 @@ export interface InspectorProps {
  * canvas at >=1280px, and a right-hand overlay sheet below that, where three
  * columns no longer fit without squeezing the canvas into uselessness.
  */
-export function Inspector({ className }: InspectorProps) {
-  const { selection, clear } = useSiteEditor();
+export function Inspector({ communityId, className }: InspectorProps) {
+  const { selection, clear, blocks } = useSiteEditor();
 
   // Deliberately phrased as max-width, not min-width — the same inversion
   // EditorShell uses for its phone gate, for the same reason.
@@ -106,8 +113,24 @@ export function Inspector({ className }: InspectorProps) {
 
   const label = sectionLabel(selection.blockType);
 
+  // Content comes from the blocks the canvas is already rendering, so opening
+  // the inspector costs no extra request. `selection.blockId` is re-resolved
+  // every render by `useCanvasSelection`, so this cannot go stale.
+  const body = (
+    <InspectorBody
+      communityId={communityId}
+      blockType={selection.blockType}
+      blockOrder={selection.blockOrder}
+      content={blocks.find((b) => b.id === selection.blockId)?.content}
+    />
+  );
+
   if (isNarrow) {
-    return <InspectorSheet label={label} body={PLACEHOLDER_BODY} onClose={clear} />;
+    return (
+      <InspectorSheet label={label} description={SHEET_DESCRIPTION} onClose={clear}>
+        {body}
+      </InspectorSheet>
+    );
   }
 
   return (
@@ -132,9 +155,7 @@ export function Inspector({ className }: InspectorProps) {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <p className="text-sm text-content-secondary">{PLACEHOLDER_BODY}</p>
-      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">{body}</div>
     </aside>
   );
 }
