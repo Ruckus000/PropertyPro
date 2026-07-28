@@ -121,7 +121,17 @@ pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 > `scripts` block for the full set (more `guard:*`, `seed:*`/`reset:demo`,
 > `plan:verify:*`, `help:*`, and E2E variants).
 
-**CI:** 7 parallel jobs per PR — lint (includes DB access guard), typecheck, unit tests, no-mock-guard, migration-ordering, perf-check, then build.
+**CI:** 6 parallel jobs per PR — lint (includes DB access guard), typecheck, unit
+tests, no-mock-guard, migration-ordering, perf-check — plus a `Build` gate that
+runs after perf-check. **`perf-check` owns the only production build**; it has to,
+because the bundle-size budget and the PDF.js smoke test read the build output
+from disk. `Build` does not build: it exists because it is a required status
+check, and it asserts `needs.perf-check.result == 'success'` so that a *skipped*
+perf-check fails it rather than silently satisfying branch protection.
+
+Unit tests are split into two vitest projects — `node` (~505 files) and `jsdom`
+(~285) — because constructing a JSDOM per file dominated the job. See
+`apps/web/vitest.shared.ts` for the partition rules before adding test files.
 
 ## Environment Setup
 

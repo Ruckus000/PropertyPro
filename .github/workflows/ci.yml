@@ -208,10 +208,12 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
-      # Carried over from the former standalone `build` job so this job's env is
-      # a superset of both — the build already succeeded without it, but keeping
-      # it means the two builds were provably equivalent before they were merged.
-      SUPABASE_SERVICE_ROLE_KEY: placeholder
+      # Deliberately NOT setting SUPABASE_SERVICE_ROLE_KEY. The retired `build`
+      # job set it, but this job's build has always succeeded without it — which
+      # proves nothing calls createAdminClient() at build time. That function
+      # throws when the var is missing (packages/db/src/supabase/admin.ts), so
+      # leaving it unset keeps a loud tripwire: a future build-time call fails
+      # the build instead of silently constructing a client with a bogus key.
 
     steps:
       - name: Checkout
@@ -238,19 +240,40 @@ jobs:
       # every run, so both Next apps are otherwise compiled cold each time.
       # turbo.json already excludes .next/cache from the build `outputs`, so this
       # does not fight turbo's own output handling.
-      - name: Cache Next.js build cache
-        uses: actions/cache@v4
+      #
+      # RESTORE on every run, SAVE only on main. A combined `actions/cache` step
+      # saves on every run, and because the key carries `github.sha` that is a
+      # NEW ~174MB entry each time. At ~30 CI runs/day that is ~5GB/day against
+      # GitHub's 10GB per-repo cap, which evicts least-recently-used — and the
+      # entries most worth keeping are the ~299MB pnpm caches that make
+      # `Install dependencies` take 5s. PR-run caches are also scoped to
+      # refs/pull/N/merge and readable only by that same PR, so nearly all of
+      # that volume would never be read again. Saving only on main keeps one
+      # entry per merge, which every PR can still restore from its base branch.
+      - name: Restore Next.js build cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             apps/web/.next/cache
             apps/admin/.next/cache
           key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          # Lockfile-scoped only. A bare `nextjs-${{ runner.os }}-` fallback would
+          # happily restore a cache built against different dependency versions.
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            nextjs-${{ runner.os }}-
 
       - name: Build
         run: pnpm build
+
+      - name: Save Next.js build cache
+        # Only main writes. See the restore step above for why.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            apps/web/.next/cache
+            apps/admin/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       - name: Run PDF.js production smoke test
         env:
@@ -274,11 +297,27 @@ jobs:
   #
   # To retire this indirection: drop `Build` from main's required status checks
   # and delete this job.
+  #
+  # `if: always()` plus an explicit result assertion, NOT a bare `needs:`.
+  # GitHub treats a required check as satisfied when it is "successful, skipped,
+  # or neutral". With a bare `needs:`, anything that makes perf-check *skip*
+  # (a paths filter, an `if:`, a trigger change) skips this job too — and both
+  # perf-check and Build would then report `skipped`, satisfying BOTH required
+  # contexts with no production build having run anywhere. Asserting on
+  # needs.perf-check.result converts that silent pass into a hard failure.
   build:
     name: Build
     needs: [perf-check]
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Production build verified in perf-check
-        run: echo "Production build succeeded in the perf-check job."
+      - name: Assert the production build succeeded
+        run: |
+          # Bracket notation, not `needs.perf-check.result` — the job id contains
+          # a hyphen, which GitHub's expression parser can read as subtraction.
+          if [ "${{ needs['perf-check'].result }}" != "success" ]; then
+            echo "::error::perf-check result=${{ needs['perf-check'].result }} — the production build was NOT verified."
+            exit 1
+          fi
+          echo "Production build succeeded in the perf-check job."
