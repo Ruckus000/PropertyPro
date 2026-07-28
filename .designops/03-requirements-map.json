@@ -1,0 +1,47 @@
+{
+  "sources": [
+    {"id":"user-brief","title":"User clarification","type":"stakeholder","locator":"Conversation: target is the Website tab, not the landing page","status":"stakeholder-provided","confidence":"high","criticality":"critical"},
+    {"id":"sidebar-context","title":"Authenticated sidebar context switch","type":"repository","locator":"apps/web/src/components/layout/app-sidebar.tsx","status":"verified","confidence":"high","criticality":"critical"},
+    {"id":"nav-config","title":"Website navigation entries","type":"repository","locator":"apps/web/src/components/layout/nav-config.ts","status":"verified","confidence":"high","criticality":"high"},
+    {"id":"website-editor-route","title":"Website editor page","type":"repository","locator":"apps/web/src/app/(authenticated)/pm/settings/website/page.tsx","status":"verified","confidence":"high","criticality":"critical"},
+    {"id":"editor-components","title":"Website editor component behavior","type":"repository","locator":"apps/web/src/components/pm/site-editor/{HeroBlockForm,ContentSectionsList,CustomStylingForm,CustomDomainCard,PublishBar}.tsx","status":"verified","confidence":"high","criticality":"high"},
+    {"id":"site-preview","title":"Authenticated public-site preview","type":"repository","locator":"apps/web/src/app/(authenticated)/pm/site-preview/page.tsx and apps/web/src/components/public-site/","status":"verified","confidence":"high","criticality":"high"},
+    {"id":"design-system","title":"PropertyPro design system rules","type":"document","locator":"DESIGN.md and .claude/rules/design.md","status":"verified","confidence":"high","criticality":"high"}
+  ],
+  "users": [
+    {"id":"community-operator","description":"A CAM or property manager editing one community website; the role and route gates are explicit, but direct research evidence is unavailable.","evidenceRefs":["source:website-editor-route","source:sidebar-context"],"priority":"primary"},
+    {"id":"portfolio-operator","description":"A property manager who may move between portfolio and community contexts; this audience is implied by the PM nav and route comments, not validated research.","evidenceRefs":["source:nav-config"],"priority":"secondary"}
+  ],
+  "tasks": [
+    {"id":"edit-community-site","description":"Edit the selected community website content and branding while staying oriented in the community workspace.","evidenceRefs":["source:website-editor-route","source:editor-components"],"priority":"primary"},
+    {"id":"compare-preview","description":"See how the current draft will appear publicly without leaving the editing context.","evidenceRefs":["source:site-preview","source:website-editor-route"],"priority":"primary"},
+    {"id":"publish-changes","description":"Understand what is draft versus live, then publish or discard changes with confidence.","evidenceRefs":["source:editor-components"],"priority":"primary"},
+    {"id":"move-between-contexts","description":"Move between community work and portfolio management without the global navigation feeling replaced unexpectedly.","evidenceRefs":["source:user-brief","source:sidebar-context","source:nav-config"],"priority":"secondary"}
+  ],
+  "claims": [
+    {"id":"stable-community-shell","text":"The Website editor should preserve a stable community workspace navigation model when the Website tab is selected.","status":"stakeholder","sourceRefs":["source:user-brief","source:sidebar-context"],"approvedUsage":["proposalSpec","demoSpec"]},
+    {"id":"editor-preview","text":"The repository already has an authenticated route that renders the same public-site layout inside a preview surface.","status":"verified","sourceRefs":["source:site-preview"],"approvedUsage":["proposalSpec","demoSpec"]},
+    {"id":"draft-publish","text":"The editor distinguishes local draft changes from a global publish action and supports discard/conflict/error outcomes.","status":"verified","sourceRefs":["source:editor-components"],"approvedUsage":["proposalSpec","demoSpec"]},
+    {"id":"token-alignment","text":"The redesign should align with PropertyPro semantic tokens, Florida Modern warmth, spacing, focus, touch target, and motion rules.","status":"verified","sourceRefs":["source:design-system"],"approvedUsage":["proposalSpec","demoSpec"]}
+  ],
+  "assumptions": [
+    {"id":"editor-is-primary","description":"The Website tab refers to the authenticated editor page, with public preview as a companion surface rather than a separate redesign target.","sourceRefs":["source:user-brief","source:website-editor-route","source:site-preview"],"confidence":"high","risk":"medium","affectedDecisions":["content-structure","interaction-model","primary-task"],"validation":{"requiredAt":"direction","hypothesis":"A split editor/preview workspace will address the user's Website-tab complaint without changing public-site rendering behavior.","killCriteria":["The user identifies the public-site preview as the only target.","The user needs a different role or route context than the authenticated Website editor."]}},
+    {"id":"stable-shell-model","description":"The preferred direction is to keep community navigation visible and make portfolio controls secondary or explicit rather than swapping the whole sidebar.","sourceRefs":["source:user-brief","source:sidebar-context","source:nav-config"],"confidence":"high","risk":"high","affectedDecisions":["interaction-model","primary-task","content-structure"],"validation":{"requiredAt":"direction","hypothesis":"A stable community shell will reduce the feeling that clicking Website changes the app's mode unexpectedly.","killCriteria":["Operators prefer the PM-only nav for Website editing after reviewing the alternative.","The route architecture makes a stable shell materially unsafe or misleading."]}}
+  ],
+  "unknowns": [
+    {"id":"preview-placement","description":"It is not confirmed whether the preview should be persistent side-by-side, a collapsible panel, or a separate tab on the Website editor.","risk":"high","blocking":false,"rationale":"The mockup can compare the side-by-side hypothesis; implementation should follow explicit review."},
+    {"id":"portfolio-context","description":"It is not confirmed whether a PM needs to retain portfolio-level controls while editing a single community site.","risk":"medium","blocking":false,"rationale":"The stable-shell direction preserves community context and can expose a clearly labeled portfolio escape hatch."},
+    {"id":"content-density","description":"The amount of existing site content and the preferred default open sections are unknown for real communities.","risk":"medium","blocking":false,"rationale":"The demo uses representative sections and progressive disclosure rather than assuming a final content volume."}
+  ],
+  "deliverables": [
+    {"id":"website-audit","artifact":"proposalSpec","claimRefs":["stable-community-shell","editor-preview","draft-publish","token-alignment"]},
+    {"id":"website-editor-mockup","artifact":"demoSpec","claimRefs":["stable-community-shell","editor-preview","draft-publish","token-alignment"]}
+  ],
+  "directionCriteria": [
+    {"id":"nav-does-not-surprise","description":"Selecting Website leaves the operator oriented in the same community workspace rather than replacing the global navigation without explanation.","kind":"hard","evidenceRefs":["source:user-brief","source:sidebar-context","source:nav-config"],"measurement":"Browser walkthrough and human review confirm the selected Website screen keeps a stable sidebar model or makes any context transition explicit and reversible."},
+    {"id":"edit-preview-together","description":"The operator can understand the relationship between editor changes and the public-site result without repeatedly losing place or opening unrelated surfaces.","kind":"hard","evidenceRefs":["source:website-editor-route","source:site-preview"],"measurement":"A reviewer can locate the active editor section, see a representative preview, and identify the preview action at desktop and mobile widths."},
+    {"id":"draft-publish-clarity","description":"Local Save actions and global Publish Website are visually distinct, with draft/live status visible near the page title and publish affordance.","kind":"hard","evidenceRefs":["source:editor-components"],"measurement":"A reviewer can answer what is saved locally, what is pending, and what will go live without reading implementation details."},
+    {"id":"system-consistency","description":"The redesign uses existing PropertyPro semantic surfaces, warm brand intent, spacing rhythm, focus behavior, touch targets, and restrained elevation.","kind":"hard","evidenceRefs":["source:design-system"],"measurement":"Each major visual treatment maps to the documented system and the mockup remains readable without decorative gradients, unsupported metrics, or color-only status."}
+  ],
+  "auditOnlyException":"This registry is evidence-bounded: it records the clarified target, repository facts, explicit assumptions, and unanswered questions without fabricating user research, analytics, customer proof, or product requirements."
+}
