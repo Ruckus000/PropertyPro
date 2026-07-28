@@ -158,15 +158,32 @@ Set **Site URL** to the canonical web apex (e.g. `https://getpropertypro.com`).
 ### 6.2 CI Pipeline Stages
 
 ```
-lint ─────────┐
-typecheck ────┤── (parallel) ──► build (sequential, after all pass)
-test ─────────┘
+lint ──────────────┐
+typecheck ─────────┤
+Unit Tests ────────┤── all six run in PARALLEL from t=0
+no-mock-guard ─────┤
+migration-ordering ┤
+perf-check ────────┴──► Build (assertion gate, ~4s)
 ```
 
-- **lint**: `pnpm lint` (ESLint + Turbo + DB access guard)
+- **lint**: `pnpm lint` (ESLint + Turbo + DB access guard) + CSS variable migration check
 - **typecheck**: `pnpm typecheck` (TypeScript strict mode via Turbo)
-- **test**: `pnpm test` (Vitest unit tests)
-- **build**: `pnpm build` (Next.js production build via Turbo, runs only after lint+typecheck+test pass)
+- **Unit Tests**: `vitest run --coverage` in `apps/web`, plus the package and admin
+  suites. Split into `node` and `jsdom` vitest projects — see
+  `apps/web/vitest.shared.ts` before adding test files.
+- **no-mock-guard** / **migration-ordering**: repo guards.
+- **perf-check**: **owns the only production build.** Runs `pnpm build`, the
+  PDF.js production smoke test, and `pnpm perf:check`. The bundle-size budget
+  reads the emitted build output from disk, which is why the build lives here.
+- **Build**: does **not** build. It is a required status check that asserts
+  `needs['perf-check'].result == 'success'` under `if: always()`. The assertion
+  is deliberate: GitHub treats a required check as satisfied when it is
+  "successful, **skipped**, or neutral", so a bare `needs:` would let a *skipped*
+  perf-check skip this job too and satisfy both contexts with no build having
+  run. Verified by fault injection: skipping perf-check makes this job **fail**
+  rather than skip.
+
+Whole-run wall clock is roughly 8 minutes, bounded by Unit Tests.
 
 ### 6.3 Branch Protection Rules
 
@@ -174,9 +191,17 @@ Configure in GitHub > Settings > Branches > Branch protection rules for `main`:
 
 - [x] Require a pull request before merging
 - [x] Require status checks to pass before merging
-  - Required checks: `Lint`, `Typecheck`, `Unit Tests`, `Build`
-- [x] Require branches to be up to date before merging
+  - Required checks (all eight): `Lint`, `Typecheck`, `Unit Tests`,
+    `no-mock-guard`, `migration-ordering`, `perf-check`, `Build`,
+    `integration-tests`
+- [x] Require branches to be up to date before merging (`strict`) — every PR must
+      be rebased onto current `main`, so expect at least one rebase cycle on a
+      busy day
 - [x] Do not allow bypassing the above settings
+
+> `integration-tests` is a required check for **merging**, but it is a separate
+> workflow and `deploy.yml` triggers on `CI` alone — so it does not currently
+> gate the production **deploy**. Tracked separately.
 
 ## 7. Deployment Procedures
 
@@ -184,18 +209,41 @@ Configure in GitHub > Settings > Branches > Branch protection rules for `main`:
 
 Production deploys happen automatically when a PR is merged to `main`:
 
-1. PR passes CI checks (lint, typecheck, test, build)
+1. PR passes CI checks (lint, typecheck, unit tests, no-mock-guard, migration-ordering, perf-check, Build)
 2. PR is reviewed and approved (PR previews are created by the native Vercel GitHub integration during the PR lifecycle)
 3. PR is merged to `main`
-4. `deploy.yml` triggers after CI succeeds on `main`: installs deps, **runs pending DB migrations** (`db:migrate` via `DIRECT_URL`, gating the deploy on success), then builds via Vercel CLI and deploys to production
+4. `deploy.yml` triggers after CI succeeds on `main`: installs deps, then builds via Vercel CLI and deploys to production. **It deploys CODE ONLY — it does not run migrations.**
 5. Smoke test verifies HTTP 200 at the deployment URL
 6. (Optional) Verify `/api/v1/internal/readiness` reports `schema_compatibility.status = "pass"`
 
-Migrations run automatically as a gated step in `deploy.yml` *before* the new
-code is deployed (expand pattern: additive migrations are safe to apply ahead
-of the code swap). A failed migration aborts the deploy, so app code never ships
-ahead of its schema. This requires the `DIRECT_URL` secret (direct 5432
-connection) to be present in the `production` GitHub environment.
+> ### ⚠️ Migrations are NOT applied by the deploy pipeline
+>
+> **`deploy.yml` deploys code only.** There is no `db:migrate` step, and nothing
+> in CI or the deploy path will apply a pending migration for you. **Merging a PR
+> does not migrate production.**
+>
+> An earlier version of this document described migrations as "a gated step in
+> `deploy.yml` … a failed migration aborts the deploy, so app code never ships
+> ahead of its schema". **That has not been true since #743.** The gate was
+> removed because it conflicted with the manual-apply model — it drifted the
+> `__drizzle_migrations` ledger, failed on every run, and silently blocked all
+> production deploys for roughly two weeks. It was also unsafe by design for
+> contract migrations, since it ran migrate-first and would have dropped columns
+> the still-live old code was reading.
+>
+> **You are responsible for ordering the schema change against the deploy:**
+>
+> - **Expand** (add a column/table): apply to production **BEFORE** merging the
+>   code that reads or writes it.
+> - **Contract** (drop a column/enum value): apply **AFTER** the new code that
+>   stopped referencing it is live.
+> - Pure policy/trigger **repair** migrations are order-independent.
+>
+> Apply them by hand via the Supabase MCP `apply_migration`, in statement order,
+> then verify against `information_schema` / `pg_catalog` and record the ledger
+> row. Full procedure and the current migration numbering live in
+> [`.claude/rules/migration-safety.md`](../.claude/rules/migration-safety.md),
+> which is the authoritative source — this section only summarises it.
 
 ### 7.2 Hotfix Deploy
 
