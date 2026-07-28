@@ -411,6 +411,99 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     }));
   });
 
+  /**
+   * Cross-tenant asset paths — the §2.4 leg this file was missing.
+   *
+   * Every fixture above uses `42/…`, and the only "cross-tenant" coverage was
+   * membership denial. That is a different control: it answers *may this caller
+   * touch community 42*, not *may the content they submit point at community
+   * 999*. `imagePathSchema` validates the shape `{digits}/{kind}/…` and any
+   * digits satisfy it, so a member in good standing could persist a foreign
+   * community id — which the hero route rejects and this one did not.
+   */
+  it('400s an image block whose imagePath references another community', async () => {
+    const body = {
+      ...VALID_IMAGE_BODY,
+      content: { imagePath: '999/content/sneaky.webp', altText: 'Not ours' },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: 'imagePath must reference this community',
+        }),
+      }),
+    );
+    // The write must not happen — a 400 that still persisted the row would be
+    // the same bug with a louder response.
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s a gallery block when only a LATER image is cross-tenant', async () => {
+    // The first entry is in-tenant on purpose: a check that only inspected
+    // images[0] would pass this body. A gallery accepts up to 24 paths.
+    const body = {
+      communityId: 42,
+      blockType: 'gallery',
+      blockOrder: 10,
+      content: {
+        images: [
+          { imagePath: '42/content/ours.webp', altText: 'Ours' },
+          { imagePath: '999/content/theirs.webp', altText: 'Theirs' },
+        ],
+      },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(400);
+    const payload = await res.json();
+    expect(payload).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({
+          message: 'images.1.imagePath must reference this community',
+          details: expect.objectContaining({
+            fields: [
+              expect.objectContaining({
+                field: 'images.1.imagePath',
+                message: expect.stringContaining('Path must start with "42/"'),
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('200s when every gallery image is in-tenant', async () => {
+    const body = {
+      communityId: 42,
+      blockType: 'gallery',
+      blockOrder: 10,
+      content: {
+        images: [
+          { imagePath: '42/content/a.webp', altText: 'A' },
+          { imagePath: '42/content/b.webp', decorative: true },
+        ],
+      },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalled();
+  });
+
+  it('does not reject a community-id prefix that merely starts with the same digits', async () => {
+    // `420/…` starts with "42" but is a different community. The check must
+    // compare the whole first segment, i.e. match on "42/" not "42".
+    const body = {
+      ...VALID_IMAGE_BODY,
+      content: { imagePath: '420/content/other.webp', altText: 'Community 420' },
+    };
+    const res = await PATCH(makePatchRequest(body));
+    expect(res.status).toBe(400);
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
   it('403s a faq block when the plan lacks hasSitePolishBlocks (but has hasSiteEditor)', async () => {
     requirePlanFeatureMock.mockImplementation((_id: number, key: string) =>
       key === 'hasSitePolishBlocks'

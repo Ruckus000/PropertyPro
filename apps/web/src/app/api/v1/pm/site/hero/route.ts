@@ -21,6 +21,10 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { heroBlockSchema } from '@propertypro/shared';
+import {
+  assertPathsScopedToCommunity,
+  collectBlockAssetPaths,
+} from '@/lib/site-assets/scoped-paths';
 import { upsertPublishedHero } from '@/lib/services/site-blocks-service';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { heroBlockGetContract, heroBlockPatchContract } from './contract';
@@ -86,27 +90,14 @@ export const PATCH = withErrorHandler(
     // `photos[]` would otherwise route straight around a control this route
     // deliberately has — the check is invisible from the schema, so a new
     // path-bearing field is exactly how it gets lost.
-    const scopedPaths: { field: string; value: string }[] = [
-      ...(heroParse.data.heroImagePath
-        ? [{ field: 'heroImagePath', value: heroParse.data.heroImagePath }]
-        : []),
-      ...(heroParse.data.photos ?? []).map((photo, index) => ({
-        field: `photos.${index}.path`,
-        value: photo.path,
-      })),
-    ];
-    for (const { field, value } of scopedPaths) {
-      if (!value.startsWith(`${communityId}/`)) {
-        throw new ValidationError(`${field} must reference this community`, {
-          fields: [
-            {
-              field,
-              message: `Path must start with "${communityId}/" (got "${value.slice(0, 32)}…")`,
-            },
-          ],
-        });
-      }
-    }
+    //
+    // The check now lives in `@/lib/site-assets/scoped-paths` and is shared
+    // with the blocks route, which had no equivalent and accepted foreign
+    // `imagePath` / `images[].imagePath` values. Behaviour here is unchanged.
+    assertPathsScopedToCommunity(
+      communityId,
+      collectBlockAssetPaths('hero', heroParse.data),
+    );
 
     // PR #8e — hero edits write to the draft row at block_order=1. The
     // public site continues to serve the last-published hero until the PM
