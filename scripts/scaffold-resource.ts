@@ -8,7 +8,6 @@
  * Generates the canonical CRUD slice for a new resource:
  *
  *   packages/db/src/schema/<plural>.ts
- *   packages/db/migrations/<NNNN>_create_<plural>.sql              (+ journal entry)
  *   apps/web/src/lib/services/<plural>-service.ts
  *   apps/web/src/app/api/v1/<plural>/contract.ts
  *   apps/web/src/app/api/v1/<plural>/route.ts                       (wrapped in runRoute)
@@ -19,8 +18,25 @@
  *   apps/web/__tests__/api/<plural>/route.test.ts
  *   apps/web/__tests__/integration/<plural>.integration.test.ts
  *
- * Plus side effects: appends a re-export to packages/db/src/schema/index.ts
- * and a new entry to packages/db/migrations/meta/_journal.json.
+ * Plus one side effect: appends a re-export to packages/db/src/schema/index.ts.
+ *
+ * IT DOES NOT TOUCH packages/db/migrations/ — no .sql, no journal entry, no
+ * snapshot. Run `pnpm --filter @propertypro/db db:generate` afterwards, which
+ * writes all three together and keeps them consistent by construction.
+ *
+ * It used to append a journal entry (and write a hand-built CREATE TABLE), which
+ * was wrong twice over:
+ *
+ *   - A journal entry with no matching meta/NNNN_snapshot.json fails
+ *     checkSnapshotChainIntact, so every `pnpm new:resource` run left
+ *     `migration-ordering` red until the author noticed.
+ *   - The hand-built CREATE TABLE could drift from packages/db/src/schema/,
+ *     which is what drizzle actually diffs — so the next `db:generate` would
+ *     emit a second migration re-creating the same table.
+ *
+ * The RLS policies and write-scope trigger still have to be hand-appended to the
+ * generated migration: drizzle emits the table and FK, never those. The
+ * scaffolder PRINTS that block with names substituted (see renderRlsBlock).
  *
  * Implementation notes (kept boring on purpose):
  *
@@ -33,9 +49,6 @@
  *
  *     Order: replace longer variants first so substring overlap (widget vs
  *     widgets) doesn't silently corrupt output. Case-sensitive.
- *
- *   - Migration filename + journal entry pick up the next NNNN by reading
- *     the highest entry idx in meta/_journal.json and adding 1.
  *
  *   - We refuse to overwrite anything: every target path must be free
  *     before writing. Any collision aborts with a clear message.
@@ -202,53 +215,17 @@ function substituteNames(input: string, target: ResourceNames): string {
 }
 
 // ---------------------------------------------------------------------------
-// Migration index + journal handling
-// ---------------------------------------------------------------------------
-
-interface JournalEntry {
-  idx: number;
-  version: string;
-  when: number;
-  tag: string;
-  breakpoints: boolean;
-}
-
-interface Journal {
-  version: string;
-  dialect: string;
-  entries: JournalEntry[];
-}
-
-function readJournal(journalPath: string): Journal {
-  const raw = readFileSync(journalPath, 'utf8');
-  try {
-    return JSON.parse(raw) as Journal;
-  } catch {
-    throw new Error(
-      `Migration journal at ${journalPath} is not valid JSON. ` +
-        `Check for merge conflict markers or a partial write.`,
-    );
-  }
-}
-
-function nextMigrationIndex(journal: Journal): number {
-  let maxIdx = -1;
-  for (const entry of journal.entries) {
-    if (entry.idx > maxIdx) maxIdx = entry.idx;
-  }
-  return maxIdx + 1;
-}
-
-function padIndex(idx: number): string {
-  return String(idx).padStart(4, '0');
-}
-
-// ---------------------------------------------------------------------------
 // Fixture discovery + target path mapping
 // ---------------------------------------------------------------------------
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = resolve(scriptDir, 'scaffold-resource.test/fixtures/widgets');
+/**
+ * Deliberately a SIBLING of FIXTURE_ROOT, not inside it: everything under
+ * FIXTURE_ROOT is walked and written to disk, and this block must be printed
+ * rather than written (see renderRlsBlock).
+ */
+const RLS_BLOCK_TEMPLATE = resolve(scriptDir, 'scaffold-resource.test/fixtures/rls-block.sql');
 
 interface ScaffoldedFile {
   /** Path relative to repo root, with fixture name (`widgets`) substituted. */
@@ -271,22 +248,13 @@ function listFixtureFilesRel(): string[] {
   return out.sort();
 }
 
-function targetRelFor(
-  fixtureRel: string,
-  names: ResourceNames,
-  migrationIdx: number,
-): string {
-  // Translate directory + filename pieces — every segment runs through the
-  // same name substitution. The migration file ALSO needs its leading
-  // `0004_` rewritten to the next index.
-  const segments = fixtureRel.split('/').map((seg) => substituteNames(seg, names));
-  return segments
-    .map((seg) => {
-      // Migration filename: rewrite the leading `0004_` to the next index.
-      const m = /^0004_(.*\.sql)$/.exec(seg);
-      if (m) return `${padIndex(migrationIdx)}_${m[1]}`;
-      return seg;
-    })
+function targetRelFor(fixtureRel: string, names: ResourceNames): string {
+  // Translate directory + filename pieces — every segment runs through the same
+  // name substitution. Nothing under packages/db/migrations/ is emitted any
+  // more (see the module docblock), so no index rewriting is needed.
+  return fixtureRel
+    .split('/')
+    .map((seg) => substituteNames(seg, names))
     .join('/');
 }
 
@@ -328,34 +296,16 @@ function appendSchemaReexport(repoRoot: string, names: ResourceNames): void {
   );
 }
 
-function appendJournalEntry(
-  repoRoot: string,
-  names: ResourceNames,
-  migrationIdx: number,
-): void {
-  const journalPath = resolve(repoRoot, 'packages/db/migrations/meta/_journal.json');
-  const journal = readJournal(journalPath);
-  const suffix = `_create_${names.pluralLower.replaceAll('-', '_')}`;
-  const tag = `${padIndex(migrationIdx)}${suffix}`;
-  // Idempotent: skip if the journal already has an entry for this RESOURCE.
-  // Protects against a duplicate entry if scaffolded files were manually
-  // deleted but the journal/barrel changes were left in place.
-  //
-  // Matched on the name, not the whole tag. The tag embeds the index, and
-  // `migrationIdx` is max+1 — so on the re-run this comment describes, the old
-  // entry keeps the journal's max high and the new tag is `0005_create_widgets`
-  // against an existing `0004_create_widgets`. A full-tag comparison never
-  // matches, and the guard appends a second entry for the same resource: exactly
-  // what it exists to prevent. (Same defect fixed in scripts/new-migration.ts.)
-  if (journal.entries.some((e) => /^\d{4}_/.test(e.tag) && e.tag.slice(4) === suffix)) return;
-  journal.entries.push({
-    idx: migrationIdx,
-    version: '7',
-    when: Date.now(),
-    tag,
-    breakpoints: true,
-  });
-  writeFileSync(journalPath, `${JSON.stringify(journal, null, 2)}\n`, 'utf8');
+/**
+ * The RLS/policy/trigger block for a new tenant table, with names substituted.
+ *
+ * Printed, never written. `drizzle-kit generate` emits the CREATE TABLE and the
+ * FK from the schema file, but it does not emit ENABLE/FORCE ROW LEVEL SECURITY,
+ * the four baseline policies, or the write-scope trigger — those are this
+ * repo's convention and have to be appended to the generated migration by hand.
+ */
+function renderRlsBlock(names: ResourceNames): string {
+  return substituteNames(readFileSync(RLS_BLOCK_TEMPLATE, 'utf8'), names);
 }
 
 // ---------------------------------------------------------------------------
@@ -364,9 +314,12 @@ function appendJournalEntry(
 
 export interface ScaffoldResult {
   filesWritten: string[];      // repo-relative paths
-  migrationIndex: number;
   schemaBarrelTouched: boolean;
-  journalTouched: boolean;
+  /**
+   * The RLS/policy/trigger SQL to append to the migration `db:generate` writes.
+   * Returned rather than written — see renderRlsBlock.
+   */
+  rlsBlock: string;
 }
 
 export interface ScaffoldOptions {
@@ -380,6 +333,9 @@ export function scaffoldResource(opts: ScaffoldOptions): ScaffoldResult {
   const repoRoot = opts.target ? resolve(opts.target) : resolve(scriptDir, '..');
   const names = buildResourceNames({ plural: opts.plural, ...(opts.singular ? { singular: opts.singular } : {}) });
 
+  // Sanity-check that we are pointed at a real repo root before writing
+  // anything. The journal is not touched — see the module docblock — but its
+  // presence is still the cheapest proof that --target is correct.
   const journalPath = resolve(repoRoot, 'packages/db/migrations/meta/_journal.json');
   if (!existsSync(journalPath)) {
     throw new Error(
@@ -387,7 +343,6 @@ export function scaffoldResource(opts: ScaffoldOptions): ScaffoldResult {
         `Pass --target <repo-root> if you're invoking the scaffolder from outside the repo.`,
     );
   }
-  const migrationIdx = nextMigrationIndex(readJournal(journalPath));
 
   // Build the full list of files to emit before touching the filesystem so
   // any failure leaves nothing partially written.
@@ -396,7 +351,7 @@ export function scaffoldResource(opts: ScaffoldOptions): ScaffoldResult {
     const fixturePath = join(FIXTURE_ROOT, fixtureRel);
     const raw = readFileSync(fixturePath, 'utf8');
     return {
-      targetRel: targetRelFor(fixtureRel, names, migrationIdx),
+      targetRel: targetRelFor(fixtureRel, names),
       contents: substituteNames(raw, names),
     };
   });
@@ -412,13 +367,11 @@ export function scaffoldResource(opts: ScaffoldOptions): ScaffoldResult {
   }
 
   appendSchemaReexport(repoRoot, names);
-  appendJournalEntry(repoRoot, names, migrationIdx);
 
   return {
     filesWritten: written,
-    migrationIndex: migrationIdx,
     schemaBarrelTouched: true,
-    journalTouched: true,
+    rlsBlock: renderRlsBlock(names),
   };
 }
 
@@ -450,8 +403,21 @@ function main(): void {
   console.log(`     \`{ resource: '${opts.plural}', action: 'read' }\` once step 1 is done.`);
   console.log('');
   console.log('  3. Customize the schema columns in');
-  console.log(`     packages/db/src/schema/${opts.plural}.ts and the matching CREATE TABLE in`);
-  console.log(`     packages/db/migrations/${padIndex(result.migrationIndex)}_create_${opts.plural.replaceAll('-', '_')}.sql.`);
+  console.log(`     packages/db/src/schema/${opts.plural}.ts — that file is what the`);
+  console.log('     migration is generated FROM, so get it right first.');
+  console.log('');
+  console.log('  4. Generate the migration:');
+  console.log(`       pnpm --filter @propertypro/db db:generate --name create_${opts.plural.replaceAll('-', '_')}`);
+  console.log('');
+  console.log('     This writes the .sql, the journal entry AND the snapshot together.');
+  console.log('     The scaffolder deliberately writes none of the three: hand-authoring');
+  console.log('     a journal entry without a matching snapshot leaves');
+  console.log('     `migration-ordering` red, and hand-writing the CREATE TABLE lets it');
+  console.log('     drift from the schema file that drizzle actually diffs.');
+  console.log('');
+  console.log('     Then APPEND the RLS block printed at the end of this output to the');
+  console.log('     generated .sql — drizzle emits the table and FK, never the policies');
+  console.log('     or the write-scope trigger.');
   console.log('');
   // Step 4 used to read `pnpm --filter @propertypro/db db:migrate`, with no
   // warning. In this repo's default environment `.env.local`'s DATABASE_URL
@@ -460,7 +426,7 @@ function main(): void {
   // it is how a stray `widgets` table — this scaffolder's own example resource
   // — reached production and sat there, in neither migration ledger, until it
   // was found by diffing prod against the migrations (dropped in 0036).
-  console.log('  4. Apply the migration to your LOCAL database:');
+  console.log('  5. Apply the migration to your LOCAL database:');
   console.log('                           pnpm db:test-local:setup');
   console.log('');
   console.log('     ⚠️  Do NOT run `pnpm --filter @propertypro/db db:migrate` here.');
@@ -469,9 +435,15 @@ function main(): void {
   console.log('     are applied deliberately and manually — see');
   console.log('     .claude/rules/migration-safety.md.');
   console.log('');
-  console.log('  5. Verify:               pnpm typecheck && pnpm lint && pnpm test');
+  console.log('  6. Verify:               pnpm typecheck && pnpm lint && pnpm test');
+  console.log('                           pnpm exec tsx scripts/verify-migration-ordering.ts');
   console.log('');
   console.log('See docs/contributing/new-resource.md for the full recipe.');
+  console.log('');
+  console.log('─'.repeat(78));
+  console.log(`RLS block for ${opts.plural} — append to the migration from step 4:`);
+  console.log('─'.repeat(78));
+  console.log(result.rlsBlock);
 }
 
 if (isInvokedDirectly()) {
