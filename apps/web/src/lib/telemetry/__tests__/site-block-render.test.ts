@@ -9,6 +9,7 @@ vi.mock('@sentry/nextjs', () => ({
 }));
 
 import {
+  __resetDegradedReportThrottle,
   findDegradedBlocks,
   reportDegradedBlocks,
   type InspectableBlock,
@@ -37,6 +38,7 @@ const validPayments: InspectableBlock = {
 
 beforeEach(() => {
   captureMessageMock.mockClear();
+  __resetDegradedReportThrottle();
 });
 
 describe('findDegradedBlocks', () => {
@@ -144,5 +146,46 @@ describe('reportDegradedBlocks', () => {
       ctx,
     );
     expect(result).toEqual([{ blockId: 3, blockType: 'text', reason: 'schema-invalid' }]);
+  });
+});
+
+describe('throttling', () => {
+  const ctx = { communityId: 42, communitySlug: 'sunset-condos' };
+  const broken: InspectableBlock[] = [{ id: 1, blockType: 'text', content: {} }];
+
+  it('reports the same degraded state only once per window', () => {
+    // The public-site route calls await headers(), so it is fully dynamic:
+    // one render per visitor, crawlers included. Without this, one broken
+    // community emits an event per page view until someone mutes the alert —
+    // which is the state this telemetry exists to escape.
+    for (let i = 0; i < 50; i += 1) reportDegradedBlocks(broken, allRender, ctx);
+    expect(captureMessageMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports again when the degraded set CHANGES', () => {
+    reportDegradedBlocks(broken, allRender, ctx);
+    expect(captureMessageMock).toHaveBeenCalledTimes(1);
+    // A site getting worse must not be suppressed by the earlier report.
+    reportDegradedBlocks(
+      [...broken, { id: 2, blockType: 'documents', content: { limit: 'lots' } }],
+      allRender,
+      ctx,
+    );
+    expect(captureMessageMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throttles per community, not globally', () => {
+    // A platform-wide schema regression must still identify every affected
+    // community, not just whichever one rendered first.
+    reportDegradedBlocks(broken, allRender, ctx);
+    reportDegradedBlocks(broken, allRender, { communityId: 7, communitySlug: 'palm-shores' });
+    expect(captureMessageMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('still returns the degraded list while throttled', () => {
+    reportDegradedBlocks(broken, allRender, ctx);
+    const second = reportDegradedBlocks(broken, allRender, ctx);
+    expect(second).toEqual([{ blockId: 1, blockType: 'text', reason: 'schema-invalid' }]);
+    expect(captureMessageMock).toHaveBeenCalledTimes(1);
   });
 });

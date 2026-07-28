@@ -83,10 +83,10 @@ export function Tidewater({ community, theme, blocks, footer, nav, page }: Layou
           if (!hasRenderer(blockType)) {
             // Unknown block type — skip. Reported at the page level by
             // `reportDegradedBlocks`, which sees the whole block list and emits
-            // one `public_site_blocks_degraded` warning per request. Do not add
-            // a per-block capture here: this component is shared with the
-            // editor's client canvas, and pulling @sentry/nextjs in would land
-            // the SDK on a route with a 700 KiB hard budget.
+            // one `public_site_blocks_degraded` warning per request. Keep the
+            // reporting there rather than adding a capture here: all three
+            // layouts have this same branch, and one event per request beats
+            // three copies of the same call drifting apart.
             return null;
           }
           // hasRenderer guard above ensures this entry exists.

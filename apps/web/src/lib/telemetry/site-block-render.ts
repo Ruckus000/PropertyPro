@@ -36,9 +36,11 @@ import { blockSchemaRegistry, TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
  *
  * Second, volume. Eleven call sites means one event per broken block per
  * request. A community with a bad hero and three bad sections would emit four
- * events on every page view, from every visitor, forever. Sited here it is
- * one event per request carrying all of them, and none at all when the page
- * is healthy.
+ * events on every page view, from every visitor. Sited here it is one event
+ * carrying all of them — and, because the route is uncached, additionally
+ * throttled per community per degraded state (see REPORT_TTL_MS). Collapsing
+ * the per-block multiplier without the per-request one would still let a
+ * single crawled community burn the Sentry quota.
  *
  * Cardinality: the event name is a fixed string. Everything variable —
  * community, block ids, types — goes in `extra`, which Sentry does not index
@@ -102,9 +104,62 @@ export function findDegradedBlocks(
 }
 
 /**
- * Emit at most one `public_site_blocks_degraded` warning for this request.
+ * How long the same degraded state stays quiet after being reported once.
  *
- * No-ops when every block is renderable, so a healthy site is silent.
+ * The public-site page calls `await headers()`, so the route is fully dynamic:
+ * no ISR, no cache, one execution per visitor. Collapsing eleven per-block
+ * events into one per request fixes the per-block multiplier but leaves the
+ * per-request one, which traffic sets. A single community with a broken
+ * `documents` block, crawled by Google, Bing and an uptime monitor, would emit
+ * thousands of identical warnings a day — enough to burn Sentry quota and get
+ * the alert muted, which is the state this whole change exists to escape.
+ *
+ * A regression that persists for weeks needs one event an hour to stay visible.
+ */
+const REPORT_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Bound the map so a pathological spread of distinct degraded states cannot
+ * grow it without limit. Well above the number of communities that could
+ * plausibly be broken at once; when exceeded, the oldest entries are dropped
+ * and those states simply report again.
+ */
+const MAX_TRACKED_STATES = 500;
+
+/**
+ * Per-process, so it dedupes within a serverless instance rather than globally.
+ * That is the right trade here: no shared store, no network call on a
+ * statutory page's render path, and it still removes the multiplier that
+ * matters — one hot instance serving a crawler.
+ */
+const lastReportedAt = new Map<string, number>();
+
+function shouldReport(key: string, now: number): boolean {
+  const previous = lastReportedAt.get(key);
+  if (previous !== undefined && now - previous < REPORT_TTL_MS) return false;
+
+  if (lastReportedAt.size >= MAX_TRACKED_STATES) {
+    for (const [oldest] of lastReportedAt) {
+      lastReportedAt.delete(oldest);
+      if (lastReportedAt.size < MAX_TRACKED_STATES) break;
+    }
+  }
+  lastReportedAt.set(key, now);
+  return true;
+}
+
+/** Exposed so tests can assert the throttle without waiting an hour. */
+export function __resetDegradedReportThrottle(): void {
+  lastReportedAt.clear();
+}
+
+/**
+ * Emit at most one `public_site_blocks_degraded` warning per community per
+ * distinct degraded state per hour.
+ *
+ * No-ops when every block is renderable, so a healthy site is silent. The key
+ * includes the degraded set, so a site that gets *worse* reports immediately
+ * rather than waiting out the window.
  *
  * Never call this for preview renders: a PM mid-edit legitimately has invalid
  * draft content, and reporting it would bury real regressions in noise.
@@ -116,6 +171,12 @@ export function reportDegradedBlocks(
 ): DegradedBlock[] {
   const degraded = findDegradedBlocks(blocks, hasRenderer);
   if (degraded.length === 0) return degraded;
+
+  const signature = degraded
+    .map((d) => `${d.blockId}:${d.reason}`)
+    .sort()
+    .join(',');
+  if (!shouldReport(`${context.communityId}|${signature}`, Date.now())) return degraded;
 
   captureMessage('public_site_blocks_degraded', {
     level: 'warning',
