@@ -1,11 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   findViolationsInSource,
   isCheckedFile,
+  resolveScanRoot,
   type Violation,
 } from '../verify-shared-side-effects';
 
@@ -25,12 +27,24 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
 const guardScript = join(repoRoot, 'scripts', 'verify-shared-side-effects.ts');
 const tsxBin = join(repoRoot, 'node_modules', '.bin', 'tsx');
-const plantedFile = join(repoRoot, 'packages', 'shared', 'src', '__guard_probe__.ts');
 
 const rules = (violations: Violation[]) => violations.map((v) => v.rule);
 
+/**
+ * Fixtures are planted in a temp directory, never inside the real
+ * packages/shared/src. Other guards' subprocess tests walk that tree
+ * concurrently, and a file appearing and vanishing mid-walk makes readdirSync
+ * and readFileSync disagree — which surfaced as an intermittent failure in
+ * verify-audit-log-trigger-overrides.test.ts, a test with nothing to do with
+ * this one.
+ */
+let sandbox: string | undefined;
+
 afterEach(() => {
-  if (existsSync(plantedFile)) rmSync(plantedFile);
+  if (sandbox !== undefined) {
+    rmSync(sandbox, { recursive: true, force: true });
+    sandbox = undefined;
+  }
 });
 
 describe('detects each import-time side effect', () => {
@@ -145,8 +159,11 @@ describe('file selection', () => {
 });
 
 describe('end to end', () => {
-  const runGuard = () => {
-    const result = spawnSync(tsxBin, [guardScript], { cwd: repoRoot, encoding: 'utf8' });
+  const runGuard = (extraArgs: string[] = []) => {
+    const result = spawnSync(tsxBin, [guardScript, ...extraArgs], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
     return {
       status: result.status ?? -1,
       output: `${result.stdout ?? ''}${result.stderr ?? ''}`,
@@ -159,13 +176,21 @@ describe('end to end', () => {
     expect(status).toBe(0);
   });
 
-  it('exits non-zero when a side effect is planted in the real tree', () => {
-    // Proves the walker reaches real files and that the process exit code is
-    // wired up — not just that the pure function returns an array.
-    writeFileSync(plantedFile, `import './boom';\n`);
-    const { status, output } = runGuard();
+  it('exits non-zero when a side effect is present in the scanned tree', () => {
+    // Proves the walker reaches real files on disk and that the process exit
+    // code is wired up — not just that the pure function returns an array.
+    sandbox = mkdtempSync(join(tmpdir(), 'shared-side-effects-'));
+    writeFileSync(join(sandbox, 'offender.ts'), `import './boom';\n`);
+    const { status, output } = runGuard(['--root', sandbox]);
     expect(status).toBe(1);
     expect(output).toContain('bare-import');
-    expect(output).toContain('__guard_probe__.ts');
+    expect(output).toContain('offender.ts');
+  });
+
+  it('defaults to packages/shared/src when --root is absent', () => {
+    // The sandbox above proves the mechanism; this proves it is aimed at the
+    // package the "sideEffects": false claim actually covers.
+    expect(resolveScanRoot([])).toBe(join(repoRoot, 'packages/shared/src'));
+    expect(resolveScanRoot(['--root', '/tmp/x'])).toBe('/tmp/x');
   });
 });

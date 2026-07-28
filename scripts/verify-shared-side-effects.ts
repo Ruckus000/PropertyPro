@@ -233,8 +233,23 @@ export function scanSharedPackage(root: string = SHARED_SRC): Violation[] {
   return violations;
 }
 
+/**
+ * Resolve the directory to scan.
+ *
+ * `--root <dir>` exists for the test suite, which must not plant fixture files
+ * inside the real `packages/shared/src`: other guards' subprocess tests walk
+ * that tree concurrently, and a file appearing and vanishing mid-walk makes
+ * `readdirSync` and `readFileSync` disagree — an intermittent failure in an
+ * unrelated test. Tests point at a temp directory instead.
+ */
+export function resolveScanRoot(argv: readonly string[]): string {
+  const index = argv.indexOf('--root');
+  const value = index === -1 ? undefined : argv[index + 1];
+  return value === undefined ? SHARED_SRC : resolve(value);
+}
+
 function main(): void {
-  const violations = scanSharedPackage();
+  const violations = scanSharedPackage(resolveScanRoot(process.argv.slice(2)));
 
   if (violations.length > 0) {
     console.error(
