@@ -335,11 +335,19 @@ function appendJournalEntry(
 ): void {
   const journalPath = resolve(repoRoot, 'packages/db/migrations/meta/_journal.json');
   const journal = readJournal(journalPath);
-  const tag = `${padIndex(migrationIdx)}_create_${names.pluralLower.replaceAll('-', '_')}`;
-  // Idempotent: skip if the journal already has an entry for this tag.
+  const suffix = `_create_${names.pluralLower.replaceAll('-', '_')}`;
+  const tag = `${padIndex(migrationIdx)}${suffix}`;
+  // Idempotent: skip if the journal already has an entry for this RESOURCE.
   // Protects against a duplicate entry if scaffolded files were manually
   // deleted but the journal/barrel changes were left in place.
-  if (journal.entries.some((e) => e.tag === tag)) return;
+  //
+  // Matched on the name, not the whole tag. The tag embeds the index, and
+  // `migrationIdx` is max+1 — so on the re-run this comment describes, the old
+  // entry keeps the journal's max high and the new tag is `0005_create_widgets`
+  // against an existing `0004_create_widgets`. A full-tag comparison never
+  // matches, and the guard appends a second entry for the same resource: exactly
+  // what it exists to prevent. (Same defect fixed in scripts/new-migration.ts.)
+  if (journal.entries.some((e) => /^\d{4}_/.test(e.tag) && e.tag.slice(4) === suffix)) return;
   journal.entries.push({
     idx: migrationIdx,
     version: '7',
