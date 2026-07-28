@@ -8,9 +8,20 @@ on:
     - cron: '10 13 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+# Scheduled workflow: queue rather than overlap, so a slow run never stacks on
+# the next tick. cancel-in-progress is false because these POST real work —
+# killing one mid-flight is worse than making the next tick wait.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   run-insurance-alerts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Invoke insurance alerts processor route
         env:
@@ -27,7 +38,13 @@ jobs:
             exit 1
           fi
 
+          # --max-time bounds a hung endpoint (there is no default timeout);
+          # --retry covers a transient 5xx or dropped connection.
           curl -fsS \
+            --max-time 120 \
+            --retry 3 \
+            --retry-delay 10 \
+            --retry-connrefused \
             -X POST \
             "$DIGEST_CRON_BASE_URL/api/v1/internal/insurance-alerts" \
             -H "Authorization: Bearer $INSURANCE_ALERTS_CRON_SECRET" \
