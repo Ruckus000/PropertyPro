@@ -24,6 +24,7 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>
       hasPublishedSite
       initialNotice={null}
       renderToolPanel={(tool) => <p>panel:{tool}</p>}
+      canOpenPublish={false}
       {...overrides}
     >
       <p>canvas</p>
@@ -145,19 +146,14 @@ describe('EditorShell — composition', () => {
 
 describe('EditorShell — publish affordance', () => {
   it('disables Publish with an explanation when there is nothing to publish', () => {
-    renderShell({ changeCount: 0 });
+    renderShell({ canOpenPublish: false });
     const publish = screen.getByRole('button', { name: /Publish/ });
     expect(publish).toBeDisabled();
     expect(publish).toHaveAttribute('title', 'Nothing to publish yet');
   });
 
   it('enables Publish once changes exist', () => {
-    renderShell({ changeCount: 2 });
+    renderShell({ canOpenPublish: true });
     expect(screen.getByRole('button', { name: /Publish/ })).toBeEnabled();
-  });
-
-  it('surfaces the pending count on the Site tab', () => {
-    renderShell({ changeCount: 4 });
-    expect(screen.getByRole('tab', { name: /Site/ })).toHaveTextContent('4');
   });
 });

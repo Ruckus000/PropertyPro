@@ -28,7 +28,8 @@ export interface EditorShellProps {
   renderToolPanel: (tool: EditorToolId) => React.ReactNode;
   /** The canvas column. Phase 2b fills this in. */
   children?: React.ReactNode;
-  changeCount?: number;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  canOpenPublish: boolean;
   status?: React.ReactNode;
   onPreview?: () => void;
   onPublish?: () => void;
@@ -59,7 +60,7 @@ export function EditorShell({
   initialNotice,
   renderToolPanel,
   children,
-  changeCount = 0,
+  canOpenPublish,
   status,
   onPreview,
   onPublish,
@@ -98,7 +99,7 @@ export function EditorShell({
       <EditorTopBar
         communityName={communityName}
         status={status}
-        changeCount={changeCount}
+        canOpenPublish={canOpenPublish}
         onPreview={onPreview}
         onPublish={onPublish}
       />
@@ -111,7 +112,6 @@ export function EditorShell({
           <ToolTabs
             active={activeTool}
             onSelect={setActiveTool}
-            counts={{ site: changeCount }}
             proToolAccess={proToolAccess}
             panelId={PANEL_ID}
           />

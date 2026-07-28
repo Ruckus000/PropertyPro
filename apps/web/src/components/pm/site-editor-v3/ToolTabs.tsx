@@ -7,8 +7,6 @@ import { EDITOR_TOOLS, TOOL_PLAN_FEATURE, type EditorToolId, type ProToolAccess,
 export interface ToolTabsProps {
   active: EditorToolId;
   onSelect: (id: EditorToolId) => void;
-  /** Count badge per tool — currently only `site` uses one (pending changes). */
-  counts?: Partial<Record<EditorToolId, number>>;
   /** Per-tool unlock state — the two Pro tools have separate plan features. */
   proToolAccess: ProToolAccess;
   panelId: string;
@@ -18,12 +16,20 @@ export interface ToolTabsProps {
  * The six tool tabs.
  *
  * Hand-rolled rather than built on `components/ui/tabs.tsx` because these are
- * icon+label tiles with count badges in a fixed six-across row, and Radix's
- * Tabs would be fighting the layout the whole way. The ARIA contract is the
- * same and is asserted in tests: `role="tablist"`, roving tabindex, arrow-key
- * traversal that wraps, Home/End, and `aria-controls` pointing at the panel.
+ * icon+label tiles in a fixed six-across row, and Radix's Tabs would be
+ * fighting the layout the whole way. The ARIA contract is the same and is
+ * asserted in tests: `role="tablist"`, roving tabindex, arrow-key traversal
+ * that wraps, Home/End, and `aria-controls` pointing at the panel.
+ *
+ * These tabs carried a pending-change count badge until the count was wired up
+ * for real, at which point it was wrong: the badge sat on the Site tab, but
+ * since Phase 8 that tab is site settings, whose writes skip the draft layer
+ * entirely and so never count. A PM would have seen "4" on Site and found a
+ * settings form with nothing pending. The top bar's Publish button and the
+ * review sheet already state the pending count; a third, mislocated surface was
+ * worse than none.
  */
-export function ToolTabs({ active, onSelect, counts, proToolAccess, panelId }: ToolTabsProps) {
+export function ToolTabs({ active, onSelect, proToolAccess, panelId }: ToolTabsProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -72,7 +78,6 @@ export function ToolTabs({ active, onSelect, counts, proToolAccess, panelId }: T
     >
       {EDITOR_TOOLS.map((tool, index) => {
         const isActive = tool.id === active;
-        const count = counts?.[tool.id] ?? 0;
         const isProTool = tool.id in TOOL_PLAN_FEATURE;
         const isProLocked = isProTool && !proToolAccess[tool.id as ProToolId];
         const Icon = tool.icon;
@@ -101,12 +106,6 @@ export function ToolTabs({ active, onSelect, counts, proToolAccess, panelId }: T
           >
             <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
             <span>{tool.label}</span>
-            {count > 0 && (
-              <span className="absolute right-1 top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-interactive px-1 text-[0.625rem] font-bold text-content-inverse">
-                {count}
-                <span className="sr-only"> pending changes</span>
-              </span>
-            )}
             {isProLocked && <span className="sr-only">Professional feature</span>}
           </button>
         );
