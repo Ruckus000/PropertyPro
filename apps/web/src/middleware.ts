@@ -321,6 +321,28 @@ function writeTenantCache(slug: string, communityId: number | null): void {
   });
 }
 
+/**
+ * Resolve a tenant host to a community id.
+ *
+ * Goes through the `pp_public_community_id_by_slug` RPC (migration 0045), NOT
+ * a direct read of `communities`.
+ *
+ * This client is built with the ANON key, so an unauthenticated visitor runs as
+ * `anon`. `communities.pp_communities_select` requires
+ * `pp_rls_has_community_membership(id)`, whose body begins
+ * `WHEN auth.uid() IS NULL THEN false` — so the direct read this replaced
+ * matched zero rows for every anonymous request. `x-community-id` was never
+ * set and every community's public site rendered "Community not found." behind
+ * an HTTP 200.
+ *
+ * It looked fine to anyone testing because an authenticated member DOES pass
+ * the membership check; the only visitor who saw the failure was the anonymous
+ * public, which is the entire audience of a §718.111(12)(g) transparency page.
+ *
+ * The RPC is SECURITY DEFINER and returns only a bigint, so RLS on
+ * `communities` stays exactly as it was — see 0045 for why an anon SELECT
+ * policy would have been the wrong fix.
+ */
 async function findCommunityIdBySlug(
   supabase: Awaited<ReturnType<typeof createMiddlewareClient>>['supabase'],
   slug: string,
@@ -330,21 +352,15 @@ async function findCommunityIdBySlug(
     return cached;
   }
 
-  const { data, error } = await supabase
-    .from('communities')
-    .select('id')
-    .eq('slug', slug)
-    .is('deleted_at', null)
-    .limit(1);
+  const { data, error } = await supabase.rpc('pp_public_community_id_by_slug', {
+    p_slug: slug,
+  });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  const communityId =
-    typeof data?.[0]?.id === 'number' && Number.isInteger(data[0].id)
-      ? data[0].id
-      : null;
+  const communityId = typeof data === 'number' && Number.isInteger(data) ? data : null;
 
   writeTenantCache(slug, communityId);
   return communityId;
@@ -357,15 +373,13 @@ async function findCommunityIdByCustomDomain(
   const key = `cd:${host}`;
   const cached = readTenantCache(key);
   if (cached !== undefined && cached !== null) return cached; // positive-only
-  const { data, error } = await supabase
-    .from('communities')
-    .select('id')
-    .eq('custom_domain', host)
-    .eq('custom_domain_status', 'active')
-    .is('deleted_at', null)
-    .limit(1);
+  // Same anon/RLS problem as findCommunityIdBySlug — a custom-domain visitor is
+  // no more authenticated than a subdomain one. See migration 0045.
+  const { data, error } = await supabase.rpc('pp_public_community_id_by_domain', {
+    p_host: host,
+  });
   if (error) throw new Error(error.message);
-  const id = typeof data?.[0]?.id === 'number' && Number.isInteger(data[0].id) ? data[0].id : null;
+  const id = typeof data === 'number' && Number.isInteger(data) ? data : null;
   if (id !== null) writeTenantCache(key, id);
   return id;
 }

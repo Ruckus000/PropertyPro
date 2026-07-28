@@ -34,6 +34,7 @@ const {
   eqMock,
   isMock,
   limitMock,
+  rpcMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   createMiddlewareClientMock: vi.fn(),
@@ -43,6 +44,7 @@ const {
   eqMock: vi.fn(),
   isMock: vi.fn(),
   limitMock: vi.fn(),
+  rpcMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -427,22 +429,32 @@ async function teardownSeededData(): Promise<void> {
 function configureMiddlewareClient(config: MiddlewareConfig): { getRequestedSlug: () => string | null } {
   let requestedSlug: string | null = null;
 
-  limitMock.mockImplementation(async () => {
-    const communityId =
-      requestedSlug == null ? null : (config.slugToCommunityId[requestedSlug] ?? null);
-    return {
-      data: communityId == null ? [] : [{ id: communityId }],
-      error: null,
-    };
+  // Tenant resolution goes through the pp_public_community_id_by_slug RPC
+  // (migration 0045), not a direct read of `communities`. The anon-keyed
+  // client cannot see that table — `pp_communities_select` requires
+  // membership, which an anonymous visitor does not have — so a direct read
+  // returned zero rows and broke every public site. The mock mirrors the RPC's
+  // contract: a scalar id, or null.
+  rpcMock.mockImplementation(async (fn: string, args: Record<string, unknown>) => {
+    if (fn === 'pp_public_community_id_by_slug') {
+      requestedSlug = String(args['p_slug']);
+      return { data: config.slugToCommunityId[requestedSlug] ?? null, error: null };
+    }
+    if (fn === 'pp_public_community_id_by_domain') {
+      return { data: null, error: null };
+    }
+    throw new Error(`unexpected rpc: ${fn}`);
   });
 
-  isMock.mockImplementation(() => ({ limit: limitMock }));
-  eqMock.mockImplementation((column: unknown, value: unknown) => {
-    if (column === 'slug') {
-      requestedSlug = String(value);
-    }
-    return { is: isMock };
+  // Retained so a regression to the direct-table read fails loudly here rather
+  // than silently resolving null the way it did in production.
+  limitMock.mockImplementation(async () => {
+    throw new Error(
+      'middleware read `communities` directly; tenant resolution must use the public RPC (see migration 0045)',
+    );
   });
+  isMock.mockImplementation(() => ({ limit: limitMock }));
+  eqMock.mockImplementation(() => ({ is: isMock }));
   selectMock.mockImplementation(() => ({ eq: eqMock }));
   fromMock.mockImplementation(() => ({ select: selectMock }));
 
@@ -456,6 +468,7 @@ function configureMiddlewareClient(config: MiddlewareConfig): { getRequestedSlug
     supabase: {
       auth: { getUser: getUserMock },
       from: fromMock,
+      rpc: rpcMock,
     },
     response: NextResponse.next(),
     user: config.user,

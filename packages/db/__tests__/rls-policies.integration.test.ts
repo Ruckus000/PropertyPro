@@ -2329,6 +2329,57 @@ describeDb('P4-55 RLS policies (integration)', () => {
       expect(visible).toHaveLength(0);
     });
 
+    /**
+     * Regression: the public-site outage.
+     *
+     * `middleware.ts` resolves a tenant host to a community id using the
+     * ANON-keyed Supabase client. It used to do that with a direct read of
+     * `communities`, whose SELECT policy requires
+     * `pp_rls_has_community_membership(id)` — and that function returns false
+     * whenever `auth.uid()` is null. So every anonymous visitor resolved to
+     * nothing, `x-community-id` was never set, and every community's public
+     * site rendered "Community not found." behind an HTTP 200 while
+     * authenticated users saw a working app.
+     *
+     * These two assertions are the contract migration 0045 created: anon CAN
+     * resolve a slug to an id, and anon still CANNOT read the row.
+     */
+    it('lets anon resolve a community slug to an id via the public RPC', async () => {
+      // Read the slug as admin FIRST. Resolving it inside the anon session
+      // would pass NULL into the function — anon cannot read `communities`,
+      // which is the whole reason this RPC exists.
+      const [community] = await adminSql<{ slug: string }[]>`
+        select slug from public.communities where id = ${seed.communityAId}
+      `;
+      expect(community?.slug).toBeTruthy();
+
+      await setAnonContext(authSql, seed.communityAId);
+      const rows = await authSql<{ id: number | null }[]>`
+        select public.pp_public_community_id_by_slug(${community!.slug}) as id
+      `;
+      expect(Number(rows[0]?.id)).toBe(seed.communityAId);
+    });
+
+    it('returns null from the public RPC for an unknown slug', async () => {
+      await setAnonContext(authSql, seed.communityAId);
+      const rows = await authSql<{ id: number | null }[]>`
+        select public.pp_public_community_id_by_slug('no-such-community-slug') as id
+      `;
+      expect(rows[0]?.id).toBeNull();
+    });
+
+    it('still hides the communities row itself from anon', async () => {
+      // The RPC must not have widened table access. If this ever passes with
+      // rows, someone "fixed" the outage by adding an anon SELECT policy and
+      // published subscription_plan, stripe_subscription_id and the street
+      // address to the internet along with it.
+      await setAnonContext(authSql, seed.communityAId);
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.communities where id = ${seed.communityAId}
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
     it('lets anon read only published blocks of the GUC-selected community', async () => {
       await setAnonContext(authSql, seed.communityAId);
       const rows = await authSql<{ id: number }[]>`

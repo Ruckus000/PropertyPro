@@ -50,28 +50,38 @@ function makeRequest(host: string, pathAndSearch: string): NextRequest {
 }
 
 /**
- * Minimal PostgREST-style builder. Records the `.eq()`/`.is()` filters so a
- * test can assert WHICH lookup ran (or that none ran), and resolves whatever
- * `communityRowsMock` returns for those filters.
+ * Minimal Supabase stub.
+ *
+ * Tenant resolution goes through the SECURITY DEFINER RPCs added in migration
+ * 0045, not a direct read of `communities`: this client carries the ANON key,
+ * and `pp_communities_select` requires membership an anonymous visitor does not
+ * have, so the direct read returned zero rows and broke every public site.
+ *
+ * The RPC arguments are translated into the same `filters` shape the old
+ * PostgREST builder recorded, so `lookupsBy('slug')` / `lookupsBy('custom_domain')`
+ * still answer the question these tests actually ask — WHICH lookup ran.
  */
 function makeSupabaseStub() {
   return {
     auth: { getUser: vi.fn() },
+    rpc(fn: string, args: Record<string, unknown>) {
+      const filters =
+        fn === 'pp_public_community_id_by_slug'
+          ? { slug: args['p_slug'], deleted_at: null }
+          : {
+              custom_domain: args['p_host'],
+              custom_domain_status: 'active',
+              deleted_at: null,
+            };
+      const rows = communityRowsMock(filters) as Array<{ id: number }> | null;
+      return Promise.resolve({ data: rows?.[0]?.id ?? null, error: null });
+    },
     from(_table: string) {
-      const filters: Record<string, unknown> = {};
-      const builder: Record<string, unknown> = {
-        select: () => builder,
-        eq: (column: string, value: unknown) => {
-          filters[column] = value;
-          return builder;
-        },
-        is: (column: string, value: unknown) => {
-          filters[column] = value;
-          return builder;
-        },
-        limit: () => Promise.resolve({ data: communityRowsMock(filters), error: null }),
-      };
-      return builder;
+      // A direct table read is the bug. Fail loudly rather than resolving null
+      // the way production silently did.
+      throw new Error(
+        'middleware read a table directly; tenant resolution must use the public RPC (migration 0045)',
+      );
     },
   };
 }
