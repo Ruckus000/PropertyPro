@@ -27,9 +27,9 @@ Tenant isolation is enforced at four layers — not by convention alone:
 
 Drizzle Kit does not auto-increment migration numbers. The pipeline has known fragility:
 
-- **Before creating a migration:** Check `packages/db/migrations/` for the current max number. Collisions from parallel branches are the most common failure mode.
+- **Before creating a migration:** Use `pnpm db:migration:new <snake_case_name>` for hand-authored migrations (RLS policies, grants, triggers, functions, backfills) — it picks the next index, stamps `when` with wall-clock `Date.now()`, and chains the snapshot. Use `pnpm --filter @propertypro/db db:generate` when a drizzle-tracked TABLE changes. Editing `meta/_journal.json` by hand is what produces collisions from parallel branches, the most common failure mode.
 - **Journal sync:** The migration directory may have more files than `meta/_journal.json` entries (drift exists on main). The CI job `migration-ordering` catches ordering violations but not file/journal count mismatches.
-- **Timestamp ordering:** `drizzle-kit generate --custom` can emit a `when` timestamp older than existing entries if prior migrations were manually future-dated. Always verify the new journal entry's `when` is strictly greater than the current max.
+- **Timestamp ordering — a correctness rule, not bookkeeping:** drizzle records `created_at = journal when` and applies a migration only when `lastApplied.created_at < folderMillis`. A `when` that does not exceed the newest applied value is **silently skipped** — no error, no output. So: stamp `when` with `Date.now()` at authoring time and **never derive it from the previous entry** (PRs #852 and #853 both computed `1784511314576` that way, from the same parent commit). If you rebase onto migrations that merged ahead of you, **re-stamp** — `migration-ordering` rejects a `when` at or below the baseline's newest.
 - **Connection discipline:** Pooled connection string for app queries; direct connection string for migrations only.
 - **After any migration change:** Run `pnpm --filter @propertypro/db db:migrate` against the target DB before integration tests. Never trust "tests pass locally" as evidence of shared DB health.
 

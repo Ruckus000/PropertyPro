@@ -126,6 +126,30 @@ describe('scaffoldResource()', () => {
     expect(last.when).toBeGreaterThan(1_700_000_000_000);
   });
 
+  it('does not append a second journal entry when the resource is re-scaffolded after a cleanup', () => {
+    // The scenario appendJournalEntry's own comment claims to protect: the
+    // generated files were deleted by hand, but the journal entry was left.
+    // A re-run then picks migrationIdx = max+1, so the tag it builds is
+    // 0005_create_widgets while the journal holds 0004_create_widgets — a
+    // full-tag comparison never matches and silently appends a duplicate entry
+    // (and a second migration creating the same table).
+    const first = scaffoldResource({ plural: 'widgets', target: tmpRoot });
+    for (const rel of first.filesWritten) {
+      rmSync(join(tmpRoot, rel), { force: true });
+    }
+
+    scaffoldResource({ plural: 'widgets', target: tmpRoot });
+
+    const journal = JSON.parse(
+      readFileSync(join(tmpRoot, 'packages/db/migrations/meta/_journal.json'), 'utf8'),
+    ) as typeof STARTING_JOURNAL;
+    const widgetEntries = journal.entries.filter((e) => e.tag.endsWith('_create_widgets'));
+
+    expect(widgetEntries).toHaveLength(1);
+    expect(widgetEntries[0]!.tag).toBe('0004_create_widgets');
+    expect(journal.entries).toHaveLength(5);
+  });
+
   it('refuses to overwrite existing files', () => {
     // Pre-create one of the targets to simulate a collision.
     writeFile(

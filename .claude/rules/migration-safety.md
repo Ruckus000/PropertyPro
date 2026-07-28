@@ -26,8 +26,30 @@
 
 ## Before Creating a Migration
 
-1. Check `packages/db/migrations/` for the highest existing file number
-2. Check `packages/db/migrations/meta/_journal.json` for the highest journal index
-3. Verify no other branch has reserved the same migration number range
+**Don't hand-edit `meta/_journal.json`.** Use the scaffolders — they pick the next
+index, stamp the timestamp, and chain the snapshot:
+
+- `pnpm db:migration:new <snake_case_name>` — hand-authored SQL (RLS policies,
+  grants, triggers, functions, CHECK constraints, backfills). Copies the tip
+  snapshot, which is correct only because drizzle-tracked schema is unchanged.
+- `pnpm --filter @propertypro/db db:generate` — when a **table** is added or
+  altered, so the snapshot records a real diff. Copying the tip snapshot for a
+  schema change is how the chain rots (`0033_snapshot` lost
+  `storm_damage_reports`, and `db:generate` then emitted a bogus migration
+  re-creating a live table).
+
+**`when` is stamped with wall-clock `Date.now()`, never derived from the previous
+entry.** Deriving it is what made PRs #852 and #853 both compute
+`1784511314576` from the same parent commit. It also matters for correctness:
+drizzle records `created_at = when` and applies only when
+`lastApplied.created_at < folderMillis`, so a `when` at or below the newest
+applied value is **silently skipped**. After rebasing onto migrations that merged
+ahead of you, re-stamp — `pnpm exec tsx scripts/verify-migration-ordering.ts`
+rejects an idx or `when` already on `origin/main`, and a `when` older than its
+newest entry.
+
+Existing entries idx 33–42 carry the old derived values. Leave them: prod's
+`drizzle.__drizzle_migrations.created_at` **is** the journal `when` for each, so
+rewriting history there would desync the ledger.
 
 </important>

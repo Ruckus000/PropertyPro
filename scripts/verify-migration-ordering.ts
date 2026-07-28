@@ -109,8 +109,14 @@ function checkTimestampOrdering(entries: JournalEntry[]): Problem[] {
  *
  * That is not hypothetical. PRs #852 and #853 both took idx 40 AND both derived
  * `when` 1784511314576 by adding 60000 to 0039's, because the repo's
- * hand-authored migrations copy that pattern rather than using wall-clock. It
- * was caught by a merge conflict, not by a check.
+ * hand-authored migrations copied that pattern rather than using wall-clock. It
+ * was caught by a merge conflict, not by a check. `pnpm db:migration:new` now
+ * stamps `when` with Date.now(), which cannot collide across branches.
+ *
+ * Three things are rejected: an idx already on the baseline, a `when` already on
+ * the baseline, and a `when` OLDER than the baseline's newest — the last because
+ * drizzle silently skips a migration whose `when` does not exceed the newest
+ * applied one, so a long-lived branch can otherwise merge into oblivion.
  *
  * Compares against the baseline ref (default `origin/main`, override with
  * MIGRATION_BASELINE_REF). Entries already on the baseline under the same tag
@@ -125,6 +131,12 @@ export function checkBaselineCollisions(
   const baselineTags = new Set(baselineEntries.map(e => e.tag));
   const baselineByIdx = new Map(baselineEntries.map(e => [e.idx, e.tag] as const));
   const baselineByWhen = new Map(baselineEntries.map(e => [e.when, e.tag] as const));
+
+  // Newest entry on the baseline, for the staleness check below.
+  let baselineMax: JournalEntry | undefined;
+  for (const e of baselineEntries) {
+    if (baselineMax === undefined || e.when > baselineMax.when) baselineMax = e;
+  }
 
   for (const entry of entries) {
     // Already on the baseline under this tag — not a new migration.
@@ -145,8 +157,22 @@ export function checkBaselineCollisions(
       problems.push({
         severity: 'error',
         message: `Migration when=${entry.when} ("${entry.tag}") is already used on the baseline `
-          + `by "${whenOwner}". Pick a strictly greater timestamp — deriving it from the `
-          + `previous entry is what makes two branches collide.`,
+          + `by "${whenOwner}". Re-stamp it with \`Date.now()\` — deriving the timestamp from `
+          + `the previous entry is what makes two branches collide.`,
+      });
+    } else if (baselineMax !== undefined && entry.when < baselineMax.when) {
+      // Stale timestamp: nothing collides, but the merged journal would hold a
+      // descending pair. drizzle records created_at = when and only applies a
+      // migration when `lastApplied.created_at < folderMillis`, so this one would
+      // be SILENTLY SKIPPED — no error, no output. Happens whenever a branch is
+      // authored before migrations that merge ahead of it.
+      problems.push({
+        severity: 'error',
+        message: `Migration when=${entry.when} ("${entry.tag}") is older than the newest `
+          + `baseline entry "${baselineMax.tag}" (when=${baselineMax.when}). drizzle applies `
+          + `only migrations whose \`when\` exceeds the last applied one, so this would be `
+          + `silently skipped. Re-stamp it with \`Date.now()\` (or re-run `
+          + `\`pnpm db:migration:new\`) after rebasing.`,
       });
     }
   }
