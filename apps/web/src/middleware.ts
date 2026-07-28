@@ -13,6 +13,7 @@
  * 8. Apply CORS validation and security response headers [P4-56]
  */
 import { type NextRequest, NextResponse } from 'next/server';
+import { captureMessage } from '@sentry/nextjs';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import {
   getWebAppOriginFromEnv,
@@ -321,6 +322,63 @@ function writeTenantCache(slug: string, communityId: number | null): void {
   });
 }
 
+/**
+ * Report a tenant-resolution failure that the caller then swallows.
+ *
+ * The public-site paths deliberately fall through on error rather than 500, so
+ * a visitor gets a page instead of a stack trace. That is the right call for
+ * availability and the wrong one for observability: with no community headers
+ * the renderer falls back to "Community not found." behind an HTTP 200, which
+ * is indistinguishable from a healthy site to `deploy.yml`'s `/auth/login`
+ * smoke test and to every uptime monitor. That combination is precisely why
+ * the original outage went unnoticed.
+ *
+ * Resolution now depends on the migration-0045 RPCs, which adds two new ways
+ * to throw that did not exist when it read the table directly: the function
+ * missing (a database restored without 0045), or `EXECUTE` revoked from `anon`
+ * — and 0045's own header records that Supabase advisor lints 0028/0029 flag
+ * these functions and recommend exactly that revoke. If someone acts on the
+ * lint, this is the signal that says so.
+ *
+ * Cardinality: fixed event name, variable parts in `extra`.
+ */
+function reportTenantResolutionFailure(
+  source: 'host_subdomain' | 'custom_domain',
+  host: string | null,
+  error: unknown,
+): void {
+  captureMessage('tenant_resolution_failed', {
+    level: 'error',
+    extra: {
+      source,
+      host,
+      reason: error instanceof Error ? error.message : String(error),
+    },
+  });
+}
+
+/**
+ * Resolve a tenant host to a community id.
+ *
+ * Goes through the `pp_public_community_id_by_slug` RPC (migration 0045), NOT
+ * a direct read of `communities`.
+ *
+ * This client is built with the ANON key, so an unauthenticated visitor runs as
+ * `anon`. `communities.pp_communities_select` requires
+ * `pp_rls_has_community_membership(id)`, whose body begins
+ * `WHEN auth.uid() IS NULL THEN false` — so the direct read this replaced
+ * matched zero rows for every anonymous request. `x-community-id` was never
+ * set and every community's public site rendered "Community not found." behind
+ * an HTTP 200.
+ *
+ * It looked fine to anyone testing because an authenticated member DOES pass
+ * the membership check; the only visitor who saw the failure was the anonymous
+ * public, which is the entire audience of a §718.111(12)(g) transparency page.
+ *
+ * The RPC is SECURITY DEFINER and returns only a bigint, so RLS on
+ * `communities` stays exactly as it was — see 0045 for why an anon SELECT
+ * policy would have been the wrong fix.
+ */
 async function findCommunityIdBySlug(
   supabase: Awaited<ReturnType<typeof createMiddlewareClient>>['supabase'],
   slug: string,
@@ -330,21 +388,15 @@ async function findCommunityIdBySlug(
     return cached;
   }
 
-  const { data, error } = await supabase
-    .from('communities')
-    .select('id')
-    .eq('slug', slug)
-    .is('deleted_at', null)
-    .limit(1);
+  const { data, error } = await supabase.rpc('pp_public_community_id_by_slug', {
+    p_slug: slug,
+  });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  const communityId =
-    typeof data?.[0]?.id === 'number' && Number.isInteger(data[0].id)
-      ? data[0].id
-      : null;
+  const communityId = typeof data === 'number' && Number.isInteger(data) ? data : null;
 
   writeTenantCache(slug, communityId);
   return communityId;
@@ -357,15 +409,13 @@ async function findCommunityIdByCustomDomain(
   const key = `cd:${host}`;
   const cached = readTenantCache(key);
   if (cached !== undefined && cached !== null) return cached; // positive-only
-  const { data, error } = await supabase
-    .from('communities')
-    .select('id')
-    .eq('custom_domain', host)
-    .eq('custom_domain_status', 'active')
-    .is('deleted_at', null)
-    .limit(1);
+  // Same anon/RLS problem as findCommunityIdBySlug — a custom-domain visitor is
+  // no more authenticated than a subdomain one. See migration 0045.
+  const { data, error } = await supabase.rpc('pp_public_community_id_by_domain', {
+    p_host: host,
+  });
   if (error) throw new Error(error.message);
-  const id = typeof data?.[0]?.id === 'number' && Number.isInteger(data[0].id) ? data[0].id : null;
+  const id = typeof data === 'number' && Number.isInteger(data) ? data : null;
   if (id !== null) writeTenantCache(key, id);
   return id;
 }
@@ -732,8 +782,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
           );
         }
         // communityId null (unverified/unknown custom host): fall through to default handling.
-      } catch {
-        // non-fatal — fall through
+      } catch (error) {
+        // Non-fatal — fall through. But REPORT it: see the slug-lookup catch
+        // below for why a silent throw here is the outage coming back.
+        reportTenantResolutionFailure('custom_domain', tenantContext.customDomainHost, error);
       }
     }
 
@@ -762,8 +814,16 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
             forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
             forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
           }
-        } catch {
-          // Non-fatal for public site — continue without community headers
+        } catch (error) {
+          // Non-fatal for the public site — continue without community headers
+          // so a visitor gets a page rather than a 500. But REPORT it first:
+          // swallowing this silently is exactly how the original outage lasted
+          // as long as it did. Without the community headers the renderer
+          // falls back to "Community not found." behind an HTTP 200, which
+          // deploy.yml's /auth/login smoke test and every uptime monitor read
+          // as healthy. The protected path does not need this — it returns a
+          // loud internalErrorResponse for the same throw.
+          reportTenantResolutionFailure('host_subdomain', tenantContext.tenantSlug, error);
         }
       }
 

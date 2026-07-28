@@ -316,6 +316,13 @@
       "when": 1784511554576,
       "tag": "0044_site_blocks_payments_type",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1785227161347,
+      "tag": "0045_public_community_resolution_rpc",
+      "breakpoints": true
     }
   ]
 }

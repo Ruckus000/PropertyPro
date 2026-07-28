@@ -20,12 +20,14 @@ const {
   authState,
   mockGetUser,
   mockSupabaseFrom,
+  mockSupabaseRpc,
 } = vi.hoisted(() => ({
   authState: {
     user: null as { id: string; email?: string | null; emailVerified: boolean } | null,
   },
   mockGetUser: vi.fn(),
   mockSupabaseFrom: vi.fn(),
+  mockSupabaseRpc: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/supabase/middleware', () => ({
@@ -33,6 +35,7 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
     const supabase = {
       auth: { getUser: mockGetUser },
       from: mockSupabaseFrom,
+      rpc: mockSupabaseRpc,
     };
     return {
       supabase,
@@ -113,17 +116,14 @@ describe('public site auth-split middleware', () => {
     vi.clearAllMocks();
     // Default: no user
     authState.user = null;
-    // Default: slug lookup returns community ID
-    mockSupabaseFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            limit: () =>
-              Promise.resolve({ data: [{ id: 42 }], error: null }),
-          }),
-        }),
-      }),
-    });
+    // Default: slug lookup resolves to a community id.
+    //
+    // Via the pp_public_community_id_by_slug RPC (migration 0045), not a direct
+    // read of `communities`: this client carries the ANON key, and
+    // pp_communities_select requires a membership an anonymous visitor does not
+    // have — so the direct read matched zero rows and every public site
+    // rendered "Community not found." behind an HTTP 200.
+    mockSupabaseRpc.mockResolvedValue({ data: 42, error: null });
   });
 
   it('lets unauthenticated user through to public site on community subdomain root', async () => {

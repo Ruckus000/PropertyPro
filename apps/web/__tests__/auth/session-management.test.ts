@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
-const { getUserMock, createMiddlewareClientMock, fromMock, selectMock, eqMock, isMock, limitMock } = vi.hoisted(() => ({
+const { getUserMock, createMiddlewareClientMock, fromMock, selectMock, eqMock, isMock, limitMock, rpcMock } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
   createMiddlewareClientMock: vi.fn(),
   fromMock: vi.fn(),
@@ -9,6 +9,7 @@ const { getUserMock, createMiddlewareClientMock, fromMock, selectMock, eqMock, i
   eqMock: vi.fn(),
   isMock: vi.fn(),
   limitMock: vi.fn(),
+  rpcMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/supabase/middleware', () => ({
@@ -46,6 +47,7 @@ function mockAuthState(user: MockMiddlewareUser | null) {
         getUser: getUserMock,
       },
       from: fromMock,
+      rpc: rpcMock,
     },
     response: NextResponse.next(),
     user,
@@ -56,6 +58,12 @@ function mockAuthState(user: MockMiddlewareUser | null) {
 describe('p1-22 session middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Tenant resolution uses the SECURITY DEFINER RPCs from migration 0045,
+    // not a direct read of `communities` — the anon-keyed client cannot see
+    // that table, which is what broke every public site. `data` is the scalar
+    // community id, or null when the host resolves to nothing.
+    rpcMock.mockResolvedValue({ data: null, error: null });
 
     limitMock.mockResolvedValue({
       data: [],
@@ -179,10 +187,7 @@ describe('p1-22 session middleware', () => {
   });
 
   it('returns 404 for unknown tenant subdomains', async () => {
-    limitMock.mockResolvedValueOnce({
-      data: [],
-      error: null,
-    });
+    rpcMock.mockResolvedValueOnce({ data: null, error: null });
 
     const response = await middleware(
       request('http://localhost:3000/api/v1/documents', {
