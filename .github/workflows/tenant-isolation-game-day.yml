@@ -17,7 +17,9 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # ECR Public's mirror of the Docker Hub official image — same rationale
+        # as integration-tests.yml: avoid a Docker Hub outage taking the job out.
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
