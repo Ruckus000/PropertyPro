@@ -141,7 +141,11 @@ describe('public site auth-split middleware', () => {
     expect(response.headers.get('X-Request-ID')).toBeTruthy();
   });
 
-  it('redirects authenticated user to /dashboard on community subdomain root', async () => {
+  it('serves the public site to an AUTHENTICATED visitor on the subdomain root', async () => {
+    // Changed by 11b-0. This used to 307 to /dashboard. With the public site
+    // owning real URLs, that made every shared link useless for exactly the
+    // people most likely to be signed in — a resident following a link to their
+    // own community's website landed on the app instead of the page.
     authState.user = {
       id: 'user-1',
       email: 'test@example.com',
@@ -154,9 +158,9 @@ describe('public site auth-split middleware', () => {
 
     const response = await middleware(request);
 
-    expect(response.status).toBe(307);
-    const locationUrl = new URL(response.headers.get('location') ?? '');
-    expect(locationUrl.pathname).toBe('/dashboard');
+    expect(response.headers.get('location')).toBeNull();
+    const rewrite = response.headers.get('x-middleware-rewrite');
+    expect(new URL(rewrite ?? '').pathname).toBe('/public-site');
   });
 
   it('keeps authenticated user on public site when preview=true is present', async () => {

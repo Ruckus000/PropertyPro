@@ -1,4 +1,5 @@
 import { headers } from 'next/headers';
+import { notFound } from 'next/navigation';
 import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
 import type { Metadata } from 'next';
 import type { CommunityType } from '@propertypro/shared';
@@ -44,6 +45,26 @@ async function resolvePreviewMode(): Promise<boolean> {
   return requestHeaders.get('x-preview') === 'true';
 }
 
+/**
+ * Optional catch-all so the public site can own more than one URL [11b-0].
+ *
+ * Middleware rewrites a verified custom domain's whole path space here, so this
+ * route now receives `/public-site` AND `/public-site/<anything>`. Until Phase
+ * 11b introduces `site_pages`, exactly one page exists — the community home —
+ * so any slug is a 404 rather than a silent render of the home page under the
+ * wrong URL, which would be worse: it would make every mistyped address look
+ * like a real page and let search engines index infinite duplicates of it.
+ */
+interface PublicSitePageProps {
+  params: Promise<{ slug?: string[] }>;
+}
+
+/** True when the request is for the site root rather than a named page. */
+async function isHomePage(params: PublicSitePageProps['params']): Promise<boolean> {
+  const { slug } = await params;
+  return slug === undefined || slug.length === 0;
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const communityId = await resolveCommunityId();
   if (!communityId) return { title: 'PropertyPro' };
@@ -65,7 +86,11 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export default async function PublicSitePage() {
+export default async function PublicSitePage({ params }: PublicSitePageProps) {
+  if (!(await isHomePage(params))) {
+    notFound();
+  }
+
   const communityId = await resolveCommunityId();
   const isPreview = await resolvePreviewMode();
   if (!communityId) {

@@ -51,6 +51,7 @@ import {
 import { buildCommunityUrl } from './lib/utils/community-url';
 import {
   isApexHost,
+  isPublicSitePath,
   parsePathBasedPublicRoute,
   shouldRewriteHostTransparency,
 } from './lib/middleware/public-host-routes';
@@ -626,6 +627,69 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // --- Host precedence: verified custom domains are public end to end [11b-0] ---
+  //
+  // This sits ABOVE the protected-path check on purpose, and it is the only
+  // place host resolution is allowed to outrank it.
+  //
+  // A verified custom domain serves the community's public website and nothing
+  // else (design decision D4 — residents authenticate on the subdomain). So a
+  // request there for `/documents` is a request for a PAGE named Documents, not
+  // for the app's document library. Without this, `isProtectedPath` catches it
+  // first and redirects to login, and the public site can never own more than
+  // one URL.
+  //
+  // Deliberately NOT extended to community subdomains. A subdomain serves the
+  // authenticated app as well as the public root — `community-tenant-host-
+  // precedence.spec.ts` loads `/dashboard` on one and expects the dashboard —
+  // so granting host precedence there would route every resident's app to the
+  // public renderer. On a subdomain the app route wins and public page slugs are
+  // reserved against it (`isReservedPublicSlug`).
+  //
+  // The safety property this must never break: on the APP host, nothing here
+  // applies, because `custom_domain` is only ever the source for a host that is
+  // neither the root domain nor one of its subdomains.
+  if (isPublicSitePath(pathname)) {
+    const hostContext = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+      rootDomain,
+    });
+
+    if (hostContext.source === 'custom_domain' && hostContext.customDomainHost) {
+      try {
+        const communityId = await findCommunityIdByCustomDomain(
+          supabase,
+          hostContext.customDomainHost,
+        );
+        if (communityId != null) {
+          forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+          forwardedHeaders.set(TENANT_SOURCE_HEADER, 'custom_domain');
+          if (isPreviewRequest) {
+            forwardedHeaders.set('x-preview', 'true');
+          }
+          // Preserve the path. The renderer is a catch-all, so `/` and
+          // `/anything` both reach it and it decides what exists.
+          const siteUrl = request.nextUrl.clone();
+          siteUrl.pathname = `/public-site${pathname === '/' ? '' : pathname}`;
+          return finaliseResponse(
+            response as unknown as NextResponse,
+            NextResponse.rewrite(siteUrl, { request: { headers: forwardedHeaders } }),
+            requestId,
+            origin,
+            isApi,
+            isPreviewRequest,
+          );
+        }
+        // Unknown/unverified custom host: fall through to default handling.
+      } catch (error) {
+        // Non-fatal, but reported — a silent throw here is how the original
+        // tenant-resolution outage stayed invisible behind an HTTP 200.
+        reportTenantResolutionFailure('custom_domain', hostContext.customDomainHost, error);
+      }
+    }
+  }
+
   // Only enforce auth checks on protected paths
   if (isProtectedPath(pathname)) {
     const isTokenAuthRoute = isTokenAuthenticatedApiRoute(request);
@@ -759,35 +823,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       rootDomain,
     });
 
-    if (tenantContext.source === 'custom_domain' && tenantContext.customDomainHost) {
-      try {
-        const communityId = await findCommunityIdByCustomDomain(supabase, tenantContext.customDomainHost);
-        if (communityId != null) {
-          forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-          forwardedHeaders.set(TENANT_SOURCE_HEADER, 'custom_domain');
-          const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
-          if (isPreviewRequest) {
-            forwardedHeaders.set('x-preview', 'true');
-          }
-          const siteUrl = request.nextUrl.clone();
-          siteUrl.pathname = '/public-site';
-          const publicSiteResponse = NextResponse.rewrite(siteUrl, { request: { headers: forwardedHeaders } });
-          return finaliseResponse(
-            response as unknown as NextResponse,
-            publicSiteResponse,
-            requestId,
-            origin,
-            isApi,
-            isPreviewRequest,
-          );
-        }
-        // communityId null (unverified/unknown custom host): fall through to default handling.
-      } catch (error) {
-        // Non-fatal — fall through. But REPORT it: see the slug-lookup catch
-        // below for why a silent throw here is the outage coming back.
-        reportTenantResolutionFailure('custom_domain', tenantContext.customDomainHost, error);
-      }
-    }
+    // Custom domains are handled by the host-precedence block above, which runs
+    // for every path rather than only '/'. Nothing to do here.
 
     const hasCommunityContext =
       tenantContext.source !== 'none' &&
@@ -827,23 +864,20 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         }
       }
 
-      // Check auth: authenticated users go to dashboard, unauthenticated see public site
-      const publicSiteUser = middlewareUser;
+      // The public site is served to EVERYONE, signed in or not [11b-0].
+      //
+      // This used to redirect an authenticated visitor to /dashboard, which was
+      // tolerable while the public site was a single page but is not once it has
+      // real URLs: a resident following a link to their community's own website
+      // would land on the app dashboard instead of the page they were sent, and
+      // every shared public link would be broken for exactly the people most
+      // likely to share it. Managers also had to append `?preview=true` to look
+      // at their own live site.
+      //
+      // Reaching the app from here is one click on the site's own header; being
+      // unable to see a public page you are logged in to is not recoverable.
 
-      if (publicSiteUser && !isPreviewRequest) {
-        const dashboardUrl = request.nextUrl.clone();
-        dashboardUrl.pathname = '/dashboard';
-        return finaliseResponse(
-          response as unknown as NextResponse,
-          NextResponse.redirect(dashboardUrl),
-          requestId,
-          origin,
-          isApi,
-          isPreviewRequest,
-        );
-      }
-
-      // Unauthenticated — rewrite to the internal public-site renderer.
+      // Rewrite to the internal public-site renderer.
       // Forward x-preview=true so the renderer can switch to draft reads
       // (PR #8c). Mirrors the /mobile preview pattern at line 477.
       if (isPreviewRequest) {

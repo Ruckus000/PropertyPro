@@ -167,12 +167,20 @@ describe('middleware: a foreign host never resolves a tenant slug', () => {
     expect(target.pathname).toBe('/select-community');
   });
 
-  it('issues no community lookup at all for a foreign host on a protected path', async () => {
-    // D4: a custom domain serves the public `/` site only, so this surface has
-    // nothing to resolve — and must not spend a DB round-trip discovering that.
-    await middleware(makeRequest('portal.example.com', '/dashboard'));
+  it('never forwards community context to an APP route on an unverified foreign host', async () => {
+    // Superseded the old "issues no community lookup at all" assertion, which
+    // rested on D4's "a custom domain serves the public `/` site only". 11b-0
+    // widened that: a verified custom domain is public at EVERY path, so
+    // `/dashboard` there is a candidate page name and the domain lookup is now
+    // required to find out. What must not change is the security property —
+    // an unverified host resolves nothing and still gets bounced.
+    const response = await middleware(makeRequest('portal.example.com', '/dashboard'));
 
-    expect(communityRowsMock).not.toHaveBeenCalled();
+    expect(response.headers.get('x-middleware-request-x-community-id')).toBeNull();
+    // Crucially still by DOMAIN, never by first-label-as-slug — that was the
+    // original bug this file exists to prevent.
+    expect(lookupsBy('slug')).toEqual([]);
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull();
   });
 
   it('does not regress *.getpropertypro.com subdomain resolution', async () => {

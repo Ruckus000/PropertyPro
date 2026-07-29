@@ -56,6 +56,50 @@ export function parsePathBasedPublicRoute(pathname: string): { slug: string; pat
   return { slug, path: `/${suffix}` };
 }
 
+/**
+ * First path segments that are infrastructure, not site content — they must
+ * keep their normal handling on EVERY host, including a fully-public custom
+ * domain.
+ *
+ * `_next` is only partly covered by the middleware matcher: it excludes
+ * `_next/static` and `_next/image`, but RSC navigation and data requests still
+ * reach middleware, and rewriting those to the public-site renderer breaks
+ * client-side navigation with no error anyone would recognise.
+ *
+ * `api` matters even on a custom domain that serves nothing but the public
+ * site: the rendered page still calls back for contact-form posts and the
+ * like, and a rewritten POST would silently render HTML instead.
+ */
+const INFRASTRUCTURE_FIRST_SEGMENTS = new Set(['api', '_next', 'auth', 'dev', 'pdfjs-test']);
+
+/**
+ * True when a path on a fully-public host should be served by the public-site
+ * renderer rather than by its normal route.
+ *
+ * Only meaningful for hosts where the whole origin is public — i.e. a verified
+ * custom domain. A community SUBDOMAIN also serves the authenticated app, so
+ * this must not be used to decide routing there. See
+ * `isCommunityPublicOnlyHost` in middleware.ts for that distinction.
+ */
+export function isPublicSitePath(pathname: string): boolean {
+  const first = pathname.split('/').filter(Boolean)[0];
+  if (first === undefined) return true; // '/' itself
+  return !INFRASTRUCTURE_FIRST_SEGMENTS.has(first);
+}
+
+/**
+ * Slugs a community may not use for a public page on its SUBDOMAIN, because the
+ * subdomain also serves the authenticated app and the app route wins.
+ *
+ * Derived from `PROTECTED_FIRST_SEGMENTS` rather than hand-listed, so adding a
+ * protected app route cannot silently create a slug that shadows it. Exported
+ * for the page-creation validator to reuse — the reserved list and the routing
+ * rule must never be two lists that drift.
+ */
+export function isReservedPublicSlug(slug: string): boolean {
+  return PROTECTED_FIRST_SEGMENTS.has(slug) || PATH_PUBLIC_SUFFIXES.has(slug);
+}
+
 export function isApexHost(host: string | null, rootDomain: string): boolean {
   if (!host) return true;
   const hostname = host.split(':')[0]?.toLowerCase() ?? '';
