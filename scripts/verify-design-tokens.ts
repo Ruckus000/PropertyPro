@@ -66,13 +66,21 @@ const RULES: Record<string, RegExp> = {
   // Functional color literals in plain CSS/TS. Intentionally also fires on
   // bracketed Tailwind values already counted by arbitrary-color (see header).
   'raw-color-fn': /\b(?:rgba?|hsla?|oklch)\(/g,
-  // Slash-opacity on the app's semantic tokens (content/surface/edge/
-  // interactive/status) is a no-op: those tokens are defined as bare
-  // `var(--x)` with no `<alpha-value>` channel, so Tailwind 3.4 generates
-  // NOTHING. Use a solid token (…-subtle / …-bg / …-hover) or built-in
-  // `white`/`black` alpha for genuine translucency instead.
+  // Slash-opacity on the app's var-backed color families is a no-op: they are
+  // defined as bare `var(--x)` with no `<alpha-value>` channel, so Tailwind 3.4
+  // generates NOTHING and the color silently renders as absent. Use a solid
+  // token (…-subtle / …-bg / …-hover) or built-in `white`/`black` alpha for
+  // genuine translucency instead.
+  //
+  // The family list must match EVERY bare-var group in apps/web/tailwind.config.ts.
+  // It originally covered only content/surface/edge/interactive/status, which
+  // left the legacy primitives (primary/secondary/accent) and nav uncovered —
+  // and `bg-accent/10` shipped invisible in two PM-facing banners for months
+  // because of it. `blue`/`gray` are deliberately absent: they are hex ramps, so
+  // alpha genuinely compiles there, and using them at all is already caught by
+  // the raw-palette rule. apps/admin's ramps (coral/blue/gray) are all hex too.
   'slash-opacity-semantic':
-    /\b(?:bg|text|border|ring|from|via|to|divide|outline|placeholder|fill|stroke|ring-offset|decoration|accent|caret)-(?:content|surface|edge|interactive|status)[a-z-]*\/\d+/g,
+    /\b(?:bg|text|border|ring|from|via|to|divide|outline|placeholder|fill|stroke|ring-offset|decoration|accent|caret)-(?:content|surface|edge|interactive|status|primary|secondary|accent|nav)[a-z-]*\/\d+/g,
 };
 
 type Counts = Record<string, number>;
@@ -141,6 +149,15 @@ function selftest(): void {
     ['slash-opacity-semantic', 'className="bg-interactive/10 hover:bg-status-danger/90"', 2],
     ['slash-opacity-semantic', 'className="bg-interactive-subtle text-content"', 0],
     ['slash-opacity-semantic', 'className="bg-white/20 bg-black/50"', 0],
+    // The families the rule originally missed. `bg-accent/10` +
+    // `border-accent/40` is the exact pair that rendered SiteSetupBanner and
+    // WizardEntryBanner with no chrome at all.
+    ['slash-opacity-semantic', 'className="border border-accent/40 bg-accent/10"', 2],
+    ['slash-opacity-semantic', 'className="bg-primary/20 text-secondary/70"', 2],
+    ['slash-opacity-semantic', 'className="bg-nav-bg-active/50"', 1],
+    // Hex ramps: alpha genuinely compiles, so this rule must stay quiet
+    // (using them at all is raw-palette's job, not this one's).
+    ['slash-opacity-semantic', 'className="bg-blue-500/20 text-gray-700/50"', 0],
   ];
   for (const [rule, input, expected] of cases) {
     const got = scanContent(input)[rule] ?? 0;

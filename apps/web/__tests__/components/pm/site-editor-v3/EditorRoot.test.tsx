@@ -112,6 +112,7 @@ function renderRoot() {
       }}
       tagline={null}
       initialSiteSettings={undefined}
+      initialCustomCss={null}
     />,
   );
 }
@@ -189,15 +190,19 @@ describe('EditorRoot — Publish button wiring', () => {
 });
 
 describe('EditorRoot — tool panels', () => {
-  it('no longer shows the unbuilt placeholder on the Add tab', async () => {
-    // `next/dynamic` is stubbed to render null in this file, so the Add panel
-    // itself cannot be asserted on here (AddPanel.test.tsx covers it). What
-    // this pins is that the tab no longer falls through to
-    // `ToolPanelPlaceholder` — the state that made v3 unable to add a section.
+  // `next/dynamic` is stubbed to render null in this file, so the panels
+  // themselves cannot be asserted on here (their own test files cover them).
+  // What these pin is which tabs still fall through to `ToolPanelPlaceholder` —
+  // the state that makes a tool unusable.
+  it.each([
+    // Exact: `/Add/` also matches the "Address" tab.
+    ['Add', 'Add'],
+    ['Colours', /Colours/],
+    ['Address', /Address/],
+  ])('no longer shows the unbuilt placeholder on the %s tab', async (_name, accessibleName) => {
     renderRoot();
 
-    // Exact: `/Add/` also matches the "Address" tab.
-    await userEvent.click(screen.getByRole('tab', { name: 'Add' }));
+    await userEvent.click(screen.getByRole('tab', { name: accessibleName }));
 
     expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
   });
@@ -205,7 +210,7 @@ describe('EditorRoot — tool panels', () => {
   it('still shows the placeholder for the tabs that really are unbuilt', async () => {
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: /Colours/ }));
+    await userEvent.click(screen.getByRole('tab', { name: /Help/ }));
 
     expect(screen.getByText('This panel is not built yet.')).toBeInTheDocument();
   });

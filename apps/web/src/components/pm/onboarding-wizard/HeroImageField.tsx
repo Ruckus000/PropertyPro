@@ -22,7 +22,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import type { HeroBlockContent } from '@propertypro/shared';
 import { replacePrimaryHeroImage } from '@/lib/site-editor/hero-imagery';
 import { useImageUpload } from '@/hooks/use-image-upload';
-import { scaleCropToNatural } from '@/components/pm/site-editor/ImageBlockForm';
+import { scaleCropToNatural } from '@/lib/site-assets/scale-crop';
 import { useHeroBlock, useUpdateHeroBlock } from '@/hooks/use-hero-block';
 import {
   validateImageFile,

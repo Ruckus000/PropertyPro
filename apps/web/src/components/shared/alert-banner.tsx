@@ -100,6 +100,15 @@ interface AlertBannerProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "t
   dismissible?: boolean;
   /** Callback when dismissed */
   onDismiss?: () => void;
+  /**
+   * Extra props for the dismiss button — test hooks, a `disabled` while the
+   * dismissal is in flight, a more specific `aria-label`.
+   *
+   * Without this the dismiss button is opaque to callers, which is enough on
+   * its own to push a consumer into hand-rolling the whole banner (and, in at
+   * least one case, hand-rolling chrome that compiled to nothing).
+   */
+  dismissButtonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
   /** Visual variant */
   variant?: "filled" | "subtle" | "outlined";
 }
@@ -113,6 +122,7 @@ export function AlertBanner({
   action,
   dismissible = false,
   onDismiss,
+  dismissButtonProps,
   variant = "filled",
   className,
   ...props
@@ -155,7 +165,11 @@ export function AlertBanner({
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="shrink-0 rounded-sm p-0.5 opacity-70 transition-opacity duration-micro hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          {...dismissButtonProps}
+          className={cn(
+            "shrink-0 rounded-sm p-0.5 opacity-70 transition-opacity duration-micro hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50",
+            dismissButtonProps?.className
+          )}
         >
           <X size={16} aria-hidden="true" />
         </button>

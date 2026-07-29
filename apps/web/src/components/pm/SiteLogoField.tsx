@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactCrop, { type Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { scaleCropToNatural } from '@/components/pm/site-editor/ImageBlockForm';
+import { scaleCropToNatural } from '@/lib/site-assets/scale-crop';
 import { cropImageToFile, type CropPx } from '@/lib/site-assets/crop-image';
 
 const ALLOWED = ['image/png', 'image/jpeg', 'image/webp'];

@@ -105,6 +105,7 @@ const SUB_SEGMENT_LABELS: Record<string, string> = {
   'portfolio-templates': 'Portfolio Templates',
   website: 'Website',
   branding: 'Website',
+  'website-editor': 'Website',
 };
 
 /** id → label for every sidebar nav item (community + PM portal). */

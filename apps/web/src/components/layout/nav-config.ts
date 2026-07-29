@@ -183,8 +183,8 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/payments'],
   },
   {
-    // Launcher into the public-site / landing-page editor (which lives under
-    // /pm/settings/website). Surfaced in the community sidebar so management-tier
+    // Launcher into the public-site / landing-page editor (which lives at
+    // /pm/website-editor). Surfaced in the community sidebar so management-tier
     // members can reach it without first going to the PM portal. Gated to the
     // management tier the editor route allows so the link never lands on a
     // redirect. (v3: `designation` is orthogonal — a manager who also holds a
@@ -192,10 +192,13 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'website',
     label: 'Website',
     icon: Paintbrush,
-    href: (cid) => `/pm/settings/website?communityId=${cid}`,
+    href: (cid) => `/pm/website-editor?communityId=${cid}`,
     visibility: 'admin',
     featureKey: 'hasSiteEditor',
-    matchPrefixes: ['/pm/settings'],
+    // `/pm/settings` is kept alongside the editor's own path so the item still
+    // highlights for anyone arriving on the retired /pm/settings/website URL
+    // during the redirect hop, and for /pm/settings/branding.
+    matchPrefixes: ['/pm/website-editor', '/pm/settings'],
   },
   {
     id: 'violations-report',
@@ -386,10 +389,14 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'branding',
     label: 'Website',
     icon: Paintbrush,
-    // PR #9c — branding settings moved into the site editor's Branding tab.
-    // /pm/settings/branding is a permanent redirect to this destination.
-    href: () => '/pm/settings/website',
-    matchPrefixes: ['/pm/settings'],
+    // Branding settings live in the editor's Colours tool; /pm/settings/branding
+    // is a permanent redirect there.
+    //
+    // No communityId: this is the portfolio rail, which has no tenant in scope.
+    // The editor bounces to the community picker, which is the correct landing
+    // for "Website" pressed from a cross-community context.
+    href: () => '/pm/website-editor',
+    matchPrefixes: ['/pm/website-editor', '/pm/settings'],
   },
   {
     id: 'portfolio-templates',
@@ -414,9 +421,9 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
  * Everything else under /pm/ is community-scoped: it requires `?communityId=`
  * and the shell resolves a real tenant for it (/pm is in the middleware's
  * PROTECTED_PATH_PREFIXES, so the query param is forwarded as x-community-id).
- * Those pages — /pm/settings/website, /pm/settings/branding, /pm/site-preview,
- * /pm/onboarding/website, /pm/website-editor, /pm/dashboard/[community_id] —
- * must keep the normal community nav. Testing the bare '/pm/' prefix instead
+ * Those pages — /pm/website-editor, /pm/settings/website (now a redirect into
+ * it), /pm/settings/branding, /pm/site-preview, /pm/onboarding/website,
+ * /pm/dashboard/[community_id] — must keep the normal community nav. Testing the bare '/pm/' prefix instead
  * conflated the two and made the "Website" tab replace the whole sidebar.
  *
  * The deeper fix is moving the community-scoped editor out from under the

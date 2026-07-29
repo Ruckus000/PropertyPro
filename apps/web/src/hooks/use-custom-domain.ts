@@ -53,15 +53,35 @@ async function readJsonError(res: Response): Promise<string> {
   }
 }
 
-export function useCustomDomain(communityId: number, initial?: DomainState) {
+export interface UseCustomDomainOptions {
+  /**
+   * Set false to hold the request. The v3 Address panel passes the plan gate
+   * here so a community without the feature never calls the provider — its
+   * upsell state needs no domain data at all.
+   */
+  enabled?: boolean;
+}
+
+/**
+ * `initial` is optional on purpose. The legacy settings page server-fetches the
+ * state via `getDomain()` and seeds it; the v3 panel is mounted only when its
+ * tab is opened and fetches on mount instead, so that provider round-trip stays
+ * off every editor load.
+ */
+export function useCustomDomain(
+  communityId: number,
+  initial?: DomainState,
+  options?: UseCustomDomainOptions,
+) {
   return useQuery<DomainState>({
     queryKey: domainQueryKey(communityId),
+    enabled: options?.enabled ?? true,
     initialData: initial,
-    // The page server-fetches the same state via getDomain(); treat it as fresh
-    // on arrival and only refetch after staleTime so mount doesn't fire a
-    // redundant GET. Mutations (set/verify/remove) update the cache directly, so
-    // state transitions don't depend on this refetch.
-    initialDataUpdatedAt: () => Date.now(),
+    // When the caller seeded us, treat that seed as fresh on arrival so mount
+    // doesn't fire a redundant GET; without a seed there is nothing to date.
+    // Mutations (set/verify/remove) update the cache directly, so state
+    // transitions don't depend on this refetch either way.
+    ...(initial ? { initialDataUpdatedAt: () => Date.now() } : {}),
     staleTime: 30_000,
     queryFn: async ({ signal }) => {
       const res = await fetch(`/api/v1/pm/site/domain?communityId=${communityId}`, { signal });

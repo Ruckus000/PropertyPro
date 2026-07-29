@@ -6,9 +6,28 @@
  * (siteOnboardingCompletedAt === null) AND the PM hasn't dismissed it.
  * Dismissal is persisted per-user (user_preferences) so it stays dismissed
  * across devices/sessions.
+ *
+ * ## Why this is an AlertBanner rather than bespoke markup
+ *
+ * It used to hand-roll its chrome from the `accent` colour with slash-opacity
+ * modifiers for the background and border. `accent.DEFAULT` is declared in
+ * tailwind.config.ts as a bare `var(--brand-accent)` with no `<alpha-value>`
+ * channel, so Tailwind emitted ZERO CSS for both — the banner had no background
+ * and no border for as long as it shipped, and rendered as unstyled text on the
+ * PM dashboard. Its icon and link were `accent` too, which is coral-200: too
+ * light to read as text. The `brand` status maps to a designed pair
+ * (coral-50 ground, coral-700 ink) and fixes the contrast as well.
+ *
+ * `guard:design-tokens` did not catch it because `accent` was missing from the
+ * `slash-opacity-semantic` family list; that has since been fixed, which is what
+ * keeps this from regressing.
+ *
+ * `role="status"` overrides AlertBanner's default `role="alert"`: this is a
+ * standing nudge, not something that just went wrong, so it is announced
+ * politely rather than interrupting. Same call as [[WizardEntryBanner]].
  */
-import Link from 'next/link';
-import { Sparkles, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { useSiteSetupBannerDismissed, useDismissSiteSetupBanner } from '@/hooks/use-site-setup-banner';
 
 interface Props {
@@ -17,8 +36,8 @@ interface Props {
   /**
    * The first incomplete community's id — deep-links the CTA into that
    * community's website-onboarding wizard. Falls back to the website editor
-   * hub when absent (shouldn't happen when hasIncompleteSite is true, but
-   * the nudge must never be a dead end).
+   * when absent (shouldn't happen when hasIncompleteSite is true, but the
+   * nudge must never be a dead end).
    */
   firstIncompleteCommunityId?: number | null;
 }
@@ -32,40 +51,37 @@ export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId 
   if (!hasIncompleteSite || isLoading || dismissed) return null;
 
   return (
-    <div
+    <AlertBanner
       role="status"
       data-testid="site-setup-banner"
-      className="flex items-start gap-3 rounded-md border border-accent/40 bg-accent/10 p-4"
-    >
-      <Sparkles className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
-      <div className="flex-1">
-        <p className="text-sm font-medium text-content">Finish setting up your community website</p>
-        <p className="mt-1 text-sm text-content-secondary">
-          One or more of your communities hasn&rsquo;t published its public site yet. Pick a layout,
-          colors, and a welcome message so residents have somewhere to land.
-        </p>
-        <Link
-          href={
-            firstIncompleteCommunityId
-              ? `/pm/onboarding/website?communityId=${firstIncompleteCommunityId}`
-              : '/pm/settings/website'
-          }
-          data-testid="site-setup-banner-cta"
-          className="mt-2 inline-flex items-center text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-        >
-          Set up your website
-        </Link>
-      </div>
-      <button
-        type="button"
-        data-testid="site-setup-banner-dismiss"
-        aria-label="Dismiss"
-        disabled={dismiss.isPending}
-        onClick={() => dismiss.mutate()}
-        className="shrink-0 self-start rounded-md p-1 text-content-secondary hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:opacity-50"
-      >
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
-    </div>
+      status="brand"
+      title="Finish setting up your community website"
+      description="One or more of your communities hasn't published its public site yet. Pick a layout, colors, and a welcome message so residents have somewhere to land."
+      action={
+        <Button asChild size="sm">
+          {/*
+            A plain <a>, not next/link: this leaves the PM portal for the
+            community-scoped wizard, and the destination reads `communityId`
+            server-side to resolve tenancy. Matches WizardEntryBanner.
+          */}
+          <a
+            href={
+              firstIncompleteCommunityId
+                ? `/pm/onboarding/website?communityId=${firstIncompleteCommunityId}`
+                : '/pm/website-editor'
+            }
+            data-testid="site-setup-banner-cta"
+          >
+            Set up your website
+          </a>
+        </Button>
+      }
+      dismissible
+      onDismiss={() => dismiss.mutate()}
+      dismissButtonProps={{
+        'data-testid': 'site-setup-banner-dismiss',
+        disabled: dismiss.isPending,
+      } as React.ButtonHTMLAttributes<HTMLButtonElement>}
+    />
   );
 }

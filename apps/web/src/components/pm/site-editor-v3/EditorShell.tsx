@@ -42,6 +42,16 @@ export interface EditorShellProps {
   onActiveToolChange?: (tool: EditorToolId) => void;
   /** The inspector column. Rendered at >=1280px; below that it overlays. */
   inspector?: React.ReactNode;
+  /**
+   * Full-width strip between the top bar and the columns.
+   *
+   * Deliberately above the columns rather than inside a tool panel: its one
+   * consumer is the "you never finished the wizard" prompt, which is about the
+   * whole site and would be missable behind a tab the PM has no reason to open.
+   * Not rendered under the phone gate — the gate is a deliberately minimal
+   * surface for posting an urgent notice, and setup guidance is not that.
+   */
+  banner?: React.ReactNode;
 }
 
 /**
@@ -67,6 +77,7 @@ export function EditorShell({
   activeTool: controlledTool,
   onActiveToolChange,
   inspector,
+  banner,
 }: EditorShellProps) {
   const [uncontrolledTool, setUncontrolledTool] = useState<EditorToolId>('sections');
   const activeTool = controlledTool ?? uncontrolledTool;
@@ -103,6 +114,10 @@ export function EditorShell({
         onPreview={onPreview}
         onPublish={onPublish}
       />
+
+      {banner ? (
+        <div className="shrink-0 border-b border-edge px-4 py-3">{banner}</div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1">
         <div

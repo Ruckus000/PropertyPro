@@ -20,7 +20,7 @@ export const ACTION_ROUTES: Record<string, ChecklistAction> = {
   invite_first_member:   { label: 'Add',       href: (cid) => `/dashboard/residents?communityId=${cid}` },
   review_compliance:     { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
   post_announcement:     { label: 'Create',    href: (cid) => `/announcements/new?communityId=${cid}` },
-  customize_portal:      { label: 'Customize', href: (cid) => `/pm/settings/website?communityId=${cid}` },
+  customize_portal:      { label: 'Customize', href: (cid) => `/pm/website-editor?communityId=${cid}` },
   review_announcement:   { label: 'View',      href: (cid) => `/announcements?communityId=${cid}` },
   check_compliance:      { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
   access_document:       { label: 'Browse',    href: (cid) => `/communities/${cid}/documents` },

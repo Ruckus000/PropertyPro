@@ -1,36 +1,29 @@
+// breadcrumbs:exempt — redirect-only page
 /**
- * PR #1b: PM website editor — Welcome tab only.
+ * Redirect from the retired stacked-form website editor to the v3 editor.
  *
- * Route: /pm/settings/website?communityId=X
- * Auth: pm_admin or cam role required.
+ * Route: /pm/settings/website?communityId=X → /pm/website-editor?communityId=X
  *
- * PR #1b ships the Hero block editor. PR #5 adds the full onboarding flow,
- * PR #8 ships the full 5-tab editor + draft/preview/publish workflow.
+ * ## Why the route still exists at all
+ *
+ * Every link in the app has been repointed at `/pm/website-editor`, but this
+ * path is in the wild: help-article deep links, PM bookmarks, and browser
+ * history. Deleting it outright would 404 all of them.
+ *
+ * ## Why this is a temporary redirect, not `permanentRedirect`
+ *
+ * A 308 is cached hard by browsers and CDNs and is effectively impossible to
+ * retract. This is a route retirement, not a permanent identity change for a
+ * resource, so a 307 leaves room to change our minds. The
+ * `/pm/settings/branding` redirect beside it is a genuine 308 because that page
+ * is never coming back.
+ *
+ * No auth or role check here on purpose: the redirect leaks nothing, and the
+ * destination re-runs the full session / role / tenancy / plan / subscription
+ * chain. Duplicating those checks would mean two places to keep in sync.
  */
 import { redirect } from 'next/navigation';
-import { CheckCircle2, Clock } from 'lucide-react';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
-import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
-import {
-  getCommunityPublicInfo,
-  getSiteOnboardingCompletedAt,
-  getBrandingForCommunity,
-} from '@/lib/api/branding';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
-import { CustomStylingForm } from '@/components/pm/site-editor/CustomStylingForm';
-import { CustomDomainCard } from '@/components/pm/site-editor/CustomDomainCard';
-import { getDomain } from '@/lib/services/custom-domain-service';
-import { buildCommunityUrl } from '@/lib/utils/community-url';
-import { heroBlockSchema, type HeroBlockContent } from '@propertypro/shared';
-import { HeroBlockForm } from '@/components/pm/site-editor/HeroBlockForm';
-import { ContentSectionsList } from '@/components/pm/site-editor/ContentSectionsList';
-import { PublishBar } from '@/components/pm/site-editor/PublishBar';
-import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
-import { PageBody } from '@/components/shared/page-body';
-import { isSiteEditorV3Enabled, siteEditorV3Path } from '@/lib/site-editor/flag';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -40,173 +33,11 @@ export default async function WebsiteSettingsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const rawId = Number(params['communityId']);
 
-  // No community in scope — bounce to the portfolio rather than rendering a
-  // community-scoped page with none, which leaves the shell resolving
-  // community = null and swapping the PM rail for the community nav. Matches
-  // what /pm/site-preview already does.
+  // Same no-community-in-scope behaviour the retired page had: bounce to the
+  // portfolio rather than forwarding to an editor that would only bounce again.
   if (!Number.isInteger(rawId) || rawId <= 0) {
     redirect('/pm/dashboard/communities');
   }
 
-  const communityId = rawId;
-  let userId: string;
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
-
-  const membership = await requireCommunityMembership(communityId, userId!);
-  if (!hasRole(membership, PM_MANAGER_ROLES)) {
-    redirect('/pm/dashboard/communities?reason=invalid-selection');
-  }
-
-  // PR #8e — load hero from the merged draft+published view so the form
-  // seeds with whatever the PM is currently iterating on, not the last
-  // published version.
-  const reader = getPublicCommunityScopedReader(communityId);
-  const blocks = await reader.listSiteBlocks({ includeDrafts: true });
-  // A site is "live" once it has at least one published (non-draft) block —
-  // only published rows count, which keeps this header pill in lockstep with
-  // the PublishBar badge (same signal).
-  const hasPublishedContent = blocks.some((b) => !b.isDraft);
-  const heroRaw = blocks.find((b) => b.blockType === 'hero')?.content;
-  let initial: HeroBlockContent | null = null;
-  if (heroRaw != null) {
-    const parsed = heroBlockSchema.safeParse(heroRaw);
-    if (parsed.success) initial = parsed.data;
-  }
-
-  const [communityInfo, onboardingCompletedAt, currentBranding, features, domainState] =
-    await Promise.all([
-      getCommunityPublicInfo(communityId),
-      getSiteOnboardingCompletedAt(communityId),
-      getBrandingForCommunity(communityId),
-      // membership.communityType is the typed CommunityType source (same idiom as
-      // contracts/page.tsx); communityInfo.communityType is a plain DB string.
-      getEffectiveFeaturesForPage(communityId, membership.communityType),
-      getDomain(communityId),
-    ]);
-  const previewUrl = communityInfo
-    ? buildCommunityUrl(communityInfo.slug, '/?preview=true')
-    : null;
-  // Pro+ gates (spec §4.3). When false, the UI renders the affordances
-  // disabled-but-visible for upsell; the write routes enforce the same gates
-  // server-side. Polish blocks → ContentSectionsList; custom CSS → the Custom
-  // Styling section below.
-  const hasSitePolishBlocks = features.hasSitePolishBlocks;
-  const hasSiteCustomCss = features.hasSiteCustomCss;
-  const customCssInitial = currentBranding?.customCssOverrides ?? null;
-  // Canonical signal: the wizard stamps site_onboarding_completed_at on its
-  // final-step publish. Null = wizard never completed → show the banner.
-  // (Replaces the prior branding.layoutId-unset substitute heuristic.)
-  const showWizardBanner = onboardingCompletedAt === null;
-  const v3Enabled = isSiteEditorV3Enabled();
-
-  return (
-    <PageBody width="reading" spacing="none">
-      {showWizardBanner && <WizardEntryBanner communityId={communityId} />}
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold text-content">Website</h1>
-            {hasPublishedContent ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-status-success-bg px-2.5 py-1 text-xs font-medium text-status-success">
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Live
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-status-warning-bg px-2.5 py-1 text-xs font-medium text-status-warning">
-                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                Not published yet
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-sm text-content-secondary">
-            Customize the welcome panel that visitors see at{' '}
-            <code className="rounded bg-surface-muted px-1 py-0.5 text-xs">
-              [your-community].getpropertypro.com
-            </code>
-            . Use <strong className="font-medium">Publish Website</strong> at the bottom to make
-            your changes live.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Phase 0 of the v3 rollout: while both editors coexist, this is the
-              only way into the new one. Next.js forbids two parallel pages at
-              the same path, so v3 lives at its own URL until Phase 12 retires
-              this page and redirects here. */}
-          {v3Enabled && (
-            <a
-              href={siteEditorV3Path(communityId)}
-              data-testid="site-editor-v3-link"
-              className="inline-flex items-center rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-            >
-              Try the new editor
-            </a>
-          )}
-          <a
-            href={`/pm/onboarding/website?communityId=${communityId}`}
-            data-testid="run-wizard-link"
-            className="inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-          >
-            Re-run onboarding
-          </a>
-          {previewUrl && (
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="preview-draft-link"
-              className="inline-flex items-center rounded-md border border-default bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-            >
-              Preview Draft
-            </a>
-          )}
-        </div>
-      </div>
-
-      <section aria-labelledby="welcome-tab" className="rounded-md border border-default bg-surface-card p-6 shadow-e0">
-        <h2 id="welcome-tab" className="mb-4 text-lg font-medium text-content">
-          Welcome
-        </h2>
-        <HeroBlockForm communityId={communityId} initial={initial} />
-      </section>
-
-      <div className="mt-8">
-        <ContentSectionsList communityId={communityId} hasSitePolishBlocks={hasSitePolishBlocks} />
-      </div>
-
-      <section
-        aria-labelledby="custom-styling-tab"
-        className="mt-8 rounded-md border border-default bg-surface-card p-6 shadow-e0"
-      >
-        <h2 id="custom-styling-tab" className="mb-1 text-lg font-medium text-content">
-          Custom Styling
-        </h2>
-        <p className="mb-4 text-sm text-content-secondary">
-          Override your selected preset&rsquo;s colors and body font. These win over the theme on
-          your public site.
-        </p>
-        <CustomStylingForm
-          communityId={communityId}
-          initial={customCssInitial}
-          hasSiteCustomCss={hasSiteCustomCss}
-        />
-      </section>
-
-      <section className="mt-8 rounded-md border border-default bg-surface-card p-6 shadow-e0">
-        {/* The card owns its visible <h2> heading (carries the "(Pro)" suffix
-            when gated), consistent with the sibling "Welcome"/"Custom Styling"
-            section headings. */}
-        <CustomDomainCard
-          communityId={communityId}
-          hasSiteCustomDomain={features.hasSiteCustomDomain}
-          initial={domainState}
-        />
-      </section>
-
-      <PublishBar communityId={communityId} />
-    </PageBody>
-  );
+  redirect(`/pm/website-editor?communityId=${rawId}`);
 }
