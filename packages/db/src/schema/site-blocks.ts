@@ -17,6 +17,7 @@ import {
   bigserial,
   boolean,
   check,
+  foreignKey,
   integer,
   jsonb,
   pgTable,
@@ -42,10 +43,11 @@ export const siteBlocks = pgTable(
      * `SET NOT NULL` is gate G3 — it can only run once the 11b code that always
      * writes a `page_id` is LIVE in production. Until then a NULL here means a
      * row written by pre-11b code, not a row without a page.
+     *
+     * The FK is COMPOSITE `(community_id, page_id)` — see the table extras
+     * below.
      */
-    pageId: bigint('page_id', { mode: 'number' }).references(() => sitePages.id, {
-      onDelete: 'cascade',
-    }),
+    pageId: bigint('page_id', { mode: 'number' }),
     blockOrder: integer('block_order').notNull(),
     blockType: text('block_type').notNull(),
     content: jsonb('content').notNull().default('{}'),
@@ -79,6 +81,17 @@ export const siteBlocks = pgTable(
         table.isDraft,
       )
       .where(sql`${table.deletedAt} IS NULL`),
+    // COMPOSITE FK: a block's page must belong to the block's own community.
+    // A single-column page_id FK would let a block in community A point at
+    // community B's page, and the cascade would then make deleting B's page
+    // delete A's content. MATCH SIMPLE (Postgres' default) means the constraint
+    // is inert while page_id IS NULL, which is exactly what the 11a->11c window
+    // needs; 11c's SET NOT NULL turns it into an unconditional guarantee.
+    foreignKey({
+      name: 'site_blocks_community_page_fk',
+      columns: [table.communityId, table.pageId],
+      foreignColumns: [sitePages.communityId, sitePages.id],
+    }).onDelete('cascade'),
     check(
       'site_blocks_block_type_check',
       sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','tombstone')`,

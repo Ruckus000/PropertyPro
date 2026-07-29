@@ -1,5 +1,5 @@
 {
-  "id": "020fb819-1e12-4139-9956-b46595243ec6",
+  "id": "955f88c9-0fc2-468f-9da4-a08ba26dca87",
   "prevId": "7a5f5866-96cb-487f-9e43-f1721fb53f61",
   "version": "7",
   "dialect": "postgresql",
@@ -10638,14 +10638,16 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "site_page_redirects_page_id_site_pages_id_fk": {
-          "name": "site_page_redirects_page_id_site_pages_id_fk",
+        "site_page_redirects_community_page_fk": {
+          "name": "site_page_redirects_community_page_fk",
           "tableFrom": "site_page_redirects",
           "tableTo": "site_pages",
           "columnsFrom": [
+            "community_id",
             "page_id"
           ],
           "columnsTo": [
+            "community_id",
             "id"
           ],
           "onDelete": "cascade",
@@ -10823,7 +10825,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "site_pages_community_id_id_key": {
+          "name": "site_pages_community_id_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "community_id",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {
         "site_pages_slug_shape_check": {
@@ -10986,14 +10997,16 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "site_blocks_page_id_site_pages_id_fk": {
-          "name": "site_blocks_page_id_site_pages_id_fk",
+        "site_blocks_community_page_fk": {
+          "name": "site_blocks_community_page_fk",
           "tableFrom": "site_blocks",
           "tableTo": "site_pages",
           "columnsFrom": [
+            "community_id",
             "page_id"
           ],
           "columnsTo": [
+            "community_id",
             "id"
           ],
           "onDelete": "cascade",

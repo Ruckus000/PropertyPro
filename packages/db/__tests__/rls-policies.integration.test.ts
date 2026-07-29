@@ -2766,6 +2766,35 @@ describeDb('P4-55 RLS policies (integration)', () => {
       ).rejects.toThrow();
     });
 
+    it('refuses a block whose page belongs to ANOTHER community', async () => {
+      // The composite (community_id, page_id) FK. With a single-column page_id
+      // FK this insert would succeed, and then deleting community B's page would
+      // cascade away community A's block — a cross-tenant DESTRUCTIVE path, not
+      // just a read one. Enforced by the database so no future write path has to
+      // remember to re-check it.
+      await expect(
+        db.insert(siteBlocks).values({
+          communityId: seed.communityAId,
+          pageId: publishedPageBId,
+          blockOrder: orderBase + 3,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuses a redirect whose page belongs to ANOTHER community', async () => {
+      const slugTag = seed.runTag.replace(/_/g, '-');
+      await expect(
+        db.insert(sitePageRedirects).values({
+          communityId: seed.communityAId,
+          fromSlug: `cross-tenant-${slugTag}`,
+          pageId: publishedPageBId,
+        }),
+      ).rejects.toThrow();
+    });
+
     it('cascades block deletion when a page is deleted', async () => {
       const slugTag = seed.runTag.replace(/_/g, '-');
       const [page] = await db

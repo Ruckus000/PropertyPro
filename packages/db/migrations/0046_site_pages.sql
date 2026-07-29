@@ -11,6 +11,19 @@
 -- WAIT, not just an apply — it can only run once the 11b code is live in
 -- production. Keeping them is exactly what makes 11b revertible.
 --
+-- COMPOSITE FOREIGN KEYS. `site_blocks.page_id` and `site_page_redirects.page_id`
+-- are constrained on `(community_id, page_id)` against
+-- `site_pages(community_id, id)`, not on `page_id` alone. A single-column FK
+-- would allow a row in community A to reference community B's page, and because
+-- these FKs cascade, deleting B's page would then delete A's content — a
+-- cross-tenant DESTRUCTIVE path, not merely a read one. Pairing the community id
+-- into the constraint makes that unrepresentable rather than leaving it to every
+-- future write path to re-check. `site_pages_community_id_id_key` exists solely
+-- to be that FK target. Postgres' default MATCH SIMPLE means the site_blocks
+-- constraint is inert while `page_id IS NULL`, which is precisely what the
+-- 11a→11c window needs; 11c's SET NOT NULL turns it into an unconditional
+-- guarantee.
+--
 -- RLS: `site_pages` and `site_page_redirects` join the `public_read_service_write`
 -- family that `site_blocks` uses — the public site renders them for anonymous
 -- visitors. anon + authenticated get a published-rows-only SELECT scoped to the
@@ -52,14 +65,15 @@ CREATE TABLE "site_pages" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
+	CONSTRAINT "site_pages_community_id_id_key" UNIQUE("community_id","id"),
 	CONSTRAINT "site_pages_slug_shape_check" CHECK (("site_pages"."is_home" AND "site_pages"."slug" = '') OR (NOT "site_pages"."is_home" AND "site_pages"."slug" ~ '^[a-z0-9][a-z0-9-]*$'))
 );
 --> statement-breakpoint
 ALTER TABLE "site_blocks" ADD COLUMN "page_id" bigint;--> statement-breakpoint
 ALTER TABLE "site_page_redirects" ADD CONSTRAINT "site_page_redirects_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "site_page_redirects" ADD CONSTRAINT "site_page_redirects_page_id_site_pages_id_fk" FOREIGN KEY ("page_id") REFERENCES "public"."site_pages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "site_page_redirects" ADD CONSTRAINT "site_page_redirects_community_page_fk" FOREIGN KEY ("community_id","page_id") REFERENCES "public"."site_pages"("community_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "site_pages" ADD CONSTRAINT "site_pages_community_id_communities_id_fk" FOREIGN KEY ("community_id") REFERENCES "public"."communities"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "site_blocks" ADD CONSTRAINT "site_blocks_page_id_site_pages_id_fk" FOREIGN KEY ("page_id") REFERENCES "public"."site_pages"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "site_blocks" ADD CONSTRAINT "site_blocks_community_page_fk" FOREIGN KEY ("community_id","page_id") REFERENCES "public"."site_pages"("community_id","id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "site_page_redirects_community_from_slug_partial" ON "site_page_redirects" USING btree ("community_id","from_slug") WHERE "site_page_redirects"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "site_pages_community_slug_partial" ON "site_pages" USING btree ("community_id","slug") WHERE "site_pages"."deleted_at" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "site_pages_community_home_partial" ON "site_pages" USING btree ("community_id") WHERE "site_pages"."is_home" AND "site_pages"."deleted_at" IS NULL;--> statement-breakpoint
@@ -101,6 +115,9 @@ WHERE NOT EXISTS (
     AND p."deleted_at" IS NULL
 )
 GROUP BY b."community_id";--> statement-breakpoint
+-- Joined on community_id, and the home partial unique index above guarantees at
+-- most one candidate page per community — so this cannot attach a block to
+-- another tenant's page even before the composite FK refuses to store one.
 UPDATE "site_blocks" b
 SET "page_id" = p."id"
 FROM "site_pages" p
@@ -147,10 +164,10 @@ DROP POLICY IF EXISTS "pp_site_page_redirects_read_published" ON "public"."site_
 DROP POLICY IF EXISTS "pp_site_page_redirects_service" ON "public"."site_page_redirects";--> statement-breakpoint
 
 -- Redirects have no is_draft column, so the read is community-scoped only. A
--- `from_slug` is a URL the site PUBLISHED in the past, so it discloses nothing
--- the public did not already have; the target page's own visibility is still
--- governed by the site_pages policies above. Resolving a redirect for a
--- draft-only page therefore yields a page anon cannot read — a 404, not a leak.
+-- `from_slug` discloses at most a URL segment, and the target page's own
+-- visibility is still governed by the site_pages policies above: a redirect
+-- pointing at an unpublished page resolves to a page anon cannot read — a 404,
+-- not a leak.
 CREATE POLICY "pp_site_page_redirects_anon_read" ON "public"."site_page_redirects"
   AS PERMISSIVE FOR SELECT TO anon
   USING (

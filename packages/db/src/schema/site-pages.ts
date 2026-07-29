@@ -48,11 +48,13 @@ import {
   bigserial,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
@@ -106,6 +108,11 @@ export const sitePages = pgTable(
       .where(sql`${table.isHome} AND ${table.deletedAt} IS NULL`),
     // Nav rendering and the pages manager are both "this community, in order".
     index('site_pages_community_nav_idx').on(table.communityId, table.sortOrder),
+    // Referenced target for the COMPOSITE foreign keys on site_blocks and
+    // site_page_redirects — see the note on `sitePageRedirects` below. Redundant
+    // with the primary key on its own; it exists so `(community_id, id)` can be
+    // an FK target.
+    unique('site_pages_community_id_id_key').on(table.communityId, table.id),
     check(
       'site_pages_slug_shape_check',
       sql`(${table.isHome} AND ${table.slug} = '') OR (NOT ${table.isHome} AND ${table.slug} ~ '^[a-z0-9][a-z0-9-]*$')`,
@@ -122,10 +129,11 @@ export const sitePageRedirects = pgTable(
       .references(() => communities.id, { onDelete: 'cascade' }),
     /** A slug the page used to live at. Never `''` — home cannot be renamed. */
     fromSlug: text('from_slug').notNull(),
-    /** The page that slug now resolves to. */
-    pageId: bigint('page_id', { mode: 'number' })
-      .notNull()
-      .references(() => sitePages.id, { onDelete: 'cascade' }),
+    /**
+     * The page that slug now resolves to. The FK is COMPOSITE — see the table
+     * extras below — so the page is guaranteed to belong to `communityId`.
+     */
+    pageId: bigint('page_id', { mode: 'number' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -140,5 +148,15 @@ export const sitePageRedirects = pgTable(
       'site_page_redirects_from_slug_shape_check',
       sql`${table.fromSlug} ~ '^[a-z0-9][a-z0-9-]*$'`,
     ),
+    // COMPOSITE FK, not a plain page_id reference. A single-column FK would
+    // permit a redirect in community A pointing at community B's page, and the
+    // cascade below would then make deleting B's page mutate A's data. Pairing
+    // community_id into the FK makes that unrepresentable in the database
+    // instead of relying on every future write path to re-check it.
+    foreignKey({
+      name: 'site_page_redirects_community_page_fk',
+      columns: [table.communityId, table.pageId],
+      foreignColumns: [sitePages.communityId, sitePages.id],
+    }).onDelete('cascade'),
   ],
 );
