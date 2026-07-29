@@ -13,7 +13,7 @@ vi.mock('react-image-crop/dist/ReactCrop.css', () => ({}));
 
 // Stub the crop-scaling helper so we don't pull ReactCrop math (jsdom gives
 // the preview <img> zero natural dims anyway → cropBox is omitted).
-vi.mock('@/components/pm/site-editor/ImageBlockForm', () => ({
+vi.mock('@/lib/site-assets/scale-crop', () => ({
   scaleCropToNatural: () => null,
 }));
 

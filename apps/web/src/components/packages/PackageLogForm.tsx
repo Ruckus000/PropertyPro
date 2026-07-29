@@ -125,8 +125,12 @@ export function PackageLogForm({
                   variant="outline"
                   size="sm"
                   className={cn(
+                    // Solid subtle token, not `bg-primary` with a slash-opacity
+                    // modifier: `primary` is a bare var() with no alpha channel,
+                    // so the modifier emitted no CSS and the selected carrier
+                    // had no fill at all.
                     carrier === opt &&
-                      'border-primary bg-primary/10 text-primary',
+                      'border-primary bg-interactive-subtle text-primary',
                   )}
                   onClick={() => setCarrier(opt)}
                 >

@@ -203,6 +203,23 @@ describe('nav href generation', () => {
     expect(byId.get('compliance')?.href(42)).toBe('/communities/42/compliance');
   });
 
+  it('points both Website entries at the editor, not the retired settings page', () => {
+    // /pm/settings/website is now a redirect into /pm/website-editor. Linking
+    // at it would cost every PM two route loads to reach the editor.
+    const community = new Map(NAV_ITEMS.map((item) => [item.id, item]));
+    const portfolio = new Map(PM_NAV_ITEMS.map((item) => [item.id, item]));
+
+    expect(community.get('website')?.href(42)).toBe('/pm/website-editor?communityId=42');
+    expect(portfolio.get('branding')?.href(0)).toBe('/pm/website-editor');
+  });
+
+  it('highlights Website on the editor path', () => {
+    // `matchPrefixes` used to be ['/pm/settings'] alone, which silently stopped
+    // matching the moment traffic moved to /pm/website-editor.
+    expect(getActiveItemId(NAV_ITEMS, '/pm/website-editor')).toBe('website');
+    expect(getActiveItemId(PM_NAV_ITEMS, '/pm/website-editor')).toBe('branding');
+  });
+
   it('never targets a compatibility redirect bridge page', () => {
     // Top-level bridge stubs that immediately server-redirect to
     // /communities/:id/... — one click must not cost two route loads.

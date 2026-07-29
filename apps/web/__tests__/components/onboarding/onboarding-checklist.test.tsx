@@ -26,7 +26,7 @@ const ROUTE_EXPECTATIONS: Array<{
   { itemKey: 'invite_first_member',    buttonLabel: 'Add',       expectedHref: `/dashboard/residents?communityId=${CID}` },
   { itemKey: 'review_compliance',      buttonLabel: 'View',      expectedHref: `/communities/${CID}/compliance` },
   { itemKey: 'post_announcement',      buttonLabel: 'Create',    expectedHref: `/announcements/new?communityId=${CID}` },
-  { itemKey: 'customize_portal',       buttonLabel: 'Customize', expectedHref: `/pm/settings/website?communityId=${CID}` },
+  { itemKey: 'customize_portal',       buttonLabel: 'Customize', expectedHref: `/pm/website-editor?communityId=${CID}` },
   { itemKey: 'review_announcement',    buttonLabel: 'View',      expectedHref: `/announcements?communityId=${CID}` },
   { itemKey: 'check_compliance',       buttonLabel: 'View',      expectedHref: `/communities/${CID}/compliance` },
   { itemKey: 'access_document',        buttonLabel: 'Browse',    expectedHref: `/communities/${CID}/documents` },

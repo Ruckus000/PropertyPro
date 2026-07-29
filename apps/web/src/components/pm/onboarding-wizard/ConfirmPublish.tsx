@@ -167,8 +167,12 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
                 </span>
                 {blockLabel(s.blockType)}
               </span>
+              {/* Draft pill uses the solid brand-status pair. The previous
+                  accent tint applied a slash-opacity modifier to a bare var(),
+                  so the pill had no fill at all, and accent-as-text is
+                  coral-200 — too light to read. */}
               {s.isDraft ? (
-                <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
+                <span className="rounded-full bg-status-brand-bg px-2 py-0.5 text-xs font-medium text-status-brand">
                   Draft
                 </span>
               ) : (

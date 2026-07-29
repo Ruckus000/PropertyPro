@@ -3,23 +3,18 @@
  *
  * Route: /pm/website-editor?communityId=X
  *
- * ## Why this is not at /pm/settings/website
- *
- * Next.js refuses two parallel pages that resolve to the same path, so the v3
- * editor cannot live in a second route group at the legacy URL — route groups
- * organise the tree, they do not create separate URL namespaces. The v3 editor
- * therefore gets its own path while both editors coexist. Phase 12 retires the
- * stacked-form editor and redirects `/pm/settings/website` here.
+ * This is the only website editor. The stacked-form predecessor at
+ * /pm/settings/website is retired; that path now redirects here, and the
+ * `SITE_EDITOR_V3_ENABLED` flag that gated the rollout is gone with it.
  *
  * The path stays under `/pm` deliberately: that prefix is in
  * `PROTECTED_PATH_PREFIXES` (apps/web/src/middleware.ts), so middleware session
- * protection applies to this route exactly as it does to the legacy one.
+ * protection applies to this route.
  *
  * ## Authorization
  *
  * Middleware guarantees a session and nothing more. Role, tenancy, plan and
- * subscription state are enforced here, mirroring the legacy page one-for-one —
- * a flag flip must not be able to widen access.
+ * subscription state are all enforced here.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
@@ -29,9 +24,12 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { getPageShellContext } from '@/lib/request/page-shell-context';
-import { isSiteEditorV3Enabled } from '@/lib/site-editor/flag';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
-import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
+import {
+  getBrandingForCommunity,
+  getCommunityPublicInfo,
+  getSiteOnboardingCompletedAt,
+} from '@/lib/api/branding';
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
@@ -47,12 +45,6 @@ interface PageProps {
 }
 
 export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
-  // The flag is checked FIRST so that a disabled rollout costs one env read
-  // rather than a chain of DB lookups.
-  if (!isSiteEditorV3Enabled()) {
-    redirect('/pm/dashboard/communities?reason=editor-unavailable');
-  }
-
   const params = await searchParams;
   const rawId = Number(params['communityId']);
   if (!Number.isInteger(rawId) || rawId <= 0) {
@@ -72,7 +64,14 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
 
-  const [features, shellContext, communityInfo, canvasContext, branding] = await Promise.all([
+  const [
+    features,
+    shellContext,
+    communityInfo,
+    canvasContext,
+    branding,
+    onboardingCompletedAt,
+  ] = await Promise.all([
     getEffectiveFeaturesForPage(communityId, membership.communityType),
     // Only for the signed-in user's display name. Everything community-scoped
     // comes from `membership` — see the lifecycle note below.
@@ -83,6 +82,11 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // `loadCanvasContext` above already reads it, so this resolves from the
     // same request-scoped result rather than issuing a second SELECT.
     getBrandingForCommunity(communityId),
+    // The canonical "wizard never finished" signal, stamped by the wizard's
+    // final-step publish. Read here rather than inferred from branding, for the
+    // same reason the legacy editor read it: `branding.layoutId` being unset was
+    // a substitute heuristic and got this wrong.
+    getSiteOnboardingCompletedAt(communityId),
   ]);
 
   if (!features.hasSiteEditor) {
@@ -162,6 +166,13 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
           settings: resolveSiteSettings(branding),
           footer: resolveFooterSettings(branding),
         }}
+        // From the same free `branding` read as the settings above, so the
+        // Colours panel opens on the community's real overrides. The Address
+        // panel gets no equivalent on purpose — its state lives at the domain
+        // provider, and seeding it here would put that round-trip on every
+        // editor load for a tab most PMs never open.
+        initialCustomCss={branding?.customCssOverrides ?? null}
+        showWizardBanner={onboardingCompletedAt === null}
       />
     </EditorFrame>
   );

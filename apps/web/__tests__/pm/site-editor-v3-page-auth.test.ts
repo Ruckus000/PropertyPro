@@ -5,7 +5,7 @@
  * inherit that layout's guarantees. Middleware still protects `/pm`, but
  * middleware only proves a session exists — role, tenancy, plan and
  * subscription state are this page's responsibility. These tests are the proof
- * that flipping the rollout flag cannot widen anyone's access.
+ * that this page enforces all four on its own.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -21,7 +21,6 @@ const requireAuthMock = vi.hoisted(() => vi.fn());
 const requireMembershipMock = vi.hoisted(() => vi.fn());
 const featuresMock = vi.hoisted(() => vi.fn());
 const shellContextMock = vi.hoisted(() => vi.fn());
-const flagMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('@/lib/request/page-auth-context', () => ({
@@ -35,10 +34,6 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
 }));
 vi.mock('@/lib/request/page-shell-context', () => ({
   getPageShellContext: shellContextMock,
-}));
-vi.mock('@/lib/site-editor/flag', () => ({
-  isSiteEditorV3Enabled: flagMock,
-  siteEditorV3Path: (id: number) => `/pm/website-editor?communityId=${id}`,
 }));
 vi.mock('@/components/pm/site-editor-v3/EditorFrame', () => ({
   EditorFrame: () => null,
@@ -57,6 +52,9 @@ vi.mock('@/lib/api/branding', () => ({
   // `@propertypro/db/unsafe` → drizzle, which throws at module load without
   // DATABASE_URL, i.e. green locally and red in the DB-less CI unit job.
   getBrandingForCommunity: vi.fn().mockResolvedValue(null),
+  // Same reason again: the page reads this to decide whether to show the
+  // wizard-entry banner, and the real module hits the DB at module load.
+  getSiteOnboardingCompletedAt: vi.fn().mockResolvedValue(new Date()),
 }));
 vi.mock('@/lib/utils/community-url', () => ({
   buildCommunityUrl: (slug: string, path: string) => `https://${slug}.example.com${path}`,
@@ -105,25 +103,10 @@ async function runPage(communityId: unknown): Promise<string | null> {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  flagMock.mockReturnValue(true);
   requireAuthMock.mockResolvedValue('user-1');
   requireMembershipMock.mockResolvedValue({ ...ACTIVE_MEMBERSHIP });
   featuresMock.mockResolvedValue({ hasSiteEditor: true });
   shellContextMock.mockResolvedValue({ user: { id: 'user-1', fullName: 'Jordan Rivera', email: null } });
-});
-
-describe('v3 editor page — rollout flag', () => {
-  it('redirects away when the flag is off', async () => {
-    flagMock.mockReturnValue(false);
-    expect(await runPage('7')).toBe('/pm/dashboard/communities?reason=editor-unavailable');
-  });
-
-  it('checks the flag before doing any database work', async () => {
-    flagMock.mockReturnValue(false);
-    await runPage('7');
-    expect(requireMembershipMock).not.toHaveBeenCalled();
-    expect(featuresMock).not.toHaveBeenCalled();
-  });
 });
 
 describe('v3 editor page — community scope', () => {

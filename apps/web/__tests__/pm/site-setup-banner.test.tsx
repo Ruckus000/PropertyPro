@@ -77,6 +77,6 @@ describe('<SiteSetupBanner> — CTA (slice 8f)', () => {
     mockStatus(false);
     render(wrap(<SiteSetupBanner hasIncompleteSite />));
     const cta = await screen.findByTestId('site-setup-banner-cta');
-    expect(cta).toHaveAttribute('href', '/pm/settings/website');
+    expect(cta).toHaveAttribute('href', '/pm/website-editor');
   });
 });

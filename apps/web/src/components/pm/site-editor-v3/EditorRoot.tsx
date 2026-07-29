@@ -51,6 +51,18 @@ const SitePanel = dynamic(
 const AddPanel = dynamic(() => import('./panels/AddPanel').then((m) => m.AddPanel), {
   loading: () => null,
 });
+
+// The two Pro tools, split for the same budget reason as everything above — and
+// with more force, since they are the two panels the median PM opens least. The
+// domain panel in particular pulls its own query stack and DNS table.
+const StylingPanel = dynamic(
+  () => import('./panels/StylingPanel').then((m) => m.StylingPanel),
+  { loading: () => null },
+);
+const DomainPanel = dynamic(
+  () => import('./panels/DomainPanel').then((m) => m.DomainPanel),
+  { loading: () => null },
+);
 // Code-split, for the same reason as PreviewDialog/PublishSheet above: the
 // inspector renders nothing until a section is selected, but a static import
 // put its whole subtree — the form registry, and every form's shared field
@@ -61,13 +73,17 @@ const Inspector = dynamic(() => import('./Inspector').then((m) => m.Inspector), 
   loading: () => null,
 });
 
+import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
+import type { CustomCssOverrides } from '@propertypro/shared';
+import { THEME_DEFAULTS } from '@propertypro/theme';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import type { SitePanelProps } from './panels/SitePanel';
+import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
 import { useSiteDiff } from './use-site-diff';
 
@@ -119,6 +135,38 @@ export interface EditorRootProps {
   siteIdentity: SitePanelProps['community'];
   tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
+  /**
+   * Stored Pro+ colour/font overrides, from the same `branding` read that
+   * feeds the Site panel. The Colours panel needs no query of its own.
+   *
+   * There is no matching prop for the Address panel: its state lives at
+   * Vercel, and server-seeding it would put a provider round-trip on every
+   * editor load for a tab most PMs never open. It fetches on mount instead.
+   */
+  initialCustomCss: CustomCssOverrides | null;
+  /**
+   * True when `communities.site_onboarding_completed_at` is null — the wizard
+   * was never finished. Surfaces the wizard prompt the legacy editor carried;
+   * it is the one entry point that lives *inside* the editor, which is where a
+   * PM is when they notice their site looks generic.
+   */
+  showWizardBanner: boolean;
+}
+
+/**
+ * What the site renders today — the Colours panel seeds its pickers from this
+ * so turning an override on starts from the live colour rather than a constant.
+ *
+ * Falls back to the platform defaults only when the community row could not be
+ * read at all, which is the same condition that degrades the canvas.
+ */
+function resolveStylingTheme(canvasContext: CanvasContext | null): StylingPanelTheme {
+  return {
+    primaryColor: canvasContext?.theme.primaryColor ?? THEME_DEFAULTS.primaryColor,
+    secondaryColor: canvasContext?.theme.secondaryColor ?? THEME_DEFAULTS.secondaryColor,
+    accentColor: canvasContext?.theme.accentColor ?? THEME_DEFAULTS.accentColor,
+    bodyFont: canvasContext?.theme.bodyFont ?? THEME_DEFAULTS.fontBody,
+  };
 }
 
 /**
@@ -144,6 +192,8 @@ export function EditorRoot({
   siteIdentity,
   tagline,
   initialSiteSettings,
+  initialCustomCss,
+  showWizardBanner,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
   // Shares the blocks query key, so this adds no request — and the publish
@@ -195,6 +245,7 @@ export function EditorRoot({
         // nothing while idle with no prior save, so this stays invisible until
         // the PM actually edits something.
         status={<AutosaveStatusLine />}
+        banner={showWizardBanner ? <WizardEntryBanner communityId={communityId} /> : null}
         renderToolPanel={(tool) => {
           if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
           if (tool === 'add') {
@@ -216,6 +267,24 @@ export function EditorRoot({
                 communityId={communityId}
                 hasPublishedSite={hasPublishedSite}
                 initialNotice={initialNotice}
+              />
+            );
+          }
+          if (tool === 'styling') {
+            return (
+              <StylingPanel
+                communityId={communityId}
+                hasSiteCustomCss={proToolAccess.styling}
+                initial={initialCustomCss}
+                theme={resolveStylingTheme(canvasContext)}
+              />
+            );
+          }
+          if (tool === 'domain') {
+            return (
+              <DomainPanel
+                communityId={communityId}
+                hasSiteCustomDomain={proToolAccess.domain}
               />
             );
           }
