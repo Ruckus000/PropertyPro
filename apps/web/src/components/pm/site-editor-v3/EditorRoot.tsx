@@ -63,6 +63,9 @@ const DomainPanel = dynamic(
   () => import('./panels/DomainPanel').then((m) => m.DomainPanel),
   { loading: () => null },
 );
+const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
+  loading: () => null,
+});
 // Code-split, for the same reason as PreviewDialog/PublishSheet above: the
 // inspector renders nothing until a section is selected, but a static import
 // put its whole subtree — the form registry, and every form's shared field
@@ -288,7 +291,13 @@ export function EditorRoot({
               />
             );
           }
-          return <ToolPanelPlaceholder tool={tool} />;
+          if (tool === 'help') return <HelpPanel communityId={communityId} />;
+          // Every tool in EDITOR_TOOLS now has a panel. This assignment is the
+          // exhaustiveness check: adding an id to EDITOR_TOOLS without a branch
+          // above fails typecheck here, instead of shipping a tab that renders
+          // "not built yet" to a manager.
+          const unhandled: never = tool;
+          return unhandled;
         }}
         // Returns null when nothing is selected, so passing it unconditionally
         // costs an empty render rather than a branch here.
@@ -383,13 +392,5 @@ function PublishSheetMount({
         : {})}
       onFixIssue={handleFixIssue}
     />
-  );
-}
-
-function ToolPanelPlaceholder({ tool }: { tool: EditorToolId }) {
-  return (
-    <p className="text-sm text-content-secondary" data-testid={`tool-panel-${tool}`}>
-      This panel is not built yet.
-    </p>
   );
 }

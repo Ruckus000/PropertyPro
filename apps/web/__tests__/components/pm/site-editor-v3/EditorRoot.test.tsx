@@ -199,7 +199,8 @@ describe('EditorRoot — tool panels', () => {
     ['Add', 'Add'],
     ['Colours', /Colours/],
     ['Address', /Address/],
-  ])('no longer shows the unbuilt placeholder on the %s tab', async (_name, accessibleName) => {
+    ['Help', /Help/],
+  ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
     renderRoot();
 
     await userEvent.click(screen.getByRole('tab', { name: accessibleName }));
@@ -207,11 +208,15 @@ describe('EditorRoot — tool panels', () => {
     expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
   });
 
-  it('still shows the placeholder for the tabs that really are unbuilt', async () => {
+  it('has a panel for every tool the tab strip offers', async () => {
+    // The placeholder is gone and `renderToolPanel` is exhaustive at the type
+    // level, so this walks the real tab strip rather than a hand-kept list —
+    // a new tool added to EDITOR_TOOLS shows up here automatically.
     renderRoot();
 
-    await userEvent.click(screen.getByRole('tab', { name: /Help/ }));
-
-    expect(screen.getByText('This panel is not built yet.')).toBeInTheDocument();
+    for (const tab of screen.getAllByRole('tab')) {
+      await userEvent.click(tab);
+      expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
+    }
   });
 });
