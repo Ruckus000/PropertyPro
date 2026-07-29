@@ -56,7 +56,7 @@ vi.mock('@/lib/utils/html-sanitizer', () => ({
   sanitizeHtml: (html: string) => html,
 }));
 
-import PublicSitePage, { generateMetadata } from '@/app/public-site/page';
+import PublicSitePage, { generateMetadata } from '@/app/public-site/[[...slug]]/page';
 
 describe('PublicSitePage (layout-registry path)', () => {
   beforeEach(() => {
@@ -73,7 +73,7 @@ describe('PublicSitePage (layout-registry path)', () => {
   });
 
   it('renders the Tidewater layout with empty-state hero when no blocks exist', async () => {
-    const ui = await PublicSitePage();
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
     const { container } = render(ui as React.ReactElement);
     // Empty-state hero renders the community name as h1
     const h1 = container.querySelector('h1');
@@ -101,7 +101,7 @@ describe('PublicSitePage (layout-registry path)', () => {
       communityType: 'hoa_720',
       sitePublishedAt: null,
     });
-    const ui = await PublicSitePage();
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
     const { container } = render(ui as React.ReactElement);
     expect(container.querySelector('h1')?.textContent).toBe('Palm Shores HOA');
     expect(container.innerHTML).not.toContain('Community Resources');
