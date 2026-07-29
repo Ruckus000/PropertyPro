@@ -2651,10 +2651,46 @@ describeDb('P4-55 RLS policies (integration)', () => {
       expect(names.has('site_blocks_community_page_order_draft_partial')).toBe(true);
     });
 
-    it('allows the same block_order on two DIFFERENT pages', async () => {
-      // The point of the whole migration: ordering becomes per-page. Note both
-      // rows must still differ under the surviving 3-column index, so they use
-      // different is_draft values.
+    it('does NOT yet allow the same (block_order, is_draft) on two different pages', async () => {
+      // Per-page ordering is what the 4-column index BUYS, but it is not
+      // available yet and this asserts that honestly: the surviving 3-column
+      // index is (community, block_order, is_draft) with no page dimension, so
+      // during the 11a->11c window two pages still cannot share an order at the
+      // same draft level. This test is the definition of what gate G3 unlocks —
+      // when 11c drops the 3-column index, this expectation flips, and that flip
+      // is the signal that the contract migration actually landed.
+      const [first] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: publishedPageAId,
+          blockOrder: orderBase + 10,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        })
+        .returning({ id: siteBlocks.id });
+      if (!first) throw new Error('Failed to seed block');
+      createdSiteBlockIds.add(first.id);
+
+      await expect(
+        db.insert(siteBlocks).values({
+          communityId: seed.communityAId,
+          pageId: draftPageAId,
+          blockOrder: orderBase + 10,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('allows rows on two different pages that also differ on is_draft', async () => {
+      // What IS possible in this window. Deliberately NOT labelled as proof of
+      // per-page ordering: these two rows already differ under the 3-column
+      // index via is_draft, so they would be accepted even if page_id took part
+      // in no index at all. The assertion here is only that adding page_id and
+      // the second index did not make a previously-legal pair illegal.
       const [first] = await db
         .insert(siteBlocks)
         .values({
@@ -2684,6 +2720,10 @@ describeDb('P4-55 RLS policies (integration)', () => {
     });
 
     it('rejects a duplicate (community, page, block_order, is_draft)', async () => {
+      // In this window BOTH indexes forbid this pair, so the rejection does not
+      // isolate the new one — unavoidable while the 3-column index is alive on
+      // purpose. Its value is as the assertion that SURVIVES 11c: once the
+      // 3-column index is dropped, this is the only thing still holding.
       const [row] = await db
         .insert(siteBlocks)
         .values({
