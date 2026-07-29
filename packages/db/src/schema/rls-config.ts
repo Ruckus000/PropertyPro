@@ -311,6 +311,18 @@ export const RLS_TENANT_TABLES = [
       'Public per-community site content. anon + authenticated SELECT expose only published (is_draft=false) rows of the GUC-selected community (site_blocks_anon_read / site_blocks_read_published); all writes are service-role only (site_blocks_service_role). Wrong-GUC drift repaired in 0023. No write-scope trigger — there is no authenticated write path (trigger-exempt family). Bespoke policy names retained — see the per-table override in rls-policies.integration.test.ts. Runtime reads via createUnscopedClient (public-community-reader) so RLS here is defense-in-depth for direct anon/authenticated access.',
   },
   {
+    tableName: 'site_pages',
+    policyFamily: 'public_read_service_write',
+    notes:
+      'Pages of a community public site (website editor v3, Phase 11a, migration 0046). Same family as its sibling site_blocks and for the same reason: the public site renders these rows for anonymous visitors. anon + authenticated SELECT expose only published (is_draft=false) rows of the GUC-selected community (pp_site_pages_anon_read / pp_site_pages_read_published) — a page created but never published is invisible to both. All writes require pp_rls_is_privileged() (pp_site_pages_service). Policies use the fail-closed GUC form 0023 introduced, on the canonical app.current_community_id. Trigger-exempt: writes only ever happen through the site services under the privileged client, so there is no authenticated write path for pp_rls_enforce_tenant_community_id() to police — same posture as site_blocks and site_publish_snapshots. Policy names are pp_-prefixed but still need an expectedPolicyOverrides entry, because this family has no derivable name shape by construction. STILL OWED BY PHASE 11c (gate G3): site_blocks.page_id SET NOT NULL and the drop of the 3-column ordering index.',
+  },
+  {
+    tableName: 'site_page_redirects',
+    policyFamily: 'public_read_service_write',
+    notes:
+      'Slug history for site_pages (website editor v3, Phase 11a, migration 0046) — a page renamed three times honours all three old slugs, and a retired slug stays reserved against new pages. Read anonymously because redirect resolution happens while rendering the public site. No is_draft column, so anon + authenticated SELECT are community-scoped ONLY (pp_site_page_redirects_anon_read / pp_site_page_redirects_read_published): a from_slug is a URL the site already published, so it discloses nothing new, and the target page\'s own visibility is still enforced by the site_pages policies — a redirect to a draft-only page resolves to a page anon cannot read, i.e. a 404 rather than a leak. All writes require pp_rls_is_privileged() (pp_site_page_redirects_service). Trigger-exempt for the same reason site_pages is.',
+  },
+  {
     tableName: 'site_publish_snapshots',
     policyFamily: 'service_only',
     notes:
@@ -494,7 +506,11 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // invariant the drift-guard test in rls-policies.integration.test.ts enforces,
 // so an unregistered table can no longer go unnoticed. SAME RE-DERIVE WARNING
 // APPLIES: this jumped by 15, so a parallel +1 will silently merge on top of it.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 78;
+// 78 on main + site_pages + site_page_redirects (0046, Phase 11a) = 80. RE-DERIVE
+// AT MERGE for the same reason as every bump above: two PRs each editing this
+// line auto-merge without a conflict, so the second one to merge has to set the
+// true total rather than trusting the number it was authored against.
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 80;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];

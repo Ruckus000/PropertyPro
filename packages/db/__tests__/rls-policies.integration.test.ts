@@ -18,6 +18,7 @@ import { notificationPreferences } from '../src/schema/notification-preferences'
 import { onboardingChecklistItems } from '../src/schema/onboarding-checklist-items';
 import { onboardingWizardState } from '../src/schema/onboarding-wizard-state';
 import { siteBlocks } from '../src/schema/site-blocks';
+import { sitePageRedirects, sitePages } from '../src/schema/site-pages';
 import {
   RLS_GLOBAL_EXCLUSION_NAMES,
   RLS_TENANT_TABLES,
@@ -66,6 +67,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
   const createdCommunityJoinRequestIds = new Set<number>();
   const createdChecklistItemIds = new Set<number>();
   const createdSiteBlockIds = new Set<number>();
+  const createdSitePageIds = new Set<number>();
   const createdRentGuardCommunityIds = new Set<number>();
 
   async function resetSession(sqlClient: SqlClient): Promise<void> {
@@ -427,6 +429,14 @@ describeDb('P4-55 RLS policies (integration)', () => {
       const siteBlockIds = [...createdSiteBlockIds];
       if (siteBlockIds.length > 0) {
         await db.delete(siteBlocks).where(inArray(siteBlocks.id, siteBlockIds));
+      }
+
+      // AFTER the blocks: site_blocks.page_id and site_page_redirects.page_id
+      // both cascade from here, so deleting pages first would take blocks with
+      // them and make the delete above look like it had nothing to do.
+      const sitePageIds = [...createdSitePageIds];
+      if (sitePageIds.length > 0) {
+        await db.delete(sitePages).where(inArray(sitePages.id, sitePageIds));
       }
 
       await db
@@ -1764,6 +1774,23 @@ describeDb('P4-55 RLS policies (integration)', () => {
       // site_blocks (public_read_service_write): anon + authenticated published-row
       // read, service-role-only writes. Bespoke names; no pp_* family standard.
       site_blocks: ['site_blocks_anon_read', 'site_blocks_read_published', 'site_blocks_service_role'],
+      // site_pages / site_page_redirects (public_read_service_write, 0046):
+      // same family as site_blocks, but named to the pp_ convention since both
+      // tables are new. They still need an entry — the family has no DERIVABLE
+      // name shape (see the `case` below), so membership requires listing them.
+      // site_page_redirects has no is_draft column, so its read policies are
+      // community-scoped only; the `_read_published` suffix is kept for symmetry
+      // with its sibling rather than describing an is_draft filter.
+      site_pages: [
+        'pp_site_pages_anon_read',
+        'pp_site_pages_read_published',
+        'pp_site_pages_service',
+      ],
+      site_page_redirects: [
+        'pp_site_page_redirects_anon_read',
+        'pp_site_page_redirects_read_published',
+        'pp_site_page_redirects_service',
+      ],
       // site_publish_snapshots (service_only): migration 0034 grants the family's
       // whole surface with ONE `FOR ALL` policy rather than the four per-command
       // pp_service_* policies. Functionally identical — same predicate
@@ -2429,6 +2456,428 @@ describeDb('P4-55 RLS policies (integration)', () => {
       const names = new Set(rows.map((r) => r.tgname));
       expect(names.has('pp_rls_enforce_tenant_scope')).toBe(true);
       expect(names.has('enforce_community_scope_onboarding_checklist_items')).toBe(false);
+    });
+  });
+
+  /**
+   * 0046 — Phase 11a multi-page EXPAND migration.
+   *
+   * Two halves. The RLS half is the one that matters most: `site_pages` is
+   * anon-readable because the public site renders it, so a page the PM has
+   * created but never published must be invisible to anon — the whole draft
+   * layer of the editor is otherwise on the internet.
+   *
+   * The structural half asserts what makes Phase 11b REVERTIBLE: `page_id` is
+   * still nullable and the 3-column ordering index still exists. Dropping either
+   * is gate G3, a deploy wait behind 11b being live. If a future change makes
+   * these fail, it has moved 11c's work into 11b's window.
+   */
+  describe('0046: multi-page expand (site_pages + site_page_redirects)', () => {
+    let publishedPageAId: number;
+    let draftPageAId: number;
+    let publishedPageBId: number;
+    let redirectAId: number;
+    let redirectBId: number;
+    // Well clear of the block_orders the 0023 block seeds (1 and 2): the
+    // 3-column index is still live, so it is community-wide until 11c.
+    const orderBase = 900;
+
+    beforeAll(async () => {
+      // runTag carries underscores; slugs are ^[a-z0-9][a-z0-9-]*$ by CHECK.
+      const slugTag = seed.runTag.replace(/_/g, '-');
+
+      const [publishedA] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityAId,
+          name: `Published ${seed.runTag}`,
+          slug: `published-${slugTag}`,
+          isDraft: false,
+          publishedAt: new Date(),
+        })
+        .returning({ id: sitePages.id });
+      const [draftA] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityAId,
+          name: `Draft ${seed.runTag}`,
+          slug: `draft-${slugTag}`,
+          isDraft: true,
+        })
+        .returning({ id: sitePages.id });
+      const [publishedB] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityBId,
+          name: `Published B ${seed.runTag}`,
+          slug: `published-b-${slugTag}`,
+          isDraft: false,
+          publishedAt: new Date(),
+        })
+        .returning({ id: sitePages.id });
+      if (!publishedA || !draftA || !publishedB) throw new Error('Failed to seed site pages');
+      publishedPageAId = publishedA.id;
+      draftPageAId = draftA.id;
+      publishedPageBId = publishedB.id;
+      createdSitePageIds.add(publishedPageAId);
+      createdSitePageIds.add(draftPageAId);
+      createdSitePageIds.add(publishedPageBId);
+
+      const [redirectA] = await db
+        .insert(sitePageRedirects)
+        .values({
+          communityId: seed.communityAId,
+          fromSlug: `old-${slugTag}`,
+          pageId: publishedPageAId,
+        })
+        .returning({ id: sitePageRedirects.id });
+      const [redirectB] = await db
+        .insert(sitePageRedirects)
+        .values({
+          communityId: seed.communityBId,
+          fromSlug: `old-b-${slugTag}`,
+          pageId: publishedPageBId,
+        })
+        .returning({ id: sitePageRedirects.id });
+      if (!redirectA || !redirectB) throw new Error('Failed to seed site page redirects');
+      redirectAId = redirectA.id;
+      redirectBId = redirectB.id;
+      // Both cascade from their page — no separate cleanup set needed.
+    });
+
+    it('lets anon read only PUBLISHED pages of the GUC-selected community', async () => {
+      // The draft page is the assertion that matters: an anon-visible draft
+      // would publish the editor's unreleased content to the internet.
+      await setAnonContext(authSql, seed.communityAId);
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.site_pages
+        where id in (${publishedPageAId}, ${draftPageAId}, ${publishedPageBId})
+      `;
+      expect(rows.map((r) => Number(r.id))).toEqual([publishedPageAId]);
+    });
+
+    it('lets authenticated read only PUBLISHED pages of the GUC-selected community', async () => {
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.site_pages
+        where id in (${publishedPageAId}, ${draftPageAId}, ${publishedPageBId})
+      `;
+      expect(rows.map((r) => Number(r.id))).toEqual([publishedPageAId]);
+    });
+
+    it('hides a draft page from a member of its own community', async () => {
+      // Membership is not the gate here — publication is. A resident of
+      // community A still must not see A's unpublished page.
+      await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.site_pages where id = ${draftPageAId}
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('returns zero rows (not an error) for page reads with an empty GUC', async () => {
+      // The fail-closed COALESCE/NULLIF form 0023 introduced. The pre-0023
+      // site_blocks policy called current_setting without missing_ok and THREW.
+      await resetSession(authSql);
+      await authSql.unsafe('set role authenticated');
+      await authSql`select set_config('request.jwt.claim.sub', ${seed.tenantAUserId}, false)`;
+      await authSql`select set_config('request.jwt.claim.role', 'authenticated', false)`;
+      await authSql`select set_config('app.current_community_id', '', false)`;
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.site_pages where id = ${publishedPageAId}
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('lets anon read redirects of the GUC-selected community only', async () => {
+      await setAnonContext(authSql, seed.communityAId);
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.site_page_redirects where id in (${redirectAId}, ${redirectBId})
+      `;
+      expect(rows.map((r) => Number(r.id))).toEqual([redirectAId]);
+    });
+
+    it('returns zero rows (not an error) for redirect reads with an empty GUC', async () => {
+      await resetSession(authSql);
+      await authSql.unsafe('set role anon');
+      await authSql`select set_config('request.jwt.claim.role', 'anon', false)`;
+      await authSql`select set_config('app.current_community_id', '', false)`;
+      const rows = await authSql<{ id: number }[]>`
+        select id from public.site_page_redirects where id = ${redirectAId}
+      `;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('refuses an anon INSERT into site_pages', async () => {
+      await setAnonContext(authSql, seed.communityAId);
+      await expect(
+        authSql`
+          insert into public.site_pages (community_id, name, slug)
+          values (${seed.communityAId}, 'anon write', 'anon-write-attempt')
+        `,
+      ).rejects.toThrow();
+    });
+
+    it('refuses an anon INSERT into site_page_redirects', async () => {
+      await setAnonContext(authSql, seed.communityAId);
+      await expect(
+        authSql`
+          insert into public.site_page_redirects (community_id, from_slug, page_id)
+          values (${seed.communityAId}, 'anon-write-attempt', ${publishedPageAId})
+        `,
+      ).rejects.toThrow();
+    });
+
+    it('keeps site_blocks.page_id NULLABLE until gate G3 (Phase 11c)', async () => {
+      const [column] = await adminSql<{ is_nullable: string }[]>`
+        select is_nullable
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'site_blocks'
+          and column_name = 'page_id'
+      `;
+      expect(column?.is_nullable).toBe('YES');
+    });
+
+    it('keeps BOTH ordering indexes until gate G3 (Phase 11c)', async () => {
+      // The 3-column index is what pre-11b code relies on; its survival is what
+      // makes 11b revertible.
+      const rows = await adminSql<{ indexname: string }[]>`
+        select indexname from pg_indexes
+        where schemaname = 'public' and tablename = 'site_blocks'
+      `;
+      const names = new Set(rows.map((r) => r.indexname));
+      expect(names.has('site_blocks_community_order_draft_partial')).toBe(true);
+      expect(names.has('site_blocks_community_page_order_draft_partial')).toBe(true);
+    });
+
+    it('does NOT yet allow the same (block_order, is_draft) on two different pages', async () => {
+      // Per-page ordering is what the 4-column index BUYS, but it is not
+      // available yet and this asserts that honestly: the surviving 3-column
+      // index is (community, block_order, is_draft) with no page dimension, so
+      // during the 11a->11c window two pages still cannot share an order at the
+      // same draft level. This test is the definition of what gate G3 unlocks —
+      // when 11c drops the 3-column index, this expectation flips, and that flip
+      // is the signal that the contract migration actually landed.
+      const [first] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: publishedPageAId,
+          blockOrder: orderBase + 10,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        })
+        .returning({ id: siteBlocks.id });
+      if (!first) throw new Error('Failed to seed block');
+      createdSiteBlockIds.add(first.id);
+
+      await expect(
+        db.insert(siteBlocks).values({
+          communityId: seed.communityAId,
+          pageId: draftPageAId,
+          blockOrder: orderBase + 10,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('allows rows on two different pages that also differ on is_draft', async () => {
+      // What IS possible in this window. Deliberately NOT labelled as proof of
+      // per-page ordering: these two rows already differ under the 3-column
+      // index via is_draft, so they would be accepted even if page_id took part
+      // in no index at all. The assertion here is only that adding page_id and
+      // the second index did not make a previously-legal pair illegal.
+      const [first] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: publishedPageAId,
+          blockOrder: orderBase,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: false,
+        })
+        .returning({ id: siteBlocks.id });
+      const [second] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: draftPageAId,
+          blockOrder: orderBase,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        })
+        .returning({ id: siteBlocks.id });
+      if (!first || !second) throw new Error('Failed to seed per-page blocks');
+      createdSiteBlockIds.add(first.id);
+      createdSiteBlockIds.add(second.id);
+      expect(first.id).not.toBe(second.id);
+    });
+
+    it('rejects a duplicate (community, page, block_order, is_draft)', async () => {
+      // In this window BOTH indexes forbid this pair, so the rejection does not
+      // isolate the new one — unavoidable while the 3-column index is alive on
+      // purpose. Its value is as the assertion that SURVIVES 11c: once the
+      // 3-column index is dropped, this is the only thing still holding.
+      const [row] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: publishedPageAId,
+          blockOrder: orderBase + 1,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: false,
+        })
+        .returning({ id: siteBlocks.id });
+      if (!row) throw new Error('Failed to seed block');
+      createdSiteBlockIds.add(row.id);
+
+      await expect(
+        db.insert(siteBlocks).values({
+          communityId: seed.communityAId,
+          pageId: publishedPageAId,
+          blockOrder: orderBase + 1,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: false,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('allows at most one live home page per community', async () => {
+      // The backfill's idempotency depends on this: a re-apply must not be able
+      // to give a community a second home page. Two indexes both forbid it (the
+      // home partial index and slug-uniqueness on the shared '' slug); either
+      // rejecting is the guarantee the backfill needs.
+      const [home] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityAId,
+          name: 'Home',
+          slug: '',
+          isHome: true,
+          isDraft: false,
+          publishedAt: new Date(),
+        })
+        .returning({ id: sitePages.id });
+      if (!home) throw new Error('Failed to seed home page');
+      createdSitePageIds.add(home.id);
+
+      await expect(
+        db.insert(sitePages).values({
+          communityId: seed.communityAId,
+          name: 'Home again',
+          slug: '',
+          isHome: true,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('rejects a malformed slug at the database layer', async () => {
+      // Shape only — the RESERVED-slug rule lives in the app layer, where
+      // isReservedPublicSlug() derives it from PROTECTED_FIRST_SEGMENTS so the
+      // routing rule and the validator cannot drift into two lists.
+      for (const slug of ['..', 'Docs', 'has space', 'trailing/slash', '-leading']) {
+        await expect(
+          db.insert(sitePages).values({
+            communityId: seed.communityAId,
+            name: `bad ${slug}`,
+            slug,
+          }),
+          `slug ${JSON.stringify(slug)} should violate site_pages_slug_shape_check`,
+        ).rejects.toThrow();
+      }
+    });
+
+    it('requires a non-home page to have a non-empty slug', async () => {
+      await expect(
+        db.insert(sitePages).values({
+          communityId: seed.communityAId,
+          name: 'no slug',
+          slug: '',
+          isHome: false,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuses a block whose page belongs to ANOTHER community', async () => {
+      // The composite (community_id, page_id) FK. With a single-column page_id
+      // FK this insert would succeed, and then deleting community B's page would
+      // cascade away community A's block — a cross-tenant DESTRUCTIVE path, not
+      // just a read one. Enforced by the database so no future write path has to
+      // remember to re-check it.
+      await expect(
+        db.insert(siteBlocks).values({
+          communityId: seed.communityAId,
+          pageId: publishedPageBId,
+          blockOrder: orderBase + 3,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('refuses a redirect whose page belongs to ANOTHER community', async () => {
+      const slugTag = seed.runTag.replace(/_/g, '-');
+      await expect(
+        db.insert(sitePageRedirects).values({
+          communityId: seed.communityAId,
+          fromSlug: `cross-tenant-${slugTag}`,
+          pageId: publishedPageBId,
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('cascades block deletion when a page is deleted', async () => {
+      const slugTag = seed.runTag.replace(/_/g, '-');
+      const [page] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityAId,
+          name: `Cascade ${seed.runTag}`,
+          slug: `cascade-${slugTag}`,
+        })
+        .returning({ id: sitePages.id });
+      if (!page) throw new Error('Failed to seed cascade page');
+
+      const [block] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: page.id,
+          blockOrder: orderBase + 2,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        })
+        .returning({ id: siteBlocks.id });
+      const [redirect] = await db
+        .insert(sitePageRedirects)
+        .values({
+          communityId: seed.communityAId,
+          fromSlug: `cascade-old-${slugTag}`,
+          pageId: page.id,
+        })
+        .returning({ id: sitePageRedirects.id });
+      if (!block || !redirect) throw new Error('Failed to seed cascade children');
+
+      await db.delete(sitePages).where(inArray(sitePages.id, [page.id]));
+
+      const remainingBlocks = await adminSql<{ id: number }[]>`
+        select id from public.site_blocks where id = ${block.id}
+      `;
+      const remainingRedirects = await adminSql<{ id: number }[]>`
+        select id from public.site_page_redirects where id = ${redirect.id}
+      `;
+      expect(remainingBlocks).toHaveLength(0);
+      expect(remainingRedirects).toHaveLength(0);
     });
   });
 });
