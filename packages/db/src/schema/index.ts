@@ -69,6 +69,7 @@ export * from './demo-instances';
 export * from './onboarding-wizard-state';
 export * from './onboarding-checklist-items';
 export * from './rls-config';
+export * from './site-pages';
 export * from './site-blocks';
 export { siteThemePresets, type ThemePresetTokens } from './site-theme-presets';
 export { siteStarterPacks, type StarterPackBlock } from './site-starter-packs';
@@ -145,6 +146,7 @@ import type { demoInstances } from './demo-instances';
 import type { onboardingWizardState } from './onboarding-wizard-state';
 import type { platformAdminUsers } from './platform-admin-users';
 import type { siteBlocks } from './site-blocks';
+import type { sitePages, sitePageRedirects } from './site-pages';
 import type { siteThemePresets } from './site-theme-presets';
 import type { siteStarterPacks } from './site-starter-packs';
 import type { siteLayoutMetadata } from './site-layout-metadata';
@@ -382,6 +384,12 @@ export type NewPlatformAdminUser = typeof platformAdminUsers.$inferInsert;
 // Site Blocks
 export type SiteBlock = typeof siteBlocks.$inferSelect;
 export type NewSiteBlock = typeof siteBlocks.$inferInsert;
+
+// Site Pages (multi-page public site — Phase 11)
+export type SitePage = typeof sitePages.$inferSelect;
+export type NewSitePage = typeof sitePages.$inferInsert;
+export type SitePageRedirect = typeof sitePageRedirects.$inferSelect;
+export type NewSitePageRedirect = typeof sitePageRedirects.$inferInsert;
 
 // Site Theme Presets
 export type SiteThemePreset = typeof siteThemePresets.$inferSelect;
