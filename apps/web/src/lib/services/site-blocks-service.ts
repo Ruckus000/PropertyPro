@@ -121,6 +121,48 @@ async function resolvePageId(
   return rows[0].id;
 }
 
+/**
+ * Refuses a slot another PAGE already holds, with a message a PM can act on.
+ *
+ * `block_order` is community-wide until Phase 11c: the pre-11a index
+ * `site_blocks_community_order_draft_partial (community_id, block_order,
+ * is_draft)` is stricter than the new 4-column one and is not dropped until then.
+ * So a PM adding a section to a second page at a slot the first page already uses
+ * violates that index — and a raw unique-constraint violation surfaces as an
+ * opaque 500 with no indication of what to do about it.
+ *
+ * Checked here rather than left to the constraint because this is reachable
+ * today: the pages API ships in 11b-1 and accepts a `pageId` on every block
+ * write. When 11c drops the index this function should be deleted, not relaxed —
+ * at that point the collision is genuinely legal.
+ */
+async function assertSlotFreeAcrossPages(
+  communityId: number,
+  pageId: number,
+  blockOrder: number,
+  isDraft: boolean,
+  tx: Tx,
+): Promise<void> {
+  const clashes = await tx
+    .select({ pageId: siteBlocks.pageId })
+    .from(siteBlocks)
+    .where(
+      and(
+        eq(siteBlocks.communityId, communityId),
+        eq(siteBlocks.blockOrder, blockOrder),
+        eq(siteBlocks.isDraft, isDraft),
+        isNull(siteBlocks.deletedAt),
+      ),
+    );
+  const foreign = clashes.find((row) => row.pageId !== null && row.pageId !== pageId);
+  if (foreign) {
+    throw new ValidationError(
+      `Position ${blockOrder} is already used by another page on this site. Section positions are shared across pages for now — pick a different position.`,
+      { fields: [{ field: 'blockOrder', message: `Position ${blockOrder} is taken by another page.` }] },
+    );
+  }
+}
+
 async function insertAuditEventInTransaction(
   tx: AuditInsertExecutor,
   params: {
@@ -389,6 +431,7 @@ export async function upsertPublishedBlock({
 
   await db.transaction(async (tx) => {
     const pageId = await resolvePageId(communityId, requestedPageId, tx);
+    await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, isDraft, tx);
     // Scoped client bound to the transaction — preserves tenant isolation
     // while keeping the soft-delete + insert + audit-log triple atomic.
     const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);

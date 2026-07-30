@@ -25,7 +25,7 @@
  * name field acts as the slug.
  */
 import { cache } from 'react';
-import { announcements, communities, documentCategories, documents, meetings, siteBlocks, userRoles, users } from '@propertypro/db';
+import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
@@ -147,6 +147,22 @@ export interface PublicScopedReader {
    * miss shadowed rows and spuriously 409. Returns null before first publish.
    */
   getLatestPublishedAt(): Promise<Date | null>;
+
+  /**
+   * The community's home page id, or null when it has no page row at all
+   * (Phase 11b).
+   *
+   * Exists so the public renderer can scope its block read to ONE page. Without
+   * it, the moment a PM publishes a second page every one of its sections appears
+   * inline on the home page, sorted by `block_order` — the pages API is live from
+   * 11b-1 even though the multi-page renderer does not arrive until 11b-2.
+   *
+   * Returns null rather than creating anything: this is a read path, and a
+   * community with no page row is one migration 0046's backfill skipped because it
+   * has no site content either. Callers treat null as "no page filter", which is
+   * exactly the pre-11b behaviour.
+   */
+  getHomePageId(): Promise<number | null>;
 
   /** PR #3 — published, non-expired announcements. */
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
@@ -291,6 +307,21 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         .orderBy(desc(siteBlocks.publishedAt))
         .limit(1);
       return rows[0]?.publishedAt ?? null;
+    },
+
+    async getHomePageId() {
+      const rows = await db
+        .select({ id: sitePages.id })
+        .from(sitePages)
+        .where(
+          and(
+            eq(sitePages.communityId, communityId),
+            eq(sitePages.isHome, true),
+            isNull(sitePages.deletedAt),
+          ),
+        )
+        .limit(1);
+      return rows[0]?.id ?? null;
     },
 
     async listAnnouncements(opts) {

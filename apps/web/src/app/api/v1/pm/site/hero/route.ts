@@ -44,7 +44,15 @@ export const GET = withErrorHandler(
     // PR #8e — the editor view merges draft + published (draft wins). If a
     // hero draft exists, return it so the editor form seeds with the draft
     // content the PM is iterating on.
-    const blocks = await reader.listSiteBlocks({ includeDrafts: true });
+    // Phase 11b: the hero lives on the HOME page only — slot 1 is the hero by
+    // convention and, while the pre-11a 3-column index survives, exactly one row
+    // per community can hold it. Unfiltered, `find` could return another page's
+    // block if one ever carried the type.
+    const homePageId = await reader.getHomePageId();
+    const blocks = await reader.listSiteBlocks({
+      includeDrafts: true,
+      ...(homePageId === null ? {} : { pageId: homePageId }),
+    });
     const heroBlock = blocks.find((b) => b.blockType === 'hero');
     return {
       hero: heroBlock?.content ?? null,

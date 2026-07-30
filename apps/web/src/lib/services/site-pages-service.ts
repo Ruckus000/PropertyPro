@@ -172,9 +172,18 @@ export async function ensureHomePage(
   tx?: Tx,
   options: EnsureHomePageOptions = {},
 ): Promise<number> {
+  // A caller's `tx` already holds the community lock — every entry point in this
+  // file and in site-blocks-service takes it first. When opening our own
+  // transaction we have to take it too: without it, two concurrent first-touches
+  // of the same community both pass the find-then-insert and the loser hits
+  // `site_pages_community_home_partial` as an opaque 500. The index keeps the data
+  // correct either way; the lock is what keeps the error out of the PM's face.
   if (tx) return ensureHomePageInTransaction(communityId, tx, options);
   const db = createUnscopedClient();
-  return db.transaction((ownTx) => ensureHomePageInTransaction(communityId, ownTx, options));
+  return db.transaction(async (ownTx) => {
+    await lockCommunity(ownTx, communityId);
+    return ensureHomePageInTransaction(communityId, ownTx, options);
+  });
 }
 
 export interface EnsureHomePageOptions {

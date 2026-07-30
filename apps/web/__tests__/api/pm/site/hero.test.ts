@@ -13,6 +13,7 @@ const {
   resolveEffectiveCommunityIdMock,
   requirePlanFeatureMock,
   listSiteBlocksMock,
+  getHomePageIdMock,
 } = vi.hoisted(() => ({
   upsertMock: vi.fn().mockResolvedValue(undefined),
   requireAuthMock: vi.fn(),
@@ -20,6 +21,7 @@ const {
   resolveEffectiveCommunityIdMock: vi.fn(),
   requirePlanFeatureMock: vi.fn(),
   listSiteBlocksMock: vi.fn(),
+  getHomePageIdMock: vi.fn().mockResolvedValue(1),
 }));
 
 vi.mock('@/lib/services/site-blocks-service', () => ({
@@ -45,6 +47,9 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
 vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: () => ({
     listSiteBlocks: listSiteBlocksMock,
+    // Phase 11b: the hero lives on the HOME page only, so the route resolves it
+    // and filters. Null would mean a community with no page row at all.
+    getHomePageId: getHomePageIdMock,
     listAnnouncements: vi.fn().mockResolvedValue([]),
     listDocuments: vi.fn().mockResolvedValue([]),
     listMeetings: vi.fn().mockResolvedValue([]),
@@ -277,10 +282,10 @@ describe('GET /api/v1/pm/site/hero', () => {
     });
   });
 
-  it('passes includeDrafts: true to the reader', async () => {
+  it('scopes the read to the home page as well as passing includeDrafts', async () => {
     listSiteBlocksMock.mockResolvedValueOnce([]);
     await GET(makeGetRequest());
-    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true });
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true, pageId: 1 });
   });
 
   it('returns hero:null when no hero block exists', async () => {

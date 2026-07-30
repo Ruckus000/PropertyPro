@@ -191,6 +191,61 @@ describeDb('multi-page site (db-backed integration)', () => {
     ).rejects.toThrow();
   });
 
+  it('refuses a slot another page holds with a readable 400, not a raw constraint 500', async () => {
+    // Reachable TODAY: the pages API ships in 11b-1 and every block write accepts a
+    // pageId, so a PM can put page 2's first section at a slot page 1 already uses.
+    // The surviving 3-column index makes that a unique violation; unguarded it
+    // surfaces as an opaque 500 with nothing to act on.
+    const communityId = await createCommunity('slot-clash-message');
+    const homePageId = await ensureHomePage(communityId);
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 7, content: { body: 'Home seven' }, isDraft: true,
+    });
+
+    await expect(
+      upsertPublishedBlock({
+        communityId, actorUserId, pageId: about.id,
+        blockType: 'text', blockOrder: 7, content: { body: 'About seven' }, isDraft: true,
+      }),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it('lets the SAME page overwrite its own slot (the guard is cross-page only)', async () => {
+    const communityId = await createCommunity('slot-same-page');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 8, content: { body: 'First' }, isDraft: true,
+    });
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 8, content: { body: 'Second' }, isDraft: true,
+    });
+    const drafts = (await liveBlocks(communityId)).filter((b) => b.isDraft && b.blockOrder === 8);
+    expect(drafts).toHaveLength(1);
+  });
+
+  it('does not confuse a published row with a draft one at the same slot', async () => {
+    // The guard matches on is_draft too, or writing a draft over a published slot
+    // on the SAME page would be refused — which is the normal edit flow.
+    const communityId = await createCommunity('slot-draft-vs-published');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 9, content: { body: 'Live' }, isDraft: false,
+    });
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 9, content: { body: 'Edited' }, isDraft: true,
+    });
+    const atNine = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 9);
+    expect(atNine).toHaveLength(2);
+  });
+
   it('still forbids two pages sharing a (block_order, is_draft) until 11c', async () => {
     // The surviving 3-column index is STRICTER than the new 4-column one, so
     // block_order stays community-wide for the whole of 11b. This is the

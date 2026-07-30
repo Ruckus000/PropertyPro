@@ -164,7 +164,19 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
 
   if (Layout) {
     const reader = getPublicCommunityScopedReader(community.id);
-    const blocks = await reader.listSiteBlocks({ includeDrafts: isPreview });
+    // Phase 11b: scope the read to the HOME page.
+    //
+    // The pages API is live from 11b-1, but the multi-page renderer is 11b-2 — so
+    // between those releases a PM can publish a second page. Without this filter
+    // every one of that page's sections would render inline on the home page,
+    // interleaved by `block_order`. Null means the community has no page row at
+    // all (0046's backfill skipped it because it has no site content), in which
+    // case the unfiltered read is the correct pre-11b behaviour.
+    const homePageId = await reader.getHomePageId();
+    const blocks = await reader.listSiteBlocks({
+      includeDrafts: isPreview,
+      ...(homePageId === null ? {} : { pageId: homePageId }),
+    });
     return (
       <>
         {fontLinks.map((href) => (
