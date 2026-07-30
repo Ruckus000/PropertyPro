@@ -318,6 +318,31 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect((await liveBlocks(communityId)).some((b) => b.pageId === about.id)).toBe(false);
   });
 
+  it('retires the removed page\'s slug history so its addresses are reusable', async () => {
+    // Leaving the redirects live would forward visitors to a page that no longer
+    // exists — a 404 with extra steps — and would keep every slug the page ever
+    // held permanently unclaimable by any future page.
+    const communityId = await createCommunity('delete-redirects');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    await updateSitePage({ communityId, actorUserId, pageId: about.id, slug: 'about-us' });
+    await stageSitePageDelete({ communityId, actorUserId, pageId: about.id });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+
+    // The address the deleted page vacated is claimable again.
+    const reused = await createSitePage({
+      communityId, actorUserId, name: 'About v2', slug: 'about',
+    });
+    expect(reused.slug).toBe('about');
+  });
+
   it('deletes a never-published page immediately, with its blocks', async () => {
     const communityId = await createCommunity('immediate-delete');
     const homePageId = await ensureHomePage(communityId);

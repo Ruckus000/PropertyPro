@@ -817,6 +817,19 @@ export async function publishCommunitySite({
         .update(siteBlocks)
         .set({ deletedAt: new Date() })
         .where(and(eq(siteBlocks.communityId, communityId), eq(siteBlocks.pageId, page.id)));
+      // The page's slug history goes with it. Leaving those rows live would
+      // forward visitors to a page that no longer exists (a 404 with extra
+      // steps), and would keep every slug the page ever held permanently
+      // unclaimable by any future page.
+      await tx
+        .update(sitePageRedirects)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(sitePageRedirects.communityId, communityId),
+            eq(sitePageRedirects.pageId, page.id),
+          ),
+        );
       await tx
         .update(sitePages)
         .set({ deletedAt: new Date() })

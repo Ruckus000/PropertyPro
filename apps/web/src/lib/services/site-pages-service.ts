@@ -65,9 +65,6 @@ const HOME_SORT_ORDER = 0;
 const MAX_PAGE_NAME_LENGTH = 60;
 const MAX_SLUG_LENGTH = 60;
 
-/** Defensive cap on the reorder payload — a nav is tens of pages, not thousands. */
-const MAX_PAGES_PER_COMMUNITY = 200;
-
 export interface SitePageRecord {
   id: number;
   name: string;
@@ -669,11 +666,14 @@ export async function reorderSitePages({
   return db.transaction(async (tx) => {
     await lockCommunity(tx, communityId);
 
+    // Deliberately UNLIMITED. A `.limit()` here would let the exact-set check
+    // below pass against a truncated list, leaving every page past the cap with a
+    // stale `sort_order` and no error. The set is bounded by what a community can
+    // actually create, and the contract caps the submitted list instead.
     const live = await tx
       .select({ id: sitePages.id, isHome: sitePages.isHome })
       .from(sitePages)
-      .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)))
-      .limit(MAX_PAGES_PER_COMMUNITY);
+      .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
     const reorderable = live.filter((row) => !row.isHome).map((row) => row.id);
 
     // Reject a partial or stale list outright. Applying one would silently
