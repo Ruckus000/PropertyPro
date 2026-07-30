@@ -330,6 +330,13 @@
       "when": 1785361068539,
       "tag": "0046_site_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1785409604312,
+      "tag": "0047_site_page_delete_staging",
+      "breakpoints": true
     }
   ]
 }

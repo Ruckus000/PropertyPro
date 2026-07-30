@@ -11,6 +11,10 @@ vi.mock('@propertypro/db', () => ({
   // Phase 8: publishCommunitySite now stamps communities.site_published_at.
   communities: Symbol('communities'),
   siteStarterPacks: Symbol('siteStarterPacks'),
+  // Phase 11b multi-page — reached through site-pages-service.
+  sitePages: Symbol('sitePages'),
+  sitePageRedirects: Symbol('sitePageRedirects'),
+  complianceAuditLog: Symbol('complianceAuditLog'),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
@@ -20,17 +24,37 @@ vi.mock('@propertypro/db/unsafe', () => ({
 vi.mock('@propertypro/db/filters', () => ({
   eq: vi.fn((col: unknown, val: unknown) => ({ __eq: { col, val } })),
   and: vi.fn((...args: unknown[]) => ({ __and: args })),
+  asc: vi.fn((col: unknown) => ({ __asc: col })),
   desc: vi.fn((col: unknown) => ({ __desc: col })),
   isNull: vi.fn((col: unknown) => ({ __isNull: col })),
+  or: vi.fn((...args: unknown[]) => ({ __or: args })),
+  sql: Object.assign(
+    (strings: TemplateStringsArray, ...values: unknown[]) => ({
+      __sql: { strings: [...strings], values },
+    }),
+    { raw: (v: string) => ({ __raw: v }) },
+  ),
+}));
+
+// Phase 11b: the starter pack now creates the community's home page and stamps
+// `page_id` on every block it inserts. Mocked rather than exercised — this file
+// is about pack selection and idempotency, and `ensureHomePage` has its own
+// coverage.
+vi.mock('@/lib/services/site-pages-service', () => ({
+  ensureHomePage: vi.fn(async () => 77),
 }));
 
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { createScopedClient } from '@propertypro/db';
 // AUTHZ: test file — mocks createUnscopedClient from @propertypro/db/unsafe; no real DB access occurs.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { ensureHomePage } from '@/lib/services/site-pages-service';
 
 const createScopedClientMock = vi.mocked(createScopedClient);
 const createUnscopedClientMock = vi.mocked(createUnscopedClient);
+
+/** The id `ensureHomePage` is mocked to return, asserted on every insert. */
+const HOME_PAGE_ID = 77;
 
 const HERO_BLOCK = { blockType: 'hero', blockOrder: 1, content: { headline: 'Welcome' } };
 const TEXT_BLOCK = { blockType: 'text', blockOrder: 2, content: { body: 'About us.' } };
@@ -84,6 +108,7 @@ describe('applyStarterPackToCommunity', () => {
       expect.anything(), // siteBlocks table ref
       expect.objectContaining({
         communityId: 10,
+        pageId: HOME_PAGE_ID,
         blockType: 'hero',
         blockOrder: 1,
         isDraft: false,
@@ -94,9 +119,29 @@ describe('applyStarterPackToCommunity', () => {
       2,
       expect.anything(),
       expect.objectContaining({
+        pageId: HOME_PAGE_ID,
         blockType: 'text',
         blockOrder: 2,
       }),
+    );
+  });
+
+  it('creates the home page as PUBLISHED, stamped with the blocks own timestamp', async () => {
+    // A starter pack is live immediately. A draft home page carrying published
+    // blocks would be hidden by anon RLS while its own content was served —
+    // which is why `ensureHomePage` takes an explicit `publishedAt` here rather
+    // than deriving published-ness from blocks that do not exist yet.
+    const scopedClient = buildScopedClient([]);
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    const unscopedClient = buildUnscopedClient([HERO_BLOCK], 'florida-condo-v1');
+    createUnscopedClientMock.mockReturnValue(unscopedClient as never);
+
+    await applyStarterPackToCommunity(10, 'condo_718');
+
+    expect(ensureHomePage).toHaveBeenCalledWith(
+      10,
+      undefined,
+      expect.objectContaining({ publishedAt: expect.any(Date) }),
     );
   });
 

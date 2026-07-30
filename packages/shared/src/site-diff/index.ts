@@ -11,6 +11,9 @@ export { stableStringify, fingerprint, parseSectionContent, zodIssuesToFields } 
 export type { ParsedSection, FieldIssue } from './canonical';
 export { diffSite, sectionTitle } from './diff';
 export { blockIssues, heroIssues, siteIssues, publishBlocked } from './validate';
+export type { SiteIssuesOptions } from './validate';
+export { pageIssues, SITE_PAGE_SLUG_PATTERN, HOME_PAGE_SLUG } from './pages';
+export type { PageForValidation, PageIssuesInput } from './pages';
 export {
   parseHex,
   relativeLuminance,

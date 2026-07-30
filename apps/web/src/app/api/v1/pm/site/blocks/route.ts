@@ -67,13 +67,15 @@ export const GET = withErrorHandler(
     // only, no drafts, no tombstones. The change model (Phase 4) diffs it
     // against the merged view; without it the editor can show WHAT the site
     // says but not what CHANGED, which is the whole point of the review sheet.
+    const pageFilter = query.pageId === undefined ? {} : { pageId: query.pageId };
     const [rows, publishedRows, latestPublishedAt] = await Promise.all([
-      reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true }),
-      reader.listSiteBlocks(),
+      reader.listSiteBlocks({ includeDrafts: true, includeTombstones: true, ...pageFilter }),
+      reader.listSiteBlocks({ ...pageFilter }),
       reader.getLatestPublishedAt(),
     ]);
     const toSummary = (r: (typeof rows)[number]) => ({
       id: r.id,
+      pageId: r.pageId,
       blockType: r.blockType,
       blockOrder: r.blockOrder,
       content: r.content,
@@ -118,6 +120,7 @@ export const PATCH = withErrorHandler(
       blockOrder: body.blockOrder,
       content: parse.data,
       isDraft: true,
+      ...(body.pageId === undefined ? {} : { pageId: body.pageId }),
     });
 
     return { ok: true as const };
@@ -135,6 +138,7 @@ export const DELETE = withErrorHandler(
       communityId,
       actorUserId: userId,
       blockOrder: body.blockOrder,
+      ...(body.pageId === undefined ? {} : { pageId: body.pageId }),
     });
 
     return { ok: true as const, staged };

@@ -52,6 +52,7 @@ export const POST = withErrorHandler(
       ...(body.direction !== undefined
         ? { direction: body.direction }
         : { toOrder: body.toOrder }),
+      ...(body.pageId === undefined ? {} : { pageId: body.pageId }),
     });
 
     return { ok: true as const, ...result };

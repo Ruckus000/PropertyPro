@@ -41,14 +41,55 @@ import { communities } from './communities';
 /**
  * The stored payload shape. Mirrors what `publishCommunitySite` promoted, so a
  * revert can rewrite the draft layer from it without re-deriving anything.
+ *
+ * VERSIONED, because production already holds rows written before Phase 11b
+ * added pages. A v1 payload has NO `version` field — that absence is the
+ * discriminator, and it is why `version` is a literal `2` rather than a number:
+ * an older row can never be mistaken for a newer one.
+ *
+ * A reader must handle both. `blocks` is present and identically shaped in each,
+ * so the only real difference is that v1 cannot say which page a block belonged
+ * to — for those rows every block is the home page's, which is true by
+ * construction: v1 predates the existence of a second page.
  */
-export interface SitePublishSnapshotPayload {
-  blocks: {
-    blockOrder: number;
-    blockType: string;
-    content: unknown;
-  }[];
+export interface SitePublishSnapshotBlockV1 {
+  blockOrder: number;
+  blockType: string;
+  content: unknown;
 }
+
+export interface SitePublishSnapshotPayloadV1 {
+  version?: undefined;
+  blocks: SitePublishSnapshotBlockV1[];
+}
+
+/**
+ * One page as it existed at publish time.
+ *
+ * This MANIFEST is the point of v2, not the `pageId` on each block. Without it a
+ * revert cannot recreate a page that has since been deleted — it would restore
+ * orphaned blocks pointing at nothing, or silently drop them. The name/slug are
+ * what make the page reconstructible; `isHome` is what stops a revert creating a
+ * second one.
+ */
+export interface SitePublishSnapshotPage {
+  pageId: number;
+  name: string;
+  slug: string;
+  inNav: boolean;
+  sortOrder: number;
+  isHome: boolean;
+}
+
+export interface SitePublishSnapshotPayloadV2 {
+  version: 2;
+  pages: SitePublishSnapshotPage[];
+  blocks: (SitePublishSnapshotBlockV1 & { pageId: number })[];
+}
+
+export type SitePublishSnapshotPayload =
+  | SitePublishSnapshotPayloadV1
+  | SitePublishSnapshotPayloadV2;
 
 export const sitePublishSnapshots = pgTable(
   'site_publish_snapshots',

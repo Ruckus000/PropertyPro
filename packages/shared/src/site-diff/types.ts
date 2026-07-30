@@ -145,4 +145,13 @@ export interface Issue {
   slot?: number;
   /** Block type of the offending section, for labelling the fix affordance. */
   blockType?: string;
+  /**
+   * The page this issue belongs to (Phase 11b multi-page), as a string for the
+   * same reason `SiteSnapshot.pageId` is one.
+   *
+   * Emitted for exactly the reason `slot` is: the review sheet groups by page, and
+   * the alternative is parsing it back out of `field` — which is silently wrong
+   * the first time a page id contains something the grammar did not anticipate.
+   */
+  pageId?: string;
 }

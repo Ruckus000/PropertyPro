@@ -177,11 +177,32 @@ function withTarget(issues: Issue[], slot: number, blockType: string): Issue[] {
  * `starterPackBlocksSchema.superRefine` so the PM-facing and admin-facing
  * messages for the same broken shape cannot drift apart.
  */
-export function siteIssues(next: SiteSnapshot): Issue[] {
+export interface SiteIssuesOptions {
+  /**
+   * Whether this snapshot is expected to have a hero at all (Phase 11b
+   * multi-page).
+   *
+   * Only the HOME page carries a hero: slot 1 is the hero by convention, and
+   * while the pre-11a 3-column index survives (until 11c) exactly one row per
+   * community can hold that slot. A non-home page is content-only, so the
+   * "no welcome section" warning would fire on every one of them and read as a
+   * defect rather than the design. Pass false for those.
+   *
+   * Defaults true, which is the single-page behaviour every pre-11b caller wants.
+   */
+  heroExpected?: boolean;
+}
+
+export function siteIssues(
+  next: SiteSnapshot,
+  { heroExpected = true }: SiteIssuesOptions = {},
+): Issue[] {
   const issues: Issue[] = [];
   const tombstoned = new Set(next.tombstonedSlots ?? []);
 
-  if (!next.hero) {
+  if (!next.hero && !heroExpected) {
+    // Non-home page: nothing to say about a hero it is not supposed to have.
+  } else if (!next.hero) {
     // A warning, not an error: the public site renders an empty-state hero
     // fallback, so a heroless site is plain rather than broken. Blocking here
     // would refuse a publish for a state the renderer explicitly supports.

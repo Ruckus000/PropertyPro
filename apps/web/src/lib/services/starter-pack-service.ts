@@ -18,6 +18,7 @@ import { createScopedClient, siteBlocks, siteStarterPacks } from '@propertypro/d
 // AUTHZ: PR #5 starter pack lookup — siteStarterPacks is platform-level catalog; caller verifies community creation.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, desc, eq } from '@propertypro/db/filters';
+import { ensureHomePage } from '@/lib/services/site-pages-service';
 import type { CommunityType } from '@propertypro/shared';
 
 interface StarterPackBlock {
@@ -63,6 +64,18 @@ export async function applyStarterPackToCommunity(
   const blocks = pack.blocks as StarterPackBlock[];
   const now = new Date();
 
+  // Phase 11b: the starter pack is the "site is already live" path for a
+  // brand-new community, so it is also where that community's home page comes
+  // from. Without this the blocks land with `page_id` NULL — invisible to the
+  // multi-page editor and a guaranteed failure when 11c sets the column NOT NULL.
+  //
+  // Created as PUBLISHED with the same stamp the blocks carry: a starter pack is
+  // live immediately, so the page it lives on has to be too, or anon RLS hides
+  // the page while serving its blocks. The `publishedAt` option exists for this
+  // caller — at this point there are no blocks for `ensureHomePage` to derive
+  // published-ness from.
+  const homePageId = await ensureHomePage(communityId, undefined, { publishedAt: now });
+
   // Inserts are independent (blockOrder is set explicitly per block);
   // run them concurrently to avoid N sequential roundtrips.
   //
@@ -78,6 +91,7 @@ export async function applyStarterPackToCommunity(
     blocks.map((block) =>
       scoped.insert(siteBlocks, {
         communityId,
+        pageId: homePageId,
         blockType: block.blockType,
         blockOrder: block.blockOrder,
         isDraft: false,

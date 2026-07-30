@@ -51,6 +51,12 @@ export interface PublicSiteBlock {
    */
   isDraft: boolean;
   publishedAt: Date | null;
+  /**
+   * The page the block belongs to (Phase 11b multi-page). Nullable until 11c sets
+   * the column NOT NULL — a NULL means a row written by pre-11b code that no
+   * write path has adopted yet, not a block without a page.
+   */
+  pageId: number | null;
 }
 
 export interface PublicDocument {
@@ -120,6 +126,17 @@ export interface PublicScopedReader {
      * published).
      */
     includeTombstones?: boolean;
+    /**
+     * Phase 11b — restrict to one page. Omitted returns EVERY page's blocks,
+     * which is what the PM editor's GET wants (it filters client-side so draft
+     * and published resolve in the same tick) and what a single-page community
+     * has always got.
+     *
+     * The draft-wins dedupe below is keyed on (page, slot) whenever this is
+     * omitted: with two pages, deduping on `block_order` alone would drop one
+     * page's section because another page happened to use the same slot.
+     */
+    pageId?: number;
   }): Promise<PublicSiteBlock[]>;
 
   /**
@@ -190,9 +207,13 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       if (!includeDrafts) {
         conditions.push(eq(siteBlocks.isDraft, false));
       }
+      if (opts?.pageId !== undefined) {
+        conditions.push(eq(siteBlocks.pageId, opts.pageId));
+      }
       const rows = await db
         .select({
           id: siteBlocks.id,
+          pageId: siteBlocks.pageId,
           blockType: siteBlocks.blockType,
           blockOrder: siteBlocks.blockOrder,
           content: siteBlocks.content,
@@ -203,15 +224,21 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         .where(and(...conditions))
         .orderBy(asc(siteBlocks.blockOrder));
 
-      // Draft-wins dedupe per block_order. The partial unique index allows
-      // one draft + one published row to coexist at the same slot; in preview
-      // mode the draft replaces the published row.
+      // Draft-wins dedupe per (page, block_order). The partial unique index
+      // allows one draft + one published row to coexist at the same slot; in
+      // preview mode the draft replaces the published row.
+      //
+      // The PAGE is part of the key even though the surviving 3-column index
+      // makes `block_order` community-unique today: keying on the order alone
+      // would silently drop one page's section the moment 11c allows slots to
+      // repeat, and this dedupe is what the public site renders from.
       if (includeDrafts) {
-        const byOrder = new Map<number, typeof rows[number]>();
+        const byOrder = new Map<string, typeof rows[number]>();
         for (const row of rows) {
-          const existing = byOrder.get(row.blockOrder);
+          const key = `${row.pageId ?? 'none'}:${row.blockOrder}`;
+          const existing = byOrder.get(key);
           if (!existing || (row.isDraft && !existing.isDraft)) {
-            byOrder.set(row.blockOrder, row);
+            byOrder.set(key, row);
           }
         }
         // Tombstone drafts (staged deletions, slice 8f) participate in the
@@ -226,6 +253,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           .sort((a, b) => a.blockOrder - b.blockOrder)
           .map((r) => ({
             id: r.id,
+            pageId: r.pageId,
             blockType: r.blockType,
             blockOrder: r.blockOrder,
             content: r.content,
@@ -236,6 +264,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
 
       return rows.map((r) => ({
         id: r.id,
+        pageId: r.pageId,
         blockType: r.blockType,
         blockOrder: r.blockOrder,
         content: r.content,

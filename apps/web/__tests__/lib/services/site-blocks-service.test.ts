@@ -18,6 +18,11 @@ vi.mock('@propertypro/db', () => ({
   // a missing one throws at module load and fails every test in this file, and
   // it fails in CI only if the real module happens to load locally.
   sitePublishSnapshots: Symbol('sitePublishSnapshots'),
+  // Phase 11b multi-page: the publish transaction reads site_pages (to promote
+  // pages and apply staged removals) and site_page_redirects (for the page-set
+  // validation gate).
+  sitePages: Symbol('sitePages'),
+  sitePageRedirects: Symbol('sitePageRedirects'),
   paginate: paginateMock,
 }));
 
@@ -31,6 +36,9 @@ vi.mock('@propertypro/db/filters', () => ({
   isNotNull: vi.fn((col: unknown) => ({ __isNotNull: col })),
   lt: vi.fn((col: unknown, val: unknown) => ({ __lt: { col, val } })),
   inArray: vi.fn((col: unknown, vals: unknown) => ({ __inArray: { col, vals } })),
+  // Phase 11b: publish retires published rows by (page, order) PAIR, which is an
+  // OR of ANDs rather than an inArray over bare orders.
+  or: vi.fn((...args: unknown[]) => ({ __or: args })),
   sql: Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: { strings: [...strings], values } }),
     {},
@@ -56,6 +64,9 @@ const {
   resetUpdateCalls,
   setDeleteReturning,
   getDeleteWhereArg,
+  setPageSelectRows,
+  setRedirectSelectRows,
+  resetPageSelectRows,
 } = vi.hoisted(() => {
   const paginateMock = vi.fn();
   const txExecuteMock = vi.fn().mockResolvedValue(undefined);
@@ -79,15 +90,37 @@ const {
   // `.where()` path resolve to the same queued rows.
   let selectQueue: unknown[][] = [];
   let selectIdx = 0;
+  // Phase 11b: publish reads `site_pages` and `site_page_redirects` on top of the
+  // block reads. Those are served from their OWN buffers, dispatched on the table
+  // passed to `.from()`, rather than from the positional queue — otherwise every
+  // block-level test in this file would have to know how many page reads the
+  // publish transaction happens to make, which is exactly the coupling that makes
+  // a harness brittle. Defaults: one published home page, no retired slugs.
+  const DEFAULT_PAGE_ROWS: unknown[] = [
+    { id: 1, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true, isDraft: false, publishedAt: null, deleteStagedAt: null },
+  ];
+  let pageSelectRows: unknown[] = DEFAULT_PAGE_ROWS;
+  let redirectSelectRows: unknown[] = [];
   const txSelectMock = vi.fn(() => {
-    const rows = selectQueue[selectIdx++] ?? [];
     const chain: Record<string, unknown> = {};
-    chain.from = () => chain;
+    // Resolved on `.from(table)`, so the positional queue only advances for the
+    // block reads it was written for.
+    let rows: unknown[] | undefined;
+    const resolveRows = () => {
+      if (rows === undefined) rows = selectQueue[selectIdx++] ?? [];
+      return rows;
+    };
+    chain.from = (table: unknown) => {
+      const name = String(table);
+      if (name.includes('sitePageRedirects')) rows = redirectSelectRows;
+      else if (name.includes('sitePages')) rows = pageSelectRows;
+      return chain;
+    };
     chain.where = () => chain;
     chain.orderBy = () => chain;
-    chain.limit = () => Promise.resolve(rows);
+    chain.limit = () => Promise.resolve(resolveRows());
     chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
-      Promise.resolve(rows).then(resolve, reject);
+      Promise.resolve(resolveRows()).then(resolve, reject);
     return chain;
   });
 
@@ -147,6 +180,12 @@ const {
     dbDeleteMock,
     // Test-only setters/getters for the chain mocks.
     setSelectQueue: (q: unknown[][]) => { selectQueue = q; selectIdx = 0; },
+    setPageSelectRows: (rows: unknown[]) => { pageSelectRows = rows; },
+    setRedirectSelectRows: (rows: unknown[]) => { redirectSelectRows = rows; },
+    // Module-level, so it survives vi.clearAllMocks() — every describe that
+    // touches it has to restore the default or it leaks into later tests as
+    // phantom pending pages.
+    resetPageSelectRows: () => { pageSelectRows = DEFAULT_PAGE_ROWS; redirectSelectRows = []; },
     setUpdateReturnQueue: (q: unknown[][]) => { updateReturnQueue = q; updateIdx = 0; },
     getUpdateCalls: () => updateCalls,
     resetUpdateCalls: () => { updateCalls.length = 0; },
@@ -161,9 +200,50 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
 }));
 
+// Phase 11b: every write path resolves (and if necessary creates) the home page
+// first. Mocked so it neither consumes the select queue nor adds inserts of its
+// own — this file is about the block service; `ensureHomePage` has its own
+// coverage in site-pages-service.test.ts.
+vi.mock('@/lib/services/site-pages-service', () => ({
+  ensureHomePage: vi.fn(async () => 1),
+}));
+
 import { upsertPublishedHero, upsertPublishedBlock, publishCommunitySite, cleanupSoftDeletedSiteBlocks, reorderSiteBlock, removeSiteBlock, discardSiteDrafts, revertToSnapshot, summarizePublishChanges, paginateSitePublishHistory } from '@/lib/services/site-blocks-service';
 import { createScopedClient } from '@propertypro/db';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
+
+/**
+ * The id `ensureHomePage` is mocked to return. Every block write in this file
+ * therefore targets the home page, which is what a single-page community — i.e.
+ * every community until 11b-3 ships a pages UI — actually looks like.
+ */
+const HOME_PAGE_ID = 1;
+
+/**
+ * Decodes the retire predicate's `or(...and(eq(pageId), eq(blockOrder)))` shape
+ * back into the (page, slot) pairs it covers.
+ *
+ * Reads the mocked filter output rather than SQL: the filter mocks above render
+ * `eq` as `{ __eq: { col, val } }`.
+ *
+ * POSITIONAL, and it has to be: the mocked `siteBlocks` is a Symbol, so
+ * `siteBlocks.pageId` is `undefined` and both operands are indistinguishable by
+ * column. The pair is therefore read as (page, order) in the order the service
+ * writes it. If that order is ever swapped this decoder silently transposes the
+ * result — hence the `pageId` values in the tests below are chosen to differ from
+ * the `blockOrder` values, so a transposition fails the assertion rather than
+ * passing by coincidence.
+ */
+function retirePairs(where: UpdateCall['where']): { pageId: number; blockOrder: number }[] {
+  const orClause = where?.__and.find((c) => '__or' in c) as
+    | { __or: { __and: { __eq: { col: unknown; val: number } }[] }[] }
+    | undefined;
+  if (!orClause) return [];
+  return orClause.__or.map((pairAnd) => {
+    const [pageEq, orderEq] = pairAnd.__and.map((c) => c.__eq);
+    return { pageId: pageEq!.val, blockOrder: orderEq!.val };
+  });
+}
 
 const createScopedClientMock = vi.mocked(createScopedClient);
 
@@ -347,6 +427,7 @@ describe('publishCommunitySite', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('acquires SELECT FOR UPDATE on the community row before reading state', async () => {
@@ -404,6 +485,60 @@ describe('publishCommunitySite', () => {
     expect(txAuditValuesMock).not.toHaveBeenCalled();
   });
 
+  it('still reports nothing-to-publish when the lazily-created HOME page is a draft', async () => {
+    // Regression, caught by the integration suite. `ensureHomePage` creates the
+    // home page as a draft for any community that has never published, so
+    // counting a draft home page as a pending change made EVERY such community's
+    // publish claim it had work to do — promoting an empty page and writing a
+    // history row for a publish that changed nothing.
+    setSelectQueue([[]]);
+    setPageSelectRows([
+      { id: HOME_PAGE_ID, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true, isDraft: true, publishedAt: null, deleteStagedAt: null },
+    ]);
+
+    const result = await publishCommunitySite({
+      communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
+    });
+
+    expect(result).toEqual({ published: false, reason: 'nothing-to-publish' });
+    expect(txUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it('DOES publish when a non-home page is pending, even with no block drafts', async () => {
+    // The other side of the same rule: "create a page, press Publish" has to work.
+    setSelectQueue([[], []]);
+    setPageSelectRows([
+      { id: HOME_PAGE_ID, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true, isDraft: false, publishedAt: null, deleteStagedAt: null },
+      { id: 2, name: 'About', slug: 'about', inNav: true, sortOrder: 1, isHome: false, isDraft: true, publishedAt: null, deleteStagedAt: null },
+    ]);
+    setUpdateReturnQueue([[], [], [], [{ id: 2 }]]);
+
+    const result = await publishCommunitySite({
+      communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
+    });
+
+    expect(result).toMatchObject({ published: true });
+  });
+
+  it('DOES publish when a page is staged for removal, even with no block drafts', async () => {
+    setSelectQueue([[], []]);
+    setPageSelectRows([
+      { id: HOME_PAGE_ID, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true, isDraft: false, publishedAt: null, deleteStagedAt: null },
+      { id: 2, name: 'About', slug: 'about', inNav: true, sortOrder: 1, isHome: false, isDraft: false, publishedAt: null, deleteStagedAt: new Date('2026-07-01T00:00:00Z') },
+    ]);
+    setUpdateReturnQueue([[], [], [], []]);
+
+    const result = await publishCommunitySite({
+      communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null,
+    });
+
+    expect(result).toMatchObject({ published: true });
+    // The staged page and its blocks are soft-deleted by the publish, which is
+    // the whole point of staging rather than deleting on click.
+    const softDeletes = getUpdateCalls().filter((c) => c.set && 'deletedAt' in c.set);
+    expect(softDeletes.length).toBeGreaterThanOrEqual(2);
+  });
+
   /**
    * Website editor v3, Phase 8 — the stamp that had no writer.
    *
@@ -436,11 +571,16 @@ describe('publishCommunitySite', () => {
     expect(stampCall?.set).toEqual({ sitePublishedAt: result.publishedAt });
   });
 
-  it('retires ONLY published rows at block_orders that have a live draft (keeps un-drafted published blocks)', async () => {
+  it('retires ONLY published rows at (page, block_order) pairs that have a live draft (keeps un-drafted published blocks)', async () => {
     // Drafts exist at slots 2 and 3 only. The retire UPDATE must be scoped to
-    // those slots via inArray — published rows at any other slot (e.g. the
-    // hero at order 1, or an un-edited block at order 4) survive the publish.
-    setSelectQueue([[{ blockOrder: 2 }, { blockOrder: 3 }]]);
+    // those slots — published rows at any other slot (e.g. the hero at order 1,
+    // or an un-edited block at order 4) survive the publish.
+    //
+    // Phase 11b: the predicate is an OR of (page AND order) ANDs, NOT an inArray
+    // over bare orders. With a bare order list a draft at slot 3 on one page would
+    // retire the published slot-3 row of every OTHER page — live content the PM
+    // never touched. That is the regression this assertion exists for.
+    setSelectQueue([[{ pageId: HOME_PAGE_ID, blockOrder: 2 }, { pageId: HOME_PAGE_ID, blockOrder: 3 }]]);
     setUpdateReturnQueue([
       [{ id: 100 }, { id: 101 }], // retired (slots 2,3)
       [], // tombstone sweep (slice 8f)
@@ -450,34 +590,64 @@ describe('publishCommunitySite', () => {
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
     const updateCalls = getUpdateCalls();
-    // Four UPDATEs: retire, tombstone sweep, promote, and the Phase 8
-    // communities.site_published_at stamp.
-    expect(updateCalls).toHaveLength(4);
-    // First UPDATE = retire. Its predicate must include an inArray over the
-    // draft block_orders [2, 3].
-    const retireWhere = updateCalls[0].where;
-    const inArrayClause = retireWhere?.__and.find((c) => '__inArray' in c) as
-      | { __inArray: { vals: number[] } }
-      | undefined;
-    expect(inArrayClause).toBeDefined();
-    expect(inArrayClause!.__inArray.vals).toEqual([2, 3]);
+    // Five UPDATEs: retire, tombstone sweep, promote blocks, promote pages, and
+    // the Phase 8 communities.site_published_at stamp.
+    expect(updateCalls).toHaveLength(5);
+    expect(retirePairs(updateCalls[0].where)).toEqual([
+      { pageId: HOME_PAGE_ID, blockOrder: 2 },
+      { pageId: HOME_PAGE_ID, blockOrder: 3 },
+    ]);
     // First UPDATE soft-deletes (sets deletedAt); the tombstone sweep also
-    // soft-deletes (scoped to blockType=tombstone); the final UPDATE promotes.
+    // soft-deletes (scoped to blockType=tombstone); then the promotes.
     expect(updateCalls[0].set).toHaveProperty('deletedAt');
     expect(updateCalls[1].set).toHaveProperty('deletedAt');
     expect(updateCalls[2].set).toMatchObject({ isDraft: false });
   });
 
-  it('de-duplicates draft block_orders before building the retire predicate', async () => {
-    setSelectQueue([[{ blockOrder: 4 }, { blockOrder: 4 }, { blockOrder: 7 }]]);
+  it('does NOT retire another page\'s published row at the same block_order', async () => {
+    // The cross-page data-loss case stated directly: one page has a draft at slot
+    // 2; a different page's published slot 2 must be untouched. Expressed as the
+    // predicate, because the mocked UPDATE cannot report which rows it matched.
+    setSelectQueue([[{ pageId: 9, blockOrder: 2 }]]);
     setUpdateReturnQueue([[{ id: 1 }], [], [{ id: 2 }]]);
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    const inArrayClause = getUpdateCalls()[0].where?.__and.find((c) => '__inArray' in c) as
-      | { __inArray: { vals: number[] } }
-      | undefined;
-    expect(inArrayClause!.__inArray.vals).toEqual([4, 7]);
+    const pairs = retirePairs(getUpdateCalls()[0].where);
+    expect(pairs).toEqual([{ pageId: 9, blockOrder: 2 }]);
+    expect(pairs.some((p) => p.pageId !== 9)).toBe(false);
+  });
+
+  it('de-duplicates draft (page, block_order) pairs before building the retire predicate', async () => {
+    setSelectQueue([
+      [
+        { pageId: HOME_PAGE_ID, blockOrder: 4 },
+        { pageId: HOME_PAGE_ID, blockOrder: 4 },
+        { pageId: HOME_PAGE_ID, blockOrder: 7 },
+      ],
+    ]);
+    setUpdateReturnQueue([[{ id: 1 }], [], [{ id: 2 }]]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    expect(retirePairs(getUpdateCalls()[0].where)).toEqual([
+      { pageId: HOME_PAGE_ID, blockOrder: 4 },
+      { pageId: HOME_PAGE_ID, blockOrder: 7 },
+    ]);
+  });
+
+  it('treats a page_id-less draft row as the home page (pre-11b rollout window)', async () => {
+    // The currently-live deploy writes rows without a page. `ensureHomePage`
+    // adopts them, but a row inserted between that and the read would still
+    // arrive NULL, so the coalesce is asserted rather than assumed.
+    setSelectQueue([[{ pageId: null, blockOrder: 5 }]]);
+    setUpdateReturnQueue([[{ id: 1 }], [], [{ id: 2 }]]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    expect(retirePairs(getUpdateCalls()[0].where)).toEqual([
+      { pageId: HOME_PAGE_ID, blockOrder: 5 },
+    ]);
   });
 
   it('throws ConflictError when expectedPublishedAt does not match the current max', async () => {
@@ -705,6 +875,7 @@ describe('reorderSiteBlock', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('moves a block DOWN: swaps its order with the next block, writing two draft rows', async () => {
@@ -1001,6 +1172,7 @@ describe('removeSiteBlock', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('published slot: clears any draft at the order and stages a tombstone draft (staged=true)', async () => {
@@ -1112,21 +1284,39 @@ describe('discardSiteDrafts', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('soft-deletes every live draft and returns the count', async () => {
-    setUpdateReturnQueue([[{ id: 1 }, { id: 2 }, { id: 3 }]]);
+    // Three UPDATEs now (Phase 11b): the block drafts, then the page arms —
+    // dropping never-published pages and cancelling staged page removals. Discard
+    // stays WHOLE-SITE by decision; a page created but never published is a
+    // pending change and therefore goes with everything else.
+    setUpdateReturnQueue([[{ id: 1 }, { id: 2 }, { id: 3 }], [], []]);
 
     const result = await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
 
-    expect(result).toEqual({ discardedCount: 3 });
+    expect(result).toEqual({ discardedCount: 3, discardedPageCount: 0 });
     const updateCalls = getUpdateCalls();
-    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls).toHaveLength(3);
     expect(updateCalls[0].set).toHaveProperty('deletedAt');
   });
 
+  it('drops never-published pages and cancels staged page removals', async () => {
+    setUpdateReturnQueue([[], [{ id: 7 }], [{ id: 8 }]]);
+
+    const result = await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
+
+    // One page dropped + one un-staged = 2, even with no block drafts at all:
+    // "discard" has to be able to undo a page-only editing session.
+    expect(result).toEqual({ discardedCount: 0, discardedPageCount: 2 });
+    const updateCalls = getUpdateCalls();
+    expect(updateCalls[1].set).toHaveProperty('deletedAt');
+    expect(updateCalls[2].set).toMatchObject({ deleteStagedAt: null });
+  });
+
   it('acquires the community FOR UPDATE lock before discarding', async () => {
-    setUpdateReturnQueue([[{ id: 1 }]]);
+    setUpdateReturnQueue([[{ id: 1 }], [], []]);
     await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
     const sqlArg = txExecuteMock.mock.calls[0][0];
     const sqlText = (sqlArg as { __sql: { strings: string[] } }).__sql.strings.join('');
@@ -1134,14 +1324,14 @@ describe('discardSiteDrafts', () => {
   });
 
   it('returns 0 and writes no audit row when there is nothing to discard', async () => {
-    setUpdateReturnQueue([[]]);
+    setUpdateReturnQueue([[], [], []]);
     const result = await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
-    expect(result).toEqual({ discardedCount: 0 });
+    expect(result).toEqual({ discardedCount: 0, discardedPageCount: 0 });
     expect(txAuditValuesMock).not.toHaveBeenCalled();
   });
 
   it('writes an inline audit row with action=delete, resourceType=community_site_drafts', async () => {
-    setUpdateReturnQueue([[{ id: 1 }, { id: 2 }]]);
+    setUpdateReturnQueue([[{ id: 1 }, { id: 2 }], [], []]);
     await discardSiteDrafts({ communityId: 42, actorUserId: 'user-1' });
     expect(txAuditValuesMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1150,7 +1340,7 @@ describe('discardSiteDrafts', () => {
         action: 'delete',
         resourceType: 'community_site_drafts',
         resourceId: '42',
-        metadata: { discardedCount: 2 },
+        metadata: { discardedCount: 2, discardedPageCount: 0 },
       }),
     );
   });
@@ -1173,6 +1363,7 @@ describe('publishCommunitySite — server-side validation', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   const VALID_LIVE_ROWS = [
@@ -1281,6 +1472,7 @@ describe('publishCommunitySite with tombstone drafts', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('sweeps tombstone drafts between retire and promote so they are never published', async () => {
@@ -1296,9 +1488,9 @@ describe('publishCommunitySite with tombstone drafts', () => {
 
     expect(result).toMatchObject({ published: true, retiredCount: 1, promotedCount: 0 });
     const updateCalls = getUpdateCalls();
-    // Four UPDATEs: retire, tombstone sweep, promote, and the Phase 8
-    // communities.site_published_at stamp.
-    expect(updateCalls).toHaveLength(4);
+    // Five UPDATEs: retire, tombstone sweep, promote blocks, promote pages
+    // (Phase 11b), and the Phase 8 communities.site_published_at stamp.
+    expect(updateCalls).toHaveLength(5);
     // The sweep (second UPDATE) soft-deletes and its predicate pins
     // blockType=tombstone + isDraft=true.
     expect(updateCalls[1].set).toHaveProperty('deletedAt');
@@ -1329,6 +1521,7 @@ describe('reorderSiteBlock with tombstone drafts', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('skips tombstoned slots in neighbor math — swap happens across the staged deletion', async () => {
@@ -1386,6 +1579,7 @@ describe('publishCommunitySite × captureSnapshot', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   const LIVE_ROWS = [
@@ -1452,12 +1646,34 @@ describe('publishCommunitySite × captureSnapshot', () => {
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
     const row = txSnapshotValuesMock.mock.calls[0][0] as {
-      snapshot: { blocks: { blockOrder: number; blockType: string; content: unknown }[] };
+      snapshot: {
+        version: number;
+        pages: { pageId: number; slug: string; isHome: boolean }[];
+        blocks: { pageId: number; blockOrder: number; blockType: string; content: unknown }[];
+      };
     };
     // Slot 3 was tombstoned, so it is NOT part of what went live.
     expect(row.snapshot.blocks).toEqual([
-      { blockOrder: 1, blockType: 'hero', content: { headline: 'Sunset Condos' } },
-      { blockOrder: 2, blockType: 'text', content: { body: 'The corrected paragraph.' } },
+      { pageId: HOME_PAGE_ID, blockOrder: 1, blockType: 'hero', content: { headline: 'Sunset Condos' } },
+      { pageId: HOME_PAGE_ID, blockOrder: 2, blockType: 'text', content: { body: 'The corrected paragraph.' } },
+    ]);
+  });
+
+  it('stores a v2 payload carrying the page MANIFEST, not just page ids', async () => {
+    // The manifest is the point of v2: without name/slug per page, a revert cannot
+    // recreate a page that has since been deleted — it would restore orphaned
+    // blocks pointing at nothing.
+    setSelectQueue([[{ pageId: HOME_PAGE_ID, blockOrder: 2 }], LIVE_ROWS]);
+    setUpdateReturnQueue([[{ id: 1 }], [], [{ id: 10 }]]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    const row = txSnapshotValuesMock.mock.calls[0][0] as {
+      snapshot: { version: number; pages: { pageId: number; name: string; slug: string; isHome: boolean }[] };
+    };
+    expect(row.snapshot.version).toBe(2);
+    expect(row.snapshot.pages).toEqual([
+      expect.objectContaining({ pageId: HOME_PAGE_ID, name: 'Home', slug: '', isHome: true }),
     ]);
   });
 
@@ -1507,31 +1723,67 @@ describe('publishCommunitySite × captureSnapshot', () => {
 
     await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
 
-    // Three UPDATEs (retire, tombstone sweep, promote) all ran before it.
-    // Four UPDATEs: retire, tombstone sweep, promote, and the Phase 8
-    // communities.site_published_at stamp.
-    expect(getUpdateCalls()).toHaveLength(4);
+    // Every mutation ran before it: retire, tombstone sweep, promote blocks,
+    // promote pages (Phase 11b), and the Phase 8 communities.site_published_at
+    // stamp.
+    expect(getUpdateCalls()).toHaveLength(5);
     expect(order).toEqual(['history']);
   });
 });
 
 describe('summarizePublishChanges', () => {
+  const P = HOME_PAGE_ID;
+
   it('labels an added, an updated, and a removed section', () => {
     const labels = summarizePublishChanges(
       [
-        { blockOrder: 2, blockType: 'text', isDraft: true },
-        { blockOrder: 3, blockType: 'image', isDraft: true },
-        { blockOrder: 3, blockType: 'image', isDraft: false },
-        { blockOrder: 4, blockType: 'tombstone', isDraft: true },
-        { blockOrder: 4, blockType: 'announcements', isDraft: false },
+        { pageId: P, blockOrder: 2, blockType: 'text', isDraft: true },
+        { pageId: P, blockOrder: 3, blockType: 'image', isDraft: true },
+        { pageId: P, blockOrder: 3, blockType: 'image', isDraft: false },
+        { pageId: P, blockOrder: 4, blockType: 'tombstone', isDraft: true },
+        { pageId: P, blockOrder: 4, blockType: 'announcements', isDraft: false },
       ],
-      [2, 3, 4],
+      [
+        { pageId: P, blockOrder: 2 },
+        { pageId: P, blockOrder: 3 },
+        { pageId: P, blockOrder: 4 },
+      ],
     );
     expect(labels).toEqual(['Added Text', 'Updated Image', 'Removed Announcements']);
   });
 
   it('returns one label per changed slot so changeCount matches the list length', () => {
-    expect(summarizePublishChanges([], [2, 5, 9])).toHaveLength(3);
+    expect(
+      summarizePublishChanges([], [
+        { pageId: P, blockOrder: 2 },
+        { pageId: P, blockOrder: 5 },
+        { pageId: P, blockOrder: 9 },
+      ]),
+    ).toHaveLength(3);
+  });
+
+  it('matches draft to published by (page, slot), not slot alone', () => {
+    // Two pages both holding slot 2: keying on the slot alone would label page
+    // 9's addition as an update of page 1's published section.
+    const labels = summarizePublishChanges(
+      [
+        { pageId: 1, blockOrder: 2, blockType: 'text', isDraft: false },
+        { pageId: 9, blockOrder: 2, blockType: 'faq', isDraft: true },
+      ],
+      [{ pageId: 9, blockOrder: 2 }],
+    );
+    expect(labels).toEqual(['Added Faq']);
+  });
+
+  it('names the page only when the community actually has several', () => {
+    const rows = [{ pageId: 9, blockOrder: 2, blockType: 'text', isDraft: true }];
+    const slots = [{ pageId: 9, blockOrder: 2 }];
+    // One page → no suffix; the labels are persisted, so "on Home" on every
+    // historical row of a single-page site would be noise.
+    expect(summarizePublishChanges(rows, slots, new Map([[9, 'Home']]))).toEqual(['Added Text']);
+    expect(
+      summarizePublishChanges(rows, slots, new Map([[1, 'Home'], [9, 'About']])),
+    ).toEqual(['Added Text on About']);
   });
 });
 
@@ -1561,6 +1813,7 @@ describe('revertToSnapshot', () => {
     setSelectQueue([]);
     setUpdateReturnQueue([]);
     resetUpdateCalls();
+    resetPageSelectRows();
   });
 
   it('rewrites the DRAFT layer from the snapshot (publish stays a separate, deliberate step)', async () => {

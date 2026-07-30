@@ -26,21 +26,27 @@ import {
   createScopedClient,
   paginate,
   siteBlocks,
+  sitePageRedirects,
+  sitePages,
   sitePublishSnapshots,
   type AuditAction,
   type SitePublishSnapshotPayload,
+  type SitePublishSnapshotPayloadV2,
 } from '@propertypro/db';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
 // AUTHZ: PR #8a atomic site-blocks publish — caller (route layer) verifies management-tier (property_manager / root_manager) + hasSiteEditor.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   TOMBSTONE_BLOCK_TYPE,
+  pageIssues,
   publishBlocked,
   siteIssues,
   type HeroBlockContent,
   type SiteSnapshot,
 } from '@propertypro/shared';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
+import { ensureHomePage } from '@/lib/services/site-pages-service';
 
 /**
  * Content blocks occupy block_order 2..99; the hero is reserved at order 1
@@ -66,6 +72,54 @@ type AuditInsertExecutor = {
     values(payload: Record<string, unknown>): Promise<unknown>;
   };
 };
+
+type UnscopedDb = ReturnType<typeof createUnscopedClient>;
+/** The drizzle transaction handle — see the same alias in site-pages-service.ts. */
+type Tx = Parameters<Parameters<UnscopedDb['transaction']>[0]>[0];
+
+/**
+ * Resolves the page a write targets (Phase 11b multi-page).
+ *
+ * Three jobs, and the third is the load-bearing one:
+ *
+ *   1. An absent `pageId` means the home page. 11b-1 ships before any client can
+ *      send one, so every legacy request has to keep landing somewhere sane.
+ *   2. A supplied `pageId` is verified to belong to THIS community before it is
+ *      used. The composite FK `(community_id, page_id)` would refuse a foreign
+ *      page anyway, but as an opaque 500 rather than a 404 — and relying on a
+ *      constraint for authorization means the error message is the only thing
+ *      standing between a PM and a confusing failure.
+ *   3. `ensureHomePage` runs either way, which ADOPTS any of the community's
+ *      page-less blocks. That is what lets the rest of this file treat
+ *      `site_blocks.page_id` as non-null even though the column is still
+ *      nullable until 11c, and it repairs rows written by the pre-11b deploy
+ *      during the rollout window.
+ */
+async function resolvePageId(
+  communityId: number,
+  requestedPageId: number | undefined,
+  tx: Tx,
+): Promise<number> {
+  const homePageId = await ensureHomePage(communityId, tx);
+  if (requestedPageId === undefined) return homePageId;
+  if (requestedPageId === homePageId) return homePageId;
+
+  const rows = await tx
+    .select({ id: sitePages.id })
+    .from(sitePages)
+    .where(
+      and(
+        eq(sitePages.communityId, communityId),
+        eq(sitePages.id, requestedPageId),
+        isNull(sitePages.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!rows[0]) {
+    throw new NotFoundError('Page not found for this community');
+  }
+  return rows[0].id;
+}
 
 async function insertAuditEventInTransaction(
   tx: AuditInsertExecutor,
@@ -126,23 +180,104 @@ function humanizeBlockType(blockType: string): string {
  * render without touching `snapshot` — which it must never return, and which
  * retention nulls out anyway.
  */
+export interface PageSlot {
+  pageId: number;
+  blockOrder: number;
+}
+
+/** Stable key for a (page, slot) pair — see the publish transaction's winner map. */
+function pageSlotKey(pageId: number, blockOrder: number): string {
+  return `${pageId}:${blockOrder}`;
+}
+
+function dedupePageSlots(pairs: readonly PageSlot[]): PageSlot[] {
+  const seen = new Map<string, PageSlot>();
+  for (const pair of pairs) {
+    seen.set(pageSlotKey(pair.pageId, pair.blockOrder), pair);
+  }
+  return [...seen.values()];
+}
+
 export function summarizePublishChanges(
-  liveRows: readonly { blockOrder: number; blockType: string; isDraft: boolean }[],
-  draftOrders: readonly number[],
+  liveRows: readonly {
+    pageId: number;
+    blockOrder: number;
+    blockType: string;
+    isDraft: boolean;
+  }[],
+  draftSlots: readonly PageSlot[],
+  /**
+   * Page names by id, so a multi-page publish says WHICH page changed. Optional:
+   * a single-page community (every community before 11b-3 ships) reads better
+   * without the suffix, and the labels are persisted, so adding "on Home" to
+   * every historical row would be noise.
+   */
+  pageNames?: ReadonlyMap<number, string>,
 ): string[] {
-  return [...draftOrders]
-    .sort((a, b) => a - b)
-    .map((order) => {
-      const draft = liveRows.find((r) => r.isDraft && r.blockOrder === order);
-      const published = liveRows.find((r) => !r.isDraft && r.blockOrder === order);
+  return [...draftSlots]
+    .sort((a, b) => a.pageId - b.pageId || a.blockOrder - b.blockOrder)
+    .map(({ pageId, blockOrder }) => {
+      const at = (r: { pageId: number; blockOrder: number }) =>
+        r.pageId === pageId && r.blockOrder === blockOrder;
+      const draft = liveRows.find((r) => r.isDraft && at(r));
+      const published = liveRows.find((r) => !r.isDraft && at(r));
+      const suffix = pageNames && pageNames.size > 1 ? ` on ${pageNames.get(pageId) ?? 'a page'}` : '';
       if (draft?.blockType === TOMBSTONE_BLOCK_TYPE) {
-        return `Removed ${humanizeBlockType(published?.blockType ?? 'section')}`;
+        return `Removed ${humanizeBlockType(published?.blockType ?? 'section')}${suffix}`;
       }
       if (published) {
-        return `Updated ${humanizeBlockType(draft?.blockType ?? published.blockType)}`;
+        return `Updated ${humanizeBlockType(draft?.blockType ?? published.blockType)}${suffix}`;
       }
-      return `Added ${humanizeBlockType(draft?.blockType ?? 'section')}`;
+      return `Added ${humanizeBlockType(draft?.blockType ?? 'section')}${suffix}`;
     });
+}
+
+/**
+ * Reads either stored payload version into the v2 shape.
+ *
+ * Production holds v1 rows written before Phase 11b, and they must stay
+ * restorable — a publish history that silently stops working for anything older
+ * than a deploy is not a history. A v1 payload carries no page dimension, so
+ * every block is attributed to the home page, which is correct by construction:
+ * v1 predates the existence of a second page. Its `pages` manifest is
+ * reconstructed as a single home entry so downstream code has one shape.
+ *
+ * Defensive about the payload's own contents (`blocks` missing, a block with no
+ * `pageId`) because this is stored JSON, not a validated request: rows written by
+ * an older deploy, a hand-edit, or a future rollback all pass through here.
+ */
+export function readSnapshotPayload(
+  payload: SitePublishSnapshotPayload,
+  homePageId: number,
+): {
+  version: 1 | 2;
+  pages: SitePublishSnapshotPayloadV2['pages'];
+  blocks: SitePublishSnapshotPayloadV2['blocks'];
+} {
+  if (payload.version === 2) {
+    return {
+      version: 2,
+      pages: payload.pages ?? [],
+      // A v2 block missing its pageId is malformed; home is the only safe guess
+      // and matches how v1 is read.
+      blocks: (payload.blocks ?? []).map((b) => ({ ...b, pageId: b.pageId ?? homePageId })),
+    };
+  }
+  const blocks = payload.blocks ?? [];
+  return {
+    version: 1,
+    pages: [
+      {
+        pageId: homePageId,
+        name: 'Home',
+        slug: '',
+        inNav: true,
+        sortOrder: 0,
+        isHome: true,
+      },
+    ],
+    blocks: blocks.map((b) => ({ ...b, pageId: homePageId })),
+  };
 }
 
 export interface CaptureSnapshotInput {
@@ -156,7 +291,13 @@ export interface CaptureSnapshotInput {
    */
   publishedAt: Date;
   /** The post-publish published block set. Tombstones are already excluded. */
-  blocks: SitePublishSnapshotPayload['blocks'];
+  blocks: SitePublishSnapshotPayloadV2['blocks'];
+  /**
+   * Every page as it existed at publish time — the manifest that makes a revert
+   * able to RECREATE a page that has since been deleted. See
+   * `SitePublishSnapshotPage`.
+   */
+  pages: SitePublishSnapshotPayloadV2['pages'];
   /** Human labels for the history list — see `summarizePublishChanges`. */
   changeLabels: string[];
 }
@@ -175,9 +316,9 @@ export interface CaptureSnapshotInput {
  */
 export async function captureSnapshot(
   tx: SnapshotInsertExecutor,
-  { communityId, actorUserId, publishedAt, blocks, changeLabels }: CaptureSnapshotInput,
+  { communityId, actorUserId, publishedAt, blocks, pages, changeLabels }: CaptureSnapshotInput,
 ): Promise<void> {
-  const payload: SitePublishSnapshotPayload = { blocks };
+  const payload: SitePublishSnapshotPayloadV2 = { version: 2, pages, blocks };
   await tx.insert(sitePublishSnapshots).values({
     communityId,
     publishedAt,
@@ -206,6 +347,13 @@ export interface UpsertPublishedBlockInput {
    * PATCH routes now pass true.
    */
   isDraft?: boolean;
+  /**
+   * Which page the block belongs to (Phase 11b multi-page). OPTIONAL, and
+   * defaults to the community's home page — 11b-1 ships before any UI can send
+   * one, so the currently-live client must keep working unchanged. It becomes
+   * mandatory in practice only when 11c makes the column NOT NULL.
+   */
+  pageId?: number;
 }
 
 export async function upsertPublishedBlock({
@@ -215,10 +363,12 @@ export async function upsertPublishedBlock({
   blockOrder,
   content,
   isDraft = false,
+  pageId: requestedPageId,
 }: UpsertPublishedBlockInput): Promise<void> {
   const db = createUnscopedClient();
 
   await db.transaction(async (tx) => {
+    const pageId = await resolvePageId(communityId, requestedPageId, tx);
     // Scoped client bound to the transaction — preserves tenant isolation
     // while keeping the soft-delete + insert + audit-log triple atomic.
     const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
@@ -238,9 +388,14 @@ export async function upsertPublishedBlock({
     // row in place (so the public site keeps serving the last-published
     // version until publish runs). Symmetrically, writing published
     // replaces the published row only.
+    //
+    // Phase 11b: also pinned to the page. Without `page_id` in the predicate,
+    // editing one page's slot would soft-delete a different page's draft at the
+    // same order.
     await scoped.softDelete(
       siteBlocks,
       and(
+        eq(siteBlocks.pageId, pageId),
         eq(siteBlocks.blockOrder, blockOrder),
         eq(siteBlocks.isDraft, isDraft),
         isNull(siteBlocks.deletedAt),
@@ -252,6 +407,7 @@ export async function upsertPublishedBlock({
     // when they become published.
     await scoped.insert(siteBlocks, {
       communityId,
+      pageId,
       blockType,
       blockOrder,
       isDraft,
@@ -266,7 +422,7 @@ export async function upsertPublishedBlock({
       action: 'update',
       resourceType: 'site_block',
       resourceId: blockType,
-      metadata: { blockType, blockOrder, isDraft },
+      metadata: { blockType, blockOrder, isDraft, pageId },
     });
   });
 }
@@ -348,7 +504,11 @@ export async function publishCommunitySite({
       sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
     );
 
-    const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
+    // Phase 11b: resolve (and if necessary create) the home page BEFORE any read
+    // below. `ensureHomePage` also adopts any page-less blocks, which is what
+    // lets every subsequent step treat `page_id` as non-null while the column is
+    // still nullable — including rows the pre-11b deploy wrote during rollout.
+    const homePageId = await ensureHomePage(communityId, tx);
 
     // Step 2: optimistic-concurrency check. The `expectedPublishedAt`
     // token captures the editor's snapshot of state; a mismatch means
@@ -383,10 +543,16 @@ export async function publishCommunitySite({
       }
     }
 
-    // Step 3: which block_orders have a live draft? Publish promotes those
-    // drafts and retires ONLY the published rows they supersede.
+    // Step 3: which (page, block_order) slots have a live draft? Publish
+    // promotes those drafts and retires ONLY the published rows they supersede.
+    //
+    // The pair, not the bare order, is the key. While the pre-11a 3-column index
+    // survives, an order belongs to exactly one page anyway — but keying on the
+    // order alone would become a cross-page data-loss bug the moment 11c permits
+    // per-page numbering, and the retire predicate below is where it would bite.
+    // Pairing it now makes 11c a pure index drop with no change to this file.
     const draftRows = await tx
-      .select({ blockOrder: siteBlocks.blockOrder })
+      .select({ pageId: siteBlocks.pageId, blockOrder: siteBlocks.blockOrder })
       .from(siteBlocks)
       .where(
         and(
@@ -395,12 +561,44 @@ export async function publishCommunitySite({
           isNull(siteBlocks.deletedAt),
         ),
       );
-    const draftOrders = [...new Set(draftRows.map((r) => r.blockOrder))];
+    const draftPairs = dedupePageSlots(
+      draftRows.map((r) => ({ pageId: r.pageId ?? homePageId, blockOrder: r.blockOrder })),
+    );
 
-    // No drafts → nothing to publish. Roll back BEFORE any mutation so the
-    // prior published rows are never touched. Drizzle's transaction wrapper
-    // undoes the (no-op) tx and the outer .catch converts the sentinel.
-    if (draftOrders.length === 0) {
+    // Pages carry pending changes of their own: one created but never published,
+    // and one staged for removal. Either is something to publish even when no
+    // block draft exists, so both count here — otherwise "add a page, publish"
+    // would report "no changes" and quietly do nothing.
+    //
+    // The HOME page is excluded from the draft arm, and that exclusion is
+    // load-bearing. `ensureHomePage` creates it lazily as a draft for any
+    // community that has never published, so counting it would make EVERY such
+    // community's publish claim it had work to do — promoting an empty home page
+    // and writing a history row for a publish that changed nothing. It is an
+    // artefact of lazy creation, not a PM action. It still gets promoted by the
+    // page promote below whenever a publish proceeds for a real reason, which is
+    // exactly when it should become live.
+    const pageRows = await tx
+      .select({
+        id: sitePages.id,
+        name: sitePages.name,
+        slug: sitePages.slug,
+        inNav: sitePages.inNav,
+        sortOrder: sitePages.sortOrder,
+        isHome: sitePages.isHome,
+        isDraft: sitePages.isDraft,
+        deleteStagedAt: sitePages.deleteStagedAt,
+      })
+      .from(sitePages)
+      .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
+    const pendingPages = pageRows.filter(
+      (p) => (p.isDraft && !p.isHome) || p.deleteStagedAt !== null,
+    );
+
+    // Nothing pending at all → nothing to publish. Roll back BEFORE any mutation
+    // so the prior published rows are never touched. Drizzle's transaction
+    // wrapper undoes the (no-op) tx and the outer .catch converts the sentinel.
+    if (draftPairs.length === 0 && pendingPages.length === 0) {
       throw new NothingToPublishRollback();
     }
 
@@ -419,8 +617,9 @@ export async function publishCommunitySite({
     // per slot, tombstoned slots disappear, and published rows at slots with no
     // draft survive. That is exactly what steps 4-6 below produce, so this
     // validates the outcome rather than the intent.
-    const liveRows = await tx
+    const liveRowsRaw = await tx
       .select({
+        pageId: siteBlocks.pageId,
         blockOrder: siteBlocks.blockOrder,
         blockType: siteBlocks.blockType,
         content: siteBlocks.content,
@@ -428,55 +627,148 @@ export async function publishCommunitySite({
       })
       .from(siteBlocks)
       .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
+    // `page_id` is nullable until 11c, but `ensureHomePage` above adopted every
+    // page-less row, so a NULL here would mean a row inserted mid-transaction by
+    // something else. Coalescing to home keeps the rest of this function
+    // non-nullable rather than sprinkling `?? homePageId` through it.
+    const liveRows = liveRowsRaw.map((r) => ({ ...r, pageId: r.pageId ?? homePageId }));
 
-    const winnerByOrder = new Map<number, (typeof liveRows)[number]>();
+    // Keyed on the PAGE and the order — one winner per slot per page.
+    const winnerByPageSlot = new Map<string, (typeof liveRows)[number]>();
     for (const row of liveRows) {
-      const existing = winnerByOrder.get(row.blockOrder);
+      const key = pageSlotKey(row.pageId, row.blockOrder);
+      const existing = winnerByPageSlot.get(key);
       if (!existing || (row.isDraft && !existing.isDraft)) {
-        winnerByOrder.set(row.blockOrder, row);
+        winnerByPageSlot.set(key, row);
       }
     }
-    const winners = [...winnerByOrder.values()].filter(
+    const winners = [...winnerByPageSlot.values()].filter(
       (r) => r.blockType !== TOMBSTONE_BLOCK_TYPE,
     );
-    const heroRow = winners.find((r) => r.blockOrder === HERO_BLOCK_ORDER);
-    const snapshot: SiteSnapshot = {
-      hero: heroRow
-        ? { slot: heroRow.blockOrder, blockType: heroRow.blockType, content: heroRow.content }
-        : null,
-      sections: winners
-        .filter((r) => r.blockOrder !== HERO_BLOCK_ORDER)
-        .map((r) => ({ slot: r.blockOrder, blockType: r.blockType, content: r.content })),
-    };
 
-    const issues = siteIssues(snapshot);
-    if (publishBlocked(issues)) {
-      // Only errors are surfaced; warnings are the sheet's business, not a
-      // reason to refuse a publish.
+    // Validate ONE SNAPSHOT PER PAGE. A single community-wide snapshot would
+    // report every page's second section as a duplicate slot the moment slots
+    // repeat across pages, and would attribute an error to no page in
+    // particular — the review sheet groups by page, so the issues have to be
+    // attributable.
+    //
+    // Only the home page carries a hero: slot 1 is the hero by convention and
+    // while the 3-column index survives exactly one row per community can hold
+    // it. So non-home pages validate with `heroExpected: false`, which
+    // suppresses the "no welcome section" warning rather than weakening it for
+    // home.
+    // Step 3b-pages: validate the PAGE SET before the block content. Cross-page
+    // rules (two pages at one address, a reserved slug, no home) are the ones a
+    // per-page block snapshot cannot see, and a publish is the last point at
+    // which the site's URL surface can still be refused.
+    //
+    // The service already rejects each of these at create/rename time, so
+    // reaching an error here means a state that arrived some other way — a raw
+    // SQL write, a restored snapshot, or a protected route added to the app after
+    // a page claimed its slug. That last one is real and is exactly why the check
+    // runs on every publish rather than only on write.
+    const redirectRows = await tx
+      .select({ fromSlug: sitePageRedirects.fromSlug, pageId: sitePageRedirects.pageId })
+      .from(sitePageRedirects)
+      .where(
+        and(
+          eq(sitePageRedirects.communityId, communityId),
+          isNull(sitePageRedirects.deletedAt),
+        ),
+      );
+
+    const pageValidationIssues = pageIssues({
+      pages: pageRows.map((p) => ({
+        pageId: String(p.id),
+        name: p.name,
+        slug: p.slug,
+        isHome: p.isHome,
+        isDraft: p.isDraft,
+        deleteStaged: p.deleteStagedAt !== null,
+      })),
+      retiredSlugs: redirectRows.map((r) => ({
+        slug: r.fromSlug,
+        pageId: String(r.pageId),
+      })),
+      isReserved: isReservedPublicSlug,
+    });
+    if (publishBlocked(pageValidationIssues)) {
       throw new ValidationError('This site cannot be published yet.', {
-        fields: issues
+        fields: pageValidationIssues
           .filter((i) => i.severity === 'error')
           .map((i) => ({ field: i.field, message: i.message })),
       });
+    }
+
+    const pagesForValidation =
+      pageRows.length > 0
+        ? pageRows
+        : [{ id: homePageId, isHome: true, deleteStagedAt: null } as (typeof pageRows)[number]];
+    for (const page of pagesForValidation) {
+      // A page being removed by this publish is about to stop existing; holding
+      // the publish on its content would block the removal of a broken page.
+      if (page.deleteStagedAt !== null) continue;
+
+      const pageWinners = winners.filter((r) => r.pageId === page.id);
+      const heroRow = page.isHome
+        ? pageWinners.find((r) => r.blockOrder === HERO_BLOCK_ORDER)
+        : undefined;
+      const snapshot: SiteSnapshot = {
+        pageId: String(page.id),
+        hero: heroRow
+          ? { slot: heroRow.blockOrder, blockType: heroRow.blockType, content: heroRow.content }
+          : null,
+        sections: pageWinners
+          .filter((r) => !(page.isHome && r.blockOrder === HERO_BLOCK_ORDER))
+          .map((r) => ({ slot: r.blockOrder, blockType: r.blockType, content: r.content })),
+      };
+
+      const issues = siteIssues(snapshot, { heroExpected: page.isHome });
+      if (publishBlocked(issues)) {
+        // Only errors are surfaced; warnings are the sheet's business, not a
+        // reason to refuse a publish. `field` is page-qualified so a failure on
+        // one of several pages says which.
+        throw new ValidationError('This site cannot be published yet.', {
+          fields: issues
+            .filter((i) => i.severity === 'error')
+            .map((i) => ({ field: `page:${page.id}.${i.field}`, message: i.message })),
+        });
+      }
     }
 
     // Step 4: soft-delete the published rows AT the slots being republished
     // only — published blocks at slots without a draft survive untouched.
     // Returns the count of rows affected so we can surface it in the audit
     // row and the result object.
-    const retiredResult = await tx
-      .update(siteBlocks)
-      .set({ deletedAt: new Date() })
-      .where(
-        and(
-          eq(siteBlocks.communityId, communityId),
-          eq(siteBlocks.isDraft, false),
-          isNull(siteBlocks.deletedAt),
-          inArray(siteBlocks.blockOrder, draftOrders),
-        ),
-      )
-      .returning({ id: siteBlocks.id });
-    const retiredCount = retiredResult.length;
+    //
+    // Matched on the (page, order) PAIR, not `inArray(blockOrder, …)`. With a
+    // bare order list, a draft at slot 3 on one page would retire the published
+    // slot-3 row of every other page — deleting live content the PM never
+    // touched. An OR of ANDs is the honest predicate; the pair count is bounded
+    // by the community's slot budget, so it stays small.
+    let retiredCount = 0;
+    if (draftPairs.length > 0) {
+      const retiredResult = await tx
+        .update(siteBlocks)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(siteBlocks.communityId, communityId),
+            eq(siteBlocks.isDraft, false),
+            isNull(siteBlocks.deletedAt),
+            or(
+              ...draftPairs.map((pair) =>
+                and(
+                  eq(siteBlocks.pageId, pair.pageId),
+                  eq(siteBlocks.blockOrder, pair.blockOrder),
+                ),
+              ),
+            ),
+          ),
+        )
+        .returning({ id: siteBlocks.id });
+      retiredCount = retiredResult.length;
+    }
 
     // Step 4b: retire tombstone drafts (staged deletions from
     // removeSiteBlock). Their published rows were just soft-deleted in step 4
@@ -510,6 +802,40 @@ export async function publishCommunitySite({
       )
       .returning({ id: siteBlocks.id });
     const promotedCount = promotedResult.length;
+
+    // Step 5a-pages (Phase 11b): apply the page-level pending changes.
+    //
+    // Removals FIRST, then promotions. A page staged for removal is by
+    // definition already published, so the two sets are disjoint — but doing
+    // removals first means a slug freed by a removal is available to a page
+    // being published into it within the same transaction, rather than colliding
+    // on `site_pages_community_slug_partial`.
+    const removedPageIds: number[] = [];
+    for (const page of pageRows) {
+      if (page.deleteStagedAt === null) continue;
+      await tx
+        .update(siteBlocks)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(siteBlocks.communityId, communityId), eq(siteBlocks.pageId, page.id)));
+      await tx
+        .update(sitePages)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(sitePages.communityId, communityId), eq(sitePages.id, page.id)));
+      removedPageIds.push(page.id);
+    }
+
+    const promotedPageResult = await tx
+      .update(sitePages)
+      .set({ isDraft: false, publishedAt })
+      .where(
+        and(
+          eq(sitePages.communityId, communityId),
+          eq(sitePages.isDraft, true),
+          isNull(sitePages.deletedAt),
+        ),
+      )
+      .returning({ id: sitePages.id });
+    const promotedPageCount = promotedPageResult.length;
 
     // Step 5c: reconcile the stamp with what actually landed.
     //
@@ -564,18 +890,37 @@ export async function publishCommunitySite({
     // `winners` is already the post-publish published set (draft-wins per slot,
     // tombstoned slots dropped), which is exactly what steps 4-5 just made
     // live, so no re-read is needed.
+    const removedPages = new Set(removedPageIds);
+    const survivingPages = pageRows.filter((p) => !removedPages.has(p.id));
+    const pageNames = new Map(survivingPages.map((p) => [p.id, p.name]));
+
     await captureSnapshot(tx as unknown as SnapshotInsertExecutor, {
       communityId,
       actorUserId,
       publishedAt: effectivePublishedAt,
+      // Sorted by page then slot so the payload is deterministic — two publishes
+      // of the same site produce byte-identical JSON, which is what makes a
+      // history diff meaningful.
       blocks: [...winners]
-        .sort((a, b) => a.blockOrder - b.blockOrder)
+        .filter((w) => !removedPages.has(w.pageId))
+        .sort((a, b) => a.pageId - b.pageId || a.blockOrder - b.blockOrder)
         .map((w) => ({
+          pageId: w.pageId,
           blockOrder: w.blockOrder,
           blockType: w.blockType,
           content: w.content,
         })),
-      changeLabels: summarizePublishChanges(liveRows, draftOrders),
+      pages: survivingPages
+        .sort((a, b) => Number(b.isHome) - Number(a.isHome) || a.sortOrder - b.sortOrder)
+        .map((p) => ({
+          pageId: p.id,
+          name: p.name,
+          slug: p.slug,
+          inNav: p.inNav,
+          sortOrder: p.sortOrder,
+          isHome: p.isHome,
+        })),
+      changeLabels: summarizePublishChanges(liveRows, draftPairs, pageNames),
     });
 
     // Step 5d: stamp `communities.site_published_at`.
@@ -612,6 +957,8 @@ export async function publishCommunitySite({
       metadata: {
         retiredCount,
         promotedCount,
+        promotedPageCount,
+        removedPageIds,
         publishedAt: effectivePublishedAt.toISOString(),
       },
     });
@@ -676,6 +1023,13 @@ export interface ReorderSiteBlockInput {
    * N round-trips and a partial-failure window.
    */
   toOrder?: number;
+  /**
+   * Which page's list is being reordered. Defaults to home — see
+   * `resolvePageId`. Reordering is strictly WITHIN a page: the merged list this
+   * function rotates must contain only that page's sections, or a drag on one
+   * page renumbers another.
+   */
+  pageId?: number;
 }
 
 export interface ReorderSiteBlockResult {
@@ -730,6 +1084,7 @@ export async function reorderSiteBlock({
   blockId,
   direction,
   toOrder: requestedOrder,
+  pageId: requestedPageId,
 }: ReorderSiteBlockInput): Promise<ReorderSiteBlockResult> {
   if ((direction === undefined) === (requestedOrder === undefined)) {
     throw new ValidationError(
@@ -746,14 +1101,20 @@ export async function reorderSiteBlock({
       sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
     );
 
+    const pageId = await resolvePageId(communityId, requestedPageId, tx);
+
     const scoped = createScopedClient(
       communityId,
       tx as unknown as Parameters<typeof createScopedClient>[1],
     );
 
-    // Read the community's non-deleted content blocks (order >= 2; the hero at
+    // Read THIS PAGE's non-deleted content blocks (order >= 2; the hero at
     // order 1 is excluded). Build the same merged draft-wins view the editor
     // sees so the swap operates on the rows the PM is actually looking at.
+    //
+    // The `page_id` filter is not optional: without it the merged list is every
+    // page's sections interleaved by `block_order`, and a drag on one page
+    // rewrites slots belonging to another.
     const rows = await tx
       .select({
         id: siteBlocks.id,
@@ -766,6 +1127,7 @@ export async function reorderSiteBlock({
       .where(
         and(
           eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.pageId, pageId),
           isNull(siteBlocks.deletedAt),
           gte(siteBlocks.blockOrder, MIN_CONTENT_BLOCK_ORDER),
         ),
@@ -839,6 +1201,7 @@ export async function reorderSiteBlock({
     await scoped.softDelete(
       siteBlocks,
       and(
+        eq(siteBlocks.pageId, pageId),
         inArray(siteBlocks.blockOrder, affectedSlots),
         eq(siteBlocks.isDraft, true),
         isNull(siteBlocks.deletedAt),
@@ -852,6 +1215,7 @@ export async function reorderSiteBlock({
       const occupant = rotated[position]!;
       await scoped.insert(siteBlocks, {
         communityId,
+        pageId,
         blockType: occupant.blockType,
         blockOrder: affectedSlots[position - low]!,
         isDraft: true,
@@ -870,6 +1234,7 @@ export async function reorderSiteBlock({
       metadata: {
         reorder: true,
         ...(direction !== undefined ? { direction } : { absolute: true }),
+        pageId,
         fromOrder,
         toOrder: destOrder,
         affectedSlots,
@@ -892,6 +1257,8 @@ export interface RemoveSiteBlockInput {
    * order 1 is required by every layout and cannot be deleted.
    */
   blockOrder: number;
+  /** Which page the slot belongs to. Defaults to home — see `resolvePageId`. */
+  pageId?: number;
 }
 
 export interface RemoveSiteBlockResult {
@@ -927,6 +1294,7 @@ export async function removeSiteBlock({
   communityId,
   actorUserId,
   blockOrder,
+  pageId: requestedPageId,
 }: RemoveSiteBlockInput): Promise<RemoveSiteBlockResult> {
   if (blockOrder < MIN_CONTENT_BLOCK_ORDER) {
     throw new ValidationError('The welcome (hero) section cannot be removed.');
@@ -941,11 +1309,15 @@ export async function removeSiteBlock({
       sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
     );
 
+    const pageId = await resolvePageId(communityId, requestedPageId, tx);
+
     const scoped = createScopedClient(
       communityId,
       tx as unknown as Parameters<typeof createScopedClient>[1],
     );
 
+    // Page-scoped: without `page_id` here, deleting one page's slot 3 would read
+    // (and below, soft-delete) another page's slot-3 draft.
     const rows = await tx
       .select({
         id: siteBlocks.id,
@@ -956,6 +1328,7 @@ export async function removeSiteBlock({
       .where(
         and(
           eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.pageId, pageId),
           eq(siteBlocks.blockOrder, blockOrder),
           isNull(siteBlocks.deletedAt),
         ),
@@ -978,6 +1351,7 @@ export async function removeSiteBlock({
     await scoped.softDelete(
       siteBlocks,
       and(
+        eq(siteBlocks.pageId, pageId),
         eq(siteBlocks.blockOrder, blockOrder),
         eq(siteBlocks.isDraft, true),
         isNull(siteBlocks.deletedAt),
@@ -987,6 +1361,7 @@ export async function removeSiteBlock({
     if (hasPublished) {
       await scoped.insert(siteBlocks, {
         communityId,
+        pageId,
         blockType: TOMBSTONE_BLOCK_TYPE,
         blockOrder,
         isDraft: true,
@@ -1003,6 +1378,7 @@ export async function removeSiteBlock({
       resourceId: String(blockOrder),
       metadata: {
         blockOrder,
+        pageId,
         staged: hasPublished,
         removedBlockType: visibleDraft?.blockType ?? rows.find((r) => !r.isDraft)?.blockType ?? null,
       },
@@ -1019,6 +1395,8 @@ export interface DiscardSiteDraftsInput {
 
 export interface DiscardSiteDraftsResult {
   discardedCount: number;
+  /** Never-published pages dropped, plus staged page removals cancelled. */
+  discardedPageCount: number;
 }
 
 /**
@@ -1026,6 +1404,16 @@ export interface DiscardSiteDraftsResult {
  * reorders, and staged deletions (tombstones) alike. Published rows are
  * untouched, so the editor snaps back to exactly what the live site shows.
  * Without this, a staged change could only be escaped by publishing it.
+ *
+ * DELIBERATELY WHOLE-SITE, not per-page (Phase 11b). This is "revert my site to
+ * what the public sees", and a PM reaching for it after a bad editing session
+ * wants all of it gone. A per-page discard would leave the site in a state that
+ * is neither the draft nor the published one.
+ *
+ * Pages participate: a page created but never published IS a pending change, so
+ * discard drops it, and a staged page removal is un-staged. Anything already
+ * published — including a rename, which is live-immediate — is not a draft and
+ * therefore survives, exactly as a published block does.
  *
  * AUTHZ: caller (route layer) verifies management-tier (property_manager / root_manager) membership + hasSiteEditor.
  */
@@ -1056,18 +1444,48 @@ export async function discardSiteDrafts({
       .returning({ id: siteBlocks.id });
     const discardedCount = discarded.length;
 
-    if (discardedCount > 0) {
+    // Pages: drop the never-published ones and cancel staged removals. The
+    // page's blocks were already caught above if they were drafts; a published
+    // block cannot belong to an unpublished page, so nothing published is lost.
+    const droppedPages = await tx
+      .update(sitePages)
+      .set({ deletedAt: new Date() })
+      .where(
+        and(
+          eq(sitePages.communityId, communityId),
+          eq(sitePages.isDraft, true),
+          eq(sitePages.isHome, false),
+          isNull(sitePages.deletedAt),
+        ),
+      )
+      .returning({ id: sitePages.id });
+
+    const unstagedPages = await tx
+      .update(sitePages)
+      .set({ deleteStagedAt: null })
+      .where(
+        and(
+          eq(sitePages.communityId, communityId),
+          isNotNull(sitePages.deleteStagedAt),
+          isNull(sitePages.deletedAt),
+        ),
+      )
+      .returning({ id: sitePages.id });
+
+    const discardedPageCount = droppedPages.length + unstagedPages.length;
+
+    if (discardedCount > 0 || discardedPageCount > 0) {
       await insertAuditEventInTransaction(tx as unknown as AuditInsertExecutor, {
         userId: actorUserId,
         communityId,
         action: 'delete',
         resourceType: 'community_site_drafts',
         resourceId: String(communityId),
-        metadata: { discardedCount },
+        metadata: { discardedCount, discardedPageCount },
       });
     }
 
-    return { discardedCount };
+    return { discardedCount, discardedPageCount };
   });
 }
 
@@ -1260,35 +1678,75 @@ export async function revertToSnapshot({
       );
     }
 
-    // Dedupe defensively by slot (first wins) and drop tombstones: two rows at
-    // one block_order would collide on the partial unique index below.
-    const bySlot = new Map<number, SitePublishSnapshotPayload['blocks'][number]>();
-    for (const block of snapshotRow.snapshot.blocks ?? []) {
-      if (block.blockType === TOMBSTONE_BLOCK_TYPE) continue;
-      if (!bySlot.has(block.blockOrder)) bySlot.set(block.blockOrder, block);
+    const homePageId = await ensureHomePage(communityId, tx);
+
+    // Read the payload through the version-tolerant adapter: a v1 row (written
+    // before Phase 11b) has no page dimension at all, and every one of its
+    // blocks is the home page's — true by construction, since v1 predates the
+    // existence of a second page.
+    const payload = readSnapshotPayload(snapshotRow.snapshot, homePageId);
+
+    // Every page the snapshot names must still exist, or its blocks have nowhere
+    // to go. Recreating a page from the manifest is possible, but reclaiming a
+    // SLUG that now belongs to a different page would silently redirect live
+    // traffic — so a revert that would have to do that is refused with something
+    // the PM can read, rather than half-applied.
+    const restorePageIds = [...new Set(payload.blocks.map((b) => b.pageId))];
+    const livePages = await tx
+      .select({ id: sitePages.id, slug: sitePages.slug })
+      .from(sitePages)
+      .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
+    const livePageIds = new Set(livePages.map((p) => p.id));
+    const missingPages = restorePageIds.filter((id) => !livePageIds.has(id));
+    if (missingPages.length > 0) {
+      const names = missingPages
+        .map((id) => payload.pages.find((p) => p.pageId === id)?.name ?? `page ${id}`)
+        .join(', ');
+      throw new ValidationError(
+        `This version cannot be restored: it contains content for a page that has since been deleted (${names}). Recreate the page first, then restore.`,
+      );
     }
-    const restoreBlocks = [...bySlot.values()].sort((a, b) => a.blockOrder - b.blockOrder);
+
+    // Dedupe defensively by (page, slot) — first wins — and drop tombstones: two
+    // rows at one slot would collide on the partial unique index below.
+    const bySlot = new Map<string, (typeof payload.blocks)[number]>();
+    for (const block of payload.blocks) {
+      if (block.blockType === TOMBSTONE_BLOCK_TYPE) continue;
+      const key = pageSlotKey(block.pageId, block.blockOrder);
+      if (!bySlot.has(key)) bySlot.set(key, block);
+    }
+    const restoreBlocks = [...bySlot.values()].sort(
+      (a, b) => a.pageId - b.pageId || a.blockOrder - b.blockOrder,
+    );
 
     // Current live state: how many drafts we are about to clear, and which
-    // slots are published (so sections missing from the snapshot get staged
-    // for removal rather than silently surviving the "revert").
-    const liveRows = await tx
+    // (page, slot) pairs are published (so sections missing from the snapshot get
+    // staged for removal rather than silently surviving the "revert").
+    const liveRowsRaw = await tx
       .select({
+        pageId: siteBlocks.pageId,
         blockOrder: siteBlocks.blockOrder,
         isDraft: siteBlocks.isDraft,
       })
       .from(siteBlocks)
       .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
+    const liveRows = liveRowsRaw.map((r) => ({ ...r, pageId: r.pageId ?? homePageId }));
 
     const clearedDraftCount = liveRows.filter((r) => r.isDraft).length;
-    const restoredSlots = new Set(restoreBlocks.map((b) => b.blockOrder));
-    const removalSlots = [
-      ...new Set(liveRows.filter((r) => !r.isDraft).map((r) => r.blockOrder)),
-    ]
+    const restoredSlots = new Set(
+      restoreBlocks.map((b) => pageSlotKey(b.pageId, b.blockOrder)),
+    );
+    const removalSlots = dedupePageSlots(
+      liveRows.filter((r) => !r.isDraft).map((r) => ({ pageId: r.pageId, blockOrder: r.blockOrder })),
+    )
       // The hero is required by every layout and cannot be removed
       // (removeSiteBlock rejects it), so it is never staged for deletion.
-      .filter((order) => order !== HERO_BLOCK_ORDER && !restoredSlots.has(order))
-      .sort((a, b) => a - b);
+      .filter(
+        (pair) =>
+          pair.blockOrder !== HERO_BLOCK_ORDER &&
+          !restoredSlots.has(pageSlotKey(pair.pageId, pair.blockOrder)),
+      )
+      .sort((a, b) => a.pageId - b.pageId || a.blockOrder - b.blockOrder);
 
     // STEP 1 — clear the whole live draft layer (edits, staged reorders, and
     // staged deletions alike). This MUST precede every insert below: it is
@@ -1302,6 +1760,7 @@ export async function revertToSnapshot({
     for (const block of restoreBlocks) {
       await scoped.insert(siteBlocks, {
         communityId,
+        pageId: block.pageId,
         blockType: block.blockType,
         blockOrder: block.blockOrder,
         isDraft: true,
@@ -1311,11 +1770,12 @@ export async function revertToSnapshot({
     }
 
     // STEP 3 — stage removal of published sections the snapshot predates.
-    for (const order of removalSlots) {
+    for (const pair of removalSlots) {
       await scoped.insert(siteBlocks, {
         communityId,
+        pageId: pair.pageId,
         blockType: TOMBSTONE_BLOCK_TYPE,
-        blockOrder: order,
+        blockOrder: pair.blockOrder,
         isDraft: true,
         publishedAt: null,
         content: {},
