@@ -75,7 +75,17 @@ const {
     let table = '';
     let where: unknown;
     const resolveRows = (): unknown[] => {
-      if (table.includes('sitePageRedirects')) return rowsByTable['redirects'] ?? [];
+      if (table.includes('sitePageRedirects')) {
+        const redirects = (rowsByTable['redirects'] ?? []) as Record<string, unknown>[];
+        // Filtered on the slug, for the same reason the pages branch is: the
+        // service asks "is a redirect holding THIS slug", and an unconditional
+        // return would let that query silently lose its `fromSlug` predicate —
+        // becoming "does this community have any retired slug at all" — with
+        // every test still passing.
+        const slug = eqValues(where).find((v) => typeof v === 'string');
+        if (slug === undefined) return redirects;
+        return redirects.filter((r) => r['fromSlug'] === slug);
+      }
       if (table.includes('siteBlocks')) return rowsByTable['blocks'] ?? [];
       if (!table.includes('sitePages')) return [];
 
@@ -288,7 +298,7 @@ describe('createSitePage', () => {
   });
 
   it('rejects a slug a retired redirect still holds', async () => {
-    setRows({ pages: [HOME], redirects: [{ id: 5, pageId: 9 }], blocks: [] });
+    setRows({ pages: [HOME], redirects: [{ id: 5, pageId: 9, fromSlug: 'old' }], blocks: [] });
     await expect(
       createSitePage({ communityId: 42, actorUserId: 'u1', name: 'Old', slug: 'old' }),
     ).rejects.toThrow(/used to live/);
@@ -341,9 +351,19 @@ describe('updateSitePage', () => {
   });
 
   it('lets a page reclaim its own former address, dropping the redirect', async () => {
-    setRows({ pages: [ABOUT], redirects: [{ id: 5, pageId: 2 }], blocks: [] });
+    // The redirect holding `about-old` belongs to THIS page, so reclaiming it is
+    // an undo rather than a hijack — and the row has to go, or the page and a
+    // redirect would both answer for the same slug.
+    setRows({ pages: [ABOUT], redirects: [{ id: 5, pageId: 2, fromSlug: 'about-old' }], blocks: [] });
     await updateSitePage({ communityId: 42, actorUserId: 'u1', pageId: 2, slug: 'about-old' });
     expect(scoped.softDelete).toHaveBeenCalled();
+  });
+
+  it('refuses an address a redirect holds for a DIFFERENT page', async () => {
+    setRows({ pages: [ABOUT], redirects: [{ id: 5, pageId: 9, fromSlug: 'taken' }], blocks: [] });
+    await expect(
+      updateSitePage({ communityId: 42, actorUserId: 'u1', pageId: 2, slug: 'taken' }),
+    ).rejects.toThrow(/used to live/);
   });
 
   it('refuses to move the home page off the site root', async () => {

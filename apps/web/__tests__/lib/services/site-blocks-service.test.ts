@@ -539,6 +539,29 @@ describe('publishCommunitySite', () => {
     expect(softDeletes.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('labels a page-only publish in the history rather than logging an empty change set', async () => {
+    // Page changes are not slot events, so they cannot come out of the draft-slot
+    // set. Without page labels this row would persist reading `changeCount: 0`
+    // with no labels — a permanent record of a publish that visibly changed
+    // nothing, which on a statutory records site is what the log exists to avoid.
+    setSelectQueue([[], []]);
+    setPageSelectRows([
+      { id: HOME_PAGE_ID, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true, isDraft: false, publishedAt: null, deleteStagedAt: null },
+      { id: 2, name: 'About', slug: 'about', inNav: true, sortOrder: 1, isHome: false, isDraft: true, publishedAt: null, deleteStagedAt: null },
+      { id: 3, name: 'Rules', slug: 'rules', inNav: true, sortOrder: 2, isHome: false, isDraft: false, publishedAt: null, deleteStagedAt: new Date('2026-07-01T00:00:00Z') },
+    ]);
+    setUpdateReturnQueue([[], [], [], []]);
+
+    await publishCommunitySite({ communityId: 42, actorUserId: 'user-1', expectedPublishedAt: null });
+
+    const row = txSnapshotValuesMock.mock.calls[0]![0] as {
+      changeCount: number;
+      changeLabels: string[];
+    };
+    expect(row.changeLabels).toEqual(['Added page About', 'Removed page Rules']);
+    expect(row.changeCount).toBe(2);
+  });
+
   /**
    * Website editor v3, Phase 8 — the stamp that had no writer.
    *

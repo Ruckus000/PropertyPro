@@ -280,6 +280,26 @@ export function readSnapshotPayload(
   };
 }
 
+/**
+ * Human labels for the PAGE-level changes a publish carried (Phase 11b).
+ *
+ * Separate from `summarizePublishChanges` because pages are not slots: adding or
+ * removing a page is not an event at any `block_order`, so it cannot be derived
+ * from the draft-slot set. Without this, a publish whose only change was a page
+ * would persist a history row reading `changeCount: 0` with no labels — a
+ * permanent record of a publish that visibly changed nothing, which on a
+ * statutory records site is the one thing the log exists to avoid.
+ */
+export function summarizePageChanges(
+  addedPages: readonly { name: string }[],
+  removedPages: readonly { name: string }[],
+): string[] {
+  return [
+    ...addedPages.map((p) => `Added page ${p.name}`),
+    ...removedPages.map((p) => `Removed page ${p.name}`),
+  ];
+}
+
 export interface CaptureSnapshotInput {
   communityId: number;
   actorUserId: string;
@@ -933,7 +953,17 @@ export async function publishCommunitySite({
           sortOrder: p.sortOrder,
           isHome: p.isHome,
         })),
-      changeLabels: summarizePublishChanges(liveRows, draftPairs, pageNames),
+      changeLabels: [
+        ...summarizePublishChanges(liveRows, draftPairs, pageNames),
+        // Page-level changes are not slot events, so they cannot come out of the
+        // draft-slot set — see `summarizePageChanges`. `promotedPages` is read
+        // from the pre-mutation `pageRows`, because by now the promote has
+        // already flipped `is_draft`.
+        ...summarizePageChanges(
+          pageRows.filter((p) => p.isDraft && !p.isHome && !removedPages.has(p.id)),
+          pageRows.filter((p) => removedPages.has(p.id)),
+        ),
+      ],
     });
 
     // Step 5d: stamp `communities.site_published_at`.
