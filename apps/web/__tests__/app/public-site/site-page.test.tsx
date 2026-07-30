@@ -5,10 +5,16 @@ const {
   getCommunityPublicInfoMock,
   getBrandingForCommunityMock,
   listSiteBlocksMock,
+  getHomePageIdMock,
 } = vi.hoisted(() => ({
   getCommunityPublicInfoMock: vi.fn(),
   getBrandingForCommunityMock: vi.fn(),
   listSiteBlocksMock: vi.fn(),
+  // Phase 11b: the renderer scopes its block read to the home page. Every
+  // export the page reaches has to be on this double — a missing one is a
+  // TypeError at render, and this file fails locally on Missing DATABASE_URL,
+  // so CI is where that would surface.
+  getHomePageIdMock: vi.fn().mockResolvedValue(1),
 }));
 
 // Mock the headers module (Next 15 dynamic API)
@@ -27,6 +33,7 @@ vi.mock('@/lib/api/branding', () => ({
 vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: () => ({
     listSiteBlocks: listSiteBlocksMock,
+    getHomePageId: getHomePageIdMock,
     listAnnouncements: vi.fn().mockResolvedValue([]),
     listDocuments: vi.fn().mockResolvedValue([]),
     listMeetings: vi.fn().mockResolvedValue([]),
@@ -80,6 +87,23 @@ describe('PublicSitePage (layout-registry path)', () => {
     expect(h1?.textContent).toBe('Sunset Condos');
     // CTA present
     expect(container.querySelector('a[href="/auth/login"]')).not.toBeNull();
+  });
+
+  it('scopes the block read to the HOME page', async () => {
+    // Phase 11b: the pages API ships in 11b-1 but the multi-page renderer is
+    // 11b-2, so between those releases a PM can publish a second page. Unfiltered,
+    // every one of its sections would render inline here, interleaved by
+    // block_order.
+    await PublicSitePage({ params: Promise.resolve({}) });
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: false, pageId: 1 });
+  });
+
+  it('falls back to an unfiltered read when the community has no page row', async () => {
+    // 0046's backfill skipped communities with no site content; that is the
+    // pre-11b behaviour and must not become an empty site.
+    getHomePageIdMock.mockResolvedValueOnce(null);
+    await PublicSitePage({ params: Promise.resolve({}) });
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: false });
   });
 
   it('builds metadata via buildCommunityMetadata using the helper', async () => {

@@ -102,10 +102,12 @@ describe('GET /api/v1/pm/site/blocks', () => {
   it('200s and returns the ordered block list plus the publish token', async () => {
     const publishedAt = new Date('2026-05-15T10:00:00Z');
     // PR #8e — reader now returns isDraft + publishedAt on every row.
+    // Phase 11b — the reader now projects pageId on every row, and the route
+    // passes it through so the editor can group by page.
     const rawBlocks = [
-      { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt },
-      { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
-      { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt },
+      { id: 2, pageId: 1, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt },
+      { id: 3, pageId: 1, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
+      { id: 4, pageId: 1, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt },
     ];
     // First call = merged editor view; second = published-only side.
     const publishedOnly = [rawBlocks[0]!, rawBlocks[2]!];
@@ -119,13 +121,13 @@ describe('GET /api/v1/pm/site/blocks', () => {
     expect(await res.json()).toEqual({
       data: {
         blocks: [
-          { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt: publishedAt.toISOString() },
-          { id: 3, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
-          { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
+          { id: 2, pageId: 1, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt: publishedAt.toISOString() },
+          { id: 3, pageId: 1, blockType: 'image', blockOrder: 3, content: { imagePath: '42/content/img.webp', altText: 'Alt' }, isDraft: true, publishedAt: null },
+          { id: 4, pageId: 1, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
         ],
         publishedBlocks: [
-          { id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt: publishedAt.toISOString() },
-          { id: 4, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
+          { id: 2, pageId: 1, blockType: 'text', blockOrder: 2, content: { body: 'Hello' }, isDraft: false, publishedAt: publishedAt.toISOString() },
+          { id: 4, pageId: 1, blockType: 'announcements', blockOrder: 4, content: { limit: 3 }, isDraft: false, publishedAt: publishedAt.toISOString() },
         ],
         latestPublishedAt: publishedAt.toISOString(),
       },
@@ -141,7 +143,11 @@ describe('GET /api/v1/pm/site/blocks', () => {
       includeDrafts: true,
       includeTombstones: true,
     });
-    expect(listSiteBlocksMock).toHaveBeenNthCalledWith(2);
+    // Called with an empty object rather than no argument: the route spreads a
+    // page filter that is empty when no `pageId` query param is present. The
+    // assertion that matters is that it carries neither includeDrafts nor
+    // includeTombstones.
+    expect(listSiteBlocksMock).toHaveBeenNthCalledWith(2, {});
   });
 
   it('passes includeDrafts + includeTombstones to the reader so the editor sees the merged view incl. staged deletions', async () => {

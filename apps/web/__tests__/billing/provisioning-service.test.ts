@@ -116,6 +116,16 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 
 vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
+  // Reached transitively: provisioning applies the starter pack, which since
+  // Phase 11b resolves the community's home page. Every export the chain touches
+  // has to be here or the module throws at load and the failure reads as this
+  // file breaking rather than a missing stub.
+  sitePages: Symbol('sitePages'),
+  sitePageRedirects: Symbol('sitePageRedirects'),
+  siteBlocks: Symbol('siteBlocks'),
+  siteStarterPacks: Symbol('siteStarterPacks'),
+  complianceAuditLog: Symbol('complianceAuditLog'),
+  createScopedClient: vi.fn(),
   complianceChecklistItems: complianceChecklistItemsTable,
   documentCategories: documentCategoriesTable,
   notificationPreferences: notificationPreferencesTable,

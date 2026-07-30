@@ -1,0 +1,18 @@
+-- Phase 11b — staged page deletion.
+--
+-- The page equivalent of a `site_blocks` tombstone draft. Deleting a PUBLISHED
+-- page must not soft-delete the row outright: that takes the page off the live
+-- public site before the PM publishes, which is the opposite of how block
+-- deletion behaves and is wrong on a statutory records site. A delete stamps
+-- this column instead; `publishCommunitySite` is what soft-deletes the page and
+-- its blocks. A page that has never been published (`is_draft = true`) has
+-- nothing live to protect and is deleted outright, so it never stamps this.
+--
+-- EXPAND migration, applied before the 11b-1 code ships.
+--
+-- No RLS change and no RLS_EXPECTED_TENANT_TABLE_COUNT bump: this adds a column
+-- to an existing tenant table, not a table. The anon read policy deliberately
+-- still keys on `is_draft` alone — that is what keeps a page staged for deletion
+-- publicly visible until the publish that removes it. Precedent for a
+-- column-only migration leaving the count alone: 0042.
+ALTER TABLE "site_pages" ADD COLUMN "delete_staged_at" timestamp with time zone;

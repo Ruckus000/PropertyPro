@@ -19,6 +19,9 @@ vi.mock('@propertypro/db', () => ({
   communities: Symbol('communities'),
   complianceAuditLog: Symbol('complianceAuditLog'),
   sitePublishSnapshots: Symbol('sitePublishSnapshots'),
+  // Phase 11b multi-page — imported by the same service module.
+  sitePages: Symbol('sitePages'),
+  sitePageRedirects: Symbol('sitePageRedirects'),
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -31,6 +34,7 @@ vi.mock('@propertypro/db/filters', () => ({
   isNotNull: vi.fn((col: unknown) => ({ __isNotNull: col })),
   lt: vi.fn((col: unknown, val: unknown) => ({ __lt: { col, val } })),
   inArray: vi.fn((col: unknown, vals: unknown) => ({ __inArray: { col, vals } })),
+  or: vi.fn((...args: unknown[]) => ({ __or: args })),
   sql: Object.assign(
     (strings: TemplateStringsArray, ...values: unknown[]) => ({
       __sql: { strings: [...strings], values },

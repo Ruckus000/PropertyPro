@@ -107,6 +107,15 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Caller authorization is verified upstream at the route layer (management-tier
   // property_manager/root_manager membership + hasSiteEditor plan feature).
   resolve(repoRoot, 'apps/web/src/lib/services/site-blocks-service.ts'),
+  // Phase 11b multi-page — site_pages / site_page_redirects mutations. Same
+  // shape and same reason as site-blocks-service.ts above: every entry point is
+  // one transaction (SELECT FOR UPDATE on communities → mutate → audit row), and
+  // `ensureHomePage` must be able to JOIN the publish transaction rather than
+  // open its own, so it takes the caller's `tx`. Writes themselves still go
+  // through createScopedClient bound to that transaction. Caller authorization is
+  // verified upstream at the route layer (management-tier
+  // property_manager/root_manager membership + hasSiteEditor plan feature).
+  resolve(repoRoot, 'apps/web/src/lib/services/site-pages-service.ts'),
   // Phase 7 urgent notice — communities is the root tenant table (no
   // community_id column to scope by; it IS the community_id), so the four
   // urgent_notice_* columns can only be read/written by primary key. Same

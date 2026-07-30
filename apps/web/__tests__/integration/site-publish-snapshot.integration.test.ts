@@ -250,9 +250,25 @@ describeDb('site publish snapshots (db-backed integration)', () => {
     expect(snapshot.changeLabels).toEqual(['Updated Text']);
     // The payload is the POST-publish published set: draft content at slot 2,
     // and the untouched published hero at slot 1.
-    expect(snapshot.snapshot?.blocks).toEqual([
-      { blockOrder: 1, blockType: 'hero', content: { headline: 'Live headline' } },
-      { blockOrder: 2, blockType: 'text', content: { body: 'Edited body copy for publish.' } },
+    //
+    // Phase 11b: v2 payload — every block carries its page, and the row also
+    // holds a page MANIFEST so a revert can recreate a page that has since been
+    // deleted. The page id is whatever `ensureHomePage` created for this
+    // community, so it is read from the payload rather than hard-coded.
+    const payload = snapshot.snapshot as unknown as {
+      version: number;
+      pages: { pageId: number; name: string; slug: string; isHome: boolean }[];
+      blocks: { pageId: number; blockOrder: number; blockType: string; content: unknown }[];
+    };
+    expect(payload.version).toBe(2);
+    const homePageId = payload.pages.find((p) => p.isHome)?.pageId;
+    expect(homePageId).toBeDefined();
+    expect(payload.pages).toEqual([
+      expect.objectContaining({ pageId: homePageId, slug: '', isHome: true }),
+    ]);
+    expect(payload.blocks).toEqual([
+      { pageId: homePageId, blockOrder: 1, blockType: 'hero', content: { headline: 'Live headline' } },
+      { pageId: homePageId, blockOrder: 2, blockType: 'text', content: { body: 'Edited body copy for publish.' } },
     ]);
   });
 

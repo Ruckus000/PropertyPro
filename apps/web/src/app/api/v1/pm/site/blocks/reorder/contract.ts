@@ -30,6 +30,13 @@ export const reorderBlockContract = defineRoute({
         direction: z.enum(['up', 'down']).optional(),
         // Content slots only — order 1 is the hero and is not a valid target.
         toOrder: z.number().int().min(2).max(99).optional(),
+        /**
+         * Which page's list is being reordered (Phase 11b). Optional, defaulting
+         * to the home page — 11b-1 ships before the editor can send it. Note the
+         * `.strict()` below: an unrecognised key is a hard rejection, so this
+         * field has to exist here before any client may send it.
+         */
+        pageId: z.number().int().positive().optional(),
       })
       .strict()
       .refine(

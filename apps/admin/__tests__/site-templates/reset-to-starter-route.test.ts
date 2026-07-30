@@ -19,13 +19,16 @@ interface ChainStubs {
   snapshotUpdate?: { data: unknown; error: unknown };
   insertResult?: { data: unknown; error: unknown };
   auditInsert?: { data: unknown; error: unknown };
+  /** Phase 11b — the home-page lookup the route uses to stamp `page_id`. */
+  homePage?: { data: unknown; error: unknown };
 }
 
 /**
  * Builds a typed-client double whose .from(table) returns a chain shaped
  * to satisfy each route step. Order-dependent: the route calls .from()
  * exactly once per table, in this sequence: communities → site_starter_packs
- * → site_blocks (snapshot update) → site_blocks (insert) → compliance_audit_log.
+ * → site_blocks (snapshot update) → site_pages (home-page lookup) → site_blocks
+ * (insert) → compliance_audit_log.
  */
 function buildClient(stubs: ChainStubs) {
   const calls: string[] = [];
@@ -74,6 +77,24 @@ function buildClient(stubs: ChainStubs) {
           // INSERT chain
           return {
             insert: vi.fn().mockResolvedValue(stubs.insertResult ?? { data: null, error: null }),
+          };
+        }
+        if (table === 'site_pages') {
+          // Phase 11b — the route resolves the community's home page so the
+          // blocks it inserts carry a `page_id`. Refuses with 409 when there
+          // isn't one; `stubs.homePage` lets a test drive that.
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  is: vi.fn(() => ({
+                    maybeSingle: vi.fn().mockResolvedValue(
+                      stubs.homePage ?? { data: { id: 55 }, error: null },
+                    ),
+                  })),
+                })),
+              })),
+            })),
           };
         }
         if (table === 'compliance_audit_log') {
@@ -165,6 +186,35 @@ describe('POST /api/admin/site-templates/communities/[id]/reset-to-starter', () 
       auditLogId: 2000,
       restoreWindowDays: 30,
     });
+  });
+
+  it('409s rather than inserting page-less blocks when the community has no home page', async () => {
+    // Phase 11b: this route writes site_blocks with raw SQL, outside the service
+    // that owns page lifecycle. A NULL `page_id` would be invisible to the
+    // multi-page editor and would break 11c's `SET NOT NULL`, so it refuses
+    // instead of inventing a page from the admin app.
+    const { client } = buildClient({
+      community: { data: { id: 42, slug: 'sunset-condos', name: 'Sunset Condos', community_type: 'condo_718' }, error: null },
+      pack: {
+        data: {
+          slug: 'florida-condo-v1',
+          blocks: [{ blockType: 'hero', blockOrder: 1, content: { headline: 'Welcome' } }],
+          is_archived: false,
+          community_type: 'condo_718',
+        },
+        error: null,
+      },
+      snapshotUpdate: { data: [], error: null },
+      homePage: { data: null, error: null },
+    });
+    createAdminTypedClientMock.mockReturnValue(client);
+
+    const { POST } = await importHandler();
+    const res = await POST(
+      makeRequest(VALID_BODY) as unknown as Parameters<typeof POST>[0],
+      { params: Promise.resolve({ id: '42' }) },
+    );
+    expect(res.status).toBe(409);
   });
 
   it('400s when communityId path param is not a positive integer', async () => {

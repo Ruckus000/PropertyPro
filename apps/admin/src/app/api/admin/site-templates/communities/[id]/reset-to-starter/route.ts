@@ -165,8 +165,44 @@ export async function POST(
       { status: 500 },
     );
   }
+  // Phase 11b: every site_blocks row needs a page. This route writes raw SQL
+  // rather than going through apps/web's site-blocks service, so it has to
+  // resolve the home page itself — a NULL `page_id` here would be invisible to
+  // the multi-page editor and would break 11c's `SET NOT NULL`.
+  //
+  // Resolved, never created: if a community has no home page it has no site
+  // content either (0046 backfilled every community that had blocks), so there is
+  // nothing for a reset to reset. Refusing beats inventing a page from the admin
+  // app, whose writes bypass the service that owns page lifecycle.
+  const { data: homePage, error: homePageErr } = await db
+    .from('site_pages')
+    .select('id')
+    .eq('community_id', communityId)
+    .eq('is_home', true)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (homePageErr) {
+    return NextResponse.json(
+      { error: { message: `Home page lookup failed: ${homePageErr.message}` } },
+      { status: 500 },
+    );
+  }
+  const homePageId = (homePage as { id: number } | null)?.id ?? null;
+  if (homePageId === null && packBlocks.length > 0) {
+    return NextResponse.json(
+      {
+        error: {
+          message:
+            'This community has no home page yet, so a starter pack cannot be applied. Open the website editor for the community once to create it, then retry.',
+        },
+      },
+      { status: 409 },
+    );
+  }
+
   const insertRows = packBlocks.map((b) => ({
     community_id: communityId,
+    page_id: homePageId,
     block_type: b.blockType,
     block_order: b.blockOrder,
     content: b.content ?? {},

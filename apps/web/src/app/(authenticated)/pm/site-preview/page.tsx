@@ -98,7 +98,14 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   }
 
   const reader = getPublicCommunityScopedReader(community!.id);
-  const blocks = await reader.listSiteBlocks({ includeDrafts: true });
+  // Scoped to the HOME page for the same reason the public renderer is: the
+  // preview has to show what the public site will show, and an unfiltered read
+  // would interleave a second page's sections into it.
+  const homePageId = await reader.getHomePageId();
+  const blocks = await reader.listSiteBlocks({
+    includeDrafts: true,
+    ...(homePageId === null ? {} : { pageId: homePageId }),
+  });
 
   return (
     <>

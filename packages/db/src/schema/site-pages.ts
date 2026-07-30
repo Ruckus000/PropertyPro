@@ -92,6 +92,27 @@ export const sitePages = pgTable(
     /** "Created but never published" — see the header. */
     isDraft: boolean('is_draft').notNull().default(true),
     publishedAt: timestamp('published_at', { withTimezone: true }),
+    /**
+     * STAGED DELETION (Phase 11b, migration 0047) — the page equivalent of a
+     * `site_blocks` tombstone draft.
+     *
+     * Deleting a PUBLISHED page cannot soft-delete the row outright: that would
+     * take the page off the live public site before the PM publishes, which is
+     * the opposite of how block deletion behaves and is wrong on a statutory
+     * records site. So a delete stamps this column, the page stays live and
+     * anon-readable, the publish sheet shows it as a pending removal, and
+     * `publishCommunitySite` is what actually soft-deletes the page and its
+     * blocks.
+     *
+     * A page that has NEVER been published (`is_draft = true`) needs no staging
+     * — there is nothing live to protect — and is deleted outright.
+     *
+     * Deliberately NOT part of any index or CHECK: it is a nullable marker read
+     * by the publish transaction, never a uniqueness or visibility key. In
+     * particular the anon RLS policy still keys on `is_draft` alone, which is
+     * what keeps a staged-for-deletion page publicly visible until publish.
+     */
+    deleteStagedAt: timestamp('delete_staged_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

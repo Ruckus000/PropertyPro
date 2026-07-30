@@ -25,7 +25,7 @@
  * name field acts as the slug.
  */
 import { cache } from 'react';
-import { announcements, communities, documentCategories, documents, meetings, siteBlocks, userRoles, users } from '@propertypro/db';
+import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
@@ -51,6 +51,12 @@ export interface PublicSiteBlock {
    */
   isDraft: boolean;
   publishedAt: Date | null;
+  /**
+   * The page the block belongs to (Phase 11b multi-page). Nullable until 11c sets
+   * the column NOT NULL — a NULL means a row written by pre-11b code that no
+   * write path has adopted yet, not a block without a page.
+   */
+  pageId: number | null;
 }
 
 export interface PublicDocument {
@@ -120,6 +126,17 @@ export interface PublicScopedReader {
      * published).
      */
     includeTombstones?: boolean;
+    /**
+     * Phase 11b — restrict to one page. Omitted returns EVERY page's blocks,
+     * which is what the PM editor's GET wants (it filters client-side so draft
+     * and published resolve in the same tick) and what a single-page community
+     * has always got.
+     *
+     * The draft-wins dedupe below is keyed on (page, slot) whenever this is
+     * omitted: with two pages, deduping on `block_order` alone would drop one
+     * page's section because another page happened to use the same slot.
+     */
+    pageId?: number;
   }): Promise<PublicSiteBlock[]>;
 
   /**
@@ -130,6 +147,22 @@ export interface PublicScopedReader {
    * miss shadowed rows and spuriously 409. Returns null before first publish.
    */
   getLatestPublishedAt(): Promise<Date | null>;
+
+  /**
+   * The community's home page id, or null when it has no page row at all
+   * (Phase 11b).
+   *
+   * Exists so the public renderer can scope its block read to ONE page. Without
+   * it, the moment a PM publishes a second page every one of its sections appears
+   * inline on the home page, sorted by `block_order` — the pages API is live from
+   * 11b-1 even though the multi-page renderer does not arrive until 11b-2.
+   *
+   * Returns null rather than creating anything: this is a read path, and a
+   * community with no page row is one migration 0046's backfill skipped because it
+   * has no site content either. Callers treat null as "no page filter", which is
+   * exactly the pre-11b behaviour.
+   */
+  getHomePageId(): Promise<number | null>;
 
   /** PR #3 — published, non-expired announcements. */
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
@@ -190,9 +223,13 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       if (!includeDrafts) {
         conditions.push(eq(siteBlocks.isDraft, false));
       }
+      if (opts?.pageId !== undefined) {
+        conditions.push(eq(siteBlocks.pageId, opts.pageId));
+      }
       const rows = await db
         .select({
           id: siteBlocks.id,
+          pageId: siteBlocks.pageId,
           blockType: siteBlocks.blockType,
           blockOrder: siteBlocks.blockOrder,
           content: siteBlocks.content,
@@ -203,15 +240,21 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         .where(and(...conditions))
         .orderBy(asc(siteBlocks.blockOrder));
 
-      // Draft-wins dedupe per block_order. The partial unique index allows
-      // one draft + one published row to coexist at the same slot; in preview
-      // mode the draft replaces the published row.
+      // Draft-wins dedupe per (page, block_order). The partial unique index
+      // allows one draft + one published row to coexist at the same slot; in
+      // preview mode the draft replaces the published row.
+      //
+      // The PAGE is part of the key even though the surviving 3-column index
+      // makes `block_order` community-unique today: keying on the order alone
+      // would silently drop one page's section the moment 11c allows slots to
+      // repeat, and this dedupe is what the public site renders from.
       if (includeDrafts) {
-        const byOrder = new Map<number, typeof rows[number]>();
+        const byOrder = new Map<string, typeof rows[number]>();
         for (const row of rows) {
-          const existing = byOrder.get(row.blockOrder);
+          const key = `${row.pageId ?? 'none'}:${row.blockOrder}`;
+          const existing = byOrder.get(key);
           if (!existing || (row.isDraft && !existing.isDraft)) {
-            byOrder.set(row.blockOrder, row);
+            byOrder.set(key, row);
           }
         }
         // Tombstone drafts (staged deletions, slice 8f) participate in the
@@ -226,6 +269,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           .sort((a, b) => a.blockOrder - b.blockOrder)
           .map((r) => ({
             id: r.id,
+            pageId: r.pageId,
             blockType: r.blockType,
             blockOrder: r.blockOrder,
             content: r.content,
@@ -236,6 +280,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
 
       return rows.map((r) => ({
         id: r.id,
+        pageId: r.pageId,
         blockType: r.blockType,
         blockOrder: r.blockOrder,
         content: r.content,
@@ -262,6 +307,21 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         .orderBy(desc(siteBlocks.publishedAt))
         .limit(1);
       return rows[0]?.publishedAt ?? null;
+    },
+
+    async getHomePageId() {
+      const rows = await db
+        .select({ id: sitePages.id })
+        .from(sitePages)
+        .where(
+          and(
+            eq(sitePages.communityId, communityId),
+            eq(sitePages.isHome, true),
+            isNull(sitePages.deletedAt),
+          ),
+        )
+        .limit(1);
+      return rows[0]?.id ?? null;
     },
 
     async listAnnouncements(opts) {
