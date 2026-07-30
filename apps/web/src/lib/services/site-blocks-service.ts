@@ -1834,6 +1834,27 @@ export async function revertToSnapshot({
       )
       .sort((a, b) => a.pageId - b.pageId || a.blockOrder - b.blockOrder);
 
+    // Both insert sets below write `is_draft = true` rows, and the surviving
+    // pre-11a index is (community_id, block_order, is_draft) — community-wide, not
+    // page-scoped. So a slot whose PAGE OWNERSHIP moved between this snapshot's
+    // capture and now cannot be expressed: the snapshot wants order N restored to
+    // page A while the live site has order N published on page B, and staging both
+    // means two drafts at order N.
+    //
+    // Refused, for the same reason the missing-page case above is refused: a
+    // half-applied revert of a statutory site is worse than one the PM can read
+    // and reason about. When 11c drops that index this whole check becomes
+    // unnecessary — delete it then rather than relaxing it.
+    const insertOrders = [...restoreBlocks, ...removalSlots].map((r) => r.blockOrder);
+    const collidingOrder = insertOrders.find(
+      (order, i) => insertOrders.indexOf(order) !== i,
+    );
+    if (collidingOrder !== undefined) {
+      throw new ValidationError(
+        `This version cannot be restored: section position ${collidingOrder} now belongs to a different page than it did when this version was published. Move that section first, then restore.`,
+      );
+    }
+
     // STEP 1 — clear the whole live draft layer (edits, staged reorders, and
     // staged deletions alike). This MUST precede every insert below: it is
     // what takes the existing rows out of the partial unique index.

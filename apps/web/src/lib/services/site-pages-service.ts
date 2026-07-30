@@ -310,6 +310,14 @@ export async function listSitePages(
 ): Promise<SitePageRecord[]> {
   const db = createUnscopedClient();
   return db.transaction(async (tx) => {
+    // Locked even though this is a read: it can CREATE the home page, and two
+    // concurrent first-touches (two editor tabs, or a load racing a prefetch)
+    // would otherwise both pass find-then-insert and the loser would hit the home
+    // partial unique index as an opaque 500. Calling
+    // `ensureHomePageInTransaction` directly skips the public wrapper's lock, so
+    // the lock has to be taken here — this was the one entry point in the file
+    // without it.
+    await lockCommunity(tx, communityId);
     await ensureHomePageInTransaction(communityId, tx);
     return listPagesInTransaction(communityId, tx, { includeDrafts });
   });

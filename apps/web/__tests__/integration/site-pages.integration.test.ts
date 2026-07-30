@@ -520,6 +520,56 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(restored[0]!.pageId).toBe(homePageId);
   });
 
+  it('refuses a revert when a slot changed page ownership since the snapshot', async () => {
+    // Both the restore and the staged-removal insert write is_draft=true rows, and
+    // the surviving pre-11a index is community-wide on (block_order, is_draft). So
+    // "restore order 3 to page A" and "stage removal of order 3 on page B" cannot
+    // both be expressed — unguarded this was a raw unique violation surfacing as a
+    // 500 rather than something the PM could act on.
+    const communityId = await createCommunity('revert-slot-moved');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    // The live site now publishes order 3 on the About page.
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: about.id,
+      blockType: 'text', blockOrder: 3, content: { body: 'About three' }, isDraft: false,
+    });
+    if (!state) throw new Error('Not initialized');
+
+    // A snapshot in which order 3 belonged to HOME.
+    const [snapshotRow] = await state.db
+      .insert(state.dbModule.sitePublishSnapshots)
+      .values({
+        communityId,
+        publishedAt: new Date('2026-05-01T00:00:00Z'),
+        actorUserId,
+        changeCount: 1,
+        changeLabels: ['Updated Text'],
+        snapshot: {
+          version: 2,
+          pages: [
+            { pageId: homePageId, name: 'Home', slug: '', inNav: true, sortOrder: 0, isHome: true },
+          ],
+          blocks: [
+            { pageId: homePageId, blockOrder: 3, blockType: 'text', content: { body: 'Home three' } },
+          ],
+        },
+      })
+      .returning({ id: state.dbModule.sitePublishSnapshots.id });
+    if (!snapshotRow) throw new Error('Failed to seed snapshot');
+
+    await expect(
+      revertToSnapshot({ communityId, actorUserId, snapshotId: snapshotRow.id }),
+    ).rejects.toThrow(/belongs to a different page/);
+  });
+
   it('refuses to restore a v2 snapshot naming a page that no longer exists', async () => {
     // Recreating the page is possible, but reclaiming a slug that now belongs to
     // someone else would silently redirect live traffic. A readable refusal beats
