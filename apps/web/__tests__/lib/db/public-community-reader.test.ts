@@ -63,6 +63,26 @@ vi.mock('@propertypro/db', () => ({
     fullName: 'users.fullName',
     deletedAt: 'users.deletedAt',
   },
+  sitePages: {
+    id: 'sitePages.id',
+    communityId: 'sitePages.communityId',
+    name: 'sitePages.name',
+    slug: 'sitePages.slug',
+    inNav: 'sitePages.inNav',
+    sortOrder: 'sitePages.sortOrder',
+    isHome: 'sitePages.isHome',
+    isDraft: 'sitePages.isDraft',
+    publishedAt: 'sitePages.publishedAt',
+    deleteStagedAt: 'sitePages.deleteStagedAt',
+    deletedAt: 'sitePages.deletedAt',
+  },
+  sitePageRedirects: {
+    id: 'sitePageRedirects.id',
+    communityId: 'sitePageRedirects.communityId',
+    fromSlug: 'sitePageRedirects.fromSlug',
+    pageId: 'sitePageRedirects.pageId',
+    deletedAt: 'sitePageRedirects.deletedAt',
+  },
   userRoles: {
     userId: 'userRoles.userId',
     communityId: 'userRoles.communityId',
@@ -315,6 +335,194 @@ describe('getPublicCommunityScopedReader', () => {
     queueQueryResults([]);
     const reader = getPublicCommunityScopedReader(42);
     expect(await reader.getLatestPublishedAt()).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 11b-2 — public multi-page reader: getPageBySlug / resolveRedirect /
+  // listNavPages
+  // ---------------------------------------------------------------------------
+
+  type Clause = {
+    __eq?: { col: string; val: unknown };
+    __isNull?: string;
+    __asc?: string;
+    __desc?: string;
+  };
+
+  function lastWhereClauses(): Clause[] {
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0] as { __and: Clause[] };
+    expect(whereCall).toHaveProperty('__and');
+    return whereCall.__and;
+  }
+
+  function eqClause(clauses: Clause[], col: string): Clause | undefined {
+    return clauses.find((c) => c.__eq?.col === col);
+  }
+
+  it('getPageBySlug binds communityId + slug + deletedAt isNull and defaults to published-only', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.getPageBySlug('about');
+
+    const clauses = lastWhereClauses();
+    expect(eqClause(clauses, 'sitePages.communityId')?.__eq?.val).toBe(42);
+    expect(eqClause(clauses, 'sitePages.slug')?.__eq?.val).toBe('about');
+    expect(clauses.map((c) => c.__isNull)).toContain('sitePages.deletedAt');
+    // is_draft = false unless includeDrafts — mirrors the anon RLS predicate.
+    expect(eqClause(clauses, 'sitePages.isDraft')?.__eq?.val).toBe(false);
+    expect(mockSelectChain.limit).toHaveBeenCalledWith(1);
+  });
+
+  it('getPageBySlug returns null for a draft page (published-only predicate, no row)', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.getPageBySlug('draft-page')).toBeNull();
+    expect(eqClause(lastWhereClauses(), 'sitePages.isDraft')?.__eq?.val).toBe(false);
+  });
+
+  it('getPageBySlug({ includeDrafts: true }) drops the is_draft predicate (preview)', async () => {
+    queueQueryResults([
+      {
+        id: 9,
+        name: 'Draft Page',
+        slug: 'draft-page',
+        isHome: false,
+        isDraft: true,
+        inNav: true,
+        sortOrder: 1,
+        deleteStagedAt: null,
+      },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const page = await reader.getPageBySlug('draft-page', { includeDrafts: true });
+    expect(page?.id).toBe(9);
+    expect(eqClause(lastWhereClauses(), 'sitePages.isDraft')).toBeUndefined();
+  });
+
+  it('getPageBySlug RETURNS a page staged for deletion and never filters delete_staged_at (D8 / migration 0047)', async () => {
+    const stagedAt = new Date('2026-07-30T12:00:00Z');
+    queueQueryResults([
+      {
+        id: 12,
+        name: 'Amenities',
+        slug: 'amenities',
+        isHome: false,
+        isDraft: false,
+        inNav: true,
+        sortOrder: 2,
+        deleteStagedAt: stagedAt,
+      },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const page = await reader.getPageBySlug('amenities');
+    // A page staged for deletion stays publicly live until the PM publishes.
+    expect(page).toMatchObject({ id: 12, slug: 'amenities', deleteStagedAt: stagedAt });
+    const clauses = lastWhereClauses();
+    expect(clauses.some((c) => c.__eq?.col === 'sitePages.deleteStagedAt')).toBe(false);
+    expect(clauses.map((c) => c.__isNull)).not.toContain('sitePages.deleteStagedAt');
+  });
+
+  it("getPageBySlug resolves home as the empty slug", async () => {
+    queueQueryResults([
+      {
+        id: 1,
+        name: 'Home',
+        slug: '',
+        isHome: true,
+        isDraft: false,
+        inNav: true,
+        sortOrder: 0,
+        deleteStagedAt: null,
+      },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const page = await reader.getPageBySlug('');
+    expect(page).toMatchObject({ id: 1, isHome: true, slug: '' });
+    expect(eqClause(lastWhereClauses(), 'sitePages.slug')?.__eq?.val).toBe('');
+  });
+
+  it('getPageBySlug returns null when no page matches', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.getPageBySlug('nope')).toBeNull();
+  });
+
+  it('resolveRedirect joins the target page and returns its CURRENT slug', async () => {
+    queueQueryResults([{ pageId: 5, toSlug: 'amenities' }]);
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.resolveRedirect('pool');
+    expect(result).toEqual({ pageId: 5, toSlug: 'amenities' });
+    expect(mockSelectChain.innerJoin).toHaveBeenCalledTimes(1);
+
+    const clauses = lastWhereClauses();
+    expect(eqClause(clauses, 'sitePageRedirects.communityId')?.__eq?.val).toBe(42);
+    expect(eqClause(clauses, 'sitePageRedirects.fromSlug')?.__eq?.val).toBe('pool');
+    expect(clauses.map((c) => c.__isNull)).toContain('sitePageRedirects.deletedAt');
+    // The target page must belong to the same community.
+    expect(eqClause(clauses, 'sitePages.communityId')?.__eq?.val).toBe(42);
+  });
+
+  it('resolveRedirect returns null when the target page is deleted (deletedAt isNull is in the join predicate)', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.resolveRedirect('pool')).toBeNull();
+    expect(lastWhereClauses().map((c) => c.__isNull)).toContain('sitePages.deletedAt');
+  });
+
+  it('resolveRedirect returns null when the target page is a draft (is_draft=false is in the join predicate)', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    expect(await reader.resolveRedirect('pool')).toBeNull();
+    expect(eqClause(lastWhereClauses(), 'sitePages.isDraft')?.__eq?.val).toBe(false);
+  });
+
+  it('resolveRedirect takes exactly ONE hop — it never re-queries redirects with the resolved slug', async () => {
+    queueQueryResults([{ pageId: 5, toSlug: 'amenities' }]);
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.resolveRedirect('pool');
+    // Redirects point at page ids, so a chain is unrepresentable: one select.
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
+  });
+
+  it('listNavPages filters to published + in_nav + not-deleted rows', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(7);
+    await reader.listNavPages();
+
+    const clauses = lastWhereClauses();
+    expect(eqClause(clauses, 'sitePages.communityId')?.__eq?.val).toBe(7);
+    expect(eqClause(clauses, 'sitePages.isDraft')?.__eq?.val).toBe(false);
+    expect(eqClause(clauses, 'sitePages.inNav')?.__eq?.val).toBe(true);
+    expect(clauses.map((c) => c.__isNull)).toContain('sitePages.deletedAt');
+  });
+
+  it('listNavPages orders home first, then sort_order, then id', async () => {
+    queueQueryResults([]);
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listNavPages();
+
+    expect(mockSelectChain.orderBy).toHaveBeenCalledTimes(1);
+    const orderArgs = mockSelectChain.orderBy.mock.calls[0] as unknown as Clause[];
+    expect(orderArgs).toHaveLength(3);
+    expect(orderArgs[0].__desc).toBe('sitePages.isHome');
+    expect(orderArgs[1].__asc).toBe('sitePages.sortOrder');
+    expect(orderArgs[2].__asc).toBe('sitePages.id');
+  });
+
+  it('listNavPages returns the { id, name, slug, isHome } projection home-first', async () => {
+    queueQueryResults([
+      { id: 1, name: 'Home', slug: '', isHome: true },
+      { id: 4, name: 'Amenities', slug: 'amenities', isHome: false },
+      { id: 9, name: 'Documents Hub', slug: 'docs-hub', isHome: false },
+    ]);
+    const reader = getPublicCommunityScopedReader(42);
+    const nav = await reader.listNavPages();
+    expect(nav).toEqual([
+      { id: 1, name: 'Home', slug: '', isHome: true },
+      { id: 4, name: 'Amenities', slug: 'amenities', isHome: false },
+      { id: 9, name: 'Documents Hub', slug: 'docs-hub', isHome: false },
+    ]);
+    expect(nav[0].isHome).toBe(true);
   });
 
   it('listAnnouncements returns mapped rows with the expected shape', async () => {
