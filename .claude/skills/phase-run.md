@@ -166,7 +166,10 @@ Full detail in `.claude/phase-run/recovery.md`. Four properties:
   deployment id, migration ledger tip, advisor baseline — written to
   `~/.claude/state/phase-run/`, deliberately outside the repo. A restore point
   stored in the thing you are about to break is not a restore point. **No restore
-  point, no run.**
+  point, no run.** The resolved slice spec is written beside it as
+  `<phase>-spec.json` — the gate reads that file rather than its own arguments,
+  so a repair round can correct a criterion and so there is an on-disk record of
+  what the gate actually executed. **No spec file, no run.**
 - **Retain.** Nothing is deleted until production is confirmed healthy. Slice
   branches are pushed to origin and never deleted; worktrees survive the phase.
 - **Detect.** Green CI is not evidence production works, and the failure this
@@ -222,6 +225,35 @@ Before stage 2, check and abort with a specific message on any failure:
 - every slice has a non-empty `ownedFiles` and at least one `doneCriteria`
 - **every done-criterion is a runnable command, and would FAIL if the slice did
   nothing.** A criterion that cannot fail is not a criterion.
+- **every criterion is ALSO satisfiable — red before, green after.** Validating
+  only "red today" is not enough and has already shipped a defect: 11b-3's D-SLOT
+  criterion was a whole-file negative grep for a token that also occurs in
+  load-bearing code, so the only change that could turn it green was deleting a
+  line that keeps a published section serving the public site. Ask of each
+  criterion: *what is the smallest change that turns this green, and is that
+  change a regression?*
+- **every criterion is traceable to the plan.** Its command text must appear in
+  the plan file, normalised for whitespace and markdown. A paraphrase is not
+  traceable — a paraphrased criterion is the 11b-3 defect exactly. A criterion
+  the plan genuinely does not state (a shell wrapper, a path expansion) must be
+  marked `derived: true` with a reason. The runner enforces this before any code
+  is written and stops with `UNTRACEABLE_CRITERIA` otherwise.
+
+### Retiring a criterion mid-run needs BOTH files
+
+The gate executes `~/.claude/state/phase-run/<phase>-spec.json`, **not the plan**.
+The runner writes that file at run start and re-reads it before every verify
+round, precisely so a repair round has something real to correct.
+
+So amending the plan is **necessary and not sufficient**. A repair round that
+retires a criterion must edit the plan *and* the spec file, with the replacement
+appearing in the plan verbatim as written into the spec — a paraphrase fails the
+traceability check and is rejected as `stale-criterion`, which is the same defect
+in a new coat.
+
+This is also why traceability is enforced rather than merely encouraged: it means
+a gate cannot be quietly weakened in a scratch file. Any weakening has to land in
+the plan, which is committed and shows up in review.
 - two slices owning the same file is fine in exactly two shapes, and a hazard
   otherwise:
   - **same dependency level** → the deriver merges them into one agent. Fine.
@@ -269,6 +301,8 @@ Sweep worktrees only after the human has read the report
 |---|---|---|
 | `DESTRUCTIVE_MIGRATION` | Irreversible statement declared | Split it out; a human applies it |
 | `NO_RESTORE_POINT` | Could not capture or verify one | Fix access first — never run blind |
+| `NO_SPEC_FILE` | Could not persist the slice spec | Without it the gate executes frozen arguments no repair round can correct |
+| `UNTRACEABLE_CRITERIA` | A criterion does not appear in the plan and is not marked derived | Reconcile the plan and the spec. Do **not** edit the plan to match a paraphrase |
 | `GATE_NOT_MET` | Previous phase not live in prod | Check the deploy |
 | `BAD_SLICE_SPEC` | Cycle or unknown dependency | Fix the spec |
 | `WAVE_TOTAL_FAILURE` | Every agent in a wave failed | Scope is underspecified |

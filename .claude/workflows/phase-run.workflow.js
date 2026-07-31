@@ -114,6 +114,34 @@ const RESTORE_POINT_SCHEMA = {
   },
 }
 
+// The slice spec has to exist ON DISK, not only as workflow arguments. See
+// specPersistPrompt for why.
+const SPEC_WRITE_SCHEMA = {
+  type: 'object',
+  required: ['ok', 'specPath', 'criteriaTotal', 'untraceable'],
+  properties: {
+    ok: { type: 'boolean' },
+    specPath: { type: 'string' },
+    criteriaTotal: { type: 'integer' },
+    // Criteria whose text does not appear in the plan. Each must be marked
+    // `derived: true` with a reason, or the run stops before writing any code.
+    untraceable: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['owner', 'command'],
+        properties: {
+          owner: { type: 'string' },
+          command: { type: 'string' },
+          resolution: { enum: ['MARKED_DERIVED', 'UNRESOLVED'] },
+          note: { type: 'string' },
+        },
+      },
+    },
+    reason: { type: 'string' },
+  },
+}
+
 const INTEGRATE_RESULT_SCHEMA = {
   type: 'object',
   required: ['ok', 'tipSha', 'merged', 'failed'],
@@ -427,6 +455,65 @@ rollback plan is a guess you will be relying on under time pressure.**
 ${SO}`
 }
 
+function specPath(ph) {
+  return `${stateDir}/${ph.phaseName}-spec.json`
+}
+
+function specPersistPrompt(ph) {
+  return `Persist the slice spec for phase ${ph.phaseName} to disk, and check every criterion is
+traceable to the plan. Do this BEFORE any code is written.
+
+## Why this exists — it cost phase 11b-3 two repair rounds
+The verify gate executes the criteria in this spec. Until now the spec lived ONLY as workflow
+arguments, nowhere on disk, and the plan was passed to agents merely as a path to read. So when a
+repair round decided a criterion was unsatisfiable and amended the plan, **the gate kept executing
+the frozen argument string.** On 11b-3 the executed criterion was a paraphrase matching neither the
+plan's original wording nor either replacement; it re-fired identically every round, and its only
+available "fix" was deleting a load-bearing line in the phase's one write-path file.
+
+Two properties follow, and both matter more than the file itself:
+- A repair round now has **a real file to correct**. Amending the plan alone is not enough and never was.
+- A criterion must be **traceable to the plan**, so a gate cannot be quietly weakened in an
+  in-memory spec — any weakening has to appear in the plan, which is committed and reviewable.
+
+## Write it
+\`${specPath(ph)}\` (beside the restore point, outside the repo on purpose):
+\`\`\`json
+${JSON.stringify({
+  phaseName: ph.phaseName,
+  planPath,
+  verifyCommands: ph.verifyCommands ?? [],
+  spotChecks: ph.spotChecks ?? [],
+  slices: (ph.slices ?? []).map(s => ({ id: s.id, doneCriteria: s.doneCriteria ?? [] })),
+}, null, 2)}
+\`\`\`
+
+## Then check traceability, before returning
+Read the plan at \`${planPath}\`. For EVERY criterion above — each slice's \`doneCriteria\`, every
+\`verifyCommands\` entry, every \`spotChecks\` entry — decide whether its command text appears in the
+plan. Compare on **normalised** text: collapse runs of whitespace, ignore surrounding markdown
+backticks and list markers. A criterion that is a paraphrase of something in the plan **does not
+count as traceable** — that paraphrase is precisely the 11b-3 defect.
+
+For each untraceable criterion, choose ONE:
+- It is a genuine convenience the plan does not state (a shell wrapper, a path expansion). Add
+  \`"derived": true\` and a one-line \`"derivedReason"\` to that criterion object in the spec file,
+  and report it with \`resolution: "MARKED_DERIVED"\`.
+- It is a real drift between plan and spec. Report it with \`resolution: "UNRESOLVED"\` and DO NOT
+  invent a fix — the run will stop and a human will reconcile them. **Do not edit the plan to match
+  the spec.** The plan is the source of truth; making the plan agree with a paraphrase is how the
+  paraphrase becomes permanent.
+
+Be strict. A criterion you wave through here is one the gate will execute unexamined for the whole run.
+
+## Return
+\`ok\` (false only if you could not write the file), \`specPath\`, \`criteriaTotal\` (every criterion
+across slices + verifyCommands + spotChecks), and \`untraceable\` (one entry per criterion, with its
+resolution). Report an empty \`untraceable\` only if every single criterion really did appear in the
+plan.
+${SO}`
+}
+
 function implementPrompt(ph, group, worktreePath, branch, fromSha) {
   const ids = group.map(s => s.id)
   const owned = [...new Set(group.flatMap(s => s.ownedFiles ?? []))]
@@ -540,10 +627,43 @@ Read-only apart from running commands. Fix nothing. Commit nothing.
 
 ${mig}
 
-## Run every one, in order, and READ the output
+## FIRST — read the criteria from disk, not from this prompt
+
+\`\`\`bash
+cat ${specPath(ph)}
+\`\`\`
+
+**That file is authoritative. This prompt is not.** Execute the \`verifyCommands\` and \`spotChecks\`
+it contains, as they read RIGHT NOW. The listing further down is only what they were at run start,
+kept so you can see whether anything changed.
+
+This indirection is the fix for a real defect: on phase 11b-3 the criteria existed only as workflow
+arguments, so a repair round that retired an unsatisfiable criterion in the plan could not reach the
+gate, and the gate re-fired the retired command verbatim on the next round — a command no correct
+implementation could satisfy, whose only available "fix" was a regression in production code.
+
+If the spec file is **missing or unparseable**, report a single failing command named
+\`spec-file-missing\` and stop. Do NOT fall back to the listing below: falling back is exactly the
+frozen-argument behaviour this exists to prevent.
+
+## SECOND — reject any criterion that is not traceable to the plan
+
+For each criterion in the spec file, before running it: unless it carries \`"derived": true\`, its
+command text must appear in the plan at \`${planPath}\` (normalised — collapse whitespace, ignore
+markdown backticks and list markers). A criterion that is a *paraphrase* of the plan is NOT
+traceable.
+
+Report every untraceable criterion as a **failing** command named \`stale-criterion:<owner>\`, with
+\`failureDetail\` giving the exact criterion text and the plan path, and **do not execute it**. A
+retired criterion that keeps running cannot go green by any correct implementation; it thrashes for
+every remaining round and pressures the next repair agent into a regression to satisfy it.
+
+## THIRD — run every criterion from the spec file, in order, and READ the output
+
+As of run start these were:
 ${fmt(ph.verifyCommands)}
 
-${(ph.spotChecks ?? []).length ? `## Spot-checks — criteria a green suite cannot prove\n${fmt(ph.spotChecks)}` : ''}
+${(ph.spotChecks ?? []).length ? `Spot-checks — criteria a green suite cannot prove:\n${fmt(ph.spotChecks)}` : ''}
 
 ## Then ask, as a chaos engineer would
 Pick the two most load-bearing new tests and ask: **would this still pass if the code did nothing?**
@@ -586,6 +706,18 @@ guess into a "confirmed" finding.
 4. Sort: **CONCEDED → \`confirmed\`. REFUTED → \`refuted\`, with the defence recorded** — a refuted
    finding is a fact about this code the next agent needs.
 
+## Consider that the CRITERION may be the defect, not the code
+Before concluding the code is wrong, ask whether the failing check could pass at all. A criterion is
+the defect when it cannot be satisfied by any correct implementation — a negative grep for a token
+that also occurs in load-bearing code, an absence check on a file that does not exist yet, a
+quoting bug that errors regardless of input, or a criterion asserting something a *later* slice owns.
+
+The tell: **"what is the smallest change that turns this green, and is that change a regression?"**
+If the only way through is deleting or weakening real code, the criterion is wrong. Say so in
+\`rootCause\` and put the corrected criterion in the finding's \`fix\` — a criterion the repair agent
+must retire in BOTH the plan and the spec file (\`${specPath(ph)}\`). This is not a licence to soften
+a check that is doing its job; a criterion that is merely *hard* to satisfy is work, not a defect.
+
 Set \`needsHuman: true\` only if the fix would require an irreversible operation, a credential, or a
 decision that changes WHAT gets built rather than how. "This is hard" is not one of those.
 
@@ -626,6 +758,23 @@ These survived a defence. Acting on one undoes a deliberate decision.
 - \`ENV:\`-prefixed failures are environmental and not yours.
 - Every new test must **fail when your fix is reverted**. Check that; a test that passes either way
   is not a test.
+
+## Retiring or amending a criterion — BOTH files, or it does not take effect
+If the diagnosis found the CRITERION to be the defect, correcting the plan is **necessary and not
+sufficient**. The gate reads \`${specPath(ph)}\`, not the plan. Edit **both**:
+
+1. \`${planPath}\` — the source of truth, and what the traceability check validates against.
+2. \`${specPath(ph)}\` — what the next verify round actually executes.
+
+The replacement must appear in the plan **verbatim as you write it into the spec**, not paraphrased.
+A paraphrase fails the traceability check and is rejected as \`stale-criterion\` — which is the same
+class of defect as the one you are fixing.
+
+Then state, in \`notes\`: the retired criterion, the replacement, and **why the replacement is
+strictly stronger rather than merely satisfiable.** A replacement that is easier to pass is a
+weakened gate wearing a fix's clothing. Verify the replacement is RED before your fix and GREEN
+after — a criterion validated only as "red today" can still be one that rewards the wrong change,
+which is exactly how 11b-3's criterion came to demand a regression.
 
 **Walk the verification checklist and report it per item in \`checklistNotes\`.**
 
@@ -1075,6 +1224,29 @@ for (let pi = 0; pi < phases.length; pi++) {
     return { ...report, stopped: 'NO_RESTORE_POINT', atPhase: ph.phaseName }
   }
   if (!restore.runbookVerified) log(`⚠ ${ph.phaseName}: rollback runbook could NOT be verified — proceeding, but flag it`)
+
+  // ---- Persist the spec, and refuse untraceable criteria ------------------
+  // The gate must execute criteria from a FILE a repair round can correct, not
+  // from frozen arguments. And every criterion must trace back to the plan, so
+  // a gate cannot be weakened anywhere but in a committed, reviewable document.
+  const spec = await safeAgent(specPersistPrompt(ph), {
+    schema: SPEC_WRITE_SCHEMA, label: `spec:${ph.phaseName}`, phase: 'Safety',
+  })
+  ent.spec = spec
+  if (!spec?.ok || !spec.specPath) {
+    ent.stopped = 'NO_SPEC_FILE'
+    ent.reason = `Could not persist the slice spec to ${specPath(ph)}. Without it the verify gate would execute frozen argument strings that no repair round can correct — the phase-11b-3 defect.`
+    log(`STOP: ${ent.reason}`)
+    return { ...report, stopped: 'NO_SPEC_FILE', atPhase: ph.phaseName }
+  }
+  const unresolved = (spec.untraceable ?? []).filter(u => u.resolution !== 'MARKED_DERIVED')
+  if (unresolved.length > 0) {
+    ent.stopped = 'UNTRACEABLE_CRITERIA'
+    ent.reason = `${unresolved.length} criterion/criteria in the spec do not appear in the plan and were not marked derived: ${unresolved.map(u => `${u.owner}: ${u.command}`).join(' | ')}. Reconcile ${planPath} and the spec before running — a paraphrased criterion is what made 11b-3's gate demand a regression.`
+    log(`STOP: ${ent.reason}`)
+    return { ...report, stopped: 'UNTRACEABLE_CRITERIA', atPhase: ph.phaseName }
+  }
+  log(`spec persisted → ${spec.specPath} (${spec.criteriaTotal} criteria, ${(spec.untraceable ?? []).length} marked derived)`)
 
   // ---- Waves --------------------------------------------------------------
   let waves
