@@ -200,19 +200,39 @@ export const ADD_CATALOG: readonly AddCatalogEntry[] = [
   },
 ];
 
-/** The hero owns slot 1; content sections run 2..99 (the contract's bounds). */
+/**
+ * The hero owns slot 1; content sections run 2..99 (the contract's bounds).
+ *
+ * These bounds are COMMUNITY-wide, not per page: the surviving pre-11a index
+ * `site_blocks_community_order_draft_partial (community_id, block_order,
+ * is_draft)` is not dropped until 11c, so two pages cannot share a slot and the
+ * 98 content positions are shared by the whole site.
+ */
 export const FIRST_CONTENT_SLOT = 2;
 export const LAST_CONTENT_SLOT = 99;
 
 /**
- * The slot a new section should take, or null when the page is full.
+ * The slot a new section should take, or null when every slot in the COMMUNITY
+ * is taken.
  *
- * **Must be given every block row, tombstones included.** A tombstone is a
- * staged deletion that still occupies its slot; `upsertPublishedBlock` soft-
- * deletes whatever draft sits at the target order, so writing over one silently
- * cancels the removal and republishes a section the PM took off the site. That
- * is why this takes raw `useContentBlocks` output and not `movableSections`,
- * which filters tombstones out.
+ * **Must be given every block row, tombstones included, from EVERY page.**
+ *
+ * Two independent reasons, and confusing them is how this goes wrong:
+ *
+ *  1. *Tombstones.* A tombstone is a staged deletion that still occupies its
+ *     slot; `upsertPublishedBlock` soft-deletes whatever draft sits at the
+ *     target order, so writing over one silently cancels the removal and
+ *     republishes a section the PM took off the site. That is why this takes raw
+ *     `useContentBlocks` output and not `movableSections`, which filters
+ *     tombstones out.
+ *
+ *  2. *Every page* (Phase 11b-3, D-C3). `block_order` is unique across the whole
+ *     community until 11c drops the 3-column index, so a caller that narrowed
+ *     the list to the selected page first would compute `max(this page) + 1` —
+ *     a slot another page is very likely already holding. Scanning every page is
+ *     precisely what makes the answer free. Do NOT "fix" a cross-page slot
+ *     collision by page-filtering this input; that is the cause, not the cure.
+ *     `AddPanel.test.tsx` pins this with a named regression case.
  *
  * Appends at `max + 1` rather than filling the first gap: reorders re-stamp the
  * existing sparse slot sequence, so gaps persist indefinitely, and filling one

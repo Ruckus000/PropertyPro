@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PreviewDialog } from '@/components/pm/site-editor-v3/PreviewDialog';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 
 const blocksState = vi.hoisted(() => ({
@@ -90,14 +91,39 @@ function renderDialog(open = true) {
   );
 }
 
-const block = (id: number, blockType: string, blockOrder: number, content: unknown) => ({
+/** The two pages the scope cases use. */
+const HOME_PAGE_ID = 10;
+const ABOUT_PAGE_ID = 11;
+
+const block = (
+  id: number,
+  blockType: string,
+  blockOrder: number,
+  content: unknown,
+  pageId: number | null = HOME_PAGE_ID,
+) => ({
   id,
+  pageId,
   blockType,
   blockOrder,
   content,
   isDraft: true,
   publishedAt: null,
 });
+
+function renderDialogOnPage(pageId: number | null) {
+  return render(
+    <SelectedSitePageProvider pageId={pageId}>
+      <PreviewDialog
+        open
+        onOpenChange={onOpenChange}
+        communityId={7}
+        context={CONTEXT}
+        now={NOW}
+      />
+    </SelectedSitePageProvider>,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -193,6 +219,56 @@ describe('PreviewDialog — draft content', () => {
     };
     renderDialog();
     expect(screen.getByText("There's nothing to preview yet")).toBeInTheDocument();
+  });
+});
+
+describe('PreviewDialog — page scope (D-C2)', () => {
+  function twoPages() {
+    blocksState.value = {
+      data: [
+        block(2, 'text', 2, { heading: 'Home section', body: 'Home body.' }, HOME_PAGE_ID),
+        block(3, 'text', 3, { heading: 'About section', body: 'About body.' }, ABOUT_PAGE_ID),
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+  }
+
+  it('previews only the page being edited', () => {
+    // A preview that concatenated every page into one scroll would not
+    // correspond to any URL a visitor can open — a lie the PM would then
+    // publish against.
+    twoPages();
+    renderDialogOnPage(ABOUT_PAGE_ID);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('About section')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Home section')).not.toBeInTheDocument();
+  });
+
+  it('follows the selection back to the home page', () => {
+    twoPages();
+    renderDialogOnPage(HOME_PAGE_ID);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Home section')).toBeInTheDocument();
+    expect(within(dialog).queryByText('About section')).not.toBeInTheDocument();
+  });
+
+  it('says there is nothing to preview on a page with no sections', () => {
+    twoPages();
+    renderDialogOnPage(99);
+    expect(screen.getByText("There's nothing to preview yet")).toBeInTheDocument();
+  });
+
+  it('previews everything when no page is selected', () => {
+    twoPages();
+    renderDialogOnPage(null);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Home section')).toBeInTheDocument();
+    expect(within(dialog).getByText('About section')).toBeInTheDocument();
   });
 });
 

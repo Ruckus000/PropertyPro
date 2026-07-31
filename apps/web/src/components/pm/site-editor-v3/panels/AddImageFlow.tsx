@@ -22,6 +22,17 @@ export interface AddImageFlowProps {
   entry: AddCatalogEntry;
   /** Slot the section will take, or null if the list has not loaded. */
   blockOrder: number | null;
+  /**
+   * The page this section is being added to (Phase 11b-3, D-WRITE).
+   *
+   * Required rather than optional, and passed through to the upsert as an
+   * explicit override even though the hook would default to the same value.
+   * An optional prop whose absence silently retargets a write at the live HOME
+   * page is the exact failure class this phase exists to remove — so the type
+   * makes forgetting it impossible rather than merely unlikely. `null` is the
+   * legitimate "no page known" case and reproduces the pre-11b-3 default.
+   */
+  pageId: number | null;
   onCancel: () => void;
   onAdded: (blockOrder: number, entry: AddCatalogEntry) => void;
 }
@@ -49,6 +60,7 @@ export function AddImageFlow({
   communityId,
   entry,
   blockOrder,
+  pageId,
   onCancel,
   onAdded,
 }: AddImageFlowProps) {
@@ -109,6 +121,7 @@ export function AddImageFlow({
         blockType: entry.blockType,
         blockOrder,
         content: buildContent(imagePath),
+        pageId,
       });
       onAdded(blockOrder, entry);
     } catch (cause) {

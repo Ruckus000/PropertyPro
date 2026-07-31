@@ -135,12 +135,33 @@ async function resolvePageId(
  * today: the pages API ships in 11b-1 and accepts a `pageId` on every block
  * write. When 11c drops the index this function should be deleted, not relaxed —
  * at that point the collision is genuinely legal.
+ *
+ * ## Why there is no `is_draft` filter (Phase 11b-3, D-SLOT)
+ *
+ * This used to match `is_draft = isDraft` as well, on the stated reasoning that
+ * without it "writing a draft over a published slot on the SAME page would be
+ * refused". That reasoning was wrong, and it left a hole big enough to freeze a
+ * community's publishing:
+ *
+ *  - Same-page writes were never at risk. `foreign` below discriminates on
+ *    `pageId`, so every row belonging to THIS page is ignored whatever its draft
+ *    state. Draft-over-published on one page still works with no draft filter at
+ *    all — which is why the filter was pure harm.
+ *  - Across pages it was actively dangerous. A DRAFT on page A at slot N was
+ *    accepted while page B held a PUBLISHED row at N, because the two rows
+ *    disagreed on `is_draft` and never met. Publish then promotes every draft to
+ *    published in one transaction, producing two live rows at one slot, which
+ *    violates the surviving 3-column index, rolls back the WHOLE publish, and
+ *    leaves the community unable to publish anything until someone hand-edits
+ *    `block_order` in production.
+ *
+ * So the query spans BOTH layers: a slot is free for this page only when no
+ * other page holds it in either the draft or the published layer.
  */
 async function assertSlotFreeAcrossPages(
   communityId: number,
   pageId: number,
   blockOrder: number,
-  isDraft: boolean,
   tx: Tx,
 ): Promise<void> {
   const clashes = await tx
@@ -150,7 +171,6 @@ async function assertSlotFreeAcrossPages(
       and(
         eq(siteBlocks.communityId, communityId),
         eq(siteBlocks.blockOrder, blockOrder),
-        eq(siteBlocks.isDraft, isDraft),
         isNull(siteBlocks.deletedAt),
       ),
     );
@@ -431,7 +451,7 @@ export async function upsertPublishedBlock({
 
   await db.transaction(async (tx) => {
     const pageId = await resolvePageId(communityId, requestedPageId, tx);
-    await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, isDraft, tx);
+    await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, tx);
     // Scoped client bound to the transaction — preserves tenant isolation
     // while keeping the soft-delete + insert + audit-log triple atomic.
     const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);

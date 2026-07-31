@@ -230,8 +230,15 @@ describeDb('multi-page site (db-backed integration)', () => {
   });
 
   it('does not confuse a published row with a draft one at the same slot', async () => {
-    // The guard matches on is_draft too, or writing a draft over a published slot
-    // on the SAME page would be refused — which is the normal edit flow.
+    // Writing a draft over a published slot on the SAME page is the normal edit
+    // flow and must not be refused.
+    //
+    // This comment used to read "the guard matches on is_draft too, or [this]
+    // would be refused". That was a FALSE PREMISE, and it is what hid the hole
+    // the next case now covers: both writes below carry the SAME pageId, and the
+    // guard discriminates on pageId, so this passes whether or not the query
+    // filters on is_draft. The is_draft filter was never what made this work —
+    // it only ever hid cross-page clashes between the two layers (D-SLOT).
     const communityId = await createCommunity('slot-draft-vs-published');
     const homePageId = await ensureHomePage(communityId);
     await upsertPublishedBlock({
@@ -244,6 +251,68 @@ describeDb('multi-page site (db-backed integration)', () => {
     });
     const atNine = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 9);
     expect(atNine).toHaveLength(2);
+  });
+
+  it('refuses a DRAFT on one page at a slot another page holds as PUBLISHED', async () => {
+    // D-SLOT — the hole the corrected comment above was hiding, and the worst
+    // failure mode in the slot rules.
+    //
+    // With `eq(site_blocks.is_draft, isDraft)` in the guard's query, the two rows
+    // below never met: page A's row is published, page B's is a draft, so the
+    // draft was ACCEPTED. Nothing was wrong until the next publish, which
+    // promotes every draft to published in ONE transaction — producing two live
+    // rows at slot 12, violating the surviving 3-column index, rolling back the
+    // whole publish, and leaving the community unable to publish ANYTHING until
+    // someone hand-edits block_order in production.
+    //
+    // Refusing the write is the recoverable half of that trade: the PM gets an
+    // actionable 400 naming the position, and nothing has been written.
+    const communityId = await createCommunity('slot-cross-layer');
+    const homePageId = await ensureHomePage(communityId);
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 12, content: { body: 'Home twelve, live' }, isDraft: false,
+    });
+
+    await expect(
+      upsertPublishedBlock({
+        communityId, actorUserId, pageId: about.id,
+        blockType: 'text', blockOrder: 12, content: { body: 'About twelve, draft' }, isDraft: true,
+      }),
+    ).rejects.toThrow(ValidationError);
+
+    // Nothing was written: page A's published row is still the only row at 12.
+    const atTwelve = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 12);
+    expect(atTwelve).toHaveLength(1);
+    expect(atTwelve[0]).toMatchObject({ pageId: homePageId, isDraft: false });
+  });
+
+  it('refuses a PUBLISHED write at a slot another page holds as a DRAFT', async () => {
+    // The mirror image, and the reason the guard drops the filter rather than
+    // inverting it: the collision is symmetric, so the query has to span BOTH
+    // layers in BOTH directions. (This direction is reachable on a community
+    // that was poisoned before the fix landed.)
+    const communityId = await createCommunity('slot-cross-layer-mirror');
+    const homePageId = await ensureHomePage(communityId);
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: about.id,
+      blockType: 'text', blockOrder: 13, content: { body: 'About thirteen, draft' }, isDraft: true,
+    });
+
+    await expect(
+      upsertPublishedBlock({
+        communityId, actorUserId, pageId: homePageId,
+        blockType: 'text', blockOrder: 13, content: { body: 'Home thirteen, live' }, isDraft: false,
+      }),
+    ).rejects.toThrow(ValidationError);
   });
 
   it('still forbids two pages sharing a (block_order, is_draft) until 11c', async () => {

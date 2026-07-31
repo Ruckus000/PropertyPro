@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { PlanBadge } from '@propertypro/ui';
 import { cn } from '@/lib/utils';
 import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blocks';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { ADD_CATALOG, nextContentSlot, type AddCatalogEntry } from './add-catalog';
 
@@ -56,9 +57,29 @@ export interface AddPanelProps {
  * 2, which would overwrite whatever really sits there. Calling
  * `useContentBlocks` here shares the query key (no extra request) and exposes
  * the `isPending` the slot maths needs.
+ *
+ * ## Why the slot list is NOT page-scoped (Phase 11b-3, D-C3)
+ *
+ * This is the one place in the phase where the community-wide list is the
+ * correct input and narrowing it would be the bug. `block_order` is unique
+ * across the WHOLE community until 11c drops the surviving 3-column index, so
+ * `nextContentSlot` has to see every page's blocks to return a slot that is
+ * actually free. Filtering to the selected page would return
+ * `max(this page) + 1` — a value another page is very likely already holding,
+ * which the server now refuses (`assertSlotFreeAcrossPages`) and which before
+ * that guard existed surfaced as an opaque 500. `nextContentSlot(blocks)` below
+ * therefore takes the raw query result, deliberately.
+ *
+ * ## Why the write carries an explicit page id (D-WRITE)
+ *
+ * `useUpsertContentBlock` would default to the selected page anyway. It is
+ * passed explicitly because "the page being added to" and "the page currently
+ * selected" are the same value by coincidence, not by contract — and the cost of
+ * that coincidence breaking is a section written onto the live home page.
  */
 export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
+  const targetPageId = useSelectedSitePage();
   const upsert = useUpsertContentBlock(communityId);
   const { selectSlot } = useSiteEditor();
 
@@ -89,6 +110,7 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
         blockType: entry.blockType,
         blockOrder: slot,
         content: entry.seed,
+        pageId: targetPageId,
       });
       handleAdded(slot, entry);
     } catch (cause) {
@@ -103,6 +125,7 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
           communityId={communityId}
           entry={imageEntry}
           blockOrder={slot}
+          pageId={targetPageId}
           onCancel={() => setImageEntry(null)}
           onAdded={handleAdded}
         />
@@ -129,10 +152,14 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
         </p>
       )}
 
+      {/* Community-wide, not per page: section positions are shared across the
+          whole site until 11c, so the 98-section ceiling is reached across all
+          pages together. Saying "this page is full" on a page holding two
+          sections would be unactionable. */}
       {isFull && (
         <p role="alert" className="text-sm text-status-danger">
-          This page is full — it already has the maximum of 98 sections. Remove one
-          before adding another.
+          Your site is full — it already has the maximum of 98 sections across all
+          pages. Remove one before adding another.
         </p>
       )}
 
