@@ -116,8 +116,11 @@ in your returned `notes`. An unwalked checklist is a failed fix.
 - [ ] Input validation and sanitisation present on anything caller-supplied
 - [ ] Authentication and authorization correctly handled — including the
       **tenancy** boundary, which in this repo is the one that matters most
-- [ ] Sensitive data protected: no secret, token, key or PII in a log, an error
-      message, a test fixture, a commit message, or a PR body
+- [ ] Sensitive data protected **at rest and in transit**: encrypted where it is
+      stored, HTTPS-only in transit, signed/expiring URLs rather than public
+      object paths, and **never** in a log, an error message, a test fixture, a
+      commit message, a PR body, or a `NEXT_PUBLIC_*` variable (which is public
+      forever, in the client bundle)
 - [ ] OWASP Top 10 considered (injection, broken access control, SSRF,
       misconfiguration, insecure deserialization)
 
