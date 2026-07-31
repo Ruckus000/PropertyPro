@@ -26,6 +26,21 @@
  *                         ['pm','site'] prefix — a discard can drop the hero
  *                         draft too, which lives under its own query key.
  *
+ * PAGE TARGETING (Phase 11b-3, D-WRITE). The three write hooks resolve a
+ * `pageId` from `useSelectedSitePage()` by default and accept an optional
+ * per-call override. This is not cosmetic: the server's `resolvePageId`
+ * defaults an ABSENT page to the community's HOME page, so a write issued while
+ * the PM is editing a second page and carrying no page id does not fail — it
+ * silently rewrites the live home page. The eight inspector forms therefore
+ * need no change (they edit the selected block, which is on the selected page);
+ * the override exists for the Add flows and for the undo replay, where the
+ * right page is not "the one currently selected".
+ *
+ * The GET stays whole-site on purpose (D-C2): `blocks` and `publishedBlocks`
+ * must resolve in the same tick for the change model, and the publish diff
+ * under-reports if it only sees one page. Callers that want one page's blocks
+ * filter with `blocksForPage` from `@/lib/site-editor/blocks-for-page`.
+ *
  * Both routes use the canonical { data: T } success envelope and
  * { error: { code, message } } error envelope (B1 canonical). Raw fetch is
  * kept to preserve the exact error-literal behaviour; migration to
@@ -34,6 +49,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 // Both type-only, so neither the contract module nor api-contract enters
 // this chunk.
 import type { InferBody } from '@propertypro/api-contract';
@@ -41,6 +57,16 @@ import type { blocksUpsertContract } from '@/app/api/v1/pm/site/blocks/contract'
 
 export interface SiteBlockSummary {
   id: number;
+  /**
+   * Phase 11b — which site page this block belongs to.
+   *
+   * REQUIRED on the type even though the value is nullable: a block list whose
+   * rows have no `pageId` cannot be page-scoped, and `blocksForPage` throws
+   * rather than silently dropping such a row. `null` is a real server value — a
+   * pre-11b row that no write path has adopted onto a page yet — and is
+   * distinct from the property being absent.
+   */
+  pageId: number | null;
   blockType: string;
   blockOrder: number;
   content: unknown;
@@ -48,6 +74,33 @@ export interface SiteBlockSummary {
   isDraft: boolean;
   /** PR #8e — last publish timestamp (ISO string) or null for drafts. */
   publishedAt: string | null;
+}
+
+/**
+ * The page a mutation targets, in priority order:
+ *   1. an explicit override on the mutation input (the caller knows better —
+ *      an undo replaying onto the page the block was removed FROM, or an Add
+ *      flow writing to the page being added to);
+ *   2. otherwise the editor's currently-selected page;
+ *   3. otherwise `undefined`, which omits the field so the server keeps its
+ *      pre-11b-3 behaviour of defaulting to the community's home page.
+ *
+ * `null` at either level means "not specified" and falls through, which is why
+ * a block carrying `pageId: null` still resolves to the current selection.
+ */
+function resolveWritePageId(
+  explicit: number | null | undefined,
+  selected: number | null,
+): number | undefined {
+  return explicit ?? selected ?? undefined;
+}
+
+/**
+ * `pageId` is `.optional()` on all three contracts and the reorder body is
+ * `.strict()`, so it has to be omitted rather than sent as `null`/`undefined`.
+ */
+function pageIdField(pageId: number | undefined): { pageId?: number } {
+  return pageId === undefined ? {} : { pageId };
 }
 
 const blocksKey = (communityId: number) =>
@@ -136,16 +189,30 @@ export interface UpsertContentBlockInput {
   blockType: InferBody<typeof blocksUpsertContract>['blockType'];
   blockOrder: number;
   content: unknown;
+  /**
+   * Optional page override (D-WRITE). Omit it and the write targets the
+   * editor's currently-selected page, which is correct for the eight inspector
+   * forms — they edit the selected block, which belongs to the selected page.
+   * Supply it where "current selection" is NOT the answer: an Add flow writing
+   * to the page being added to, and an undo replaying onto the page the block
+   * was removed from.
+   */
+  pageId?: number | null;
 }
 
 export function useUpsertContentBlock(communityId: number) {
   const qc = useQueryClient();
+  const selectedPageId = useSelectedSitePage();
   return useMutation<void, Error, UpsertContentBlockInput>({
-    mutationFn: async (input) => {
+    mutationFn: async ({ pageId, ...input }) => {
       const res = await fetch('/api/v1/pm/site/blocks', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, ...input }),
+        body: JSON.stringify({
+          communityId,
+          ...input,
+          ...pageIdField(resolveWritePageId(pageId, selectedPageId)),
+        }),
       });
       if (!res.ok) throw new Error(await readError(res));
     },
@@ -163,14 +230,25 @@ export interface DeleteContentBlockResult {
   staged: boolean;
 }
 
+export interface DeleteContentBlockInput {
+  blockOrder: number;
+  /** Optional page override — same contract as `UpsertContentBlockInput.pageId`. */
+  pageId?: number | null;
+}
+
 export function useDeleteContentBlock(communityId: number) {
   const qc = useQueryClient();
-  return useMutation<DeleteContentBlockResult, Error, { blockOrder: number }>({
-    mutationFn: async ({ blockOrder }) => {
+  const selectedPageId = useSelectedSitePage();
+  return useMutation<DeleteContentBlockResult, Error, DeleteContentBlockInput>({
+    mutationFn: async ({ blockOrder, pageId }) => {
       const res = await fetch('/api/v1/pm/site/blocks', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, blockOrder }),
+        body: JSON.stringify({
+          communityId,
+          blockOrder,
+          ...pageIdField(resolveWritePageId(pageId, selectedPageId)),
+        }),
       });
       if (!res.ok) throw new Error(await readError(res));
       const body = (await res.json()) as { data: { ok: true; staged: boolean } };
@@ -216,6 +294,8 @@ const MIN_CONTENT_BLOCK_ORDER = 2;
 export type ReorderBlockInput = {
   /** The winning (merged draft-wins) content-block row id to move. */
   blockId: number;
+  /** Optional page override — same contract as `UpsertContentBlockInput.pageId`. */
+  pageId?: number | null;
 } & (
   | { direction: 'up' | 'down'; toOrder?: never }
   /** Absolute drop target (drag-and-drop): the block_order slot to land on. */
@@ -234,16 +314,25 @@ export type ReorderBlockInput = {
  *
  * Returns the input unchanged when the block isn't found, has no neighbor in
  * the requested direction, or was dropped where it already sat.
+ *
+ * `pageId` scopes the neighbour set. The server's `reorderSiteBlock` reorders
+ * strictly WITHIN a page, so an optimistic move computed across the
+ * community-wide cached list would pick a neighbour on another page and show an
+ * order the server is never going to return.
  */
 function moveWithin(
   blocks: SiteBlockSummary[],
   input: ReorderBlockInput,
+  pageId: number | undefined,
 ): SiteBlockSummary[] {
   const content = [...blocks]
     // Exclude tombstones (staged deletions) — they're hidden from the editor
     // list and the server's reorderSiteBlock skips them too, so the optimistic
     // move must not treat one as a neighbor (else the visible order desyncs).
     .filter((b) => b.blockOrder >= MIN_CONTENT_BLOCK_ORDER && b.blockType !== TOMBSTONE_BLOCK_TYPE)
+    // No page in play (pre-11b-3 callers, or nothing selected) means the whole
+    // list, which is exactly the behaviour those callers had before.
+    .filter((b) => pageId === undefined || b.pageId === pageId)
     .sort((a, b) => a.blockOrder - b.blockOrder);
   const index = content.findIndex((b) => b.id === input.blockId);
   if (index === -1) return blocks;
@@ -285,6 +374,7 @@ function moveWithin(
  */
 export function useReorderBlocks(communityId: number) {
   const qc = useQueryClient();
+  const selectedPageId = useSelectedSitePage();
   return useMutation<void, Error, ReorderBlockInput, { previous?: BlocksPayload }>({
     mutationFn: async (input) => {
       const res = await fetch('/api/v1/pm/site/blocks/reorder', {
@@ -295,6 +385,7 @@ export function useReorderBlocks(communityId: number) {
         body: JSON.stringify({
           communityId,
           blockId: input.blockId,
+          ...pageIdField(resolveWritePageId(input.pageId, selectedPageId)),
           ...(input.direction !== undefined
             ? { direction: input.direction }
             : { toOrder: input.toOrder }),
@@ -310,7 +401,11 @@ export function useReorderBlocks(communityId: number) {
       if (previous) {
         qc.setQueryData<BlocksPayload>(blocksKey(communityId), {
           ...previous,
-          blocks: moveWithin(previous.blocks, input),
+          blocks: moveWithin(
+            previous.blocks,
+            input,
+            resolveWritePageId(input.pageId, selectedPageId),
+          ),
         });
       }
       return { previous };
