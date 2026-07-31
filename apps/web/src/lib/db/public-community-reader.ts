@@ -108,6 +108,16 @@ export interface PublicSitemapDocument {
   updatedAt: Date;
 }
 
+/**
+ * Minimal projection used by sitemap.xml for multi-page sites (Phase 11b-2).
+ * Slug + lastmod is everything a `<url>` entry needs.
+ */
+export interface PublicSitemapPage {
+  id: number;
+  slug: string;
+  updatedAt: Date;
+}
+
 export interface PublicMeeting {
   id: number;
   title: string;
@@ -247,6 +257,22 @@ export interface PublicScopedReader {
    * category filter — sitemap surfaces every public document.
    */
   listPublicDocumentsForSitemap(opts: { limit: number }): Promise<PublicSitemapDocument[]>;
+
+  /**
+   * Phase 11b-2 — published, non-deleted pages for sitemap.xml.
+   *
+   * Deliberately IGNORES `in_nav`: nav membership is presentation, an
+   * unlisted-but-published page is still a public URL and belongs in the
+   * sitemap (D16).
+   *
+   * Deliberately EXCLUDES the home page: sitemap.ts already emits `/` as a
+   * static entry, and home's slug is `''` so it would otherwise produce a
+   * duplicate `/` URL.
+   *
+   * No `delete_staged_at` predicate, for the same reason as `getPageBySlug` —
+   * a page staged for deletion is still live to the public.
+   */
+  listPublishedPagesForSitemap(opts: { limit: number }): Promise<PublicSitemapPage[]>;
 
   /** PR #4 — upcoming meetings within window. */
   listMeetings(opts: { limit: number; timeWindowDays: number }): Promise<PublicMeeting[]>;
@@ -546,6 +572,31 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           ),
         )
         .orderBy(asc(documents.id))
+        .limit(opts.limit);
+      return rows;
+    },
+
+    async listPublishedPagesForSitemap(opts) {
+      // Same shape as listPublicDocumentsForSitemap: published rows only,
+      // id-asc for a stable crawl order, hard-capped by the caller.
+      // `in_nav` is NOT a predicate (D16) and home is excluded because
+      // sitemap.ts emits `/` itself.
+      const rows = await db
+        .select({
+          id: sitePages.id,
+          slug: sitePages.slug,
+          updatedAt: sitePages.updatedAt,
+        })
+        .from(sitePages)
+        .where(
+          and(
+            eq(sitePages.communityId, communityId),
+            isNull(sitePages.deletedAt),
+            eq(sitePages.isDraft, false),
+            eq(sitePages.isHome, false),
+          ),
+        )
+        .orderBy(asc(sitePages.id))
         .limit(opts.limit);
       return rows;
     },
