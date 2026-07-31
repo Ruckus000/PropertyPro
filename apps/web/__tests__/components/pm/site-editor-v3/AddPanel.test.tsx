@@ -179,7 +179,8 @@ describe('AddPanel', () => {
   });
 
   it('disables every type while the block list is loading', () => {
-    // `EditorRoot` passes `blocks ?? []`, so loading looks exactly like an
+    // The panel reads `useContentBlocks` itself precisely so it can tell these
+    // apart: collapsing `undefined` to `[]` makes loading look exactly like an
     // empty site — and the slot for an empty site is 2, which would overwrite
     // whatever really sits there.
     state.isPending = true;

@@ -52,9 +52,15 @@ export interface AddPanelProps {
  *
  * ## Why the panel reads the block list itself
  *
- * `EditorRoot` hands the provider `blocks ?? []`, which makes "still loading"
- * indistinguishable from "empty site" — and the next slot for an empty site is
- * 2, which would overwrite whatever really sits there. Calling
+ * Two independent reasons, and each alone would be enough.
+ *
+ * First, the provider's list is now PAGE-SCOPED (D-C2) — `EditorRoot` narrows
+ * it with `blocksForPage` so the Sections panel and Inspector agree with the
+ * canvas. That is the wrong input for slot maths, per D-C3 below.
+ *
+ * Second, the provider collapses `undefined` to `[]`, which makes "still
+ * loading" indistinguishable from "empty site" — and the next slot for an empty
+ * site is 2, which would overwrite whatever really sits there. Calling
  * `useContentBlocks` here shares the query key (no extra request) and exposes
  * the `isPending` the slot maths needs.
  *
