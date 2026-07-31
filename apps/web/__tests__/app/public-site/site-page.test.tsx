@@ -317,6 +317,32 @@ describe('PublicSitePage — per-page metadata [11b-2 / D17]', () => {
     expect(String(meta.alternates?.canonical)).toContain('/about');
   });
 
+  // The canonical must name the host the visitor used, not the community slug.
+  // `sitemap.ts` advertises `https://<custom domain>/<slug>` for this very page,
+  // and home emits no canonical at all — so a slug-derived canonical would tell
+  // crawlers every sub-page's real home is a different origin than its parent's.
+  it('canonicalises to the request host on a verified custom domain', async () => {
+    headersGetMock.mockImplementation((key: string) => {
+      if (key === 'x-community-id') return '42';
+      if (key === 'host') return 'www.sunsetcondos.com';
+      return null;
+    });
+    getPageBySlugMock.mockResolvedValue(ABOUT_PAGE);
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: ['about'] }) });
+    expect(meta.alternates?.canonical).toBe('https://www.sunsetcondos.com/about');
+  });
+
+  it('canonicalises to the subdomain host when that is what was requested', async () => {
+    headersGetMock.mockImplementation((key: string) => {
+      if (key === 'x-community-id') return '42';
+      if (key === 'host') return 'sunset-condos.getpropertypro.com';
+      return null;
+    });
+    getPageBySlugMock.mockResolvedValue(ABOUT_PAGE);
+    const meta = await generateMetadata({ params: Promise.resolve({ slug: ['about'] }) });
+    expect(meta.alternates?.canonical).toBe('https://sunset-condos.getpropertypro.com/about');
+  });
+
   it('keeps community-level metadata when the slug resolves to the home page', async () => {
     getPageBySlugMock.mockResolvedValue(HOME_PAGE);
     const meta = await generateMetadata({ params: Promise.resolve({ slug: [''] }) });

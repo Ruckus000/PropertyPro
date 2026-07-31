@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
@@ -87,7 +88,27 @@ async function resolveSlugSegments(
  *   segment: that would index every `/about/anything` as a duplicate of
  *   `/about`.
  */
+/**
+ * Per-request memoized page-by-slug read.
+ *
+ * Next invokes `generateMetadata` and the page body in the SAME request, and
+ * both need the page row — so without this the sub-page path issued
+ * `getPageBySlug` twice, over D20's budget of two extra reads. `cache()`
+ * memoizes on the argument tuple for the lifetime of one request; note that
+ * what `getPublicCommunityScopedReader` memoizes is the reader FACTORY, not
+ * its method results, which is exactly why this wrapper has to exist.
+ */
+const getPageBySlugCached = cache(
+  async (
+    communityId: number,
+    slug: string,
+    includeDrafts: boolean,
+  ): Promise<PublicSitePageRow | null> =>
+    getPublicCommunityScopedReader(communityId).getPageBySlug(slug, { includeDrafts }),
+);
+
 async function resolveRequestedPage(
+  communityId: number,
   reader: ReturnType<typeof getPublicCommunityScopedReader>,
   segments: string[],
   isPreview: boolean,
@@ -103,7 +124,7 @@ async function resolveRequestedPage(
   // `includeDrafts` is threaded to the PAGE lookup as well as the block lookup:
   // an unpublished page is a 404 to the public and visible only under preview
   // (D7), matching the anon RLS predicate on `site_pages`.
-  const page = await reader.getPageBySlug(slug, { includeDrafts: isPreview });
+  const page = await getPageBySlugCached(communityId, slug, isPreview);
   if (page) return { pageId: page.id, page };
 
   // Retired slug → ONE hop, 308 permanent (D6). `resolveRedirect` returns null
@@ -146,10 +167,7 @@ export async function generateMetadata(props?: PublicSitePageProps): Promise<Met
   if (segments.length !== 1) return base;
 
   const isPreview = await resolvePreviewMode();
-  const page = await getPublicCommunityScopedReader(community.id).getPageBySlug(
-    segments[0] as string,
-    { includeDrafts: isPreview },
-  );
+  const page = await getPageBySlugCached(community.id, segments[0] as string, isPreview);
   // No page (404 or a retired slug about to 308) and the home page itself both
   // keep the community-level metadata.
   if (!page || page.isHome) return base;
@@ -157,8 +175,30 @@ export async function generateMetadata(props?: PublicSitePageProps): Promise<Met
   return {
     ...base,
     title: `${page.name} · ${community.name}`,
-    alternates: { ...base.alternates, canonical: buildCommunityUrl(community.slug, `/${page.slug}`) },
+    alternates: { ...base.alternates, canonical: await resolvePageCanonical(community.slug, page.slug) },
   };
+}
+
+/**
+ * The canonical URL for a sub-page, on the host the visitor actually used.
+ *
+ * NOT `buildCommunityUrl`, which hardcodes `<slug>.<root domain>`. A verified
+ * custom domain is a first-class public host as of 11b-0/11b-2 — `sitemap.ts`
+ * advertises `https://<custom domain>/<slug>` for the very same page — so a
+ * slug-derived canonical would tell crawlers every sub-page's real home is a
+ * different origin, while the home page (which emits no canonical) stays
+ * self-canonical on the custom domain. Contradictory signals on the host the
+ * association actually paid for.
+ *
+ * Falls back to `buildCommunityUrl` only when there is no host header, which
+ * in practice means a unit test or a malformed request.
+ */
+async function resolvePageCanonical(communitySlug: string, pageSlug: string): Promise<string> {
+  const host = (await headers()).get('host');
+  if (!host) return buildCommunityUrl(communitySlug, `/${pageSlug}`);
+  // Local dev is the only http host; everything else is https end to end.
+  const protocol = host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https';
+  return `${protocol}://${host}/${pageSlug}`;
 }
 
 export default async function PublicSitePage({ params }: PublicSitePageProps) {
@@ -186,7 +226,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   // Phase 11b-2 — resolve WHICH page this URL addresses before doing any render
   // work. A 404 or a 308 should not first presign logo URLs.
   const reader = getPublicCommunityScopedReader(community.id);
-  const { pageId, page } = await resolveRequestedPage(reader, segments, isPreview);
+  const { pageId, page } = await resolveRequestedPage(community.id, reader, segments, isPreview);
   const navPages: PublicNavPage[] = await reader.listNavPages();
   // Home's slug is '' — so `currentSlug` compares directly against a nav item's
   // slug on every page, home included.
