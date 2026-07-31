@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FEATURE_REGISTRY } from '../../src/lib/constants/feature-registry';
+import { PROTECTED_PATH_PREFIXES } from '../../src/lib/middleware/public-host-routes';
 
 const { headersMock, redirectMock } = vi.hoisted(() => ({
   headersMock: vi.fn(),
@@ -29,11 +30,14 @@ describe('help center routing contracts', () => {
       __dirname,
       '../../src/app/(authenticated)/help/page.tsx',
     );
-    const middlewarePath = path.resolve(__dirname, '../../src/middleware.ts');
-
     expect(helpItem?.href).toBe('/help');
     expect(fs.existsSync(helpPagePath)).toBe(true);
-    expect(fs.readFileSync(middlewarePath, 'utf8')).toContain("'\/help'");
+    // The protected-route table moved out of middleware.ts into
+    // public-host-routes.ts in 11b-2 (S1), so the reserved public-page slugs
+    // could be derived from it instead of hand-copied. Assert the value rather
+    // than grepping a file for a literal — the contract is "/help is protected",
+    // not "middleware.ts contains this string".
+    expect(PROTECTED_PATH_PREFIXES).toContain('/help');
   });
 });
 

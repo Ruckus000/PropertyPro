@@ -24,7 +24,7 @@ function hasHeroBlock(blocks: SiteBlock[]): boolean {
   return blocks.some((b) => b.blockType === 'hero');
 }
 
-function EmptyStateHero({ communityName }: { communityName: string }) {
+function EmptyStateHero({ heading }: { heading: string }) {
   return (
     <section className="border-y border-edge bg-secondary px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-end">
@@ -33,7 +33,7 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
             Community Portal
           </p>
           <h1 className="font-heading text-4xl font-semibold text-content sm:text-5xl">
-            {communityName}
+            {heading}
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-content-secondary">
             Documents, meetings, announcements, and resident resources in one place.
@@ -52,14 +52,17 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
   );
 }
 
-export function Boulevard({ community, theme, blocks, footer }: LayoutProps) {
+export function Boulevard({ community, theme, blocks, footer, nav, page }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
+  // D18 — see Tidewater. A non-home page cannot own a hero block, so the
+  // empty-state hero is its only <h1>; headline it with the page's own name.
+  const heroHeading = page && !page.isHome ? page.name : community.name;
 
   return (
     <div className="min-h-screen bg-secondary font-body text-content">
-      <PublicSiteHeader theme={toHeaderTheme(community, theme)} />
+      <PublicSiteHeader theme={toHeaderTheme(community, theme)} nav={nav} />
       <main id="main-content">
-        {!hasHeroBlock(ordered) && <EmptyStateHero communityName={community.name} />}
+        {!hasHeroBlock(ordered) && <EmptyStateHero heading={heroHeading} />}
         <div className="divide-y divide-edge">
           {ordered.map((block) => {
             const blockType = block.blockType as BlockType;

@@ -50,45 +50,16 @@ import {
 } from './lib/request/forwarded-headers';
 import { buildCommunityUrl } from './lib/utils/community-url';
 import {
+  classifySubdomainPath,
+  HOST_NATIVE_PUBLIC_SUFFIX_ROUTES,
   isApexHost,
   isPublicSitePath,
+  METADATA_FIRST_SEGMENTS,
   parsePathBasedPublicRoute,
+  PROTECTED_PATH_PREFIXES,
   shouldRewriteHostTransparency,
 } from './lib/middleware/public-host-routes';
 
-/**
- * Routes under (authenticated) that require a valid session.
- * The Next.js route group `(authenticated)` is stripped from the URL,
- * so we match on the actual URL paths that live inside that group.
- *
- * No prefix should be a substring-prefix of another (e.g. adding '/con'
- * would incorrectly match '/contracts' and '/communities').
- */
-const PROTECTED_PATH_PREFIXES = [
-  '/dashboard',
-  '/welcome',
-  '/help',
-  '/select-community',
-  '/settings',
-  '/help',
-  '/documents',
-  '/maintenance',
-  '/violations',
-  '/contracts',
-  '/audit-trail',
-  '/announcements',
-  '/notifications',
-  '/mobile',
-  '/pm',
-  '/communities',
-  '/onboarding',
-  '/emergency',
-  '/payments',
-  '/assessments',
-  '/finance',
-  '/esign',
-  '/api/v1',
-];
 const API_PATH_PREFIX = '/api/v1';
 const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/invitations', method: 'PATCH' },
@@ -538,6 +509,25 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
   const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
 
+  /**
+   * Whether this request may see UNPUBLISHED site content [11b-2].
+   *
+   * `?preview=true` is visitor-controlled — it is a query string, nothing more.
+   * `x-preview` is what the public-site renderer trusts to switch to draft
+   * reads, and 11b-2 threads it to the PAGE-row lookup as well as the block
+   * lookup, so an ungated stamp would let any anonymous visitor read a page the
+   * PM created but never published by appending `?preview=true`. D7 ("an
+   * unpublished page is a 404 to the public") only holds if the stamp is gated.
+   *
+   * The gate is "there is a signed-in user", not "this user may edit this
+   * community's site": the latter needs a per-request DB read in middleware,
+   * which runs on every request. That narrows the exposure from *anyone on the
+   * internet* to *someone with an account*, which is the property D7 is about.
+   * A signed preview token is the right long-term fix and belongs with the
+   * editor's share-a-preview feature, not here.
+   */
+  const canPreviewDrafts = isPreviewRequest && middlewareUser != null;
+
   // --- Rate limiting (Phase 1: unauthenticated routes) [P2-42] ---
   // For auth and public routes, check rate limit by IP before doing heavier work.
   const routeCategory = classifyRoute(pathname, request.method);
@@ -665,27 +655,168 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         if (communityId != null) {
           forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
           forwardedHeaders.set(TENANT_SOURCE_HEADER, 'custom_domain');
-          if (isPreviewRequest) {
+          // Gated on a session, not on the query param alone — see
+          // `canPreviewDrafts`. An anonymous `?preview=true` gets the published
+          // site, which is what D7 promises.
+          if (canPreviewDrafts) {
             forwardedHeaders.set('x-preview', 'true');
           }
-          // Preserve the path. The renderer is a catch-all, so `/` and
-          // `/anything` both reach it and it decides what exists.
-          const siteUrl = request.nextUrl.clone();
-          siteUrl.pathname = `/public-site${pathname === '/' ? '' : pathname}`;
-          return finaliseResponse(
-            response as unknown as NextResponse,
-            NextResponse.rewrite(siteUrl, { request: { headers: forwardedHeaders } }),
-            requestId,
-            origin,
-            isApi,
-            isPreviewRequest,
-          );
+
+          const firstSegment = pathname.split('/').filter(Boolean)[0];
+
+          // Metadata routes own themselves [11b-2 / D12+D14]. `isPublicSitePath`
+          // says yes to `/sitemap.xml`, so before this the custom domain
+          // rewrote both metadata routes into the public-site renderer and
+          // served a 404 for each — on the one host where a per-page sitemap
+          // actually matters. They need the tenant headers, though, which is
+          // why they fall THROUGH (carrying `forwardedHeaders` to the final
+          // `NextResponse.next`) rather than being excluded outright.
+          if (firstSegment !== undefined && METADATA_FIRST_SEGMENTS.has(firstSegment)) {
+            // fall through — no rewrite, headers already stamped
+          } else {
+            // A path-public suffix with a host-native renderer goes to that
+            // renderer, not to the public-site one [11b-2 / D13]. Previously
+            // this block pre-empted the `/transparency` → `/public-transparency`
+            // branch further down, which itself refuses `custom_domain`, so
+            // `/transparency` 404'd on every custom domain.
+            const hostNative =
+              firstSegment !== undefined
+                ? HOST_NATIVE_PUBLIC_SUFFIX_ROUTES[firstSegment]
+                : undefined;
+
+            // Otherwise preserve the path. The renderer is a catch-all, so `/`
+            // and `/anything` both reach it and it decides what exists.
+            const siteUrl = request.nextUrl.clone();
+            siteUrl.pathname =
+              hostNative ?? `/public-site${pathname === '/' ? '' : pathname}`;
+            return finaliseResponse(
+              response as unknown as NextResponse,
+              NextResponse.rewrite(siteUrl, { request: { headers: forwardedHeaders } }),
+              requestId,
+              origin,
+              isApi,
+              isPreviewRequest,
+            );
+          }
         }
         // Unknown/unverified custom host: fall through to default handling.
       } catch (error) {
         // Non-fatal, but reported — a silent throw here is how the original
         // tenant-resolution outage stayed invisible behind an HTTP 200.
         reportTenantResolutionFailure('custom_domain', hostContext.customDomainHost, error);
+      }
+    }
+  }
+
+  // --- Community subdomain: public website vs authenticated app [11b-2] ---
+  //
+  // A subdomain serves BOTH surfaces, so this is the fork between them — and it
+  // sits ABOVE `isProtectedPath` on purpose (D2). Below it, `isProtectedPath`'s
+  // *prefix* match silently swallows any slug that merely begins with a
+  // protected string (`documents-2024` → `/documents`), and the fork becomes
+  // invisible to the reserved-slug validator the editor already runs at write
+  // time. Above it, one function — `classifySubdomainPath` — decides, and
+  // `isReservedPublicSlug` (derived from `PROTECTED_PATH_PREFIXES`) is the same
+  // predicate on both sides.
+  //
+  // The app always wins a reserved slug: `/dashboard` on a subdomain is the
+  // resident's dashboard, never a page named Dashboard.
+  // `community-tenant-host-precedence.spec.ts` asserts exactly that against a
+  // real subdomain.
+  //
+  // Custom domains are handled entirely by the host-precedence block above,
+  // which runs for every path; a 'custom_domain' source that reached here is
+  // unresolved or inactive and must fall through to default handling rather
+  // than render a community-less public site on a foreign host.
+  const publicHostContext = resolveCommunityContext({
+    searchParams: request.nextUrl.searchParams,
+    host: request.headers.get('host'),
+    rootDomain,
+  });
+
+  const hasPublicHostCommunityContext =
+    publicHostContext.source !== 'none' &&
+    publicHostContext.source !== 'custom_domain' &&
+    !publicHostContext.isReservedSubdomain;
+
+  if (hasPublicHostCommunityContext) {
+    // Path-preserving public routing is a HOST property, so it applies only to
+    // a real community subdomain. `?communityId=`/`?tenant=` on some other host
+    // still gets the historical `/` behaviour and nothing more — widening it
+    // would let a query param turn an app host's URLs into public pages.
+    const pathKind =
+      pathname === '/'
+        ? ('site-root' as const)
+        : publicHostContext.source === 'host_subdomain'
+          ? classifySubdomainPath(pathname)
+          : ('app' as const);
+
+    if (pathKind !== 'app') {
+      if (publicHostContext.communityId) {
+        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(publicHostContext.communityId));
+        forwardedHeaders.set(TENANT_SOURCE_HEADER, publicHostContext.source);
+      } else if (publicHostContext.tenantSlug) {
+        try {
+          const communityId = await findCommunityIdBySlug(
+            supabase,
+            publicHostContext.tenantSlug,
+          );
+          if (communityId != null) {
+            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
+            forwardedHeaders.set(TENANT_SLUG_HEADER, publicHostContext.tenantSlug);
+            forwardedHeaders.set(TENANT_SOURCE_HEADER, publicHostContext.source);
+          }
+        } catch (error) {
+          // Non-fatal for the public site — continue without community headers
+          // so a visitor gets a page rather than a 500. But REPORT it first:
+          // swallowing this silently is exactly how the original outage lasted
+          // as long as it did. Without the community headers the renderer
+          // falls back to "Community not found." behind an HTTP 200, which
+          // deploy.yml's /auth/login smoke test and every uptime monitor read
+          // as healthy. The protected path does not need this — it returns a
+          // loud internalErrorResponse for the same throw.
+          reportTenantResolutionFailure('host_subdomain', publicHostContext.tenantSlug, error);
+        }
+      }
+
+      // `sitemap.xml` / `robots.txt` need the tenant headers but must reach
+      // their own handlers, so they fall through with the headers stamped
+      // (D14). Before this, `x-community-id` was never set for them on a
+      // subdomain, which made sitemap.ts's search-indexing opt-out and its
+      // per-document URLs dead code in production.
+      if (pathKind !== 'metadata') {
+        // The public site is served to EVERYONE, signed in or not [11b-0].
+        //
+        // This used to redirect an authenticated visitor to /dashboard, which
+        // was tolerable while the public site was a single page but is not once
+        // it has real URLs: a resident following a link to their community's
+        // own website would land on the app dashboard instead of the page they
+        // were sent, and every shared public link would be broken for exactly
+        // the people most likely to share it. Managers also had to append
+        // `?preview=true` to look at their own live site.
+        //
+        // Reaching the app from here is one click on the site's own header;
+        // being unable to see a public page you are logged in to is not
+        // recoverable.
+
+        // Forward x-preview=true so the renderer can switch to draft reads
+        // (PR #8c). NOT the /mobile pattern above: that one is deliberately
+        // cookie-less because it renders a published demo template, whereas
+        // this one exposes unpublished pages and blocks, so it is gated on a
+        // session — see `canPreviewDrafts`.
+        if (canPreviewDrafts) {
+          forwardedHeaders.set('x-preview', 'true');
+        }
+        const siteUrl = request.nextUrl.clone();
+        siteUrl.pathname = pathKind === 'site-root' ? '/public-site' : `/public-site${pathname}`;
+        return finaliseResponse(
+          response as unknown as NextResponse,
+          NextResponse.rewrite(siteUrl, { request: { headers: forwardedHeaders } }),
+          requestId,
+          origin,
+          isApi,
+          isPreviewRequest,
+        );
       }
     }
   }
@@ -803,94 +934,6 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.redirect(selectUrl),
-        requestId,
-        origin,
-        isApi,
-        isPreviewRequest,
-      );
-    }
-  }
-
-  // --- Public site auth-split [Wave 5 / Task 3.3] ---
-  // When a community subdomain requests '/' (the public site root):
-  //   - Resolve tenant context and forward headers so the page can read community info
-  //   - If authenticated, redirect to /dashboard unless preview=true
-  //   - If NOT authenticated, let through to the public site renderer
-  if (pathname === '/') {
-    const tenantContext = resolveCommunityContext({
-      searchParams: request.nextUrl.searchParams,
-      host: request.headers.get('host'),
-      rootDomain,
-    });
-
-    // Custom domains are handled by the host-precedence block above, which runs
-    // for every path rather than only '/'. Nothing to do here.
-
-    const hasCommunityContext =
-      tenantContext.source !== 'none' &&
-      // A 'custom_domain' source is fully handled by the dedicated block above
-      // (resolved → already returned; unresolved/inactive → must fall through to
-      // default handling, NOT the subdomain auth-split, so an unknown foreign
-      // host neither renders a community-less public site nor redirects an
-      // authenticated user to /dashboard on the foreign host).
-      tenantContext.source !== 'custom_domain' &&
-      !tenantContext.isReservedSubdomain;
-
-    if (hasCommunityContext) {
-      const isPreviewRequest = request.nextUrl.searchParams.get('preview') === 'true';
-
-      // Resolve community ID from slug if needed
-      if (tenantContext.communityId) {
-        forwardedHeaders.set(COMMUNITY_ID_HEADER, String(tenantContext.communityId));
-        forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-      } else if (tenantContext.tenantSlug) {
-        try {
-          const communityId = await findCommunityIdBySlug(supabase, tenantContext.tenantSlug);
-          if (communityId != null) {
-            forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
-            forwardedHeaders.set(TENANT_SLUG_HEADER, tenantContext.tenantSlug);
-            forwardedHeaders.set(TENANT_SOURCE_HEADER, tenantContext.source);
-          }
-        } catch (error) {
-          // Non-fatal for the public site — continue without community headers
-          // so a visitor gets a page rather than a 500. But REPORT it first:
-          // swallowing this silently is exactly how the original outage lasted
-          // as long as it did. Without the community headers the renderer
-          // falls back to "Community not found." behind an HTTP 200, which
-          // deploy.yml's /auth/login smoke test and every uptime monitor read
-          // as healthy. The protected path does not need this — it returns a
-          // loud internalErrorResponse for the same throw.
-          reportTenantResolutionFailure('host_subdomain', tenantContext.tenantSlug, error);
-        }
-      }
-
-      // The public site is served to EVERYONE, signed in or not [11b-0].
-      //
-      // This used to redirect an authenticated visitor to /dashboard, which was
-      // tolerable while the public site was a single page but is not once it has
-      // real URLs: a resident following a link to their community's own website
-      // would land on the app dashboard instead of the page they were sent, and
-      // every shared public link would be broken for exactly the people most
-      // likely to share it. Managers also had to append `?preview=true` to look
-      // at their own live site.
-      //
-      // Reaching the app from here is one click on the site's own header; being
-      // unable to see a public page you are logged in to is not recoverable.
-
-      // Rewrite to the internal public-site renderer.
-      // Forward x-preview=true so the renderer can switch to draft reads
-      // (PR #8c). Mirrors the /mobile preview pattern at line 477.
-      if (isPreviewRequest) {
-        forwardedHeaders.set('x-preview', 'true');
-      }
-      const siteUrl = request.nextUrl.clone();
-      siteUrl.pathname = '/public-site';
-      const publicSiteResponse = NextResponse.rewrite(siteUrl, {
-        request: { headers: forwardedHeaders },
-      });
-      return finaliseResponse(
-        response as unknown as NextResponse,
-        publicSiteResponse,
         requestId,
         origin,
         isApi,

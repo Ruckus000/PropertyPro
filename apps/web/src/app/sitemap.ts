@@ -2,8 +2,10 @@
  * PR #4: Next 15 sitemap.ts metadata route. Per-host content.
  *
  * Three branches (mirroring robots.ts):
- *   1. Community subdomain: list the community's public URLs + per-document
- *      URLs for documents marked public_access=true (migration 0007).
+ *   1. Community public host — a community subdomain OR a verified custom
+ *      domain: list the community's public URLs, one entry per published
+ *      site page (Phase 11b-2), + per-document URLs for documents marked
+ *      public_access=true (migration 0007).
  *   2. Reserved subdomain (pm.*, app.*, admin.*): empty sitemap.
  *   3. Marketing root: list the marketing pages.
  *
@@ -30,16 +32,31 @@ export const revalidate = 3600;
  *  to keep the list small in practice. */
 const SITEMAP_DOCUMENT_LIMIT = 1000;
 
+/** Phase 11b-2 cap on per-page sitemap entries (D16), following the
+ *  SITEMAP_DOCUMENT_LIMIT precedent. */
+const SITEMAP_PAGE_LIMIT = 200;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const hdrs = await headers();
   const host = hdrs.get('host');
-  const context = resolveCommunityContext({ host });
+  // `rootDomain` is REQUIRED for `source: 'custom_domain'` to be reachable at
+  // all — `foreignHost()` returns null without it, so a verified custom domain
+  // like `www.example.com` was previously classified as a reserved `www`
+  // subdomain and emitted an empty sitemap. Read the same way middleware does.
+  const context = resolveCommunityContext({
+    host,
+    rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'getpropertypro.com',
+  });
   const now = new Date();
 
-  // Branch 1: Community subdomain.
-  // Routes listed here match the allow list in robots.ts and the actual
-  // route files under apps/web/src/app/(public)/[subdomain]/.
-  if (context.source === 'host_subdomain' && context.tenantSlug && !context.isReservedSubdomain) {
+  // Branch 1: Community public host — subdomain or verified custom domain.
+  // Both serve the same public site off `https://${host}`, so they share a
+  // body. Routes listed here match the disallow list in robots.ts and the
+  // actual route files under apps/web/src/app/(public)/[subdomain]/.
+  const isCommunitySubdomain =
+    context.source === 'host_subdomain' && !!context.tenantSlug && !context.isReservedSubdomain;
+  const isCustomDomain = context.source === 'custom_domain';
+  if (isCommunitySubdomain || isCustomDomain) {
     const base = `https://${host}`;
 
     // Website editor v3, Phase 8 — a community that has opted out of search
@@ -75,6 +92,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const communityId = communityIdHeader ? Number(communityIdHeader) : NaN;
     if (Number.isInteger(communityId) && communityId > 0) {
       const reader = getPublicCommunityScopedReader(communityId);
+
+      // Phase 11b-2 — one entry per published page. `in_nav` is presentation,
+      // not indexability, so unlisted published pages are included (D16). The
+      // reader excludes the home page; `/` is already a static entry above.
+      const pages = await reader.listPublishedPagesForSitemap({ limit: SITEMAP_PAGE_LIMIT });
+      const pageEntries: MetadataRoute.Sitemap = pages.map((page) => ({
+        url: `${base}/${page.slug}`,
+        lastModified: page.updatedAt,
+        changeFrequency: 'weekly',
+        priority: 0.7,
+      }));
+
       const docs = await reader.listPublicDocumentsForSitemap({ limit: SITEMAP_DOCUMENT_LIMIT });
       const documentEntries: MetadataRoute.Sitemap = docs.map((doc) => ({
         url: `${base}/api/v1/documents/${doc.id}/download`,
@@ -82,7 +111,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: 'yearly',
         priority: 0.4,
       }));
-      return [...staticEntries, ...documentEntries];
+      return [...staticEntries, ...pageEntries, ...documentEntries];
     }
     return staticEntries;
   }

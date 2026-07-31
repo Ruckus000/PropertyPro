@@ -4,17 +4,21 @@ const {
   headersMock,
   resolveCommunityContextMock,
   listPublicDocumentsForSitemapMock,
+  listPublishedPagesForSitemapMock,
   getReaderMock,
   getBrandingForCommunityMock,
 } = vi.hoisted(() => {
   const listPublicDocumentsForSitemapMock = vi.fn().mockResolvedValue([]);
+  const listPublishedPagesForSitemapMock = vi.fn().mockResolvedValue([]);
   return {
     headersMock: vi.fn(),
     resolveCommunityContextMock: vi.fn(),
     listPublicDocumentsForSitemapMock,
+    listPublishedPagesForSitemapMock,
     getBrandingForCommunityMock: vi.fn().mockResolvedValue(null),
     getReaderMock: vi.fn(() => ({
       listPublicDocumentsForSitemap: listPublicDocumentsForSitemapMock,
+      listPublishedPagesForSitemap: listPublishedPagesForSitemapMock,
       // The other reader methods aren't called by sitemap.ts; stubbed so the
       // mock satisfies the PublicScopedReader interface shape if extended.
       listSiteBlocks: vi.fn(),
@@ -49,6 +53,7 @@ describe('sitemap.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listPublicDocumentsForSitemapMock.mockResolvedValue([]);
+    listPublishedPagesForSitemapMock.mockResolvedValue([]);
     getBrandingForCommunityMock.mockResolvedValue(null);
   });
 
@@ -209,6 +214,131 @@ describe('sitemap.ts', () => {
       });
       await sitemap();
       expect(getBrandingForCommunityMock).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Phase 11b-2, S7. Two pre-existing production bugs, one root cause: this
+   * route called `resolveCommunityContext({ host })` with NO `rootDomain`.
+   * `foreignHost()` (subdomain-router.ts) short-circuits on
+   * `if (!host || !rootDomain) return null`, so `source: 'custom_domain'` was
+   * literally unreachable and a verified custom domain fell through to the
+   * subdomain/marketing branches.
+   *
+   * The other cases in this file mock `resolveCommunityContext` with hardcoded
+   * return values, which makes the fix invisible to them by construction — so
+   * the ARGUMENT is asserted here.
+   */
+  describe('host resolution (custom domains)', () => {
+    it('passes a rootDomain to resolveCommunityContext, without which custom_domain is unreachable', async () => {
+      headersMock.mockResolvedValueOnce(new Headers({ host: 'www.sunsetcondos.org' }));
+      resolveCommunityContextMock.mockReturnValueOnce({
+        source: 'custom_domain',
+        tenantSlug: null,
+        isReservedSubdomain: false,
+        communityId: null,
+        customDomainHost: 'www.sunsetcondos.org',
+      });
+      await sitemap();
+      expect(resolveCommunityContextMock).toHaveBeenCalledWith(
+        expect.objectContaining({ rootDomain: expect.any(String) }),
+      );
+    });
+
+    it('emits community URLs on a custom domain (was: classified as a reserved www subdomain → [])', async () => {
+      headersMock.mockResolvedValueOnce(new Headers({ host: 'www.sunsetcondos.org' }));
+      resolveCommunityContextMock.mockReturnValueOnce({
+        source: 'custom_domain',
+        tenantSlug: null,
+        isReservedSubdomain: false,
+        communityId: null,
+        customDomainHost: 'www.sunsetcondos.org',
+      });
+      const result = await sitemap();
+      expect(result).toHaveLength(4);
+      expect(result[0]?.url).toBe('https://www.sunsetcondos.org/');
+      expect(result[1]?.url).toBe('https://www.sunsetcondos.org/transparency');
+      // And NOT PropertyPro's own marketing URLs under the community's domain.
+      expect(result.some((e) => e.url.endsWith('/pricing'))).toBe(false);
+      expect(result.some((e) => e.url.endsWith('/signup'))).toBe(false);
+    });
+
+    it('appends per-page and per-document URLs on a custom domain', async () => {
+      headersMock.mockResolvedValueOnce(
+        new Headers({ host: 'sunsetcondos.org', 'x-community-id': '42' }),
+      );
+      resolveCommunityContextMock.mockReturnValueOnce({
+        source: 'custom_domain',
+        tenantSlug: null,
+        isReservedSubdomain: false,
+        communityId: null,
+        customDomainHost: 'sunsetcondos.org',
+      });
+      listPublishedPagesForSitemapMock.mockResolvedValueOnce([
+        { id: 7, slug: 'about', updatedAt: new Date('2026-05-01T00:00:00Z') },
+      ]);
+      const result = await sitemap();
+      expect(result.map((e) => e.url)).toContain('https://sunsetcondos.org/about');
+      expect(getReaderMock).toHaveBeenCalledWith(42);
+    });
+  });
+
+  /**
+   * Phase 11b-2, S7 — one entry per published page (D16). `in_nav` is
+   * presentation, not indexability, so the reader deliberately does not filter
+   * on it; that predicate lives in (and is tested by) the reader.
+   */
+  describe('published site pages', () => {
+    function subdomainWithCommunityId() {
+      headersMock.mockResolvedValueOnce(
+        new Headers({ host: 'sunset-condos.getpropertypro.com', 'x-community-id': '42' }),
+      );
+      resolveCommunityContextMock.mockReturnValueOnce({
+        source: 'host_subdomain',
+        tenantSlug: 'sunset-condos',
+        isReservedSubdomain: false,
+        communityId: null,
+      });
+    }
+
+    it('emits one URL per published page, after the static entries', async () => {
+      subdomainWithCommunityId();
+      listPublishedPagesForSitemapMock.mockResolvedValueOnce([
+        { id: 7, slug: 'about', updatedAt: new Date('2026-05-01T00:00:00Z') },
+        { id: 9, slug: 'amenities', updatedAt: new Date('2026-05-02T00:00:00Z') },
+      ]);
+      const result = await sitemap();
+      expect(result).toHaveLength(6);
+      expect(result[4]?.url).toBe('https://sunset-condos.getpropertypro.com/about');
+      expect(result[4]?.lastModified).toEqual(new Date('2026-05-01T00:00:00Z'));
+      expect(result[5]?.url).toBe('https://sunset-condos.getpropertypro.com/amenities');
+    });
+
+    it('caps the page listing at 200 (D16)', async () => {
+      subdomainWithCommunityId();
+      await sitemap();
+      expect(listPublishedPagesForSitemapMock).toHaveBeenCalledWith({ limit: 200 });
+    });
+
+    it('does not emit a duplicate `/` — the home page is excluded by the reader', async () => {
+      subdomainWithCommunityId();
+      listPublishedPagesForSitemapMock.mockResolvedValueOnce([
+        { id: 7, slug: 'about', updatedAt: new Date('2026-05-01T00:00:00Z') },
+      ]);
+      const result = await sitemap();
+      const roots = result.filter((e) => e.url === 'https://sunset-condos.getpropertypro.com/');
+      expect(roots).toHaveLength(1);
+    });
+
+    it('lists no pages at all when the community has opted out of indexing', async () => {
+      subdomainWithCommunityId();
+      getBrandingForCommunityMock.mockResolvedValue({ siteSettings: { searchIndexing: false } });
+      listPublishedPagesForSitemapMock.mockResolvedValueOnce([
+        { id: 7, slug: 'about', updatedAt: new Date('2026-05-01T00:00:00Z') },
+      ]);
+      expect(await sitemap()).toEqual([]);
+      // The opt-out short-circuits before the reader is ever consulted.
+      expect(listPublishedPagesForSitemapMock).not.toHaveBeenCalled();
     });
   });
 });

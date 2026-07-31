@@ -24,7 +24,7 @@ function hasHeroBlock(blocks: SiteBlock[]): boolean {
   return blocks.some((b) => b.blockType === 'hero');
 }
 
-function EmptyStateHero({ communityName }: { communityName: string }) {
+function EmptyStateHero({ heading }: { heading: string }) {
   return (
     <section className="bg-surface-card px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl border-l-4 border-accent pl-6 sm:pl-8">
@@ -32,7 +32,7 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
           Resident Access
         </p>
         <h1 className="font-heading text-4xl font-semibold text-content sm:text-5xl">
-          {communityName}
+          {heading}
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-content-secondary">
           A quiet home for community notices, records, meetings, and essential updates.
@@ -50,14 +50,17 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
   );
 }
 
-export function Sable({ community, theme, blocks, footer }: LayoutProps) {
+export function Sable({ community, theme, blocks, footer, nav, page }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
+  // D18 — see Tidewater. A non-home page cannot own a hero block, so the
+  // empty-state hero is its only <h1>; headline it with the page's own name.
+  const heroHeading = page && !page.isHome ? page.name : community.name;
 
   return (
     <div className="min-h-screen bg-surface font-body text-content">
-      <PublicSiteHeader theme={toHeaderTheme(community, theme)} />
+      <PublicSiteHeader theme={toHeaderTheme(community, theme)} nav={nav} />
       <main id="main-content">
-        {!hasHeroBlock(ordered) && <EmptyStateHero communityName={community.name} />}
+        {!hasHeroBlock(ordered) && <EmptyStateHero heading={heroHeading} />}
         <div className="mx-auto max-w-6xl">
           {ordered.map((block) => {
             const blockType = block.blockType as BlockType;

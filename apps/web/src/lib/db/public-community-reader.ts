@@ -25,7 +25,7 @@
  * name field acts as the slug.
  */
 import { cache } from 'react';
-import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePages, userRoles, users } from '@propertypro/db';
+import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNull, lte } from '@propertypro/db/filters';
@@ -77,9 +77,44 @@ export interface PublicDocument {
   createdAt: Date;
 }
 
+/**
+ * A public site page (Phase 11b multi-page), as the anonymous renderer sees it.
+ *
+ * `deleteStagedAt` is exposed but is deliberately NOT a visibility filter — see
+ * `getPageBySlug`.
+ */
+export interface PublicSitePage {
+  id: number;
+  name: string;
+  slug: string;
+  isHome: boolean;
+  isDraft: boolean;
+  inNav: boolean;
+  sortOrder: number;
+  deleteStagedAt: Date | null;
+}
+
+/** Nav projection — the minimum the public header needs to render a link. */
+export interface PublicNavPage {
+  id: number;
+  name: string;
+  slug: string;
+  isHome: boolean;
+}
+
 /** Minimal projection used by sitemap.xml — id + dates only, no PII. */
 export interface PublicSitemapDocument {
   id: number;
+  updatedAt: Date;
+}
+
+/**
+ * Minimal projection used by sitemap.xml for multi-page sites (Phase 11b-2).
+ * Slug + lastmod is everything a `<url>` entry needs.
+ */
+export interface PublicSitemapPage {
+  id: number;
+  slug: string;
   updatedAt: Date;
 }
 
@@ -164,6 +199,45 @@ export interface PublicScopedReader {
    */
   getHomePageId(): Promise<number | null>;
 
+  /**
+   * The community's page at `slug`, or null (Phase 11b-2 public multi-page).
+   * Home is `slug = ''`.
+   *
+   * Predicate: `community_id`, `deleted_at IS NULL`, and `is_draft = false`
+   * unless `includeDrafts` (preview). That mirrors the anon RLS policy on
+   * `site_pages` exactly.
+   *
+   * Deliberately does NOT filter `delete_staged_at`: a page staged for deletion
+   * stays publicly live until the PM publishes the removal (migration 0047's
+   * decision, and what the prod anon policy actually enforces). Adding that
+   * filter here would take a live page down early.
+   */
+  getPageBySlug(slug: string, opts?: { includeDrafts?: boolean }): Promise<PublicSitePage | null>;
+
+  /**
+   * Resolve a retired slug to the page that now owns it, returning that page's
+   * CURRENT slug so the renderer can issue a single 308.
+   *
+   * ONE HOP, structurally — `site_page_redirects.page_id` points at a page id,
+   * not at another slug, so a redirect chain is unrepresentable. Do not add a
+   * walk loop; there is nothing to walk.
+   *
+   * Returns null when the target page is deleted or still a draft: a retired
+   * slug must not resurrect a page the public cannot see (a 404 is correct
+   * there, not a redirect into a 404).
+   */
+  resolveRedirect(fromSlug: string): Promise<{ pageId: number; toSlug: string } | null>;
+
+  /**
+   * Pages for the public nav: published, `in_nav = true`, not deleted.
+   *
+   * Ordered home-first, then `sort_order`, then `id` — the same ordering
+   * `listPagesInTransaction` (site-pages-service.ts) gives the PM editor, so the
+   * PM sees the order visitors see. `site_pages_community_nav_idx
+   * (community_id, sort_order)` covers the read.
+   */
+  listNavPages(): Promise<PublicNavPage[]>;
+
   /** PR #3 — published, non-expired announcements. */
   listAnnouncements(opts: { limit: number; timeWindowDays?: number | null }): Promise<PublicAnnouncement[]>;
 
@@ -183,6 +257,22 @@ export interface PublicScopedReader {
    * category filter — sitemap surfaces every public document.
    */
   listPublicDocumentsForSitemap(opts: { limit: number }): Promise<PublicSitemapDocument[]>;
+
+  /**
+   * Phase 11b-2 — published, non-deleted pages for sitemap.xml.
+   *
+   * Deliberately IGNORES `in_nav`: nav membership is presentation, an
+   * unlisted-but-published page is still a public URL and belongs in the
+   * sitemap (D16).
+   *
+   * Deliberately EXCLUDES the home page: sitemap.ts already emits `/` as a
+   * static entry, and home's slug is `''` so it would otherwise produce a
+   * duplicate `/` URL.
+   *
+   * No `delete_staged_at` predicate, for the same reason as `getPageBySlug` —
+   * a page staged for deletion is still live to the public.
+   */
+  listPublishedPagesForSitemap(opts: { limit: number }): Promise<PublicSitemapPage[]>;
 
   /** PR #4 — upcoming meetings within window. */
   listMeetings(opts: { limit: number; timeWindowDays: number }): Promise<PublicMeeting[]>;
@@ -324,6 +414,84 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       return rows[0]?.id ?? null;
     },
 
+    async getPageBySlug(slug, opts) {
+      const conditions = [
+        eq(sitePages.communityId, communityId),
+        eq(sitePages.slug, slug),
+        isNull(sitePages.deletedAt),
+      ];
+      if (opts?.includeDrafts !== true) {
+        conditions.push(eq(sitePages.isDraft, false));
+      }
+      // NO delete_staged_at predicate — a page staged for deletion is still
+      // live to the public until the PM publishes the removal (0047 / D8).
+      const rows = await db
+        .select({
+          id: sitePages.id,
+          name: sitePages.name,
+          slug: sitePages.slug,
+          isHome: sitePages.isHome,
+          isDraft: sitePages.isDraft,
+          inNav: sitePages.inNav,
+          sortOrder: sitePages.sortOrder,
+          deleteStagedAt: sitePages.deleteStagedAt,
+        })
+        .from(sitePages)
+        .where(and(...conditions))
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
+    async resolveRedirect(fromSlug) {
+      // ONE HOP by construction: the redirect row carries a page_id, so its
+      // target is a page, never another redirect. There is no chain to walk.
+      // The join also enforces the target's public visibility (not deleted,
+      // not draft) so a retired slug cannot 308 into a 404.
+      const rows = await db
+        .select({
+          pageId: sitePages.id,
+          toSlug: sitePages.slug,
+        })
+        .from(sitePageRedirects)
+        .innerJoin(sitePages, eq(sitePages.id, sitePageRedirects.pageId))
+        .where(
+          and(
+            eq(sitePageRedirects.communityId, communityId),
+            eq(sitePageRedirects.fromSlug, fromSlug),
+            isNull(sitePageRedirects.deletedAt),
+            eq(sitePages.communityId, communityId),
+            isNull(sitePages.deletedAt),
+            eq(sitePages.isDraft, false),
+          ),
+        )
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
+    async listNavPages() {
+      const rows = await db
+        .select({
+          id: sitePages.id,
+          name: sitePages.name,
+          slug: sitePages.slug,
+          isHome: sitePages.isHome,
+        })
+        .from(sitePages)
+        .where(
+          and(
+            eq(sitePages.communityId, communityId),
+            eq(sitePages.isDraft, false),
+            eq(sitePages.inNav, true),
+            isNull(sitePages.deletedAt),
+          ),
+        )
+        // Home first, then sort_order, then id — identical to
+        // listPagesInTransaction's ordering so the editor and the public site
+        // never disagree about nav order.
+        .orderBy(desc(sitePages.isHome), asc(sitePages.sortOrder), asc(sitePages.id));
+      return rows;
+    },
+
     async listAnnouncements(opts) {
       const conditions = [
         eq(announcements.communityId, communityId),
@@ -404,6 +572,31 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           ),
         )
         .orderBy(asc(documents.id))
+        .limit(opts.limit);
+      return rows;
+    },
+
+    async listPublishedPagesForSitemap(opts) {
+      // Same shape as listPublicDocumentsForSitemap: published rows only,
+      // id-asc for a stable crawl order, hard-capped by the caller.
+      // `in_nav` is NOT a predicate (D16) and home is excluded because
+      // sitemap.ts emits `/` itself.
+      const rows = await db
+        .select({
+          id: sitePages.id,
+          slug: sitePages.slug,
+          updatedAt: sitePages.updatedAt,
+        })
+        .from(sitePages)
+        .where(
+          and(
+            eq(sitePages.communityId, communityId),
+            isNull(sitePages.deletedAt),
+            eq(sitePages.isDraft, false),
+            eq(sitePages.isHome, false),
+          ),
+        )
+        .orderBy(asc(sitePages.id))
         .limit(opts.limit);
       return rows;
     },
