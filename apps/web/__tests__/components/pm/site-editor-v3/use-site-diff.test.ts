@@ -291,7 +291,13 @@ describe('useSiteDiff — page changes', () => {
   });
 
   it('exposes a label and a nav rank for each page group', () => {
-    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    // `sortOrder: 7`, deliberately NOT 1. The rank is documented as the ARRAY
+    // INDEX — the list already arrives home-first in nav order, so re-sorting
+    // by the number the server already used would be redundant. With
+    // `sortOrder` equal to the index (as every other fixture here has it), a
+    // `sortOrder`-derived implementation passes this case unchanged, and the
+    // decision the comment records goes unpinned.
+    queries.pages = [HOME_PAGE, { ...CONTACT_PAGE, sortOrder: 7 }];
 
     const { result } = renderHook(() => useSiteDiff(42));
 

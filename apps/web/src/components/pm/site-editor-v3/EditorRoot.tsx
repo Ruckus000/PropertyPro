@@ -277,13 +277,25 @@ export function EditorRoot({
     null;
   const effectivePageId = selectedPageId ?? homePageId;
 
+  /**
+   * Announcement for a page change that has no visible confirmation of its own.
+   *
+   * Lives here for the same reason the pending mark does: `PagesPanel` sets it
+   * in the same batch as the selection change, and that change remounts the
+   * panel via the `key` below — so a live region inside the panel is torn down
+   * and rebuilt before the string can ever be announced. The panel keeps its
+   * own region for reorders, which do not switch page and therefore survive.
+   */
+  const [pageAnnouncement, setPageAnnouncement] = useState('');
+
   const handleSelectPage = useCallback(
-    (pageId: number, options?: { pending?: boolean }) => {
+    (pageId: number, options?: { pending?: boolean; announce?: string }) => {
       setSelectedPageId(pageId);
       // Cleared, not left alone, when this is an ordinary selection: a stale
       // mark from an earlier creation would suppress repair for a page the PM
       // has since navigated away from.
       setPendingSelectionId(options?.pending ? pageId : null);
+      setPageAnnouncement(options?.announce ?? '');
     },
     [],
   );
@@ -361,6 +373,19 @@ export function EditorRoot({
 
   return (
     <SelectedSitePageProvider pageId={effectivePageId}>
+      {/*
+       * OUTSIDE the keyed provider on purpose. A live region only announces
+       * changes observed while it is in the DOM, so one that is unmounted and
+       * remounted by the very update it is reporting announces nothing.
+       */}
+      <p
+        data-testid="site-page-announcement"
+        role="status"
+        aria-live="polite"
+        className="sr-only"
+      >
+        {pageAnnouncement}
+      </p>
       <SiteEditorProvider
         /*
          * D-SEL. The key is the whole mechanism, not a React housekeeping

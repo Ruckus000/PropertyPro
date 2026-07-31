@@ -367,17 +367,6 @@ async function loadPage(
 // ---------------------------------------------------------------------------
 
 /**
- * Rejects a slug the community cannot use, with a message a PM can act on.
- *
- * Four failure modes, and RESERVED is the security-relevant one: a community
- * subdomain also serves the authenticated app, so a page at `/documents` would
- * be shadowed by the app route forever — and would present as a broken public
- * page rather than an error anyone could diagnose. The list comes from
- * `isReservedPublicSlug`, which derives it from `PROTECTED_FIRST_SEGMENTS`.
- * Never re-list the names here: the routing rule and the validator must not
- * become two lists that drift.
- */
-/**
  * Refuse a page name another live page in this community already uses.
  *
  * The editor runs the same rule through `pageIssues`, but that is a client
@@ -434,6 +423,24 @@ async function assertNameAvailable(
   }
 }
 
+/**
+ * Rejects a slug the community cannot use, with a message a PM can act on.
+ *
+ * Four failure modes, and RESERVED is the security-relevant one: a community
+ * subdomain also serves the authenticated app, so a page at `/documents` would
+ * be shadowed by the app route forever — and would present as a broken public
+ * page rather than an error anyone could diagnose. The list comes from
+ * `isReservedPublicSlug`, which derives it from `PROTECTED_FIRST_SEGMENTS`.
+ * Never re-list the names here: the routing rule and the validator must not
+ * become two lists that drift.
+ *
+ * Unlike `assertNameAvailable` above, this deliberately COUNTS a page staged
+ * for deletion. `site_pages_community_slug_partial` is unique on
+ * `(community_id, slug) WHERE deleted_at IS NULL`, and a staged page still has
+ * `deleted_at` null — so letting a second page claim that slug would turn a
+ * clean `ValidationError` into a raw unique-violation 500. Names carry no such
+ * index, which is what makes the asymmetry correct rather than an oversight.
+ */
 export async function assertUsableSlug(
   communityId: number,
   slug: string,

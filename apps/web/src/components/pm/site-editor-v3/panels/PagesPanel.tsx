@@ -31,18 +31,25 @@
  * say how many sections go with the page (D36′). It shares the canvas's query
  * key, so it costs no extra request.
  *
- * ## Selection repair
+ * ## Selection repair is NOT this panel's job
  *
- * When the list resolves and the selection does not name a page in it — either
- * because it names a page that is gone, or because there is no selection at all
- * — the panel selects home. Both states are reachable: the first from removing
- * the page you were editing (or from a second browser tab), the second from an
- * editor whose server-side page seed failed.
+ * It was, and that was wrong twice over. This panel is dynamically imported and
+ * mounted only while its own tab is active, so a repair here never ran in the
+ * window that needs it most — a publish applying a staged page removal, which
+ * is normally started from the shell header with Sections showing. And
+ * `EditorRoot`'s `key={effectivePageId}` (D-SEL) remounts this panel on every
+ * page switch, so any state the repair kept between renders was discarded by
+ * the same event it was tracking.
  *
- * Neither is a correctness hole on its own. The server answers a write to an
- * unknown page with a 404, and it treats an absent page id as home. What the
- * repair fixes is the DISHONEST rendering in between: a panel showing no page as
- * current while every save is quietly landing on home is the wrong-but-200
+ * `EditorRoot` now owns the selection, the repair and the just-created
+ * "pending" mark, driven by the pages list `useSiteDiff` already fetches. This
+ * panel reports "I created this one, hold the selection" through
+ * `onSelectPage`'s options and otherwise owns only its own view state.
+ *
+ * What the repair fixes is unchanged and worth restating: not a correctness
+ * hole — the server answers a write to an unknown page with a 404 and treats an
+ * absent page id as home — but the DISHONEST rendering in between. Showing no
+ * page as current while every save quietly lands on home is the wrong-but-200
  * failure, and it is the one nobody reports.
  *
  * ## The address control is absent, not disabled, on a published page (D32′)
@@ -264,7 +271,18 @@ export interface PagesPanelProps {
    * It is a flag rather than a second callback because the two always happen
    * together: there is no "mark pending without selecting".
    */
-  onSelectPage: (pageId: number, options?: { pending?: boolean }) => void;
+  onSelectPage: (
+    pageId: number,
+    options?: {
+      pending?: boolean;
+      /**
+       * Text for the parent's live region. Belongs to the parent because a page
+       * change remounts THIS panel, so a region inside it is rebuilt by the very
+       * update it would be reporting and announces nothing.
+       */
+      announce?: string;
+    },
+  ) => void;
 }
 
 export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesPanelProps) {
@@ -280,8 +298,13 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
   const unstageDelete = useUnstageSitePageDelete(communityId);
 
   const hintId = useId();
-  // Announces ONLY the changes that have no visible confirmation of their own —
-  // a reorder (the list rearranges in place) and a creation (a row appears).
+  // Announces ONLY the changes that have no visible confirmation of their own
+  // AND do not switch page — which leaves the REORDER (the list rearranges in
+  // place). A creation also has no visible confirmation, but it moves the
+  // selection and therefore remounts this panel, so its announcement is handed
+  // to `EditorRoot` through `onSelectPage` instead; a live region rebuilt by
+  // the update it is reporting announces nothing.
+  //
   // Everything else toasts, and a toast is itself a live region: announcing in
   // both is the double-announcement `GalleryImagesField` documents avoiding.
   const [announcement, setAnnouncement] = useState('');
@@ -485,13 +508,17 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
             setNewName('');
             setNewSlug('');
             setSlugTouched(false);
-            setAnnouncement(`${page.name} added.`);
             // Land the PM on what they just made — otherwise the next section
             // they add goes onto the page they were already looking at. The
             // pending mark holds the selection until the refetch catches up;
             // `EditorRoot` owns it, because this panel is remounted by the page
             // switch this very call triggers.
-            onSelectPage(page.id, { pending: true });
+            //
+            // The announcement rides along for the same reason. Setting it on
+            // THIS panel's live region would announce nothing at all: the
+            // region is torn down and rebuilt by the same update, and a live
+            // region only reports changes it was mounted to observe.
+            onSelectPage(page.id, { pending: true, announce: `${page.name} added.` });
           },
           onError: (mutationError) => {
             toast.error(`We couldn't add that page. ${mutationError.message}`);

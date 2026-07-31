@@ -45,7 +45,10 @@ vi.mock('next/dynamic', () => ({
           onSelectPage,
         }: {
           selectedPageId: number | null;
-          onSelectPage: (pageId: number, options?: { pending?: boolean }) => void;
+          onSelectPage: (
+            pageId: number,
+            options?: { pending?: boolean; announce?: string },
+          ) => void;
         }) => (
           <div>
             <p>Editing page {String(selectedPageId)}</p>
@@ -62,7 +65,12 @@ vi.mock('next/dynamic', () => ({
              */}
             <button
               type="button"
-              onClick={() => onSelectPage(CREATED_PAGE_ID, { pending: true })}
+              onClick={() =>
+                onSelectPage(CREATED_PAGE_ID, {
+                  pending: true,
+                  announce: 'Pool Rules added.',
+                })
+              }
             >
               Create a page
             </button>
@@ -513,6 +521,40 @@ describe('EditorRoot — selection repair and the just-created page', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+
+  it('announces a creation from above the remount, where the live region survives', async () => {
+    // The same dead-in-the-real-tree class as the pending mark, and its second
+    // victim. `PagesPanel` set its own live region in the batch that switched
+    // page — which remounts the panel — so the region was torn down and rebuilt
+    // by the very update it was reporting, and a live region only announces
+    // changes it was mounted to observe. Screen-reader users got silence on the
+    // one action the panel documents as having no visible confirmation.
+    queries.pages = [seededHome];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
+
+    // Queried at the ROOT, not inside the panel: that is the assertion. A
+    // region inside the panel would not have survived to carry this.
+    expect(screen.getByTestId('site-page-announcement')).toHaveTextContent('Pool Rules added.');
+  });
+
+  it('does not leave a stale announcement on an ordinary page click', async () => {
+    // A live region that keeps its last string re-announces it on the next
+    // unrelated update.
+    queries.pages = [
+      seededHome,
+      { ...seededHome, id: SECOND_PAGE_ID, name: 'Amenities', slug: 'amenities', isHome: false },
+    ];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByTestId('site-page-announcement')).toHaveTextContent('');
   });
 
   it('holds the selection on a page it has just created, before the list catches up', async () => {

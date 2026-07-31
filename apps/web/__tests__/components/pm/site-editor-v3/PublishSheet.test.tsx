@@ -289,8 +289,13 @@ describe('PublishSheet — the change list', () => {
       fromSlot: null,
       toSlot: null,
     });
-    const grouped = groupChanges([change('99'), change('2')], new Map([['2', 1]]));
-    expect(grouped.map((g) => g.group)).toEqual(['2', '99']);
+    // '100', not '99'. The unranked id has to sort BEFORE the ranked one under
+    // the plain string fallback, or the case passes without the ranked-wins
+    // legs ever running: `'2'.localeCompare('99')` is already negative, so '2'
+    // came first either way.  `'2'.localeCompare('100')` is positive, so only
+    // the rank logic can put '2' first.
+    const grouped = groupChanges([change('100'), change('2')], new Map([['2', 1]]));
+    expect(grouped.map((g) => g.group)).toEqual(['2', '100']);
   });
 
   it('says so when the site has never been published', () => {

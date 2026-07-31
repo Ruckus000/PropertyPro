@@ -238,10 +238,11 @@ describe('PagesPanel — selection', () => {
    * production does not use.
    */
 
-  it('does not repair a selection when the read failed', () => {
-    renderPanel({ selectedPageId: 999, isError: true, error: new Error('nope') });
-    expect(onSelectPage).not.toHaveBeenCalled();
-  });
+  // 'does not repair a selection when the read failed' was the sixth of the
+  // cases above and is deleted with them. Left in place it would have been
+  // VACUOUS: with repair gone from this panel, `onSelectPage` fires only from a
+  // row click and from `create.onSuccess`, so `not.toHaveBeenCalled()` holds
+  // whatever the error branch does. A case that cannot fail is not coverage.
 });
 
 describe('PagesPanel — row state', () => {
@@ -324,9 +325,15 @@ describe('PagesPanel — adding a page', () => {
       { name: 'Pool Rules', slug: 'pool-rules' },
       expect.anything(),
     );
-    // `pending: true` is the whole contract with the parent: it says "I made
-    // this one, the cached list does not have it yet, hold the selection".
-    expect(onSelectPage).toHaveBeenCalledWith(9, { pending: true });
+    // The whole contract with the parent. `pending: true` says "I made this
+    // one, the cached list does not have it yet, hold the selection";
+    // `announce` hands over the screen-reader text, because this panel is
+    // remounted by the very switch this call triggers and its own live region
+    // would be rebuilt before the string could be announced.
+    expect(onSelectPage).toHaveBeenCalledWith(9, {
+      pending: true,
+      announce: 'Pool Rules added.',
+    });
   });
 
   /*
