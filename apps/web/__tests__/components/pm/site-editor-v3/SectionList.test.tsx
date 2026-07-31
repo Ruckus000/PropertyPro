@@ -44,8 +44,11 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   },
 }));
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function section(id: number, blockType: string, blockOrder: number, isDraft = false) {
-  return { id, blockType, blockOrder, content: {}, isDraft, publishedAt: null };
+  return { id, pageId: HOME_PAGE_ID, blockType, blockOrder, content: {}, isDraft, publishedAt: null };
 }
 
 /** Slot orders deliberately non-contiguous — `toOrder` is a slot, not an index. */

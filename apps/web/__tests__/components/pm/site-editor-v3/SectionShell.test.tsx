@@ -43,8 +43,12 @@ const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: toastError } }));
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: 2,
     content: {},

@@ -16,6 +16,15 @@
  *    the re-insert replaces (cancelling the staged removal). See
  *    `apps/web/src/lib/services/site-blocks-service.ts`.
  *
+ *    Phase 11b-3 adds `pageId` to that captured set (D-UNDO). The write hooks
+ *    otherwise read the CURRENTLY-selected page, and "currently" is the wrong
+ *    tense for a replay: an undo issued after the PM switched pages would
+ *    restore the section onto the page they are looking at rather than the one
+ *    they removed it from — silently, with the PM believing they undid
+ *    something. The page is part of what "this section was here" means, so it
+ *    is captured at removal time alongside the type, order and content, and
+ *    passed back as an explicit override on both the delete and the replay.
+ *
  * 2. **An expired undo must be impossible, not merely ineffective.** The
  *    captured payload is released when the window closes, and each removal
  *    carries a token the undo closure must still match. A toast that outlives
@@ -36,6 +45,7 @@ import {
   type SiteBlockSummary,
   type UpsertContentBlockInput,
 } from '@/hooks/use-content-blocks';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { sectionLabel } from './section-label';
 
 /**
@@ -96,6 +106,7 @@ export function useUndoableRemove(
 ): UseUndoableRemoveResult {
   const remove = useDeleteContentBlock(communityId);
   const restore = useUpsertContentBlock(communityId);
+  const selectedPageId = useSelectedSitePage();
   const [isConfirmOpen, setConfirmOpen] = useState(false);
 
   const pendingRef = useRef<PendingRestore | null>(null);
@@ -140,16 +151,23 @@ export function useUndoableRemove(
 
     // Captured BEFORE the delete — afterwards the row is gone and the content
     // is unrecoverable from the client.
+    //
+    // The block's own page wins over the current selection: they agree today
+    // (the canvas only shows the selected page's blocks) but the correctness of
+    // the replay must not depend on that coincidence. The selection is the
+    // fallback only for an unadopted pre-11b row, whose `pageId` is null.
+    const removedFromPageId = block.pageId ?? selectedPageId;
     const restorable = isRestorable(block.blockType)
       ? ({
           blockType: block.blockType,
           blockOrder: block.blockOrder,
           content: block.content,
+          pageId: removedFromPageId,
         } satisfies UpsertContentBlockInput)
       : null;
 
     remove.mutate(
-      { blockOrder: block.blockOrder },
+      { blockOrder: block.blockOrder, pageId: removedFromPageId },
       {
         onSuccess: ({ staged }) => {
           const message = staged
@@ -186,7 +204,7 @@ export function useUndoableRemove(
         },
       },
     );
-  }, [block, label, release, remove, undo]);
+  }, [block, label, release, remove, selectedPageId, undo]);
 
   const requestRemove = useCallback(() => setConfirmOpen(true), []);
 

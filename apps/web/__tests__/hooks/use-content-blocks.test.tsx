@@ -5,11 +5,13 @@ import type { ReactNode } from 'react';
 import React from 'react';
 import {
   useContentBlocks,
+  useDeleteContentBlock,
   useUpsertContentBlock,
   useReorderBlocks,
   useSitePublishToken,
   type SiteBlockSummary,
 } from '@/hooks/use-content-blocks';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 
 interface BlocksPayload {
   blocks: SiteBlockSummary[];
@@ -29,6 +31,38 @@ function makeWrapper() {
   };
 }
 
+/**
+ * A wrapper that also puts the editor's selected page in scope, so the write
+ * hooks resolve a `pageId` the way they do inside the real editor tree
+ * (D-WRITE). Without a provider `useSelectedSitePage()` yields null — which is
+ * the ConfirmPublish / onboarding-wizard case and the pre-11b-3 behaviour.
+ */
+function makePageWrapper(pageId: number | null) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>
+        <SelectedSitePageProvider pageId={pageId}>{children}</SelectedSitePageProvider>
+      </QueryClientProvider>
+    );
+  };
+}
+
+/** The parsed request body of the Nth fetch call. */
+function bodyOf(callIndex = 0): Record<string, unknown> {
+  const call = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[callIndex];
+  return JSON.parse(call[1].body as string) as Record<string, unknown>;
+}
+
+function okOnce() {
+  (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({ data: { ok: true, staged: true } }),
+  });
+}
+
 beforeEach(() => {
   global.fetch = vi.fn();
 });
@@ -36,8 +70,8 @@ beforeEach(() => {
 describe('useContentBlocks', () => {
   it('GETs /api/v1/pm/site/blocks?communityId=X and returns the blocks array', async () => {
     const blocks = [
-      { id: 1, blockType: 'text', blockOrder: 0, content: { text: 'Hello' } },
-      { id: 2, blockType: 'image', blockOrder: 1, content: { storagePath: '/img.webp' } },
+      { id: 1, pageId: 10, blockType: 'text', blockOrder: 0, content: { text: 'Hello' } },
+      { id: 2, pageId: 10, blockType: 'image', blockOrder: 1, content: { storagePath: '/img.webp' } },
     ];
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
@@ -204,7 +238,9 @@ describe('useUpsertContentBlock', () => {
 
     // Pre-populate cache so we can check invalidation state afterward
     const queryKey = ['pm', 'site', 'blocks', 7];
-    client.setQueryData(queryKey, [{ id: 1, blockType: 'text', blockOrder: 0, content: {} }]);
+    client.setQueryData(queryKey, [
+      { id: 1, pageId: 10, blockType: 'text', blockOrder: 0, content: {} },
+    ]);
     expect(client.getQueryState(queryKey)?.isInvalidated).toBe(false);
 
     const { result } = renderHook(() => useUpsertContentBlock(7), { wrapper });
@@ -217,11 +253,93 @@ describe('useUpsertContentBlock', () => {
   });
 });
 
+/**
+ * Phase 11b-3 / D-WRITE. `resolvePageId` on the server defaults an absent
+ * `pageId` to the community's HOME page, so a write issued while the PM is
+ * editing page B and carrying no page id does not fail — it rewrites the live
+ * home page. These cases pin the three ways a page is resolved.
+ */
+describe('page targeting', () => {
+  it('omits pageId entirely when there is no selected-page provider', async () => {
+    okOnce();
+    const { result } = renderHook(() => useUpsertContentBlock(7), { wrapper: makeWrapper() });
+    await result.current.mutateAsync({ blockType: 'text', blockOrder: 2, content: {} });
+    // Not `pageId: null` — the contract is `z.number().optional()` and the
+    // reorder body is `.strict()`, so an explicit null is a 400.
+    expect(bodyOf()).not.toHaveProperty('pageId');
+  });
+
+  it('sends the selected page on an upsert', async () => {
+    okOnce();
+    const { result } = renderHook(() => useUpsertContentBlock(7), {
+      wrapper: makePageWrapper(42),
+    });
+    await result.current.mutateAsync({ blockType: 'text', blockOrder: 2, content: {} });
+    expect(bodyOf().pageId).toBe(42);
+  });
+
+  it('sends the selected page on a delete', async () => {
+    okOnce();
+    const { result } = renderHook(() => useDeleteContentBlock(7), {
+      wrapper: makePageWrapper(42),
+    });
+    await result.current.mutateAsync({ blockOrder: 3 });
+    expect(bodyOf()).toEqual({ communityId: 7, blockOrder: 3, pageId: 42 });
+  });
+
+  it('sends the selected page on a reorder', async () => {
+    okOnce();
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper: makePageWrapper(42) });
+    await result.current.mutateAsync({ blockId: 12, direction: 'down' });
+    expect(bodyOf()).toEqual({
+      communityId: 7,
+      blockId: 12,
+      pageId: 42,
+      direction: 'down',
+    });
+  });
+
+  it('lets an explicit override beat the selected page', async () => {
+    okOnce();
+    const { result } = renderHook(() => useUpsertContentBlock(7), {
+      wrapper: makePageWrapper(42),
+    });
+    // The undo replay's case: restore onto the page the block was removed
+    // from, not the one the PM happens to be looking at now.
+    await result.current.mutateAsync({ blockType: 'text', blockOrder: 2, content: {}, pageId: 99 });
+    expect(bodyOf().pageId).toBe(99);
+  });
+
+  it('falls back to the selected page when the override is null', async () => {
+    okOnce();
+    const { result } = renderHook(() => useDeleteContentBlock(7), {
+      wrapper: makePageWrapper(42),
+    });
+    // null means "not specified" — an unadopted pre-11b block carries it.
+    await result.current.mutateAsync({ blockOrder: 3, pageId: null });
+    expect(bodyOf().pageId).toBe(42);
+  });
+
+  it('never leaks pageId into the query key — the list stays whole-site', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { blocks: [], publishedBlocks: [], latestPublishedAt: null } }),
+    });
+    const { result } = renderHook(() => useContentBlocks(7), { wrapper: makePageWrapper(42) });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // The publish diff needs every page's blocks (D-C2); scoping the fetch
+    // would make it under-report.
+    const url = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toBe('/api/v1/pm/site/blocks?communityId=7');
+  });
+});
+
 describe('useReorderBlocks', () => {
   const blocksKey = (id: number) => ['pm', 'site', 'blocks', id];
 
   function block(partial: Partial<SiteBlockSummary> & { id: number; blockOrder: number }): SiteBlockSummary {
     return {
+      pageId: 10,
       blockType: 'text',
       content: {},
       isDraft: false,
@@ -306,6 +424,39 @@ describe('useReorderBlocks', () => {
       expect(cached.find((b) => b.id === 14)!.blockOrder).toBe(2);
       // The tombstone is untouched at order 3.
       expect(cached.find((b) => b.id === 90)!.blockOrder).toBe(3);
+    });
+  });
+
+  it('optimistic move ignores blocks on another page', async () => {
+    // The server reorders strictly WITHIN a page. A neighbour picked from the
+    // community-wide cache would show an order the server will never return.
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise(() => {}));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <SelectedSitePageProvider pageId={10}>{children}</SelectedSitePageProvider>
+      </QueryClientProvider>
+    );
+    // page 10 holds 2 and 5; page 20 sits between them at 3.
+    client.setQueryData<BlocksPayload>(blocksKey(7), payload([
+      block({ id: 12, blockOrder: 2 }),
+      block({ id: 77, pageId: 20, blockType: 'image', blockOrder: 3 }),
+      block({ id: 13, blockType: 'image', blockOrder: 5 }),
+    ]));
+
+    const { result } = renderHook(() => useReorderBlocks(7), { wrapper });
+    act(() => {
+      result.current.mutate({ blockId: 12, direction: 'down' });
+    });
+
+    await waitFor(() => {
+      const cached = client.getQueryData<BlocksPayload>(blocksKey(7))!.blocks;
+      // 12 swapped with its same-page neighbour 13, not with page 20's block.
+      expect(cached.find((b) => b.id === 12)!.blockOrder).toBe(5);
+      expect(cached.find((b) => b.id === 13)!.blockOrder).toBe(2);
+      expect(cached.find((b) => b.id === 77)!.blockOrder).toBe(3);
     });
   });
 

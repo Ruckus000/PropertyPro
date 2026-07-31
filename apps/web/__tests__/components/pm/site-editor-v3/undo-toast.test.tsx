@@ -16,6 +16,7 @@ import userEvent from '@testing-library/user-event';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { UNDO_WINDOW_MS } from '@/components/pm/site-editor-v3/use-undoable-remove';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 
 const editor = vi.hoisted(() => ({
   move: vi.fn(),
@@ -60,9 +61,13 @@ function lastToastOptions(): ToastOptions {
   return (call![1] ?? {}) as ToastOptions;
 }
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function block(overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary {
   return {
     id: 2,
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: 4,
     content: { heading: 'Pool rules', body: 'No glass.' },
@@ -138,7 +143,7 @@ describe('removal confirmation', () => {
     await user.click(screen.getByRole('button', { name: 'Remove section' }));
 
     expect(deleteMutate).toHaveBeenCalledWith(
-      { blockOrder: 4 },
+      { blockOrder: 4, pageId: HOME_PAGE_ID },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     );
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
@@ -203,8 +208,87 @@ describe('undo', () => {
         blockType: 'text',
         blockOrder: 4,
         content: { heading: 'Pool rules', body: 'No glass.' },
+        pageId: HOME_PAGE_ID,
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+  });
+
+  /**
+   * D-UNDO. The write hooks otherwise resolve the CURRENTLY-selected page, and
+   * "currently" is the wrong tense for a replay: an undo issued after a page
+   * switch would restore the section onto the page the PM is looking at rather
+   * than the one they removed it from — silently, with the PM believing they
+   * undid something.
+   */
+  it('restores an undone removal to the page it was removed from', async () => {
+    const user = userEvent.setup();
+    deleteMutate.mockImplementation((_input, opts) => opts.onSuccess({ staged: true }));
+    const removed = block({ pageId: 10 });
+
+    const { rerender } = render(
+      <SelectedSitePageProvider pageId={10}>
+        <FloatControls block={removed} communityId={7} />
+      </SelectedSitePageProvider>,
+    );
+    await openConfirm(user);
+    await user.click(screen.getByRole('button', { name: 'Remove section' }));
+    expect(deleteMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ pageId: 10 }),
+      expect.anything(),
+    );
+
+    // The PM moves to another page before hitting Undo.
+    rerender(
+      <SelectedSitePageProvider pageId={55}>
+        <FloatControls block={removed} communityId={7} />
+      </SelectedSitePageProvider>,
+    );
+    lastToastOptions().action!.onClick();
+
+    expect(upsertMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ blockOrder: 4, pageId: 10 }),
+      expect.anything(),
+    );
+  });
+
+  it('captures the selected page at removal time for an unadopted block', async () => {
+    // A pre-11b row carries pageId: null, so the page has to come from the
+    // selection — captured when the removal happens, not read back later.
+    const user = userEvent.setup();
+    deleteMutate.mockImplementation((_input, opts) => opts.onSuccess({ staged: true }));
+    const legacy = block({ pageId: null });
+
+    const { rerender } = render(
+      <SelectedSitePageProvider pageId={10}>
+        <FloatControls block={legacy} communityId={7} />
+      </SelectedSitePageProvider>,
+    );
+    await openConfirm(user);
+    await user.click(screen.getByRole('button', { name: 'Remove section' }));
+
+    rerender(
+      <SelectedSitePageProvider pageId={55}>
+        <FloatControls block={legacy} communityId={7} />
+      </SelectedSitePageProvider>,
+    );
+    lastToastOptions().action!.onClick();
+
+    expect(upsertMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ pageId: 10 }),
+      expect.anything(),
+    );
+  });
+
+  it('omits the page entirely outside a selected-page provider', async () => {
+    // The onboarding wizard's tree. `useSelectedSitePage()` must return null,
+    // not throw, and a null block page then leaves the server to default.
+    const options = await removeAndGetToast(block({ pageId: null }));
+    options.action!.onClick();
+
+    expect(upsertMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ pageId: null }),
+      expect.anything(),
     );
   });
 
