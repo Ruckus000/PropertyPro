@@ -25,9 +25,35 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 // Every code-split child (preview, publish sheet, notice/site panels,
 // inspector) renders nothing — this file is about the top bar, and mounting
 // them would drag in their own query surfaces.
+//
+// The ONE exception is the Pages panel, replaced here by a stub. It is the only
+// way to drive a page change, and a page change is what the `key` remount in
+// `EditorRoot` exists for (D-SEL). Selecting on the loader's SOURCE rather than
+// mounting everything keeps every other panel's module out of this file
+// entirely — and when the panel is renamed this match fails loudly, which is
+// the right direction for a test to break in.
+const SECOND_PAGE_ID = 77;
+const HOME_PAGE_ID = 5;
+
 vi.mock('next/dynamic', () => ({
   __esModule: true,
-  default: () => () => null,
+  default: (loader: () => Promise<unknown>) =>
+    String(loader).includes('PagesPanel')
+      ? ({
+          selectedPageId,
+          onSelectPage,
+        }: {
+          selectedPageId: number | null;
+          onSelectPage: (pageId: number) => void;
+        }) => (
+          <div>
+            <p>Editing page {String(selectedPageId)}</p>
+            <button type="button" onClick={() => onSelectPage(SECOND_PAGE_ID)}>
+              Edit the second page
+            </button>
+          </div>
+        )
+      : () => null,
 }));
 
 // The shell asks `(max-width: 767px)`: false = desktop. True would render the
@@ -113,6 +139,23 @@ function renderRoot() {
       tagline={null}
       initialSiteSettings={undefined}
       initialCustomCss={null}
+      showWizardBanner={false}
+      // The server seed. Its only job here is to supply the home page id before
+      // the Pages panel has ever been opened — that id is what every block
+      // write is scoped by.
+      initialPages={[
+        {
+          id: HOME_PAGE_ID,
+          name: 'Home',
+          slug: '',
+          inNav: true,
+          sortOrder: 0,
+          isHome: true,
+          isDraft: false,
+          publishedAt: '2026-07-01T00:00:00.000Z',
+          deleteStagedAt: null,
+        },
+      ]}
     />,
   );
 }
@@ -208,6 +251,19 @@ describe('EditorRoot — tool panels', () => {
     expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
   });
 
+  it('seeds the selected page from the server-rendered list', async () => {
+    // Before the Pages panel has ever been opened — and therefore before any
+    // client request — the editor already knows which page it is editing. This
+    // is what stops the first save of a session defaulting to home on a
+    // community whose PM was editing something else.
+    queries.draft = [hero(), block({ id: 1 })];
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+
   it('has a panel for every tool the tab strip offers', async () => {
     // The placeholder is gone and `renderToolPanel` is exhaustive at the type
     // level, so this walks the real tab strip rather than a hand-kept list —
@@ -218,5 +274,60 @@ describe('EditorRoot — tool panels', () => {
       await userEvent.click(tab);
       expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
     }
+  });
+});
+
+describe('EditorRoot — selected page (D-SEL)', () => {
+  /** The Sections panel row for a block, which carries the selected state. */
+  function sectionRow() {
+    return screen.getByRole('button', { name: 'Text' });
+  }
+
+  async function selectTheTextSection() {
+    await userEvent.click(sectionRow());
+    // Precondition, asserted rather than assumed: a test that "clears" a
+    // selection that was never made passes for the wrong reason.
+    expect(sectionRow()).toHaveAttribute('aria-current', 'true');
+  }
+
+  beforeEach(() => {
+    queries.draft = [hero(), block({ id: 1 })];
+    queries.published = [hero(), block({ id: 1 })];
+  });
+
+  it('clears the canvas selection when the page changes', async () => {
+    // The selection anchors a block id. Carrying it across a page switch means
+    // the inspector edits a section that is not on the page the PM is looking
+    // at — so the provider is REMOUNTED on the page id rather than the stale
+    // anchor being guarded against at every read.
+    renderRoot();
+    await selectTheTextSection();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(sectionRow()).not.toHaveAttribute('aria-current');
+  });
+
+  it('keeps the selection when the page does not change', async () => {
+    // The other half of the same claim: the remount is keyed on the page, so
+    // ordinary tab traffic must not throw the selection away.
+    renderRoot();
+    await selectTheTextSection();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(sectionRow()).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('tells the Pages panel which page is now selected', async () => {
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
   });
 });

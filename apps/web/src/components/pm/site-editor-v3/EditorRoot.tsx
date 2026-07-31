@@ -66,6 +66,14 @@ const DomainPanel = dynamic(
 const HelpPanel = dynamic(() => import('./panels/HelpPanel').then((m) => m.HelpPanel), {
   loading: () => null,
 });
+
+// Phase 11b-3. Same reasoning as every panel above — only the ACTIVE tool's
+// panel is rendered, so the pages list and its query only arrive on the tab
+// click. The route sits at ~640 KiB of a 700 KiB HARD budget, and a statically
+// imported panel is a cost every PM pays whether or not they ever open it.
+const PagesPanel = dynamic(() => import('./panels/PagesPanel').then((m) => m.PagesPanel), {
+  loading: () => null,
+});
 // Code-split, for the same reason as PreviewDialog/PublishSheet above: the
 // inspector renders nothing until a section is selected, but a static import
 // put its whole subtree — the form registry, and every form's shared field
@@ -81,6 +89,8 @@ import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
+import type { SitePageSummary } from '@/hooks/use-site-pages';
 import type { CustomCssOverrides } from '@propertypro/shared';
 import { THEME_DEFAULTS } from '@propertypro/theme';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
@@ -154,6 +164,26 @@ export interface EditorRootProps {
    * PM is when they notice their site looks generic.
    */
   showWizardBanner: boolean;
+  /**
+   * Phase 11b-3. The community's site pages, read server-side.
+   *
+   * REQUIRED, and required for a reason worth stating: the selected page id is
+   * what every block write is scoped by, and `resolvePageId` on the server
+   * treats an absent page id as "the home page". So an editor that renders
+   * before it knows which page is selected is an editor whose first save can
+   * land on the wrong page — and an optional prop defaulting to `[]` is exactly
+   * that failure, silently. Seeding it here means the id is known on the first
+   * paint rather than one round-trip later.
+   *
+   * `[]` is still a legal value — it is what the page passes when the read
+   * fails — and it degrades to the pre-11b-3 behaviour (no page id sent, server
+   * defaults to home), which is correct for the single-page communities that
+   * are the overwhelming majority.
+   *
+   * This is a SNAPSHOT, deliberately not kept live. `PagesPanel` owns the live
+   * query and reports selection changes back up; nothing here re-reads.
+   */
+  initialPages: SitePageSummary[];
 }
 
 /**
@@ -197,6 +227,7 @@ export function EditorRoot({
   initialSiteSettings,
   initialCustomCss,
   showWizardBanner,
+  initialPages,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
   // Shares the blocks query key, so this adds no request — and the publish
@@ -206,6 +237,14 @@ export function EditorRoot({
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+
+  // Which page the editor is editing. `null` until the PM picks one, at which
+  // point the server seed's home page stands in — `initialPages` is home-first,
+  // but `find` on the flag rather than `[0]` because "first row" is an ordering
+  // detail and "is home" is the fact.
+  const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
+  const homePageId = initialPages.find((page) => page.isHome)?.id ?? null;
+  const effectivePageId = selectedPageId ?? homePageId;
 
   // Selecting a section on the canvas pulls the Sections panel forward, so the
   // controls for what you just clicked are visible without a second action.
@@ -223,11 +262,30 @@ export function EditorRoot({
   const handleGoToAdd = useCallback(() => setActiveTool('add'), []);
 
   return (
-    <SiteEditorProvider
-      communityId={communityId}
-      blocks={blocks ?? []}
-      onSelect={handleSelect}
-    >
+    <SelectedSitePageProvider pageId={effectivePageId}>
+      <SiteEditorProvider
+        /*
+         * D-SEL. The key is the whole mechanism, not a React housekeeping
+         * detail: switching page REMOUNTS the provider, which discards the
+         * canvas selection with it.
+         *
+         * The alternative — threading a page id through `selectSlot` and
+         * checking it on every read — guards against a stale selection. This
+         * makes one impossible: there is no code path on which a block id
+         * selected on page A can still be selected while page B is open,
+         * because the state holding it no longer exists. The provider carries
+         * only the selection and one live-region string, so the remount costs
+         * nothing worth measuring.
+         *
+         * `'none'` for the no-page case rather than `undefined`: an undefined
+         * key is no key at all, which would silently disable the remount for
+         * exactly the community whose page read failed.
+         */
+        key={effectivePageId ?? 'none'}
+        communityId={communityId}
+        blocks={blocks ?? []}
+        onSelect={handleSelect}
+      >
       <AutosaveStatusProvider>
       <EditorShell
         communityName={communityName}
@@ -291,6 +349,15 @@ export function EditorRoot({
               />
             );
           }
+          if (tool === 'pages') {
+            return (
+              <PagesPanel
+                communityId={communityId}
+                selectedPageId={effectivePageId}
+                onSelectPage={setSelectedPageId}
+              />
+            );
+          }
           if (tool === 'help') return <HelpPanel communityId={communityId} />;
           // Every tool in EDITOR_TOOLS now has a panel. This assignment is the
           // exhaustiveness check: adding an id to EDITOR_TOOLS without a branch
@@ -338,7 +405,8 @@ export function EditorRoot({
         />
       ) : null}
       </AutosaveStatusProvider>
-    </SiteEditorProvider>
+      </SiteEditorProvider>
+    </SelectedSitePageProvider>
   );
 }
 
