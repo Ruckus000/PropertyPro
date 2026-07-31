@@ -337,6 +337,27 @@ One entry per phase, in execution order. For each phase:
   Carry across any correction from the verdicts above.
 - \`doneCriteria\` — **runnable shell commands**, not prose. "works correctly" is not a criterion.
 
+**When the plan already states a done-criterion, carry it VERBATIM.** Do not
+re-author, reformat, or "improve" it. A criterion written into a plan has usually
+been executed against the real tree by whoever wrote it, and rewriting it silently
+discards that verification. Add criteria the plan is missing; never replace one it
+has. (This rule exists because a derivation replaced a working, plan-verified
+\`git grep -qn "…" <file>\` with a \`test "$(grep -cF \\"…\\" <file>)" = "1"\`
+whose nested quoting made it error on every input — turning a red-today check into
+a can-never-pass one, on a slice in the final wave.)
+
+**Every criterion you author yourself must be EXECUTED before you return it**, in
+the repo, exactly as written, and it must exit non-zero on the current tree. Report
+the exit code in the criterion's \`expect\` field. Two failure modes to test for
+explicitly, both of which have shipped here:
+- *Vacuously green*: would this pass on an empty diff? (\`git grep\` asserting
+  something stayed unchanged; \`curl\` without \`-f\`, which exits 0 on a 404.)
+- *Vacuously red / can-never-pass*: does it error regardless of the code? Nested
+  quoting inside \`"$( … )"\`, or \`git grep\` on a path that does not exist yet —
+  which reports "no matches" and so passes an absence check most loudly when the
+  file was never written. Prefer \`test -f <path> && ! grep -q <pattern> <path>\`
+  over a bare negated grep.
+
 **\`verifyCommands\`** — the whole-phase gate an independent agent re-runs. Use this repo's exact
 forms (see the corpus below); the obvious form of several of these is silently wrong.
 
