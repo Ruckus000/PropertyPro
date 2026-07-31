@@ -22,6 +22,8 @@ import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
 import { SitePanel } from '@/components/pm/site-editor-v3/panels/SitePanel';
+import { PagesPanel } from '@/components/pm/site-editor-v3/panels/PagesPanel';
+import type { SitePageSummary } from '@/hooks/use-site-pages';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
@@ -67,6 +69,29 @@ vi.mock('@/hooks/use-urgent-notice', () => ({
     ['pm', 'site', 'urgent-notice', communityId] as const,
 }));
 
+// Phase 11b-3. Same rule as above — mock the module COMPLETELY.
+const sitePagesMock = vi.hoisted(() => ({
+  data: undefined as unknown,
+  isPending: false,
+  isError: false,
+}));
+vi.mock('@/hooks/use-site-pages', () => ({
+  useSitePages: () => ({
+    data: sitePagesMock.data,
+    isPending: sitePagesMock.isPending,
+    isError: sitePagesMock.isError,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useCreateSitePage: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUpdateSitePage: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useReorderSitePages: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useDeleteSitePage: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUnstageSitePageDelete: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  applyPageOrder: (pages: unknown) => pages,
+  sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId] as const,
+}));
+
 // The inspector docks at >=1280px; false = wide. Both modes are audited.
 const isNarrowMock = vi.hoisted(() => ({ value: false }));
 vi.mock('@/hooks/use-media-query', () => ({
@@ -110,9 +135,48 @@ function renderEditorSurfaces() {
   );
 }
 
+const SITE_PAGES: SitePageSummary[] = [
+  {
+    id: 1,
+    name: 'Home',
+    slug: '',
+    inNav: true,
+    sortOrder: 0,
+    isHome: true,
+    isDraft: false,
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    deleteStagedAt: null,
+  },
+  {
+    id: 2,
+    name: 'Amenities',
+    slug: 'amenities',
+    inNav: false,
+    sortOrder: 1,
+    isHome: false,
+    isDraft: true,
+    publishedAt: null,
+    deleteStagedAt: null,
+  },
+  {
+    id: 3,
+    name: 'Board',
+    slug: 'board',
+    inNav: true,
+    sortOrder: 2,
+    isHome: false,
+    isDraft: false,
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    deleteStagedAt: '2026-07-30T00:00:00.000Z',
+  },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   isNarrowMock.value = false;
+  sitePagesMock.data = SITE_PAGES;
+  sitePagesMock.isPending = false;
+  sitePagesMock.isError = false;
 });
 
 describe('Website editor v3 — axe', () => {
@@ -174,6 +238,44 @@ describe('Urgent notice — axe (Phase 7)', () => {
       <UrgentNoticeBanner
         notice={{ urgentNoticeText: 'Boil water order in effect', urgentNoticeExpiresAt: null }}
       />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Pages panel — axe (Phase 11b-3)', () => {
+  // Audited in every data state, not only the happy one: the loading skeleton
+  // and the error banner are what a PM meets on a bad connection, and an
+  // unlabelled control there is exactly as inaccessible as one in the list.
+  it('has no violations with the page list loaded', async () => {
+    const { container } = render(
+      <PagesPanel communityId={7} selectedPageId={1} onSelectPage={vi.fn()} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations while the list is loading', async () => {
+    sitePagesMock.isPending = true;
+    sitePagesMock.data = undefined;
+    const { container } = render(
+      <PagesPanel communityId={7} selectedPageId={null} onSelectPage={vi.fn()} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations when the read failed', async () => {
+    sitePagesMock.isError = true;
+    sitePagesMock.data = undefined;
+    const { container } = render(
+      <PagesPanel communityId={7} selectedPageId={null} onSelectPage={vi.fn()} />,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the empty state', async () => {
+    sitePagesMock.data = [];
+    const { container } = render(
+      <PagesPanel communityId={7} selectedPageId={null} onSelectPage={vi.fn()} />,
     );
     expect(await axe(container)).toHaveNoViolations();
   });
