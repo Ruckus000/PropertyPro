@@ -419,8 +419,9 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
  * community sidebar for PM_NAV_ITEMS.
  *
  * Everything else under /pm/ is community-scoped: it requires `?communityId=`
- * and the shell resolves a real tenant for it (/pm is in the middleware's
- * PROTECTED_PATH_PREFIXES, so the query param is forwarded as x-community-id).
+ * and the shell resolves a real tenant for it (/pm is in
+ * PROTECTED_PATH_PREFIXES, defined in lib/middleware/public-host-routes.ts, so
+ * the query param is forwarded as x-community-id).
  * Those pages — /pm/website-editor, /pm/settings/website (now a redirect into
  * it), /pm/settings/branding, /pm/site-preview, /pm/onboarding/website,
  * /pm/dashboard/[community_id] — must keep the normal community nav. Testing the bare '/pm/' prefix instead

@@ -2,14 +2,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Middleware auth-split test — verifies the public site routing logic.
+ * Middleware public-site routing test.
  *
  * The middleware must:
- * 1. When a community subdomain requests '/' and user is NOT authenticated,
- *    let the request through to the public site with community headers.
- * 2. When a community subdomain requests '/' and user IS authenticated,
- *    redirect to /dashboard.
- * 3. When no community context on '/', pass through normally (marketing page).
+ * 1. On a community subdomain, rewrite '/' to the public site with community
+ *    headers — for EVERY visitor, signed in or not.
+ * 2. When there is no community context on '/', pass through normally
+ *    (marketing page).
+ *
+ * There is no auth split here any more. Until 11b-0 an authenticated visitor
+ * was redirected to /dashboard; that was tolerable while the public site was a
+ * single page and wrong once it owned real URLs, so it was removed. The test at
+ * 'serves the public site to an AUTHENTICATED visitor on the subdomain root' is
+ * the assertion that it stays removed.
  */
 
 // Mock dependencies before importing middleware.
@@ -111,7 +116,7 @@ function createRequest(
   return req;
 }
 
-describe('public site auth-split middleware', () => {
+describe('public site root rewrite middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: no user

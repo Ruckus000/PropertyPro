@@ -8,8 +8,8 @@
  * `SITE_EDITOR_V3_ENABLED` flag that gated the rollout is gone with it.
  *
  * The path stays under `/pm` deliberately: that prefix is in
- * `PROTECTED_PATH_PREFIXES` (apps/web/src/middleware.ts), so middleware session
- * protection applies to this route.
+ * `PROTECTED_PATH_PREFIXES` (apps/web/src/lib/middleware/public-host-routes.ts),
+ * so middleware session protection applies to this route.
  *
  * ## Authorization
  *

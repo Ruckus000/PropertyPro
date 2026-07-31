@@ -162,6 +162,11 @@ export const METADATA_FIRST_SEGMENTS = new Set(['sitemap.xml', 'robots.txt']);
  * `transparency` has a host-native twin today (`app/public-transparency`); the
  * remaining suffixes (`notices`, `request-access`, `unavailable`) have none, so
  * they keep the default public-site handling and render the branded 404.
+ *
+ * `app/sitemap.ts`'s static entries must stay consistent with this: a suffix
+ * with no host-native twin is a 404 and must not be advertised to crawlers.
+ * The two lists are deliberately NOT deduped — this one is request routing,
+ * that one is SEO inventory, and they share exactly one entry.
  */
 export const HOST_NATIVE_PUBLIC_SUFFIX_ROUTES: Readonly<Record<string, string>> = {
   transparency: '/public-transparency',

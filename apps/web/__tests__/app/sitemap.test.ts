@@ -66,13 +66,30 @@ describe('sitemap.ts', () => {
       communityId: null,
     });
     const result = await sitemap();
-    expect(result).toHaveLength(4);
+    expect(result).toHaveLength(2);
     expect(result[0]?.url).toBe('https://sunset-condos.getpropertypro.com/');
     expect(result[1]?.url).toBe('https://sunset-condos.getpropertypro.com/transparency');
-    expect(result[2]?.url).toBe('https://sunset-condos.getpropertypro.com/notices');
-    expect(result[3]?.url).toBe('https://sunset-condos.getpropertypro.com/request-access');
     // Reader is NOT consulted when the middleware-injected community id is missing.
     expect(listPublicDocumentsForSitemapMock).not.toHaveBeenCalled();
+  });
+
+  it('does not advertise /notices or /request-access — neither renders on a tenant host', async () => {
+    // Regression. Both were static entries until this was fixed, and both 404 on
+    // a community subdomain AND a verified custom domain: their renderers live at
+    // `app/(public)/[subdomain]/<suffix>` and need a `[subdomain]` PATH segment,
+    // which a host carrying tenancy implicitly never supplies. `transparency` is
+    // the only suffix with a host-native twin (`app/public-transparency`).
+    headersMock.mockResolvedValueOnce(new Headers({ host: 'sunset-condos.getpropertypro.com' }));
+    resolveCommunityContextMock.mockReturnValueOnce({
+      source: 'host_subdomain',
+      tenantSlug: 'sunset-condos',
+      isReservedSubdomain: false,
+      communityId: null,
+    });
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).not.toContain('https://sunset-condos.getpropertypro.com/notices');
+    expect(urls).not.toContain('https://sunset-condos.getpropertypro.com/request-access');
+    expect(urls).toContain('https://sunset-condos.getpropertypro.com/transparency');
   });
 
   it('appends per-document URLs when middleware resolves an x-community-id (migration 0007)', async () => {
@@ -91,11 +108,11 @@ describe('sitemap.ts', () => {
     ]);
 
     const result = await sitemap();
-    // 4 static + 2 documents = 6 entries.
-    expect(result).toHaveLength(6);
-    expect(result[4]?.url).toBe('https://sunset-condos.getpropertypro.com/api/v1/documents/101/download');
-    expect(result[4]?.lastModified).toEqual(new Date('2026-02-01T00:00:00Z'));
-    expect(result[5]?.url).toBe('https://sunset-condos.getpropertypro.com/api/v1/documents/247/download');
+    // 2 static + 2 documents = 4 entries.
+    expect(result).toHaveLength(4);
+    expect(result[2]?.url).toBe('https://sunset-condos.getpropertypro.com/api/v1/documents/101/download');
+    expect(result[2]?.lastModified).toEqual(new Date('2026-02-01T00:00:00Z'));
+    expect(result[3]?.url).toBe('https://sunset-condos.getpropertypro.com/api/v1/documents/247/download');
     // Reader is bound to the parsed numeric community id.
     expect(getReaderMock).toHaveBeenCalledWith(42);
     expect(listPublicDocumentsForSitemapMock).toHaveBeenCalledWith({ limit: 1000 });
@@ -112,7 +129,7 @@ describe('sitemap.ts', () => {
       communityId: null,
     });
     const result = await sitemap();
-    expect(result).toHaveLength(4);
+    expect(result).toHaveLength(2);
     expect(listPublicDocumentsForSitemapMock).not.toHaveBeenCalled();
   });
 
@@ -255,7 +272,7 @@ describe('sitemap.ts', () => {
         customDomainHost: 'www.sunsetcondos.org',
       });
       const result = await sitemap();
-      expect(result).toHaveLength(4);
+      expect(result).toHaveLength(2);
       expect(result[0]?.url).toBe('https://www.sunsetcondos.org/');
       expect(result[1]?.url).toBe('https://www.sunsetcondos.org/transparency');
       // And NOT PropertyPro's own marketing URLs under the community's domain.
@@ -308,10 +325,10 @@ describe('sitemap.ts', () => {
         { id: 9, slug: 'amenities', updatedAt: new Date('2026-05-02T00:00:00Z') },
       ]);
       const result = await sitemap();
-      expect(result).toHaveLength(6);
-      expect(result[4]?.url).toBe('https://sunset-condos.getpropertypro.com/about');
-      expect(result[4]?.lastModified).toEqual(new Date('2026-05-01T00:00:00Z'));
-      expect(result[5]?.url).toBe('https://sunset-condos.getpropertypro.com/amenities');
+      expect(result).toHaveLength(4);
+      expect(result[2]?.url).toBe('https://sunset-condos.getpropertypro.com/about');
+      expect(result[2]?.lastModified).toEqual(new Date('2026-05-01T00:00:00Z'));
+      expect(result[3]?.url).toBe('https://sunset-condos.getpropertypro.com/amenities');
     });
 
     it('caps the page listing at 200 (D16)', async () => {
@@ -320,7 +337,13 @@ describe('sitemap.ts', () => {
       expect(listPublishedPagesForSitemapMock).toHaveBeenCalledWith({ limit: 200 });
     });
 
-    it('does not emit a duplicate `/` — the home page is excluded by the reader', async () => {
+    // NOTE the narrow scope, and do not widen the title back. This asserts that
+    // sitemap.ts adds no `/` of its own beyond the static entry — it CANNOT
+    // observe that the reader excludes home, because the reader is mocked here
+    // and the mock simply never returns a home row. The real guarantee
+    // (`isHome = false` in the WHERE) is asserted in
+    // __tests__/lib/db/public-community-reader.test.ts.
+    it('adds no second `/` entry alongside the static one', async () => {
       subdomainWithCommunityId();
       listPublishedPagesForSitemapMock.mockResolvedValueOnce([
         { id: 7, slug: 'about', updatedAt: new Date('2026-05-01T00:00:00Z') },
