@@ -77,9 +77,26 @@ scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integrat
 # Full integration preflight (also uses .env.local → prod; prefer the local runner)
 scripts/with-env-local.sh pnpm test:integration:preflight
 
-# E2E (Playwright)
-pnpm test:e2e                   # Run end-to-end suite
-pnpm playwright:install         # Install browsers
+# E2E (Playwright) — THREE configs; none of them runs the whole directory.
+pnpm playwright:install         # Install browsers (once)
+pnpm test:e2e                   # dev server on :3000 (+ admin on :3001)
+pnpm test:e2e:tenant            # tenant-host specs; dev server on localtest.me:3002
+pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
+                                # production build on :3100; the only spec CI runs
+
+> **E2E preconditions, and what CI does NOT cover.** These specs are not
+> self-contained: they need `NODE_ENV=development`, a live Supabase **Auth**
+> instance (`/dev/agent-login` calls `auth.admin.generateLink`, so a bare
+> Postgres is not enough — use a local `supabase start` stack, never prod), and
+> `pnpm seed:demo` for the demo users. `test:e2e:tenant` additionally needs
+> wildcard DNS for `*.localtest.me` → 127.0.0.1 (works unconfigured on macOS)
+> and starts its own server on :3002.
+>
+> **CI runs exactly one spec** — `pdfjs-runtime.spec.ts`, inside `perf-check`,
+> precisely because it is the only one with no DB/auth/seed dependency. Every
+> other spec is unexercised by CI: do not assume a Playwright spec guards
+> anything on a PR. Adding a CI e2e job is blocked on getting Supabase Auth +
+> a seed into a workflow, not on Playwright.
 
 # Other guards (run individually; all bundled into `pnpm lint`)
 pnpm guard:breadcrumbs          # Breadcrumb coverage
