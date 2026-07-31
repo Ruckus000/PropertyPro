@@ -123,4 +123,25 @@ describe('nextContentSlot', () => {
     }
     expect(nextContentSlot(blocks)).toBeNull();
   });
+
+  it('computes the next slot from every page, not just the selected one', () => {
+    // D-C3. `block_order` is unique across the WHOLE community until 11c drops
+    // the surviving 3-column index, so the allocator's input must span every
+    // page. This case is the shape a page-filtered caller would produce: the
+    // About page holds only slot 5, so filtering first yields 6 — which the home
+    // page already occupies, and which the server now refuses outright.
+    const everyPage = [
+      { blockOrder: 1 }, // hero, home
+      { blockOrder: 2 }, // home
+      { blockOrder: 5 }, // ABOUT — the only block a page-filtered list would see
+      { blockOrder: 6 }, // home
+    ];
+    expect(nextContentSlot(everyPage)).toBe(7);
+
+    // And the value the tempting "fix" would have produced, spelled out so the
+    // collision is visible rather than implied.
+    const onlyTheAboutPage = [{ blockOrder: 5 }];
+    expect(nextContentSlot(onlyTheAboutPage)).toBe(6);
+    expect(everyPage.some((b) => b.blockOrder === 6)).toBe(true);
+  });
 });

@@ -14,6 +14,8 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { hasView } from '@/components/public-site/blocks/view-registry';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
+import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { CanvasBlock } from './canvas/CanvasBlock';
 import { sortBlocks } from './canvas/Canvas';
@@ -51,6 +53,14 @@ export interface PreviewDialogProps {
  * in-tree render to a phone width would squeeze a desktop layout rather than
  * re-trigger the views' own responsive breakpoints — a mobile preview that
  * lies. Left out until there is a draft-preview URL to frame.
+ *
+ * ## Page scope (Phase 11b-3, D-C2)
+ *
+ * Scoped to the page the PM is editing, for the same reason the canvas is: a
+ * preview that concatenated every page's sections into one scroll would not
+ * correspond to any URL a visitor can open, which is a worse lie than no preview
+ * at all. The copy says "page" rather than "site" so the PM is not left thinking
+ * the pages that are not shown have gone missing.
  */
 export function PreviewDialog({
   open,
@@ -65,8 +75,8 @@ export function PreviewDialog({
         <DialogHeader>
           <DialogTitle>{`Preview — ${context.community.name}`}</DialogTitle>
           <DialogDescription>
-            This is your site as it stands right now, including unpublished
-            changes. It is what visitors see once you publish.
+            This is the page you are editing as it stands right now, including
+            unpublished changes. It is what visitors see once you publish.
           </DialogDescription>
         </DialogHeader>
 
@@ -88,18 +98,23 @@ interface PreviewBodyProps {
 
 function PreviewBody({ communityId, context, now }: PreviewBodyProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
+  const selectedPageId = useSelectedSitePage();
 
   // One timestamp for the whole render pass, matching the canvas — two blocks
   // sharing a time window must not disagree about where the cutoff falls.
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
 
-  // Filter before the empty check, for the same reason the canvas does: the PM
-  // blocks endpoint returns tombstone rows (staged deletions), and a build may
-  // not have a view for every stored type. Both render as null, so counting
-  // them would skip the empty message and show a blank white box.
+  // Narrowed to the selected page (D-C2), then filtered before the empty check
+  // for the same reason the canvas does: the PM blocks endpoint returns
+  // tombstone rows (staged deletions), and a build may not have a view for every
+  // stored type. Both render as null, so counting them would skip the empty
+  // message and show a blank white box.
   const ordered = useMemo(
-    () => sortBlocks(blocks ?? []).filter((b) => hasView(b.blockType as never)),
-    [blocks],
+    () =>
+      sortBlocks(blocksForPage(blocks, selectedPageId)).filter((b) =>
+        hasView(b.blockType as never),
+      ),
+    [blocks, selectedPageId],
   );
 
   if (isPending) {
@@ -131,7 +146,7 @@ function PreviewBody({ communityId, context, now }: PreviewBodyProps) {
     return (
       <EmptyState
         title="There's nothing to preview yet"
-        description="Add a section to your site and it will show up here."
+        description="Add a section to this page and it will show up here."
       />
     );
   }
