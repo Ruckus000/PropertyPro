@@ -1,47 +1,96 @@
 ---
 name: phase-run
-description: Ship one decision-ledger plan end to end — derive waves from declared file ownership, implement in parallel worktrees, integrate, verify independently, dual-review, adopt, PR, CI, merge. Use when a plan file plus its slice spec exist and the phase is approved to build.
+description: Take a plan, stress-test it against the codebase, report where it is weak, then implement it end to end unattended — waves, independent verification, adversarial diagnosis, four-lens review, migration ladder, merge, and a production health check with automatic rollback. Use when handed a plan to build.
 ---
 
 # /phase-run
 
-Ships one approved phase autonomously. Proven on website-editor v3 Phase 11b-2
-(PR #883, merged with zero human interrupts).
+**Give it a plan. It tells you where the plan is weak. You approve once. It ships.**
 
-**This skill owns all filesystem access.** The workflow it invokes
-(`.claude/workflows/phase-run.workflow.js`) is pure orchestration and cannot read
-disk, use a clock, or use RNG — everything it needs arrives as args. Keep that
-split; it is what makes the workflow testable by reading.
+One human gate, at the start. After that it runs to completion — through failing
+tests, red CI, review findings and merge conflicts — and only comes back for the
+three things that genuinely belong to a human.
 
-## Deliberately NOT built (YAGNI — do not add without a real trigger)
+```
+/phase-run <path-to-plan> [phase hint]
+```
 
-- **No plan-markdown parser.** Slices come from a hand-authored JSON sidecar. A
-  parser is fragile and there is no second consumer.
-- **No lock file / staleness abort.** `/drain-loop` needs one because it mutates a
-  shared allowlist across runs. A phase run is one branch and one PR; two
-  concurrent runs of the same phase is not a real scenario. Add it when it is.
-- **No multi-phase loop.** One invocation ships one phase. A human reads the
-  result before the next phase starts — that checkpoint is the point.
-- **No migration automation beyond a classifier and a hard stop.** The full
-  apply/verify/rollback ladder gets built when a phase actually declares a
-  migration, not before.
+The plan can be prose. It does **not** need a pre-written decision ledger or
+slice spec — deriving those is this skill's job. Having to hand-write them was
+the flaw in the previous version: it automated the easy half and left the hard
+half blocking on a human.
+
+**This skill owns all filesystem access.** Both workflows it invokes are pure
+orchestration and cannot read disk, use a clock, or use RNG — everything arrives
+as args. Keep that split; it is what makes them testable by reading.
 
 ---
 
-## Inputs
+## Stage 1 — Intake (the only stop)
 
-Two files per phase, both authored by hand before invoking:
+Run `.claude/workflows/phase-intake.workflow.js` by **scriptPath**, passing
+`repoRoot`, `planPath`, the full text of `.claude/phase-run/corpus.md`, and any
+phase hint.
 
-1. **The plan**, `~/.claude/plans/<name>.md`, containing a **Decision Ledger**
-   (every product question pre-answered, declared normative) and a **slice list**.
-   Without a ledger, do not run this — the whole design assumes implementers never
-   need to ask.
-2. **The slice spec**, `~/.claude/plans/<name>.slices.json`:
+It reads the plan, then does the thing that matters most: **extracts every
+factual claim the plan makes about the codebase and verifies each one against the
+actual code, in parallel.** A plan is a set of assertions written by someone who
+was not reading every file at the time. When one is wrong, faithful
+implementation produces a broken product and no downstream review catches it,
+because the code correctly implements the plan. The 11b-0 plan asserted that
+community subdomains do not serve the authenticated app; that was false, and
+building it as written would have routed every resident's dashboard to the public
+site renderer.
+
+Present to the human in this order:
+
+1. **Weaknesses** — BLOCKER first. Lead with any `FALSE_PREMISE`: "the plan says
+   X, the code says Y, here is what breaks."
+2. **Decisions** — the derived ledger. Call out `confidence: LOW` (a guess) and
+   `reversible: false` (permanent once shipped) explicitly. These are what they
+   actually need to read.
+3. **The shape** — phases, slices, derived waves, what runs in parallel.
+4. **Risk** — migration class, blast radius, what the rollback is.
+5. **Readiness** — READY / NEEDS_DECISIONS / BLOCKED.
+
+Be concise and lead with the bad news. The human is answering one question: *is
+this plan sound enough to build unattended?* Never run stage 2 on a `BLOCKED`
+intake, and never soften a blocker to get moving.
+
+## Stage 2 — Run (unattended)
+
+On approval, run `.claude/workflows/phase-run.workflow.js` by scriptPath with the
+approved `spec.phases`, the full text of **`corpus.md`**, **`bug-protocol.md`**
+and **`recovery.md`**, `baseSha` (`git rev-parse origin/main`), `tsIso` (the
+sandbox has no clock), and `stateDir: ~/.claude/state/phase-run`.
+
+Create that state directory and the integration-worktree root first. Each phase
+gets its own integration worktree — never the one you are working in, since the
+integrator requires a clean tree there.
+
+Per phase: capture a verified restore point → derive waves from declared file
+ownership → implement in parallel worktrees → integrate → verify via an agent
+that did not write the code → **adversarially diagnose anything red before fixing
+it** → apply any migration through the ladder → open a PR → four review lenses
+(correctness, corpus, DevOps+chaos, security) → adjudicate findings adversarially
+→ adopt only what survives → re-verify → CI → merge → **confirm production is
+healthy, and roll back automatically if it is not.**
+
+Phases chain. A phase with a `deploy-live` gate waits for the previous one to be
+genuinely live in production, not merely merged.
+
+---
+
+## Reference — the slice spec the intake produces
+
+You do not write this by hand; it is here so you can read and correct what intake
+derived.
+
+One entry per phase, in execution order:
 
 ```json
 {
   "phaseName": "11b-2",
-  "planPath": "/Users/…/plans/<name>.md",
   "integrationBranch": "claude/<something>",
   "prTitle": "feat(scope): … [11b-2]",
   "prBody": "markdown draft; the PR agent corrects it against the real diff",
@@ -82,35 +131,97 @@ definition site", "no new client island", "this fix is asserted, not just
 present". Write one for every criterion phrased as an absence.
 
 `migration` is `null` or
-`{ "number": "0048", "class": "EXPAND" | "REVERSIBLE_CONTRACT" | "DESTRUCTIVE", "expect": { … } }`.
-**A `DESTRUCTIVE` class refuses to run** — DROP COLUMN/TABLE and non-idempotent
-DML are not reversible by any harness and PITR is a whole-project rollback, not an
-undo. Split the destructive statements into their own migration and apply them by
-hand.
+`{ "number", "class": "EXPAND" | "REVERSIBLE_CONTRACT" | "DESTRUCTIVE", "classRationale", "statements": [], "expect": {} }`.
+`gate` is `{ "kind": "deploy-live" | "none", "verifyCommand", "rationale" }` — use
+`deploy-live` when a phase cannot start until the previous one is live in
+production, which is a real wait, not a checkpoint.
 
 ---
 
-## Steps
+## What it will not do
 
-Abort at any step that fails; do not proceed on a warning.
+Three stops, and they are not configurable:
 
-### 1. Preconditions
+**Irreversible operations.** `DROP COLUMN`/`DROP TABLE`, non-idempotent DML, a
+force-push over commits that are not its own, deleting a branch with unmerged
+work, or anything outward-facing (mail, third-party posts, charges). Nothing can
+undo these, and PITR is a whole-project rollback rather than an undo. A
+DESTRUCTIVE migration is refused *before* any work starts, not halfway through.
 
-```bash
-cd "$(git rev-parse --show-toplevel)"
-git fetch origin --quiet
-git log origin/main --oneline -1
-git rev-parse origin/main
-```
+**A decision that changes what gets built.** If following the plan would produce
+the wrong product, it stops. "This is hard" is not that; "this plan step is
+wrong" is.
 
-Confirm the plan file and slice spec both exist and the JSON parses. Confirm
-`integrationBranch` does not already exist locally or on origin.
+**An external blocker.** A credential, an account, an access grant. It will never
+read, echo, log or commit a secret in order to get past one.
 
-### 2. Validate the slice spec
+Everything else — failing tests, red CI, review findings, merge conflicts,
+re-scoping inside a slice's blast radius — is work, and it does the work.
 
-Check, and abort with a specific message on any failure:
+## Safety model
+
+Full detail in `.claude/phase-run/recovery.md`. Four properties:
+
+- **Capture before change.** A verified restore point per phase — main SHA, live
+  deployment id, migration ledger tip, advisor baseline — written to
+  `~/.claude/state/phase-run/`, deliberately outside the repo. A restore point
+  stored in the thing you are about to break is not a restore point. **No restore
+  point, no run.**
+- **Retain.** Nothing is deleted until production is confirmed healthy. Slice
+  branches are pushed to origin and never deleted; worktrees survive the phase.
+- **Detect.** Green CI is not evidence production works, and the failure this
+  guards against is *not noticing for a week*. Every phase ends with a real check
+  against production: did the deploy land, does the steady state hold, are there
+  new advisor errors or new Sentry issue classes.
+- **Restore.** A runbook written and *verified* at capture time, not improvised
+  under pressure. Unhealthy production triggers rollback immediately — Vercel
+  instant rollback first, then a revert PR. Diagnose from a healthy production,
+  never a broken one. **Ambiguity is escalation, never a pass.**
+
+## Security
+
+Mandatory, not advisory:
+
+- A **security lens runs on every PR** and its findings need a much stronger
+  defence than any other lens to be dismissed. "Unlikely to be exploited" is not
+  a defence; "the caller cannot reach this path because file:line" is.
+- Priorities in this codebase's order: tenant isolation → broken access control
+  (especially **a privilege flag derived from something the caller controls** —
+  that shipped in 11b-2) → data exposure → injection → RLS → OWASP generally.
+- **Least privilege.** A phase without a migration never touches production
+  credentials; `.env.local`'s `DATABASE_URL` is production and integration tests
+  use the local disposable DB.
+- The runner **may not edit its own safety machinery** while shipping a phase. A
+  diff touching `.claude/phase-run/*` or `.claude/workflows/phase-run*` is a HIGH
+  security finding regardless of how correct it looks.
+
+## How problems get handled
+
+`.claude/phase-run/bug-protocol.md`, injected into every implement, repair and
+review prompt. Two mechanisms:
+
+**Adversarial diagnosis before any fix.** A critic states findings; a defender
+answers them; only what the defender cannot answer is treated as real. Adapted
+from the `/dg` pattern (github.com/v1r3n/dinesh-gilfoyle) — the logic, not the
+code. It exists because a retry loop thrashes on a misdiagnosed symptom and, far
+worse, can go *green* by hiding the fault: weaken an assertion, add a guard, ship
+the bug with a passing suite. **A red gate with no confirmed finding stops the
+run** — an unexplained failure is not something to guess at against production.
+
+**The verification checklist**, walked item by item on every fix with the result
+reported per item, and every non-trivial decision considered from **both** the
+DevOps and the chaos engineer's perspective, saying which lens drove it. Where
+they conflict: chaos wins on anything irreversible, DevOps on anything routine.
+
+---
+
+## Validating what intake derived
+
+Before stage 2, check and abort with a specific message on any failure:
 - every `dependsOn` names a real slice id; no cycles
 - every slice has a non-empty `ownedFiles` and at least one `doneCriteria`
+- **every done-criterion is a runnable command, and would FAIL if the slice did
+  nothing.** A criterion that cannot fail is not a criterion.
 - two slices owning the same file is fine in exactly two shapes, and a hazard
   otherwise:
   - **same dependency level** → the deriver merges them into one agent. Fine.
@@ -123,77 +234,57 @@ Check, and abort with a specific message on any failure:
 - `blast` is one of the project's tags, and the riskiest tag appears in a slice
   whose `dependsOn` is honest about ordering
 
-### 3. Integration worktree
+## Invoking stage 2
 
-The integration branch needs its own worktree, separate from wherever you are
-working — the workflow's integrator requires a clean tree there and any stray file
-of yours will abort it.
+Create `~/.claude/state/phase-run/` and an integration-worktree root first. The
+workflow makes one integration worktree per phase; none of them may be the tree
+you are working in, since the integrator requires it clean.
 
-```bash
-git worktree add .claude/worktrees/<phase>-integration -b <integrationBranch> origin/main
-cd .claude/worktrees/<phase>-integration && git status --porcelain   # must be empty
-```
-
-### 4. Invoke
-
-Read `.claude/phase-run/corpus.md` and pass its **full text** as `corpus`. Capture
-the timestamp outside the sandbox (the workflow has no clock).
-
-```
-Workflow({
-  scriptPath: "<REPO_ROOT>/.claude/workflows/phase-run.workflow.js",
-  args: {
-    repoRoot, integrationWorktree, integrationBranch,
-    baseSha:   "<git rev-parse origin/main>",
-    tsIso:     "<date -u +%Y-%m-%dT%H:%M:%S.000Z>",
-    phaseName, planPath, corpus,
-    slices, verifyCommands, spotChecks, migration, prTitle, prBody
-  }
-})
-```
-
-Invoke by **scriptPath, not name** — project workflows are only name-resolvable at
-session startup. Compute the root with `git rev-parse --show-toplevel` rather than
-hardcoding it, so this works from a feature-branch worktree.
-
-Structured args stringify across the tool boundary; the workflow parses
+Invoke by **scriptPath, not name** — project workflows are only name-resolvable
+at session startup. Compute the root with `git rev-parse --show-toplevel`, never
+hardcoded, so this works from a feature-branch worktree. Pass the **full text**
+of `corpus.md`, `bug-protocol.md` and `recovery.md`; capture `tsIso` outside the
+sandbox. Structured args stringify across the tool boundary; both workflows parse
 defensively.
 
-### 5. On completion
+## On completion
 
-The result is JSON (possibly as a string). Report to the user:
+Report per phase: PR/merge/health, the derived waves (so the grouping is
+visible), migration stage and ledger id, findings raw-vs-confirmed-vs-refuted,
+any `ENV:` verification gaps, and — importantly — **any `undeclaredEdits`**. That
+is the ownership contract breaking, and it needs a human's eye even on a green
+run.
 
-- PR number/URL and merge state
-- the derived waves, so they can see the grouping the spec produced
-- **any slice with a non-empty `undeclaredFiles`** — this is the ownership contract
-  breaking and it needs a human's eye even when the run succeeded
-- verify results, with `ENV:`-prefixed failures called out as environmental
-- findings: total / HIGH / adopted / dismissed / failed
-- anything in `integrateFailures`
+Then **verify independently rather than relaying**: `git log origin/main
+--oneline -3`, `gh pr view <n> --json state,mergeCommit`, `gh pr checks <n>`, and
+the live production deployment. The runner reporting success is not evidence that
+it succeeded.
 
-Then **verify the claims independently** rather than relaying them — at minimum
-`git log origin/main --oneline -3`, `gh pr view <n> --json state,mergeCommit`, and
-`gh pr checks <n>`. The runner reporting success is not evidence that it succeeded.
+Sweep worktrees only after the human has read the report
+(`git worktree remove … && git worktree prune`). **Leave the branches.**
 
-Clean up: `git worktree remove` any surviving `phase-run/` worktrees, and
-`git worktree prune`.
+## Stop codes
 
-### 6. On a `stopped` result
-
-The workflow returns `{ stopped: <reason> }` rather than merging when it cannot
-proceed safely. Each is a real signal, not a retry prompt:
-
-| `stopped` | Means | Do |
+| Code | Means | Do |
 |---|---|---|
-| `DESTRUCTIVE_MIGRATION` | The phase declares an irreversible migration | Split it out; a human applies it |
-| `WAVE_TOTAL_FAILURE` | Every agent in a wave failed | Read their `reason`s — usually the slice scope is underspecified |
-| `INTEGRATE_FAILED` | Merge conflict or dirty tree | A slice edited a file it did not declare. Fix `ownedFiles`, do not resolve by hand |
-| `VERIFY_FAILED` | Local gate red after two repair rounds | Read it. This is the gate doing its job |
+| `DESTRUCTIVE_MIGRATION` | Irreversible statement declared | Split it out; a human applies it |
+| `NO_RESTORE_POINT` | Could not capture or verify one | Fix access first — never run blind |
+| `GATE_NOT_MET` | Previous phase not live in prod | Check the deploy |
+| `BAD_SLICE_SPEC` | Cycle or unknown dependency | Fix the spec |
+| `WAVE_TOTAL_FAILURE` | Every agent in a wave failed | Scope is underspecified |
+| `INTEGRATE_FAILED` | Merge conflict | A slice edited an undeclared file — fix `ownedFiles`, never hand-resolve |
+| `VERIFY_FAILED` | Red after 3 diagnose-and-fix rounds | Read it; the gate is working |
+| `VERIFY_FAILED_NO_DIAGNOSIS` | Red, but nothing confirmed | The failure is not understood — do not guess |
+| `MIGRATION_NOT_APPLIED` | Ladder stopped or rolled back | Read `expectMismatches` |
+| `DIAGNOSIS_NEEDS_HUMAN` | Fix needs an irreversible op or a real decision | Yours |
 | `POST_ADOPT_VERIFY_FAILED` | A review fix broke the gate | Inspect the adopt commits |
-| `CI_NOT_GREEN` | CI red/timeout after two repair rounds | Read the job logs |
+| `CI_NOT_GREEN` | Red/timeout after 2 rounds | Read the job logs |
+| `ROLLED_BACK` | Prod was unhealthy; rollback succeeded | Diagnose from healthy prod |
+| `ROLLBACK_FAILED` | **Urgent** — prod unhealthy, rollback failed | Manual intervention now |
+| `HEALTH_UNVERIFIED` | Could not confirm prod health | Chaining stopped deliberately |
 
-**Do not re-run a stopped phase blindly.** Every stop above means a human should
-look first.
+**Never re-run a stopped phase blindly.** Every code means a human should look
+first.
 
 ---
 

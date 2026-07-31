@@ -1,120 +1,60 @@
-// Generic phase runner: ships one decision-ledger plan end to end.
+// Ship an approved plan — one or many phases — end to end, unattended.
 //
-// Proven on website-editor v3 Phase 11b-2 (PR #883, merged with zero human
-// interrupts) as a one-off with the slice specs hardcoded; this is that runner
-// with the repo- and phase-specific parts lifted out into args.
+// Per phase: capture a restore point → derive waves from declared file
+// ownership → implement in parallel → integrate → verify independently →
+// adversarially diagnose anything red → apply a migration through the ladder →
+// PR → dual review + security + two-perspective lenses → adjudicate findings →
+// adopt only what survives → CI → merge → confirm production is healthy.
 //
-// Responsibilities (SRP — this file does orchestration and NOTHING else):
-//   - derive waves from declared file ownership + dependencies
-//   - fan slices out, integrate them, verify, review, adopt, ship
-// It knows nothing about PropertyPro. Repo knowledge arrives as `corpus`;
-// phase knowledge arrives as `slices`. The skill owns all filesystem access.
+// Design commitments, each of which came from something going wrong:
 //
-// Sandbox constraints:
-//   - no filesystem, no Date.now()/new Date()/Math.random()
-//   - self-contained: no imports
-//   - meta must be a pure literal
+//   1. Waves are DERIVED from `ownedFiles`, never grouped by hand. An
+//      integration conflict then means one thing: a slice touched a file it did
+//      not declare.
+//   2. Verification is done by an agent that did NOT write the code. Every
+//      defect in Phase 11b-1 was found by a reader, none by a test; a builder
+//      grading its own homework is worthless.
+//   3. Anything red gets ADVERSARIALLY DIAGNOSED before it gets fixed. A retry
+//      loop thrashes on a misdiagnosed symptom, and can go green by hiding the
+//      fault. See .claude/phase-run/bug-protocol.md.
+//   4. Nothing is deleted until production is confirmed healthy, and every
+//      phase captures a verified restore point first. See recovery.md.
+//   5. Irreversible operations are REFUSED, not carefully handled.
+//
+// Sandbox: no filesystem, no clock, no RNG, no imports, meta is a pure literal.
 
 export const meta = {
   name: 'phase-run',
-  description: 'Ship one decision-ledger plan: derive waves → parallel implement → integrate → independent verify → dual review → adopt → re-verify → PR → CI → merge',
-  whenToUse: 'Invoked by the /phase-run skill. Do not call directly — the skill reads the plan, slices and corpus off disk and passes them in.',
+  description: 'Ship an approved multi-phase plan unattended: restore point → waves → verify → adversarial diagnosis → review → merge → production health check',
+  whenToUse: 'Invoked by the /phase-run skill after a human has approved the intake report.',
   phases: [
+    { title: 'Safety' },
     { title: 'Implement' },
     { title: 'Integrate' },
     { title: 'Verify' },
+    { title: 'Migrate' },
     { title: 'Review' },
     { title: 'Adopt' },
     { title: 'Ship' },
+    { title: 'Health' },
   ],
 }
 
-// Structured args stringify across the Workflow tool boundary but survive as
-// real objects through an inline workflow() call. Handle both.
 const A = typeof args === 'string' ? JSON.parse(args) : args
 const {
   repoRoot,
-  integrationWorktree,
-  integrationBranch,
+  integrationWorktreeRoot,
   baseSha,
   tsIso,
-  phaseName,
   planPath,
   corpus,
-  slices,
-  verifyCommands,
-  spotChecks = [],
-  migration = null,
-  prTitle,
-  prBody,
+  bugProtocol,
+  recovery,
+  phases,
+  stateDir,
 } = A
 
-log(`phase-run "${phaseName}" starting ${tsIso}; ${slices.length} slices from ${baseSha.slice(0, 8)}`)
-
-// ============================================================ wave derivation
-
-// Group slices into waves. Two rules, both mechanical:
-//
-//   1. A slice runs only after everything in `dependsOn` has landed → topological
-//      levels.
-//   2. Slices at the same level that declare ANY file in common are merged into
-//      ONE agent → union-find over `ownedFiles`.
-//
-// Rule 2 is the whole point. On 11b-2 the grouping was done by hand and one agent
-// still had to break file discipline; deriving it from the declared ownership
-// makes an overlap impossible to miss, and makes a merge conflict during
-// integration mean "a slice edited a file it did not declare" rather than "bad
-// luck". Keep this simple — it is a grouping rule, not a scheduler.
-function deriveWaves(slices) {
-  const byId = new Map(slices.map(s => [s.id, s]))
-  const level = new Map()
-
-  // Longest-path level assignment. Iterate to a fixed point; slices.length passes
-  // is a hard ceiling, and exceeding it means a dependency cycle.
-  for (const s of slices) level.set(s.id, 0)
-  let settled = false
-  for (let pass = 0; pass <= slices.length && !settled; pass++) {
-    settled = true
-    for (const s of slices) {
-      for (const dep of s.dependsOn ?? []) {
-        if (!byId.has(dep)) throw new Error(`slice ${s.id} dependsOn unknown slice ${dep}`)
-        const want = level.get(dep) + 1
-        if (want > level.get(s.id)) { level.set(s.id, want); settled = false }
-      }
-    }
-  }
-  if (!settled) throw new Error('dependency cycle in slices')
-
-  const waves = []
-  const maxLevel = Math.max(...slices.map(s => level.get(s.id)))
-  for (let lv = 0; lv <= maxLevel; lv++) {
-    const here = slices.filter(s => level.get(s.id) === lv)
-    if (here.length === 0) continue
-
-    // Union-find on shared owned files.
-    const parent = new Map(here.map(s => [s.id, s.id]))
-    const find = id => (parent.get(id) === id ? id : (parent.set(id, find(parent.get(id))), parent.get(id)))
-    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb) }
-    const owner = new Map()
-    for (const s of here) {
-      for (const f of s.ownedFiles ?? []) {
-        if (owner.has(f)) union(owner.get(f), s.id)
-        else owner.set(f, s.id)
-      }
-    }
-    const groups = new Map()
-    for (const s of here) {
-      const root = find(s.id)
-      if (!groups.has(root)) groups.set(root, [])
-      groups.get(root).push(s)
-    }
-    waves.push([...groups.values()])
-  }
-  return waves
-}
-
-const waves = deriveWaves(slices)
-log(`derived ${waves.length} wave(s): ${waves.map((w, i) => `W${i + 1}=[${w.map(g => g.map(s => s.id).join('+')).join(', ')}]`).join(' ')}`)
+log(`phase-run: ${phases.length} phase(s) — ${phases.map(p => p.phaseName).join(' → ')}`)
 
 // ==================================================================== schemas
 
@@ -129,19 +69,47 @@ const SLICE_RESULT_SCHEMA = {
     commitSha: { type: 'string' },
     filesChanged: { type: 'array', items: { type: 'string' } },
     undeclaredFiles: { type: 'array', items: { type: 'string' } },
+    checklistNotes: { type: 'string' },
     commandsRun: {
       type: 'array',
       items: {
         type: 'object',
         required: ['command', 'passed'],
-        properties: {
-          command: { type: 'string' },
-          passed: { type: 'boolean' },
-          summary: { type: 'string' },
-        },
+        properties: { command: { type: 'string' }, passed: { type: 'boolean' }, summary: { type: 'string' } },
       },
     },
     notes: { type: 'string' },
+    reason: { type: 'string' },
+  },
+}
+
+const RESTORE_POINT_SCHEMA = {
+  type: 'object',
+  required: ['ok', 'git'],
+  properties: {
+    ok: { type: 'boolean' },
+    git: {
+      type: 'object',
+      properties: { mainSha: { type: 'string' }, mainSubject: { type: 'string' } },
+    },
+    deploy: {
+      type: 'object',
+      properties: { liveDeploymentId: { type: 'string' }, liveDeploymentSha: { type: 'string' }, note: { type: 'string' } },
+    },
+    db: {
+      type: 'object',
+      properties: {
+        ledgerTipId: { type: 'string' },
+        ledgerTipCreatedAt: { type: 'string' },
+        migrationFileCount: { type: 'integer' },
+        publicTableCount: { type: 'integer' },
+        advisorErrors: { type: 'integer' },
+        note: { type: 'string' },
+      },
+    },
+    runbookVerified: { type: 'boolean' },
+    runbook: { type: 'string' },
+    statePath: { type: 'string' },
     reason: { type: 'string' },
   },
 }
@@ -161,6 +129,7 @@ const INTEGRATE_RESULT_SCHEMA = {
         properties: { sliceId: { type: 'string' }, reason: { type: 'string' } },
       },
     },
+    undeclaredEdits: { type: 'array', items: { type: 'string' } },
   },
 }
 
@@ -186,6 +155,40 @@ const VERIFY_RESULT_SCHEMA = {
   },
 }
 
+// The adversarial loop's output: findings already sorted into confirmed and
+// refuted, with the reasoning attached. That sorting is the entire value.
+const DIAGNOSIS_SCHEMA = {
+  type: 'object',
+  required: ['rootCause', 'confirmed', 'refuted'],
+  properties: {
+    rootCause: { type: 'string' },
+    rounds: { type: 'integer' },
+    confirmed: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['finding', 'evidence', 'fix'],
+        properties: {
+          finding: { type: 'string' },
+          evidence: { type: 'string' },
+          fix: { type: 'string' },
+          severity: { enum: ['HIGH', 'MEDIUM', 'LOW'] },
+        },
+      },
+    },
+    refuted: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['finding', 'defence'],
+        properties: { finding: { type: 'string' }, defence: { type: 'string' } },
+      },
+    },
+    needsHuman: { type: 'boolean' },
+    needsHumanReason: { type: 'string' },
+  },
+}
+
 const REVIEW_FINDINGS_SCHEMA = {
   type: 'object',
   required: ['findings'],
@@ -203,6 +206,7 @@ const REVIEW_FINDINGS_SCHEMA = {
           description: { type: 'string' },
           suggestedFix: { type: 'string' },
           isCoverageExpansion: { type: 'boolean' },
+          lens: { type: 'string' },
           sliceId: { type: 'string' },
         },
       },
@@ -231,7 +235,22 @@ const ADOPT_RESULT_SCHEMA = {
         properties: { finding: { type: 'string' }, reason: { type: 'string' } },
       },
     },
+    checklistNotes: { type: 'string' },
     headSha: { type: 'string' },
+  },
+}
+
+const MIGRATION_RESULT_SCHEMA = {
+  type: 'object',
+  required: ['ok', 'stage'],
+  properties: {
+    ok: { type: 'boolean' },
+    stage: { enum: ['LOCAL', 'REHEARSED', 'APPLIED', 'VERIFIED', 'ROLLED_BACK', 'REFUSED'] },
+    ledgerId: { type: 'string' },
+    expectMismatches: { type: 'array', items: { type: 'string' } },
+    advisorErrorsAfter: { type: 'integer' },
+    reason: { type: 'string' },
+    notes: { type: 'string' },
   },
 }
 
@@ -252,6 +271,7 @@ const CI_WAIT_RESULT_SCHEMA = {
   properties: {
     state: { enum: ['GREEN', 'RED', 'TIMEOUT'] },
     failedChecks: { type: 'array', items: { type: 'string' } },
+    failureLog: { type: 'string' },
     waitedSeconds: { type: 'integer' },
   },
 }
@@ -266,9 +286,39 @@ const MERGE_RESULT_SCHEMA = {
   },
 }
 
-// A direct `await agent({schema})` THROWS if the subagent finishes without
-// calling StructuredOutput. parallel() already absorbs that to null; safeAgent
-// gives direct calls the same graceful degradation.
+const HEALTH_SCHEMA = {
+  type: 'object',
+  required: ['healthy', 'checks'],
+  properties: {
+    healthy: { type: 'boolean' },
+    deployReachedProd: { type: 'boolean' },
+    liveDeploymentSha: { type: 'string' },
+    checks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['name', 'passed', 'evidence'],
+        properties: { name: { type: 'string' }, passed: { type: 'boolean' }, evidence: { type: 'string' } },
+      },
+    },
+    advisorErrors: { type: 'integer' },
+    newErrorClasses: { type: 'array', items: { type: 'string' } },
+    recommendation: { enum: ['CONTINUE', 'ROLLBACK', 'ESCALATE'] },
+    reason: { type: 'string' },
+  },
+}
+
+const ROLLBACK_SCHEMA = {
+  type: 'object',
+  required: ['ok', 'method'],
+  properties: {
+    ok: { type: 'boolean' },
+    method: { enum: ['VERCEL_INSTANT_ROLLBACK', 'GIT_REVERT_PR', 'NONE_NEEDED', 'FAILED'] },
+    evidence: { type: 'string' },
+    reason: { type: 'string' },
+  },
+}
+
 async function safeAgent(prompt, opts) {
   try {
     return await agent(prompt, opts)
@@ -278,35 +328,116 @@ async function safeAgent(prompt, opts) {
   }
 }
 
-// ==================================================================== prompts
+// ============================================================ wave derivation
 
-const STRUCTURED_OUTPUT_MANDATE = `**You MUST end your turn by calling the StructuredOutput tool**, even on failure and
-even with zero findings. A turn that ends without it is dropped as a null result and wastes the work.`
+// Topological levels by `dependsOn`, then union-find on shared `ownedFiles`.
+// Slices at the same level that share ANY file become one agent — that is what
+// makes the integration merges conflict-free by construction rather than by luck.
+function deriveWaves(slices) {
+  const byId = new Map(slices.map(s => [s.id, s]))
+  const level = new Map(slices.map(s => [s.id, 0]))
+  let settled = false
+  for (let pass = 0; pass <= slices.length && !settled; pass++) {
+    settled = true
+    for (const s of slices) {
+      for (const dep of s.dependsOn ?? []) {
+        if (!byId.has(dep)) throw new Error(`slice ${s.id} dependsOn unknown slice ${dep}`)
+        const want = level.get(dep) + 1
+        if (want > level.get(s.id)) { level.set(s.id, want); settled = false }
+      }
+    }
+  }
+  if (!settled) throw new Error('dependency cycle in slices')
 
-const NO_LOCAL_DISK = `## CRITICAL: do NOT read files from local disk
-Other agents have moved on and the working tree is not what you are reviewing. Read the code under
-review ONLY through \`gh pr diff <n>\`, \`gh pr diff <n> --name-only\`, and
-\`git show "origin/${'<branch>'}:<path>"\` for full-file context. A finding based on a stale local
-file is a false positive that wastes an adopt cycle.`
-
-function fmtCommands(cmds) {
-  return cmds.map(c => `- \`${typeof c === 'string' ? c : c.command}\`${typeof c === 'object' && c.expect ? ` — expect: ${c.expect}` : ''}`).join('\n')
+  const waves = []
+  const maxLevel = Math.max(...slices.map(s => level.get(s.id)))
+  for (let lv = 0; lv <= maxLevel; lv++) {
+    const here = slices.filter(s => level.get(s.id) === lv)
+    if (!here.length) continue
+    const parent = new Map(here.map(s => [s.id, s.id]))
+    const find = id => (parent.get(id) === id ? id : (parent.set(id, find(parent.get(id))), parent.get(id)))
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb) }
+    const owner = new Map()
+    for (const s of here) {
+      for (const f of s.ownedFiles ?? []) {
+        if (owner.has(f)) union(owner.get(f), s.id)
+        else owner.set(f, s.id)
+      }
+    }
+    const groups = new Map()
+    for (const s of here) {
+      const root = find(s.id)
+      if (!groups.has(root)) groups.set(root, [])
+      groups.get(root).push(s)
+    }
+    waves.push([...groups.values()])
+  }
+  return waves
 }
 
-function implementPrompt(group, worktreePath, branch, fromSha) {
-  const ids = group.map(s => s.id)
-  const ownedFiles = [...new Set(group.flatMap(s => s.ownedFiles ?? []))]
-  return `You are implementing part of an APPROVED plan. Read it first — it is normative:
+// ==================================================================== prompts
 
+const SO = `**You MUST end your turn by calling the StructuredOutput tool**, even on failure and even
+with nothing to report. A turn that ends without it is dropped as null and wastes the work.`
+
+const NO_LOCAL_DISK = branch => `## CRITICAL: do NOT read files from local disk
+The working tree has moved on and is not what you are reviewing. Read the code under review ONLY
+through \`gh pr diff <n>\`, \`gh pr diff <n> --name-only\`, and \`git show "origin/${branch}:<path>"\`.
+A finding based on a stale local file is a false positive that wastes an adjudication cycle.`
+
+const fmt = cmds => (cmds ?? []).map(c => {
+  const cmd = typeof c === 'string' ? c : c.command
+  const exp = typeof c === 'object' && c.expect ? ` — expect: ${c.expect}` : ''
+  return `- \`${cmd}\`${exp}`
+}).join('\n')
+
+function restorePointPrompt(ph) {
+  return `Capture and VERIFY a restore point before phase ${ph.phaseName} changes anything.
+
+${recovery}
+
+## Capture, by reading the real thing — never assume a value
+\`\`\`bash
+cd ${repoRoot} && git fetch origin --quiet
+git rev-parse origin/main && git log -1 --format=%s origin/main
+\`\`\`
+- **Deploy**: the CURRENT production deployment id and the commit it was built from. Use whatever
+  Vercel access is available (\`vercel\` CLI or the Vercel MCP tools). If you genuinely cannot read
+  it, set \`deploy.note\` saying so — do NOT invent an id, because a fabricated rollback target is
+  worse than an absent one.
+- **DB**: ledger tip id + created_at, migration file count on disk, public table count, and the
+  CURRENT count of ERROR-level advisor lints as a BASELINE. Read-only queries only. If the phase
+  declares no migration, a note saying "not captured — no migration this phase" is acceptable for
+  the table/advisor fields, but capture the ledger tip regardless.
+${ph.migration ? `\n  This phase DOES declare migration ${ph.migration.number} (${ph.migration.class}) — capture the full DB block.\n` : ''}
+
+## Write it
+\`${stateDir}/${ph.phaseName}-restore.json\`, outside the repo on purpose. Also echo the JSON so it
+survives a lost file.
+
+## Write the runbook, then VERIFY it
+Fill the recovery table above with the real captured values — an actual deployment id, an actual
+SHA. Then prove the git path works:
+\`\`\`bash
+cd ${repoRoot} && git revert --no-commit HEAD && git revert --abort
+\`\`\`
+(a clean apply/abort against the current tip). Set \`runbookVerified\` honestly. **An unverified
+rollback plan is a guess you will be relying on under time pressure.**
+
+${SO}`
+}
+
+function implementPrompt(ph, group, worktreePath, branch, fromSha) {
+  const ids = group.map(s => s.id)
+  const owned = [...new Set(group.flatMap(s => s.ownedFiles ?? []))]
+  return `Implement slice(s) **${ids.join(', ')}** of phase ${ph.phaseName}.
+
+The plan is normative and its **Decision Ledger answers every product question**:
 \`\`\`
 ${planPath}
 \`\`\`
-
-Implement ONLY slice(s) **${ids.join(', ')}** of phase ${phaseName}.
-
-The plan's **Decision Ledger** answers every product question. If you find yourself wanting to ask
-the user something, the answer is in the ledger. If you genuinely disagree with a ledger entry,
-**implement it as written and record your objection in \`notes\`** — do not deviate, do not stop.
+If you want to ask the user something, the answer is in the ledger. If you disagree with a ledger
+entry, **implement it as written and record the objection in \`notes\`** — do not deviate, do not stop.
 
 ## Workspace
 \`\`\`bash
@@ -317,556 +448,873 @@ pnpm install --silent
 pnpm --filter "@propertypro/*" --filter "!@propertypro/web" --filter "!@propertypro/admin" build
 \`\`\`
 That last build is not optional — a fresh worktree has unbuilt workspace packages and \`pnpm test\`
-will report ~269 bogus failures without it.
+reports ~269 bogus resolution failures without it.
 
-Work ONLY inside \`${worktreePath}\`. Other agents are working in sibling worktrees concurrently.
+Work ONLY inside \`${worktreePath}\`. Sibling worktrees are other agents working concurrently.
 
-## File ownership — this is what keeps the parallel waves conflict-free
-You own exactly these paths:
-${ownedFiles.map(f => `- \`${f}\``).join('\n')}
+## File ownership — this is what keeps the parallel waves safe
+You own exactly:
+${owned.map(f => `- \`${f}\``).join('\n')}
 
-Do not edit anything else. If you believe you must, **do not** — record the path and the reason in
-\`undeclaredFiles\` and \`notes\` and work around it. Editing a file another slice owns is the one
-failure mode that breaks the whole run. (If a file genuinely must change and cannot be worked
-around, edit it, but you MUST list it in \`undeclaredFiles\` — a silent extra edit is far worse
-than a declared one.)
+Do not edit anything else. If you truly must, edit it AND list it in \`undeclaredFiles\` — a
+declared exception is recoverable, a silent one corrupts the run.
 
-${group.map(s => `## Slice ${s.id} — ${s.title}  [blast: ${s.blast}]\n${s.scope}\n\n**Done-criteria — run each and report the real output:**\n${fmtCommands(s.doneCriteria ?? [])}`).join('\n\n---\n\n')}
+${group.map(s => `## ${s.id} — ${s.title}  [blast: ${s.blast}]\n${s.scope}\n\n**Done-criteria — run each, report real output:**\n${fmt(s.doneCriteria)}`).join('\n\n---\n\n')}
+
+---
+
+${bugProtocol}
+
+**Walk the verification checklist above before you finish and report the result per item in
+\`checklistNotes\`.** Consider every non-trivial decision from BOTH the DevOps and the chaos
+engineer's perspective and say which lens drove it.
 
 ---
 
 ${corpus}
 
-## Commit
-Conventional-commit messages scoped to the phase, e.g.
-\`feat(<scope>): <what> [${phaseName} ${ids.join('+')}]\`. Multiple commits are fine.
-Do NOT push, open a PR, or merge — the runner does that.
+## Commit and push
+Conventional commits scoped to the phase. Then **push the branch**:
+\`git push -u origin ${branch}\` — so the work survives even if the worktree is lost. Do NOT open a
+PR and do NOT merge; the runner does that.
 
 ## Return
-StructuredOutput with \`ok\`, \`sliceId: "${ids.join('+')}"\`, \`branch\`, \`worktreePath\`,
-\`commitSha\`, \`filesChanged\`, \`undeclaredFiles\`, \`commandsRun\` (one entry per done-criterion
-with \`passed\` and a one-line \`summary\` of the ACTUAL output — never report a command you did not
-run), and \`notes\`. On failure \`ok: false\` plus \`reason\`.
-
-${STRUCTURED_OUTPUT_MANDATE}`
+\`ok\`, \`sliceId: "${ids.join('+')}"\`, \`branch\`, \`worktreePath\`, \`commitSha\`, \`filesChanged\`,
+\`undeclaredFiles\`, \`commandsRun\` (never report a command you did not run), \`checklistNotes\`,
+\`notes\`. On failure \`ok:false\` + \`reason\`.
+${SO}`
 }
 
-function integratePrompt(waveIndex, results) {
-  return `Integrate wave ${waveIndex} of phase ${phaseName} into the integration branch.
+function integratePrompt(ph, waveIndex, results) {
+  return `Integrate wave ${waveIndex} of phase ${ph.phaseName}.
 
-## Inputs
-Integration worktree: \`${integrationWorktree}\`
-Integration branch: \`${integrationBranch}\`
-Slice branches to merge, IN THIS ORDER:
+Integration worktree: \`${ph.integrationWorktree}\`   Branch: \`${ph.integrationBranch}\`
 \`\`\`json
 ${JSON.stringify(results.map(r => ({ sliceId: r.sliceId, branch: r.branch, worktreePath: r.worktreePath, filesChanged: r.filesChanged, undeclaredFiles: r.undeclaredFiles, notes: r.notes })), null, 2)}
 \`\`\`
 
-## Procedure
 \`\`\`bash
-cd ${integrationWorktree}
-git status --porcelain     # must be empty; if not, STOP and report ok:false
+cd ${ph.integrationWorktree}
+git status --porcelain     # must be empty; if not, STOP, ok:false
 \`\`\`
-Then for each branch in order: \`git merge --no-ff <branch> -m "merge(${phaseName}): <sliceId>"\`.
+Then per branch, in order: \`git merge --no-ff <branch> -m "merge(${ph.phaseName}): <sliceId>"\`.
 
-The waves were DERIVED so that everything merged here owns a disjoint file set. **A conflict
-therefore means a slice edited a file it did not declare.** On conflict:
-1. \`git merge --abort\`
-2. record that slice in \`failed\`, reason = the conflicting paths
-3. continue with the remaining branches
-Do NOT resolve conflicts by hand — a conflict is a signal the plan's ownership map is wrong, and
-papering over it hides that.
+Waves are DERIVED so everything here owns a disjoint file set. **A conflict means a slice edited a
+file it did not declare.** On conflict: \`git merge --abort\`, record it in \`failed\` with the
+conflicting paths, continue with the rest. Do NOT hand-resolve — that hides a broken ownership map.
 
-Any slice reporting a non-empty \`undeclaredFiles\` merged fine but broke the ownership contract.
-Note it in the \`failed\` reason of no slice — instead surface it by listing those paths in your
-returned \`merged\` entry as \`"<sliceId> (undeclared: a, b)"\` so a human sees it.
+Collect every slice's \`undeclaredFiles\` into \`undeclaredEdits\`.
 
-Sanity-check the merged tree compiles at all:
-\`\`\`bash
-pnpm --filter @propertypro/web exec tsc --noEmit
-\`\`\`
-Do not fix failures — the Verify phase owns that. Report the error summary.
+Sanity-check it compiles: \`pnpm --filter @propertypro/web exec tsc --noEmit\`. Do not fix failures —
+Verify owns that. Report the summary.
 
-Then remove each SUCCESSFULLY merged slice's worktree (\`git worktree remove <path> --force\`),
-leaving any failed slice's worktree in place for inspection.
+**Do NOT remove any worktree and do NOT delete any branch.** Nothing is cleaned up until production
+is confirmed healthy. A merged slice's worktree is the only copy of its reasoning.
 
-## Return
-StructuredOutput with \`ok\`, \`tipSha\` (\`git rev-parse HEAD\` after merging), \`merged\`, \`failed\`.
-${STRUCTURED_OUTPUT_MANDATE}`
+Return \`ok\`, \`tipSha\`, \`merged\`, \`failed\`, \`undeclaredEdits\`.
+${SO}`
 }
 
-function verifyPrompt(tipSha, label) {
-  const migrationSection = migration
-    ? `## Migration \`expect\` block — phase ${phaseName} ships migration ${migration.number} (${migration.class})
-Assert the catalog and probe expectations below against the LOCAL disposable DB only. **Do not
-touch production.** If any assertion mismatches, report it as a failed command — do not improvise.
+function verifyPrompt(ph, tipSha) {
+  const mig = ph.migration
+    ? `## Migration \`expect\` block — ${ph.migration.number} (${ph.migration.class})
+Assert against the LOCAL disposable DB only. **Never production.** Any mismatch is a failed command.
 \`\`\`json
-${JSON.stringify(migration.expect ?? {}, null, 2)}
+${JSON.stringify(ph.migration.expect ?? {}, null, 2)}
 \`\`\``
     : `## Migration
-Phase ${phaseName} ships NO migration. Assert it mechanically:
-\`git diff --name-only origin/main...HEAD -- packages/db/migrations packages/db/src/schema | wc -l\`
-must be **0**.`
+This phase ships NONE. Assert it mechanically:
+\`git diff --name-only origin/main...HEAD -- packages/db/migrations packages/db/src/schema | wc -l\` = **0**.`
 
-  return `You are the VERIFY gate for phase ${phaseName}. You did not write this code. Re-run the
-verification sweep independently and report **what actually happened**, not what should have.
+  return `You are the VERIFY gate for phase ${ph.phaseName}. You did not write this code. Re-run the
+sweep independently and report **what actually happened**, not what should have.
 
-## Workspace
 \`\`\`bash
-cd ${integrationWorktree}
+cd ${ph.integrationWorktree}
 pnpm install --silent
 pnpm --filter "@propertypro/*" --filter "!@propertypro/web" --filter "!@propertypro/admin" build
 git log --oneline -1        # expect ${tipSha.slice(0, 8)}
 git status --porcelain      # expect empty, before AND after install
 \`\`\`
-Read-only apart from running commands. Do not fix anything. Do not commit.
+Read-only apart from running commands. Fix nothing. Commit nothing.
 
-${migrationSection}
+${mig}
 
-## Run every one of these, in order, and read the output
-${fmtCommands(verifyCommands)}
+## Run every one, in order, and READ the output
+${fmt(ph.verifyCommands)}
 
-${spotChecks.length ? `## Spot-checks — done-criteria a green suite does not prove\n${fmtCommands(spotChecks)}` : ''}
+${(ph.spotChecks ?? []).length ? `## Spot-checks — criteria a green suite cannot prove\n${fmt(ph.spotChecks)}` : ''}
+
+## Then ask, as a chaos engineer would
+Pick the two most load-bearing new tests and ask: **would this still pass if the code did nothing?**
+If yes, that is a failed verification, not a passed one — report it as a failing command named
+\`tautological-test:<file>\`.
 
 ${corpus}
 
 ## Return
-StructuredOutput: \`allPassed\` (true only if EVERY command passed), \`results\` (one entry per
-command with \`passed\` and \`evidence\` = the actual key line of output — a test count, a guard
-verdict, a byte size), and \`slicesFailing\`.
+\`allPassed\` (true only if EVERY command passed), \`results\` (per command, with \`evidence\` = the
+actual key line of output), \`slicesFailing\`.
 
-**Report faithfully. A false green here defeats the entire point of this gate.** If a command
-could not be RUN in this environment, mark it \`passed: false\` with a \`failureDetail\` starting
-\`ENV:\` — those are tolerated and distinguished from real failures. Never mark an unrun command
-passed.
-${STRUCTURED_OUTPUT_MANDATE}`
+**Report faithfully — a false green here defeats the entire gate.** A command you could not RUN is
+\`passed: false\` with \`failureDetail\` starting \`ENV:\`; those are tolerated and distinguished from
+real failures. Never mark an unrun command passed.
+${SO}`
 }
 
-function repairPrompt(verifyResult, tipSha) {
-  return `The VERIFY gate for phase ${phaseName} failed. Fix it.
+function diagnosePrompt(ph, failure, context) {
+  return `Phase ${ph.phaseName} has a failure. **Diagnose it adversarially. Do NOT fix anything.**
 
-## Workspace
-\`\`\`bash
-cd ${integrationWorktree}
-git log --oneline -3        # tip should be ${tipSha.slice(0, 8)}
-\`\`\`
-Work directly on \`${integrationBranch}\` here. Commit your fixes.
-
-## What failed
+## The failure
 \`\`\`json
-${JSON.stringify(verifyResult, null, 2)}
+${JSON.stringify(failure, null, 2)}
 \`\`\`
+Context: ${context}
+Workspace: \`${ph.integrationWorktree}\` (read it; you may run commands, but change no file)
+
+${bugProtocol}
+
+## How to run this alone
+You are playing BOTH roles. Do it honestly — the value comes entirely from the defender being
+genuinely hard to satisfy, and a debate you throw is worse than no debate because it launders a
+guess into a "confirmed" finding.
+
+1. As the **critic**, state the findings with file:line evidence. Root causes, not symptoms.
+2. As the **defender**, answer each one. Cite the plan's Decision Ledger (\`${planPath}\`) where a
+   "finding" objects to a decision made deliberately — that is a REFUTED finding, not work.
+3. Go another round only where there is a genuinely new point. Cap 5.
+4. Sort: **CONCEDED → \`confirmed\`. REFUTED → \`refuted\`, with the defence recorded** — a refuted
+   finding is a fact about this code the next agent needs.
+
+Set \`needsHuman: true\` only if the fix would require an irreversible operation, a credential, or a
+decision that changes WHAT gets built rather than how. "This is hard" is not one of those.
+
+## Return
+\`rootCause\` (one paragraph, the actual cause), \`rounds\`, \`confirmed\` (each with \`fix\`),
+\`refuted\`, \`needsHuman\`.
+${SO}`
+}
+
+function repairPrompt(ph, diagnosis, tipSha) {
+  return `Implement the confirmed fixes for phase ${ph.phaseName}. The diagnosis is done — do not
+re-litigate it.
+
+\`\`\`bash
+cd ${ph.integrationWorktree}
+git log --oneline -3        # tip ${tipSha.slice(0, 8)}
+\`\`\`
+Work on \`${ph.integrationBranch}\` here and commit.
+
+## Root cause
+${diagnosis.rootCause}
+
+## Confirmed — fix these
+\`\`\`json
+${JSON.stringify(diagnosis.confirmed, null, 2)}
+\`\`\`
+
+## Refuted — do NOT "fix" these
+\`\`\`json
+${JSON.stringify(diagnosis.refuted, null, 2)}
+\`\`\`
+These survived a defence. Acting on one undoes a deliberate decision.
 
 ## Rules
-- Fix the CAUSE. Never delete or skip a failing test to go green, and never loosen an assertion
-  that is catching a real defect.
-- The plan (\`${planPath}\`) and its Decision Ledger are the spec. If a failure means a ledger
-  decision was wrong, implement the ledger as written and record the objection — do not redesign
-  mid-run.
-- \`ENV:\`-prefixed failures are not yours to fix. Leave them and say so.
+- Fix the cause. **Never delete or skip a failing test, and never loosen an assertion that is
+  catching a real fault** — going green by hiding the fault is the failure mode this whole protocol
+  exists to prevent.
+- \`ENV:\`-prefixed failures are environmental and not yours.
+- Every new test must **fail when your fix is reverted**. Check that; a test that passes either way
+  is not a test.
+
+**Walk the verification checklist and report it per item in \`checklistNotes\`.**
+
+${bugProtocol}
 
 ${corpus}
 
-## Return
-StructuredOutput in the slice-result shape: \`ok\`, \`sliceId: "repair"\`, \`commitSha\`,
-\`filesChanged\`, \`commandsRun\`, \`notes\`.
-${STRUCTURED_OUTPUT_MANDATE}`
+Return the slice-result shape with \`sliceId: "repair"\`.
+${SO}`
 }
 
-function codeReviewPrompt(pr) {
-  return `Review PR #${pr.prNumber} (${pr.prUrl}) — phase ${phaseName}. You are the GENERAL
-CORRECTNESS reviewer; a separate agent covers this repo's conventions. Do not duplicate its work.
+function migrationPrompt(ph) {
+  const m = ph.migration
+  return `Apply migration ${m.number} (${m.class}) for phase ${ph.phaseName} through the ladder.
+**Every rung fully before the next. Any mismatch → roll back and stop. Never improvise against
+production.**
 
-Use \`/code-review --effort high\` if available, otherwise review the diff directly.
+${recovery}
 
-${NO_LOCAL_DISK.replace('<branch>', pr.branch)}
+## Class
+${m.class} — ${m.classRationale ?? ''}
+${m.class === 'REVERSIBLE_CONTRACT' ? 'Reversible: no data is lost and every statement is recreatable from the repo schema. State the exact inverse statement BEFORE applying, and put it in `notes`.' : 'Expand-only: additive, and safe to apply before the code that needs it ships.'}
 
-## The approved plan (normative)
-\`${planPath}\` — read it. Its Decision Ledger is the spec. A **deviation** from a ledger entry is
-a finding; **disagreeing** with a ledger entry is not.
+## Statements
+\`\`\`sql
+${(m.statements ?? []).join('\n')}
+\`\`\`
 
-## What to look for
-- Logic errors, off-by-one, inverted conditions, wrong branch order.
-- Anything that changes which requests reach which handler. In this codebase that is the highest
-  severity class — a request that previously reached the authenticated app and now does not is a
-  user-facing outage.
-- Authorization and visibility: can an unauthenticated or unauthorized caller reach data they
-  could not before? Is any privilege flag derived from something the caller controls?
-- Tenancy: is every new query scoped?
-- Redirect loops, unbounded walks, links to things that do not exist.
-- Error handling and null propagation on new code paths.
-- Behaviour the plan says must be UNCHANGED that the diff changes anyway.
+## expect block
+\`\`\`json
+${JSON.stringify(m.expect ?? {}, null, 2)}
+\`\`\`
 
-## Severity
-- **HIGH**: a user sees the wrong thing, a security or tenancy boundary is crossed, a live URL
-  breaks, or previously-working functionality stops.
-- **MEDIUM**: a real defect with a narrow trigger, a missing test for a stated done-criterion, a
-  contract that will break at the next phase.
-- **LOW**: style, naming, comment accuracy.
+## The ladder
+1. **Local disposable DB** — \`pnpm db:test-local:reset\` then \`pnpm test:integration:local\`.
+   Assert the expect block here first. Stop on any failure.
+2. **Prod rehearsal, committing nothing** — run the statements plus the expect probes inside a
+   self-aborting \`DO\` block (\`RAISE EXCEPTION\` at the end, carrying the results out in the
+   message). This is the cheapest real proof against production and it leaves zero residue.
+3. **Apply** via the Supabase MCP \`apply_migration\`, in statement order.
+4. **Verify against the expect block** using \`information_schema\` / \`pg_catalog\`.
+   **Any mismatch → immediately reverse the statements** (you stated the inverse in step 1),
+   return \`stage: "ROLLED_BACK"\`, and stop. Do not attempt a second apply.
+5. **Reconcile the ledger** — \`hash\` = \`shasum -a 256 <migration file>\`,
+   \`created_at\` = the journal \`when\` (NOT wall-clock). Check
+   \`supabase_migrations.schema_migrations\` first for applies you did not make; two sessions
+   against one prod is a live hazard here.
+6. **\`get_advisors\`** must show **no NEW ERROR-level lint** versus the captured baseline.
 
-Set \`isCoverageExpansion: true\` for findings that are purely "add a test for X" rather than "this
-code is wrong". Set \`sliceId\` when you can attribute it.
-
-## Return
-StructuredOutput with \`findings\`. ${STRUCTURED_OUTPUT_MANDATE}`
-}
-
-function corpusReviewPrompt(pr) {
-  return `Review PR #${pr.prNumber} (${pr.prUrl}) against THIS CODEBASE's conventions and its
-specific history. You are the CORPUS reviewer; a separate agent covers general correctness.
-
-${NO_LOCAL_DISK.replace('<branch>', pr.branch)}
-
-## The approved plan
-\`${planPath}\`. Its Decision Ledger is normative.
-
-${corpus}
-
-## Your job
-Every numbered item above is a lens. Walk the diff against each one and report what it catches.
-The "Review lenses" section at the end is ranked by how often each has found a real defect here —
-start there. Pay particular attention to **tests that pass for the wrong reason**: that is the
-single most common finding on this programme, and a green suite is not evidence against it.
-
-## Severity
-- **HIGH**: user-visible breakage, tenancy or draft/published leakage, a CI-red that is locally
-  invisible, or a fix that is untestable by construction.
-- **MEDIUM**: real defect with a narrow trigger, missing test for a stated done-criterion, a
-  convention break that will bite next phase.
-- **LOW**: style, naming, comment accuracy.
-
-\`isCoverageExpansion: true\` for pure "add a test" findings. Set \`sliceId\` when you can.
+## Refusals
+If any statement is a \`DROP COLUMN\`, \`DROP TABLE\`, or non-idempotent DML, **stop immediately**
+with \`stage: "REFUSED"\`. Nothing can undo those; PITR is a whole-project rollback, not an undo.
+Do not apply the safe statements and leave the rest — return REFUSED for the whole migration.
 
 ## Return
-StructuredOutput with \`findings\`. ${STRUCTURED_OUTPUT_MANDATE}`
+\`ok\`, \`stage\`, \`ledgerId\`, \`expectMismatches\`, \`advisorErrorsAfter\`, \`notes\` (including the
+inverse statements).
+${SO}`
 }
 
-function dedupeFindings(a, b) {
-  // Same file + line within ±2 + same severity. Descriptions are too freeform
-  // for an exact match.
-  const seen = []
-  for (const f of [...a, ...b]) {
-    const dup = seen.find(s =>
-      s.file === f.file &&
-      Math.abs((s.line ?? 0) - (f.line ?? 0)) <= 2 &&
-      s.severity === f.severity
-    )
-    if (!dup) seen.push(f)
-  }
-  return seen
-}
+function openPrPrompt(ph) {
+  return `Open the pull request for phase ${ph.phaseName}.
 
-function isActionable(f) {
-  return f.severity === 'HIGH' || (f.severity === 'MEDIUM' && !f.isCoverageExpansion)
-}
-
-function adoptPrompt(pr, findings) {
-  return `Adopt the actionable review findings on PR #${pr.prNumber} (phase ${phaseName}).
-
-## Workspace
 \`\`\`bash
-cd ${integrationWorktree}
+cd ${ph.integrationWorktree}
+git status --porcelain            # must be empty
+git log --oneline origin/main..HEAD
+git push -u origin ${ph.integrationBranch}
+\`\`\`
+
+Read \`${planPath}\` and write the body from it — do not invent scope. Draft below; correct anything
+it gets wrong against the real diff, and keep the test-plan checklist **honest** — tick only what
+the Verify gate actually ran.
+
+\`\`\`markdown
+${ph.prBody}
+\`\`\`
+
+\`gh pr create --base main --head ${ph.integrationBranch} --title "${ph.prTitle}" --body "$(cat <<'PRBODY'
+<corrected body>
+PRBODY
+)"\`
+
+Return \`ok\`, \`prNumber\`, \`prUrl\`.
+${SO}`
+}
+
+function generalReviewPrompt(ph, pr) {
+  return `Review PR #${pr.prNumber} (${pr.prUrl}) — phase ${ph.phaseName}. You are the GENERAL
+CORRECTNESS reviewer. Separate agents cover this repo's conventions and security; do not duplicate.
+
+Use \`/code-review --effort high\` if available.
+
+${NO_LOCAL_DISK(ph.integrationBranch)}
+
+## The plan is the spec
+\`${planPath}\`. A **deviation** from its Decision Ledger is a finding; **disagreeing** with a ledger
+entry is not.
+
+## Look for
+- Logic errors, inverted conditions, off-by-one, wrong branch order.
+- Anything changing which requests reach which handler — in this codebase a request that previously
+  reached the authenticated app and now does not is a user-facing outage, the highest severity class.
+- Authorization and visibility: can an unauthenticated caller reach something new? Is a privilege
+  flag derived from anything the caller controls?
+- Tenancy: is every new query community-scoped?
+- Behaviour the plan says must be UNCHANGED that the diff changes anyway.
+- Tests that would pass whether or not the code works.
+
+## Severity
+HIGH: a user sees the wrong thing, a boundary is crossed, a live URL breaks, working functionality
+stops. MEDIUM: real defect with a narrow trigger, missing test for a stated criterion. LOW: style.
+
+Set \`lens: "correctness"\`, \`isCoverageExpansion\` for pure "add a test" findings, and \`sliceId\`
+where attributable.
+${SO}`
+}
+
+function corpusReviewPrompt(ph, pr) {
+  return `Review PR #${pr.prNumber} (${pr.prUrl}) against THIS CODEBASE's conventions and history.
+
+${NO_LOCAL_DISK(ph.integrationBranch)}
+
+Plan: \`${planPath}\` — its Decision Ledger is normative.
+
+${corpus}
+
+Every numbered item above is a lens; walk the diff against each. The "Review lenses" section is
+ranked by how often each has caught something real here — start there. Weight **tests that pass for
+the wrong reason** highest: it is the most common real finding on this programme, and a green suite
+is not evidence against it.
+
+Severity as usual. Set \`lens: "corpus"\`.
+${SO}`
+}
+
+function opsReviewPrompt(ph, pr) {
+  return `Review PR #${pr.prNumber} (${pr.prUrl}) — phase ${ph.phaseName} — from **two operational
+perspectives**. This PR merges to main and deploys to production automatically, with no human
+reading it first. That is the standard you are reviewing against.
+
+${NO_LOCAL_DISK(ph.integrationBranch)}
+
+${bugProtocol}
+
+## Your two lenses
+Use the DevOps and chaos-engineer question lists in the protocol above. Concretely, for this diff:
+
+**DevOps** — How is this undone? What is the blast radius if it is wrong: one page, one tenant, or
+everyone? Is anything here a manual step rather than something reproducible from version control?
+Would a failure be *visible*? Does the ordering survive a deploy (expand before contract)? What does
+it cost — bundle size, query count, build time?
+
+**Chaos** — What is the steady state and how would we know it broke? What if this half-succeeds —
+migration applied but code not deployed, one of two writes landing? What if nobody notices for a
+week: what does the data look like by then? Is it idempotent — what breaks if it runs twice, or
+concurrently? What is the SILENT failure mode? A 500 gets noticed; a wrong-but-200 does not, and
+this codebase has shipped exactly that before (a colour token that emitted zero CSS, a publish
+button permanently disabled, a search-indexing opt-out that was dead code).
+
+Report a finding for each real answer. Set \`lens: "devops"\` or \`lens: "chaos"\`.
+HIGH is reserved for: no way to undo it, a silent failure mode in a user-visible path, or a
+half-succeed state that corrupts data.
+${SO}`
+}
+
+function securityReviewPrompt(ph, pr) {
+  return `Security review of PR #${pr.prNumber} (${pr.prUrl}) — phase ${ph.phaseName}.
+**This is a mandatory gate, not an advisory pass.** The PR merges and deploys with no human review.
+
+Use \`/security-review\` if available.
+
+${NO_LOCAL_DISK(ph.integrationBranch)}
+
+## Priorities for this codebase, in order
+1. **Tenant isolation.** Every tenant query through \`createScopedClient\`; operators from
+   \`@propertypro/db/filters\`; any \`@propertypro/db/unsafe\` use carrying a documented
+   authorization contract. A client-supplied foreign key that is not validated against the caller's
+   community is a cross-tenant path — and with \`ON DELETE CASCADE\` it can be a DESTRUCTIVE one,
+   not merely a read.
+2. **Broken access control.** Is every route's \`requirePermission\` intact and unweakened? Can an
+   anonymous caller reach anything new? **Is any privilege or preview flag derived from something
+   the caller controls** — a query param, a header, a cookie value? This exact bug shipped in
+   11b-2: \`x-preview\` was stamped from \`?preview=true\` with no auth check, exposing unpublished
+   content to anyone.
+3. **Data exposure.** Secrets, tokens, keys or PII in a log, an error message, a test fixture, a
+   commit message, a PR body, or a client bundle. Any new \`NEXT_PUBLIC_\` variable is public
+   forever — is it meant to be?
+4. **Injection and validation.** Zod at the boundary; no string-built SQL; no unsanitised HTML.
+5. **RLS.** A new tenant table needs policies, FORCE RLS, a write-scope trigger, and the registry
+   count bumped. A policy predicate that reads the wrong GUC silently allows everything.
+6. **OWASP Top 10** generally: SSRF on any new outbound fetch, misconfiguration, insecure
+   deserialization, vulnerable dependency added.
+
+Also confirm the negative: **did this PR touch any security-relevant file it had no business
+touching** — middleware, an RLS policy, an auth guard, the scoped-client allowlist, or the runner's
+own safety machinery (\`.claude/phase-run/*\`, \`.claude/workflows/phase-run*\`)? Report any such
+edit as HIGH regardless of whether it looks correct.
+
+Set \`lens: "security"\`. Any confirmed finding here is HIGH by default; justify anything lower.
+${SO}`
+}
+
+function adjudicatePrompt(ph, pr, findings) {
+  return `Adjudicate the review findings on PR #${pr.prNumber} (phase ${ph.phaseName})
+**adversarially, before anything is changed.**
+
+Four reviewers ran independently (correctness, corpus, devops/chaos, security). Reviewers
+over-report — that is correct behaviour for a reviewer and wrong behaviour for an implementer. Your
+job is to sort real from noise **by defending the code**, not by taste.
+
+## Findings
+\`\`\`json
+${JSON.stringify(findings, null, 2)}
+\`\`\`
+
+${bugProtocol}
+
+## Method
+Play both roles honestly. For each finding:
+1. **Verify it against the actual diff** — \`gh pr diff ${pr.prNumber}\`. A reviewer working from a
+   stale local file produces plausible findings about code that is not there. Those are REFUTED
+   with \`"false-positive-on-diff-inspection"\`.
+2. **Defend the code.** Cite the plan's Decision Ledger (\`${planPath}\`) where a finding objects to
+   a decision taken deliberately — REFUTED as \`"contradicts ledger D<n>"\`. Cite the corpus where a
+   pattern is a known-good convention.
+3. A finding you cannot answer is **CONFIRMED**. Give the concrete fix.
+
+**A security-lens finding needs a much stronger defence than any other lens.** "Unlikely to be
+exploited" is not a defence; "the caller cannot reach this path because <file:line>" is.
+
+Coverage-only findings (\`isCoverageExpansion\`) are confirmed only when the missing test covers
+something a stated done-criterion claimed.
+
+## Return
+\`rootCause\` = a one-paragraph summary of what the review round actually found,
+\`confirmed\` (each with \`fix\`), \`refuted\` (each with its \`defence\`), \`needsHuman\`.
+${SO}`
+}
+
+function adoptPrompt(ph, pr, diagnosis) {
+  return `Implement the CONFIRMED review findings on PR #${pr.prNumber} (phase ${ph.phaseName}).
+
+\`\`\`bash
+cd ${ph.integrationWorktree}
 git status --porcelain     # must be empty
 \`\`\`
 
-## Findings (HIGH + non-coverage MEDIUM)
+## Confirmed — implement these
 \`\`\`json
-${JSON.stringify(findings.filter(isActionable), null, 2)}
+${JSON.stringify(diagnosis.confirmed, null, 2)}
 \`\`\`
+
+## Refuted — do NOT act on these
+\`\`\`json
+${JSON.stringify(diagnosis.refuted, null, 2)}
+\`\`\`
+Each survived a defence. Acting on one undoes a deliberate decision or chases a phantom.
 
 ## Rules
-1. **Verify each finding against the diff first** — \`gh pr diff ${pr.prNumber}\`. A reviewer
-   working from a stale local file produces plausible findings about code that is not there.
-   Dismiss those with reason \`"false-positive-on-diff-inspection"\`.
-2. **Check each finding against the plan's Decision Ledger** (\`${planPath}\`). A finding asking for
-   behaviour the ledger explicitly decided against is dismissed with reason
-   \`"contradicts ledger D<n>"\`. The ledger is the spec; re-litigating it mid-run is exactly what
-   this format exists to prevent.
-3. For each surviving finding: make the fix, re-run the affected tests, commit on pass. On failure
-   \`git checkout -- <file>\` and record it in \`failed\`.
-4. Never weaken or delete a test to make a finding go away.
-5. Re-run the local gate after all fixes, then \`git push --force-with-lease\`.
+- Never weaken or delete a test to make a finding go away.
+- Every new test must fail when its fix is reverted.
+- Re-run the full local gate afterwards, then \`git push --force-with-lease\`
+  (on this phase's own branch only — **never to main**).
+
+**Walk the verification checklist; report per item in \`checklistNotes\`.**
+
+${bugProtocol}
 
 ${corpus}
 
-## Return
-StructuredOutput: \`adopted\`, \`dismissed\` ({finding, reason}), \`failed\` ({finding, reason}),
-\`headSha\`. ${STRUCTURED_OUTPUT_MANDATE}`
+Return \`adopted\`, \`dismissed\`, \`failed\`, \`checklistNotes\`, \`headSha\`.
+${SO}`
 }
 
-function openPrPrompt() {
-  return `Open the pull request for phase ${phaseName}.
+function ciWaitPrompt(pr) {
+  return `Wait for CI on PR #${pr.prNumber}.
 
-\`\`\`bash
-cd ${integrationWorktree}
-git status --porcelain            # must be empty
-git log --oneline origin/main..HEAD
-git push -u origin ${integrationBranch}
-\`\`\`
+Poll \`gh pr checks ${pr.prNumber}\` every 90s. Any REQUIRED check failing → \`state: "RED"\` with
+\`failedChecks\` **and \`failureLog\`** (pull the actual failing output via
+\`gh run view <id> --log-failed\` — the next agent diagnoses from it, and a bare check name is not
+enough to diagnose from). All required passing → GREEN. 30-minute cap → TIMEOUT.
 
-Read the plan at \`${planPath}\` and write the PR body from it — do not invent scope. A draft body
-is below; correct anything it gets wrong against the actual diff, and keep the test-plan checklist
-honest (only tick what the Verify gate actually ran).
+Required contexts: Lint, Typecheck, Unit Tests, no-mock-guard, migration-ordering, Build,
+integration-tests, perf-check. Vercel checks are auto-skipped via \`ignoreCommand\` — ignore them.
 
-\`\`\`markdown
-${prBody}
-\`\`\`
-
-\`\`\`bash
-gh pr create --base main --head ${integrationBranch} --title "${prTitle}" --body "$(cat <<'PRBODY'
-<the corrected body>
-PRBODY
-)"
-\`\`\`
-
-## Return
-StructuredOutput with \`ok\`, \`prNumber\`, \`prUrl\`; on failure \`ok:false\` + \`reason\`.
-${STRUCTURED_OUTPUT_MANDATE}`
-}
-
-function ciWaitPrompt(prNumber) {
-  return `Wait for CI on PR #${prNumber}.
-
-Poll \`gh pr checks ${prNumber}\` every 90 seconds.
-- Any REQUIRED check failing → \`state: "RED"\` with \`failedChecks\`.
-- All required checks passing → \`state: "GREEN"\`.
-- Wall-clock cap 30 minutes → \`state: "TIMEOUT"\`.
-
-Vercel checks are auto-skipped via \`ignoreCommand\`; ignore them. **\`Build\` does not build** —
-\`perf-check\` owns the only production build and \`Build\` asserts
+**\`Build\` does not build.** \`perf-check\` owns the only production build and \`Build\` asserts
 \`needs.perf-check.result == 'success'\`, so a *skipped* perf-check FAILS Build. Never read a skip
-as a pass.
+as a pass. Note also that check names contain spaces — match on the full name, not the first token.
 
-## Return
-StructuredOutput with \`state\`, \`failedChecks\`, \`waitedSeconds\`. ${STRUCTURED_OUTPUT_MANDATE}`
+Return \`state\`, \`failedChecks\`, \`failureLog\`, \`waitedSeconds\`.
+${SO}`
 }
 
-function ciRepairPrompt(prNumber, failedChecks) {
-  return `CI is RED on PR #${prNumber} (phase ${phaseName}). Failed: ${JSON.stringify(failedChecks)}.
+function mergePrompt(ph, pr) {
+  return `Merge PR #${pr.prNumber} (phase ${ph.phaseName}).
 
 \`\`\`bash
-cd ${integrationWorktree}
-gh run list --branch ${integrationBranch} --limit 5
-gh run view <id> --log-failed
-\`\`\`
-Diagnose from the real logs and fix the CAUSE. Never delete or skip a failing test to go green.
-Commit, then \`git push --force-with-lease\`.
-
-The "Verification commands" and "Test traps" sections below cover the usual causes — a DB-gated
-test CI runs and a local run skips, a mock factory missing a new export, a \`node:*\` import in a
-client bundle, a lint guard hidden behind a tail, a stale turbo typecheck cache.
-
-${corpus}
-
-## Return
-StructuredOutput in the slice-result shape: \`ok\`, \`sliceId: "ci-repair"\`, \`commitSha\`,
-\`filesChanged\`, \`commandsRun\`, \`notes\`. ${STRUCTURED_OUTPUT_MANDATE}`
-}
-
-function mergePrompt(prNumber) {
-  return `Merge PR #${prNumber} (phase ${phaseName}).
-
-\`\`\`bash
-cd ${integrationWorktree}
+cd ${ph.integrationWorktree}
 git fetch origin --quiet
 git rebase origin/main
 \`\`\`
-- Conflict → \`git rebase --abort\`, return \`state: "REBASE_FAILED"\` with the conflicting paths.
-- Clean → \`git push --force-with-lease\`, re-wait for CI on the rebased branch
-  (\`gh pr checks ${prNumber}\` every 90s, max 10 min). Not green → \`"CI_FAILED_AFTER_REBASE"\`.
-- Green → \`gh pr merge ${prNumber} --squash\`, then \`gh pr view ${prNumber} --json mergeCommit\`
-  and return \`state: "MERGED"\` with \`mergeCommit\`.
+- Conflict → \`git rebase --abort\`, return \`REBASE_FAILED\` with the paths.
+- Clean → \`git push --force-with-lease\` (this branch only, **never main**), then re-wait CI
+  (every 90s, max 10 min). Not green → \`CI_FAILED_AFTER_REBASE\`.
+- Green → \`gh pr merge ${pr.prNumber} --squash\`, then read back
+  \`gh pr view ${pr.prNumber} --json mergeCommit\` → \`MERGED\`.
 
-This repo has auto-merge DISABLED and \`delete_branch_on_merge\` DISABLED — merge synchronously,
-do not rely on \`--auto\`.
+Auto-merge and \`delete_branch_on_merge\` are both DISABLED here — merge synchronously, and **do not
+delete the branch**; retention is deliberate.
 
-## Return
-StructuredOutput with \`state\`, \`mergeCommit\`, \`reason\`. ${STRUCTURED_OUTPUT_MANDATE}`
+Return \`state\`, \`mergeCommit\`, \`reason\`.
+${SO}`
+}
+
+function healthPrompt(ph, mergeCommit, restore) {
+  return `Confirm production is healthy after phase ${ph.phaseName} merged as \`${mergeCommit}\`.
+
+**This step exists because green CI is not evidence that production works, and the failure mode we
+are guarding against is not noticing for a week.**
+
+## Restore point captured before this phase
+\`\`\`json
+${JSON.stringify(restore, null, 2)}
+\`\`\`
+
+## Checks
+1. **Did the deploy reach production?** \`deploy.yml\` ships \`main\` on CI success. Wait for it
+   (poll up to 15 min), then read the LIVE production deployment and compare its commit to
+   \`${mergeCommit}\`. A merge is not a deploy. Set \`deployReachedProd\` and \`liveDeploymentSha\`.
+2. **Steady state.** Fetch the real production surfaces this phase could affect and confirm they
+   respond correctly — the marketing root, a community public site, and an authenticated route
+   returning a redirect-to-login rather than a 500. Use the plan's own steady-state claims where it
+   states them. Check status codes AND that the body is not an error page behind a 200.
+3. **Advisors.** Re-run \`get_advisors\` and compare with the baseline
+   (${restore?.db?.advisorErrors ?? 'not captured'}). New ERROR lints are a failure.
+4. **Error tracker.** Check Sentry for a NEW issue class since the deploy. Pre-existing noise is not
+   this phase's problem; a new class is.
+
+## Verdict
+- **CONTINUE** — deploy landed and every check passed.
+- **ROLLBACK** — production is broken or degraded. Recommend this decisively; do not diagnose first.
+  A healthy production is the right place to debug from.
+- **ESCALATE** — you cannot tell (no access, ambiguous signal). Say exactly what you could not read.
+  **Ambiguity is ESCALATE, never CONTINUE.**
+
+Return \`healthy\`, \`deployReachedProd\`, \`liveDeploymentSha\`, \`checks\`, \`advisorErrors\`,
+\`newErrorClasses\`, \`recommendation\`, \`reason\`.
+${SO}`
+}
+
+function rollbackPrompt(ph, mergeCommit, restore, health) {
+  return `Roll back phase ${ph.phaseName}. Production is unhealthy after \`${mergeCommit}\`.
+
+## Why
+\`\`\`json
+${JSON.stringify(health, null, 2)}
+\`\`\`
+
+## Restore point (captured before the phase)
+\`\`\`json
+${JSON.stringify(restore, null, 2)}
+\`\`\`
+
+${recovery}
+
+## Order — cheapest and safest first
+1. **Vercel instant rollback** to \`${restore?.deploy?.liveDeploymentId ?? '<not captured>'}\`. This
+   is the documented incident response for this repo and it restores service in seconds without git
+   archaeology. Do this FIRST. If the id was not captured, roll back to the deployment immediately
+   preceding this one and say so.
+2. **Then** take the code off main properly: \`git revert -m 1 ${mergeCommit}\` on a new branch → PR
+   → normal CI. **Never force-push main.**
+3. If a migration was applied this phase and the code is now reverted, check the expand/contract
+   direction. An EXPAND migration can and should stay — that is the entire point of expanding first.
+   Do not reverse it reflexively.
+
+**If the rollback itself fails, stop and escalate immediately.** Do not improvise a second recovery
+path against production; a failed rollback plus an improvised fix is how a bad deploy becomes an
+outage.
+
+Return \`ok\`, \`method\`, \`evidence\`, \`reason\`.
+${SO}`
+}
+
+function gatePrompt(ph, prev) {
+  return `Phase ${ph.phaseName} cannot start until phase ${prev} is LIVE in production.
+
+Reason: ${ph.gate?.rationale ?? 'declared deploy-live gate'}
+
+Confirm it, do not assume it. \`deploy.yml\` ships \`main\` on CI success, so a merge is not a
+deploy. Read the live production deployment and confirm it was built from a commit at or after
+${prev}'s merge, and that the site actually serves.
+${ph.gate?.verifyCommand ? `\nAlso run and require success:\n\`\`\`bash\n${ph.gate.verifyCommand}\n\`\`\`` : ''}
+
+Poll up to 20 minutes. Return the health shape: \`healthy\`, \`deployReachedProd\`,
+\`liveDeploymentSha\`, \`checks\`, \`recommendation\` (CONTINUE once live, ESCALATE if it never
+lands or you cannot read it).
+${SO}`
 }
 
 // ================================================================== execution
 
-// A destructive migration is a hard stop. No harness can undo a DROP COLUMN or a
-// non-idempotent DML; PITR is a whole-project rollback, not an undo. Refuse
-// before doing any work rather than halfway through.
-if (migration && migration.class === 'DESTRUCTIVE') {
-  log('DESTRUCTIVE migration declared — refusing to run autonomously.')
-  return {
-    stopped: 'DESTRUCTIVE_MIGRATION',
-    reason: `Phase ${phaseName} declares migration ${migration.number} as DESTRUCTIVE. ` +
-      'DROP COLUMN/TABLE and non-idempotent DML are not reversible by this harness and must be ' +
-      'applied by a human. Re-run with the destructive statements split into their own migration.',
-    migration,
+const report = { phases: [], tsIso }
+let previousPhase = null
+
+for (let pi = 0; pi < phases.length; pi++) {
+  const ph = { ...phases[pi] }
+  ph.integrationWorktree = `${integrationWorktreeRoot}/${ph.phaseName.toLowerCase().replace(/[^a-z0-9-]/g, '')}-integration`
+  const ent = { phaseName: ph.phaseName }
+  report.phases.push(ent)
+
+  // ---- Refuse the irreversible before doing any work ----------------------
+  if (ph.migration?.class === 'DESTRUCTIVE') {
+    ent.stopped = 'DESTRUCTIVE_MIGRATION'
+    ent.reason = `Migration ${ph.migration.number} is DESTRUCTIVE. DROP COLUMN/TABLE and non-idempotent DML cannot be undone by any harness — PITR is a whole-project rollback, not an undo. Split the destructive statements out for a human.`
+    log(`REFUSED: ${ent.reason}`)
+    return { ...report, stopped: 'DESTRUCTIVE_MIGRATION', atPhase: ph.phaseName }
   }
-}
 
-let tip = baseSha
-const waveResults = []
-const integrations = []
-
-for (let w = 0; w < waves.length; w++) {
-  phase('Implement')
-  const groups = waves[w]
-  log(`Wave ${w + 1}/${waves.length}: ${groups.length} agent(s)`)
-
-  const results = (await parallel(groups.map(group => () => {
-    const ids = group.map(s => s.id)
-    const slug = group.map(s => s.slug ?? s.id).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '')
-    const worktreePath = `${repoRoot}/.claude/worktrees/${phaseName.toLowerCase().replace(/[^a-z0-9-]/g, '')}-${slug}`
-    const branch = `phase-run/${phaseName}/${slug}`
-    return agent(implementPrompt(group, worktreePath, branch, tip), {
-      schema: SLICE_RESULT_SCHEMA,
-      label: `impl:${ids.join('+')}`,
-      phase: 'Implement',
+  // ---- Gate: previous phase must be live ----------------------------------
+  if (ph.gate?.kind === 'deploy-live' && previousPhase) {
+    phase('Safety')
+    const g = await safeAgent(gatePrompt(ph, previousPhase), {
+      schema: HEALTH_SCHEMA, label: `gate:${ph.phaseName}`, phase: 'Safety',
     })
-  }))).filter(Boolean)
+    ent.gate = g
+    if (g?.recommendation !== 'CONTINUE') {
+      ent.stopped = 'GATE_NOT_MET'
+      ent.reason = g?.reason ?? 'Could not confirm the previous phase is live in production.'
+      log(`GATE not met for ${ph.phaseName}: ${ent.reason}`)
+      return { ...report, stopped: 'GATE_NOT_MET', atPhase: ph.phaseName }
+    }
+    log(`gate met: ${previousPhase} is live`)
+  }
 
-  waveResults.push(results)
-  const ok = results.filter(r => r.ok)
-  log(`Wave ${w + 1}: ${ok.length}/${groups.length} ok`)
-  for (const r of results) {
-    if ((r.undeclaredFiles ?? []).length > 0) {
-      log(`⚠ ${r.sliceId} edited undeclared files: ${r.undeclaredFiles.join(', ')}`)
+  // ---- Capture the restore point BEFORE anything changes ------------------
+  phase('Safety')
+  const restore = await safeAgent(restorePointPrompt(ph), {
+    schema: RESTORE_POINT_SCHEMA, label: `restore-point:${ph.phaseName}`, phase: 'Safety',
+  })
+  ent.restore = restore
+  if (!restore?.ok || !restore.git?.mainSha) {
+    ent.stopped = 'NO_RESTORE_POINT'
+    ent.reason = 'Could not capture a verified restore point. Refusing to make an unattended production change without one.'
+    log(`STOP: ${ent.reason}`)
+    return { ...report, stopped: 'NO_RESTORE_POINT', atPhase: ph.phaseName }
+  }
+  if (!restore.runbookVerified) log(`⚠ ${ph.phaseName}: rollback runbook could NOT be verified — proceeding, but flag it`)
+
+  // ---- Waves --------------------------------------------------------------
+  let waves
+  try {
+    waves = deriveWaves(ph.slices)
+  } catch (e) {
+    ent.stopped = 'BAD_SLICE_SPEC'
+    ent.reason = e.message
+    return { ...report, stopped: 'BAD_SLICE_SPEC', atPhase: ph.phaseName }
+  }
+  ent.waves = waves.map(w => w.map(g => g.map(s => s.id).join('+')))
+  log(`${ph.phaseName}: ${waves.length} wave(s) — ${ent.waves.map((w, i) => `W${i + 1}[${w.join(', ')}]`).join(' ')}`)
+
+  let tip = pi === 0 ? baseSha : restore.git.mainSha
+  ent.slices = []
+  ent.undeclaredEdits = []
+
+  for (let w = 0; w < waves.length; w++) {
+    phase('Implement')
+    const groups = waves[w]
+    const results = (await parallel(groups.map(group => () => {
+      const slug = group.map(s => s.slug ?? s.id).join('-').toLowerCase().replace(/[^a-z0-9-]/g, '')
+      const worktreePath = `${repoRoot}/.claude/worktrees/${ph.phaseName.toLowerCase().replace(/[^a-z0-9-]/g, '')}-${slug}`
+      const branch = `phase-run/${ph.phaseName}/${slug}`
+      return agent(implementPrompt(ph, group, worktreePath, branch, tip), {
+        schema: SLICE_RESULT_SCHEMA, label: `impl:${group.map(s => s.id).join('+')}`, phase: 'Implement',
+      })
+    }))).filter(Boolean)
+
+    ent.slices.push(...results.map(r => ({ sliceId: r.sliceId, ok: r.ok, undeclaredFiles: r.undeclaredFiles ?? [], notes: r.notes })))
+    for (const r of results) {
+      if ((r.undeclaredFiles ?? []).length) log(`⚠ ${r.sliceId} edited undeclared: ${r.undeclaredFiles.join(', ')}`)
+    }
+
+    const ok = results.filter(r => r.ok)
+    if (!ok.length) {
+      ent.stopped = 'WAVE_TOTAL_FAILURE'
+      ent.reason = `Every agent in wave ${w + 1} failed.`
+      return { ...report, stopped: 'WAVE_TOTAL_FAILURE', atPhase: ph.phaseName }
+    }
+
+    phase('Integrate')
+    const integ = await safeAgent(integratePrompt(ph, w + 1, ok), {
+      schema: INTEGRATE_RESULT_SCHEMA, label: `integrate:${ph.phaseName}W${w + 1}`, phase: 'Integrate',
+    })
+    if (!integ?.ok || !integ.tipSha) {
+      ent.stopped = 'INTEGRATE_FAILED'
+      ent.reason = integ?.failed?.map(f => `${f.sliceId}: ${f.reason}`).join('; ') ?? 'integrator failed'
+      return { ...report, stopped: 'INTEGRATE_FAILED', atPhase: ph.phaseName }
+    }
+    tip = integ.tipSha
+    ent.undeclaredEdits.push(...(integ.undeclaredEdits ?? []))
+    log(`${ph.phaseName} W${w + 1} integrated → ${tip.slice(0, 8)}`)
+  }
+
+  // ---- Verify, with adversarial diagnosis on red --------------------------
+  phase('Verify')
+  const blocking = v => (v?.results ?? []).filter(r => !r.passed && !(r.failureDetail ?? '').startsWith('ENV:'))
+
+  let verify = await safeAgent(verifyPrompt(ph, tip), {
+    schema: VERIFY_RESULT_SCHEMA, label: `verify:${ph.phaseName}`, phase: 'Verify',
+  })
+  ent.diagnoses = []
+  for (let round = 0; round < 3; round++) {
+    if (verify && blocking(verify).length === 0) break
+    log(`${ph.phaseName} verify red (round ${round + 1}) — diagnosing adversarially`)
+
+    const diag = await safeAgent(
+      diagnosePrompt(ph, blocking(verify), `verify gate, repair round ${round + 1}`),
+      { schema: DIAGNOSIS_SCHEMA, label: `diagnose:${ph.phaseName}:${round + 1}`, phase: 'Verify' },
+    )
+    ent.diagnoses.push(diag)
+    if (diag?.needsHuman) {
+      ent.stopped = 'DIAGNOSIS_NEEDS_HUMAN'
+      ent.reason = diag.needsHumanReason
+      return { ...report, stopped: 'DIAGNOSIS_NEEDS_HUMAN', atPhase: ph.phaseName }
+    }
+    if (!diag || diag.confirmed.length === 0) {
+      ent.stopped = 'VERIFY_FAILED_NO_DIAGNOSIS'
+      ent.reason = 'The gate is red but the adversarial loop confirmed no findings — the failure is not understood, and guessing at a fix against production is worse than stopping.'
+      return { ...report, stopped: 'VERIFY_FAILED_NO_DIAGNOSIS', atPhase: ph.phaseName }
+    }
+
+    const fix = await safeAgent(repairPrompt(ph, diag, tip), {
+      schema: SLICE_RESULT_SCHEMA, label: `repair:${ph.phaseName}:${round + 1}`, phase: 'Verify',
+    })
+    if (!fix?.ok) break
+    tip = fix.commitSha ?? tip
+    verify = await safeAgent(verifyPrompt(ph, tip), {
+      schema: VERIFY_RESULT_SCHEMA, label: `verify:${ph.phaseName}:${round + 2}`, phase: 'Verify',
+    })
+  }
+  ent.verify = verify
+  if (!verify || blocking(verify).length > 0) {
+    ent.stopped = 'VERIFY_FAILED'
+    ent.reason = `Local gate still red after 3 diagnose-and-fix rounds: ${blocking(verify).map(r => r.command).join(', ')}`
+    return { ...report, stopped: 'VERIFY_FAILED', atPhase: ph.phaseName }
+  }
+  log(`${ph.phaseName} verify green`)
+
+  // ---- Migration ladder ---------------------------------------------------
+  if (ph.migration) {
+    phase('Migrate')
+    const mig = await safeAgent(migrationPrompt(ph), {
+      schema: MIGRATION_RESULT_SCHEMA, label: `migrate:${ph.migration.number}`, phase: 'Migrate',
+    })
+    ent.migration = mig
+    if (!mig?.ok || (mig.stage !== 'VERIFIED' && mig.stage !== 'APPLIED')) {
+      ent.stopped = 'MIGRATION_NOT_APPLIED'
+      ent.reason = `Migration ${ph.migration.number} ended at stage ${mig?.stage ?? 'UNKNOWN'}: ${mig?.reason ?? 'no reason given'}`
+      return { ...report, stopped: 'MIGRATION_NOT_APPLIED', atPhase: ph.phaseName }
+    }
+    log(`migration ${ph.migration.number} ${mig.stage} (ledger ${mig.ledgerId})`)
+  }
+
+  // ---- PR + four-lens review ---------------------------------------------
+  phase('Review')
+  const pr = await safeAgent(openPrPrompt(ph), { schema: PR_RESULT_SCHEMA, label: `pr:${ph.phaseName}`, phase: 'Review' })
+  if (!pr?.ok || !pr.prNumber) {
+    ent.stopped = 'PR_FAILED'
+    ent.reason = pr?.reason ?? 'could not open the PR'
+    return { ...report, stopped: 'PR_FAILED', atPhase: ph.phaseName }
+  }
+  ent.prNumber = pr.prNumber
+  ent.prUrl = pr.prUrl
+  log(`${ph.phaseName} → PR #${pr.prNumber}`)
+
+  const reviews = await parallel([
+    () => agent(generalReviewPrompt(ph, pr), { schema: REVIEW_FINDINGS_SCHEMA, label: `review:correctness`, phase: 'Review' }),
+    () => agent(corpusReviewPrompt(ph, pr), { agentType: 'feature-dev:code-reviewer', schema: REVIEW_FINDINGS_SCHEMA, label: `review:corpus`, phase: 'Review' }),
+    () => agent(opsReviewPrompt(ph, pr), { schema: REVIEW_FINDINGS_SCHEMA, label: `review:devops-chaos`, phase: 'Review' }),
+    () => agent(securityReviewPrompt(ph, pr), { schema: REVIEW_FINDINGS_SCHEMA, label: `review:security`, phase: 'Review' }),
+  ])
+  const findings = reviews.filter(Boolean).flatMap(r => r.findings ?? [])
+  ent.findingsRaw = findings.length
+  log(`${ph.phaseName} review: ${findings.length} raw findings across 4 lenses`)
+
+  // ---- Adjudicate adversarially, then adopt only what survives ------------
+  phase('Adopt')
+  let adoption = { adopted: [], dismissed: [], failed: [] }
+  if (findings.length) {
+    const adj = await safeAgent(adjudicatePrompt(ph, pr, findings), {
+      schema: DIAGNOSIS_SCHEMA, label: `adjudicate:${ph.phaseName}`, phase: 'Adopt',
+    })
+    ent.adjudication = adj ? { confirmed: adj.confirmed.length, refuted: adj.refuted.length, rounds: adj.rounds } : null
+
+    if (adj?.needsHuman) {
+      ent.stopped = 'REVIEW_NEEDS_HUMAN'
+      ent.reason = adj.needsHumanReason
+      return { ...report, stopped: 'REVIEW_NEEDS_HUMAN', atPhase: ph.phaseName }
+    }
+    if (adj && adj.confirmed.length) {
+      log(`${ph.phaseName}: ${adj.confirmed.length} confirmed, ${adj.refuted.length} refuted`)
+      adoption = (await safeAgent(adoptPrompt(ph, pr, adj), {
+        schema: ADOPT_RESULT_SCHEMA, label: `adopt:${ph.phaseName}`, phase: 'Adopt',
+      })) ?? adoption
+
+      const re = await safeAgent(verifyPrompt(ph, adoption.headSha ?? tip), {
+        schema: VERIFY_RESULT_SCHEMA, label: `verify:post-adopt:${ph.phaseName}`, phase: 'Adopt',
+      })
+      if (!re || blocking(re).length > 0) {
+        ent.stopped = 'POST_ADOPT_VERIFY_FAILED'
+        ent.reason = 'Adopting review findings broke the local gate.'
+        return { ...report, stopped: 'POST_ADOPT_VERIFY_FAILED', atPhase: ph.phaseName }
+      }
+      tip = adoption.headSha ?? tip
+    } else {
+      log(`${ph.phaseName}: no findings survived adjudication`)
     }
   }
+  ent.findings = { raw: findings.length, adopted: adoption.adopted.length, dismissed: adoption.dismissed.length, failed: adoption.failed.length }
 
-  if (ok.length === 0) {
-    return { stopped: 'WAVE_TOTAL_FAILURE', wave: w + 1, waveResults }
+  // ---- CI, with adversarial diagnosis on red ------------------------------
+  phase('Ship')
+  let ci = await safeAgent(ciWaitPrompt(pr), { schema: CI_WAIT_RESULT_SCHEMA, label: `ci:${ph.phaseName}`, phase: 'Ship' })
+  for (let round = 0; round < 2; round++) {
+    if (ci?.state !== 'RED') break
+    log(`${ph.phaseName} CI red — diagnosing`)
+    const diag = await safeAgent(
+      diagnosePrompt(ph, { failedChecks: ci.failedChecks, failureLog: ci.failureLog }, `CI red, round ${round + 1}`),
+      { schema: DIAGNOSIS_SCHEMA, label: `diagnose:ci:${round + 1}`, phase: 'Ship' },
+    )
+    if (diag?.needsHuman || !diag?.confirmed?.length) break
+    const fix = await safeAgent(repairPrompt(ph, diag, tip), {
+      schema: SLICE_RESULT_SCHEMA, label: `ci-repair:${round + 1}`, phase: 'Ship',
+    })
+    if (!fix?.ok) break
+    ci = await safeAgent(ciWaitPrompt(pr), { schema: CI_WAIT_RESULT_SCHEMA, label: `ci:${ph.phaseName}:${round + 2}`, phase: 'Ship' })
+  }
+  ent.ci = ci?.state
+  if (ci?.state !== 'GREEN') {
+    ent.stopped = 'CI_NOT_GREEN'
+    ent.reason = `${ci?.state ?? 'UNKNOWN'}: ${(ci?.failedChecks ?? []).join(', ')}`
+    return { ...report, stopped: 'CI_NOT_GREEN', atPhase: ph.phaseName }
   }
 
-  phase('Integrate')
-  const integ = await safeAgent(integratePrompt(w + 1, ok), {
-    schema: INTEGRATE_RESULT_SCHEMA, label: `integrate:W${w + 1}`, phase: 'Integrate',
-  })
-  integrations.push(integ)
-  if (!integ?.ok || !integ.tipSha) {
-    return { stopped: 'INTEGRATE_FAILED', wave: w + 1, waveResults, integrations }
+  const merge = await safeAgent(mergePrompt(ph, pr), { schema: MERGE_RESULT_SCHEMA, label: `merge:${ph.phaseName}`, phase: 'Ship' })
+  ent.merge = merge?.state
+  ent.mergeCommit = merge?.mergeCommit
+  if (merge?.state !== 'MERGED') {
+    ent.stopped = 'MERGE_FAILED'
+    ent.reason = merge?.reason ?? merge?.state ?? 'unknown'
+    return { ...report, stopped: 'MERGE_FAILED', atPhase: ph.phaseName }
   }
-  tip = integ.tipSha
-  log(`Wave ${w + 1} integrated → ${tip.slice(0, 8)} (merged ${integ.merged.length}, failed ${integ.failed.length})`)
-}
+  log(`${ph.phaseName} MERGED ${merge.mergeCommit?.slice(0, 10)}`)
 
-// ---- Verify: an independent agent re-runs every done-criterion --------------
-phase('Verify')
-
-const blockingOf = v => (v?.results ?? []).filter(r => !r.passed && !(r.failureDetail ?? '').startsWith('ENV:'))
-
-let verify = await safeAgent(verifyPrompt(tip, 'verify'), {
-  schema: VERIFY_RESULT_SCHEMA, label: 'verify', phase: 'Verify',
-})
-const repairs = []
-for (let round = 0; round < 2; round++) {
-  if (!verify || blockingOf(verify).length === 0) break
-  log(`Verify round ${round + 1} failed — repairing`)
-  const repair = await safeAgent(repairPrompt(verify, tip), {
-    schema: SLICE_RESULT_SCHEMA, label: `repair:${round + 1}`, phase: 'Verify',
+  // ---- Production health — the "didn't realize until later" gate ----------
+  phase('Health')
+  const health = await safeAgent(healthPrompt(ph, merge.mergeCommit, restore), {
+    schema: HEALTH_SCHEMA, label: `health:${ph.phaseName}`, phase: 'Health',
   })
-  repairs.push(repair)
-  if (!repair?.ok) break
-  tip = repair.commitSha ?? tip
-  verify = await safeAgent(verifyPrompt(tip, `verify:${round + 2}`), {
-    schema: VERIFY_RESULT_SCHEMA, label: `verify:${round + 2}`, phase: 'Verify',
-  })
-}
+  ent.health = health
 
-if (!verify || blockingOf(verify).length > 0) {
-  return {
-    stopped: 'VERIFY_FAILED',
-    reason: 'Local gate did not go green after two repair rounds — escalating rather than opening a PR.',
-    waveResults, integrations, verify, repairs,
+  if (health?.recommendation === 'ROLLBACK') {
+    log(`${ph.phaseName}: production UNHEALTHY — rolling back`)
+    const rb = await safeAgent(rollbackPrompt(ph, merge.mergeCommit, restore, health), {
+      schema: ROLLBACK_SCHEMA, label: `rollback:${ph.phaseName}`, phase: 'Health',
+    })
+    ent.rollback = rb
+    ent.stopped = rb?.ok ? 'ROLLED_BACK' : 'ROLLBACK_FAILED'
+    ent.reason = health.reason
+    return { ...report, stopped: ent.stopped, atPhase: ph.phaseName, urgent: !rb?.ok }
   }
-}
-log('Verify green (ENV-only failures tolerated).')
-
-// ---- PR ---------------------------------------------------------------------
-phase('Review')
-const pr = await safeAgent(openPrPrompt(), { schema: PR_RESULT_SCHEMA, label: 'open-pr', phase: 'Review' })
-if (!pr?.ok || !pr.prNumber) {
-  return { stopped: 'PR_FAILED', waveResults, integrations, verify, pr }
-}
-log(`PR #${pr.prNumber}: ${pr.prUrl}`)
-const prCtx = { prNumber: pr.prNumber, prUrl: pr.prUrl, branch: integrationBranch }
-
-// ---- Dual review ------------------------------------------------------------
-const [general, corpusRev] = await parallel([
-  () => agent(codeReviewPrompt(prCtx), { schema: REVIEW_FINDINGS_SCHEMA, label: 'review:general', phase: 'Review' }),
-  () => agent(corpusReviewPrompt(prCtx), {
-    agentType: 'feature-dev:code-reviewer',
-    schema: REVIEW_FINDINGS_SCHEMA, label: 'review:corpus', phase: 'Review',
-  }),
-])
-const findings = dedupeFindings(general?.findings ?? [], corpusRev?.findings ?? [])
-const high = findings.filter(f => f.severity === 'HIGH')
-log(`Review: ${findings.length} deduped findings (${high.length} HIGH)`)
-
-// ---- Adopt, then re-verify --------------------------------------------------
-phase('Adopt')
-let adoption = { adopted: [], dismissed: [], failed: [] }
-if (findings.some(isActionable)) {
-  adoption = (await safeAgent(adoptPrompt(prCtx, findings), {
-    schema: ADOPT_RESULT_SCHEMA, label: 'adopt', phase: 'Adopt',
-  })) ?? adoption
-  log(`Adopt: ${adoption.adopted.length} adopted, ${adoption.dismissed.length} dismissed, ${adoption.failed.length} failed`)
-
-  // A fix is not a fix until the gate agrees.
-  const reVerify = await safeAgent(verifyPrompt(adoption.headSha ?? tip, 'post-adopt'), {
-    schema: VERIFY_RESULT_SCHEMA, label: 'verify:post-adopt', phase: 'Adopt',
-  })
-  if (!reVerify || blockingOf(reVerify).length > 0) {
-    return {
-      stopped: 'POST_ADOPT_VERIFY_FAILED',
-      reason: 'Adopting review findings broke the local gate — escalating rather than merging.',
-      prUrl: pr.prUrl, findings, adoption, reVerify,
-    }
+  if (health?.recommendation !== 'CONTINUE') {
+    ent.stopped = 'HEALTH_UNVERIFIED'
+    ent.reason = health?.reason ?? 'Could not confirm production health. Ambiguity is escalation, not a pass — the next phase would build on an unverified base.'
+    return { ...report, stopped: 'HEALTH_UNVERIFIED', atPhase: ph.phaseName }
   }
-} else {
-  log('No actionable findings.')
+
+  log(`${ph.phaseName} healthy in production`)
+  ent.ok = true
+  previousPhase = ph.phaseName
 }
 
-// ---- CI + merge --------------------------------------------------------------
-phase('Ship')
-let ci = await safeAgent(ciWaitPrompt(pr.prNumber), { schema: CI_WAIT_RESULT_SCHEMA, label: 'ci-wait', phase: 'Ship' })
-const ciRepairs = []
-for (let round = 0; round < 2; round++) {
-  if (ci?.state !== 'RED') break
-  log(`CI RED (${(ci.failedChecks ?? []).join(', ')}) — repair ${round + 1}`)
-  const r = await safeAgent(ciRepairPrompt(pr.prNumber, ci.failedChecks ?? []), {
-    schema: SLICE_RESULT_SCHEMA, label: `ci-repair:${round + 1}`, phase: 'Ship',
-  })
-  ciRepairs.push(r)
-  if (!r?.ok) break
-  ci = await safeAgent(ciWaitPrompt(pr.prNumber), {
-    schema: CI_WAIT_RESULT_SCHEMA, label: `ci-wait:${round + 2}`, phase: 'Ship',
-  })
-}
-if (ci?.state !== 'GREEN') {
-  return {
-    stopped: 'CI_NOT_GREEN', state: ci?.state ?? 'UNKNOWN', failedChecks: ci?.failedChecks ?? [],
-    prUrl: pr.prUrl, findings, adoption, ciRepairs,
-  }
-}
-
-const merge = await safeAgent(mergePrompt(pr.prNumber), { schema: MERGE_RESULT_SCHEMA, label: 'merge', phase: 'Ship' })
-
+// Cleanup is deliberately NOT automated: every phase is healthy by the time we
+// reach here, but the worktrees and branches are the only record of how each
+// slice reasoned, and they cost nothing to keep. The skill sweeps them once the
+// human has read the report.
 return {
-  phase: phaseName,
-  prNumber: pr.prNumber,
-  prUrl: pr.prUrl,
-  merged: merge?.state === 'MERGED',
-  mergeState: merge?.state ?? 'UNKNOWN',
-  mergeCommit: merge?.mergeCommit,
-  waves: waves.map(w => w.map(g => g.map(s => s.id).join('+'))),
-  slices: waveResults.flat().map(r => ({ sliceId: r.sliceId, ok: r.ok, undeclaredFiles: r.undeclaredFiles ?? [], notes: r.notes })),
-  integrateFailures: integrations.flatMap(i => i?.failed ?? []),
-  verify,
-  repairs: repairs.filter(Boolean).length,
-  findings: {
-    total: findings.length,
-    high: high.length,
-    adopted: adoption.adopted.length,
-    dismissed: adoption.dismissed.length,
-    failed: adoption.failed.length,
-  },
-  ciRepairs: ciRepairs.filter(Boolean).length,
-  tsIso,
+  ...report,
+  ok: report.phases.every(p => p.ok),
+  cleanupPending: `${repoRoot}/.claude/worktrees (phase-run/* branches and *-integration worktrees retained deliberately)`,
 }
