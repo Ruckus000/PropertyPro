@@ -12,6 +12,9 @@
  * protected segments, not hand-copied, or the two drift and a page silently
  * shadows a real route.
  */
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   classifySubdomainPath,
@@ -59,7 +62,18 @@ describe('isReservedPublicSlug', () => {
     expect(isReservedPublicSlug(slug)).toBe(true);
   });
 
-  it.each(['meetings', 'about', 'amenities', 'board', 'contact-us'])(
+  // `meetings` and `arc-requests` used to be listed here as "available". They
+  // are top-level `(authenticated)` pages AND sidebar nav items, so that was
+  // the bug encoded as a test: a logged-in resident clicking Meetings on their
+  // community subdomain got the public-site renderer's 404.
+  it.each(['meetings', 'arc-requests', 'account', 'admin', 'billing'])(
+    'reserves the authenticated route segment %s',
+    (slug) => {
+      expect(isReservedPublicSlug(slug)).toBe(true);
+    },
+  );
+
+  it.each(['about', 'amenities', 'board', 'contact-us'])(
     'leaves %s available for a page',
     (slug) => {
       expect(isReservedPublicSlug(slug)).toBe(false);
@@ -82,6 +96,35 @@ describe('isReservedPublicSlug', () => {
     // Guard the guard: an empty/degenerate prefix list would make the loop
     // above vacuously true.
     expect(PROTECTED_PATH_PREFIXES.length).toBeGreaterThan(20);
+  });
+
+  // The derivation above only closes the drift between two LISTS. This closes
+  // the drift between the list and the actual route tree — the gap that let
+  // `/meetings` and `/arc-requests` (top-level `(authenticated)` pages and
+  // sidebar nav items) be classified as public page slugs once
+  // `classifySubdomainPath` became a routing gate above `isProtectedPath`.
+  it('reserves the first segment of EVERY (authenticated) route directory', () => {
+    const authenticatedDir = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../../src/app/(authenticated)',
+    );
+    const segments = readdirSync(authenticatedDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      // Route groups `(x)` and private folders `_x` do not appear in the URL.
+      .map((entry) => entry.name)
+      .filter((name) => !name.startsWith('(') && !name.startsWith('_'));
+
+    expect(segments.length).toBeGreaterThan(10);
+    for (const segment of segments) {
+      expect(
+        isReservedPublicSlug(segment),
+        `(authenticated)/${segment} is an app route, so "${segment}" must be reserved — add '/${segment}' to PROTECTED_PATH_PREFIXES`,
+      ).toBe(true);
+      expect(
+        classifySubdomainPath(`/${segment}`),
+        `/${segment} must route to the app on a community subdomain, not the public-site renderer`,
+      ).toBe('app');
+    }
   });
 
   it('reserves "welcome" — the divergence that motivated the derivation', () => {

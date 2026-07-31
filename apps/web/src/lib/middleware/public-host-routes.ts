@@ -21,6 +21,17 @@ export const PATH_PUBLIC_SUFFIXES = new Set([
  * community subdomain would have shadowed the authenticated route for every
  * resident. Derivation makes that class of bug unrepresentable.
  *
+ * **Every first segment under `apps/web/src/app/(authenticated)/` must appear
+ * here.** Before 11b-2 this list only drove `isProtectedPath`, and a missing
+ * entry was harmless for any route whose own layout enforced auth. It is now a
+ * ROUTING gate as well: `classifySubdomainPath` runs above `isProtectedPath`,
+ * so a first segment missing from here is classified `site-page` and rewritten
+ * to the public-site renderer, which 404s for a logged-in resident clicking it
+ * in the sidebar. `/meetings` and `/arc-requests` (both sidebar nav items) were
+ * exactly that; `/account`, `/admin` and `/billing` survived only by accident,
+ * because every route under them happens to be ≥2 segments deep.
+ * `public-host-routes.test.ts` enumerates the route tree and fails on drift.
+ *
  * No prefix should be a substring-prefix of another (e.g. adding '/con'
  * would incorrectly match '/contracts' and '/communities').
  */
@@ -28,6 +39,11 @@ export const PROTECTED_PATH_PREFIXES = [
   '/dashboard',
   '/welcome',
   '/help',
+  '/meetings',
+  '/arc-requests',
+  '/account',
+  '/admin',
+  '/billing',
   '/select-community',
   '/settings',
   '/documents',

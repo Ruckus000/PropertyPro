@@ -19,10 +19,15 @@ import { NextRequest, NextResponse } from 'next/server';
 const ROOT_DOMAIN = 'getpropertypro.com';
 const CUSTOM_HOST = 'www.sunsetcondos.com';
 
-const { getUserMock, rpcMock, captureMessageMock } = vi.hoisted(() => ({
+const { getUserMock, rpcMock, captureMessageMock, sessionUser } = vi.hoisted(() => ({
   getUserMock: vi.fn(),
   rpcMock: vi.fn(),
   captureMessageMock: vi.fn(),
+  // `createMiddlewareClient` resolves the session ONCE and hands the caller a
+  // `user`; middleware reads that, not `supabase.auth.getUser()`. The mock has
+  // to expose it or every case in this file runs as anonymous regardless of
+  // `signedIn(true)` — which is how the x-preview gate went untested.
+  sessionUser: { current: null as { id: string; email: string } | null },
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
@@ -34,6 +39,8 @@ vi.mock('@propertypro/db/supabase/middleware', () => ({
       rpc: rpcMock,
     },
     response: NextResponse.next(),
+    user: sessionUser.current,
+    authChecked: true,
   }),
 }));
 
@@ -59,6 +66,7 @@ function request(host: string, path: string): NextRequest {
 }
 
 function signedIn(is: boolean) {
+  sessionUser.current = is ? { id: 'u1', email: 'a@b.c' } : null;
   getUserMock.mockResolvedValue(
     is
       ? { data: { user: { id: 'u1', email: 'a@b.c' }, claims: { sub: 'u1' } }, error: null }
@@ -334,7 +342,8 @@ describe('community subdomain — public page slugs now resolve [D1]', () => {
     expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-transparency' });
   });
 
-  it('forwards x-preview when ?preview=true', async () => {
+  it('forwards x-preview when ?preview=true and there is a session', async () => {
+    signedIn(true);
     const res = await middleware(
       new NextRequest(`https://preview-condos.${ROOT_DOMAIN}/about?preview=true`, {
         headers: { host: `preview-condos.${ROOT_DOMAIN}` },
@@ -342,6 +351,32 @@ describe('community subdomain — public page slugs now resolve [D1]', () => {
     );
     expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-site/about' });
     expect(forwarded(res, 'x-preview')).toBe('true');
+  });
+
+  // `?preview=true` is a query string — anyone can type it. 11b-2 threads
+  // `x-preview` to the PAGE-row lookup as well as the block lookup, so an
+  // ungated stamp would hand an anonymous visitor a page the PM never
+  // published. D7 says an unpublished page is a 404 to the public.
+  it('does NOT forward x-preview for an anonymous ?preview=true', async () => {
+    signedIn(false);
+    const res = await middleware(
+      new NextRequest(`https://anonpreview-condos.${ROOT_DOMAIN}/about?preview=true`, {
+        headers: { host: `anonpreview-condos.${ROOT_DOMAIN}` },
+      }),
+    );
+    expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-site/about' });
+    expect(forwarded(res, 'x-preview')).toBeNull();
+  });
+
+  it('does NOT forward x-preview for an anonymous ?preview=true on a custom domain', async () => {
+    signedIn(false);
+    const res = await middleware(
+      new NextRequest(`https://anon-preview.example.com/about?preview=true`, {
+        headers: { host: 'anon-preview.example.com' },
+      }),
+    );
+    expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-site/about' });
+    expect(forwarded(res, 'x-preview')).toBeNull();
   });
 
   it('still serves a page when the tenant lookup throws, and reports it', async () => {

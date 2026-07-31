@@ -509,6 +509,25 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
   const forwardedHeaders = sanitizeForwardedHeaders(request, requestId);
 
+  /**
+   * Whether this request may see UNPUBLISHED site content [11b-2].
+   *
+   * `?preview=true` is visitor-controlled — it is a query string, nothing more.
+   * `x-preview` is what the public-site renderer trusts to switch to draft
+   * reads, and 11b-2 threads it to the PAGE-row lookup as well as the block
+   * lookup, so an ungated stamp would let any anonymous visitor read a page the
+   * PM created but never published by appending `?preview=true`. D7 ("an
+   * unpublished page is a 404 to the public") only holds if the stamp is gated.
+   *
+   * The gate is "there is a signed-in user", not "this user may edit this
+   * community's site": the latter needs a per-request DB read in middleware,
+   * which runs on every request. That narrows the exposure from *anyone on the
+   * internet* to *someone with an account*, which is the property D7 is about.
+   * A signed preview token is the right long-term fix and belongs with the
+   * editor's share-a-preview feature, not here.
+   */
+  const canPreviewDrafts = isPreviewRequest && middlewareUser != null;
+
   // --- Rate limiting (Phase 1: unauthenticated routes) [P2-42] ---
   // For auth and public routes, check rate limit by IP before doing heavier work.
   const routeCategory = classifyRoute(pathname, request.method);
@@ -636,7 +655,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         if (communityId != null) {
           forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
           forwardedHeaders.set(TENANT_SOURCE_HEADER, 'custom_domain');
-          if (isPreviewRequest) {
+          // Gated on a session, not on the query param alone — see
+          // `canPreviewDrafts`. An anonymous `?preview=true` gets the published
+          // site, which is what D7 promises.
+          if (canPreviewDrafts) {
             forwardedHeaders.set('x-preview', 'true');
           }
 
@@ -778,8 +800,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         // recoverable.
 
         // Forward x-preview=true so the renderer can switch to draft reads
-        // (PR #8c). Mirrors the /mobile preview pattern above.
-        if (isPreviewRequest) {
+        // (PR #8c). NOT the /mobile pattern above: that one is deliberately
+        // cookie-less because it renders a published demo template, whereas
+        // this one exposes unpublished pages and blocks, so it is gated on a
+        // session — see `canPreviewDrafts`.
+        if (canPreviewDrafts) {
           forwardedHeaders.set('x-preview', 'true');
         }
         const siteUrl = request.nextUrl.clone();
