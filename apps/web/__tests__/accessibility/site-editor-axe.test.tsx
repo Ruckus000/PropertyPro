@@ -103,8 +103,18 @@ vi.mock('@/hooks/use-media-query', () => ({
   useIsDesktop: () => !isNarrowMock.value,
 }));
 
+// `pageId` is REQUIRED on SiteBlockSummary (D13'), but `apps/web/tsconfig.json`
+// includes only `src/**`, so nothing typechecks this file — a missing `pageId`
+// would silently yield `undefined` and `blocksForPage` would throw the first
+// time these rows reached a page-scoped surface. It is a real page id, not
+// `null`: `blocksForPage` deliberately EXCLUDES unadopted (`null`) rows when a
+// page is selected, so `null` here would make the whole fixture vanish rather
+// than render. 1 is SITE_PAGES[0] below, the home page.
+const FIXTURE_PAGE_ID = 1;
+
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: FIXTURE_PAGE_ID,
     blockType: 'text',
     blockOrder: overrides.id,
     content: {},

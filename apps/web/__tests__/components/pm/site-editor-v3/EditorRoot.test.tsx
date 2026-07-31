@@ -63,9 +63,17 @@ vi.mock('@/hooks/use-media-query', () => ({
   useIsDesktop: () => true,
 }));
 
+// `pageId` is REQUIRED on SiteBlockSummary (D13'), but `apps/web/tsconfig.json`
+// includes only `src/**`, so nothing typechecks this file. This factory is
+// green today only because the Canvas — the caller of `blocksForPage`, which
+// throws on an `undefined` pageId — is mocked away above; the tripwire cannot
+// fire on exactly the file that needs it. Defaulting to HOME_PAGE_ID (the page
+// the shell seeds) rather than `null` matters: `blocksForPage` deliberately
+// excludes unadopted (`null`) rows once a page is selected.
 function block(overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary {
   return {
     id: 1,
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: 2,
     content: { heading: 'Pool rules', body: 'No glass by the pool, please.' },
