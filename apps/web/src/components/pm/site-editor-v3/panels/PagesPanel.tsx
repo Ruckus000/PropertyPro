@@ -1,15 +1,9 @@
 'use client';
 
 /**
- * The "Pages" tool panel — which page of the site the editor is editing
- * (website editor v3, Phase 11b-3).
- *
- * ## What this slice ships
- *
- * A READ-ONLY list with selection. Creating, renaming, reordering, nav toggling
- * and removal all land in the next slice; this one exists so the rest of the
- * editor has a selected page to key off, which is the prerequisite for every
- * block write targeting the right page.
+ * The "Pages" tool panel — which page of the site the editor is editing, and
+ * every change a PM can make to the set of pages (website editor v3, Phase
+ * 11b-3, slices S4a + S4b).
  *
  * ## States (all four, per `.claude/rules/design.md`)
  *
@@ -21,7 +15,9 @@
  * The empty state is genuinely reachable despite `listSitePages` creating a home
  * page on demand: an editor that was open when the community's last page was
  * removed refetches into an empty list. It is not "impossible", it is "rare",
- * and rendering nothing for it would look like a broken panel.
+ * and rendering nothing for it would look like a broken panel. It still offers
+ * the add form, because a panel whose only escape hatch is a page reload is a
+ * support ticket.
  *
  * ## Why the panel queries rather than taking a server seed
  *
@@ -30,6 +26,10 @@
  * initial load of every PM who never opens it. `EditorRoot` separately receives
  * a server-rendered seed, but that is for the *selected page id* — which the
  * write hooks need before any tab is clicked — not for this list.
+ *
+ * `useContentBlocks` is read for ONE reason: the permanent-delete dialog has to
+ * say how many sections go with the page (D36′). It shares the canvas's query
+ * key, so it costs no extra request.
  *
  * ## Selection repair
  *
@@ -44,27 +44,134 @@
  * repair fixes is the DISHONEST rendering in between: a panel showing no page as
  * current while every save is quietly landing on home is the wrong-but-200
  * failure, and it is the one nobody reports.
+ *
+ * ## The address control is absent, not disabled, on a published page (D32′)
+ *
+ * Changing a live page's address is live-immediate, mints a permanent redirect
+ * and reserves the old slug forever. That change is deferred to a later PR a
+ * human reviews. A *disabled* input would still be an affordance — it says "this
+ * is a thing you can do, just not now", which is a promise this build does not
+ * keep. So on a published page there is no address field at all. On a page that
+ * has never been published there is one, because a draft page has no public URL,
+ * mints nothing permanent, and without it a typo made at creation becomes a
+ * permanent address the PM can never correct.
+ *
+ * ## Removal has two shapes, and only one of them is undoable (D36′)
+ *
+ * A published page is STAGED for removal and stays live until the next publish,
+ * so its toast carries an Undo that cancels the staging. A page that has never
+ * been published is deleted outright, together with its sections, with no
+ * server-side path back — `unstageSitePageDelete` throws when nothing is staged
+ * and a draft discard cannot resurrect a soft-deleted row. The confirmation is
+ * therefore the ONLY guard on that path, and its copy is constrained: it states
+ * that the deletion is immediate, that it cannot be undone, and how many
+ * sections go with it. It deliberately never uses the word "publish" — this page
+ * has no relationship to publishing, and borrowing that vocabulary would imply a
+ * staged action the PM could still reverse.
  */
 
-import { useEffect } from 'react';
-import { Files } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
+import dynamic from 'next/dynamic';
+import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Files,
+  GripVertical,
+  Plus,
+  Settings2,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  pageIssues,
+  TOMBSTONE_BLOCK_TYPE,
+  type PageForValidation,
+} from '@propertypro/shared';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
-import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
+import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
+import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
+import { useContentBlocks } from '@/hooks/use-content-blocks';
+import {
+  useCreateSitePage,
+  useDeleteSitePage,
+  useReorderSitePages,
+  useSitePages,
+  useUnstageSitePageDelete,
+  useUpdateSitePage,
+  type SitePageSummary,
+} from '@/hooks/use-site-pages';
 
-export interface PagesPanelProps {
-  communityId: number;
-  /**
-   * The page being edited, or `null` while none is known.
-   *
-   * Required, not defaulted: a panel that invented its own selection would
-   * disagree with the one the block writes actually use.
-   */
-  selectedPageId: number | null;
-  onSelectPage: (pageId: number) => void;
+// Mounted only once opened, and code-split with it: the Radix alert-dialog stack
+// is ~31 KiB and this route sits inside a hard 700 KiB budget. Nothing is
+// confirmed before a click, so nobody pays for it before then.
+const ConfirmDialog = dynamic(() => import('../ConfirmDialog').then((m) => m.ConfirmDialog), {
+  loading: () => null,
+});
+
+/**
+ * How many pages a site may have (D39′).
+ *
+ * A UX guard rail, not a correctness rule: the reorder contract independently
+ * caps at 200 and the community-wide section cap is 98. It exists so a runaway
+ * script or a confused afternoon does not leave a PM with a nav they cannot
+ * read. The server does not enforce it, so this is advisory — which is exactly
+ * why it must never be the only thing standing between a user and data loss.
+ */
+export const MAX_SITE_PAGES = 20;
+
+/**
+ * Spelled out rather than interpolated from `MAX_SITE_PAGES`.
+ *
+ * The two are pinned together by a test, so they cannot drift; a literal is used
+ * because the phase's done-criterion greps this file for the exact sentence, and
+ * a criterion that a template string can silently satisfy is not a criterion.
+ */
+export const PAGE_CAP_MESSAGE = 'A site can have up to 20 pages.';
+
+/** How long the Undo on a staged removal stays offered. Mirrors `UNDO_WINDOW_MS`. */
+const UNDO_WINDOW_MS = 10_000;
+
+/** The synthetic id the not-yet-created page carries through `pageIssues`. */
+const NEW_PAGE_KEY = 'new';
+
+/**
+ * Suggests an address from a page name.
+ *
+ * Deliberately NOT `slugifyHeading` from `@/lib/help/anchors`, which produces
+ * the same shape today: that helper's contract is "an anchor inside one help
+ * article", and sharing it would mean a change made for a help TOC silently
+ * changes what a public page URL is proposed as. The overlap is a coincidence,
+ * not an interface.
+ *
+ * Trailing hyphens are stripped AFTER the length clamp so a name truncated
+ * mid-word cannot yield `foo-`, which `SITE_PAGE_SLUG_PATTERN` accepts but reads
+ * as a mistake.
+ */
+export function slugifyPageName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, '');
 }
 
 /** The public address of a page, as a PM reads it. Home is the site root. */
@@ -101,10 +208,96 @@ function rowBadge(page: SitePageSummary): { label: string; className: string } |
   return null;
 }
 
+/** Maps a server row onto the shared validator's shape, with optional edits applied. */
+function toValidationShape(
+  page: SitePageSummary,
+  override?: { name?: string; slug?: string },
+): PageForValidation {
+  return {
+    pageId: String(page.id),
+    name: override?.name ?? page.name,
+    slug: override?.slug ?? page.slug,
+    isHome: page.isHome,
+    isDraft: page.isDraft,
+    // A page already staged for removal is skipped by the validator, which is
+    // what frees its address for reuse before the publish lands.
+    deleteStaged: page.deleteStagedAt !== null,
+  };
+}
+
+function messagesFor(
+  issues: ReturnType<typeof pageIssues>,
+  pageKey: string,
+  field: 'name' | 'slug',
+): string[] {
+  return issues
+    .filter((issue) => issue.pageId === pageKey && issue.field.endsWith(`.${field}`))
+    .map((issue) => issue.message);
+}
+
+/** "no sections" / "1 section" / "4 sections" — the count D36′ requires, said in words. */
+function sectionPhrase(count: number): string {
+  if (count === 0) return 'no sections';
+  if (count === 1) return '1 section';
+  return `${count} sections`;
+}
+
+export interface PagesPanelProps {
+  communityId: number;
+  /**
+   * The page being edited, or `null` while none is known.
+   *
+   * Required, not defaulted: a panel that invented its own selection would
+   * disagree with the one the block writes actually use.
+   */
+  selectedPageId: number | null;
+  onSelectPage: (pageId: number) => void;
+}
+
 export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesPanelProps) {
   const { data, isPending, isError, error, refetch } = useSitePages(communityId);
+  // Shares the canvas's query key, so this adds no request. Read solely to say
+  // how many sections a permanent delete takes with it (D36′).
+  const { data: blocks } = useContentBlocks(communityId);
 
-  const pages = data ?? [];
+  const createPage = useCreateSitePage(communityId);
+  const updatePage = useUpdateSitePage(communityId);
+  const reorderPages = useReorderSitePages(communityId);
+  const deletePage = useDeleteSitePage(communityId);
+  const unstageDelete = useUnstageSitePageDelete(communityId);
+
+  const hintId = useId();
+  // Announces ONLY the changes that have no visible confirmation of their own —
+  // a reorder (the list rearranges in place) and a creation (a row appears).
+  // Everything else toasts, and a toast is itself a live region: announcing in
+  // both is the double-announcement `GalleryImagesField` documents avoiding.
+  const [announcement, setAnnouncement] = useState('');
+  const [expandedPageId, setExpandedPageId] = useState<number | null>(null);
+  const [nameDraft, setNameDraft] = useState('');
+  const [slugDraft, setSlugDraft] = useState('');
+  const [isAdding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newSlug, setNewSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<SitePageSummary | null>(null);
+  /**
+   * A page that was just created and is not in the cached list yet.
+   *
+   * Without this the panel eats its own creation: `create` resolves, the panel
+   * selects the new id, and the very next render still holds the PRE-create list
+   * — so the selection-repair below reads the new page as one that does not
+   * exist and throws the PM back to home, before the refetch lands. The PM then
+   * adds sections to the wrong page, having watched the editor look correct for
+   * a frame. Suppressing the repair for exactly this id is the narrowest fix:
+   * every other stale selection still repairs.
+   */
+  const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(null);
+  // Focus returns here when the confirm closes: the dialog is code-split and has
+  // no registered Radix trigger, so Radix's own restore would strand focus on
+  // <body>. See ConfirmDialog.
+  const removeButtonRef = useRef<HTMLButtonElement>(null);
+
+  const pages = useMemo(() => data ?? [], [data]);
   // `?? pages[0]` is a real fallback, not defensive noise: the list is
   // home-first, so a community whose home flag is somehow unset still resolves
   // to the page a manager would call home rather than to nothing at all.
@@ -112,9 +305,15 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
   // `data === undefined` — still loading, or the read failed — is NOT a stale
   // selection. Repairing on it would throw away the server-seeded page id on
   // every mount, which is the opposite of the point.
+  // `pendingSelectionId !== null` is load-bearing: without it a null selection
+  // equals a null pending mark and the repair that puts a seedless editor onto
+  // home would never fire.
+  const repairSuppressed =
+    pendingSelectionId !== null && selectedPageId === pendingSelectionId;
   const selectionNeedsRepair =
     data !== undefined &&
     home !== undefined &&
+    !repairSuppressed &&
     !pages.some((page) => page.id === selectedPageId);
 
   useEffect(() => {
@@ -122,6 +321,250 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
     // condition above is false and the effect does not re-fire.
     if (selectionNeedsRepair && home) onSelectPage(home.id);
   }, [home, onSelectPage, selectionNeedsRepair]);
+
+  // A row that disappeared underneath an open editor must not leave that editor
+  // open over nothing — and the reorder/nav controls inside it would then be
+  // acting on an id the server no longer knows.
+  useEffect(() => {
+    if (expandedPageId !== null && data !== undefined && !pages.some((p) => p.id === expandedPageId)) {
+      setExpandedPageId(null);
+    }
+  }, [data, expandedPageId, pages]);
+
+  // Released when — and only when — the list catches up. Releasing on
+  // "the parent is not on this page yet" was the first attempt and it defeats
+  // the whole mechanism: the parent is BY DEFINITION not on it yet at the
+  // moment the mark is set. A PM who navigates elsewhere needs no release,
+  // because the suppression already keys on the selection still being this id.
+  useEffect(() => {
+    if (pendingSelectionId !== null && pages.some((page) => page.id === pendingSelectionId)) {
+      setPendingSelectionId(null);
+    }
+  }, [pages, pendingSelectionId]);
+
+  const expandedPage = pages.find((page) => page.id === expandedPageId) ?? null;
+
+  const openEditor = useCallback((page: SitePageSummary) => {
+    setExpandedPageId((current) => {
+      if (current === page.id) return null;
+      // Drafts are re-seeded from the server row on every open, so an abandoned
+      // edit never leaks into the next page's form.
+      setNameDraft(page.name);
+      setSlugDraft(page.slug);
+      return page.id;
+    });
+  }, []);
+
+  // ── Validation ────────────────────────────────────────────────────────────
+  // Both runs use the SHARED validator with the app's own reserved-slug
+  // predicate injected, so the editor and the publish gate cannot disagree about
+  // what a legal address is. `retiredSlugs` is not available client-side; the
+  // server re-runs the same function and is the actual gate.
+
+  const createIssues = useMemo(
+    () =>
+      pageIssues({
+        pages: [
+          ...pages.map((page) => toValidationShape(page)),
+          { pageId: NEW_PAGE_KEY, name: newName, slug: newSlug, isHome: false },
+        ],
+        isReserved: isReservedPublicSlug,
+      }),
+    [newName, newSlug, pages],
+  );
+  const createNameErrors = messagesFor(createIssues, NEW_PAGE_KEY, 'name');
+  const createSlugErrors = messagesFor(createIssues, NEW_PAGE_KEY, 'slug');
+  // Nothing is complained about before the PM has typed anything — an error
+  // shown on an untouched form reads as the form being broken.
+  const showCreateErrors = newName.trim().length > 0 || newSlug.length > 0;
+  const canCreate =
+    newName.trim().length > 0 &&
+    newSlug.length > 0 &&
+    createNameErrors.length === 0 &&
+    createSlugErrors.length === 0;
+
+  const editIssues = useMemo(() => {
+    if (expandedPage === null) return [];
+    return pageIssues({
+      pages: pages.map((page) =>
+        page.id === expandedPage.id
+          ? toValidationShape(page, { name: nameDraft, slug: slugDraft })
+          : toValidationShape(page),
+      ),
+      isReserved: isReservedPublicSlug,
+    });
+  }, [expandedPage, nameDraft, pages, slugDraft]);
+  const editKey = expandedPage === null ? '' : String(expandedPage.id);
+  const editNameErrors = messagesFor(editIssues, editKey, 'name');
+  const editSlugErrors = messagesFor(editIssues, editKey, 'slug');
+
+  // ── Reorder ───────────────────────────────────────────────────────────────
+  // Home is pinned at the site root and is not reorderable, so the submitted
+  // order is the non-home ids only — exactly what the contract wants. Positions
+  // are announced against the WHOLE list (home is 1) because that is the list
+  // the PM can see; announcing an index into a subset the UI never shows would
+  // be accurate and useless.
+
+  const reorderableIds = useMemo(
+    () => pages.filter((page) => !page.isHome).map((page) => page.id),
+    [pages],
+  );
+  const pinnedCount = pages.length - reorderableIds.length;
+
+  const moveToIndex = useCallback(
+    (page: SitePageSummary, toIndex: number) => {
+      const from = reorderableIds.indexOf(page.id);
+      if (from === -1 || toIndex < 0 || toIndex >= reorderableIds.length || toIndex === from) {
+        // A soft stop, not an error: these controls are reachable by keyboard
+        // and a PM holding ArrowUp should hit the end of the list, not a toast.
+        return;
+      }
+      const next = [...reorderableIds];
+      next.splice(from, 1);
+      next.splice(toIndex, 0, page.id);
+      setAnnouncement(
+        `${page.name} moved to position ${toIndex + 1 + pinnedCount} of ${pages.length}.`,
+      );
+      reorderPages.mutate(
+        { orderedPageIds: next },
+        {
+          onError: (mutationError) => {
+            setAnnouncement(`${page.name} could not be moved.`);
+            toast.error(`We couldn't reorder your pages. ${mutationError.message}`);
+          },
+        },
+      );
+    },
+    [pages.length, pinnedCount, reorderPages, reorderableIds],
+  );
+
+  const handleGripKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, page: SitePageSummary) => {
+      const from = reorderableIds.indexOf(page.id);
+      switch (event.key) {
+        case 'ArrowUp':
+          event.preventDefault();
+          moveToIndex(page, from - 1);
+          return;
+        case 'ArrowDown':
+          event.preventDefault();
+          moveToIndex(page, from + 1);
+          return;
+        case 'Home':
+          event.preventDefault();
+          moveToIndex(page, 0);
+          return;
+        case 'End':
+          event.preventDefault();
+          moveToIndex(page, reorderableIds.length - 1);
+          return;
+        default:
+          // Every other key belongs to the browser (Tab, Enter, typeahead).
+          return;
+      }
+    },
+    [moveToIndex, reorderableIds],
+  );
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
+  const submitCreate = useCallback(
+    (event: FormEvent) => {
+      event.preventDefault();
+      if (!canCreate || createPage.isPending) return;
+      const name = newName.trim();
+      createPage.mutate(
+        { name, slug: newSlug },
+        {
+          onSuccess: (page) => {
+            setAdding(false);
+            setNewName('');
+            setNewSlug('');
+            setSlugTouched(false);
+            setAnnouncement(`${page.name} added.`);
+            // Land the PM on what they just made — otherwise the next section
+            // they add goes onto the page they were already looking at. The
+            // pending mark holds the selection until the refetch catches up.
+            setPendingSelectionId(page.id);
+            onSelectPage(page.id);
+          },
+          onError: (mutationError) => {
+            toast.error(`We couldn't add that page. ${mutationError.message}`);
+          },
+        },
+      );
+    },
+    [canCreate, createPage, newName, newSlug, onSelectPage],
+  );
+
+  const saveField = useCallback(
+    (page: SitePageSummary, patch: { name?: string; slug?: string; inNav?: boolean }, done: string) => {
+      updatePage.mutate(
+        { pageId: page.id, ...patch },
+        {
+          onSuccess: () => {
+            toast.success(done);
+          },
+          onError: (mutationError) => {
+            toast.error(`We couldn't save that change. ${mutationError.message}`);
+          },
+        },
+      );
+    },
+    [updatePage],
+  );
+
+  const cancelStagedRemoval = useCallback(
+    (page: SitePageSummary) => {
+      unstageDelete.mutate(
+        { pageId: page.id },
+        {
+          onSuccess: () => toast.success(`${page.name} is no longer being removed.`),
+          onError: (mutationError) =>
+            toast.error(`We couldn't cancel that removal. ${mutationError.message}`),
+        },
+      );
+    },
+    [unstageDelete],
+  );
+
+  const confirmRemove = useCallback(() => {
+    const page = removeTarget;
+    if (page === null) return;
+    setRemoveTarget(null);
+    deletePage.mutate(
+      { pageId: page.id },
+      {
+        onSuccess: ({ staged }) => {
+          if (!staged) {
+            // Nothing to offer here: there is no server-side path back, so an
+            // Undo affordance would be a lie. The dialog was the guard.
+            toast.success(`${page.name} was deleted.`);
+            return;
+          }
+          toast.success(`${page.name} will be removed from your live site when you publish.`, {
+            duration: UNDO_WINDOW_MS,
+            dismissible: true,
+            closeButton: true,
+            action: {
+              label: 'Undo',
+              // Safe by construction even if this toast outlives its window or
+              // the PM publishes first: `unstage` is addressed by page id and
+              // the server refuses when nothing is staged. Unlike a section
+              // undo, it replays no content, so a late click cannot resurrect
+              // stale data — it can only fail loudly.
+              onClick: () => cancelStagedRemoval(page),
+            },
+          });
+        },
+        onError: (mutationError) => {
+          toast.error(`We couldn't remove that page. ${mutationError.message}`);
+        },
+      },
+    );
+  }, [cancelStagedRemoval, deletePage, removeTarget]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (isPending) {
     return (
@@ -148,54 +591,183 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
     );
   }
 
+  const atCap = pages.length >= MAX_SITE_PAGES;
+  const removeTargetIsLive = removeTarget !== null && !removeTarget.isDraft;
+  const removeTargetSections =
+    removeTarget === null
+      ? 0
+      : blocksForPage(blocks, removeTarget.id).filter(
+          (block) => block.blockType !== TOMBSTONE_BLOCK_TYPE,
+        ).length;
+
+  const addForm = atCap ? (
+    <p data-testid="site-pages-cap" className="text-xs text-content-tertiary">
+      {PAGE_CAP_MESSAGE}
+    </p>
+  ) : isAdding ? (
+    <form onSubmit={submitCreate} className="space-y-3 rounded-md border border-edge p-3">
+      <div className="space-y-1">
+        <Label htmlFor="site-page-new-name">Page name</Label>
+        <Input
+          id="site-page-new-name"
+          value={newName}
+          onChange={(event) => {
+            const value = event.target.value;
+            setNewName(value);
+            // Slugify UNTIL the PM edits the address themselves — after that the
+            // address is theirs and typing in the name must not overwrite it.
+            if (!slugTouched) setNewSlug(slugifyPageName(value));
+          }}
+          aria-invalid={showCreateErrors && createNameErrors.length > 0}
+          aria-describedby={
+            showCreateErrors && createNameErrors.length > 0
+              ? 'site-page-new-name-error'
+              : undefined
+          }
+        />
+        {showCreateErrors && createNameErrors.length > 0 && (
+          <p id="site-page-new-name-error" role="alert" className="text-xs text-status-danger">
+            {createNameErrors.join(' ')}
+          </p>
+        )}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="site-page-new-slug">Web address</Label>
+        <div className="flex items-center gap-1">
+          <span aria-hidden="true" className="text-sm text-content-tertiary">
+            /
+          </span>
+          <Input
+            id="site-page-new-slug"
+            value={newSlug}
+            onChange={(event) => {
+              setSlugTouched(true);
+              setNewSlug(event.target.value);
+            }}
+            aria-invalid={showCreateErrors && createSlugErrors.length > 0}
+            aria-describedby={
+              showCreateErrors && createSlugErrors.length > 0
+                ? 'site-page-new-slug-error'
+                : undefined
+            }
+          />
+        </div>
+        {showCreateErrors && createSlugErrors.length > 0 && (
+          <p id="site-page-new-slug-error" role="alert" className="text-xs text-status-danger">
+            {createSlugErrors.join(' ')}
+          </p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={!canCreate || createPage.isPending}>
+          {createPage.isPending ? 'Adding…' : 'Add page'}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setAdding(false);
+            setNewName('');
+            setNewSlug('');
+            setSlugTouched(false);
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  ) : (
+    <Button type="button" size="sm" variant="outline" onClick={() => setAdding(true)}>
+      <Plus className="h-4 w-4" aria-hidden="true" />
+      Add a page
+    </Button>
+  );
+
   if (pages.length === 0) {
     return (
-      <div data-testid="site-pages-empty">
+      <div data-testid="site-pages-empty" className="space-y-3">
         <EmptyState
           size="sm"
           icon={Files}
           title="No pages yet"
           description="Your site's pages will show up here."
         />
+        {addForm}
       </div>
     );
   }
 
   return (
     <div data-testid="site-pages" className="space-y-3">
-      <ul aria-label="Site pages" className="flex flex-col gap-1">
-        {pages.map((page) => {
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+      <p id={hintId} className="sr-only">
+        Press Arrow Up or Arrow Down to move this page one position. Press Home to move it to
+        the top, or End to move it to the bottom.
+      </p>
+
+      <ul aria-label="Site pages" aria-busy={reorderPages.isPending} className="flex flex-col gap-1">
+        {pages.map((page, index) => {
           const selected = page.id === selectedPageId;
           const badge = rowBadge(page);
+          const reorderIndex = reorderableIds.indexOf(page.id);
+          const canReorder = reorderIndex !== -1;
+          const canUp = canReorder && reorderIndex > 0;
+          const canDown = canReorder && reorderIndex < reorderableIds.length - 1;
+          const expanded = expandedPageId === page.id;
+          const editorId = `${hintId}-editor-${page.id}`;
+          const staged = page.deleteStagedAt !== null;
 
           return (
-            <li key={page.id}>
-              <button
-                type="button"
-                onClick={() => onSelectPage(page.id)}
-                aria-current={selected ? 'true' : undefined}
+            <li key={page.id} className="flex flex-col gap-1">
+              <div
                 data-testid={`site-page-row-${page.id}`}
                 className={cn(
-                  'flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md border px-2 py-1 text-left transition-colors duration-quick',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  'flex min-h-11 w-full min-w-0 items-center gap-1 rounded-md border px-1 py-1 transition-colors duration-quick',
                   selected
                     ? 'border-interactive bg-interactive-subtle'
                     : 'border-edge-subtle bg-surface-card hover:bg-surface-hover',
                 )}
               >
-                <span className="flex min-w-0 flex-1 flex-col">
+                {/* Rendered for every row so the row keeps one shape and one tab
+                    order; home is disabled rather than missing, because a
+                    control that vanishes on one row makes the list jump. */}
+                <button
+                  type="button"
+                  aria-roledescription="sortable item"
+                  aria-label={`Reorder ${page.name}, position ${index + 1} of ${pages.length}`}
+                  aria-describedby={hintId}
+                  aria-keyshortcuts="ArrowUp ArrowDown Home End"
+                  disabled={!canUp && !canDown}
+                  onKeyDown={(event) => handleGripKeyDown(event, page)}
+                  data-testid={`site-page-grip-${page.id}`}
+                  className="flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-sm text-content-tertiary hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled"
+                >
+                  <GripVertical className="h-4 w-4" aria-hidden="true" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onSelectPage(page.id)}
+                  aria-current={selected ? 'true' : undefined}
+                  data-testid={`site-page-select-${page.id}`}
+                  className="flex min-h-9 min-w-0 flex-1 flex-col items-start rounded-sm px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
                   <span
                     className={cn(
-                      'truncate text-sm',
+                      'w-full truncate text-sm',
                       selected ? 'font-semibold text-content' : 'text-content-secondary',
                     )}
                   >
                     {page.name}
                   </span>
-                  <span className="truncate text-xs text-content-tertiary">
+                  <span className="w-full truncate text-xs text-content-tertiary">
                     {pageAddress(page)}
                   </span>
-                </span>
+                </button>
+
                 {badge && (
                   <span
                     className={cn(
@@ -206,17 +778,217 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                     {badge.label}
                   </span>
                 )}
-              </button>
+
+                <button
+                  type="button"
+                  disabled={!canUp}
+                  onClick={() => moveToIndex(page, reorderIndex - 1)}
+                  aria-label={`Move ${page.name} up`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled disabled:hover:bg-transparent"
+                >
+                  <ChevronUp className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={!canDown}
+                  onClick={() => moveToIndex(page, reorderIndex + 1)}
+                  aria-label={`Move ${page.name} down`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled disabled:hover:bg-transparent"
+                >
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openEditor(page)}
+                  aria-expanded={expanded}
+                  aria-controls={editorId}
+                  aria-label={`Page settings for ${page.name}`}
+                  data-testid={`site-page-settings-${page.id}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:bg-surface-hover hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <Settings2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              {expanded && (
+                <div
+                  id={editorId}
+                  data-testid={`site-page-editor-${page.id}`}
+                  className="space-y-3 rounded-md border border-edge p-3"
+                >
+                  <div className="space-y-1">
+                    <Label htmlFor={`${editorId}-name`}>Page name</Label>
+                    <Input
+                      id={`${editorId}-name`}
+                      value={nameDraft}
+                      onChange={(event) => setNameDraft(event.target.value)}
+                      aria-invalid={editNameErrors.length > 0}
+                    />
+                    {editNameErrors.length > 0 && (
+                      <p role="alert" className="text-xs text-status-danger">
+                        {editNameErrors.join(' ')}
+                      </p>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        editNameErrors.length > 0 ||
+                        nameDraft.trim() === page.name ||
+                        updatePage.isPending
+                      }
+                      onClick={() =>
+                        saveField(page, { name: nameDraft.trim() }, `Page renamed to ${nameDraft.trim()}.`)
+                      }
+                    >
+                      Save name
+                    </Button>
+                  </div>
+
+                  {/* D32′: only a page that has never been published gets an
+                      address control, and it is ABSENT — not disabled — on the
+                      rest. Home is pinned at the root and excluded outright. */}
+                  {page.isDraft && !page.isHome && (
+                    <div className="space-y-1">
+                      <Label htmlFor={`${editorId}-slug`}>Web address</Label>
+                      <div className="flex items-center gap-1">
+                        <span aria-hidden="true" className="text-sm text-content-tertiary">
+                          /
+                        </span>
+                        <Input
+                          id={`${editorId}-slug`}
+                          value={slugDraft}
+                          onChange={(event) => setSlugDraft(event.target.value)}
+                          aria-invalid={editSlugErrors.length > 0}
+                        />
+                      </div>
+                      {editSlugErrors.length > 0 && (
+                        <p role="alert" className="text-xs text-status-danger">
+                          {editSlugErrors.join(' ')}
+                        </p>
+                      )}
+                      <p className="text-xs text-content-tertiary">
+                        This page is not on your live site yet, so changing its address changes
+                        nothing a visitor has seen.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          editSlugErrors.length > 0 ||
+                          slugDraft === page.slug ||
+                          slugDraft.length === 0 ||
+                          updatePage.isPending
+                        }
+                        onClick={() =>
+                          saveField(page, { slug: slugDraft }, `Address changed to /${slugDraft}.`)
+                        }
+                      >
+                        Save address
+                      </Button>
+                    </div>
+                  )}
+
+                  {!page.isHome && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      aria-pressed={page.inNav}
+                      disabled={updatePage.isPending}
+                      onClick={() =>
+                        saveField(
+                          page,
+                          { inNav: !page.inNav },
+                          page.inNav
+                            ? `${page.name} is hidden from your navigation.`
+                            : `${page.name} shows in your navigation.`,
+                        )
+                      }
+                    >
+                      {/* `aria-pressed` alone is invisible: an `outline` Button
+                          has no pressed styling, and the row's "Hidden" badge is
+                          suppressed whenever the page is also a draft or staged
+                          for removal — so a sighted PM would have no signal at
+                          all in exactly the states that matter. The icon carries
+                          it, and stays `aria-hidden` because the accessible name
+                          must keep describing the CONTROL, not its state. */}
+                      {page.inNav ? (
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <EyeOff className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      Show in navigation
+                    </Button>
+                  )}
+
+                  {/* Home has no removal control at all: every layout renders a
+                      site root, and the server refuses. An affordance that
+                      always 400s is worse than none. */}
+                  {!page.isHome &&
+                    (staged ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={unstageDelete.isPending}
+                        onClick={() => cancelStagedRemoval(page)}
+                      >
+                        Cancel removal
+                      </Button>
+                    ) : (
+                      <Button
+                        ref={removeButtonRef}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={deletePage.isPending}
+                        onClick={() => setRemoveTarget(page)}
+                        className="text-status-danger"
+                      >
+                        {page.isDraft ? 'Delete page' : 'Remove page'}
+                      </Button>
+                    ))}
+                </div>
+              )}
             </li>
           );
         })}
       </ul>
-      {/* No "more is coming" promise here on purpose: this panel can ship
-          without the slice that adds the row actions, and copy that commits to
-          an unshipped capability is a support ticket waiting to happen. */}
-      <p className="text-xs text-content-tertiary">
-        Pick a page to edit the sections on it.
-      </p>
+
+      <p className="text-xs text-content-tertiary">Pick a page to edit the sections on it.</p>
+
+      {addForm}
+
+      {removeTarget !== null ? (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setRemoveTarget(null);
+          }}
+          restoreFocusTo={removeButtonRef}
+          title={
+            removeTargetIsLive
+              ? `Remove ${removeTarget.name}?`
+              : `Delete ${removeTarget.name}?`
+          }
+          description={
+            removeTargetIsLive
+              ? // Staged: reversible, and the copy says how.
+                `${removeTarget.name} stays on your live site until you publish. You'll have a moment to undo this.`
+              : // D36′. Immediate, permanent, and the section count — and no
+                // form of the word "publish", which would imply a staged action
+                // this page cannot have.
+                `${removeTarget.name} has ${sectionPhrase(removeTargetSections)}. Deleting removes the page and everything on it immediately, and this cannot be undone.`
+          }
+          confirmLabel={removeTargetIsLive ? 'Remove page' : 'Delete page'}
+          cancelLabel="Keep page"
+          destructive
+          pending={deletePage.isPending}
+          onConfirm={confirmRemove}
+        />
+      ) : null}
     </div>
   );
 }
