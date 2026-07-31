@@ -570,6 +570,38 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(moved.page.name).toBe('Amenity guide');
   });
 
+  it('frees a staged page\'s name for reuse before the publish lands', async () => {
+    // Staging is what releases the name — that is the rule `pageIssues` already
+    // applies client-side (`live = pages.filter(p => !p.deleteStaged)`) and the
+    // one the Pages panel documents. A server gate that counted staged pages
+    // would be STRICTER than the invariant it protects: `publishCommunitySite`
+    // runs `pageIssues`, so it would publish this state happily, while the PM
+    // was told the name is taken by a page they had already marked for
+    // deletion. The only escape would be publishing that deletion — which also
+    // ships every other pending draft.
+    const communityId = await createCommunity('staged-name-reuse');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const events = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events',
+    });
+    // Published, so the removal STAGES rather than deleting outright — the row
+    // is still present and still `deletedAt IS NULL` while staged.
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    const staged = await stageSitePageDelete({
+      communityId, actorUserId, pageId: events.id,
+    });
+    expect(staged).toEqual({ staged: true });
+
+    const replacement = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events-2026',
+    });
+    expect(replacement.name).toBe('Events');
+  });
+
   it('refuses to publish when a page holds a slug reserved by an app route', async () => {
     // A community subdomain also serves the authenticated app, so `/documents`
     // would be shadowed forever. The publish gate re-checks on every publish

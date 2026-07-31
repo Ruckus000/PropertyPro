@@ -392,6 +392,15 @@ async function loadPage(
  * `toLowerCase()` — names are nav labels, so two that differ only in case are
  * indistinguishable to a visitor.
  *
+ * A page STAGED for removal is skipped, matching `pageIssues`' `live` filter
+ * (`packages/shared/src/site-diff/pages.ts`) and the panel's own note that
+ * staging is what frees a page's name and address for reuse before the publish
+ * lands. Counting it would make this gate stricter than the invariant it
+ * protects: `publishCommunitySite` runs `pageIssues`, so it would publish that
+ * state happily, and the PM would be told a name is taken by a page they have
+ * already marked for deletion — escapable only by publishing the deletion,
+ * which also ships every other pending draft.
+ *
  * Callers hold the community lock, so the read-then-write is not racy.
  */
 async function assertNameAvailable(
@@ -406,7 +415,13 @@ async function assertNameAvailable(
   const rows = await tx
     .select({ id: sitePages.id, name: sitePages.name })
     .from(sitePages)
-    .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
+    .where(
+      and(
+        eq(sitePages.communityId, communityId),
+        isNull(sitePages.deletedAt),
+        isNull(sitePages.deleteStagedAt),
+      ),
+    );
 
   const target = trimmed.toLowerCase();
   const clash = rows.some(
