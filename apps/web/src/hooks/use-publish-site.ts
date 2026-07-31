@@ -6,8 +6,9 @@
  * usePublishSite(communityId) — POST /api/v1/pm/site/publish
  *   - Caller passes `expectedPublishedAt` (the timestamp of the most recent
  *     published state the editor has loaded) to gate optimistic concurrency.
- *   - On success, invalidates the content-blocks query so the editor reloads
- *     and the pending-changes badge clears.
+ *   - On success, invalidates the whole `['pm','site']` query prefix so the
+ *     editor reloads — blocks, hero and pages — and the pending-changes badge
+ *     clears. See the note on `onSuccess`.
  *   - On 409 ConflictError, throws so the UI can show "Someone else
  *     published — reload and try again."
  *
@@ -87,17 +88,24 @@ export function usePublishSite(communityId: number) {
       return body.data;
     },
     onSuccess: async () => {
-      // Invalidate every editor-related query so the page reloads with the
-      // newly-published state. Content blocks reload (drafts cleared); the
-      // hero block re-reads its published row; future SoR-block hooks will
-      // be invalidated via this same key prefix.
-      // Keys mirror the existing hook shapes:
-      //   ['pm', 'site', 'blocks', communityId]  — use-content-blocks.ts
-      //   ['pm', 'site', 'hero',   communityId]  — use-hero-block.ts
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['pm', 'site', 'blocks', communityId] }),
-        qc.invalidateQueries({ queryKey: ['pm', 'site', 'hero', communityId] }),
-      ]);
+      // The whole ['pm','site'] prefix, not a hand-listed pair of keys (D10′).
+      //
+      // This used to invalidate exactly two keys — ['pm','site','blocks',id] and
+      // ['pm','site','hero',id]. That list is a maintenance trap: a publish
+      // rewrites more editor state than blocks and the hero, and every hook
+      // added under the prefix since has had to be remembered here or go stale
+      // silently. It already had: a publish APPLIES staged page removals
+      // (`site_pages.delete_staged_at`), so with the narrow list the Pages panel
+      // and the publish sheet both keep rendering a page that no longer exists
+      // until something else happens to refetch.
+      //
+      // `useDiscardDrafts` (use-content-blocks.ts) and `useDeleteSitePage`
+      // (use-site-pages.ts) already invalidate this prefix for the same reason;
+      // this matches them rather than inventing a third convention. The prefix
+      // is not community-scoped, so it also drops other communities' cached
+      // editor state — that is a redundant refetch for a PM who has more than
+      // one community open, never a wrong render.
+      await qc.invalidateQueries({ queryKey: ['pm', 'site'] });
     },
   });
 }

@@ -117,6 +117,25 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
+// Phase 11b-3: `useSiteDiff` (which EditorRoot calls for the Publish button)
+// now also reads the pages query, because a staged page removal is a pending
+// change that shows up nowhere else. This tree is rendered without a
+// QueryClientProvider, so the real hook would throw "No QueryClient set" —
+// mocked COMPLETELY for the same reason as use-content-blocks above.
+vi.mock('@/hooks/use-site-pages', () => ({
+  sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
+  applyPageOrder: (pages: unknown) => pages,
+  useSitePages: () => ({
+    ...base(),
+    data: queries.isPending || queries.isError ? undefined : [],
+  }),
+  useCreateSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUpdateSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useReorderSitePages: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useDeleteSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUnstageSitePageDelete: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
 function renderRoot() {
   return render(
     <EditorRoot

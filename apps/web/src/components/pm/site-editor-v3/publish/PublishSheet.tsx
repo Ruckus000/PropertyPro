@@ -35,11 +35,27 @@
  *
  * See `Receipt.tsx`. Success closes the sheet and toasts through the root
  * layout's single `<Toaster/>` — no second Toaster is mounted here.
+ *
+ * ## Pages (Phase 11b-3)
+ *
+ * Two page-level facts are pending at publish time and nothing else is: a page
+ * that has never been published (it appears), and a page staged for removal (it
+ * disappears). Both arrive as `page:<id>` changes from `diffPages` via
+ * `useSiteDiff`, and both are grouped under the page they are about, so a new
+ * page's creation heads the list of the sections it brought with it.
+ *
+ * **The staged removal carries an undo, and that is not a convenience.** It is
+ * the only place in the product where a PM sees "this page is about to
+ * disappear from your live site" next to the button that would do it. A review
+ * surface that states a destructive pending change without offering to cancel
+ * it forces the PM to leave, find the Pages panel, and remember which page it
+ * was — or to publish and hope. The undo is a `DELETE … { unstage: true }`,
+ * which is the exact inverse of what staged the removal.
  */
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRight, Info } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Info, Undo2 } from 'lucide-react';
 import {
   contrastIssues,
   publishBlocked,
@@ -65,9 +81,10 @@ import {
   PublishConflictError,
   type PublishSiteResult,
 } from '@/hooks/use-publish-site';
+import { useUnstageSitePageDelete } from '@/hooks/use-site-pages';
 import { issueTarget } from '@/lib/site-editor/to-snapshot';
 import { cn } from '@/lib/utils';
-import { useSiteDiff } from '../use-site-diff';
+import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 export interface PublishSheetProps {
@@ -89,8 +106,8 @@ export interface PublishSheetProps {
   onFixIssue?: (slot: number) => void;
 }
 
-/** `'site'` sorts first; any Phase 11 page group follows, alphabetically. */
-const SITE_GROUP = 'site';
+/** `'site'` sorts first; page groups follow, in the site's own nav order. */
+const SITE_GROUP = SITE_CHANGE_GROUP;
 
 const KIND_LABEL: Record<Change['kind'], string> = {
   added: 'Added',
@@ -103,8 +120,15 @@ const GROUP_LABEL: Record<string, string> = {
   [SITE_GROUP]: 'Across the site',
 };
 
-function groupLabel(group: string): string {
-  return GROUP_LABEL[group] ?? group;
+/**
+ * A heading for one group.
+ *
+ * `pageLabels` comes from the pages query, so a page group is named after the
+ * page rather than its id. The raw group id is the last resort and is reached
+ * only if the pages query has not resolved — never a lie, just unhelpful.
+ */
+function groupLabel(group: string, pageLabels: ReadonlyMap<string, string>): string {
+  return GROUP_LABEL[group] ?? pageLabels.get(group) ?? group;
 }
 
 function plural(n: number, noun: string): string {
@@ -117,8 +141,18 @@ function plural(n: number, noun: string): string {
  * Insertion order within a group is preserved: `diffSite` emits in a stable
  * order and re-sorting would only make two consecutive reviews of the same
  * draft disagree about where a row sits.
+ *
+ * `rank` orders the page groups by their position in the site's nav, which is
+ * the order the PM sees everywhere else. Without it page groups would sort by
+ * id STRING — where page 10 precedes page 2 — so the fallback is deliberately
+ * `localeCompare` on the raw id rather than a numeric compare: an unranked
+ * group is one the pages query has not resolved, and inventing a numeric order
+ * for it would claim a nav position that may not be its own.
  */
-export function groupChanges(changes: readonly Change[]): Array<{ group: string; changes: Change[] }> {
+export function groupChanges(
+  changes: readonly Change[],
+  rank: ReadonlyMap<string, number> = new Map(),
+): Array<{ group: string; changes: Change[] }> {
   const byGroup = new Map<string, Change[]>();
   for (const change of changes) {
     const bucket = byGroup.get(change.group);
@@ -130,9 +164,30 @@ export function groupChanges(changes: readonly Change[]): Array<{ group: string;
       if (a === b) return 0;
       if (a === SITE_GROUP) return -1;
       if (b === SITE_GROUP) return 1;
+      const rankA = rank.get(a);
+      const rankB = rank.get(b);
+      if (rankA !== undefined && rankB !== undefined) return rankA - rankB;
+      if (rankA !== undefined) return -1;
+      if (rankB !== undefined) return 1;
       return a.localeCompare(b);
     })
     .map(([group, groupedChanges]) => ({ group, changes: groupedChanges }));
+}
+
+/**
+ * Whether this change is a page removal the PM can still call off.
+ *
+ * `change.page.deleteStaged` is the discriminator, not `kind === 'removed'`.
+ * `diffPages` also emits `removed` for a published page that has vanished from
+ * the pages list entirely — a state 11b cannot produce, but if it ever occurs
+ * there is nothing staged to unstage and offering an undo would be an
+ * affordance for a request the server would reject.
+ */
+function stagedPageRemoval(change: Change): number | null {
+  if (change.kind !== 'removed') return null;
+  if (change.page?.deleteStaged !== true) return null;
+  const pageId = Number(change.page.pageId);
+  return Number.isSafeInteger(pageId) && pageId > 0 ? pageId : null;
 }
 
 /** What the publish outcome should say. Mirrors the legacy PublishBar's wording. */
@@ -203,6 +258,8 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   const {
     diff,
     next,
+    pageLabels,
+    pageRank,
     isPending: diffPending,
     isError,
     error: diffError,
@@ -213,6 +270,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   // drop exactly those rows and 409 against a publish nobody else made.
   const tokenQuery = useSitePublishToken(communityId);
   const publish = usePublishSite(communityId);
+  const unstagePage = useUnstageSitePageDelete(communityId);
 
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
 
@@ -235,6 +293,29 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   function fixIssue(slot: number) {
     onOpenChange(false);
     onFixIssue?.(slot);
+  }
+
+  /**
+   * Cancel a staged page removal without leaving the review.
+   *
+   * The sheet stays open on success: the PM came here to decide what ships, and
+   * closing it would make cancelling one removal cost them the whole review.
+   * The pages query invalidates, so the row simply leaves the list.
+   */
+  async function undoPageRemoval(pageId: number, label: string) {
+    try {
+      await unstagePage.mutateAsync({ pageId });
+      toast.success(`${label} will stay on your site.`);
+    } catch (error) {
+      // A toast, not a receipt: a receipt describes the outcome of a publish,
+      // and nothing was published. The staged removal is untouched and the row
+      // is still on screen saying so, so the sheet is already truthful.
+      toast.error(
+        error instanceof Error
+          ? `We couldn't cancel that removal. ${error.message}`
+          : "We couldn't cancel that removal. Please try again.",
+      );
+    }
   }
 
   async function onPublish() {
@@ -302,7 +383,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
     );
   }
 
-  const grouped = groupChanges(diff.changes);
+  const grouped = groupChanges(diff.changes, pageRank);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
@@ -342,12 +423,25 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
           grouped.map(({ group, changes }) => (
             <div key={group} data-testid={`change-group-${group}`} className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-content-secondary">
-                {groupLabel(group)}
+                {groupLabel(group, pageLabels)}
               </h4>
               <ul className="space-y-2">
-                {changes.map((change) => (
-                  <ChangeRow key={`${change.key}-${change.kind}`} change={change} />
-                ))}
+                {changes.map((change) => {
+                  const undoablePageId = stagedPageRemoval(change);
+                  return (
+                    <ChangeRow
+                      key={`${change.key}-${change.kind}`}
+                      change={change}
+                      {...(undoablePageId !== null
+                        ? {
+                            onUndoRemoval: () =>
+                              void undoPageRemoval(undoablePageId, change.title),
+                            undoPending: unstagePage.isPending,
+                          }
+                        : {})}
+                    />
+                  );
+                })}
               </ul>
             </div>
           ))
@@ -382,7 +476,15 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   );
 }
 
-function ChangeRow({ change }: { change: Change }) {
+interface ChangeRowProps {
+  change: Change;
+  /** Present only on a staged page removal — see `stagedPageRemoval`. */
+  onUndoRemoval?: () => void;
+  undoPending?: boolean;
+}
+
+function ChangeRow({ change, onUndoRemoval, undoPending = false }: ChangeRowProps) {
+  const page = change.page;
   return (
     <li className="rounded-md border border-edge bg-surface-card p-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -394,6 +496,29 @@ function ChangeRow({ change }: { change: Change }) {
           <span className="text-xs text-content-secondary">and moved</span>
         ) : null}
       </div>
+      {page ? (
+        // The public address, because it is the one thing that tells a PM which
+        // URL is about to start or stop working — and neither `key` nor `group`
+        // can be parsed back into it.
+        <p className="mt-1 text-xs text-content-secondary">
+          {page.isHome ? 'Your site\u2019s front page' : `/${page.slug}`}
+        </p>
+      ) : null}
+      {onUndoRemoval ? (
+        <div className="mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onUndoRemoval}
+            disabled={undoPending}
+            aria-label={`Keep the ${change.title}`}
+          >
+            <Undo2 className="h-4 w-4" aria-hidden="true" />
+            Keep this page
+          </Button>
+        </div>
+      ) : null}
       {change.degraded ? (
         <p className="mt-1 flex items-start gap-1.5 text-xs text-content-secondary">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
