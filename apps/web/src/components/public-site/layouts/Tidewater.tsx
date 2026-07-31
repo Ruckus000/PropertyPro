@@ -42,12 +42,12 @@ function hasHeroBlock(blocks: SiteBlock[]): boolean {
   );
 }
 
-function EmptyStateHero({ communityName }: { communityName: string }) {
+function EmptyStateHero({ heading }: { heading: string }) {
   return (
     <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
         <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
-          {communityName}
+          {heading}
         </h1>
         <p className="mt-4 text-lg text-content-inverse">
           Your community portal for documents, meetings, and more.
@@ -65,14 +65,19 @@ function EmptyStateHero({ communityName }: { communityName: string }) {
   );
 }
 
-export function Tidewater({ community, theme, blocks, footer }: LayoutProps) {
+export function Tidewater({ community, theme, blocks, footer, nav, page }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
+  // D18 — a non-home page cannot own a hero block (block_order is
+  // community-wide until 11c, so slot 1 belongs to the home page), which means
+  // the empty-state hero is the only <h1> a sub-page gets. Headline it with the
+  // page's own name rather than the community's.
+  const heroHeading = page && !page.isHome ? page.name : community.name;
 
   return (
     <div className="min-h-screen flex flex-col font-body">
-      <PublicSiteHeader theme={toHeaderTheme(community, theme)} />
+      <PublicSiteHeader theme={toHeaderTheme(community, theme)} nav={nav} />
       <main id="main-content" className="flex-1">
-        {!hasHeroBlock(ordered) && <EmptyStateHero communityName={community.name} />}
+        {!hasHeroBlock(ordered) && <EmptyStateHero heading={heroHeading} />}
         {ordered.map((block) => {
           const blockType = block.blockType as BlockType;
           if (!hasRenderer(blockType)) {

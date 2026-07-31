@@ -101,6 +101,57 @@ describe('<Tidewater>', () => {
     expect(screen.getByTestId('hero-mock')).toBeInTheDocument();
   });
 
+  it('headlines a non-home page with the page name, not the community name (D18)', () => {
+    // A sub-page cannot own a hero block (block_order is community-wide until
+    // 11c, so slot 1 belongs to home), which makes the empty-state hero its
+    // only <h1>.
+    const { container } = render(
+      <Tidewater
+        community={community}
+        theme={theme}
+        blocks={[]}
+        page={{ name: 'About Us', isHome: false }}
+      />,
+    );
+    const headings = container.querySelectorAll('h1');
+    expect(headings).toHaveLength(1);
+    expect(headings[0]).toHaveTextContent('About Us');
+  });
+
+  it('keeps the community name as the <h1> on the home page', () => {
+    render(
+      <Tidewater
+        community={community}
+        theme={theme}
+        blocks={[]}
+        page={{ name: 'Home', isHome: true }}
+      />,
+    );
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sunset Condos');
+  });
+
+  it('threads the page nav to the header', () => {
+    const { container } = render(
+      <Tidewater
+        community={community}
+        theme={theme}
+        blocks={[]}
+        nav={{
+          items: [
+            { id: 1, name: 'Home', slug: '', isHome: true },
+            { id: 7, name: 'About Us', slug: 'about', isHome: false },
+          ],
+          currentSlug: 'about',
+        }}
+        page={{ name: 'About Us', isHome: false }}
+      />,
+    );
+    const links = Array.from(
+      container.querySelectorAll('nav[aria-label="Site pages"] a'),
+    );
+    expect(links.map((a) => a.textContent)).toEqual(['Home', 'About Us']);
+  });
+
   it('falls back to the empty-state <h1> when a hero block fails schema validation', () => {
     // Hero row present but content fails heroBlockSchema (empty headline).
     // HeroBlock returns null on safeParse failure; if Tidewater suppressed

@@ -72,4 +72,38 @@ describe('<Boulevard>', () => {
     expect(screen.queryByText(/unknown/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('hero-mock')).toHaveTextContent('After skip');
   });
+  it('headlines a non-home page with the page name (D18)', () => {
+    const { container } = render(
+      <Boulevard
+        community={community}
+        theme={theme}
+        blocks={[]}
+        page={{ name: 'About Us', isHome: false }}
+      />,
+    );
+    const headings = container.querySelectorAll('h1');
+    expect(headings).toHaveLength(1);
+    expect(headings[0]).toHaveTextContent('About Us');
+  });
+
+  it('threads the page nav to the header', () => {
+    const { container } = render(
+      <Boulevard
+        community={community}
+        theme={theme}
+        blocks={[]}
+        nav={{
+          items: [
+            { id: 1, name: 'Home', slug: '', isHome: true },
+            { id: 7, name: 'About Us', slug: 'about', isHome: false },
+          ],
+          currentSlug: 'about',
+        }}
+      />,
+    );
+    const links = Array.from(
+      container.querySelectorAll('nav[aria-label="Site pages"] a'),
+    );
+    expect(links.map((a) => a.textContent)).toEqual(['Home', 'About Us']);
+  });
 });

@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
 import type { Metadata } from 'next';
 import type { CommunityType } from '@propertypro/shared';
@@ -13,7 +13,12 @@ import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { buildCommunityMetadata } from '@/lib/seo/community-metadata';
 import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
-import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import {
+  getPublicCommunityScopedReader,
+  type PublicNavPage,
+  type PublicSitePage as PublicSitePageRow,
+} from '@/lib/db/public-community-reader';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 import {
   resolveFooterSettings,
@@ -48,24 +53,70 @@ async function resolvePreviewMode(): Promise<boolean> {
 /**
  * Optional catch-all so the public site can own more than one URL [11b-0].
  *
- * Middleware rewrites a verified custom domain's whole path space here, so this
- * route now receives `/public-site` AND `/public-site/<anything>`. Until Phase
- * 11b introduces `site_pages`, exactly one page exists — the community home —
- * so any slug is a 404 rather than a silent render of the home page under the
- * wrong URL, which would be worse: it would make every mistyped address look
- * like a real page and let search engines index infinite duplicates of it.
+ * Middleware rewrites a community subdomain's and a verified custom domain's
+ * public path space here, so this route receives `/public-site` AND
+ * `/public-site/<slug>`. Phase 11b-2 resolves that slug against `site_pages`.
  */
 interface PublicSitePageProps {
   params: Promise<{ slug?: string[] }>;
 }
 
-/** True when the request is for the site root rather than a named page. */
-async function isHomePage(params: PublicSitePageProps['params']): Promise<boolean> {
+/**
+ * The URL path segments below the site root. `[]` is the home page.
+ *
+ * `params` is optional only because `generateMetadata` is invoked directly with
+ * no arguments in the unit tests; Next always supplies it.
+ */
+async function resolveSlugSegments(
+  params: PublicSitePageProps['params'] | undefined,
+): Promise<string[]> {
+  if (!params) return [];
   const { slug } = await params;
-  return slug === undefined || slug.length === 0;
+  return slug ?? [];
 }
 
-export async function generateMetadata(): Promise<Metadata> {
+/**
+ * Look up the page a request addresses, or 404 / 308.
+ *
+ * - 0 segments → the home page (identified by `getHomePageId`, exactly as
+ *   before 11b-2; the home render path is unchanged).
+ * - 1 segment  → `site_pages.slug`, then the retired-slug redirect table.
+ * - ≥2 segments → 404. `site_pages_slug_shape_check` admits no `/` in a slug,
+ *   so a nested path is not representable as a page and never will be until
+ *   that constraint changes. Do NOT "support" it by falling back to the first
+ *   segment: that would index every `/about/anything` as a duplicate of
+ *   `/about`.
+ */
+async function resolveRequestedPage(
+  reader: ReturnType<typeof getPublicCommunityScopedReader>,
+  segments: string[],
+  isPreview: boolean,
+): Promise<{ pageId: number | null; page: PublicSitePageRow | null }> {
+  if (segments.length === 0) {
+    return { pageId: await reader.getHomePageId(), page: null };
+  }
+  if (segments.length > 1) {
+    notFound();
+  }
+
+  const slug = segments[0] as string;
+  // `includeDrafts` is threaded to the PAGE lookup as well as the block lookup:
+  // an unpublished page is a 404 to the public and visible only under preview
+  // (D7), matching the anon RLS predicate on `site_pages`.
+  const page = await reader.getPageBySlug(slug, { includeDrafts: isPreview });
+  if (page) return { pageId: page.id, page };
+
+  // Retired slug → ONE hop, 308 permanent (D6). `resolveRedirect` returns null
+  // when the target page is deleted or still a draft, so a retired slug can
+  // never 308 into a 404.
+  const redirectTarget = await reader.resolveRedirect(slug);
+  if (redirectTarget) {
+    permanentRedirect(redirectTarget.toSlug === '' ? '/' : `/${redirectTarget.toSlug}`);
+  }
+  notFound();
+}
+
+export async function generateMetadata(props?: PublicSitePageProps): Promise<Metadata> {
   const communityId = await resolveCommunityId();
   if (!communityId) return { title: 'PropertyPro' };
   const community = await getCommunityPublicInfo(communityId);
@@ -76,7 +127,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // community whose branding jsonb is malformed gets default metadata, not a
   // 500 on a statutory public page.
   const branding = await getBrandingForCommunity(community.id);
-  return buildCommunityMetadata({
+  const base = buildCommunityMetadata({
     id: community.id,
     slug: community.slug,
     name: community.name,
@@ -84,12 +135,34 @@ export async function generateMetadata(): Promise<Metadata> {
     tagline: branding?.tagline,
     siteSettings: resolveSiteSettings(branding),
   });
+
+  // Phase 11b-2 / D17 — per-page title + canonical, so every URL does not
+  // inherit the home page's and read as duplicate content.
+  //
+  // The HOME page's metadata is returned untouched, canonical included (it has
+  // none today): this route already serves every live community, and changing
+  // its tags is SEO churn with no upside.
+  const segments = await resolveSlugSegments(props?.params);
+  if (segments.length !== 1) return base;
+
+  const isPreview = await resolvePreviewMode();
+  const page = await getPublicCommunityScopedReader(community.id).getPageBySlug(
+    segments[0] as string,
+    { includeDrafts: isPreview },
+  );
+  // No page (404 or a retired slug about to 308) and the home page itself both
+  // keep the community-level metadata.
+  if (!page || page.isHome) return base;
+
+  return {
+    ...base,
+    title: `${page.name} · ${community.name}`,
+    alternates: { ...base.alternates, canonical: buildCommunityUrl(community.slug, `/${page.slug}`) },
+  };
 }
 
 export default async function PublicSitePage({ params }: PublicSitePageProps) {
-  if (!(await isHomePage(params))) {
-    notFound();
-  }
+  const segments = await resolveSlugSegments(params);
 
   const communityId = await resolveCommunityId();
   const isPreview = await resolvePreviewMode();
@@ -109,6 +182,15 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       </div>
     );
   }
+
+  // Phase 11b-2 — resolve WHICH page this URL addresses before doing any render
+  // work. A 404 or a 308 should not first presign logo URLs.
+  const reader = getPublicCommunityScopedReader(community.id);
+  const { pageId, page } = await resolveRequestedPage(reader, segments, isPreview);
+  const navPages: PublicNavPage[] = await reader.listNavPages();
+  // Home's slug is '' — so `currentSlug` compares directly against a nav item's
+  // slug on every page, home included.
+  const nav = { items: navPages, currentSlug: segments[0] ?? '' };
 
   // Resolve theme from branding settings.
   //
@@ -163,19 +245,16 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const Layout = getLayout(layoutId);
 
   if (Layout) {
-    const reader = getPublicCommunityScopedReader(community.id);
-    // Phase 11b: scope the read to the HOME page.
+    // Phase 11b: scope the read to the RESOLVED page.
     //
-    // The pages API is live from 11b-1, but the multi-page renderer is 11b-2 — so
-    // between those releases a PM can publish a second page. Without this filter
-    // every one of that page's sections would render inline on the home page,
+    // Without this filter every other page's sections would render inline here,
     // interleaved by `block_order`. Null means the community has no page row at
     // all (0046's backfill skipped it because it has no site content), in which
-    // case the unfiltered read is the correct pre-11b behaviour.
-    const homePageId = await reader.getHomePageId();
+    // case the unfiltered read is the correct pre-11b behaviour — and it can only
+    // happen on the home path, since a named slug had to resolve to a page row.
     const blocks = await reader.listSiteBlocks({
       includeDrafts: isPreview,
-      ...(homePageId === null ? {} : { pageId: homePageId }),
+      ...(pageId === null ? {} : { pageId }),
     });
     return (
       <>
@@ -239,6 +318,10 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
             // footer rather than throwing on a page with no feature flag in
             // front of it.
             footer={resolveFooterSettings(rawBranding)}
+            nav={nav}
+            // Undefined on the home path (which never loads the page row), which
+            // is exactly what the layouts treat as "home". See D18.
+            page={page ? { name: page.name, isHome: page.isHome } : undefined}
           />
         </div>
       </>
@@ -256,14 +339,18 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
         {/* Same banner in the legacy fallback branch: "every page" has to mean
             every render path, not just the one that is currently reachable. */}
         <UrgentNoticeBanner notice={community} />
-        <PublicSiteHeader theme={theme} />
+        {/* The page nav has to reach every render path, not just the layout
+            registry one — same reasoning as the banner and the footer above. */}
+        <PublicSiteHeader theme={theme} nav={nav} />
 
         <main id="main-content" className="flex-1">
           {/* Hero section */}
           <section className="bg-primary px-4 py-20 text-center sm:px-6 lg:px-8">
             <div className="mx-auto max-w-3xl">
               <h1 className="font-heading text-4xl font-bold text-content-inverse sm:text-5xl">
-                {community.name}
+                {/* D18 — a sub-page headlines with its own name, not the
+                    community's; it cannot own a hero block until 11c. */}
+                {page && !page.isHome ? page.name : community.name}
               </h1>
               <p className="mt-4 text-lg text-content-inverse">
                 Your community portal for documents, meetings, and more.
