@@ -41,6 +41,10 @@ global.ResizeObserver = class ResizeObserver {
 // reads as an unrelated component breaking rather than a mock being short.
 // Anything FloatControls' undo path reaches has to be listed.
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // Phase 11b-3: the Pages panel reads the block list so the permanent-delete
+  // dialog can say how many sections go with the page (D36′). Empty here — the
+  // audit is of the list's markup, not of a count.
+  useContentBlocks: () => ({ data: [] }),
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
