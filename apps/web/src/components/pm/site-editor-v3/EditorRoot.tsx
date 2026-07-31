@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
+import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -90,7 +91,7 @@ import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
-import type { SitePageSummary } from '@/hooks/use-site-pages';
+import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
 import type { CustomCssOverrides } from '@propertypro/shared';
 import { THEME_DEFAULTS } from '@propertypro/theme';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
@@ -243,8 +244,105 @@ export function EditorRoot({
   // but `find` on the flag rather than `[0]` because "first row" is an ordering
   // detail and "is home" is the fact.
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
-  const homePageId = initialPages.find((page) => page.isHome)?.id ?? null;
+  /**
+   * A page just created in the Pages panel that the cached list does not hold
+   * yet. Suppresses the repair below for exactly that id — see
+   * `PagesPanelProps.onSelectPage`.
+   *
+   * It lives HERE, not in the panel, because `key={effectivePageId}` remounts
+   * the panel on the same switch that sets the mark.
+   */
+  const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(null);
+
+  // Shares `useSiteDiff`'s query key, so this adds no request — the diff calls
+  // `useSitePages` internally and unconditionally. Read here because selection
+  // is owned at this level and so is everything that repairs it.
+  const { data: pages } = useSitePages(communityId);
+
+  /*
+   * The server seed is the fast path, NOT the only one.
+   *
+   * `loadInitialPages` returns `[]` on any error, and that read takes the same
+   * `FOR UPDATE` community lock a concurrent publish holds — so routine
+   * contention, not just a broken database, can empty it. A null
+   * `effectivePageId` is not a harmless "not known yet" here:
+   * `blocksForPage(blocks, null)` returns the list UNCHANGED, which would
+   * concatenate every page's sections into one canvas and send every write to
+   * the home-page default. Falling back to the client query turns a silently
+   * wrong editor into a correct one that took an extra round-trip.
+   */
+  const homePageId =
+    initialPages.find((page) => page.isHome)?.id ??
+    pages?.find((page) => page.isHome)?.id ??
+    null;
   const effectivePageId = selectedPageId ?? homePageId;
+
+  const handleSelectPage = useCallback(
+    (pageId: number, options?: { pending?: boolean }) => {
+      setSelectedPageId(pageId);
+      // Cleared, not left alone, when this is an ordinary selection: a stale
+      // mark from an earlier creation would suppress repair for a page the PM
+      // has since navigated away from.
+      setPendingSelectionId(options?.pending ? pageId : null);
+    },
+    [],
+  );
+
+  // Released when — and only when — the list catches up. Releasing on "the
+  // selection moved elsewhere" defeats the mechanism: at the moment the mark is
+  // set, the list is BY DEFINITION not showing the new page yet.
+  useEffect(() => {
+    if (pendingSelectionId !== null && pages?.some((page) => page.id === pendingSelectionId)) {
+      setPendingSelectionId(null);
+    }
+  }, [pages, pendingSelectionId]);
+
+  /*
+   * Selection repair, hoisted out of `PagesPanel`.
+   *
+   * The panel is dynamically imported and mounted only while its own tab is
+   * active, so repair living there was absent in the window where the selected
+   * page most commonly disappears: a publish that applies a staged removal,
+   * which invalidates the whole `['pm','site']` prefix (D10′) and is normally
+   * started from the shell header with Sections showing. `selectedPageId` then
+   * named a deleted page, `blocksForPage` returned `[]`, and the canvas went
+   * silently blank while subsequent writes 404'd.
+   *
+   * `pages === undefined` — still loading, or the read failed — is NOT a stale
+   * selection; repairing on it would discard the server seed on every mount.
+   */
+  const home = pages?.find((page) => page.isHome) ?? pages?.[0];
+  const selectionNeedsRepair =
+    pages !== undefined &&
+    home !== undefined &&
+    selectedPageId !== null &&
+    selectedPageId !== pendingSelectionId &&
+    !pages.some((page) => page.id === selectedPageId);
+
+  useEffect(() => {
+    // Converges in one step: afterwards the selected id IS home's, so the
+    // condition above is false and the effect does not re-fire.
+    if (selectionNeedsRepair && home) setSelectedPageId(home.id);
+  }, [home, selectionNeedsRepair]);
+
+  /*
+   * D-C2. The provider feeds `SectionList` — the DEFAULT tool — and the
+   * Inspector, both of which sit beside the canvas and are read as one view
+   * with it, so they get the same narrowing `Canvas` applies.
+   *
+   * Unfiltered, they listed every page's sections next to a one-page canvas,
+   * and selecting a foreign row opened the Inspector on a block whose write
+   * `assertSlotFreeAcrossPages` rejects — the selected page's id travels with
+   * it (D-WRITE) and does not match the block's slot. A brand-new empty page
+   * showed home's sections instead of its empty state.
+   *
+   * The whole-site list is still what the publish diff and the slot allocator
+   * read (D-C3); they call `useContentBlocks` directly, not this context.
+   */
+  const pageBlocks = useMemo(
+    () => blocksForPage(blocks ?? [], effectivePageId),
+    [blocks, effectivePageId],
+  );
 
   // Selecting a section on the canvas pulls the Sections panel forward, so the
   // controls for what you just clicked are visible without a second action.
@@ -283,7 +381,7 @@ export function EditorRoot({
          */
         key={effectivePageId ?? 'none'}
         communityId={communityId}
-        blocks={blocks ?? []}
+        blocks={pageBlocks}
         onSelect={handleSelect}
       >
       <AutosaveStatusProvider>
@@ -354,7 +452,7 @@ export function EditorRoot({
               <PagesPanel
                 communityId={communityId}
                 selectedPageId={effectivePageId}
-                onSelectPage={setSelectedPageId}
+                onSelectPage={handleSelectPage}
               />
             );
           }

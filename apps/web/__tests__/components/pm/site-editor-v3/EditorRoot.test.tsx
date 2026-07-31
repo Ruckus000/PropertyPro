@@ -17,7 +17,7 @@
  * reads as an unrelated component breaking.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
@@ -34,6 +34,7 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 // the right direction for a test to break in.
 const SECOND_PAGE_ID = 77;
 const HOME_PAGE_ID = 5;
+const CREATED_PAGE_ID = 91;
 
 vi.mock('next/dynamic', () => ({
   __esModule: true,
@@ -44,12 +45,26 @@ vi.mock('next/dynamic', () => ({
           onSelectPage,
         }: {
           selectedPageId: number | null;
-          onSelectPage: (pageId: number) => void;
+          onSelectPage: (pageId: number, options?: { pending?: boolean }) => void;
         }) => (
           <div>
             <p>Editing page {String(selectedPageId)}</p>
             <button type="button" onClick={() => onSelectPage(SECOND_PAGE_ID)}>
               Edit the second page
+            </button>
+            <button type="button" onClick={() => onSelectPage(HOME_PAGE_ID)}>
+              Edit the home page
+            </button>
+            {/*
+             * What the real panel does in `submitCreate.onSuccess`: select the
+             * page it just made and mark it pending, because the cached list
+             * does not contain it yet.
+             */}
+            <button
+              type="button"
+              onClick={() => onSelectPage(CREATED_PAGE_ID, { pending: true })}
+            >
+              Create a page
             </button>
           </div>
         )
@@ -92,9 +107,24 @@ const hero = (overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary =>
     ...overrides,
   });
 
+interface StubPage {
+  id: number;
+  name: string;
+  slug: string;
+  inNav: boolean;
+  sortOrder: number;
+  isHome: boolean;
+  isDraft: boolean;
+  publishedAt: string | null;
+  deleteStagedAt: string | null;
+}
+
 const queries = vi.hoisted(() => ({
   draft: [] as SiteBlockSummary[],
   published: [] as SiteBlockSummary[],
+  // The client pages list. Selection repair and the home-page fallback are both
+  // driven by this, so it has to be settable per test rather than a fixed [].
+  pages: [] as unknown[],
   isPending: false,
   isError: false,
   error: null as Error | null,
@@ -135,7 +165,7 @@ vi.mock('@/hooks/use-site-pages', () => ({
   applyPageOrder: (pages: unknown) => pages,
   useSitePages: () => ({
     ...base(),
-    data: queries.isPending || queries.isError ? undefined : [],
+    data: queries.isPending || queries.isError ? undefined : queries.pages,
   }),
   useCreateSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useUpdateSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
@@ -144,8 +174,21 @@ vi.mock('@/hooks/use-site-pages', () => ({
   useUnstageSitePageDelete: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
-function renderRoot() {
-  return render(
+/** The server-seeded home row, as `page.tsx` supplies it. */
+const seededHome: StubPage = {
+  id: HOME_PAGE_ID,
+  name: 'Home',
+  slug: '',
+  inNav: true,
+  sortOrder: 0,
+  isHome: true,
+  isDraft: false,
+  publishedAt: '2026-07-01T00:00:00.000Z',
+  deleteStagedAt: null,
+};
+
+function rootElement({ initialPages = [seededHome] }: { initialPages?: StubPage[] } = {}) {
+  return (
     <EditorRoot
       communityId={42}
       communityName="Sunset Condos"
@@ -170,21 +213,13 @@ function renderRoot() {
       // The server seed. Its only job here is to supply the home page id before
       // the Pages panel has ever been opened — that id is what every block
       // write is scoped by.
-      initialPages={[
-        {
-          id: HOME_PAGE_ID,
-          name: 'Home',
-          slug: '',
-          inNav: true,
-          sortOrder: 0,
-          isHome: true,
-          isDraft: false,
-          publishedAt: '2026-07-01T00:00:00.000Z',
-          deleteStagedAt: null,
-        },
-      ]}
-    />,
+      initialPages={initialPages}
+    />
   );
+}
+
+function renderRoot(options: { initialPages?: StubPage[] } = {}) {
+  return render(rootElement(options));
 }
 
 function publishButton() {
@@ -195,6 +230,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   queries.draft = [];
   queries.published = [];
+  queries.pages = [];
   queries.isPending = false;
   queries.isError = false;
   queries.error = null;
@@ -327,6 +363,26 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     // the inspector edits a section that is not on the page the PM is looking
     // at — so the provider is REMOUNTED on the page id rather than the stale
     // anchor being guarded against at every read.
+    //
+    // Asserted by returning to home. Since D-C2 scoped the provider, the other
+    // page does not list this section AT ALL — a stronger outcome, but one that
+    // would make `not.toHaveAttribute` pass vacuously on an absent element, so
+    // the round trip is what keeps this assertion about the selection.
+    renderRoot();
+    await selectTheTextSection();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(sectionRow()).not.toHaveAttribute('aria-current');
+  });
+
+  it('does not list the previous page sections after a switch (D-C2)', async () => {
+    // The other consequence of the same switch, and the one the unscoped
+    // provider got wrong: home's sections stayed listed beside a canvas
+    // rendering the second page.
     renderRoot();
     await selectTheTextSection();
 
@@ -334,7 +390,7 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
 
-    expect(sectionRow()).not.toHaveAttribute('aria-current');
+    expect(screen.queryByRole('button', { name: 'Text' })).not.toBeInTheDocument();
   });
 
   it('keeps the selection when the page does not change', async () => {
@@ -356,5 +412,168 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
+  });
+});
+
+/**
+ * D-C2's sixth caller. `EditorRoot` feeds `SiteEditorProvider`, which feeds
+ * `SectionList` — the DEFAULT tool — and the Inspector. Unfiltered, both listed
+ * every page's sections beside a canvas showing one page's.
+ *
+ * `SectionList` is a STATIC import, so unlike every panel above it really
+ * renders here. That is what makes this the composition test the leaf tests
+ * could not be.
+ */
+describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2)', () => {
+  const homeSection = () => screen.queryByRole('button', { name: 'Text' });
+  const otherPageSection = () => screen.queryByRole('button', { name: 'Gallery' });
+
+  beforeEach(() => {
+    queries.draft = [
+      hero(),
+      block({ id: 1, pageId: HOME_PAGE_ID }),
+      block({ id: 2, pageId: SECOND_PAGE_ID, blockType: 'gallery', blockOrder: 3 }),
+    ];
+    queries.pages = [
+      seededHome,
+      {
+        ...seededHome,
+        id: SECOND_PAGE_ID,
+        name: 'Amenities',
+        slug: 'amenities',
+        sortOrder: 1,
+        isHome: false,
+      },
+    ];
+  });
+
+  it('lists only the selected page, not every page in the community', () => {
+    renderRoot();
+
+    expect(homeSection()).toBeInTheDocument();
+    expect(otherPageSection()).not.toBeInTheDocument();
+  });
+
+  it('swaps the list when the page changes', async () => {
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(otherPageSection()).toBeInTheDocument();
+    expect(homeSection()).not.toBeInTheDocument();
+  });
+
+  it('shows an empty page as empty rather than borrowing the home page sections', async () => {
+    // The failure a PM meets first: create a page, and it already appears to
+    // have every section the home page has.
+    queries.draft = [hero(), block({ id: 1, pageId: HOME_PAGE_ID })];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(homeSection()).not.toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — selection repair and the just-created page', () => {
+  beforeEach(() => {
+    queries.draft = [hero(), block({ id: 1 })];
+  });
+
+  it('returns the selection to home when the selected page leaves the list', async () => {
+    // The window this exists for: a publish applies a staged page removal and
+    // invalidates the whole ['pm','site'] prefix (D10'). That is normally
+    // started from the shell header with SECTIONS showing — so the Pages panel,
+    // where this repair used to live, is not even mounted.
+    queries.pages = [
+      seededHome,
+      { ...seededHome, id: SECOND_PAGE_ID, name: 'Amenities', slug: 'amenities', isHome: false },
+    ];
+
+    const { rerender } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
+
+    // Leave the Pages tab, so the panel is unmounted exactly as it would be
+    // during a header-initiated publish. If the repair still lived in the
+    // panel, nothing below could fire.
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    // The publish landed: the staged page is gone from the server's list, and
+    // the invalidation re-renders the tree with it.
+    queries.pages = [seededHome];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [seededHome] }));
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+
+  it('holds the selection on a page it has just created, before the list catches up', async () => {
+    // `create` resolves and the selection moves to the new id while the cached
+    // list is still the PRE-create one. Repairing on that would bounce the PM
+    // back to home and send their next section to the wrong page.
+    queries.pages = [seededHome];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
+
+    expect(screen.getByText(`Editing page ${CREATED_PAGE_ID}`)).toBeInTheDocument();
+  });
+
+  it('still repairs an ordinary stale selection, so the pending mark is not a blanket opt-out', async () => {
+    // The mark is released when the list catches up, and an ORDINARY selection
+    // never sets it. Without this, "hold the selection" would mean "never
+    // repair" and finding #6 would be reintroduced through the fix for #5.
+    queries.pages = [seededHome];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — the server page seed can fail', () => {
+  it('falls back to the client pages query when the seed came back empty', async () => {
+    // `loadInitialPages` returns [] on any error, and that read takes the same
+    // FOR UPDATE community lock a concurrent publish holds — so this is routine
+    // contention, not just a broken database. A null page id is NOT harmless:
+    // `blocksForPage(blocks, null)` returns the list UNCHANGED, concatenating
+    // every page's sections into one canvas and sending every write to home.
+    queries.draft = [
+      hero(),
+      block({ id: 1, pageId: HOME_PAGE_ID }),
+      block({ id: 2, pageId: SECOND_PAGE_ID, blockType: 'gallery', blockOrder: 3 }),
+    ];
+    queries.pages = [
+      seededHome,
+      {
+        ...seededHome,
+        id: SECOND_PAGE_ID,
+        name: 'Amenities',
+        slug: 'amenities',
+        sortOrder: 1,
+        isHome: false,
+      },
+    ];
+
+    renderRoot({ initialPages: [] });
+
+    // Scoped to home, not showing every page: proof the fallback resolved a
+    // real page id rather than leaving it null.
+    expect(screen.queryByRole('button', { name: 'Text' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Gallery' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });

@@ -522,6 +522,54 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(reclaimed.page.slug).toBe('about');
   });
 
+  it('refuses a duplicate page name on the write, not on the next publish', async () => {
+    // The editor runs the same rule client-side, but the pages API carries no
+    // feature flag — `site_pages` shipped in 11a and any authenticated PM with
+    // an HTTP client can reach it. Without a server rule, a duplicate name
+    // saved cleanly and then blocked EVERY subsequent publish, because
+    // `publishCommunitySite` runs `pageIssues` itself and throws — naming a
+    // page the PM may never have touched. A write that quietly makes the site
+    // unpublishable is refused at the write.
+    const communityId = await createCommunity('duplicate-name');
+    await ensureHomePage(communityId);
+    const amenities = await createSitePage({
+      communityId, actorUserId, name: 'Amenities', slug: 'amenities',
+    });
+    const board = await createSitePage({
+      communityId, actorUserId, name: 'Board', slug: 'board',
+    });
+
+    // Both directions: the client bug was that only one of them was caught.
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: amenities.id, name: 'Board' }),
+    ).rejects.toThrow(ValidationError);
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: board.id, name: 'Amenities' }),
+    ).rejects.toThrow(ValidationError);
+
+    // Case-insensitively: names are nav labels, so two differing only in case
+    // are indistinguishable to a visitor.
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: amenities.id, name: 'bOaRd' }),
+    ).rejects.toThrow(ValidationError);
+
+    // Creation is the same hole seen from the other side.
+    await expect(
+      createSitePage({ communityId, actorUserId, name: 'Board', slug: 'board-2' }),
+    ).rejects.toThrow(ValidationError);
+
+    // A page keeping its own name is not a clash with itself, and an unrelated
+    // rename still works — the guard must not be a blanket refusal.
+    const renamed = await updateSitePage({
+      communityId, actorUserId, pageId: amenities.id, name: 'Amenities',
+    });
+    expect(renamed.page.name).toBe('Amenities');
+    const moved = await updateSitePage({
+      communityId, actorUserId, pageId: amenities.id, name: 'Amenity guide',
+    });
+    expect(moved.page.name).toBe('Amenity guide');
+  });
+
   it('refuses to publish when a page holds a slug reserved by an app route', async () => {
     // A community subdomain also serves the authenticated app, so `/documents`
     // would be shadowed forever. The publish gate re-checks on every publish

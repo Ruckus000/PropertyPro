@@ -210,7 +210,29 @@ export function useSiteDiff(communityId: number): SiteDiffState {
 
   const diff = useMemo<DiffResult>(() => {
     const base = diffSite(published, next);
-    const pageChanges = diffPages(publishedPageBaseline(pageRows), pageRows);
+    /*
+     * Mirror the server's draft-home exclusion, which is deliberate and which
+     * this diff omitted.
+     *
+     * `ensureHomePageInTransaction` creates home lazily with
+     * `isDraft: publishedStamp === null`, so a community that has never
+     * published has a DRAFT home it never asked for.
+     * `publishedPageBaseline` drops every draft page from the baseline, so
+     * without this filter that row reads as `added` — an untouched empty site
+     * claims one pending change, `canOpenPublish` goes true, and the publish
+     * then throws `NothingToPublishRollback`. Newly reachable because the RSC
+     * now calls `listSitePages` on every load, which is what creates the row.
+     *
+     * The server rule is `(isDraft && !isHome) || deleteStagedAt !== null`
+     * (site-blocks-service.ts:677-679). The `deleteStaged` arm needs no
+     * counterpart here: `diffPages` independently treats a page that was never
+     * published AND is already staged for removal as a net non-event, since
+     * publishing it neither creates nor destroys anything a visitor could have
+     * seen. Spelling that case out again would be a second rule saying the same
+     * thing, and the two would drift.
+     */
+    const pendingPageRows = pageRows.filter((page) => !(page.isHome && page.isDraft));
+    const pageChanges = diffPages(publishedPageBaseline(pageRows), pendingPageRows);
     const sectionChanges = base.changes.map((change) => {
       const group = groupForChange(change, slotGroups);
       return group === change.group ? change : { ...change, group };

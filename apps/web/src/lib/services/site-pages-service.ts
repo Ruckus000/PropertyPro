@@ -377,6 +377,48 @@ async function loadPage(
  * Never re-list the names here: the routing rule and the validator must not
  * become two lists that drift.
  */
+/**
+ * Refuse a page name another live page in this community already uses.
+ *
+ * The editor runs the same rule through `pageIssues`, but that is a client
+ * check on an endpoint with no feature flag — `site_pages` shipped in 11a and
+ * the pages API has been reachable by any authenticated PM with an HTTP client
+ * ever since. Without this, a duplicate name saves cleanly and then blocks
+ * EVERY subsequent publish: `publishCommunitySite` runs `pageIssues` itself and
+ * throws, naming a page the PM may never have touched. A write that quietly
+ * makes the site unpublishable is worth refusing at the write.
+ *
+ * Compared case-insensitively on the trimmed value, matching `pageIssues`'
+ * `toLowerCase()` — names are nav labels, so two that differ only in case are
+ * indistinguishable to a visitor.
+ *
+ * Callers hold the community lock, so the read-then-write is not racy.
+ */
+async function assertNameAvailable(
+  communityId: number,
+  name: string,
+  tx: Tx,
+  { excludePageId }: { excludePageId?: number } = {},
+): Promise<void> {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return; // `assertUsableName` owns the empty case.
+
+  const rows = await tx
+    .select({ id: sitePages.id, name: sitePages.name })
+    .from(sitePages)
+    .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
+
+  const target = trimmed.toLowerCase();
+  const clash = rows.some(
+    (row) => row.id !== excludePageId && row.name.trim().toLowerCase() === target,
+  );
+  if (clash) {
+    throw new ValidationError('Another page already uses that name.', {
+      fields: [{ field: 'name', message: `Another page is also called "${trimmed}".` }],
+    });
+  }
+}
+
 export async function assertUsableSlug(
   communityId: number,
   slug: string,
@@ -508,6 +550,9 @@ export async function createSitePage({
   return db.transaction(async (tx) => {
     await lockCommunity(tx, communityId);
     await ensureHomePageInTransaction(communityId, tx);
+    // After `ensureHomePage`, so a name colliding with the lazily-created home
+    // page is caught rather than depending on whether home existed yet.
+    await assertNameAvailable(communityId, name, tx);
     await assertUsableSlug(communityId, slug, tx);
 
     const highest = await tx
@@ -596,6 +641,11 @@ export async function updateSitePage({
       throw new ValidationError('The home page always lives at the site root.', {
         fields: [{ field: 'slug', message: 'The home page address cannot be changed.' }],
       });
+    }
+
+    // Inside the lock and before the update, alongside the slug rule it mirrors.
+    if (name !== undefined) {
+      await assertNameAvailable(communityId, name, tx, { excludePageId: pageId });
     }
 
     const slugChanged = slug !== undefined && slug !== current.slug && !current.isHome;

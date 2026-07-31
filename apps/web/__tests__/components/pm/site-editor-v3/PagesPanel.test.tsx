@@ -217,37 +217,26 @@ describe('PagesPanel — selection', () => {
     ).toHaveLength(0);
   });
 
-  it('selects home when the editor arrived with no page at all', () => {
-    // The server-side seed failing is the way this happens. Without it the
-    // panel shows nothing as current while every save quietly lands on home —
-    // true, invisible, and the kind of wrong nobody reports.
-    renderPanel({ selectedPageId: null });
-
-    expect(onSelectPage).toHaveBeenCalledTimes(1);
-    expect(onSelectPage).toHaveBeenCalledWith(1);
-  });
-
-  it('repairs a selection that no longer names a real page, once', () => {
-    renderPanel({ selectedPageId: 999 });
-
-    expect(onSelectPage).toHaveBeenCalledTimes(1);
-    expect(onSelectPage).toHaveBeenCalledWith(1);
-  });
-
-  it('leaves a valid selection alone', () => {
-    renderPanel({ selectedPageId: 2 });
-    expect(onSelectPage).not.toHaveBeenCalled();
-  });
-
-  it('does not repair a selection while the list is still loading', () => {
-    renderPanel({ selectedPageId: 999, isPending: true });
-    expect(onSelectPage).not.toHaveBeenCalled();
-  });
-
-  it('does not invent a selection while the list is still loading', () => {
-    renderPanel({ selectedPageId: null, isPending: true });
-    expect(onSelectPage).not.toHaveBeenCalled();
-  });
+  /*
+   * Selection REPAIR is no longer this panel's job, and the cases that used to
+   * live here have moved to `EditorRoot.test.tsx` rather than being dropped:
+   *
+   *  - repairs a stale selection  → 'returns the selection to home when the
+   *    selected page leaves the list'
+   *  - selects home when the editor arrived with no page → covered by the seed
+   *    fallback, 'falls back to the client pages query when the seed came back
+   *    empty'. `EditorRoot` now DERIVES home rather than calling back to ask
+   *    for it, so there is no callback left to assert on.
+   *  - does not repair while loading / leaves a valid selection alone → the
+   *    same guards, asserted where the effect now runs.
+   *
+   * They cannot be asserted here any more, and that is the point: this panel is
+   * dynamically imported and mounted only while its own tab is active, so a
+   * repair living here never ran in the window that needed it most — a publish
+   * applying a staged page removal, started from the shell header with Sections
+   * showing. Keeping green versions of them here would assert a mechanism
+   * production does not use.
+   */
 
   it('does not repair a selection when the read failed', () => {
     renderPanel({ selectedPageId: 999, isError: true, error: new Error('nope') });
@@ -335,52 +324,24 @@ describe('PagesPanel — adding a page', () => {
       { name: 'Pool Rules', slug: 'pool-rules' },
       expect.anything(),
     );
-    expect(onSelectPage).toHaveBeenCalledWith(9);
+    // `pending: true` is the whole contract with the parent: it says "I made
+    // this one, the cached list does not have it yet, hold the selection".
+    expect(onSelectPage).toHaveBeenCalledWith(9, { pending: true });
   });
 
-  it('does not bounce the PM back to home before the new page reaches the list', async () => {
-    // The panel used to eat its own creation: `create` resolves, the panel
-    // selects the new id, and the very next render still holds the PRE-create
-    // list — so the selection repair read the new page as one that does not
-    // exist and reset to home. The PM then adds sections to the wrong page,
-    // having watched the editor look correct for a frame.
-    const user = userEvent.setup();
-    createMutate.mockImplementation((_input, options) =>
-      options.onSuccess(page({ id: 9, name: 'Pool Rules', slug: 'pool-rules' })),
-    );
-    const { rerender } = renderPanel();
-
-    await user.click(screen.getByRole('button', { name: 'Add a page' }));
-    await user.type(screen.getByLabelText('Page name'), 'Pool Rules');
-    await user.click(screen.getByRole('button', { name: 'Add page' }));
-
-    onSelectPage.mockClear();
-    // The parent adopts the new selection while the query cache is still stale.
-    rerender(
-      <PagesPanel communityId={7} selectedPageId={9} onSelectPage={onSelectPage} />,
-    );
-    expect(onSelectPage).not.toHaveBeenCalled();
-  });
-
-  it('still repairs an ordinary stale selection after a creation', async () => {
-    // The suppression above must be scoped to the created id alone, or it would
-    // disable the repair the panel exists to provide.
-    const user = userEvent.setup();
-    createMutate.mockImplementation((_input, options) =>
-      options.onSuccess(page({ id: 9, name: 'Pool Rules', slug: 'pool-rules' })),
-    );
-    const { rerender } = renderPanel();
-
-    await user.click(screen.getByRole('button', { name: 'Add a page' }));
-    await user.type(screen.getByLabelText('Page name'), 'Pool Rules');
-    await user.click(screen.getByRole('button', { name: 'Add page' }));
-
-    onSelectPage.mockClear();
-    rerender(
-      <PagesPanel communityId={7} selectedPageId={404} onSelectPage={onSelectPage} />,
-    );
-    expect(onSelectPage).toHaveBeenCalledWith(1);
-  });
+  /*
+   * 'does not bounce the PM back to home before the new page reaches the list'
+   * used to sit here, and it could not fail. It drove the change with
+   * `rerender`, which PRESERVES state — but production goes through
+   * `EditorRoot`, whose `key={effectivePageId}` (D-SEL) REMOUNTS this panel on
+   * the very switch the creation triggers, resetting the mark it had just set.
+   * The guard was dead in the real tree and the test could not see it.
+   *
+   * The mark now lives in `EditorRoot`, above the remount, and is asserted
+   * there against the real composition — 'holds the selection on a page it has
+   * just created, before the list catches up', plus 'still repairs an ordinary
+   * stale selection' for the scoping half.
+   */
 
   it('refuses an address an application route already owns', async () => {
     // `isReservedPublicSlug` is INJECTED into the shared validator, which is the
@@ -467,6 +428,44 @@ describe('PagesPanel — renaming', () => {
 
     expect(editor.getByText(/Another page is also called "Amenities"/)).toBeInTheDocument();
     expect(editor.getByRole('button', { name: 'Save name' })).toBeDisabled();
+  });
+
+  it('refuses the clash in the other direction too — renaming the EARLIER page', async () => {
+    // The case above renames the LATER page (id 3) onto an earlier name, which
+    // always worked. `pageIssues` attributes a clash to the SECOND occurrence
+    // it sees, so in plain list order the edited page only heard about it when
+    // it happened to sit after the page it collided with.
+    //
+    // Renaming Amenities (id 2) to "Board" (id 3) filed the issue against page
+    // 3 — which this panel never displays, since `messagesFor` filters on the
+    // edited page's id. So: no error, Save enabled, `updateSitePage` had no
+    // uniqueness rule to stop it, and the PM met the clash only as a server
+    // error on their next publish, naming a page they never touched.
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE] });
+
+    const editor = await openSettings(user, 2);
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Board');
+
+    expect(editor.getByText(/Another page is also called "Board"/)).toBeInTheDocument();
+    expect(editor.getByRole('button', { name: 'Save name' })).toBeDisabled();
+  });
+
+  it('does not accuse a page of clashing with itself', async () => {
+    // The obvious wrong fix for the above — comparing names without excluding
+    // the edited page — would make every rename that keeps its own name, and
+    // every no-op open-and-close of the editor, report a clash.
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE] });
+
+    const editor = await openSettings(user, 2);
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Amenities');
+
+    expect(editor.queryByText(/Another page is also called/)).not.toBeInTheDocument();
   });
 });
 

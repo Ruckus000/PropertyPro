@@ -11,7 +11,22 @@ import { sectionLabel } from './section-label';
 export type MoveDirection = 'up' | 'down';
 
 export interface SiteEditorContextValue {
-  /** Merged draft-wins blocks, exactly as the canvas renders them. */
+  /**
+   * Merged draft-wins blocks for the SELECTED PAGE, exactly as the canvas
+   * renders them (D-C2).
+   *
+   * Narrowed by `blocksForPage` in `EditorRoot` before it reaches here. The
+   * narrowing is load-bearing, not cosmetic: `movableSections` below feeds
+   * `SectionList` — the editor's DEFAULT tool — and the Inspector, both of
+   * which sit beside the canvas and are read as one view with it. An unscoped
+   * list makes them offer sections the canvas is not showing, and selecting one
+   * opens the Inspector on a block whose write `assertSlotFreeAcrossPages`
+   * rejects, because the write hooks carry the selected page's id (D-WRITE).
+   *
+   * The whole-site list still exists for the callers that need it — the publish
+   * diff and the slot allocator (D-C3) — which read `useContentBlocks`
+   * directly rather than going through this context.
+   */
   blocks: readonly SiteBlockSummary[];
   /** Reorderable sections, slot-ordered, hero and tombstones excluded. */
   movableSections: SiteBlockSummary[];

@@ -216,6 +216,47 @@ describe('useSiteDiff — page changes', () => {
     });
   });
 
+  it('ignores the lazily-created draft home page on a never-published site', () => {
+    // `ensureHomePage` creates home as a draft for any community that has never
+    // published, and the RSC now calls `listSitePages` on every editor load —
+    // so this row exists for a PM who has done nothing at all.
+    //
+    // `publishedPageBaseline` drops every draft page, so without the server's
+    // exclusion this home reads as `added`: an untouched empty site claims one
+    // pending change, `canOpenPublish` goes true, and the publish then throws
+    // `NothingToPublishRollback` — "nothing left to publish" on the very click
+    // the editor invited. The server has excluded it deliberately since
+    // site-blocks-service.ts:677; this is the client saying the same thing.
+    //
+    // Every other home fixture in this file is `isDraft: false`, which is
+    // exactly why nothing caught it.
+    queries.published = [];
+    queries.draft = [];
+    queries.pages = [{ ...HOME_PAGE, isDraft: true, publishedAt: null }];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.diff.changes.filter((c) => c.key.startsWith('page:'))).toHaveLength(0);
+  });
+
+  it('reports nothing for a draft home that is also staged for removal', () => {
+    // Belt and braces from two independent directions, which is why the
+    // exclusion above does not need a `deleteStaged` arm of its own: the filter
+    // drops this row, and `diffPages` would ALSO treat it as a net non-event
+    // (never published, already staged — publishing it neither creates nor
+    // destroys anything a visitor could have seen). Pinned so that removing
+    // either one does not silently start reporting a phantom change.
+    queries.published = [];
+    queries.draft = [];
+    queries.pages = [
+      { ...HOME_PAGE, isDraft: true, publishedAt: null, deleteStagedAt: '2026-07-30T09:00:00.000Z' },
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.diff.changes.filter((c) => c.key.startsWith('page:'))).toHaveLength(0);
+  });
+
   it('reports a staged page removal, carrying the flag the undo affordance keys on', () => {
     queries.published = [hero(), block({ id: 1 })];
     queries.draft = [hero(), block({ id: 1 })];
@@ -232,14 +273,21 @@ describe('useSiteDiff — page changes', () => {
   it('keeps `keys` in step with the merged change list', () => {
     // Derived from the merged changes rather than concatenated from two key
     // arrays — the only form in which the two cannot disagree.
+    //
+    // The page change here is a genuinely NEW second page. This case previously
+    // used a draft HOME page, which produced a `page:` key only because the
+    // client diff was missing the server's draft-home exclusion — so it was
+    // asserting the phantom change as though it were the feature. The property
+    // under test is keys/changes agreement, and it needs a real page change, not
+    // that particular one.
     queries.published = [];
     queries.draft = [hero({ isDraft: true, publishedAt: null })];
-    queries.pages = [{ ...HOME_PAGE, isDraft: true, publishedAt: null }];
+    queries.pages = [HOME_PAGE, { ...CONTACT_PAGE, isDraft: true, publishedAt: null }];
 
     const { result } = renderHook(() => useSiteDiff(42));
 
     expect(result.current.diff.keys).toEqual(result.current.diff.changes.map((c) => c.key));
-    expect(result.current.diff.keys).toContain(`page:${HOME_PAGE_ID}`);
+    expect(result.current.diff.keys).toContain(`page:${SECOND_PAGE_ID}`);
   });
 
   it('exposes a label and a nav rank for each page group', () => {

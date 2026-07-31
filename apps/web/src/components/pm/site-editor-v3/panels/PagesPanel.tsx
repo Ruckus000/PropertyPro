@@ -251,7 +251,20 @@ export interface PagesPanelProps {
    * disagree with the one the block writes actually use.
    */
   selectedPageId: number | null;
-  onSelectPage: (pageId: number) => void;
+  /**
+   * Move the editor onto a page.
+   *
+   * `pending` marks a page this panel has just CREATED and that the cached list
+   * does not contain yet. `EditorRoot` holds the selection there instead of
+   * repairing it away — without that, `create` resolves, the selection moves to
+   * the new id, and the still-stale list makes the repair read it as a page that
+   * does not exist and bounce the PM back to home. The PM then adds sections to
+   * the wrong page, having watched the editor look correct for a frame.
+   *
+   * It is a flag rather than a second callback because the two always happen
+   * together: there is no "mark pending without selecting".
+   */
+  onSelectPage: (pageId: number, options?: { pending?: boolean }) => void;
 }
 
 export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesPanelProps) {
@@ -280,67 +293,42 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
   const [newSlug, setNewSlug] = useState('');
   const [slugTouched, setSlugTouched] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<SitePageSummary | null>(null);
-  /**
-   * A page that was just created and is not in the cached list yet.
-   *
-   * Without this the panel eats its own creation: `create` resolves, the panel
-   * selects the new id, and the very next render still holds the PRE-create list
-   * — so the selection-repair below reads the new page as one that does not
-   * exist and throws the PM back to home, before the refetch lands. The PM then
-   * adds sections to the wrong page, having watched the editor look correct for
-   * a frame. Suppressing the repair for exactly this id is the narrowest fix:
-   * every other stale selection still repairs.
-   */
-  const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(null);
   // Focus returns here when the confirm closes: the dialog is code-split and has
   // no registered Radix trigger, so Radix's own restore would strand focus on
   // <body>. See ConfirmDialog.
   const removeButtonRef = useRef<HTMLButtonElement>(null);
 
   const pages = useMemo(() => data ?? [], [data]);
-  // `?? pages[0]` is a real fallback, not defensive noise: the list is
-  // home-first, so a community whose home flag is somehow unset still resolves
-  // to the page a manager would call home rather than to nothing at all.
-  const home = pages.find((page) => page.isHome) ?? pages[0];
-  // `data === undefined` — still loading, or the read failed — is NOT a stale
-  // selection. Repairing on it would throw away the server-seeded page id on
-  // every mount, which is the opposite of the point.
-  // `pendingSelectionId !== null` is load-bearing: without it a null selection
-  // equals a null pending mark and the repair that puts a seedless editor onto
-  // home would never fire.
-  const repairSuppressed =
-    pendingSelectionId !== null && selectedPageId === pendingSelectionId;
-  const selectionNeedsRepair =
-    data !== undefined &&
-    home !== undefined &&
-    !repairSuppressed &&
-    !pages.some((page) => page.id === selectedPageId);
 
-  useEffect(() => {
-    // Converges in one step: afterwards the selected id IS home's, so the
-    // condition above is false and the effect does not re-fire.
-    if (selectionNeedsRepair && home) onSelectPage(home.id);
-  }, [home, onSelectPage, selectionNeedsRepair]);
+  /*
+   * Selection REPAIR and the just-created "pending" mark used to live here, and
+   * both were dead in the real tree.
+   *
+   * `EditorRoot` owns `selectedPageId`, and its `key={effectivePageId}` (D-SEL)
+   * remounts this panel on every page switch — so a mark set in `onSuccess`
+   * below was back to `null` on the very next render, and its regression test
+   * could not see that because it drove the change with `rerender`, which
+   * preserves state. Repair had a second, independent hole: this panel is
+   * dynamically imported and mounted only while its own tab is active, so it was
+   * absent in the window where the selected page most commonly disappears — a
+   * publish that applies a staged removal, normally started from the shell
+   * header with Sections showing.
+   *
+   * Both now live in `EditorRoot`, next to the state they repair and driven by
+   * the pages list it already holds. This panel reports "I created this one,
+   * hold the selection" through `onSelectPage`'s `pending` flag and otherwise
+   * owns only its own view state.
+   */
 
   // A row that disappeared underneath an open editor must not leave that editor
   // open over nothing — and the reorder/nav controls inside it would then be
-  // acting on an id the server no longer knows.
+  // acting on an id the server no longer knows. This one is genuinely
+  // panel-local: `expandedPageId` is this panel's own disclosure state.
   useEffect(() => {
     if (expandedPageId !== null && data !== undefined && !pages.some((p) => p.id === expandedPageId)) {
       setExpandedPageId(null);
     }
   }, [data, expandedPageId, pages]);
-
-  // Released when — and only when — the list catches up. Releasing on
-  // "the parent is not on this page yet" was the first attempt and it defeats
-  // the whole mechanism: the parent is BY DEFINITION not on it yet at the
-  // moment the mark is set. A PM who navigates elsewhere needs no release,
-  // because the suppression already keys on the selection still being this id.
-  useEffect(() => {
-    if (pendingSelectionId !== null && pages.some((page) => page.id === pendingSelectionId)) {
-      setPendingSelectionId(null);
-    }
-  }, [pages, pendingSelectionId]);
 
   const expandedPage = pages.find((page) => page.id === expandedPageId) ?? null;
 
@@ -383,14 +371,30 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
     createNameErrors.length === 0 &&
     createSlugErrors.length === 0;
 
+  /*
+   * The edited page goes LAST, exactly as the add form puts `NEW_PAGE_KEY` last.
+   *
+   * `pageIssues` attributes a name or slug clash to the SECOND occurrence it
+   * sees, so in list order the edited page only hears about a clash when it
+   * happens to sit after the page it collides with. Renaming the EARLIER of two
+   * pages onto the later one's name filed the issue against the later page —
+   * which this panel never displays, because `messagesFor` filters on the
+   * edited page's id. Save stayed enabled, `updateSitePage` had no uniqueness
+   * rule to stop it, and the clash surfaced only as a server error on the next
+   * publish, naming a page the PM never touched.
+   *
+   * Ordering the edited page last makes the check symmetric: it is always the
+   * second occurrence of any name it duplicates, whichever direction the PM
+   * renames in.
+   */
   const editIssues = useMemo(() => {
     if (expandedPage === null) return [];
+    const others = pages.filter((page) => page.id !== expandedPage.id);
     return pageIssues({
-      pages: pages.map((page) =>
-        page.id === expandedPage.id
-          ? toValidationShape(page, { name: nameDraft, slug: slugDraft })
-          : toValidationShape(page),
-      ),
+      pages: [
+        ...others.map((page) => toValidationShape(page)),
+        toValidationShape(expandedPage, { name: nameDraft, slug: slugDraft }),
+      ],
       isReserved: isReservedPublicSlug,
     });
   }, [expandedPage, nameDraft, pages, slugDraft]);
@@ -484,9 +488,10 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
             setAnnouncement(`${page.name} added.`);
             // Land the PM on what they just made — otherwise the next section
             // they add goes onto the page they were already looking at. The
-            // pending mark holds the selection until the refetch catches up.
-            setPendingSelectionId(page.id);
-            onSelectPage(page.id);
+            // pending mark holds the selection until the refetch catches up;
+            // `EditorRoot` owns it, because this panel is remounted by the page
+            // switch this very call triggers.
+            onSelectPage(page.id, { pending: true });
           },
           onError: (mutationError) => {
             toast.error(`We couldn't add that page. ${mutationError.message}`);
