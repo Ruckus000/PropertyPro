@@ -9,9 +9,15 @@
  * a generic failure, and that a failure leaves a receipt behind that a
  * re-render cannot sweep away.
  *
- * `@/hooks/use-content-blocks` is mocked COMPLETELY — a partial factory fails
- * only at module load for whichever component happens to reach the missing
- * export, and reads as an unrelated component breaking.
+ * `@/hooks/use-content-blocks` and `@/hooks/use-site-pages` are mocked
+ * COMPLETELY — a partial factory fails only at module load for whichever
+ * component happens to reach the missing export, and reads as an unrelated
+ * component breaking.
+ *
+ * Phase 11b-3 note on the group ids below: every block now carries a `pageId`,
+ * so a section change is filed under its PAGE (`change-group-1`), not under the
+ * site-wide bucket. `change-group-site` is now reached only by a change that
+ * genuinely belongs to no single page.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -23,12 +29,17 @@ import {
 } from '@/components/pm/site-editor-v3/publish/PublishSheet';
 import { PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
+import type { SitePageSummary } from '@/hooks/use-site-pages';
 
 // ── block fixtures ─────────────────────────────────────────────────────────
+
+const HOME_PAGE_ID = 1;
+const CONTACT_PAGE_ID = 2;
 
 function block(overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary {
   return {
     id: 1,
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: 2,
     content: { heading: 'Pool rules', body: 'No glass by the pool, please.' },
@@ -46,6 +57,32 @@ const heroBlock = (overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary 
     content: { headline: 'Sunset Condos', subtitle: 'Miami Beach' },
     ...overrides,
   });
+
+// ── page fixtures ──────────────────────────────────────────────────────────
+
+function sitePage(overrides: Partial<SitePageSummary> = {}): SitePageSummary {
+  return {
+    id: HOME_PAGE_ID,
+    name: 'Home',
+    slug: '',
+    inNav: true,
+    sortOrder: 0,
+    isHome: true,
+    isDraft: false,
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    deleteStagedAt: null,
+    ...overrides,
+  };
+}
+
+const HOME_PAGE = sitePage();
+const CONTACT_PAGE = sitePage({
+  id: CONTACT_PAGE_ID,
+  name: 'Contact',
+  slug: 'contact',
+  sortOrder: 1,
+  isHome: false,
+});
 
 const PUBLISHED: SiteBlockSummary[] = [heroBlock(), block({ id: 1, blockOrder: 2 })];
 
@@ -66,6 +103,7 @@ const DRAFT_ONE_EDIT: SiteBlockSummary[] = [
 const queries = vi.hoisted(() => ({
   draft: [] as SiteBlockSummary[],
   published: [] as SiteBlockSummary[],
+  pages: [] as SitePageSummary[],
   token: null as string | null,
   isPending: false,
   isError: false,
@@ -98,6 +136,27 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
+const unstageAsync = vi.hoisted(() => vi.fn());
+const unstageState = vi.hoisted(() => ({ isPending: false }));
+
+vi.mock('@/hooks/use-site-pages', () => ({
+  sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
+  applyPageOrder: (pages: unknown) => pages,
+  useSitePages: () => ({
+    ...draftQuery(),
+    data: queries.isPending || queries.isError ? undefined : queries.pages,
+  }),
+  useCreateSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUpdateSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useReorderSitePages: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useDeleteSitePage: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUnstageSitePageDelete: () => ({
+    mutate: vi.fn(),
+    mutateAsync: unstageAsync,
+    isPending: unstageState.isPending,
+  }),
 }));
 
 const mutateAsync = vi.hoisted(() => vi.fn());
@@ -149,11 +208,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   queries.draft = DRAFT_ONE_EDIT;
   queries.published = PUBLISHED;
+  queries.pages = [HOME_PAGE];
   queries.token = '2026-07-01T00:00:00.000Z';
   queries.isPending = false;
   queries.isError = false;
   queries.error = null;
   publishState.isPending = false;
+  unstageState.isPending = false;
+  unstageAsync.mockResolvedValue(undefined);
   mutateAsync.mockResolvedValue(PUBLISHED_OK);
 });
 
@@ -163,9 +225,11 @@ describe('PublishSheet — the change list', () => {
   it('lists the pending changes when open', async () => {
     renderSheet();
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    const group = screen.getByTestId('change-group-site');
+    const group = screen.getByTestId(`change-group-${HOME_PAGE_ID}`);
     expect(within(group).getByText('Text section')).toBeInTheDocument();
     expect(within(group).getByText('Edited')).toBeInTheDocument();
+    // Named after the page, not its id.
+    expect(within(group).getByText('Home')).toBeInTheDocument();
   });
 
   it('renders nothing at all while closed, so the blocks query never fires for it', () => {
@@ -194,6 +258,41 @@ describe('PublishSheet — the change list', () => {
     expect(grouped[0]!.changes.map((c) => c.title)).toEqual(['B', 'D']);
   });
 
+  it('orders page groups by nav position, not by the id read as a string', () => {
+    // '10'.localeCompare('2') is negative, so without the rank map page 10
+    // would render before page 2 on any site with ten pages — a plausible-
+    // looking list in the wrong order.
+    const change = (group: string): Change => ({
+      key: 'order',
+      kind: 'reordered',
+      group,
+      title: group,
+      blockType: null,
+      fromSlot: null,
+      toSlot: null,
+    });
+    const rank = new Map([
+      ['2', 1],
+      ['10', 9],
+    ]);
+    const grouped = groupChanges([change('10'), change('site'), change('2')], rank);
+    expect(grouped.map((g) => g.group)).toEqual(['site', '2', '10']);
+  });
+
+  it('sorts a group the pages query has not resolved after the ranked ones', () => {
+    const change = (group: string): Change => ({
+      key: 'order',
+      kind: 'reordered',
+      group,
+      title: group,
+      blockType: null,
+      fromSlot: null,
+      toSlot: null,
+    });
+    const grouped = groupChanges([change('99'), change('2')], new Map([['2', 1]]));
+    expect(grouped.map((g) => g.group)).toEqual(['2', '99']);
+  });
+
   it('says so when the site has never been published', () => {
     queries.published = [];
     renderSheet();
@@ -206,8 +305,30 @@ describe('PublishSheet — the change list', () => {
       block({ id: 9, blockOrder: 2, blockType: TOMBSTONE_BLOCK_TYPE, content: {}, isDraft: true }),
     ];
     renderSheet();
-    const group = screen.getByTestId('change-group-site');
+    const group = screen.getByTestId(`change-group-${HOME_PAGE_ID}`);
     expect(within(group).getByText('Removed')).toBeInTheDocument();
+    // A SECTION removal is not a page removal — no undo affordance here.
+    expect(screen.queryByRole('button', { name: /keep the/i })).not.toBeInTheDocument();
+  });
+
+  it('files a section change under the page it belongs to', () => {
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.draft = [
+      ...PUBLISHED,
+      block({
+        id: 7,
+        pageId: CONTACT_PAGE_ID,
+        blockOrder: 3,
+        isDraft: true,
+        publishedAt: null,
+        content: { heading: 'Reach us', body: 'Front desk, 9-5.' },
+      }),
+    ];
+    renderSheet();
+
+    const group = screen.getByTestId(`change-group-${CONTACT_PAGE_ID}`);
+    expect(within(group).getByText('Contact')).toBeInTheDocument();
+    expect(within(group).getByText('Added')).toBeInTheDocument();
   });
 
   it('handles loading and error states', async () => {
@@ -222,6 +343,81 @@ describe('PublishSheet — the change list', () => {
     renderSheet();
     expect(await screen.findByText(/couldn't work out what's changed/i)).toBeInTheDocument();
     expect(screen.getByText('Network down')).toBeInTheDocument();
+  });
+});
+
+// ── page-level changes (Phase 11b-3) ───────────────────────────────────────
+
+describe('PublishSheet — page changes', () => {
+  /** Contact is live and staged for removal on the next publish. */
+  function stageContactRemoval() {
+    queries.pages = [
+      HOME_PAGE,
+      { ...CONTACT_PAGE, deleteStagedAt: '2026-07-30T09:00:00.000Z' },
+    ];
+  }
+
+  it('lists a page the publish will create, with the address it will occupy', () => {
+    queries.pages = [HOME_PAGE, { ...CONTACT_PAGE, isDraft: true, publishedAt: null }];
+    renderSheet();
+
+    const group = screen.getByTestId(`change-group-${CONTACT_PAGE_ID}`);
+    expect(within(group).getByText('Added')).toBeInTheDocument();
+    expect(within(group).getByText('Contact page')).toBeInTheDocument();
+    // The address is the one thing that says which URL starts working.
+    expect(within(group).getByText('/contact')).toBeInTheDocument();
+  });
+
+  it('lists a staged page removal and offers to call it off', async () => {
+    const user = userEvent.setup();
+    stageContactRemoval();
+    const onOpenChange = vi.fn();
+    renderSheet({ onOpenChange });
+
+    const group = screen.getByTestId(`change-group-${CONTACT_PAGE_ID}`);
+    expect(within(group).getByText('Removed')).toBeInTheDocument();
+    expect(within(group).getByText('Contact page')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /keep the contact page/i }));
+
+    expect(unstageAsync).toHaveBeenCalledWith({ pageId: CONTACT_PAGE_ID });
+    // Cancelling one removal must not cost the PM the whole review.
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(toastSuccess).toHaveBeenCalledWith('Contact page will stay on your site.');
+  });
+
+  it('says so, and leaves the removal staged, when the undo fails', async () => {
+    const user = userEvent.setup();
+    stageContactRemoval();
+    unstageAsync.mockRejectedValue(new Error('Upstream timed out'));
+    renderSheet();
+
+    await user.click(screen.getByRole('button', { name: /keep the contact page/i }));
+
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining("We couldn't cancel that removal"),
+    );
+    // The row still says the page is going, because it still is.
+    const group = screen.getByTestId(`change-group-${CONTACT_PAGE_ID}`);
+    expect(within(group).getByText('Removed')).toBeInTheDocument();
+  });
+
+  it('disables the undo while the request is in flight', () => {
+    stageContactRemoval();
+    unstageState.isPending = true;
+    renderSheet();
+    expect(screen.getByRole('button', { name: /keep the contact page/i })).toBeDisabled();
+  });
+
+  it('counts a staged page removal as something to publish', () => {
+    // Blocks are untouched, so without diffPages the sheet would say "nothing
+    // to publish" while a publish was about to take a live page off the site.
+    queries.draft = PUBLISHED;
+    stageContactRemoval();
+    renderSheet();
+
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+    expect(screen.getByText(/1 change ready to publish/i)).toBeInTheDocument();
   });
 });
 

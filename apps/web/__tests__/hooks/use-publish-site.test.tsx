@@ -101,19 +101,37 @@ describe('usePublishSite', () => {
     ).rejects.toThrow(/boom/);
   });
 
-  it('invalidates the content-blocks and hero queries on success', async () => {
+  /**
+   * D10′ — the invalidation is the WHOLE `['pm','site']` prefix, not a
+   * hand-listed pair of keys.
+   *
+   * Asserted behaviourally (does the cached pages query actually go stale?)
+   * rather than by spying on the call shape, because the call shape is not the
+   * requirement: publishing applies staged page removals, so a publish sheet or
+   * Pages panel left holding a page that no longer exists is the defect, and
+   * the narrow two-key form produced exactly that.
+   */
+  it('invalidates the whole pm/site query prefix on success — blocks, hero AND pages', async () => {
     (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({ data: { published: true, publishedAt: '2026-05-15T12:00:00.000Z', promotedCount: 1, retiredCount: 0 } }),
     });
     const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    const keys = [
+      ['pm', 'site', 'blocks', 42],
+      ['pm', 'site', 'hero', 42],
+      ['pm', 'site', 'pages', 42],
+    ];
+    for (const key of keys) qc.setQueryData(key, { seeded: true });
+
     const { result } = renderHook(() => usePublishSite(42), { wrapper: wrap(qc) });
     await result.current.mutateAsync({ expectedPublishedAt: null });
+
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['pm', 'site', 'blocks', 42] });
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['pm', 'site', 'hero', 42] });
+      for (const key of keys) {
+        expect(qc.getQueryState(key)?.isInvalidated).toBe(true);
+      }
     });
   });
 });
