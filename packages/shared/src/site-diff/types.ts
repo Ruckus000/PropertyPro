@@ -73,9 +73,15 @@ export type SectionRef = `p${number}` | `d${number}`;
  * Revert-targeting and dedupe only.
  *
  * **No consumer may `switch` on this type.** Adding a member to a string
- * literal union is a breaking change for exhaustive switches, and Phases 8/9/11
- * will add `site`, `footer`, `page:<id>` and `pageorder`. Render from `kind`,
- * `group` and `title` instead — those are stable.
+ * literal union is a breaking change for exhaustive switches, and Phases 8/9
+ * may still add `site` and `footer`. Render from `kind`, `group` and `title`
+ * instead — those are stable. Phase 11b-3 added `page:<id>` exactly this way,
+ * and nothing broke, which is the demonstration that the rule works.
+ *
+ * `page:<id>` identifies a whole page that a publish will create or remove —
+ * see `diffPages`. There is deliberately **no** page-ordering key: a page
+ * reorder writes `site_pages.sort_order` immediately and is live the moment it
+ * is saved, so it is never pending publication and has nothing to report here.
  *
  * `style` is declared but has no producer: branding is unstaged, so both sides
  * of the diff always carry the same value. Phase 8 was expected to turn it on
@@ -84,7 +90,56 @@ export type SectionRef = `p${number}` | `d${number}`;
  * stays declared so the grouping code is written once, and so turning it on
  * later is not a breaking change.
  */
-export type ChangeKey = 'hero' | 'style' | 'order' | `block:${SectionRef}`;
+export type ChangeKey = 'hero' | 'style' | 'order' | `block:${SectionRef}` | `page:${string}`;
+
+/**
+ * One page as it exists on one side of a page diff — see `diffPages`.
+ *
+ * Unlike `SiteSectionSnapshot`, this one **does** carry an identity, and that
+ * asymmetry is the whole reason page diffing is easy where section diffing is
+ * hard. `site_pages` is ONE ROW PER PAGE with a stable `id` that survives every
+ * rename, so pages correlate by id and none of `diff.ts`'s content-matching
+ * machinery is needed or wanted here.
+ *
+ * `pageId` is a string for the same reason `SiteSnapshot.pageId` is: ids stay
+ * opaque in this package, and the caller stringifies at the boundary.
+ *
+ * Structurally a superset of `PageForValidation` (see `pages.ts`) minus
+ * `isDraft`. They are separate types on purpose — that one answers "may this
+ * set of pages be published at all", this one answers "what will publishing
+ * change" — and merging them would couple two unrelated rulesets.
+ */
+export interface SitePageSnapshot {
+  /** `site_pages.id`, stringified by the caller. */
+  pageId: string;
+  /** PM-facing page name; also the nav label. */
+  name: string;
+  /** URL segment without a leading slash. `''` for the home page. */
+  slug: string;
+  isHome: boolean;
+  /** Whether the page appears in the public site's nav. */
+  inNav: boolean;
+  /**
+   * True when a publish will remove this page (`site_pages.delete_staged_at`).
+   *
+   * Meaningful on the **next** side only, exactly like
+   * `SiteSnapshot.tombstonedSlots`. A staged page is still live and still
+   * anon-readable until the publish transaction soft-deletes it, so it is
+   * present on BOTH sides of the diff and set membership cannot detect the
+   * removal — the flag is the only signal there is. `diffPages` therefore
+   * ignores this field on the published side.
+   */
+  deleteStaged?: boolean;
+}
+
+/**
+ * A page row as the pages API returns it: a snapshot plus the flag that says
+ * which side of the diff it belongs on. Input to `publishedPageBaseline`.
+ */
+export interface SitePageRow extends SitePageSnapshot {
+  /** True while the page has never been published. */
+  isDraft: boolean;
+}
 
 export interface Change {
   key: ChangeKey;
@@ -102,6 +157,16 @@ export interface Change {
   order?: { from: SectionRef[]; to: SectionRef[] };
   /** True when an edited section also changed position. */
   alsoMoved?: boolean;
+  /**
+   * Present only on a `page:<id>` change — the page the change is about.
+   *
+   * Carried explicitly so a consumer never parses it back out of `key` or
+   * `group`. Both encode the page id, and both would keep working right up
+   * until a page id stops being a bare number; recovering `slug` from either is
+   * impossible anyway, and the slug is the one thing a PM needs to see to know
+   * which public URL is about to appear or disappear.
+   */
+  page?: SitePageSnapshot;
   /**
    * True when either side failed to parse against its block schema — typically
    * a row written before a schema tightened. The comparison falls back to a raw
