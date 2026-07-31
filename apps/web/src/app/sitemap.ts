@@ -51,8 +51,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Branch 1: Community public host — subdomain or verified custom domain.
   // Both serve the same public site off `https://${host}`, so they share a
-  // body. Routes listed here match the disallow list in robots.ts and the
-  // actual route files under apps/web/src/app/(public)/[subdomain]/.
+  // body.
   const isCommunitySubdomain =
     context.source === 'host_subdomain' && !!context.tenantSlug && !context.isReservedSubdomain;
   const isCustomDomain = context.source === 'custom_domain';
@@ -77,11 +76,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       if (!isSearchIndexingEnabled(branding)) return [];
     }
 
+    // Only paths that actually RENDER on a tenant host belong here. `/` and
+    // `/transparency` do; `/notices` and `/request-access` did not, and were
+    // advertised to crawlers as 404s on both host types until this was fixed.
+    //
+    // The reason is structural, not an oversight to "fix" by re-adding them:
+    // those renderers live at `app/(public)/[subdomain]/<suffix>` and need a
+    // `[subdomain]` PATH segment, which a host that carries tenancy implicitly
+    // never supplies. `transparency` is the one suffix with a host-native twin
+    // (`app/public-transparency`), which is why it is the one that survives —
+    // see HOST_NATIVE_PUBLIC_SUFFIX_ROUTES in lib/middleware/public-host-routes.ts.
+    // Both slugs are reserved by `isReservedPublicSlug`, so a community cannot
+    // create a page at either address either. Adding one back means building a
+    // host-native renderer for it first.
+    //
+    // Kept as two sources deliberately: that map is request ROUTING, this list
+    // is SEO inventory. Deduping them across that seam would couple the two for
+    // one shared entry.
     const staticEntries: MetadataRoute.Sitemap = [
       { url: `${base}/`, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
       { url: `${base}/transparency`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
-      { url: `${base}/notices`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
-      { url: `${base}/request-access`, lastModified: now, changeFrequency: 'yearly', priority: 0.5 },
     ];
 
     // Append per-document URLs when middleware has resolved a community id.

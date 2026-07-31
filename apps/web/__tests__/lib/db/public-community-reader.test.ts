@@ -74,6 +74,10 @@ vi.mock('@propertypro/db', () => ({
     isDraft: 'sitePages.isDraft',
     publishedAt: 'sitePages.publishedAt',
     deleteStagedAt: 'sitePages.deleteStagedAt',
+    // Selected by listPublishedPagesForSitemap. Was missing here, which made
+    // that column resolve to `undefined` under the mock — a projection
+    // assertion would have compared undefined to undefined and passed.
+    updatedAt: 'sitePages.updatedAt',
     deletedAt: 'sitePages.deletedAt',
   },
   sitePageRedirects: {
@@ -727,6 +731,91 @@ describe('getPublicCommunityScopedReader', () => {
     );
     expect(hasInArray).toBe(false);
     expect(mockSelectChain.leftJoin).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // listPublishedPagesForSitemap (Phase 11b-2 / D16)
+  //
+  // sitemap.test.ts mocks this reader wholesale, so it can only assert URL
+  // ASSEMBLY — every predicate below is invisible to it. These are the tests
+  // that actually pin the query.
+  // ---------------------------------------------------------------------------
+
+  /** The four predicates, extracted from the single WHERE call as `col -> val`. */
+  function sitemapPagesEqClauses() {
+    const whereCall = mockSelectChain.where.mock.calls[0][0];
+    return {
+      eqs: whereCall.__and
+        .filter((c: unknown) => (c as { __eq?: unknown }).__eq !== undefined)
+        .map((c: unknown) => (c as { __eq: { col: string; val: unknown } }).__eq),
+      isNulls: whereCall.__and
+        .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
+        .map((c: unknown) => (c as { __isNull: string }).__isNull),
+    };
+  }
+
+  it('listPublishedPagesForSitemap binds communityId and excludes deleted, draft and home rows', async () => {
+    mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    const reader = getPublicCommunityScopedReader(7);
+    await reader.listPublishedPagesForSitemap({ limit: 200 });
+
+    const { eqs, isNulls } = sitemapPagesEqClauses();
+    expect(isNulls).toContain('sitePages.deletedAt');
+    expect(eqs).toContainEqual({ col: 'sitePages.communityId', val: 7 });
+    // Draft pages must never reach a public sitemap.
+    expect(eqs).toContainEqual({ col: 'sitePages.isDraft', val: false });
+    // Home is excluded here because sitemap.ts emits `/` as a static entry; home's
+    // slug is '' so including it would produce a duplicate `/` URL.
+    expect(eqs).toContainEqual({ col: 'sitePages.isHome', val: false });
+  });
+
+  it('listPublishedPagesForSitemap does NOT filter on in_nav (D16) or delete_staged_at', async () => {
+    // The two DELIBERATE absences, and the reason this test exists: `listNavPages`
+    // DOES filter on `in_nav`, so the two methods are one copy-paste from
+    // converging and nothing else would catch it. `in_nav` is presentation — an
+    // unlisted-but-published page is still a public URL. `delete_staged_at` is
+    // omitted for the same reason as getPageBySlug: a page staged for deletion is
+    // still live to the public until the PM publishes (D8 / migration 0047).
+    mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listPublishedPagesForSitemap({ limit: 200 });
+
+    const { eqs, isNulls } = sitemapPagesEqClauses();
+    expect(eqs.map((e: { col: string }) => e.col)).not.toContain('sitePages.inNav');
+    expect(eqs.map((e: { col: string }) => e.col)).not.toContain('sitePages.deleteStagedAt');
+    expect(isNulls).not.toContain('sitePages.deleteStagedAt');
+  });
+
+  it('listPublishedPagesForSitemap orders by id ascending for a stable crawl order', async () => {
+    mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listPublishedPagesForSitemap({ limit: 200 });
+    expect(mockSelectChain.orderBy).toHaveBeenCalledWith({ __asc: 'sitePages.id' });
+  });
+
+  it('listPublishedPagesForSitemap forwards the caller-supplied limit to the query', async () => {
+    // The cap lives entirely at the call site (SITEMAP_PAGE_LIMIT); the reader has
+    // none of its own, so "the argument was passed" and "the query is capped" are
+    // different claims. sitemap.test.ts can only make the first.
+    mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listPublishedPagesForSitemap({ limit: 200 });
+    expect(mockSelectChain.limit).toHaveBeenCalledWith(200);
+  });
+
+  it('listPublishedPagesForSitemap returns the { id, slug, updatedAt } projection', async () => {
+    const fakeRow = { id: 9, slug: 'amenities', updatedAt: new Date('2026-05-02T00:00:00Z') };
+    mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([fakeRow]).then(resolve));
+    const reader = getPublicCommunityScopedReader(42);
+    const result = await reader.listPublishedPagesForSitemap({ limit: 200 });
+    expect(result).toEqual([fakeRow]);
+
+    const projection = mockDb.select.mock.calls[0][0];
+    expect(projection).toEqual({
+      id: 'sitePages.id',
+      slug: 'sitePages.slug',
+      updatedAt: 'sitePages.updatedAt',
+    });
   });
 
   it('listMeetings WHERE includes the deletedAt isNull guard', async () => {

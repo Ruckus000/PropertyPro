@@ -27,7 +27,7 @@
  * cross-community, so the target community arrives as a searchParam and cannot
  * be resolved at layout level. Middleware still protects the whole tree — the
  * URL lives under `/pm`, which is in `PROTECTED_PATH_PREFIXES`
- * (apps/web/src/middleware.ts).
+ * (apps/web/src/lib/middleware/public-host-routes.ts).
  */
 import type { ReactNode } from 'react';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
