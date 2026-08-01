@@ -476,6 +476,72 @@ describe('PagesPanel — renaming', () => {
   });
 });
 
+describe('PagesPanel — a staged page still holds its address', () => {
+  /*
+   * The client used to disagree with the server here, and the server is right.
+   *
+   * `site_pages_community_slug_partial` is unique on
+   * `(community_id, slug) WHERE deleted_at IS NULL`, and a page staged for
+   * removal keeps `deleted_at` NULL until the publish lands — so its row still
+   * owns the address. `assertUsableSlug` refuses it accordingly. `pageIssues`
+   * skipped staged pages entirely, so the panel showed no error and left Save
+   * enabled on an address the write would reject with a 400.
+   *
+   * Names are the opposite and deliberately so: no unique index, and
+   * `assertNameAvailable` skips staged pages. Both directions are asserted, or
+   * the obvious "fix" — stop skipping staged pages anywhere — would look right.
+   */
+  const STAGED = page({
+    id: 2,
+    name: 'Amenities',
+    slug: 'amenities',
+    deleteStagedAt: '2026-07-30T00:00:00.000Z',
+  });
+
+  it('refuses the address on the add form', async () => {
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, STAGED] });
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await user.type(screen.getByLabelText('Page name'), 'Amenity Guide');
+    await user.clear(screen.getByLabelText('Web address'));
+    await user.type(screen.getByLabelText('Web address'), 'amenities');
+
+    expect(screen.getByText(/staged for removal still uses "\/amenities"/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add page' })).toBeDisabled();
+  });
+
+  it('refuses the address on a rename', async () => {
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, STAGED, DRAFT_PAGE] });
+
+    // DRAFT_PAGE has never been published, so it is the one page whose address
+    // control is rendered at all (D32′).
+    const editor = await openSettings(user, 3);
+    await user.clear(editor.getByLabelText('Web address'));
+    await user.type(editor.getByLabelText('Web address'), 'amenities');
+
+    expect(editor.getByText(/staged for removal still uses "\/amenities"/)).toBeInTheDocument();
+    expect(editor.getByRole('button', { name: 'Save address' })).toBeDisabled();
+  });
+
+  it('still frees the staged page NAME, which has no unique index', async () => {
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, STAGED] });
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await user.type(screen.getByLabelText('Page name'), 'Amenities');
+    // The address must be moved off the auto-slug, or this asserts the SLUG
+    // rule a second time: "Amenities" slugifies to "amenities", which the
+    // staged page does still hold. Only the name is under test here.
+    await user.clear(screen.getByLabelText('Web address'));
+    await user.type(screen.getByLabelText('Web address'), 'amenities-2026');
+
+    expect(screen.queryByText(/Another page is also called/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add page' })).toBeEnabled();
+  });
+});
+
 describe('PagesPanel — the address control (D32′)', () => {
   it('does not offer an address control for a published page', async () => {
     // ABSENT, not disabled. Changing a live page's address is live-immediate and

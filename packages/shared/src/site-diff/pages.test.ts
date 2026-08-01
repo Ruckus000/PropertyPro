@@ -115,6 +115,69 @@ describe('pageIssues', () => {
     expect(issues).toEqual([]);
   });
 
+  describe('a staged page and its address (reserveStagedSlugs)', () => {
+    const stagedAbout = { ...about, deleteStaged: true };
+    const replacement = {
+      pageId: '3',
+      name: 'About us',
+      slug: 'about',
+      isHome: false,
+      isDraft: true,
+    };
+
+    it('by default leaves the address free — the publish gate, where the page is leaving', () => {
+      // Unchanged behaviour, pinned. `publishCommunitySite` asks whether the
+      // set about to go live is valid, and a staged page is not in it.
+      expect(pageIssues({ pages: [home, stagedAbout, replacement], isReserved })).toEqual([]);
+    });
+
+    it('reserves the address when asked — an editor form, where the row is still live', () => {
+      // `site_pages_community_slug_partial` is unique on
+      // `(community_id, slug) WHERE deleted_at IS NULL`, and a staged page has
+      // `deleted_at` still NULL. So the server refuses this slug, and a form
+      // that said otherwise would enable a Save that 400s.
+      const issues = pageIssues({
+        pages: [home, stagedAbout, replacement],
+        isReserved,
+        reserveStagedSlugs: true,
+      });
+      expect(issues).toHaveLength(1);
+      expect(issues[0]?.pageId).toBe('3');
+      expect(issues[0]?.field).toBe('page:3.slug');
+      expect(issues[0]?.message).toMatch(/staged for removal/);
+    });
+
+    it('does not accuse the staged page of clashing with itself', () => {
+      expect(
+        pageIssues({ pages: [home, stagedAbout], isReserved, reserveStagedSlugs: true }),
+      ).toEqual([]);
+    });
+
+    it('still does not VALIDATE the staged page, even while reserving its address', () => {
+      // The two concerns stay separate: a page with a reserved slug must remain
+      // deletable, so reserving its address must not resurrect its own errors.
+      expect(
+        pageIssues({
+          pages: [home, { ...about, slug: 'documents', deleteStaged: true }],
+          isReserved,
+          reserveStagedSlugs: true,
+        }),
+      ).toEqual([]);
+    });
+
+    it('leaves the staged page NAME free — names have no unique index', () => {
+      // The asymmetry with slugs is deliberate. `assertNameAvailable` skips
+      // staged pages on the server, so the form must not invent a clash.
+      expect(
+        pageIssues({
+          pages: [home, stagedAbout, { ...replacement, slug: 'about-us', name: 'About' }],
+          isReserved,
+          reserveStagedSlugs: true,
+        }),
+      ).toEqual([]);
+    });
+  });
+
   it('carries pageId on every page-specific issue so the review sheet can group', () => {
     const issues = pageIssues({
       pages: [home, { ...about, slug: 'documents' }],

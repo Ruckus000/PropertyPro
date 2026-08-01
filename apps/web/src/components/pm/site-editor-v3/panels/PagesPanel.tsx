@@ -226,8 +226,13 @@ function toValidationShape(
     slug: override?.slug ?? page.slug,
     isHome: page.isHome,
     isDraft: page.isDraft,
-    // A page already staged for removal is skipped by the validator, which is
-    // what frees its address for reuse before the publish lands.
+    // A page already staged for removal is not VALIDATED by the shared checker
+    // — it is about to stop existing. It does still hold its ADDRESS, though,
+    // until the publish lands: its row stays live in
+    // `site_pages_community_slug_partial`, so the server refuses that slug to
+    // anyone else. Both form validations below pass `reserveStagedSlugs` so
+    // they agree with the server rather than offering an address it will reject.
+    // Its NAME is genuinely free (no unique index) — see `assertNameAvailable`.
     deleteStaged: page.deleteStagedAt !== null,
   };
 }
@@ -380,6 +385,9 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
           { pageId: NEW_PAGE_KEY, name: newName, slug: newSlug, isHome: false },
         ],
         isReserved: isReservedPublicSlug,
+        // This form asks "can this page take this address now?", not "is the
+        // set about to go live valid?" — so a staged page still holds its slug.
+        reserveStagedSlugs: true,
       }),
     [newName, newSlug, pages],
   );
@@ -419,6 +427,8 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
         toValidationShape(expandedPage, { name: nameDraft, slug: slugDraft }),
       ],
       isReserved: isReservedPublicSlug,
+      // Same question as the add form: what can this page take right now.
+      reserveStagedSlugs: true,
     });
   }, [expandedPage, nameDraft, pages, slugDraft]);
   const editKey = expandedPage === null ? '' : String(expandedPage.id);
