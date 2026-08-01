@@ -39,6 +39,24 @@ export interface UseAutosaveOptions {
   delayMs?: number;
   /** When false, changes are tracked but never written. */
   enabled?: boolean;
+  /**
+   * A save that failed with nobody left to tell.
+   *
+   * The status line and the retry both need a mounted component, so a failure
+   * during the unmount flush is swallowed: `setState` is skipped, no retry is
+   * scheduled, and the status slot has already been handed back. Silent.
+   *
+   * That went from rare to routine in 11b-3. A pages refetch on window focus can
+   * discover that a co-manager removed the page being edited; selection repair
+   * then moves the editor to home, which remounts the subtree (D-SEL) and
+   * flushes the open form — at a page the server no longer has. The PM gets a
+   * toast saying they were moved, and the last debounce window of typing
+   * disappears with no error anywhere.
+   *
+   * Called ONLY when the component is already gone. A mounted failure still
+   * goes to the status line, which can retry.
+   */
+  onUnmountedError?: (error: Error) => void;
 }
 
 export const DEFAULT_AUTOSAVE_DELAY_MS = 800;
@@ -89,7 +107,12 @@ export function useAutosave<T>(
   save: (value: T) => Promise<void>,
   options: UseAutosaveOptions = {},
 ): UseAutosaveResult<T> {
-  const { delayMs = DEFAULT_AUTOSAVE_DELAY_MS, enabled = true } = options;
+  const { delayMs = DEFAULT_AUTOSAVE_DELAY_MS, enabled = true, onUnmountedError } = options;
+
+  // In a ref because `runSave` is a `useCallback` that must not re-identify on
+  // every render — the debounce effect depends on it.
+  const onUnmountedErrorRef = useRef(onUnmountedError);
+  onUnmountedErrorRef.current = onUnmountedError;
 
   const [state, setState] = useState<AutosaveState>({
     status: 'idle',
@@ -159,6 +182,10 @@ export function useAutosave<T>(
         attemptsRef.current += 1;
         if (mountedRef.current) {
           setState((prev) => ({ status: 'error', lastSavedAt: prev.lastSavedAt, error }));
+        } else {
+          // Nobody left to tell: no status line, and the retry below is gated on
+          // being mounted too. Without this the write is lost in silence.
+          onUnmountedErrorRef.current?.(error);
         }
         const backoff = RETRY_BACKOFF_MS[attemptsRef.current - 1];
         if (backoff !== undefined && mountedRef.current) {

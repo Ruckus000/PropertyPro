@@ -155,9 +155,19 @@ const PAGE_COLUMNS = {
  *     inserted without a page.
  *
  * So this ALSO adopts any of the community's page-less blocks — the same
- * `page_id` UPDATE the migration ran, scoped to one community. That makes the
- * function self-healing rather than merely lazy, which matters because 11c sets
- * `page_id NOT NULL` and every NULL left behind is a failed migration.
+ * `page_id` UPDATE the migration ran, scoped to one community.
+ *
+ * **That healing now reaches WRITE paths only, and 11c must not rely on it.**
+ * It used to run on every `listSitePages` call, so merely opening the editor
+ * repaired a community. `listSitePages` is now a lock-free read on the common
+ * path (it has to be — it runs on every editor load and every pages refetch),
+ * and this is an UPDATE, so it cannot ride along. A community whose blocks
+ * carry `page_id NULL`, and which already has a home page, is now repaired only
+ * when someone writes a block.
+ *
+ * 11c sets `page_id NOT NULL`, and every NULL left behind fails that migration.
+ * The migration therefore needs its own backfill rather than assuming traffic
+ * has healed everything — do not delete this paragraph without adding it.
  *
  * `is_draft` is derived exactly as 0046's backfill derived it: published if any
  * live block of the community is published, draft otherwise. A community with no
@@ -342,7 +352,14 @@ export async function listSitePages(
   const existing = await db.transaction(async (tx) =>
     listPagesInTransaction(communityId, tx, { includeDrafts: true }),
   );
-  if (existing.length > 0) {
+  // `some(isHome)`, not `length > 0`. The invariant this function promises is
+  // "a home page exists", and those two only coincide while home is
+  // undeletable. A community with pages but no home would otherwise
+  // short-circuit forever, and `EditorRoot` would fall through to `pages[0]` and
+  // scope every write to a non-home page — the state its own comment calls "a
+  // community whose home flag is somehow unset". Not constructible today; this
+  // is what keeps it that way.
+  if (existing.some((page) => page.isHome)) {
     return includeDrafts ? existing : existing.filter((page) => !page.isDraft);
   }
 

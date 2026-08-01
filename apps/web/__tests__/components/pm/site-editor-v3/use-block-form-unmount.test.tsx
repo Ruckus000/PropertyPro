@@ -18,6 +18,13 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
+const toastError = vi.hoisted(() => vi.fn());
+// `use-block-form` toasts a flush that failed after unmount — a factory missing
+// an export it reaches yields `undefined` at call time.
+vi.mock('sonner', () => ({
+  toast: { error: toastError, success: vi.fn(), dismiss: vi.fn() },
+}));
+
 import { useBlockForm } from '@/components/pm/site-editor-v3/inspector/use-block-form';
 
 const DELAY = 800;
@@ -105,6 +112,45 @@ describe('useBlockForm — unmount while an edit is still inside the debounce wi
     });
 
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a flush that FAILS, instead of losing the write in silence', async () => {
+    // The status line needs a mounted component and so does the retry, so a
+    // failure here reached nothing at all. That went from rare to routine in
+    // 11b-3: a pages refetch on window focus can discover a co-manager removed
+    // the page being edited, selection repair moves the editor to home, the
+    // remount flushes this form — and the server 404s the page it names. The PM
+    // was told they had been moved and nothing else.
+    const save = vi.fn().mockRejectedValue(new Error('Page not found for this community'));
+    const { result, unmount } = renderHook(() => useBlockForm(options(save)));
+
+    act(() => {
+      result.current.setDraft({ heading: 'Lost without this' });
+    });
+    await act(async () => {
+      unmount();
+    });
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(toastError).toHaveBeenCalledWith(
+      expect.stringContaining("couldn't save your last change"),
+    );
+  });
+
+  it('does not toast when the flush SUCCEEDS', async () => {
+    // The control: a toast on every unmount would fire constantly, since an
+    // ordinary page switch flushes.
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { result, unmount } = renderHook(() => useBlockForm(options(save)));
+
+    act(() => {
+      result.current.setDraft({ heading: 'Saved fine' });
+    });
+    await act(async () => {
+      unmount();
+    });
+
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it('does not write an incomplete draft — an emptied required field is not persisted', async () => {

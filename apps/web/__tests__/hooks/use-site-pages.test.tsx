@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -60,6 +60,13 @@ beforeEach(() => {
   global.fetch = vi.fn();
   focusManager.setFocused(true);
   vi.useRealTimers();
+});
+
+// `focusManager` is a module singleton and `setFocused` is a manual override,
+// so leaving it set would leak into any file that runs after this one the day
+// per-file isolation is relaxed.
+afterEach(() => {
+  focusManager.setFocused(undefined);
 });
 
 describe('useSitePages', () => {

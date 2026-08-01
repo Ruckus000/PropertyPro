@@ -17,6 +17,7 @@
  * reads as an unrelated component breaking.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useEffect } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
@@ -35,6 +36,9 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 const SECOND_PAGE_ID = 77;
 const HOME_PAGE_ID = 5;
 const CREATED_PAGE_ID = 91;
+/** Mount/unmount trail for the inspector stub — see the dynamic mock below. */
+const inspectorLifecycle = vi.hoisted(() => [] as string[]);
+
 /** A `block_order` held by a section on SECOND_PAGE_ID, not on home. */
 const FOREIGN_SLOT = 3;
 
@@ -78,7 +82,23 @@ vi.mock('next/dynamic', () => ({
             </button>
           </div>
         )
-      : // The publish sheet, stubbed only far enough to fire "Fix this". Its
+      : // The inspector, stubbed to record its own mount/unmount.
+        //
+        // This is what guards `key={effectivePageId}` for WRITE targeting.
+        // `page-switch-flush.test.tsx` proves "inspector unmounts ⇒ the flush
+        // carries the pre-switch page id", using the real hooks. It cannot
+        // prove the unmount happens, because the key in its harness is its own.
+        // This half proves the unmount, in the real tree. Neither alone is
+        // enough; together they cover the claim.
+        String(loader).includes('Inspector')
+        ? () => {
+            useEffect(() => {
+              inspectorLifecycle.push('mount');
+              return () => inspectorLifecycle.push('unmount');
+            }, []);
+            return <p>inspector</p>;
+          }
+        : // The publish sheet, stubbed only far enough to fire "Fix this". Its
         // blocking issues come from the WHOLE-SITE diff while the editor
         // context is page-scoped (D-C2), so the slot it hands back routinely
         // names a section on another page — the case that regressed.
@@ -259,6 +279,7 @@ beforeEach(() => {
   queries.draft = [];
   queries.published = [];
   queries.pages = [];
+  inspectorLifecycle.length = 0;
   queries.isPending = false;
   queries.isError = false;
   queries.error = null;
@@ -405,6 +426,49 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
 
     expect(sectionRow()).not.toHaveAttribute('aria-current');
+  });
+
+  it('UNMOUNTS the inspector on a page switch, which is what targets a pending write', async () => {
+    /*
+     * The write-targeting half of D-SEL, and the one nothing guarded.
+     *
+     * `useUpsertContentBlock` captures `useSelectedSitePage()` at RENDER time,
+     * so an inspector edit still inside its debounce window writes to whichever
+     * page its last render saw. The `key` is what makes that the right one: the
+     * outgoing subtree is UNMOUNTED rather than re-rendered, so
+     * `use-block-form`'s cleanup flushes through a closure holding the OLD page
+     * id. Without the key the form re-renders under the NEW id and the pending
+     * debounce silently rewrites the other page's section.
+     *
+     * `page-switch-flush.test.tsx` proves the second half — unmount ⇒ old page
+     * id — against the real hooks. It cannot prove THIS half, because the key in
+     * its harness is its own `<div key>`, not this one. An earlier version of
+     * this suite believed otherwise: deleting the line below left that file
+     * green, so the guarantee the commit was built on was unguarded.
+     *
+     * Asserting the unmount rather than the write keeps this test about
+     * composition and off the hook internals the other file owns.
+     */
+    renderRoot();
+    expect(inspectorLifecycle).toEqual(['mount']);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    // Torn down and rebuilt, not merely re-rendered.
+    expect(inspectorLifecycle).toEqual(['mount', 'unmount', 'mount']);
+  });
+
+  it('does NOT unmount the inspector on an ordinary tab change', async () => {
+    // The control: the remount must be keyed on the PAGE, not on tab traffic,
+    // or every panel click would throw away a pending edit's context.
+    renderRoot();
+    expect(inspectorLifecycle).toEqual(['mount']);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(inspectorLifecycle).toEqual(['mount']);
   });
 
   it('does not list the previous page sections after a switch (D-C2)', async () => {
@@ -666,6 +730,48 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     const banner = screen.getByTestId('staged-page-banner');
     expect(banner).toHaveTextContent('Amenities');
     expect(banner).toHaveTextContent(/removed/i);
+  });
+
+  it('appears when the staging arrives UNDER a mounted editor', async () => {
+    // The scenario the banner exists for, and the only one the others do not
+    // cover: they all seed the staged state before rendering, so a regression
+    // that computed `selectedPageIsStaged` once — hoisted into a mis-keyed
+    // `useMemo`, or pushed down into a panel — would pass every one of them.
+    //
+    // This is how it actually happens: the PM is editing, a co-manager stages
+    // the page, and the focus refetch added alongside this banner brings the
+    // news in mid-session.
+    queries.pages = [seededHome, { ...stagedSecondPage, deleteStagedAt: null }];
+
+    const { rerender } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    expect(screen.queryByTestId('staged-page-banner')).not.toBeInTheDocument();
+
+    queries.pages = [seededHome, stagedSecondPage];
+    await act(async () => {
+      rerender(rootElement());
+    });
+
+    expect(screen.getByTestId('staged-page-banner')).toBeInTheDocument();
+  });
+
+  it('falls back to the server seed when the pages query is unavailable', async () => {
+    // The seed and the client query fail independently, and the seed carries
+    // `deleteStagedAt`. Reading only `pages` would drop the warning for exactly
+    // the session least able to notice anything else is wrong.
+    //
+    // The seed keeps its home page: without one `effectivePageId` is null and
+    // nothing is selected, which would make this pass or fail for a reason that
+    // has nothing to do with the fallback.
+    queries.isError = true;
+    queries.error = new Error('Pages unavailable');
+
+    renderRoot({ initialPages: [seededHome, stagedSecondPage] });
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByTestId('staged-page-banner')).toBeInTheDocument();
   });
 
   it('says nothing when the selected page is not staged', () => {

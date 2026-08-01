@@ -605,16 +605,22 @@ describeDb('multi-page site (db-backed integration)', () => {
 
   /*
    * These two are REGRESSION tests for the lock-free refactor, not proof of it.
+   * Both pass with the fast path deleted — verified by reverting. What they pin
+   * is that the refactor changed no ANSWER: both branches return the same pages,
+   * and the lazy ensure still seeds home exactly once.
    *
-   * Stated plainly because the distinction has bitten this PR repeatedly: both
-   * cases pass with the fast path removed, and that is correct — the change is
-   * purely about which transactions take `FOR UPDATE`, and the service's API
-   * cannot observe that. What they pin is that the refactor did not change any
-   * ANSWER: both branches still return the same pages, and the lazy ensure still
-   * seeds home exactly once.
+   * An earlier version of this comment said the lock removal "cannot be
+   * observed" through the service API. That was wrong, and wrong in a
+   * self-serving direction — it turned an admission into a justification. A
+   * second connection observes it directly: hold
+   * `SELECT id FROM communities WHERE id = $1 FOR UPDATE` open on one, and
+   * `listSitePages` on another resolves now where it would previously have
+   * blocked.
    *
-   * Verified by reverting: with the fast path deleted, both still pass. Do not
-   * read them as evidence the lock was removed.
+   * That test is worth having and is NOT written here: a deliberately
+   * lock-contending case needs its own timeout discipline, and a hung
+   * connection in CI is a worse failure than the gap it closes. Filed
+   * separately. Until then this property is genuinely UNTESTED — not untestable.
    */
   it('creates the home page on a community that has none, and reads without doing so afterwards', async () => {
     const communityId = await createCommunity('lazy-ensure');

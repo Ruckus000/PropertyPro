@@ -97,9 +97,9 @@ export function useSitePages(communityId: number) {
      * changes what the page list means — and writes to a staged page still
      * SUCCEED (`resolvePageId` checks only `deletedAt`, which staging does not
      * set). So a manager who left the tab open kept editing, kept seeing
-     * "Saved", and lost the work at the other manager's publish. With the
-     * global default they would never learn: `staleTime` is 60s but nothing
-     * triggers the refetch.
+     * "Saved", and lost the work at the other manager's publish. The global
+     * default leaves only a reconnect or a remount to trigger a refetch —
+     * neither of which a manager sitting in another tab produces.
      *
      * Focus is the right trigger rather than an interval: it costs nothing
      * while they work, and returning to the tab is exactly when a stale editor

@@ -397,7 +397,12 @@ export function EditorRoot({
    * for both, and telling them apart would need an actor identity the client
    * does not have.
    */
-  const selectedPage = pages?.find((page) => page.id === effectivePageId);
+  // `?? initialPages` for the same reason `homePageId` reads the seed first:
+  // the RSC seed and the client query fail independently, and the seed carries
+  // `deleteStagedAt` too. Reading only `pages` would make the warning silently
+  // absent for a session whose pages query is failing — the one session least
+  // able to notice anything else is wrong.
+  const selectedPage = (pages ?? initialPages).find((page) => page.id === effectivePageId);
   const selectedPageIsStaged = selectedPage?.deleteStagedAt != null;
 
   // Selecting a section on the canvas pulls the Sections panel forward, so the
@@ -500,7 +505,6 @@ export function EditorRoot({
         banner={
           selectedPageIsStaged ? (
             <AlertBanner
-              role="alert"
               data-testid="staged-page-banner"
               status="warning"
               title={`"${selectedPage?.name ?? 'This page'}" is set to be removed.`}

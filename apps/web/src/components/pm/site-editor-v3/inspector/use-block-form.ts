@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useAutosave, stableStringify, type UseAutosaveResult } from '../useAutosave';
 import { useAutosaveReporter } from './autosave-status';
 
@@ -145,7 +146,17 @@ export function useBlockForm<TDraft>({
     await saveRef.current(value);
   }, []);
 
-  const autosave = useAutosave(canonical, persist, { enabled: canonical !== null });
+  const autosave = useAutosave(canonical, persist, {
+    enabled: canonical !== null,
+    // The form is already gone, so the status line cannot carry this and the
+    // retry is gated on being mounted. A toast outlives the tree and is the
+    // only surface left. Routine since 11b-3: a focus refetch can find that a
+    // co-manager removed the page being edited, selection repair moves the
+    // editor to home, and the resulting remount flushes this form at a page the
+    // server no longer has.
+    onUnmountedError: (error) =>
+      toast.error(`We couldn't save your last change. ${error.message}`),
+  });
 
   // Consume the adoption flag. Runs after the render that adopted, and after
   // the debounce effect has armed — which is fine, because `markClean` cancels
