@@ -12,7 +12,7 @@
  * shared provider `initTestKit` registers.
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValidationError } from '@/lib/api/errors';
 import {
   publishCommunitySite,
@@ -617,10 +617,9 @@ describeDb('multi-page site (db-backed integration)', () => {
    * `listSitePages` on another resolves now where it would previously have
    * blocked.
    *
-   * That test is worth having and is NOT written here: a deliberately
-   * lock-contending case needs its own timeout discipline, and a hung
-   * connection in CI is a worse failure than the gap it closes. Filed
-   * separately. Until then this property is genuinely UNTESTED — not untestable.
+   * That test now exists — see the `the community lock` describe below, which
+   * holds `FOR UPDATE` on one connection and races the read on another. These
+   * two remain answer-regression tests; the lock itself is pinned there.
    */
   it('creates the home page on a community that has none, and reads without doing so afterwards', async () => {
     const communityId = await createCommunity('lazy-ensure');
@@ -658,6 +657,127 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(all).toHaveLength(1);
     expect(all[0]?.id).toBe(homePageId);
     expect(all[0]?.isDraft).toBe(true);
+  });
+
+  /*
+   * The lock-free fast path, asserted directly.
+   *
+   * The two cases above pin that no ANSWER changed and pass with the fast path
+   * deleted — which is honest but leaves the actual property untested. It IS
+   * observable, with two connections: hold `FOR UPDATE` on the community row,
+   * then see whether a pages read comes back.
+   *
+   * `listSitePages` opens its own client via `createUnscopedClient()`, so it
+   * contends with `state.sqlClient` rather than sharing its pool.
+   *
+   * Neither case can hang CI: every wait is raced against a timer, the lock is
+   * released in a `finally`, and the outstanding promise is always awaited
+   * afterwards so nothing is left dangling.
+   */
+  describe('the community lock', () => {
+    const WAIT_MS = 2_000;
+
+    /**
+     * Holds `SELECT … FOR UPDATE` on one connection for the duration of `body`.
+     * The transaction is always ended, even if `body` throws.
+     */
+    async function whileCommunityRowLocked<T>(
+      communityId: number,
+      body: () => Promise<T>,
+    ): Promise<T> {
+      if (!state) throw new Error('Not initialized');
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // Hand-rolled rather than `Promise.withResolvers` — the repo runs Node 20
+      // (.nvmrc), where that is not available.
+      let signalAcquired!: () => void;
+      const acquired = new Promise<void>((resolve) => {
+        signalAcquired = resolve;
+      });
+
+      const held = state.sqlClient
+        .begin(async (tx) => {
+          await tx`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`;
+          signalAcquired();
+          await released;
+        })
+        // Swallow here so a transaction failure surfaces as the body's timeout
+        // rather than as an unhandled rejection in an unrelated test.
+        .catch(() => signalAcquired());
+
+      await acquired;
+      try {
+        return await body();
+      } finally {
+        release();
+        await held;
+      }
+    }
+
+    /** Resolves `{ settled: false }` rather than hanging. */
+    async function settlesWithin<T>(
+      promise: Promise<T>,
+      ms: number,
+    ): Promise<{ settled: boolean }> {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), ms);
+      });
+      // The promise is awaited by the caller either way; this only observes it.
+      const outcome = await Promise.race([promise.then(() => 'settled' as const), timeout]);
+      if (timer) clearTimeout(timer);
+      return { settled: outcome === 'settled' };
+    }
+
+    it('does not block a pages read on a community that already has a home page', async () => {
+      const communityId = await createCommunity('lock-fast-path');
+      await ensureHomePage(communityId);
+
+      // The read is handed OUT of the locked section rather than awaited inside
+      // it. Awaiting a blocked read in there would deadlock — the `finally` that
+      // releases the lock cannot run until the body returns — and vitest's
+      // default timeout killing a held transaction is precisely the failure mode
+      // this harness exists to avoid.
+      const { outcome, read } = await whileCommunityRowLocked(communityId, async () => {
+        const pending = listSitePages(communityId, { includeDrafts: true });
+        return { outcome: await settlesWithin(pending, WAIT_MS), read: pending };
+      });
+
+      const pages = await read;
+      expect(pages).toHaveLength(1);
+
+      expect(
+        outcome.settled,
+        `listSitePages blocked for ${WAIT_MS}ms while another transaction held the ` +
+          'community row. The fast path should not take that lock — every editor ' +
+          'load and every pages refetch goes through here.',
+      ).toBe(true);
+    });
+
+    it('DOES block when the community has no home page yet, because that branch writes', async () => {
+      // The positive control, and the reason the case above means anything: it
+      // proves this harness can actually detect blocking. Without it, "resolved
+      // quickly" would also be what a broken lock-holder produced.
+      const communityId = await createCommunity('lock-slow-path');
+
+      const { outcome, read } = await whileCommunityRowLocked(communityId, async () => {
+        const pending = listSitePages(communityId, { includeDrafts: true });
+        return { outcome: await settlesWithin(pending, WAIT_MS), read: pending };
+      });
+
+      expect(
+        outcome.settled,
+        'A community with no pages must take the lock: that branch creates the ' +
+          'home page, and two concurrent first-touches would race find-then-insert.',
+      ).toBe(false);
+
+      // Released now, so it completes — and correctly.
+      const pages = await read;
+      expect(pages).toHaveLength(1);
+      expect(pages[0]?.isHome).toBe(true);
+    });
   });
 
   it('refuses to CANCEL a removal when the name has since been taken', async () => {
