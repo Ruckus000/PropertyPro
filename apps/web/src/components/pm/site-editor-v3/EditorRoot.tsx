@@ -94,6 +94,7 @@ import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
 import type { EditorToolId, ProToolAccess } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
+import { UndoableRemoveProvider } from './undoable-remove-context';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
 import type { CustomCssOverrides } from '@propertypro/shared';
 import { THEME_DEFAULTS } from '@propertypro/theme';
@@ -448,6 +449,7 @@ export function EditorRoot({
        * changes observed while it is in the DOM, so one that is unmounted and
        * remounted by the very update it is reporting announces nothing.
        */}
+      <UndoableRemoveProvider communityId={communityId}>
       <p
         data-testid="site-page-announcement"
         role="status"
@@ -618,6 +620,7 @@ export function EditorRoot({
       ) : null}
       </AutosaveStatusProvider>
       </SiteEditorProvider>
+      </UndoableRemoveProvider>
     </SelectedSitePageProvider>
   );
 }

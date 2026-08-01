@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { UNDO_WINDOW_MS } from '@/components/pm/site-editor-v3/use-undoable-remove';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
@@ -46,8 +47,9 @@ const toastError = vi.hoisted(() => vi.fn());
 // `dismiss` is here because `useUndoableRemove` takes the undo toast down
 // when its section unmounts. A factory missing a newly-added export yields
 // `undefined` at call time, which reads as an unrelated component breaking.
+const toastDismiss = vi.hoisted(() => vi.fn());
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccess, error: toastError, dismiss: vi.fn() },
+  toast: { success: toastSuccess, error: toastError, dismiss: toastDismiss },
 }));
 
 type ToastOptions = {
@@ -83,7 +85,11 @@ function block(overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary {
 }
 
 function renderControls(b: SiteBlockSummary = block()) {
-  return render(<FloatControls block={b} communityId={7} />);
+  return render(
+    <UndoableRemoveProvider communityId={7}>
+      <FloatControls block={b} communityId={7} />
+    </UndoableRemoveProvider>,
+  );
 }
 
 /**
@@ -233,7 +239,9 @@ describe('undo', () => {
 
     const { rerender } = render(
       <SelectedSitePageProvider pageId={10}>
-        <FloatControls block={removed} communityId={7} />
+        <UndoableRemoveProvider communityId={7}>
+          <FloatControls block={removed} communityId={7} />
+        </UndoableRemoveProvider>
       </SelectedSitePageProvider>,
     );
     await openConfirm(user);
@@ -246,7 +254,9 @@ describe('undo', () => {
     // The PM moves to another page before hitting Undo.
     rerender(
       <SelectedSitePageProvider pageId={55}>
-        <FloatControls block={removed} communityId={7} />
+        <UndoableRemoveProvider communityId={7}>
+          <FloatControls block={removed} communityId={7} />
+        </UndoableRemoveProvider>
       </SelectedSitePageProvider>,
     );
     lastToastOptions().action!.onClick();
@@ -266,7 +276,9 @@ describe('undo', () => {
 
     const { rerender } = render(
       <SelectedSitePageProvider pageId={10}>
-        <FloatControls block={legacy} communityId={7} />
+        <UndoableRemoveProvider communityId={7}>
+          <FloatControls block={legacy} communityId={7} />
+        </UndoableRemoveProvider>
       </SelectedSitePageProvider>,
     );
     await openConfirm(user);
@@ -274,7 +286,9 @@ describe('undo', () => {
 
     rerender(
       <SelectedSitePageProvider pageId={55}>
-        <FloatControls block={legacy} communityId={7} />
+        <UndoableRemoveProvider communityId={7}>
+          <FloatControls block={legacy} communityId={7} />
+        </UndoableRemoveProvider>
       </SelectedSitePageProvider>,
     );
     lastToastOptions().action!.onClick();
@@ -396,5 +410,53 @@ describe('accessibility contract', () => {
 
     await user.click(screen.getByRole('button', { name: 'Keep section' }));
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+});
+
+describe('the removed section leaves the canvas — the ordinary path', () => {
+  /*
+   * The case that made the previous design wrong, and that this file could not
+   * see while it mounted `FloatControls` alone and never unmounted it.
+   *
+   * A removal writes a TOMBSTONE — a new row, new id, a type no view renders —
+   * so `Canvas`'s `blocksForPage(...).filter(hasView)` drops the original id and
+   * `SectionShell key={block.id}` unmounts on the refetch the delete triggers.
+   * That is every removal, not an edge case.
+   *
+   * While the pending payload and the toast id lived in `useUndoableRemove`,
+   * that unmount ran a cleanup which dismissed the toast it had just created.
+   * The undo host now sits above the section, so the section going away takes
+   * nothing with it.
+   */
+  it('keeps the Undo offer alive after the section unmounts', async () => {
+    const user = userEvent.setup();
+    deleteMutate.mockImplementation((_input, opts) => opts.onSuccess({ staged: true }));
+    const removed = block({ pageId: 10 });
+
+    const { rerender } = render(
+      <SelectedSitePageProvider pageId={10}>
+        <UndoableRemoveProvider communityId={7}>
+          <FloatControls block={removed} communityId={7} />
+        </UndoableRemoveProvider>
+      </SelectedSitePageProvider>,
+    );
+    await openConfirm(user);
+    await user.click(screen.getByRole('button', { name: 'Remove section' }));
+
+    // The refetch lands and the section is gone from the canvas. The host stays.
+    rerender(
+      <SelectedSitePageProvider pageId={10}>
+        <UndoableRemoveProvider communityId={7} />
+      </SelectedSitePageProvider>,
+    );
+
+    // Not dismissed…
+    expect(toastDismiss).not.toHaveBeenCalled();
+    // …and still able to put the section back.
+    lastToastOptions().action!.onClick();
+    expect(upsertMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ blockOrder: 4, pageId: 10 }),
+      expect.anything(),
+    );
   });
 });

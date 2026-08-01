@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
@@ -68,9 +69,11 @@ const HERO = block({ id: 1, blockType: 'hero', blockOrder: 1 });
 
 function renderShell(b: SiteBlockSummary = TEXT) {
   return render(
+    <UndoableRemoveProvider communityId={7}>
     <SectionShell block={b} communityId={7}>
       <p>Section body</p>
     </SectionShell>,
+    </UndoableRemoveProvider>
   );
 }
 

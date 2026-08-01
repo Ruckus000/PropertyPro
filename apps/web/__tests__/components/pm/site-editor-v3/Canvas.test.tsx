@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Canvas, sortBlocks } from '@/components/pm/site-editor-v3/canvas/Canvas';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 
 const blocksState = vi.hoisted(() => ({
@@ -89,14 +90,20 @@ const ABOUT_PAGE_ID = 11;
  * behaviour every state/ordering case below is about.
  */
 function renderCanvas() {
-  return render(<Canvas communityId={7} context={CONTEXT} now={NOW} />);
+  return render(
+    <UndoableRemoveProvider communityId={7}>
+      <Canvas communityId={7} context={CONTEXT} now={NOW} />
+    </UndoableRemoveProvider>,
+  );
 }
 
 function renderCanvasOnPage(pageId: number | null) {
   return render(
-    <SelectedSitePageProvider pageId={pageId}>
-      <Canvas communityId={7} context={CONTEXT} now={NOW} />
-    </SelectedSitePageProvider>,
+    <UndoableRemoveProvider communityId={7}>
+      <SelectedSitePageProvider pageId={pageId}>
+        <Canvas communityId={7} context={CONTEXT} now={NOW} />
+      </SelectedSitePageProvider>
+    </UndoableRemoveProvider>,
   );
 }
 

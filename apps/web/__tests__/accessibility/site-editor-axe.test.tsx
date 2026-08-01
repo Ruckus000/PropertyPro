@@ -17,6 +17,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { SiteEditorProvider } from '@/components/pm/site-editor-v3/editor-context';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
@@ -133,6 +134,7 @@ const BLOCKS: SiteBlockSummary[] = [
 
 function renderEditorSurfaces() {
   return render(
+    <UndoableRemoveProvider communityId={7}>
     <SiteEditorProvider communityId={7} blocks={BLOCKS}>
       <div>
         <SectionList />
@@ -145,7 +147,8 @@ function renderEditorSurfaces() {
         </div>
         <Inspector communityId={7} />
       </div>
-    </SiteEditorProvider>,
+    </SiteEditorProvider>
+    </UndoableRemoveProvider>,
   );
 }
 
