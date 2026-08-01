@@ -1076,7 +1076,14 @@ export function PagesPanel({
 
                   {/* D32′: only a page that has never been published gets an
                       address control, and it is ABSENT — not disabled — on the
-                      rest. Home is pinned at the root and excluded outright. */}
+                      rest. Home is pinned at the root and excluded outright.
+
+                      Deliberately NOT `isLazyDraftHome`, despite spelling the
+                      same condition. That predicate means "an artefact of lazy
+                      creation, not a PM action"; this means "home's slug is
+                      pinned to the root". Two different rules that happen to
+                      agree today — collapsing them would couple this control to
+                      a publish-accounting decision it has nothing to do with. */}
                   {page.isDraft && !page.isHome && (
                     <div className="space-y-1">
                       <Label htmlFor={`${editorId}-slug`}>Web address</Label>

@@ -119,6 +119,41 @@ describe('POST /api/v1/pm/site/publish', () => {
     expect(json.data.publishedAt).toBe('2026-05-15T12:00:00.000Z');
   });
 
+  it('carries the PAGE counts through to the wire, not just the section counts', async () => {
+    /*
+     * The seam nothing covered. The counts are pinned at the service (a
+     * db-backed integration case) and at the component (a mocked result), and
+     * neither can see this route dropping or renaming them in between.
+     *
+     * It matters more here than for most fields because the contract's response
+     * is `z.unknown()` — deliberately, since `publishedAt` round-trips
+     * Date → string and a tight schema would fail on the pre-serialization
+     * safeParse. So nothing validates this shape at runtime, and both counts
+     * are OPTIONAL on `PublishSiteResult` (a browser tab can be older or newer
+     * than the server mid-deploy). A typo in the field name would therefore
+     * degrade silently and permanently to "Published — your changes are live."
+     * — the deploy-skew fallback, firing for a bug instead.
+     *
+     * Revert check (production line): `addedPageCount` / `removedPageCount` in
+     * `publishCommunitySite`'s return, or `return result;` in this route.
+     */
+    publishMock.mockResolvedValueOnce({
+      published: true,
+      publishedAt: new Date('2026-05-15T12:00:00.000Z'),
+      promotedCount: 0,
+      retiredCount: 0,
+      addedPageCount: 0,
+      removedPageCount: 1,
+    });
+    const res = await POST(makeRequest(VALID_BODY));
+    const json = await res.json();
+    expect(json.data).toMatchObject({
+      published: true,
+      addedPageCount: 0,
+      removedPageCount: 1,
+    });
+  });
+
   it('returns the nothing-to-publish result body verbatim', async () => {
     publishMock.mockResolvedValueOnce({
       published: false,

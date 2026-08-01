@@ -77,6 +77,32 @@ export function pageTitle(page: Pick<SitePageSnapshot, 'name' | 'slug' | 'isHome
  * phase adds those columns must read the published values here instead, and the
  * `'edited'` branch of `diffPages` is already waiting for it.
  */
+/**
+ * The lazily-created draft home page — an artefact, not a PM action.
+ *
+ * `ensureHomePage` inserts home with `is_draft = (publishedStamp === null)`, so
+ * every community that has never published carries a DRAFT home page nobody
+ * asked for. Four places independently need to exclude it and each had written
+ * the condition out by hand:
+ *
+ *   - the publish transaction's `pendingPages` (is there anything to publish?);
+ *   - its `addedPageCount` (what does the receipt say happened?);
+ *   - its history-snapshot page list;
+ *   - the client's `useSiteDiff` (does the Publish button light up?).
+ *
+ * They must agree. If the gate counts it and the diff does not, an untouched
+ * empty site claims a pending change and the publish then throws
+ * `NothingToPublishRollback` — "nothing left to publish" on the very click the
+ * editor invited. If the receipt counts it and the gate does not, every
+ * first-time PM is told they added a page they never made. Both have happened.
+ *
+ * One predicate rather than four copies, so the next phase that needs it
+ * inherits the rule instead of re-deriving it.
+ */
+export function isLazyDraftHome(page: { isHome: boolean; isDraft: boolean }): boolean {
+  return page.isHome && page.isDraft;
+}
+
 export function publishedPageBaseline(
   pages: readonly SitePageRow[],
 ): SitePageSnapshot[] {

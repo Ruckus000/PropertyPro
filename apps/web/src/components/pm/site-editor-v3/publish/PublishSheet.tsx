@@ -86,6 +86,7 @@ import { issueTarget } from '@/lib/site-editor/to-snapshot';
 import { cn } from '@/lib/utils';
 import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
 import { ApiRequestError } from '@/lib/api/request-json';
+import { describePublishedCounts } from '@/lib/site-editor/describe-publish-outcome';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 export interface PublishSheetProps {
@@ -210,41 +211,15 @@ export function stagedPageRemoval(change: Change): number | null {
 /**
  * What the publish outcome should say.
  *
- * Built by CLAUSE rather than by branch, because a publish can consist entirely
- * of page changes and the section-only wording had no way to say so. A created
- * page with no sections yet promotes zero blocks, and a staged removal deletes
- * the page, its sections and its slug history through a loop `retiredCount`
- * does not count — so both reported **"Published — 0 sections live."** The
- * destructive one is the one that matters: the only report a PM gets after the
- * most irreversible operation this phase ships understated it to nothing, and
- * the sheet closes on success, so no receipt survives to correct it.
- *
- * Each clause is omitted at zero, which is what preserves the original three
- * section-only sentences exactly. A missing page count (an older server — see
- * `PublishSiteResult`) contributes no clause rather than a `0` or an
- * `undefined`.
+ * The counts live in `describePublishedCounts`, shared with the onboarding
+ * wizard's final step — which had its own section-only copy and was reachable
+ * with a page-only publish, because the wizard is entered FROM this editor
+ * while the Pages tool is open. Only the `published: false` sentence is local:
+ * the two surfaces say different things about it on purpose.
  */
 function describeOutcome(result: PublishSiteResult): string {
   if (!result.published) return 'The server found nothing left to publish.';
-  const { promotedCount, retiredCount, addedPageCount = 0, removedPageCount = 0 } = result;
-
-  const clauses: string[] = [];
-  if (promotedCount > 0) clauses.push(`${plural(promotedCount, 'section')} live`);
-  if (retiredCount > 0) clauses.push(`${plural(retiredCount, 'section')} removed`);
-  // "page added", not "page live": a page IS live once published, but the PM's
-  // mental model of the action is that they added one.
-  if (addedPageCount > 0) clauses.push(`${plural(addedPageCount, 'page')} added`);
-  // Named separately from sections even though both say "removed", because the
-  // qualifier is the whole point — "1 page removed" is a different loss from
-  // "1 section removed", and the page took its sections with it.
-  if (removedPageCount > 0) clauses.push(`${plural(removedPageCount, 'page')} removed`);
-
-  // Reachable only from a server that reported no counts at all for a publish
-  // that nonetheless did something. Better a true vague sentence than a
-  // confident "0 sections live".
-  if (clauses.length === 0) return 'Published — your changes are live.';
-
-  return `Published — ${clauses.join(', ')}.`;
+  return describePublishedCounts(result);
 }
 
 interface ReceiptState {

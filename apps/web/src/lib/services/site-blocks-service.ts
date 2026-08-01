@@ -38,6 +38,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   TOMBSTONE_BLOCK_TYPE,
+  isLazyDraftHome,
   pageIssues,
   publishBlocked,
   siteIssues,
@@ -717,7 +718,7 @@ export async function publishCommunitySite({
       .from(sitePages)
       .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
     const pendingPages = pageRows.filter(
-      (p) => (p.isDraft && !p.isHome) || p.deleteStagedAt !== null,
+      (p) => (p.isDraft && !isLazyDraftHome(p)) || p.deleteStagedAt !== null,
     );
 
     // Nothing pending at all → nothing to publish. Roll back BEFORE any mutation
@@ -992,7 +993,7 @@ export async function publishCommunitySite({
      * being deleted, not published — it is counted below instead.
      */
     const addedPageCount = pageRows.filter(
-      (p) => p.isDraft && !p.isHome && p.deleteStagedAt === null,
+      (p) => p.isDraft && !isLazyDraftHome(p) && p.deleteStagedAt === null,
     ).length;
 
     // Step 5c: reconcile the stamp with what actually landed.
@@ -1085,7 +1086,7 @@ export async function publishCommunitySite({
         // from the pre-mutation `pageRows`, because by now the promote has
         // already flipped `is_draft`.
         ...summarizePageChanges(
-          pageRows.filter((p) => p.isDraft && !p.isHome && !removedPages.has(p.id)),
+          pageRows.filter((p) => p.isDraft && !isLazyDraftHome(p) && !removedPages.has(p.id)),
           pageRows.filter((p) => removedPages.has(p.id)),
         ),
       ],

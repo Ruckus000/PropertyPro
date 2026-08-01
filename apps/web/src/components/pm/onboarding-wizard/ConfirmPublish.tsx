@@ -13,6 +13,7 @@
  * confirm + publish only.
  */
 import { useMemo, useState } from 'react';
+import { describePublishedCounts } from '@/lib/site-editor/describe-publish-outcome';
 import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import {
   usePublishSite,
@@ -69,8 +70,20 @@ function classifyOutcome(result: PublishSiteResult, communitySlug?: string | nul
     const where = communitySlug
       ? ` Live at ${communitySlug}.getpropertypro.com.`
       : '';
-    return `Published — ${result.promotedCount} section${result.promotedCount === 1 ? '' : 's'} live.${where}`;
+    /*
+     * Shared with the editor's review sheet, not counted here.
+     *
+     * This used to interpolate `promotedCount` alone, which reports
+     * "Published — 0 sections live." for a publish made entirely of page
+     * changes — and that is reachable from here, not hypothetical: this wizard
+     * is entered FROM the editor (`WizardEntryBanner`), and the Pages tool is
+     * available the whole time, so a PM can create a page, click through, and
+     * publish without touching a single section.
+     */
+    return `${describePublishedCounts(result)}${where}`;
   }
+  // Deliberately NOT the sheet's wording. This is a wizard step's resting
+  // state, not a report on a click the PM was invited to make.
   return 'No changes to publish.';
 }
 

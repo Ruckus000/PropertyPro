@@ -139,6 +139,54 @@ describe('<ConfirmPublish>', () => {
     });
   });
 
+  it('does not report a page-only publish as "0 sections live"', async () => {
+    /*
+     * Reachable from HERE, which is the part that was missed. This wizard is
+     * entered from the editor (`WizardEntryBanner`, rendered whenever
+     * onboarding is incomplete) and the editor's Pages tool is available the
+     * whole time — so a PM can create a page, click through to this step, and
+     * publish without having touched a section. `promotedCount` is then 0 and
+     * the wizard's own copy, which counted only sections, said the publish did
+     * nothing.
+     *
+     * An earlier version of this change left the wizard alone on the grounds
+     * that it "has no Pages panel, so it cannot reach a page-only publish".
+     * The wizard does not need one: the editor is upstream of it.
+     *
+     * Revert check (production line): `describePublishedCounts(result)` in
+     * `ConfirmPublish.tsx`'s `classifyOutcome` — restoring the old
+     * `${result.promotedCount} section…` interpolation turns this red.
+     */
+    installFetch({
+      blocks: [
+        { id: 1, blockType: 'hero', blockOrder: 1, content: {}, isDraft: false, publishedAt: '2026-05-10T00:00:00Z' },
+      ],
+      publishResponse: {
+        status: 200,
+        body: {
+          data: {
+            published: true,
+            publishedAt: '2026-05-30T12:00:00Z',
+            promotedCount: 0,
+            retiredCount: 0,
+            addedPageCount: 1,
+            removedPageCount: 0,
+          },
+        },
+      },
+    });
+    render(wrap(<ConfirmPublish communityId={42} communitySlug="sunset-condos" />));
+    await screen.findByTestId('confirm-publish-list');
+    fireEvent.click(screen.getByRole('button', { name: /publish my site/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/published — 1 page added/i);
+    });
+    expect(screen.getByRole('status')).not.toHaveTextContent(/0 sections/i);
+    // The wizard's own trailing clause is untouched by the sharing.
+    expect(screen.getByRole('status')).toHaveTextContent(/sunset-condos\.getpropertypro\.com/i);
+  });
+
   it('publish POST includes max(publishedAt) across published rows as the concurrency token', async () => {
     installFetch({
       blocks: [

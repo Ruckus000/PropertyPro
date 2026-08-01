@@ -73,6 +73,7 @@ import { useCallback, useMemo } from 'react';
 import {
   diffPages,
   diffSite,
+  isLazyDraftHome,
   pageIssues,
   pageTitle,
   publishedPageBaseline,
@@ -271,7 +272,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
      * seen. Spelling that case out again would be a second rule saying the same
      * thing, and the two would drift.
      */
-    const pendingPageRows = pageRows.filter((page) => !(page.isHome && page.isDraft));
+    const pendingPageRows = pageRows.filter((page) => !isLazyDraftHome(page));
     const pageChanges = diffPages(publishedPageBaseline(pageRows), pendingPageRows);
     const sectionChanges = base.changes.map((change) => {
       const group = groupForChange(change, slotGroups);
@@ -335,7 +336,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
       populated.add(block.pageId);
     }
     return (pagesQuery.data ?? [])
-      .filter((page) => page.isDraft && !page.isHome && !populated.has(page.id))
+      .filter((page) => page.isDraft && !isLazyDraftHome(page) && !populated.has(page.id))
       .map((page) => ({
         field: `page:${page.id}.sections`,
         message: `"${page.name}" has no sections yet, so visitors following its link will find an empty page.`,
