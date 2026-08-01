@@ -555,6 +555,26 @@ export type PublishCommunitySiteResult =
       publishedAt: Date;
       promotedCount: number;
       retiredCount: number;
+      /**
+       * Pages this publish put on the live site (Phase 11b-3).
+       *
+       * Reported because a publish can consist ENTIRELY of page changes: a
+       * created page with no sections yet promotes zero blocks, so the receipt
+       * read "Published — 0 sections live." for work that did something. The
+       * destructive case was worse — a staged removal deletes the page, its
+       * sections and its slug history, and `retiredCount` counts none of them
+       * (the block soft-delete happens in its own loop, not in the retire
+       * update), so the most irreversible operation this phase ships also
+       * reported zero.
+       *
+       * EXCLUDES the lazily-created draft home page, mirroring `pendingPages`:
+       * `ensureHomePage` creates it for any community that has never published,
+       * so counting it would tell every first-time PM they had added a page
+       * they never asked for.
+       */
+      addedPageCount: number;
+      /** Pages this publish took off the live site, with everything on them. */
+      removedPageCount: number;
     }
   | {
       published: false;
@@ -955,6 +975,26 @@ export async function publishCommunitySite({
       .returning({ id: sitePages.id });
     const promotedPageCount = promotedPageResult.length;
 
+    /*
+     * What the RECEIPT reports, which is not `promotedPageCount`.
+     *
+     * That count is every draft page the promote above touched, including the
+     * lazily-created home page `ensureHomePage` makes for a community that has
+     * never published — an artefact of lazy creation, not a PM action, and the
+     * exact row `pendingPages` excludes for the same reason. Reporting it would
+     * tell every first-time PM they had just added a page they never asked for.
+     *
+     * Derived from `pageRows` (read before any of this transaction's writes) so
+     * it states what the PM ASKED for, and it matches the client's own diff
+     * one-for-one: `useSiteDiff` filters `isHome && isDraft` and
+     * `publishedPageBaseline` drops drafts, so a page counted here is exactly a
+     * page the sheet listed as "Added". A staged page is excluded because it is
+     * being deleted, not published — it is counted below instead.
+     */
+    const addedPageCount = pageRows.filter(
+      (p) => p.isDraft && !p.isHome && p.deleteStagedAt === null,
+    ).length;
+
     // Step 5c: reconcile the stamp with what actually landed.
     //
     // A REMOVAL-ONLY publish promotes zero rows: the only pending draft was a
@@ -1102,6 +1142,8 @@ export async function publishCommunitySite({
       publishedAt: effectivePublishedAt,
       promotedCount,
       retiredCount,
+      addedPageCount,
+      removedPageCount: removedPageIds.length,
     };
   })
     .catch((err: unknown) => {

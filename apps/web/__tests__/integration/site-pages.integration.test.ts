@@ -443,6 +443,60 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect((await liveBlocks(communityId)).some((b) => b.pageId === about.id)).toBe(false);
   });
 
+  it('counts the pages a publish added and removed, so the receipt can say what happened', async () => {
+    /*
+     * A publish can consist ENTIRELY of page changes, and the result reported
+     * neither. A created page with no sections promotes zero blocks; a staged
+     * removal deletes the page, its sections and its slug history through a
+     * loop `retiredCount` does not count. Both came back
+     * `{ promotedCount: 0, retiredCount: 0 }`, so the toast — the only record
+     * the PM gets, since the sheet closes on success — read
+     * "Published — 0 sections live." for the most irreversible thing this phase
+     * ships.
+     *
+     * Asserted here rather than only in the component test because the counts
+     * are a property of the TRANSACTION: `removedPageCount` comes from the loop
+     * that soft-deletes, and `addedPageCount` from rows read before any of the
+     * transaction's own writes. A mocked result would assert the fixture.
+     *
+     * Revert check (production line): `addedPageCount` / `removedPageCount` in
+     * `publishCommunitySite`'s return.
+     */
+    const communityId = await createCommunity('publish-page-counts');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+
+    // A page with NO sections on it: the case that promoted zero blocks and so
+    // reported zero of everything.
+    const empty = await createSitePage({
+      communityId, actorUserId, name: 'Contact', slug: 'contact',
+    });
+    const added = await publishCommunitySite({
+      communityId, actorUserId, expectedPublishedAt: null,
+    });
+    expect(added.published).toBe(true);
+    if (!added.published) throw new Error('unreachable');
+    expect(added.addedPageCount).toBe(1);
+    expect(added.removedPageCount).toBe(0);
+    // The lazily-created home page is NOT counted — it is an artefact of
+    // `ensureHomePage`, not something this PM asked for, and counting it would
+    // tell every first-time manager they had added a page they never made.
+    expect(added.promotedCount).toBe(0);
+
+    // Now the destructive half.
+    await stageSitePageDelete({ communityId, actorUserId, pageId: empty.id });
+    const removed = await publishCommunitySite({
+      communityId, actorUserId, expectedPublishedAt: null,
+    });
+    expect(removed.published).toBe(true);
+    if (!removed.published) throw new Error('unreachable');
+    expect(removed.removedPageCount).toBe(1);
+    expect(removed.addedPageCount).toBe(0);
+  });
+
   it('retires the removed page\'s slug history so its addresses are reusable', async () => {
     // Leaving the redirects live would forward visitors to a page that no longer
     // exists — a 404 with extra steps — and would keep every slug the page ever

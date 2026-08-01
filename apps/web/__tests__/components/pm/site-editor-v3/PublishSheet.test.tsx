@@ -787,6 +787,85 @@ describe('PublishSheet — publishing', () => {
     expect(screen.queryByTestId('publish-receipt')).not.toBeInTheDocument();
   });
 
+  it('does NOT report a page-only publish as "0 sections live"', async () => {
+    /*
+     * The most irreversible operation this phase ships reported nothing.
+     *
+     * A staged page removal deletes the page, every section on it and its whole
+     * slug history — and `retiredCount` counts none of that, because the block
+     * soft-delete happens in its own loop rather than in the retire update.
+     * `promotedCount` is zero too, since a removal-only publish promotes no
+     * drafts. So the success toast read "Published — 0 sections live." for a
+     * publish that took a live page off the site, and the sheet CLOSES on
+     * success, so no receipt survived to correct it. The PM's only record of
+     * the delete said it did nothing.
+     *
+     * Revert check (production line): the `removedPageCount` clause in
+     * `describeOutcome`. Removing it turns this red — and removing
+     * `removedPageCount: removedPageIds.length` from the service's return does
+     * the same, since the count would then be absent on the wire.
+     */
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      published: true,
+      publishedAt: '2026-07-26T10:00:00.000Z',
+      promotedCount: 0,
+      retiredCount: 0,
+      addedPageCount: 0,
+      removedPageCount: 1,
+    });
+    renderSheet();
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+
+    expect(toastSuccess).toHaveBeenCalledWith('Published — 1 page removed.');
+    expect(toastSuccess).not.toHaveBeenCalledWith(expect.stringContaining('0 sections'));
+  });
+
+  it('names sections and pages together when a publish carries both', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      published: true,
+      publishedAt: '2026-07-26T10:00:00.000Z',
+      promotedCount: 2,
+      retiredCount: 1,
+      addedPageCount: 1,
+      removedPageCount: 1,
+    });
+    renderSheet();
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+
+    expect(toastSuccess).toHaveBeenCalledWith(
+      'Published — 2 sections live, 1 section removed, 1 page added, 1 page removed.',
+    );
+  });
+
+  it('claims nothing about pages when the server did not say', async () => {
+    /*
+     * A browser tab open on a newer bundle than the server it is talking to —
+     * routine mid-deploy, in both directions. The page counts are absent, and
+     * the copy must not interpolate `undefined` or invent a `0` into the
+     * sentence a PM reads after an irreversible action.
+     *
+     * The section-only wording is asserted verbatim here because preserving it
+     * is what shows the clause builder did not quietly reword every existing
+     * publish.
+     */
+    const user = userEvent.setup();
+    mutateAsync.mockResolvedValue({
+      published: true,
+      publishedAt: '2026-07-26T10:00:00.000Z',
+      promotedCount: 3,
+      retiredCount: 0,
+    });
+    renderSheet();
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+
+    expect(toastSuccess).toHaveBeenCalledWith('Published — 3 sections live.');
+  });
+
   it('sends a null token for a first-ever publish rather than inventing one', async () => {
     const user = userEvent.setup();
     queries.published = [];

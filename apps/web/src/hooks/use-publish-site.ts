@@ -13,7 +13,8 @@
  *     published — reload and try again."
  *
  * The success body is the discriminated union from publishCommunitySite:
- *   { published: true,  publishedAt: string, promotedCount, retiredCount }
+ *   { published: true,  publishedAt: string, promotedCount, retiredCount,
+ *     addedPageCount?, removedPageCount? }
  *   { published: false, reason: 'nothing-to-publish' }
  *
  * `publishedAt` round-trips Date → ISO string through the wire, so we expose
@@ -28,6 +29,21 @@ export type PublishSiteResult =
       publishedAt: string;
       promotedCount: number;
       retiredCount: number;
+      /**
+       * Pages added / removed by this publish (Phase 11b-3). See
+       * `PublishCommunitySiteResult` for what each counts and what
+       * `addedPageCount` deliberately excludes.
+       *
+       * OPTIONAL on the wire, and that is not laziness: this type describes a
+       * JSON response, and a client can be newer than the server it is talking
+       * to — a Vercel deploy replaces the app while browser tabs stay open on
+       * the previous bundle, and the reverse holds mid-rollout. Requiring them
+       * would make `describeOutcome` interpolate `undefined` into the sentence
+       * a PM reads after an irreversible action. Absent means "this server did
+       * not say", which the copy treats as "do not claim anything about pages".
+       */
+      addedPageCount?: number;
+      removedPageCount?: number;
     }
   | { published: false; reason: 'nothing-to-publish' };
 
