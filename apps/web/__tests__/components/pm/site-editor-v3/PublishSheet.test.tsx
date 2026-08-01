@@ -622,6 +622,61 @@ describe('PublishSheet — the PAGE SET can block a publish too', () => {
     expect(screen.getByText(/Another page already uses "\/contact"/)).toBeInTheDocument();
   });
 
+  it('names the offending PAGE, not its field path', () => {
+    /*
+     * Round 6. Running `pageIssues` client-side made the block visible before
+     * the button — and then labelled it `page:3.slug`, because `describeTarget`
+     * only understood `hero` / `sections.<n>` and fell through to the raw
+     * field. Naming the offender in machine syntax is the dead end the whole
+     * change set out to remove, just moved one screen earlier.
+     *
+     * Revert check (production line): the `page:` branch in
+     * `PublishSheet.tsx`'s `describeTarget`. Removing it renders `page:3.slug`
+     * and turns this red.
+     */
+    queries.pages = [
+      HOME_PAGE,
+      CONTACT_PAGE,
+      sitePage({ id: 3, name: 'Reach us', slug: 'contact', sortOrder: 2, isHome: false }),
+    ];
+    renderSheet();
+
+    const alert = screen.getByRole('alert');
+    expect(within(alert).getByText('Reach us page')).toBeInTheDocument();
+    expect(within(alert).queryByText(/^page:3\./)).not.toBeInTheDocument();
+  });
+
+  it('offers a way out of a page problem, which "Fix this" cannot reach', async () => {
+    /*
+     * A page-set issue has no section slot, so `issueTarget` returns null and
+     * the "Fix this" button is not rendered — which left these as the only
+     * blocking issues in the sheet with NO action at all, under a footer
+     * reading "Fix the problems above before publishing".
+     *
+     * Revert check (production line): the `isPageIssue && onGoToPages` branch
+     * in `BlockingIssues`.
+     */
+    const user = userEvent.setup();
+    queries.pages = [CONTACT_PAGE]; // no home page
+    const onOpenChange = vi.fn();
+    const onGoToPages = vi.fn();
+    render(
+      <PublishSheet
+        open
+        onOpenChange={onOpenChange}
+        communityId={7}
+        onGoToPages={onGoToPages}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /go to pages/i }));
+
+    // Closes first, then hands over — a sheet left open over the panel the PM
+    // was just sent to is a second thing to dismiss.
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onGoToPages).toHaveBeenCalled();
+  });
+
   it('refuses a publish when the site has no home page at all', () => {
     queries.pages = [CONTACT_PAGE];
     renderSheet();

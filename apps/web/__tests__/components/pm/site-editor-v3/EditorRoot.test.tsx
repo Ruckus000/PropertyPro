@@ -108,6 +108,18 @@ vi.mock('next/dynamic', () => ({
             }, []);
             return <p>inspector</p>;
           }
+        : // The preview, stubbed to echo the ONE prop the parent has to pass.
+        //
+        // Asserted here rather than only in `PreviewDialog.test.tsx`, which
+        // passes `pageName` explicitly and therefore cannot see a parent that
+        // forgets it — the identical hole that shipped the Publish button dead
+        // and that this whole file exists to close. Round 6 found the preview
+        // half of the A1 fix had exactly that gap while the top-bar half did
+        // not.
+        String(loader).includes('PreviewDialog')
+        ? ({ pageName }: { pageName?: string }) => (
+            <p>previewing {pageName ?? '(no page)'}</p>
+          )
         : // The publish sheet, stubbed only far enough to fire "Fix this". Its
         // blocking issues come from the WHOLE-SITE diff while the editor
         // context is page-scoped (D-C2), so the slot it hands back routinely
@@ -265,11 +277,18 @@ const seededHome: StubPage = {
 interface RootOptions {
   initialPages?: StubPage[];
   showWizardBanner?: boolean;
+  /**
+   * Null by default, which takes the degraded-canvas branch and keeps the whole
+   * block-view tree out of this file. Supplied only by the preview case, where
+   * `EditorRoot` gates the dialog on it being non-null.
+   */
+  canvasContext?: unknown;
 }
 
 function rootElement({
   initialPages = [seededHome],
   showWizardBanner = false,
+  canvasContext = null,
 }: RootOptions = {}) {
   return (
     <EditorRoot
@@ -278,9 +297,9 @@ function rootElement({
       publicSiteUrl="https://sunset-condos.example.com/"
       proToolAccess={{ styling: true, domain: true }}
       hasPolishBlocks
-      // Null on purpose: takes the degraded-canvas branch, so the whole
-      // block-view tree stays out of this test.
-      canvasContext={null}
+      // Null on purpose by default: takes the degraded-canvas branch, so the
+      // whole block-view tree stays out of this test.
+      canvasContext={canvasContext as never}
       hasPublishedSite
       initialNotice={null}
       siteIdentity={{
@@ -945,6 +964,37 @@ describe('EditorRoot — the top bar names the page being edited', () => {
   });
 });
 
+describe('EditorRoot — the preview is titled after the page it renders', () => {
+  // The seam, not the leaf. `PreviewDialog.test.tsx` proves the dialog USES
+  // `pageName`; only this can prove `EditorRoot` passes it. Round 6 found the
+  // top-bar half of the same fix had an EditorRoot test and the preview half
+  // did not — the precise asymmetry that shipped the Publish button dead.
+  //
+  // Revert check (production line): `pageName={selectedPage?.name}` on
+  // `<PreviewDialog>` in `EditorRoot.tsx`.
+  it('hands the selected page name down when Preview is opened', async () => {
+    queries.pages = [
+      seededHome,
+      {
+        ...seededHome,
+        id: SECOND_PAGE_ID,
+        name: 'Amenities',
+        slug: 'amenities',
+        sortOrder: 1,
+        isHome: false,
+      },
+    ];
+    // Non-null so the dialog branch is reachable at all; the stub ignores it.
+    renderRoot({ canvasContext: {} });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
+
+    expect(screen.getByText(/previewing Amenities/)).toBeInTheDocument();
+  });
+});
+
 describe('EditorRoot — "Fix this" reaches a section on another page', () => {
   // A regression introduced BY the D-C2 scoping. `PublishSheetMount` resolves
   // the issue's slot against `movableSections`, which is now page-scoped, while
@@ -1020,9 +1070,22 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
   });
 
   it('does not re-select the offending section after the PM moves on', async () => {
-    // The mark is one-shot. Left armed, a later remount — an ordinary page
-    // click, a refetch — would yank the selection back to a section the PM
-    // dealt with minutes ago.
+    /*
+     * The mark is one-shot. Left armed, a later remount — an ordinary page
+     * click, a refetch — would yank the selection back to a section the PM
+     * dealt with minutes ago.
+     *
+     * **Honest limitation, found by round 6's fix-auditor:** this case has no
+     * single revert target. By the time the second half runs, `onSlotSelected`
+     * has already cleared `pendingSelectSlot` in the parent, so
+     * `selectSlotOnMount` is `null` for every later provider instance —
+     * meaning it stays green whether or not `consumedSlotRef` exists and
+     * whether or not `handleSelectPage` clears the mark. It is a
+     * belt-and-braces statement of the end state, not a guard on either
+     * mechanism, and `setPendingSelectSlot(null)` in `handleSelectPage` remains
+     * uncovered. Recorded rather than dressed up: claiming a revert target it
+     * does not have is the round-3/4 mistake.
+     */
     renderRoot();
 
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
@@ -1120,11 +1183,22 @@ describe('EditorRoot — BOTH page reads fail', () => {
   });
 
   it('leaves the editor alone while the pages query is merely still in flight', () => {
-    // The control. Blanking on `pages === undefined` would flash a failure
-    // banner on every ordinary first paint.
+    /*
+     * The control for the `pagesFailed` conjunct: blanking on
+     * `pages === undefined` would flash a failure banner on every ordinary
+     * first paint.
+     *
+     * `initialPages: []` is load-bearing and an earlier version of this case
+     * omitted it. With the default seed, `homePageId` resolves from
+     * `initialPages.find(isHome)` and `effectivePageId` is non-null — so
+     * `pagesUnavailable` is already false through the FIRST conjunct, and the
+     * case passed verbatim with `&& pagesFailed` deleted. An empty seed is the
+     * only shape in which the second conjunct decides anything, and it is also
+     * the only shape in which the flashing-banner scenario exists.
+     */
     queries.isError = false;
     queries.isPending = true;
-    renderRoot();
+    renderRoot({ initialPages: [] });
 
     expect(screen.queryByTestId('pages-unavailable-banner')).not.toBeInTheDocument();
   });

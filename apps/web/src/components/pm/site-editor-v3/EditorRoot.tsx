@@ -280,6 +280,15 @@ export function EditorRoot({
    * back to the person who caused it.
    */
   const [selfRemovedPageId, setSelfRemovedPageId] = useState<number | null>(null);
+  /**
+   * True when the selection moved because the PM clicked a row in the Pages
+   * panel — so the remounted panel puts focus back on that row rather than
+   * letting it fall to `<body>`. See `PagesPanelProps.restoreFocusToSelectedRow`.
+   *
+   * Reset on any other route to a page change (a "Fix this" jump, a repair), so
+   * it never steals focus for a switch the PM did not initiate here.
+   */
+  const [focusSelectedRow, setFocusSelectedRow] = useState(false);
   const handlePageRemoved = useCallback((pageId: number) => setSelfRemovedPageId(pageId), []);
 
   // Shares `useSiteDiff`'s query key, so this adds no request — the diff calls
@@ -363,6 +372,13 @@ export function EditorRoot({
       // Leaving it armed would let it fire on some later remount, moving a
       // selection the PM did not ask for.
       setPendingSelectSlot(null);
+      // Cleared here too. Deleting a page you are NOT currently on sets the
+      // mark and the repair never runs, so nothing else would ever clear it —
+      // safe today only because re-selecting a deleted `bigserial` id is
+      // impossible, which is safety by accident of id allocation rather than by
+      // construction.
+      setSelfRemovedPageId(null);
+      setFocusSelectedRow(true);
       setPageAnnouncement(options?.announce ?? '');
     },
     [],
@@ -406,6 +422,7 @@ export function EditorRoot({
     const selfInflicted = selectedPageId === selfRemovedPageId;
     setSelectedPageId(home.id);
     setSelfRemovedPageId(null);
+    setFocusSelectedRow(false);
     // SAID OUT LOUD, not done quietly — unless the PM did it themselves.
     //
     // The common cause is a co-manager publishing a staged removal of the page
@@ -538,6 +555,7 @@ export function EditorRoot({
       setSelectedPageId(targetPageId);
       setPendingSelectionId(null);
       setPendingSelectSlot(slot);
+      setFocusSelectedRow(false);
       setPageAnnouncement('');
     },
     [effectivePageId, slotGroups],
@@ -548,6 +566,9 @@ export function EditorRoot({
   // than read from context because `setActiveTool` lives HERE — the provider's
   // parent — and only `useSiteEditor` is out of reach from this component.
   const handleGoToAdd = useCallback(() => setActiveTool('add'), []);
+  // The publish sheet's route out of a page-set problem — a duplicate address
+  // or a missing home page has no section slot, so "Fix this" cannot reach it.
+  const handleGoToPages = useCallback(() => setActiveTool('pages'), []);
 
   return (
     <SelectedSitePageProvider pageId={effectivePageId}>
@@ -705,6 +726,7 @@ export function EditorRoot({
               <PagesPanel
                 communityId={communityId}
                 selectedPageId={effectivePageId}
+                restoreFocusToSelectedRow={focusSelectedRow}
                 onSelectPage={handleSelectPage}
                 onPageRemoved={handlePageRemoved}
               />
@@ -768,6 +790,7 @@ export function EditorRoot({
           theme={canvasContext?.theme ?? null}
           onOpenChange={setPublishOpen}
           onFixIssue={handleSelectSlot}
+          onGoToPages={handleGoToPages}
         />
       ) : null}
       </AutosaveStatusProvider>
@@ -789,11 +812,13 @@ function PublishSheetMount({
   theme,
   onOpenChange,
   onFixIssue,
+  onGoToPages,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
   onOpenChange: (open: boolean) => void;
   onFixIssue: (slot: number) => void;
+  onGoToPages: () => void;
 }) {
   const { movableSections, select } = useSiteEditor();
 
@@ -835,6 +860,8 @@ function PublishSheetMount({
           }
         : {})}
       onFixIssue={handleFixIssue}
+      // Page-set problems are fixed in the Pages panel and nowhere else.
+      onGoToPages={onGoToPages}
     />
   );
 }

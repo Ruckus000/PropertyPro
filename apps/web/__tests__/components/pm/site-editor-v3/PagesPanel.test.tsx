@@ -29,12 +29,13 @@
  * component breaking rather than a mock being short.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 // Imported, never spelled out: a literal here would keep passing after the
 // constant moved, and the assertion it guards is a section COUNT the PM reads
 // before an irreversible delete.
 import { SITE_PAGE_SLUG_PATTERN, TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
+import { ApiRequestError } from '@/lib/api/request-json';
 
 const {
   useSitePagesMock,
@@ -235,7 +236,59 @@ describe('PagesPanel — selection', () => {
     renderPanel({ selectedPageId: 1 });
 
     await user.click(screen.getByTestId('site-page-select-2'));
-    expect(onSelectPage).toHaveBeenCalledWith(2);
+    // …carrying the words for the parent's live region. The panel's primary
+    // action used to be its ONLY silent one: creation, reorder and selection
+    // repair all announce, while an ordinary switch — which swaps the canvas,
+    // the Sections list and the Inspector all at once — said nothing.
+    //
+    // Announced from HERE rather than in `EditorRoot` because this side knows
+    // the page's name; held by the parent because the switch remounts this
+    // panel and a live region inside it would be rebuilt before it could speak.
+    expect(onSelectPage).toHaveBeenCalledWith(2, { announce: 'Now editing Amenities.' });
+  });
+
+  it('puts focus back on the row after the parent remounts the panel', () => {
+    /*
+     * `EditorRoot`'s `key={effectivePageId}` (D-SEL) remounts this panel on
+     * every page switch, which destroys the button the PM just activated —
+     * so the panel's PRIMARY action was the one action that stranded a keyboard
+     * user at `<body>`, at the top of the document, while the canvas, the
+     * Sections list and the Inspector all swapped underneath.
+     *
+     * Simulated the way production does it: a fresh mount with the new
+     * selection and the parent's flag set, which is exactly what the remount
+     * produces.
+     *
+     * Revert check (production line): `selectedRowRef.current?.focus()` in
+     * `PagesPanel.tsx`'s mount effect.
+     */
+    useSitePagesMock.mockReturnValue({
+      data: [HOME, AMENITIES],
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: refetchMock,
+    });
+    render(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={2}
+        restoreFocusToSelectedRow
+        onSelectPage={onSelectPage}
+        onPageRemoved={onPageRemoved}
+      />,
+    );
+
+    expect(document.activeElement).toBe(screen.getByTestId('site-page-select-2'));
+  });
+
+  it('does NOT steal focus when the panel is merely opened', () => {
+    // The control, and the reason the flag exists rather than "focus the
+    // selected row on mount": opening the Pages tab also mounts this panel,
+    // and grabbing focus there would yank it out of whatever the PM was doing.
+    renderPanel({ selectedPageId: 2 });
+
+    expect(document.activeElement).not.toBe(screen.getByTestId('site-page-select-2'));
   });
 
   it('marks no row current until the parent says which page is selected', () => {
@@ -336,6 +389,23 @@ describe('PagesPanel — row state', () => {
     expect(row.queryByText('Draft')).not.toBeInTheDocument();
   });
 
+  it('shows BOTH draft and nav state, which are independent facts', () => {
+    // Under a single most-urgent-wins badge, a draft page the PM had taken out
+    // of the nav showed only "Draft" — and the nav state appeared nowhere in
+    // the collapsed list, only as an icon inside the expanded editor, which is
+    // not the surface the PM reads.
+    //
+    // Revert check (production line): the `badges.push` for `!page.inNav` in
+    // `PagesPanel.tsx`'s `rowBadges`, or making the two branches exclusive
+    // again. Either turns this red and leaves the staged case above green.
+    renderPanel({
+      pages: [HOME, page({ id: 2, name: 'Amenities', isDraft: true, inNav: false })],
+    });
+    const row = within(screen.getByTestId('site-page-row-2'));
+    expect(row.getByText('Draft')).toBeInTheDocument();
+    expect(row.getByText('Not in nav')).toBeInTheDocument();
+  });
+
   it('badges nothing on an ordinary published page', () => {
     renderPanel();
     const row = within(screen.getByTestId('site-page-row-2'));
@@ -423,6 +493,45 @@ describe('PagesPanel — adding a page', () => {
     expect(onSelectPage).not.toHaveBeenCalled();
   });
 
+  it('gives the server\'s actionable reason, not just its summary sentence', async () => {
+    /*
+     * Round 6. A `ValidationError` carries the summary in `message` and the
+     * half that tells the PM what to DO in `fields` — "…still forwards visitors
+     * to the page that replaced it. Pick another address." `requestJson` now
+     * carries `fields` through (`ApiRequestError`), and this toast was still
+     * printing the summary alone, so the change that carried it stopped one
+     * call site short.
+     *
+     * Revert check (production line): `refusalDetail`'s `error.fields` read in
+     * `PagesPanel.tsx`. Returning `error.message` unconditionally turns this
+     * red and leaves the plain-Error case green.
+     */
+    const user = userEvent.setup();
+    createMutate.mockImplementation((_input, options) =>
+      options.onError(
+        new ApiRequestError('Another page used to live at that web address.', {
+          status: 400,
+          code: 'VALIDATION_ERROR',
+          details: {
+            fields: [
+              {
+                field: 'slug',
+                message: 'It still forwards visitors to the page that replaced it. Pick another address.',
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await user.type(screen.getByLabelText('Page name'), 'Pool Rules');
+    await user.click(screen.getByRole('button', { name: 'Add page' }));
+
+    expect(toastErrorMock).toHaveBeenCalledWith(expect.stringContaining('Pick another address'));
+  });
+
   it('refuses an address an application route already owns', async () => {
     // `isReservedPublicSlug` is INJECTED into the shared validator, which is the
     // same function the server runs. A page at /documents would be shadowed by
@@ -445,15 +554,37 @@ describe('PagesPanel — adding a page', () => {
   });
 
   it('refuses the submit even when the disabled button is bypassed', async () => {
-    // The other half of the case above, isolated: `submitCreate`'s own
-    // `!canCreate` short-circuit. Submitting the FORM (Enter in the name field)
-    // does not go through the disabled button at all, so this reaches the guard
-    // the click could not distinguish.
+    /*
+     * The other half of the case above, isolated: `submitCreate`'s own
+     * `!canCreate` short-circuit.
+     *
+     * **`user.type(field, '…{Enter}')` does NOT reach it**, and an earlier
+     * version of this test used exactly that and proved nothing. user-event's
+     * Enter-on-a-text-input behaviour does not submit the form — it looks up
+     * `button[type="submit"]` and dispatches a CLICK on it. That button is
+     * `disabled`, so the path collapses into the very click case this is
+     * supposed to be distinguished from, `onSubmit` never fires, and the guard
+     * is never entered. (Caught by review round 6's fix-auditor, in a test
+     * written to close round 5's meta-finding — the same failure mode, one
+     * level up.)
+     *
+     * `fireEvent.submit` on the form element is the only way in from a test:
+     * a real user reaches it via Enter in a browser that DOES submit, or via a
+     * second submit control.
+     *
+     * Revert check (production line, verified): the `!canCreate ||` term in
+     * `PagesPanel.tsx`'s `submitCreate`. Removing it turns this red. The
+     * previous `{Enter}` version stayed GREEN under that same removal.
+     */
     const user = userEvent.setup();
     renderPanel();
 
     await user.click(screen.getByRole('button', { name: 'Add a page' }));
-    await user.type(screen.getByLabelText('Page name'), 'Documents{Enter}');
+    await user.type(screen.getByLabelText('Page name'), 'Documents');
+
+    const form = screen.getByLabelText('Page name').closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
 
     expect(createMutate).not.toHaveBeenCalled();
   });

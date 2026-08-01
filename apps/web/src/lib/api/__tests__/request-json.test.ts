@@ -66,8 +66,12 @@ describe('requestJson — the server\'s structured detail survives the throw', (
    *
    * Revert check (production line): the `fields` assignment in
    * `ApiRequestError`'s constructor (`this.fields = readFields(init.details)`).
-   * Removing only that line turns the two `fields` cases here red and leaves
-   * `code`/`details`/`status` green.
+   * Removing it turns the FIRST case below red — and only that one. The other
+   * two assert `fields` is `undefined`, which is exactly what a deleted
+   * assignment produces, so they are insensitive to it by construction. Said
+   * plainly rather than claimed away: a negative that a missing implementation
+   * also satisfies is not a guard, it is a description of the absent case, and
+   * both are here for the shape of the API rather than to pin that line.
    */
   function failWith(body: unknown, status = 400) {
     fetchMock.mockResolvedValue({ ok: false, status, json: async () => body });
@@ -116,9 +120,14 @@ describe('requestJson — the server\'s structured detail survives the throw', (
     expect(error.fields).toBeUndefined();
   });
 
-  it('refuses a malformed fields array rather than handing a UI half-typed entries', async () => {
-    // A partly-typed array would render `undefined` to a PM mid-publish, which
-    // is worse than the generic message it replaced.
+  it('drops an entirely malformed fields array rather than handing a UI half-typed entries', async () => {
+    // "Entirely", precisely: `readFields` FILTERS, so a mixed array keeps its
+    // well-formed entries and drops the rest. That is the intended policy —
+    // one unreadable reason must not cost the PM the readable ones — and the
+    // case below pins it. This case is the all-invalid end, where filtering
+    // leaves nothing and `undefined` is the honest answer. A partly-typed entry
+    // reaching a UI would render `undefined` to a PM mid-publish, which is
+    // worse than the generic message it replaced.
     failWith({
       error: {
         code: 'VALIDATION_ERROR',
@@ -131,5 +140,30 @@ describe('requestJson — the server\'s structured detail survives the throw', (
     expect(error.fields).toBeUndefined();
     // The raw payload is still reachable for anything that wants to inspect it.
     expect(error.details).toEqual({ fields: ['just a string', { field: 7 }, null] });
+  });
+
+  it('keeps the well-formed reasons out of a partly malformed array', async () => {
+    // The filtering policy, stated. One unreadable entry must not cost the PM
+    // the readable ones — and unlike the two `undefined` cases above, this one
+    // IS sensitive to `readFields`: deleting the `fields` assignment turns it
+    // red.
+    failWith({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Nope.',
+        details: {
+          fields: [
+            'junk',
+            { field: 'page:7.slug', message: 'Another page already uses "/contact".' },
+            { field: 9 },
+          ],
+        },
+      },
+    });
+
+    const error = await rejection();
+    expect(error.fields).toEqual([
+      { field: 'page:7.slug', message: 'Another page already uses "/contact".' },
+    ]);
   });
 });

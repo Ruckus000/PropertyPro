@@ -111,6 +111,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { ApiRequestError } from '@/lib/api/request-json';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
@@ -193,18 +194,22 @@ function pageAddress(page: SitePageSummary): string {
  * that is both hidden from the nav and staged for removal only needs the
  * removal said out loud — that is the state with a deadline attached.
  */
-function rowBadge(page: SitePageSummary): { label: string; className: string } | null {
+function rowBadges(page: SitePageSummary): Array<{ label: string; className: string }> {
+  // A staged removal SUPERSEDES everything else and shows alone. Whether such a
+  // page is a draft, or in the nav, is about to stop being true — listing those
+  // beside "Removing" is detail about a state that is ending.
   if (page.deleteStagedAt) {
-    return {
-      label: 'Removing',
-      className: 'bg-status-danger-bg text-status-danger',
-    };
+    return [{ label: 'Removing', className: 'bg-status-danger-bg text-status-danger' }];
   }
+
+  // "Draft" and "Not in nav" are independent facts and both are worth knowing,
+  // so they COMBINE. Under a single most-urgent-wins badge a draft page the PM
+  // had taken out of the nav showed only "Draft", and the nav state was visible
+  // nowhere in the collapsed list — only as an icon inside the expanded editor,
+  // which is not the surface the PM reads.
+  const badges: Array<{ label: string; className: string }> = [];
   if (page.isDraft) {
-    return {
-      label: 'Draft',
-      className: 'bg-status-warning-bg text-status-warning',
-    };
+    badges.push({ label: 'Draft', className: 'bg-status-warning-bg text-status-warning' });
   }
   if (!page.inNav) {
     // "Not in nav", not "Hidden". `in_nav` removes the navigation LINK and
@@ -213,12 +218,31 @@ function rowBadge(page: SitePageSummary): { label: string; className: string } |
     // reading "Hidden" is the PM's most likely route to believing they have
     // taken a page off their site when they have not — which for a page they
     // wanted gone is a disclosure they think they made and did not.
-    return {
-      label: 'Not in nav',
-      className: 'bg-status-neutral-bg text-status-neutral',
-    };
+    badges.push({ label: 'Not in nav', className: 'bg-status-neutral-bg text-status-neutral' });
   }
-  return null;
+  return badges;
+}
+
+/**
+ * The server's reasons for refusing a page write, in one readable sentence.
+ *
+ * A `ValidationError` carries a summary MESSAGE plus a `fields` array holding
+ * the actionable half — "…still forwards visitors to the page that replaced it.
+ * Pick another address." lives in `fields`, not in the message. `requestJson`
+ * used to drop it entirely; since it now throws `ApiRequestError` the detail
+ * reaches here, and dropping it a second time in the toast would waste the
+ * change that carried it.
+ *
+ * Falls back to the bare message for every other error class, which is what a
+ * timeout or a 500 has.
+ */
+function refusalDetail(error: Error): string {
+  const fields = error instanceof ApiRequestError ? error.fields : undefined;
+  if (!fields) return error.message;
+  // De-duplicated: the same rule can be reported against a name and a slug, and
+  // a toast repeating one sentence twice reads as a bug.
+  const reasons = [...new Set(fields.map((f) => f.message))];
+  return reasons.join(' ');
 }
 
 /** Maps a server row onto the shared validator's shape, with optional edits applied. */
@@ -262,6 +286,22 @@ function sectionPhrase(count: number): string {
 
 export interface PagesPanelProps {
   communityId: number;
+  /**
+   * True when the parent moved the selection in response to a click in THIS
+   * panel, so focus should return to the row that was clicked.
+   *
+   * `EditorRoot`'s `key={effectivePageId}` (D-SEL) remounts this panel on every
+   * page switch, which destroys the button the PM just activated and drops
+   * focus to `<body>` — the panel's primary action was the one action that
+   * stranded a keyboard user at the top of the document. The flag has to come
+   * from above for the same reason the pending mark does: any state this panel
+   * set would die with the instance that set it.
+   *
+   * NOT simply "focus the selected row on mount": opening the Pages tab also
+   * mounts this panel, and stealing focus there would yank it out of whatever
+   * the PM was doing.
+   */
+  restoreFocusToSelectedRow?: boolean;
   /**
    * The page being edited, or `null` while none is known.
    *
@@ -316,6 +356,7 @@ export interface PagesPanelProps {
 export function PagesPanel({
   communityId,
   selectedPageId,
+  restoreFocusToSelectedRow = false,
   onSelectPage,
   onPageRemoved,
 }: PagesPanelProps) {
@@ -361,6 +402,8 @@ export function PagesPanel({
    * effect below.
    */
   const listRef = useRef<HTMLUListElement>(null);
+  /** The row for the currently selected page — see `restoreFocusToSelectedRow`. */
+  const selectedRowRef = useRef<HTMLButtonElement>(null);
 
   const pages = useMemo(() => data ?? [], [data]);
 
@@ -383,6 +426,23 @@ export function PagesPanel({
    * hold the selection" through `onSelectPage`'s `pending` flag and otherwise
    * owns only its own view state.
    */
+
+  /*
+   * Focus follows the selection across the remount.
+   *
+   * Mount-only (`[]`), and gated on a flag the PARENT sets: this panel is
+   * remounted both by a page switch (where the PM's focus was on a row that no
+   * longer exists) and by opening the Pages tab (where stealing focus would be
+   * an ambush). Only the first deserves it.
+   *
+   * The row is the right target rather than the list: the PM pressed a specific
+   * row, and returning them to it keeps Tab order where they left it.
+   */
+  useEffect(() => {
+    if (!restoreFocusToSelectedRow) return;
+    selectedRowRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
+  }, []);
 
   // A row that disappeared underneath an open editor must not leave that editor
   // open over nothing — and the reorder/nav controls inside it would then be
@@ -585,7 +645,7 @@ export function PagesPanel({
             onSelectPage(page.id, { pending: true, announce: `${page.name} added.` });
           },
           onError: (mutationError) => {
-            toast.error(`We couldn't add that page. ${mutationError.message}`);
+            toast.error(`We couldn't add that page. ${refusalDetail(mutationError)}`);
           },
         },
       );
@@ -602,7 +662,7 @@ export function PagesPanel({
             toast.success(done);
           },
           onError: (mutationError) => {
-            toast.error(`We couldn't save that change. ${mutationError.message}`);
+            toast.error(`We couldn't save that change. ${refusalDetail(mutationError)}`);
           },
         },
       );
@@ -819,7 +879,7 @@ export function PagesPanel({
       >
         {pages.map((page, index) => {
           const selected = page.id === selectedPageId;
-          const badge = rowBadge(page);
+          const badges = rowBadges(page);
           const reorderIndex = reorderableIds.indexOf(page.id);
           const canReorder = reorderIndex !== -1;
           const canUp = canReorder && reorderIndex > 0;
@@ -867,7 +927,16 @@ export function PagesPanel({
 
                 <button
                   type="button"
-                  onClick={() => onSelectPage(page.id)}
+                  ref={selected ? selectedRowRef : undefined}
+                  onClick={() =>
+                    // The announcement is passed UP because this panel is
+                    // remounted by the very switch it is reporting — a live
+                    // region inside it is torn down and rebuilt before the
+                    // string can be announced. `EditorRoot` owns the region
+                    // that survives. The panel supplies the text because it is
+                    // the side that knows the page's name.
+                    onSelectPage(page.id, { announce: `Now editing ${page.name}.` })
+                  }
                   aria-current={selected ? 'page' : undefined}
                   data-testid={`site-page-select-${page.id}`}
                   className="flex min-h-9 min-w-0 flex-1 flex-col items-start rounded-sm px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
@@ -885,8 +954,9 @@ export function PagesPanel({
                   </span>
                 </button>
 
-                {badge && (
+                {badges.map((badge) => (
                   <span
+                    key={badge.label}
                     className={cn(
                       'shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium',
                       badge.className,
@@ -894,7 +964,7 @@ export function PagesPanel({
                   >
                     {badge.label}
                   </span>
-                )}
+                ))}
 
                 <button
                   type="button"

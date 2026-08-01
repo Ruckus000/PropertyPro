@@ -105,6 +105,13 @@ export interface PublishSheetProps {
    * calls this with the section's `block_order` slot; the editor owns selection.
    */
   onFixIssue?: (slot: number) => void;
+  /**
+   * Open the Pages panel. Page-SET problems (a duplicate address, no home page)
+   * block a publish but have no section slot, so `onFixIssue` cannot reach
+   * them — this is their equivalent, and without it they are the only blocking
+   * issues the sheet reports with no way to act on them.
+   */
+  onGoToPages?: () => void;
 }
 
 /** `'site'` sorts first; page groups follow, in the site's own nav order. */
@@ -228,6 +235,7 @@ export function PublishSheet({
   communityId,
   brandColors,
   onFixIssue,
+  onGoToPages,
 }: PublishSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -249,6 +257,7 @@ export function PublishSheet({
             communityId={communityId}
             brandColors={brandColors}
             onFixIssue={onFixIssue}
+            onGoToPages={onGoToPages}
             onOpenChange={onOpenChange}
           />
         ) : null}
@@ -261,10 +270,11 @@ interface BodyProps {
   communityId: number;
   brandColors?: ResolvedBrandColors;
   onFixIssue?: (slot: number) => void;
+  onGoToPages?: () => void;
   onOpenChange: (open: boolean) => void;
 }
 
-function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }: BodyProps) {
+function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, onOpenChange }: BodyProps) {
   // The same hook the top bar's Publish button reads, so the button's enabled
   // state and this sheet's change count are one computation, not two.
   const {
@@ -320,6 +330,13 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
   function fixIssue(slot: number) {
     onOpenChange(false);
     onFixIssue?.(slot);
+  }
+
+  // Same shape as `fixIssue`: close first, then hand over. A sheet left open
+  // over the panel the PM was just sent to is a second thing to dismiss.
+  function goToPages() {
+    onOpenChange(false);
+    onGoToPages?.();
   }
 
   /**
@@ -449,8 +466,10 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
         <BlockingIssues
           issues={blocking}
           snapshot={next}
+          pageLabels={pageLabels}
           onFix={fixIssue}
           canFix={onFixIssue !== undefined}
+          {...(onGoToPages ? { onGoToPages: goToPages } : {})}
         />
       ) : null}
 
@@ -590,11 +609,19 @@ function ChangeRow({ change, onUndoRemoval, undoPending = false }: ChangeRowProp
 interface BlockingIssuesProps {
   issues: readonly Issue[];
   snapshot: SiteSnapshot;
+  /** Group id → page name, so a page issue names the page and not `page:47`. */
+  pageLabels: ReadonlyMap<string, string>;
   onFix: (slot: number) => void;
   canFix: boolean;
+  /**
+   * Opens the Pages panel. Page-set problems are fixed there and nowhere else,
+   * and `issueTarget` cannot produce a slot for them — so without this they
+   * were the only blocking issues with no route out of the sheet at all.
+   */
+  onGoToPages?: () => void;
 }
 
-function BlockingIssues({ issues, snapshot, onFix, canFix }: BlockingIssuesProps) {
+function BlockingIssues({ issues, snapshot, pageLabels, onFix, canFix, onGoToPages }: BlockingIssuesProps) {
   return (
     <section
       role="alert"
@@ -615,7 +642,8 @@ function BlockingIssues({ issues, snapshot, onFix, canFix }: BlockingIssuesProps
       <ul className="space-y-3">
         {issues.map((issue, index) => {
           const target = issueTarget(issue.field, snapshot);
-          const name = describeTarget(issue, snapshot);
+          const name = describeTarget(issue, snapshot, pageLabels);
+          const isPageIssue = issue.field.startsWith('page:') || issue.field.startsWith('pages.');
           return (
             <li key={`${issue.field}-${index}`} className="space-y-1 text-sm">
               <p className="font-medium text-content">{name}</p>
@@ -628,6 +656,11 @@ function BlockingIssues({ issues, snapshot, onFix, canFix }: BlockingIssuesProps
                   onClick={() => onFix(target.slot)}
                 >
                   Fix this
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              ) : isPageIssue && onGoToPages ? (
+                <Button type="button" variant="outline" size="sm" onClick={onGoToPages}>
+                  Go to Pages
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
               ) : null}
@@ -646,7 +679,11 @@ function BlockingIssues({ issues, snapshot, onFix, canFix }: BlockingIssuesProps
  * actionable, `sections.2.content.items.0.question` is not. Falls back to the
  * raw field only for issues that are not about a section at all.
  */
-function describeTarget(issue: Issue, snapshot: SiteSnapshot): string {
+function describeTarget(
+  issue: Issue,
+  snapshot: SiteSnapshot,
+  pageLabels: ReadonlyMap<string, string>,
+): string {
   if (issue.field === 'hero' || issue.field.startsWith('hero.')) {
     return 'Welcome section';
   }
@@ -654,6 +691,23 @@ function describeTarget(issue: Issue, snapshot: SiteSnapshot): string {
   if (target) {
     return `Section ${target.slot} (${target.blockType})`;
   }
+  /*
+   * Page-SET issues, which reach this component for the first time in 11b-3.
+   *
+   * `pageIssues` emits `page:<id>.<field>` and `pages.home`, and neither is a
+   * `sections.<n>` path, so both fell through to the raw `issue.field` — the
+   * PM was shown a heading reading `page:47.slug`. Making the block visible
+   * before the button (which is what running `pageIssues` client-side bought)
+   * is only half the job if the offender is named in machine syntax.
+   */
+  const pageMatch = /^page:([^.]+)\./.exec(issue.field);
+  if (pageMatch) {
+    const label = pageLabels.get(pageMatch[1]!);
+    // The label, not the id, and never the raw field. A page the pages query
+    // has not resolved falls back to a phrase that is still a sentence.
+    return label ? `${label} page` : 'One of your pages';
+  }
+  if (issue.field === 'pages.home') return 'Your site as a whole';
   return issue.field;
 }
 
