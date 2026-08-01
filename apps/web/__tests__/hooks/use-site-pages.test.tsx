@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
 import {
@@ -58,6 +58,8 @@ function bodyOf(callIndex = 0): unknown {
 
 beforeEach(() => {
   global.fetch = vi.fn();
+  focusManager.setFocused(true);
+  vi.useRealTimers();
 });
 
 describe('useSitePages', () => {
@@ -82,6 +84,51 @@ describe('useSitePages', () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[1]?.deleteStagedAt).toBe('2026-07-30T09:00:00.000Z');
+  });
+
+  it('refetches when the PM returns to the tab, despite the app-wide default', async () => {
+    // Behavioural, not an assertion about the options object: the client below
+    // mirrors `makeQueryClient` (staleTime 60s, refetchOnWindowFocus FALSE), so
+    // this passes only because the hook overrides that default for itself.
+    //
+    // Why it matters: a co-manager can stage the page you have open, and writes
+    // to a staged page still SUCCEED — the editor keeps saying "Saved" for work
+    // the next publish deletes. Without a refetch the tab never finds out.
+    //
+    // Note the query must be STALE for focus to refetch, which is why the clock
+    // moves past `staleTime` first. A manager returning within the minute keeps
+    // the cached list; beyond it — which the leave-and-come-back case always is
+    // — they get the truth.
+    const appLikeClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: 60_000, refetchOnWindowFocus: false },
+        mutations: { retry: false },
+      },
+    });
+    // `shouldAdvanceTime` so `waitFor` still makes progress under fake timers.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockOnce({ data: { pages: [HOME] } });
+    const { result } = renderHook(() => useSitePages(COMMUNITY_ID), {
+      wrapper: wrap(appLikeClient),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(1);
+
+    // Past staleTime, and a co-manager has added a page in the meantime.
+    // `mockResolvedValue`, not `…Once`: how MANY refetches focus triggers is
+    // react-query's business, and pinning it here would make this a test of the
+    // library. What matters is that the editor ends up holding the truth.
+    await vi.advanceTimersByTimeAsync(61_000);
+    fetchMock().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { pages: [HOME, page({ id: 9 })] } }),
+    });
+
+    focusManager.setFocused(false);
+    focusManager.setFocused(true);
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
   });
 
   it('surfaces the server error message rather than a generic failure', async () => {

@@ -172,12 +172,18 @@ export async function ensureHomePage(
   tx?: Tx,
   options: EnsureHomePageOptions = {},
 ): Promise<number> {
-  // A caller's `tx` already holds the community lock — every entry point in this
-  // file, and every write path in site-blocks-service, takes it first. (That was
-  // not true until 11b-3: `upsertPublishedBlock` was the one exception, and it
-  // is what made D-SLOT's widened slot guard a read-then-write with nothing
-  // under it. Do not add another exception.) When opening our own
-  // transaction we have to take it too: without it, two concurrent first-touches
+  // A caller passing `tx` MUST already hold the community lock. Every write
+  // path in this file and in site-blocks-service takes it first. (That was not
+  // true until 11b-3: `upsertPublishedBlock` was the one exception, and it is
+  // what made D-SLOT's widened slot guard a read-then-write with nothing under
+  // it. Do not add another exception.)
+  //
+  // `listSitePages` is the one READ that reaches here, and it takes the lock
+  // only on the branch that calls this — its fast path returns before it. That
+  // is the contract: unlocked reads must not reach this function.
+  //
+  // When opening our own transaction we take the lock too: without it, two
+  // concurrent first-touches
   // of the same community both pass the find-then-insert and the loser hits
   // `site_pages_community_home_partial` as an opaque 500. The index keeps the data
   // correct either way; the lock is what keeps the error out of the PM's face.
@@ -306,20 +312,49 @@ export interface ListSitePagesOptions {
  * The community's pages in nav order (home first). Ensures the home page exists,
  * so a brand-new community's editor opens on a real page rather than an empty
  * list it cannot act on.
+ *
+ * The ensure is LAZY: it costs a locked transaction, so it runs only when the
+ * community genuinely has no pages. Every other call is a plain read. See the
+ * body — the ordering there is what keeps a pages refetch from serializing
+ * against publishes.
  */
 export async function listSitePages(
   communityId: number,
   { includeDrafts = false }: ListSitePagesOptions = {},
 ): Promise<SitePageRecord[]> {
   const db = createUnscopedClient();
+
+  // Fast path: a plain read, no lock and no write.
+  //
+  // This used to lock unconditionally, because the read can CREATE the home
+  // page. But the create is needed only for a community that has never had one,
+  // which is once in a community's lifetime — while the read happens on every
+  // editor load AND on every pages refetch. Paying a `FOR UPDATE` on the
+  // community row for all of them made a read serialize against publishes,
+  // reorders and every other block write.
+  //
+  // Read UNFILTERED and apply the caller's filter here. Deciding on a filtered
+  // read would be a landmine rather than a bug today: a community that has never
+  // published has a DRAFT home page, so an `includeDrafts: false` read comes back
+  // empty and would take the lock on EVERY call for exactly the communities most
+  // likely to be new. Both current callers pass `includeDrafts: true`, so it
+  // would sit there unnoticed until one did not.
+  const existing = await db.transaction(async (tx) =>
+    listPagesInTransaction(communityId, tx, { includeDrafts: true }),
+  );
+  if (existing.length > 0) {
+    return includeDrafts ? existing : existing.filter((page) => !page.isDraft);
+  }
+
+  // No pages at all — the once-per-community case. NOW take the lock: two
+  // concurrent first-touches (two editor tabs, or a load racing a prefetch)
+  // would otherwise both pass find-then-insert and the loser would hit the home
+  // partial unique index as an opaque 500. `ensureHomePageInTransaction` skips
+  // the public wrapper's lock, so it has to be taken here.
+  //
+  // Racing into this branch is safe: the loser blocks on the lock, then
+  // `ensureHomePageInTransaction` finds the home page the winner just made.
   return db.transaction(async (tx) => {
-    // Locked even though this is a read: it can CREATE the home page, and two
-    // concurrent first-touches (two editor tabs, or a load racing a prefetch)
-    // would otherwise both pass find-then-insert and the loser would hit the home
-    // partial unique index as an opaque 500. Calling
-    // `ensureHomePageInTransaction` directly skips the public wrapper's lock, so
-    // the lock has to be taken here — this was the one entry point in the file
-    // without it.
     await lockCommunity(tx, communityId);
     await ensureHomePageInTransaction(communityId, tx);
     return listPagesInTransaction(communityId, tx, { includeDrafts });

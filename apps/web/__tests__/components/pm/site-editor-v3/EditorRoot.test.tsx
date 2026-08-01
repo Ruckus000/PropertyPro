@@ -207,7 +207,15 @@ const seededHome: StubPage = {
   deleteStagedAt: null,
 };
 
-function rootElement({ initialPages = [seededHome] }: { initialPages?: StubPage[] } = {}) {
+interface RootOptions {
+  initialPages?: StubPage[];
+  showWizardBanner?: boolean;
+}
+
+function rootElement({
+  initialPages = [seededHome],
+  showWizardBanner = false,
+}: RootOptions = {}) {
   return (
     <EditorRoot
       communityId={42}
@@ -229,7 +237,7 @@ function rootElement({ initialPages = [seededHome] }: { initialPages?: StubPage[
       tagline={null}
       initialSiteSettings={undefined}
       initialCustomCss={null}
-      showWizardBanner={false}
+      showWizardBanner={showWizardBanner}
       // The server seed. Its only job here is to supply the home page id before
       // the Pages panel has ever been opened — that id is what every block
       // write is scoped by.
@@ -238,7 +246,7 @@ function rootElement({ initialPages = [seededHome] }: { initialPages?: StubPage[
   );
 }
 
-function renderRoot(options: { initialPages?: StubPage[] } = {}) {
+function renderRoot(options: RootOptions = {}) {
   return render(rootElement(options));
 }
 
@@ -626,6 +634,82 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — the page being edited is staged for removal', () => {
+  // Writes to a staged page SUCCEED — `resolvePageId` checks only `deletedAt`,
+  // which staging does not set — so the editor reports "Saved" for work the next
+  // publish deletes. The only prior warning was a "Removing" badge in a panel
+  // tab the PM may never open.
+  const stagedSecondPage = {
+    ...seededHome,
+    id: SECOND_PAGE_ID,
+    name: 'Amenities',
+    slug: 'amenities',
+    sortOrder: 1,
+    isHome: false,
+    deleteStagedAt: '2026-07-30T09:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    queries.draft = [hero(), block({ id: 1 })];
+  });
+
+  it('warns on the editing surface, naming the page', async () => {
+    queries.pages = [seededHome, stagedSecondPage];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    const banner = screen.getByTestId('staged-page-banner');
+    expect(banner).toHaveTextContent('Amenities');
+    expect(banner).toHaveTextContent(/removed/i);
+  });
+
+  it('says nothing when the selected page is not staged', () => {
+    queries.pages = [seededHome, { ...stagedSecondPage, deleteStagedAt: null }];
+
+    renderRoot();
+
+    expect(screen.queryByTestId('staged-page-banner')).not.toBeInTheDocument();
+  });
+
+  it('takes the banner slot from the wizard invitation', async () => {
+    // One slot, and the removal wins it: the wizard banner is an invitation with
+    // no deadline, this is the only thing on screen saying the work in progress
+    // is about to be deleted.
+    queries.pages = [seededHome, stagedSecondPage];
+
+    renderRoot({ showWizardBanner: true });
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByTestId('staged-page-banner')).toBeInTheDocument();
+    expect(screen.queryByTestId('wizard-entry-banner')).not.toBeInTheDocument();
+  });
+
+  it('still shows the wizard invitation when nothing is staged', () => {
+    // The precedence must be conditional, not a permanent eviction.
+    queries.pages = [seededHome];
+
+    renderRoot({ showWizardBanner: true });
+
+    expect(screen.getByTestId('wizard-entry-banner')).toBeInTheDocument();
+  });
+
+  it('sends the PM to Pages, where the removal can be cancelled', async () => {
+    queries.pages = [seededHome, stagedSecondPage];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Go to Pages' }));
+
+    expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
   });
 });
 

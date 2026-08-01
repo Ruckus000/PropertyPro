@@ -87,6 +87,8 @@ const Inspector = dynamic(() => import('./Inspector').then((m) => m.Inspector), 
 });
 
 import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { Button } from '@/components/ui/button';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
 import { SectionList } from './panels/SectionList';
@@ -377,6 +379,27 @@ export function EditorRoot({
     [blocks, effectivePageId],
   );
 
+  /*
+   * The page being edited is on its way out.
+   *
+   * Said on the EDITING surface, not only as a "Removing" badge in the Pages
+   * panel — that badge is in a tab the PM may never open, and the whole failure
+   * is someone editing a page they do not know is going away. Writes to a staged
+   * page SUCCEED (`resolvePageId` checks only `deletedAt`, which staging does
+   * not set), so the editor happily reports "Saved" for work the next publish
+   * will delete. Nothing else on screen contradicts that.
+   *
+   * Not blocked, only announced: the removal is still cancellable, and a PM who
+   * changes their mind may legitimately keep editing. Refusing the write would
+   * break that, and it is not this component's call to make.
+   *
+   * Shown to whoever staged it as well as to a co-manager. It is equally true
+   * for both, and telling them apart would need an actor identity the client
+   * does not have.
+   */
+  const selectedPage = pages?.find((page) => page.id === effectivePageId);
+  const selectedPageIsStaged = selectedPage?.deleteStagedAt != null;
+
   // Selecting a section on the canvas pulls the Sections panel forward, so the
   // controls for what you just clicked are visible without a second action.
   const handleSelect = useCallback(() => setActiveTool('sections'), []);
@@ -471,7 +494,27 @@ export function EditorRoot({
         // nothing while idle with no prior save, so this stays invisible until
         // the PM actually edits something.
         status={<AutosaveStatusLine />}
-        banner={showWizardBanner ? <WizardEntryBanner communityId={communityId} /> : null}
+        // One slot, and the removal wins it: the wizard banner is an invitation
+        // with no deadline, this is the only thing on screen saying the work in
+        // progress is about to be deleted.
+        banner={
+          selectedPageIsStaged ? (
+            <AlertBanner
+              role="alert"
+              data-testid="staged-page-banner"
+              status="warning"
+              title={`"${selectedPage?.name ?? 'This page'}" is set to be removed.`}
+              description="It stays on your live site until you publish, and the publish deletes it along with everything on it — including anything you change here now."
+              action={
+                <Button size="sm" variant="outline" onClick={() => setActiveTool('pages')}>
+                  Go to Pages
+                </Button>
+              }
+            />
+          ) : showWizardBanner ? (
+            <WizardEntryBanner communityId={communityId} />
+          ) : null
+        }
         renderToolPanel={(tool) => {
           if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
           if (tool === 'add') {

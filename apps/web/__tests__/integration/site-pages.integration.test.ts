@@ -603,6 +603,57 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(replacement.name).toBe('Events');
   });
 
+  /*
+   * These two are REGRESSION tests for the lock-free refactor, not proof of it.
+   *
+   * Stated plainly because the distinction has bitten this PR repeatedly: both
+   * cases pass with the fast path removed, and that is correct — the change is
+   * purely about which transactions take `FOR UPDATE`, and the service's API
+   * cannot observe that. What they pin is that the refactor did not change any
+   * ANSWER: both branches still return the same pages, and the lazy ensure still
+   * seeds home exactly once.
+   *
+   * Verified by reverting: with the fast path deleted, both still pass. Do not
+   * read them as evidence the lock was removed.
+   */
+  it('creates the home page on a community that has none, and reads without doing so afterwards', async () => {
+    const communityId = await createCommunity('lazy-ensure');
+
+    // No pages yet: the slow branch runs and seeds home.
+    const first = await listSitePages(communityId, { includeDrafts: true });
+    expect(first).toHaveLength(1);
+    expect(first[0]?.isHome).toBe(true);
+
+    // Now the fast branch. Same answer, and it must not create a second home —
+    // which is also what would happen if the emptiness check were wrong.
+    const second = await listSitePages(communityId, { includeDrafts: true });
+    expect(second).toHaveLength(1);
+    expect(second[0]?.id).toBe(first[0]?.id);
+  });
+
+  it('does not re-run the ensure for a community whose only page is a DRAFT home', async () => {
+    // The landmine the unfiltered read exists to avoid. A community that has
+    // never published has a draft home, so deciding the fast path on an
+    // `includeDrafts: false` read would come back empty and take the lock on
+    // EVERY call — for exactly the communities most likely to be new. Both
+    // current callers pass `includeDrafts: true`, so this would have sat unnoticed.
+    //
+    // Same caveat as above: this pins the ANSWER (a filtered view being empty
+    // must not provoke a second home page), not the lock behaviour.
+    const communityId = await createCommunity('draft-home-only');
+    const homePageId = await ensureHomePage(communityId);
+
+    const publishedOnly = await listSitePages(communityId, { includeDrafts: false });
+    expect(publishedOnly).toEqual([]);
+
+    // The draft home is still there and still the only page — the filtered view
+    // being empty must not have provoked a second one.
+    const all = await listSitePages(communityId, { includeDrafts: true });
+    expect(all).toHaveLength(1);
+    expect(all[0]?.id).toBe(homePageId);
+    expect(all[0]?.isDraft).toBe(true);
+  });
+
   it('refuses to CANCEL a removal when the name has since been taken', async () => {
     // The other side of freeing the name, and the hole freeing it opened.
     // "Cancel removal" is always offered and has no time limit, so without a

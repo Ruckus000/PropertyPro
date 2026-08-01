@@ -89,6 +89,24 @@ export function useSitePages(communityId: number) {
       );
       return payload.pages;
     },
+    /*
+     * Overrides the app-wide `refetchOnWindowFocus: false` for this query
+     * alone, because this is the one list a SECOND person can invalidate.
+     *
+     * A co-manager staging a page for removal, or publishing that removal,
+     * changes what the page list means — and writes to a staged page still
+     * SUCCEED (`resolvePageId` checks only `deletedAt`, which staging does not
+     * set). So a manager who left the tab open kept editing, kept seeing
+     * "Saved", and lost the work at the other manager's publish. With the
+     * global default they would never learn: `staleTime` is 60s but nothing
+     * triggers the refetch.
+     *
+     * Focus is the right trigger rather than an interval: it costs nothing
+     * while they work, and returning to the tab is exactly when a stale editor
+     * becomes dangerous. Affordable because `listSitePages` no longer locks the
+     * community row on the common path.
+     */
+    refetchOnWindowFocus: true,
   });
 }
 
