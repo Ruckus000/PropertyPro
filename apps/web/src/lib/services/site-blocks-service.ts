@@ -450,6 +450,28 @@ export async function upsertPublishedBlock({
   const db = createUnscopedClient();
 
   await db.transaction(async (tx) => {
+    // Serialize against concurrent publishes, reorders and other block writes
+    // for this community — the same lock `reorderSiteBlock`, `removeSiteBlock`,
+    // `publishCommunitySite`, `discardSiteDrafts` and `revertToSnapshot` all
+    // take. This was the one write path in the file that skipped it.
+    //
+    // It became load-bearing when D-SLOT dropped the draft predicate from
+    // `assertSlotFreeAcrossPages` below. That widened the guard to the
+    // CROSS-LAYER case — a draft on page A against a PUBLISHED row on page B at
+    // the same slot — which no index covers, because the surviving
+    // `(community_id, block_order, is_draft)` index sees the two rows as
+    // distinct. Before the widening a lost race degraded to a unique violation:
+    // an opaque 500, but loud and immediate. After it, a lost race COMMITS, and
+    // the damage surfaces at the next publish as a unique violation that rolls
+    // the whole publish back and keeps rolling it back — a community that can
+    // no longer publish anything, with an error naming an index rather than a
+    // page, days after the write that caused it.
+    //
+    // A read-then-write guard is only as good as the lock under it.
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
     const pageId = await resolvePageId(communityId, requestedPageId, tx);
     await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, tx);
     // Scoped client bound to the transaction — preserves tenant isolation

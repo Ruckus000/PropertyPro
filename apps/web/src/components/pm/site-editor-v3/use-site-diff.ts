@@ -28,8 +28,11 @@
  *
  * ## `useContentBlocks` here stays WHOLE-SITE (Phase 11b-3, D-C2)
  *
- * Every other editor surface — the canvas, the preview, the Add panel — narrows
- * the block list to the selected page. **This one must not.** A publish is
+ * The canvas, the preview, and the Sections panel + Inspector (via the provider,
+ * which `EditorRoot` narrows) all scope the block list to the selected page.
+ * The Add panel scopes only the page it WRITES to — its slot maths must keep
+ * seeing every page, or it allocates a slot another page already holds (D-C3).
+ * **This one must not scope at all.** A publish is
  * whole-site and atomic: the server promotes every draft row for the community
  * in one transaction, regardless of which page the PM happens to be looking at.
  * Page-filtering here would make the sheet under-report — the PM would review
@@ -98,6 +101,17 @@ export interface SiteDiffState {
   pageLabels: ReadonlyMap<string, string>;
   /** Group id → nav position, so page groups render in the site's own order. */
   pageRank: ReadonlyMap<string, number>;
+  /**
+   * `block_order` → the page id that slot's section lives on.
+   *
+   * Exposed for "Fix this" in the publish sheet. Blocking issues are computed
+   * from the WHOLE-SITE snapshot (D-C2 — the publish diff must see every page),
+   * while the editor context is scoped to the selected page, so an issue's slot
+   * routinely names a section the editor cannot currently reach. Without this
+   * the fix affordance silently does nothing for exactly the multi-page case
+   * this phase ships.
+   */
+  slotGroups: ReadonlyMap<number, string>;
   isPending: boolean;
   isError: boolean;
   error: Error | null;
@@ -260,6 +274,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     next,
     pageLabels,
     pageRank,
+    slotGroups,
     // The pages query joins the gate rather than degrading quietly. A publish
     // sheet rendered while the page list is missing would omit an entire class
     // of pending change — a staged page removal shows up nowhere else — and

@@ -227,8 +227,14 @@ describe('PagesPanel — selection', () => {
    *    fallback, 'falls back to the client pages query when the seed came back
    *    empty'. `EditorRoot` now DERIVES home rather than calling back to ask
    *    for it, so there is no callback left to assert on.
-   *  - does not repair while loading / leaves a valid selection alone → the
-   *    same guards, asserted where the effect now runs.
+   *  - leaves a valid selection alone → `EditorRoot`: 'swaps the list when the
+   *    page changes' asserts the selection stays put.
+   *  - does not repair while the list is loading → NOT re-asserted anywhere,
+   *    stated plainly rather than implied. `EditorRoot`'s repair requires
+   *    `home !== undefined`, which already fails whenever `pages` is
+   *    `undefined`, so the `pages !== undefined` clause is belt-and-braces and
+   *    a test for it would pass on either. The behaviour is safe; the coverage
+   *    is genuinely absent.
    *
    * They cannot be asserted here any more, and that is the point: this panel is
    * dynamically imported and mounted only while its own tab is active, so a
@@ -523,6 +529,31 @@ describe('PagesPanel — a staged page still holds its address', () => {
 
     expect(editor.getByText(/staged for removal still uses "\/amenities"/)).toBeInTheDocument();
     expect(editor.getByRole('button', { name: 'Save address' })).toBeDisabled();
+  });
+
+  it('offers no rename control on a staged page — absent, not disabled', async () => {
+    // `pageIssues` skips a staged page as a SUBJECT as well as a candidate, so
+    // the rename form's validation goes quiet on it: a clashing name shows no
+    // error, Save stays enabled, and the server refuses the write. Same
+    // "absent, not disabled" rule D32′ applies to the address control.
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, STAGED] });
+
+    const editor = await openSettings(user, 2);
+    expect(editor.queryByLabelText('Page name')).not.toBeInTheDocument();
+    expect(editor.queryByRole('button', { name: 'Save name' })).not.toBeInTheDocument();
+    // And the action that IS useful on a staged page stays reachable — it lives
+    // inside this same editor, so hiding the whole panel would have stranded it.
+    expect(editor.getByRole('button', { name: 'Cancel removal' })).toBeInTheDocument();
+  });
+
+  it('keeps the rename control on a page that is NOT staged', async () => {
+    // Scoped to staged rows, not a general removal of the control.
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    expect(editor.getByLabelText('Page name')).toBeInTheDocument();
   });
 
   it('still frees the staged page NAME, which has no unique index', async () => {

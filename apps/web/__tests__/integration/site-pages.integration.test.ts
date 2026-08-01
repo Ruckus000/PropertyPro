@@ -24,6 +24,7 @@ import {
   ensureHomePage,
   listSitePages,
   stageSitePageDelete,
+  unstageSitePageDelete,
   updateSitePage,
 } from '@/lib/services/site-pages-service';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
@@ -600,6 +601,59 @@ describeDb('multi-page site (db-backed integration)', () => {
       communityId, actorUserId, name: 'Events', slug: 'events-2026',
     });
     expect(replacement.name).toBe('Events');
+  });
+
+  it('refuses to CANCEL a removal when the name has since been taken', async () => {
+    // The other side of freeing the name, and the hole freeing it opened.
+    // "Cancel removal" is always offered and has no time limit, so without a
+    // re-check the sequence stage → create replacement → cancel leaves two live
+    // pages under one name. Nothing downstream stops it: `publishCommunitySite`
+    // runs `pageIssues`, which errors on the duplicate, so EVERY later publish
+    // is blocked — and the PM is told a name clashes right after doing
+    // something they think of as an undo.
+    //
+    // The clash cannot exist until the replacement is created, which is why the
+    // check belongs here and not at staging time.
+    const communityId = await createCommunity('unstage-name-clash');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const events = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events',
+    });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    await stageSitePageDelete({ communityId, actorUserId, pageId: events.id });
+    await createSitePage({ communityId, actorUserId, name: 'Events', slug: 'events-2026' });
+
+    await expect(
+      unstageSitePageDelete({ communityId, actorUserId, pageId: events.id }),
+    ).rejects.toThrow(ValidationError);
+
+    // Still staged — a refused cancel must not half-apply.
+    const pages = await listSitePages(communityId, { includeDrafts: true });
+    expect(pages.find((p) => p.id === events.id)?.deleteStagedAt).not.toBeNull();
+  });
+
+  it('still cancels a removal when nothing took the name', async () => {
+    // The guard must not make every cancel fail — the ordinary undo still works.
+    const communityId = await createCommunity('unstage-clean');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const events = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events',
+    });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    await stageSitePageDelete({ communityId, actorUserId, pageId: events.id });
+
+    const restored = await unstageSitePageDelete({
+      communityId, actorUserId, pageId: events.id,
+    });
+    expect(restored.deleteStagedAt).toBeNull();
   });
 
   it('refuses to publish when a page holds a slug reserved by an app route', async () => {

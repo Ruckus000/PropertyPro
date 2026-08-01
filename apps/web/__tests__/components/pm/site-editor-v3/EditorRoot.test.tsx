@@ -35,6 +35,8 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 const SECOND_PAGE_ID = 77;
 const HOME_PAGE_ID = 5;
 const CREATED_PAGE_ID = 91;
+/** A `block_order` held by a section on SECOND_PAGE_ID, not on home. */
+const FOREIGN_SLOT = 3;
 
 vi.mock('next/dynamic', () => ({
   __esModule: true,
@@ -76,7 +78,17 @@ vi.mock('next/dynamic', () => ({
             </button>
           </div>
         )
-      : () => null,
+      : // The publish sheet, stubbed only far enough to fire "Fix this". Its
+        // blocking issues come from the WHOLE-SITE diff while the editor
+        // context is page-scoped (D-C2), so the slot it hands back routinely
+        // names a section on another page — the case that regressed.
+        String(loader).includes('PublishSheet')
+        ? ({ onFixIssue }: { onFixIssue: (slot: number) => void }) => (
+            <button type="button" onClick={() => onFixIssue(FOREIGN_SLOT)}>
+              Fix this
+            </button>
+          )
+        : () => null,
 }));
 
 // The shell asks `(max-width: 767px)`: false = desktop. True would render the
@@ -534,11 +546,19 @@ describe('EditorRoot — selection repair and the just-created page', () => {
 
     renderRoot();
     await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+
+    // Captured BEFORE the switch. Text content alone cannot tell the two
+    // placements apart: put the region back inside the keyed provider and React
+    // mounts the new subtree with the string already in it, so
+    // `toHaveTextContent` passes either way — a live region announces changes it
+    // was mounted to observe, and jsdom has no notion of that. NODE IDENTITY is
+    // the only observable difference, so it is what this asserts.
+    const region = screen.getByTestId('site-page-announcement');
+
     await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
 
-    // Queried at the ROOT, not inside the panel: that is the assertion. A
-    // region inside the panel would not have survived to carry this.
-    expect(screen.getByTestId('site-page-announcement')).toHaveTextContent('Pool Rules added.');
+    expect(screen.getByTestId('site-page-announcement')).toBe(region);
+    expect(region).toHaveTextContent('Pool Rules added.');
   });
 
   it('does not leave a stale announcement on an ordinary page click', async () => {
@@ -555,6 +575,31 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('site-page-announcement')).toHaveTextContent('');
+  });
+
+  it('says so when it repairs the selection, rather than swapping pages silently', async () => {
+    // The common cause is a co-manager publishing a staged removal of the page
+    // you had open. A silent swap is the wrong-but-200 this repair exists to
+    // prevent, with the destination reversed: the canvas repopulates with
+    // home's sections, the PM keeps editing believing they are elsewhere, and
+    // every write now lands on the LIVE home page and succeeds.
+    queries.pages = [
+      seededHome,
+      { ...seededHome, id: SECOND_PAGE_ID, name: 'Amenities', slug: 'amenities', isHome: false },
+    ];
+
+    const { rerender } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    queries.pages = [seededHome];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [seededHome] }));
+    });
+
+    expect(screen.getByTestId('site-page-announcement')).toHaveTextContent(
+      /no longer available/i,
+    );
   });
 
   it('holds the selection on a page it has just created, before the list catches up', async () => {
@@ -580,6 +625,83 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — "Fix this" reaches a section on another page', () => {
+  // A regression introduced BY the D-C2 scoping. `PublishSheetMount` resolves
+  // the issue's slot against `movableSections`, which is now page-scoped, while
+  // the publish sheet's blocking issues come from the whole-site snapshot. So
+  // for an issue on a page the PM is not on, `find` returned undefined, the
+  // sheet closed, nothing was selected and nothing was said — the affordance
+  // for the one thing standing between the PM and a publish, dead in exactly
+  // the multi-page case this phase ships.
+  beforeEach(() => {
+    queries.published = [hero(), block({ id: 1, pageId: HOME_PAGE_ID })];
+    queries.draft = [
+      hero(),
+      block({ id: 1, pageId: HOME_PAGE_ID }),
+      block({
+        id: 2,
+        pageId: SECOND_PAGE_ID,
+        blockType: 'gallery',
+        blockOrder: FOREIGN_SLOT,
+        isDraft: true,
+        publishedAt: null,
+      }),
+    ];
+    queries.pages = [
+      seededHome,
+      {
+        ...seededHome,
+        id: SECOND_PAGE_ID,
+        name: 'Amenities',
+        slug: 'amenities',
+        sortOrder: 1,
+        isHome: false,
+      },
+    ];
+  });
+
+  it('switches to the page the offending section is on', async () => {
+    renderRoot();
+    // Precondition: on home, and the offending section is not reachable here.
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
+  });
+
+  it('stays put when the section is already on the selected page', async () => {
+    // The switch must be conditional, or every "Fix this" churns the selection
+    // and remounts the whole editor for no reason.
+    //
+    // Identical to the case above except for the offending block's PAGE — vary
+    // only the dimension under test, or a difference in the diff shape (and so
+    // in whether Publish is even enabled) could explain the result instead.
+    queries.draft = [
+      hero(),
+      block({ id: 1, pageId: HOME_PAGE_ID }),
+      block({
+        id: 2,
+        pageId: HOME_PAGE_ID,
+        blockType: 'gallery',
+        blockOrder: FOREIGN_SLOT,
+        isDraft: true,
+        publishedAt: null,
+      }),
+    ];
+
+    renderRoot();
+    await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });

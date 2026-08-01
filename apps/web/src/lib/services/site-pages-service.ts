@@ -173,7 +173,10 @@ export async function ensureHomePage(
   options: EnsureHomePageOptions = {},
 ): Promise<number> {
   // A caller's `tx` already holds the community lock — every entry point in this
-  // file and in site-blocks-service takes it first. When opening our own
+  // file, and every write path in site-blocks-service, takes it first. (That was
+  // not true until 11b-3: `upsertPublishedBlock` was the one exception, and it
+  // is what made D-SLOT's widened slot guard a read-then-write with nothing
+  // under it. Do not add another exception.) When opening our own
   // transaction we have to take it too: without it, two concurrent first-touches
   // of the same community both pass the find-then-insert and the loser hits
   // `site_pages_community_home_partial` as an opaque 500. The index keeps the data
@@ -396,7 +399,19 @@ async function assertNameAvailable(
   communityId: number,
   name: string,
   tx: Tx,
-  { excludePageId }: { excludePageId?: number } = {},
+  {
+    excludePageId,
+    summary,
+  }: {
+    excludePageId?: number;
+    /**
+     * Overrides the top-line message. The clash reads very differently
+     * depending on what the PM just did — "another page uses that name" is
+     * right for a rename, and baffling for someone who clicked "Cancel
+     * removal".
+     */
+    summary?: string;
+  } = {},
 ): Promise<void> {
   const trimmed = name.trim();
   if (trimmed.length === 0) return; // `assertUsableName` owns the empty case.
@@ -417,7 +432,7 @@ async function assertNameAvailable(
     (row) => row.id !== excludePageId && row.name.trim().toLowerCase() === target,
   );
   if (clash) {
-    throw new ValidationError('Another page already uses that name.', {
+    throw new ValidationError(summary ?? 'Another page already uses that name.', {
       fields: [{ field: 'name', message: `Another page is also called "${trimmed}".` }],
     });
   }
@@ -886,6 +901,25 @@ export async function unstageSitePageDelete({
     if (page.deleteStagedAt === null) {
       throw new ValidationError('That page is not staged for removal.');
     }
+
+    // Staging FREES this page's name (`assertNameAvailable` skips staged rows,
+    // deliberately — names have no unique index). So by the time a removal is
+    // cancelled, another page may legitimately have taken the name, and
+    // restoring this one would put two live pages under it. Nothing downstream
+    // stops that: `publishCommunitySite` runs `pageIssues`, which errors on the
+    // duplicate, so EVERY later publish is blocked — and the PM is told a name
+    // clashes, having last done something they think of as an undo.
+    //
+    // Re-checked here rather than at staging time, because the clash cannot
+    // exist until the replacement is created, which happens after.
+    //
+    // The slug needs no equivalent: a staged page keeps its row inside
+    // `site_pages_community_slug_partial`, so no replacement could ever have
+    // taken its address.
+    await assertNameAvailable(communityId, page.name, tx, {
+      excludePageId: pageId,
+      summary: `Another page is now called "${page.name.trim()}", so this one cannot be restored under that name. Rename the other page first.`,
+    });
 
     await scopedFor(communityId, tx).update(
       sitePages,

@@ -859,34 +859,48 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                   data-testid={`site-page-editor-${page.id}`}
                   className="space-y-3 rounded-md border border-edge p-3"
                 >
-                  <div className="space-y-1">
-                    <Label htmlFor={`${editorId}-name`}>Page name</Label>
-                    <Input
-                      id={`${editorId}-name`}
-                      value={nameDraft}
-                      onChange={(event) => setNameDraft(event.target.value)}
-                      aria-invalid={editNameErrors.length > 0}
-                    />
-                    {editNameErrors.length > 0 && (
-                      <p role="alert" className="text-xs text-status-danger">
-                        {editNameErrors.join(' ')}
-                      </p>
-                    )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={
-                        editNameErrors.length > 0 ||
-                        nameDraft.trim() === page.name ||
-                        updatePage.isPending
-                      }
-                      onClick={() =>
-                        saveField(page, { name: nameDraft.trim() }, `Page renamed to ${nameDraft.trim()}.`)
-                      }
-                    >
-                      Save name
-                    </Button>
-                  </div>
+                  {/*
+                    ABSENT on a staged page, not disabled — the same rule D32′
+                    applies to the address control just below.
+                    `pageIssues` skips a staged page as a SUBJECT as well as a
+                    candidate, so the validation goes quiet here: renaming a
+                    staged page onto a name another page holds shows no error
+                    and enables Save, and the server then refuses the write.
+                    Rather than teach the validator about a subject on its way
+                    out, drop the control — the useful action on a staged page
+                    is "Cancel removal", which is further down this same panel
+                    and stays reachable.
+                  */}
+                  {!staged && (
+                    <div className="space-y-1">
+                      <Label htmlFor={`${editorId}-name`}>Page name</Label>
+                      <Input
+                        id={`${editorId}-name`}
+                        value={nameDraft}
+                        onChange={(event) => setNameDraft(event.target.value)}
+                        aria-invalid={editNameErrors.length > 0}
+                      />
+                      {editNameErrors.length > 0 && (
+                        <p role="alert" className="text-xs text-status-danger">
+                          {editNameErrors.join(' ')}
+                        </p>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={
+                          editNameErrors.length > 0 ||
+                          nameDraft.trim() === page.name ||
+                          updatePage.isPending
+                        }
+                        onClick={() =>
+                          saveField(page, { name: nameDraft.trim() }, `Page renamed to ${nameDraft.trim()}.`)
+                        }
+                      >
+                        Save name
+                      </Button>
+                    </div>
+                  )}
 
                   {/* D32′: only a page that has never been published gets an
                       address control, and it is ABSENT — not disabled — on the

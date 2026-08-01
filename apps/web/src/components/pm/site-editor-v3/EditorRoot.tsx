@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
@@ -181,8 +182,11 @@ export interface EditorRootProps {
    * defaults to home), which is correct for the single-page communities that
    * are the overwhelming majority.
    *
-   * This is a SNAPSHOT, deliberately not kept live. `PagesPanel` owns the live
-   * query and reports selection changes back up; nothing here re-reads.
+   * A fast-path SEED for the first paint, not the source of truth. `EditorRoot`
+   * also holds the live `useSitePages` query — shared key with `useSiteDiff`, so
+   * no extra request — and drives the home-page fallback and selection repair
+   * off that. `PagesPanel` owns neither: it reports selection changes upward and
+   * is remounted by the page switch it triggers.
    */
   initialPages: SitePageSummary[];
 }
@@ -234,7 +238,7 @@ export function EditorRoot({
   // Shares the blocks query key, so this adds no request — and the publish
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
-  const { diff, isError: diffFailed } = useSiteDiff(communityId);
+  const { diff, isError: diffFailed, slotGroups } = useSiteDiff(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -271,9 +275,16 @@ export function EditorRoot({
    * the home-page default. Falling back to the client query turns a silently
    * wrong editor into a correct one that took an extra round-trip.
    */
+  // `?? pages[0]` is the same real fallback the repair below keeps, and it has
+  // to be on BOTH or they disagree: a community whose home flag is somehow
+  // unset would resolve to no page at all here, and `blocksForPage(blocks,
+  // null)` returns the list UNCHANGED — every page's sections on one canvas,
+  // every write defaulting to home. Repair cannot rescue that, because it only
+  // runs once a page has been explicitly selected.
   const homePageId =
     initialPages.find((page) => page.isHome)?.id ??
     pages?.find((page) => page.isHome)?.id ??
+    pages?.[0]?.id ??
     null;
   const effectivePageId = selectedPageId ?? homePageId;
 
@@ -334,7 +345,17 @@ export function EditorRoot({
   useEffect(() => {
     // Converges in one step: afterwards the selected id IS home's, so the
     // condition above is false and the effect does not re-fire.
-    if (selectionNeedsRepair && home) setSelectedPageId(home.id);
+    if (!selectionNeedsRepair || !home) return;
+    setSelectedPageId(home.id);
+    // SAID OUT LOUD, not done quietly. The common cause is a co-manager
+    // publishing a staged removal of the page you had open — and a silent swap
+    // is the wrong-but-200 this repair exists to prevent, only with the
+    // destination reversed: the canvas repopulates with home's sections, the PM
+    // keeps editing believing they are elsewhere, and every write now lands on
+    // the LIVE home page and succeeds.
+    const message = 'The page you were editing is no longer available. You are now editing the home page.';
+    setPageAnnouncement(message);
+    toast.info(message);
   }, [home, selectionNeedsRepair]);
 
   /*
@@ -364,7 +385,28 @@ export function EditorRoot({
   // "Fix this" hands back a block_order slot. Surfacing the Sections panel is
   // this component's job; selecting the row needs the editor context, so it
   // happens one level down in PublishSheetMount.
-  const handleSelectSlot = useCallback(() => setActiveTool('sections'), []);
+  //
+  // It also switches PAGE when the offending section is on another one. Since
+  // D-C2 the editor context is page-scoped while the publish sheet's issues
+  // come from the whole-site snapshot, so an issue's slot routinely names a
+  // section the current page's `movableSections` does not contain — and
+  // `PublishSheetMount`'s `find` would silently return undefined, closing the
+  // sheet and selecting nothing. The slot → page map comes from `useSiteDiff`,
+  // which already builds it for change grouping.
+  const handleSelectSlot = useCallback(
+    (slot: number) => {
+      setActiveTool('sections');
+      const group = slotGroups.get(slot);
+      if (group === undefined) return;
+      const targetPageId = Number(group);
+      // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
+      if (!Number.isFinite(targetPageId) || targetPageId === effectivePageId) return;
+      setSelectedPageId(targetPageId);
+      setPendingSelectionId(null);
+      setPageAnnouncement('');
+    },
+    [effectivePageId, slotGroups],
+  );
   // The empty states in the Sections panel and on the canvas both name adding a
   // section; this is what makes them able to do it. Passed as a prop rather
   // than read from context because `setActiveTool` lives HERE — the provider's

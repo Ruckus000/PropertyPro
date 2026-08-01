@@ -41,7 +41,12 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
-vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: toastError } }));
+// `dismiss` is here because `useUndoableRemove` takes the undo toast down
+// when its section unmounts. A factory missing a newly-added export yields
+// `undefined` at call time, which reads as an unrelated component breaking.
+vi.mock('sonner', () => ({
+  toast: { success: toastSuccess, error: toastError, dismiss: vi.fn() },
+}));
 
 /** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
 const HOME_PAGE_ID = 10;

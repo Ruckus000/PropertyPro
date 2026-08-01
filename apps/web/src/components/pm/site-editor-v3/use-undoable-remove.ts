@@ -121,9 +121,30 @@ export function useUndoableRemove(
     }
   }, []);
 
+  /** The live undo toast, so unmounting can take the affordance with it. */
+  const toastIdRef = useRef<string | number | null>(null);
+
   // Unmounting the canvas (navigating away, discarding drafts) must not leave a
   // live timer holding a payload for a slot this session no longer owns.
-  useEffect(() => release, [release]);
+  //
+  // The toast has to go WITH it. Sonner renders outside this tree, so it
+  // survives an unmount that has just dropped `pendingRef` — leaving a visible,
+  // clickable "Undo" whose handler returns early and does nothing at all. A
+  // page switch makes that routine rather than exotic: D-SEL keys the provider
+  // on the page id, so switching pages inside the 10-second window unmounts
+  // every SectionShell. Silently doing nothing is the worst of the three
+  // options; dismissing is honest, and the removal is still recoverable by
+  // re-adding until publish.
+  useEffect(
+    () => () => {
+      if (toastIdRef.current !== null) {
+        toast.dismiss(toastIdRef.current);
+        toastIdRef.current = null;
+      }
+      release();
+    },
+    [release],
+  );
 
   const label = sectionLabel(block.blockType);
 
@@ -187,7 +208,7 @@ export function useUndoableRemove(
           pendingRef.current = { token, input: restorable };
           timerRef.current = setTimeout(release, UNDO_WINDOW_MS);
 
-          toast.success(message, {
+          toastIdRef.current = toast.success(message, {
             duration: UNDO_WINDOW_MS,
             dismissible: true,
             closeButton: true,

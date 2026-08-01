@@ -239,23 +239,23 @@ describe('useSiteDiff — page changes', () => {
     expect(result.current.diff.changes.filter((c) => c.key.startsWith('page:'))).toHaveLength(0);
   });
 
-  it('reports nothing for a draft home that is also staged for removal', () => {
-    // Belt and braces from two independent directions, which is why the
-    // exclusion above does not need a `deleteStaged` arm of its own: the filter
-    // drops this row, and `diffPages` would ALSO treat it as a net non-event
-    // (never published, already staged — publishing it neither creates nor
-    // destroys anything a visitor could have seen). Pinned so that removing
-    // either one does not silently start reporting a phantom change.
-    queries.published = [];
-    queries.draft = [];
-    queries.pages = [
-      { ...HOME_PAGE, isDraft: true, publishedAt: null, deleteStagedAt: '2026-07-30T09:00:00.000Z' },
-    ];
+  /*
+   * A case for "a draft home that is ALSO staged for removal" used to sit here,
+   * claiming to pin both the filter above and `diffPages`' never-published-and-
+   * staged short circuit. It pinned neither: each mechanism independently
+   * produces zero changes, so only removing BOTH would have failed it — the
+   * inverse of what it claimed.
+   *
+   * It was also unreachable. `stageSitePageDelete` refuses the home page
+   * outright, so no such row can exist. Deleted rather than repaired: a case
+   * that cannot fail, guarding a state that cannot occur, reads as coverage
+   * without being any.
+   *
+   * The filter itself is pinned by the sibling case above; `diffPages`' short
+   * circuit is pinned in `diff-pages.test.ts`, against a reachable non-home
+   * page.
+   */
 
-    const { result } = renderHook(() => useSiteDiff(42));
-
-    expect(result.current.diff.changes.filter((c) => c.key.startsWith('page:'))).toHaveLength(0);
-  });
 
   it('reports a staged page removal, carrying the flag the undo affordance keys on', () => {
     queries.published = [hero(), block({ id: 1 })];
