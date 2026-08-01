@@ -144,11 +144,41 @@ describe('PreviewDialog — open state', () => {
     expect(screen.queryByText('About us')).not.toBeInTheDocument();
   });
 
-  it('has an accessible name naming the community', () => {
+  it('falls back to the community name when the page is not known', () => {
+    // The pages read can genuinely fail. A community-named preview is a worse
+    // title than a page-named one and a far better one than an empty heading.
     renderDialog();
     expect(
       screen.getByRole('dialog', { name: /Preview — Sunset Condos/ }),
     ).toBeInTheDocument();
+  });
+
+  it('names the PAGE it is previewing, not the community', () => {
+    // The dialog renders exactly one page (D-C2). Titling it after the
+    // community reads as "this is your site" over a single page's sections —
+    // the misreading the scoping exists to prevent, restated in the heading.
+    //
+    // Revert check (production line): `PreviewDialog.tsx`'s
+    // `${pageName ?? context.community.name}`. Reverting only that expression
+    // to `context.community.name` turns this red and leaves the fallback case
+    // above green.
+    render(
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <PreviewDialog
+          open
+          onOpenChange={onOpenChange}
+          communityId={7}
+          context={CONTEXT}
+          pageName="Amenities"
+          now={NOW}
+        />
+      </SelectedSitePageProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: /Preview — Amenities/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: /Preview — Sunset Condos/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {

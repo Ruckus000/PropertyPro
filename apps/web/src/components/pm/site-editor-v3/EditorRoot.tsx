@@ -260,19 +260,45 @@ export function EditorRoot({
    * the panel on the same switch that sets the mark.
    */
   const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(null);
+  /**
+   * A `block_order` the PM asked to fix on a page they were not on. Handed to
+   * the provider that replaces the current one, which selects it on mount —
+   * see `SiteEditorProviderProps.selectSlotOnMount`.
+   *
+   * Owned here rather than in `PublishSheetMount` for the same reason
+   * `pendingSelectionId` is: the page switch that creates the need also
+   * remounts everything below the `key`, so a mark held down there dies with
+   * the instance that set it.
+   */
+  const [pendingSelectSlot, setPendingSelectSlot] = useState<number | null>(null);
+  /**
+   * A page THIS PM just deleted outright, so the repair below can move the
+   * selection without announcing it — see `PagesPanelProps.onPageRemoved`.
+   *
+   * Cleared as soon as it is consumed, and never used to skip the repair
+   * itself: the selection still has to move, it just does not need narrating
+   * back to the person who caused it.
+   */
+  const [selfRemovedPageId, setSelfRemovedPageId] = useState<number | null>(null);
+  const handlePageRemoved = useCallback((pageId: number) => setSelfRemovedPageId(pageId), []);
 
   // Shares `useSiteDiff`'s query key, so this adds no request — the diff calls
   // `useSitePages` internally and unconditionally. Read here because selection
   // is owned at this level and so is everything that repairs it.
-  const { data: pages } = useSitePages(communityId);
+  const { data: pages, isError: pagesFailed, refetch: refetchPages } = useSitePages(communityId);
 
   /*
    * The server seed is the fast path, NOT the only one.
    *
-   * `loadInitialPages` returns `[]` on any error, and that read takes the same
-   * `FOR UPDATE` community lock a concurrent publish holds — so routine
-   * contention, not just a broken database, can empty it. A null
-   * `effectivePageId` is not a harmless "not known yet" here:
+   * `loadInitialPages` returns `[]` on any error, and the fallback matters
+   * whatever the cause. (An earlier version of this comment justified it by
+   * "routine contention on the `FOR UPDATE` community lock". That reasoning
+   * expired with the lock-free refactor: `listSitePages` now locks only on the
+   * branch that creates a missing home page, so a mature community's read
+   * contends with nothing. The remaining causes are ordinary — a timeout, a
+   * connection blip, a failed deploy of one lambda — and none of them is rare
+   * enough to leave unhandled.) A null `effectivePageId` is not a harmless
+   * "not known yet" here:
    * `blocksForPage(blocks, null)` returns the list UNCHANGED, which would
    * concatenate every page's sections into one canvas and send every write to
    * the home-page default. Falling back to the client query turns a silently
@@ -290,6 +316,30 @@ export function EditorRoot({
     pages?.[0]?.id ??
     null;
   const effectivePageId = selectedPageId ?? homePageId;
+
+  /*
+   * BOTH page reads failed, and that is not a degraded editor — it is a wrong
+   * one.
+   *
+   * The seed returns `[]` on error and the client query can fail for the same
+   * reason (the same lock, the same database). `effectivePageId` is then null,
+   * and `blocksForPage(blocks, null)` returns the list UNCHANGED: every page's
+   * sections concatenated into one canvas, with no banner. Adds land on the
+   * live home page, and editing a section that belongs to another page fails
+   * with "Position 7 is already used by another page" — an instruction the
+   * editor offers no control to follow.
+   *
+   * `use-selected-site-page.tsx` states the invariant this violates in its own
+   * header: the editor must not render block-editing affordances before it
+   * knows which page is selected. So when this is true, it does not — the
+   * canvas, the Add panel and the Inspector are all withheld and the PM is told
+   * why, with a retry.
+   *
+   * `pagesFailed` specifically, not `pages === undefined`: a query still in
+   * flight is a normal first paint, and blanking the editor on it would flash a
+   * failure banner on every load.
+   */
+  const pagesUnavailable = effectivePageId === null && pagesFailed;
 
   /**
    * Announcement for a page change that has no visible confirmation of its own.
@@ -309,6 +359,10 @@ export function EditorRoot({
       // mark from an earlier creation would suppress repair for a page the PM
       // has since navigated away from.
       setPendingSelectionId(options?.pending ? pageId : null);
+      // An ordinary page change abandons a "Fix this" that never resolved.
+      // Leaving it armed would let it fire on some later remount, moving a
+      // selection the PM did not ask for.
+      setPendingSelectSlot(null);
       setPageAnnouncement(options?.announce ?? '');
     },
     [],
@@ -349,17 +403,28 @@ export function EditorRoot({
     // Converges in one step: afterwards the selected id IS home's, so the
     // condition above is false and the effect does not re-fire.
     if (!selectionNeedsRepair || !home) return;
+    const selfInflicted = selectedPageId === selfRemovedPageId;
     setSelectedPageId(home.id);
-    // SAID OUT LOUD, not done quietly. The common cause is a co-manager
-    // publishing a staged removal of the page you had open — and a silent swap
-    // is the wrong-but-200 this repair exists to prevent, only with the
-    // destination reversed: the canvas repopulates with home's sections, the PM
-    // keeps editing believing they are elsewhere, and every write now lands on
-    // the LIVE home page and succeeds.
+    setSelfRemovedPageId(null);
+    // SAID OUT LOUD, not done quietly — unless the PM did it themselves.
+    //
+    // The common cause is a co-manager publishing a staged removal of the page
+    // you had open, and a silent swap is the wrong-but-200 this repair exists
+    // to prevent, only with the destination reversed: the canvas repopulates
+    // with home's sections, the PM keeps editing believing they are elsewhere,
+    // and every write now lands on the LIVE home page and succeeds.
+    //
+    // But the same effect also fires one tick after the PM deletes the page
+    // they were on, which already toasted "X was deleted." Telling them a page
+    // is "no longer available" immediately afterwards describes their own
+    // action back at them as if it were someone else's, and the alarm that
+    // matters is the one that never cries wolf. The repair still RUNS — only
+    // the announcement is suppressed.
+    if (selfInflicted) return;
     const message = 'The page you were editing is no longer available. You are now editing the home page.';
     setPageAnnouncement(message);
     toast.info(message);
-  }, [home, selectionNeedsRepair]);
+  }, [home, selectionNeedsRepair, selectedPageId, selfRemovedPageId]);
 
   /*
    * D-C2. The provider feeds `SectionList` — the DEFAULT tool — and the
@@ -398,13 +463,46 @@ export function EditorRoot({
    * for both, and telling them apart would need an actor identity the client
    * does not have.
    */
-  // `?? initialPages` for the same reason `homePageId` reads the seed first:
-  // the RSC seed and the client query fail independently, and the seed carries
-  // `deleteStagedAt` too. Reading only `pages` would make the warning silently
-  // absent for a session whose pages query is failing — the one session least
-  // able to notice anything else is wrong.
+  // `?? initialPages` because the RSC seed and the client query fail
+  // independently, and the seed carries `deleteStagedAt` too: reading only
+  // `pages` would make the warning silently absent for a session whose pages
+  // query is failing — the one session least able to notice anything else is
+  // wrong.
+  //
+  // Note this is the OPPOSITE precedence to `homePageId`, which reads the seed
+  // first. An earlier comment here claimed the two were the same rule; they are
+  // not, and both are deliberate. `homePageId` wants the value available on the
+  // FIRST paint, before any query resolves, because a null page id makes
+  // `blocksForPage` return every page's blocks. This wants the FRESHEST value,
+  // because staging happens after load and a seed that predates it would hide a
+  // removal the PM needs to see. Residual: if the query never succeeds, this
+  // falls back to a seed that can be stale — an under-warning, which is the
+  // safer direction than warning about a removal that was cancelled.
   const selectedPage = (pages ?? initialPages).find((page) => page.id === effectivePageId);
   const selectedPageIsStaged = selectedPage?.deleteStagedAt != null;
+
+  /*
+   * `publicSiteUrl` is passed through as the community ROOT, deliberately.
+   *
+   * Round 5 asked for it to carry the selected page's slug ("'View site' never
+   * opens the page being edited"). It cannot, and the reason is worth writing
+   * down so the next round does not re-derive it: the editor has no desktop
+   * "View site" affordance at all. `EditorShell` forwards this prop to exactly
+   * one consumer, `PhoneGate`, which it returns INSTEAD of the editor on a
+   * narrow viewport — so on every render that reads this link, the Pages panel
+   * has never been mounted, `selectedPageId` is still null, and
+   * `effectivePageId` is the seeded home page whose slug is `''`. A
+   * page-suffixed URL would be dead code that reads as a working feature.
+   *
+   * (`DomainPanel` has its own "View site" link, but that one points at the
+   * community's CUSTOM domain root and is about DNS, not about which page is
+   * open.)
+   *
+   * The other half of that finding — the preview never naming the page — was
+   * real and is fixed: `PreviewDialog` is page-scoped and now titled after the
+   * page. Giving the editor a desktop "open this page" link is a new
+   * affordance, not a correction, and belongs in its own change.
+   */
 
   // Selecting a section on the canvas pulls the Sections panel forward, so the
   // controls for what you just clicked are visible without a second action.
@@ -422,6 +520,13 @@ export function EditorRoot({
   // `PublishSheetMount`'s `find` would silently return undefined, closing the
   // sheet and selecting nothing. The slot → page map comes from `useSiteDiff`,
   // which already builds it for change grouping.
+  //
+  // Switching page was only HALF the fix, and the other half was missing for a
+  // round: `PublishSheetMount` resolves the slot against the PRE-switch
+  // `movableSections`, so on a cross-page issue it finds nothing — and even if
+  // it did, the `key` remount would discard the selection. So the intent is
+  // parked in `pendingSelectSlot` and honoured by the provider that replaces
+  // this one, which is the first instance whose blocks are the right page's.
   const handleSelectSlot = useCallback(
     (slot: number) => {
       setActiveTool('sections');
@@ -432,10 +537,12 @@ export function EditorRoot({
       if (!Number.isFinite(targetPageId) || targetPageId === effectivePageId) return;
       setSelectedPageId(targetPageId);
       setPendingSelectionId(null);
+      setPendingSelectSlot(slot);
       setPageAnnouncement('');
     },
     [effectivePageId, slotGroups],
   );
+  const handleSlotSelected = useCallback(() => setPendingSelectSlot(null), []);
   // The empty states in the Sections panel and on the canvas both name adding a
   // section; this is what makes them able to do it. Passed as a prop rather
   // than read from context because `setActiveTool` lives HERE — the provider's
@@ -480,10 +587,16 @@ export function EditorRoot({
         communityId={communityId}
         blocks={pageBlocks}
         onSelect={handleSelect}
+        // Cross-page "Fix this": this instance is the one that can resolve it.
+        selectSlotOnMount={pendingSelectSlot}
+        onSlotSelected={handleSlotSelected}
       >
       <AutosaveStatusProvider>
       <EditorShell
         communityName={communityName}
+        // The only thing on screen naming the page while the Sections tool is
+        // open — see `EditorTopBarProps.pageName`.
+        pageName={selectedPage?.name}
         publicSiteUrl={publicSiteUrl}
         proToolAccess={proToolAccess}
         communityId={communityId}
@@ -505,7 +618,19 @@ export function EditorRoot({
         // with no deadline, this is the only thing on screen saying the work in
         // progress is about to be deleted.
         banner={
-          selectedPageIsStaged ? (
+          pagesUnavailable ? (
+            <AlertBanner
+              data-testid="pages-unavailable-banner"
+              status="danger"
+              title="We couldn't load this site's pages."
+              description="Editing is paused until we know which page you're on — without it, changes could be saved to the wrong page. Your site is unchanged."
+              action={
+                <Button size="sm" variant="outline" onClick={() => void refetchPages()}>
+                  Try again
+                </Button>
+              }
+            />
+          ) : selectedPageIsStaged ? (
             <AlertBanner
               data-testid="staged-page-banner"
               status="warning"
@@ -522,6 +647,18 @@ export function EditorRoot({
           ) : null
         }
         renderToolPanel={(tool) => {
+          // Nothing that writes a BLOCK is offered while the page is unknown —
+          // a write with no page id defaults to the live home page, which is
+          // precisely the silent wrong-page save the banner is warning about.
+          // The site/branding/domain/help tools are unaffected: they are not
+          // page-scoped.
+          if (pagesUnavailable && (tool === 'sections' || tool === 'add')) {
+            return (
+              <p className="p-4 text-sm text-content-secondary">
+                Sections are unavailable until this site&apos;s pages load.
+              </p>
+            );
+          }
           if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
           if (tool === 'add') {
             return <AddPanel communityId={communityId} hasPolishBlocks={hasPolishBlocks} />;
@@ -569,6 +706,7 @@ export function EditorRoot({
                 communityId={communityId}
                 selectedPageId={effectivePageId}
                 onSelectPage={handleSelectPage}
+                onPageRemoved={handlePageRemoved}
               />
             );
           }
@@ -581,10 +719,22 @@ export function EditorRoot({
           return unhandled;
         }}
         // Returns null when nothing is selected, so passing it unconditionally
-        // costs an empty render rather than a branch here.
-        inspector={<Inspector communityId={communityId} />}
+        // costs an empty render rather than a branch here — except while the
+        // page is unknown, where an inspector save would target home.
+        inspector={pagesUnavailable ? null : <Inspector communityId={communityId} />}
       >
-        {canvasContext ? (
+        {pagesUnavailable ? (
+          // NOT the unfiltered canvas. `blocksForPage(blocks, null)` returns
+          // every page's sections in one scroll, which is a plausible-looking
+          // editor for a site that does not exist at any URL.
+          <div className="mx-auto max-w-[1000px] px-5 py-4">
+            <div className="rounded-[var(--radius-md)] border border-dashed border-edge-strong bg-surface-card p-10 text-center">
+              <p className="text-sm text-content-secondary">
+                Your sections are hidden until we know which page you&apos;re editing.
+              </p>
+            </div>
+          </div>
+        ) : canvasContext ? (
           <Canvas
             communityId={communityId}
             context={canvasContext}
@@ -607,6 +757,8 @@ export function EditorRoot({
           onOpenChange={setPreviewOpen}
           communityId={communityId}
           context={canvasContext}
+          // The dialog renders ONE page, so it is titled after that page.
+          pageName={selectedPage?.name}
         />
       ) : null}
 
@@ -650,6 +802,15 @@ function PublishSheetMount({
       onFixIssue(slot);
       // `Issue.slot` is a block_order, not an index — resolve it against the
       // current list rather than treating it as a position.
+      //
+      // This handles the SAME-page case only, and deliberately. `movableSections`
+      // here is still the pre-switch page's — `onFixIssue` has only queued a
+      // state update — so on a cross-page issue `find` returns undefined and
+      // this no-ops. That case is served by `selectSlotOnMount` on the provider
+      // `EditorRoot` is about to remount, which is the first instance holding
+      // the target page's blocks. Do not "fix" this by reaching for the new
+      // page's list here: there isn't one yet, and the instance that would hold
+      // the selection is about to be thrown away.
       const target = movableSections.find((b) => b.blockOrder === slot);
       if (target) select(target.id);
     },

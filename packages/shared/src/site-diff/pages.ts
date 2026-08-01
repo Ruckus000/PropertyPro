@@ -214,8 +214,17 @@ export function pageIssues({
     // removal, so a PM reads it as already gone), and the two ways out —
     // publish the removal, or "Cancel removal" — are not guessable from
     // "another page already uses this".
+    // No `&& stagedOwner !== page.pageId` here, unlike the two clashes below.
+    // It cannot fire: `stagedSlugOwners` is built ONLY from pages with
+    // `deleteStaged === true`, and this loop iterates `live`, which is the
+    // complement of that set — so the owner is never this page. It was
+    // unreachable-true, which made `pages.test.ts`'s "does not accuse the
+    // staged page of clashing with itself" pass for a reason unrelated to what
+    // it claimed (the staged page is filtered out of `live` and is never a loop
+    // SUBJECT at all). Deleting the conjunct is behaviour-preserving; keeping
+    // it invited exactly that misreading.
     const stagedOwner = stagedSlugOwners.get(page.slug);
-    if (stagedOwner !== undefined && stagedOwner !== page.pageId) {
+    if (stagedOwner !== undefined) {
       issues.push(
         issue(
           page.pageId,

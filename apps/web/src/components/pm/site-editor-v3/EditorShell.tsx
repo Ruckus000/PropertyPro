@@ -14,6 +14,8 @@ const PANEL_ID = 'site-editor-tool-panel';
 
 export interface EditorShellProps {
   communityName: string;
+  /** Forwarded to the top bar; see `EditorTopBarProps.pageName` (Phase 11b-3). */
+  pageName?: string;
   publicSiteUrl: string | null;
   proToolAccess: ProToolAccess;
   /**
@@ -63,6 +65,7 @@ export interface EditorShellProps {
  */
 export function EditorShell({
   communityName,
+  pageName,
   publicSiteUrl,
   proToolAccess,
   communityId,
@@ -109,6 +112,7 @@ export function EditorShell({
     <div className="flex min-h-0 flex-1 flex-col">
       <EditorTopBar
         communityName={communityName}
+        pageName={pageName}
         status={status}
         canOpenPublish={canOpenPublish}
         onPreview={onPreview}

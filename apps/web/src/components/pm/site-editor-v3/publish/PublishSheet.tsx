@@ -85,6 +85,7 @@ import { useUnstageSitePageDelete } from '@/hooks/use-site-pages';
 import { issueTarget } from '@/lib/site-editor/to-snapshot';
 import { cn } from '@/lib/utils';
 import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
+import { ApiRequestError } from '@/lib/api/request-json';
 import { Receipt, type ReceiptStatus } from './Receipt';
 
 export interface PublishSheetProps {
@@ -182,8 +183,17 @@ export function groupChanges(
  * the pages list entirely — a state 11b cannot produce, but if it ever occurs
  * there is nothing staged to unstage and offering an undo would be an
  * affordance for a request the server would reject.
+ *
+ * **Exported for its own test.** That reason had no coverage: the only
+ * assertion touching it was satisfied by `Number(undefined) → NaN` failing the
+ * safe-integer check below — a different mechanism reaching the same answer, so
+ * deleting the `deleteStaged` line changed nothing observable. The shape it
+ * guards cannot be produced through the sheet's queries (`useSiteDiff` builds
+ * both sides of `diffPages` from one page list, so a page cannot be in the
+ * baseline and absent from `next`), which is exactly why it is defensive — and
+ * why it has to be asserted here rather than through a render.
  */
-function stagedPageRemoval(change: Change): number | null {
+export function stagedPageRemoval(change: Change): number | null {
   if (change.kind !== 'removed') return null;
   if (change.page?.deleteStaged !== true) return null;
   const pageId = Number(change.page.pageId);
@@ -208,6 +218,8 @@ interface ReceiptState {
   attempted: string;
   outcome: string;
   nextStep: string;
+  /** Per-field reasons from a server `ValidationError` — see `ReceiptProps.reasons`. */
+  reasons?: string[];
 }
 
 export function PublishSheet({
@@ -260,6 +272,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
     next,
     pageLabels,
     pageRank,
+    pageIssues: pageSetIssues,
     isPending: diffPending,
     isError,
     error: diffError,
@@ -280,8 +293,22 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
     // the public site, so blocking here cannot un-ship a bad ratio — it would
     // only stop an unrelated copy fix. See the note on `contrastIssues`.
     const contrast = brandColors ? contrastIssues(brandColors, { severity: 'warning' }) : [];
-    return [...structural, ...contrast];
-  }, [next, brandColors]);
+    /*
+     * The PAGE-SET rules, which this sheet did not run at all until round 5.
+     *
+     * The server runs them inside the publish transaction and refuses on no
+     * home, two homes, a duplicate name or slug, or a reserved slug — so a PM
+     * in any of those states saw an enabled Publish button, clicked it, and got
+     * a receipt reading "This site cannot be published yet… Try publishing
+     * again": advice for the one action guaranteed to fail forever.
+     *
+     * `useSiteDiff` computes them from the page rows it already holds, so this
+     * costs no request. It is a strict subset of the server's run (the redirect
+     * table is server-only), which is the only safe direction: it can miss a
+     * refusal, never invent one.
+     */
+    return [...structural, ...pageSetIssues, ...contrast];
+  }, [next, brandColors, pageSetIssues]);
 
   const blocking = useMemo(() => issues.filter((i) => i.severity === 'error'), [issues]);
   const warnings = useMemo(() => issues.filter((i) => i.severity === 'warning'), [issues]);
@@ -348,11 +375,31 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
         });
         return;
       }
+      /*
+       * A refusal the server can EXPLAIN gets the explanation, and different
+       * advice.
+       *
+       * "Try publishing again" is right for a transient failure and wrong for
+       * a validation refusal, which will fail identically forever — the PM has
+       * to change something first. The reasons are already on the wire in
+       * `ValidationError`'s `fields`, page-qualified; `requestJson` used to
+       * drop them, and `ApiRequestError` now carries them through.
+       *
+       * With the page-set gate above running client-side this should be
+       * unreachable for the page rules. It is kept because it is not
+       * unreachable for all of them: the retired-slug rule is server-only, and
+       * a co-manager can create the offending state between this sheet's read
+       * and the publish click.
+       */
+      const fields = error instanceof ApiRequestError ? error.fields : undefined;
       setReceipt({
         status: 'error',
         attempted,
         outcome: error instanceof Error ? error.message : 'The publish request failed.',
-        nextStep: 'Your live site is unchanged and your draft is safe. Try publishing again.',
+        nextStep: fields
+          ? 'Your live site is unchanged and your draft is safe. Fix the problems above in the Pages panel, then publish again.'
+          : 'Your live site is unchanged and your draft is safe. Try publishing again.',
+        ...(fields ? { reasons: fields.map((f) => f.message) } : {}),
       });
     }
   }
@@ -392,6 +439,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onOpenChange }
           status={receipt.status}
           attempted={receipt.attempted}
           outcome={receipt.outcome}
+          {...(receipt.reasons ? { reasons: receipt.reasons } : {})}
           nextStep={receipt.nextStep}
           onDismiss={() => setReceipt(null)}
         />
@@ -504,6 +552,13 @@ function ChangeRow({ change, onUndoRemoval, undoPending = false }: ChangeRowProp
           {page.isHome ? 'Your site\u2019s front page' : `/${page.slug}`}
         </p>
       ) : null}
+      {/*
+       * The accessible name CONTAINS the visible label, per WCAG 2.5.3 (Label
+       * in Name). It used to read "Keep the Contact page" against a button
+       * showing "Keep this page" — no overlap, so voice control could not
+       * activate the only control that prevents a page being deleted at
+       * publish: the user says what they see and nothing happens.
+       */}
       {onUndoRemoval ? (
         <div className="mt-2">
           <Button
@@ -512,7 +567,7 @@ function ChangeRow({ change, onUndoRemoval, undoPending = false }: ChangeRowProp
             size="sm"
             onClick={onUndoRemoval}
             disabled={undoPending}
-            aria-label={`Keep the ${change.title}`}
+            aria-label={`Keep this page: ${change.title}`}
           >
             <Undo2 className="h-4 w-4" aria-hidden="true" />
             Keep this page

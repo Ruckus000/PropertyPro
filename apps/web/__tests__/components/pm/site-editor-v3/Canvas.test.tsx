@@ -135,7 +135,7 @@ describe('Canvas — states', () => {
 
   it('shows an empty state rather than a blank canvas', () => {
     renderCanvas();
-    expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+    expect(screen.getByText('This page is empty')).toBeInTheDocument();
     // No handler passed: the copy still stands on its own, and no dead button
     // is rendered.
     expect(screen.queryByRole('button', { name: 'Add a section' })).not.toBeInTheDocument();
@@ -234,7 +234,7 @@ describe('Canvas — rendering blocks', () => {
       error: null,
     };
     renderCanvas();
-    expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+    expect(screen.getByText('This page is empty')).toBeInTheDocument();
   });
 
   it('skips a block type it has no view for instead of crashing', () => {
@@ -306,10 +306,17 @@ describe('Canvas — page scope (D-C2)', () => {
   it('shows the empty state for a page that has no sections of its own', () => {
     // Without page scoping this rendered the OTHER page's sections and looked
     // like a working page, which is how an edit lands on the wrong one.
+    //
+    // The COPY is asserted here as well as the state, and that is the point of
+    // the string this expects. For two rounds the canvas said "Your site is
+    // empty" on a page-scoped surface — so the PM's first act after creating a
+    // second page was being told their whole site had gone. `Canvas.tsx`'s own
+    // comment claimed the opposite behaviour throughout.
     twoPages();
     renderCanvasOnPage(99);
 
-    expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+    expect(screen.getByText('This page is empty')).toBeInTheDocument();
+    expect(screen.queryByText(/your site is empty/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Home section')).not.toBeInTheDocument();
     expect(screen.queryByText('About section')).not.toBeInTheDocument();
   });

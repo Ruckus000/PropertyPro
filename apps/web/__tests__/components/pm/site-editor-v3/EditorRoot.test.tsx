@@ -49,15 +49,25 @@ vi.mock('next/dynamic', () => ({
       ? ({
           selectedPageId,
           onSelectPage,
+          onPageRemoved,
         }: {
           selectedPageId: number | null;
           onSelectPage: (
             pageId: number,
             options?: { pending?: boolean; announce?: string },
           ) => void;
+          onPageRemoved: (pageId: number) => void;
         }) => (
           <div>
             <p>Editing page {String(selectedPageId)}</p>
+            {/*
+             * What the real panel does in `confirmRemove`'s `!staged` branch:
+             * tell the parent the disappearance was self-inflicted, so the
+             * repair moves the selection without announcing it.
+             */}
+            <button type="button" onClick={() => onPageRemoved(SECOND_PAGE_ID)}>
+              I deleted the second page
+            </button>
             <button type="button" onClick={() => onSelectPage(SECOND_PAGE_ID)}>
               Edit the second page
             </button>
@@ -111,6 +121,25 @@ vi.mock('next/dynamic', () => ({
         : () => null,
 }));
 
+/*
+ * `toast.info` is what the selection repair speaks through, and it had ZERO
+ * mock coverage anywhere in the repo — this file did not mock sonner at all, so
+ * the call went to the real module and no test could see whether it fired.
+ *
+ * Every method the site-editor tree can reach is stubbed, not just the one used
+ * here: corpus trap #3 — a factory missing an export yields `undefined` at call
+ * time, which reads as an unrelated component breaking.
+ */
+const toastInfo = vi.hoisted(() => vi.fn());
+vi.mock('sonner', () => ({
+  toast: {
+    info: toastInfo,
+    success: vi.fn(),
+    error: vi.fn(),
+    dismiss: vi.fn(),
+  },
+}));
+
 // The shell asks `(max-width: 767px)`: false = desktop. True would render the
 // phone gate and there would be no top bar to assert on.
 vi.mock('@/hooks/use-media-query', () => ({
@@ -119,12 +148,18 @@ vi.mock('@/hooks/use-media-query', () => ({
 }));
 
 // `pageId` is REQUIRED on SiteBlockSummary (D13'), but `apps/web/tsconfig.json`
-// includes only `src/**`, so nothing typechecks this file. This factory is
-// green today only because the Canvas — the caller of `blocksForPage`, which
-// throws on an `undefined` pageId — is mocked away above; the tripwire cannot
-// fire on exactly the file that needs it. Defaulting to HOME_PAGE_ID (the page
-// the shell seeds) rather than `null` matters: `blocksForPage` deliberately
-// excludes unadopted (`null`) rows once a page is selected.
+// includes only `src/**`, so nothing typechecks this file.
+//
+// This factory IS covered by D13's runtime tripwire, contrary to what stood
+// here: the note claimed the throw "cannot fire on exactly the file that needs
+// it" because the Canvas is mocked away. That stopped being true when the D-C2
+// sixth-caller fix made `EditorRoot` itself call `blocksForPage` on every
+// render, to narrow the list it hands the provider. A stale row in this file
+// now throws from `EditorRoot`, with the Canvas still mocked.
+//
+// Defaulting to HOME_PAGE_ID (the page the shell seeds) rather than `null`
+// matters: `blocksForPage` deliberately excludes unadopted (`null`) rows once a
+// page is selected.
 function block(overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary {
   return {
     id: 1,
@@ -672,6 +707,48 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     expect(screen.getByTestId('site-page-announcement')).toHaveTextContent(
       /no longer available/i,
     );
+    expect(toastInfo).toHaveBeenCalledWith(expect.stringMatching(/no longer available/i));
+  });
+
+  it('stays QUIET when the PM deleted that page themselves', async () => {
+    /*
+     * Same repair, same destination — different story. The alarm above is
+     * written for a co-manager's action; fired one tick after the PM's own
+     * deliberate delete, on top of the "X was deleted." they already got, it
+     * describes their own action back at them as if it were someone else's.
+     * The alarm that matters is the one that never cries wolf.
+     *
+     * The repair itself must still RUN: the selection has to leave a page that
+     * no longer exists. Only the announcement is suppressed, which is why both
+     * halves are asserted here.
+     *
+     * Revert check (production line): `EditorRoot.tsx`'s
+     * `if (selfInflicted) return;` in the repair effect. Removing only that
+     * line turns this red and leaves the co-manager case above green.
+     */
+    queries.pages = [
+      seededHome,
+      { ...seededHome, id: SECOND_PAGE_ID, name: 'Amenities', slug: 'amenities', isHome: false },
+    ];
+
+    const { rerender } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    // The panel reports the hard delete, then the invalidated list comes back
+    // without the page — the same two steps, in the same order, as production.
+    await userEvent.click(screen.getByRole('button', { name: 'I deleted the second page' }));
+    queries.pages = [seededHome];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [seededHome] }));
+    });
+
+    // Repaired…
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+    // …silently.
+    expect(toastInfo).not.toHaveBeenCalled();
+    expect(screen.getByTestId('site-page-announcement')).toHaveTextContent('');
   });
 
   it('holds the selection on a page it has just created, before the list catches up', async () => {
@@ -819,6 +896,55 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
   });
 });
 
+describe('EditorRoot — the top bar names the page being edited', () => {
+  // Nothing on screen said which page you were editing. The canvas is scrolled,
+  // the Pages panel is behind a tab, and the Sections tool — the default — is
+  // just a list of section types. So a PM could create a second page, click
+  // back to Sections, and edit for an hour with no indication of the target,
+  // while every write went to that page.
+  //
+  // Asserted through EditorRoot rather than against EditorTopBar directly, for
+  // the reason this whole file exists: the shell's own tests pass every prop
+  // explicitly, so they cannot see a parent that forgets one. That is exactly
+  // how the Publish button shipped dead.
+  //
+  // Revert check (production line): `EditorRoot.tsx`'s `pageName={selectedPage?.name}`
+  // on `<EditorShell>`. Removing only that line leaves `EditorTopBar` correct
+  // and every EditorShell/TopBar assertion green, and turns both cases here red.
+  beforeEach(() => {
+    queries.draft = [hero(), block({ id: 1, pageId: HOME_PAGE_ID })];
+    queries.pages = [
+      seededHome,
+      {
+        ...seededHome,
+        id: SECOND_PAGE_ID,
+        name: 'Amenities',
+        slug: 'amenities',
+        sortOrder: 1,
+        isHome: false,
+      },
+    ];
+  });
+
+  it('names the seeded home page before the PM has opened Pages at all', () => {
+    renderRoot();
+
+    expect(screen.getByTestId('editing-page-name')).toHaveTextContent('Home');
+  });
+
+  it('follows the selection to another page', async () => {
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByTestId('editing-page-name')).toHaveTextContent('Amenities');
+    // The heading is the route's identity and must NOT churn with the page —
+    // it is the breadcrumb trail's leaf.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Website');
+  });
+});
+
 describe('EditorRoot — "Fix this" reaches a section on another page', () => {
   // A regression introduced BY the D-C2 scoping. `PublishSheetMount` resolves
   // the issue's slot against `movableSections`, which is now page-scoped, while
@@ -867,6 +993,54 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
   });
 
+  it('selects the offending section once the new page has mounted', async () => {
+    // The other HALF of the fix above, missing for a round: the page switch
+    // landed, and then nothing was selected — so the PM arrived on the right
+    // page facing an undifferentiated list, with the issue naming "Section 7"
+    // and no row anywhere showing a slot number.
+    //
+    // Revert check (production line, not this file):
+    // `editor-context.tsx`'s `selectSlotOnMount` effect. Delete only the
+    // `selectInternal(target.id)` line inside it and this goes red with
+    // `aria-current` absent, while every other case in this describe stays
+    // green — the switch and the same-page path do not go through it.
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
+
+    // `select` reveals the Sections panel, and the offending row is the only
+    // one on the page we were moved to. Matched loosely: the offending section
+    // is an unpublished draft, so its row carries a "Draft" badge inside the
+    // same button and its accessible name is "GalleryDraft".
+    const row = await screen.findByRole('button', { name: /^Gallery/ });
+    expect(row).toHaveAttribute('aria-current', 'true');
+    // And nothing on the page we LEFT is selected — the remount discarded it.
+    expect(screen.queryByRole('button', { name: /^Text/ })).not.toBeInTheDocument();
+  });
+
+  it('does not re-select the offending section after the PM moves on', async () => {
+    // The mark is one-shot. Left armed, a later remount — an ordinary page
+    // click, a refetch — would yank the selection back to a section the PM
+    // dealt with minutes ago.
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
+    expect(await screen.findByRole('button', { name: /^Gallery/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+
+    // Away and back again.
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+
+    expect(screen.getByRole('button', { name: /^Gallery/ })).not.toHaveAttribute('aria-current');
+  });
+
   it('stays put when the section is already on the selected page', async () => {
     // The switch must be conditional, or every "Fix this" churns the selection
     // and remounts the whole editor for no reason.
@@ -893,6 +1067,66 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — BOTH page reads fail', () => {
+  /*
+   * The seed returns `[]` on any error and the client query can fail for the
+   * same reason — the same lock, the same database. `effectivePageId` is then
+   * null, and `blocksForPage(blocks, null)` returns the list UNCHANGED: every
+   * page's sections concatenated into one canvas, with no banner and no hint
+   * that anything is wrong. Adds land on the live home page, and editing a
+   * foreign section fails with "Position 7 is already used by another page" —
+   * an instruction the editor offers no control to follow.
+   *
+   * `use-selected-site-page.tsx` states the invariant this violated in its own
+   * header: the editor must not render block-editing affordances before it
+   * knows which page is selected.
+   *
+   * Revert check (production line): `EditorRoot.tsx`'s
+   * `const pagesUnavailable = effectivePageId === null && pagesFailed;` —
+   * pinning it to `false` turns all three cases here red.
+   */
+  beforeEach(() => {
+    queries.draft = [
+      hero(),
+      block({ id: 1, pageId: HOME_PAGE_ID }),
+      block({ id: 2, pageId: SECOND_PAGE_ID, blockType: 'gallery', blockOrder: 3 }),
+    ];
+    queries.isError = true;
+  });
+
+  it('says so, rather than rendering a canvas of every page at once', () => {
+    renderRoot({ initialPages: [] });
+
+    expect(screen.getByTestId('pages-unavailable-banner')).toBeInTheDocument();
+  });
+
+  it('withholds the sections list instead of offering another page\'s rows', () => {
+    renderRoot({ initialPages: [] });
+
+    // Neither page's sections are listed — an unscoped list would show BOTH.
+    expect(screen.queryByRole('button', { name: /^Text/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Gallery/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Sections are unavailable until/i)).toBeInTheDocument();
+  });
+
+  it('offers no Add panel, because a block written now would land on the home page', async () => {
+    renderRoot({ initialPages: [] });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Add' }));
+    expect(screen.getByText(/Sections are unavailable until/i)).toBeInTheDocument();
+  });
+
+  it('leaves the editor alone while the pages query is merely still in flight', () => {
+    // The control. Blanking on `pages === undefined` would flash a failure
+    // banner on every ordinary first paint.
+    queries.isError = false;
+    queries.isPending = true;
+    renderRoot();
+
+    expect(screen.queryByTestId('pages-unavailable-banner')).not.toBeInTheDocument();
   });
 });
 

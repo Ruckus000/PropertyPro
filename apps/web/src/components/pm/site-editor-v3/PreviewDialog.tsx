@@ -26,6 +26,15 @@ export interface PreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   communityId: number;
   context: CanvasContext;
+  /**
+   * The site page being previewed (Phase 11b-3). Names the dialog after the
+   * page rather than the community, which is what it actually renders.
+   *
+   * Falls back to the community name when absent — the page read can genuinely
+   * fail, and `Preview — Sunset Condos` is a worse title than
+   * `Preview — Amenities` but a far better one than an empty heading.
+   */
+  pageName?: string;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
 }
@@ -60,20 +69,24 @@ export interface PreviewDialogProps {
  * preview that concatenated every page's sections into one scroll would not
  * correspond to any URL a visitor can open, which is a worse lie than no preview
  * at all. The copy says "page" rather than "site" so the PM is not left thinking
- * the pages that are not shown have gone missing.
+ * the pages that are not shown have gone missing — and the TITLE names the page
+ * for the same reason. `Preview — Sunset Condos` over one page's sections reads
+ * as "this is your site", which is exactly the misreading the scoping exists to
+ * prevent.
  */
 export function PreviewDialog({
   open,
   onOpenChange,
   communityId,
   context,
+  pageName,
   now,
 }: PreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="xl" resizable>
         <DialogHeader>
-          <DialogTitle>{`Preview — ${context.community.name}`}</DialogTitle>
+          <DialogTitle>{`Preview — ${pageName ?? context.community.name}`}</DialogTitle>
           <DialogDescription>
             This is the page you are editing as it stands right now, including
             unpublished changes. It is what visitors see once you publish.

@@ -659,6 +659,65 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(all[0]?.isDraft).toBe(true);
   });
 
+  it('re-creates home for a community that has pages but no HOME page', async () => {
+    /*
+     * The fast-path guard is `existing.some((p) => p.isHome)`, not
+     * `existing.length > 0`, and until now nothing tested the difference:
+     * reverting it to `length > 0` broke no test at all.
+     *
+     * The two coincide only while home is undeletable, which is a property of
+     * today's write paths rather than of the data. A community with pages and
+     * no home short-circuits forever under `length > 0` — `listSitePages`
+     * keeps answering "nothing to do", `EditorRoot` falls through to
+     * `pages?.[0]`, and every block write is scoped to a NON-home page while
+     * the public root serves nothing. The function's promise is "a home page
+     * exists", so that is what the guard has to check.
+     *
+     * The state is reached by soft-deleting the home row directly, which is
+     * the honest way to build a state no service will produce — a restored
+     * backup or a raw SQL fix is exactly how it would arise in production.
+     */
+    if (!state) throw new Error('Not initialized');
+    const communityId = await createCommunity('home-less');
+    const originalHomeId = await ensureHomePage(communityId);
+    await createSitePage({
+      communityId,
+      actorUserId,
+      name: 'Amenities',
+      slug: 'amenities',
+    });
+
+    await state.db
+      .update(state.dbModule.sitePages)
+      .set({ deletedAt: new Date() })
+      .where(eq(state.dbModule.sitePages.id, originalHomeId));
+
+    // Precondition read straight from the table, NOT through `listSitePages` —
+    // that call is the thing under test and would repair the state before the
+    // assertion could observe it.
+    const before = await state.db
+      .select({
+        id: state.dbModule.sitePages.id,
+        isHome: state.dbModule.sitePages.isHome,
+      })
+      .from(state.dbModule.sitePages)
+      .where(
+        and(
+          eq(state.dbModule.sitePages.communityId, communityId),
+          isNull(state.dbModule.sitePages.deletedAt),
+        ),
+      );
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some((p) => p.isHome)).toBe(false);
+
+    const after = await listSitePages(communityId, { includeDrafts: true });
+    const homes = after.filter((p) => p.isHome);
+    expect(homes).toHaveLength(1);
+    expect(homes[0]?.id).not.toBe(originalHomeId);
+    // And the non-home page is untouched — the repair adds, it does not rebuild.
+    expect(after.some((p) => p.slug === 'amenities')).toBe(true);
+  });
+
   /*
    * The lock-free fast path, asserted directly.
    *

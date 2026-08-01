@@ -178,10 +178,15 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
   // the way to being redirected away. The cost is one serial round-trip on a
   // route that already makes six.
   //
-  // The lock itself is accepted: it is the same lock the pages API takes on
-  // every list, it is held for the length of one indexed read, and it is what
-  // stops two concurrent first-touches racing to insert the home page and
-  // failing the partial unique index with an opaque 500.
+  // The lock is accepted, and it is NO LONGER taken on every list — that claim
+  // stood here after the lock-free refactor made it false. `listSitePages` now
+  // reads without a lock on the common path and takes `FOR UPDATE` only on the
+  // branch that WRITES: a community with no home page yet. So this read locks
+  // once, on a community's very first touch, and never again. That branch is
+  // what stops two concurrent first-touches racing to insert the home page and
+  // failing the partial unique index with an opaque 500. Both halves are pinned
+  // by the `the community lock` describe in `site-pages.integration.test.ts`,
+  // which races two connections.
   //
   // Seeded rather than left to the client because `EditorRoot` needs the page id
   // on its FIRST paint — see `EditorRootProps.initialPages`.

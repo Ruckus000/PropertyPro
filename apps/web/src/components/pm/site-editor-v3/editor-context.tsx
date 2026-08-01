@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useReorderBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import {
   useCanvasSelection,
@@ -62,6 +70,24 @@ export interface SiteEditorProviderProps {
   blocks: readonly SiteBlockSummary[];
   /** Fired when a section is selected, so the shell can reveal its panel. */
   onSelect?: (blockId: number) => void;
+  /**
+   * A `block_order` to select as soon as this provider mounts (Phase 11b-3).
+   *
+   * This exists for exactly one caller: the publish sheet's "Fix this" on an
+   * issue that belongs to a section on ANOTHER page. `EditorRoot` switches page,
+   * which changes `key={effectivePageId}` and therefore REMOUNTS this provider —
+   * so any selection made in the same tick is thrown away with the old instance,
+   * and a selection made against the pre-switch `movableSections` never resolves
+   * in the first place. Handing the intent down as a prop and letting the NEW
+   * instance act on it is the only ordering that works: on mount, `blocks` is
+   * already the target page's.
+   *
+   * Same-page "Fix this" does not come through here — nothing remounts, so
+   * `PublishSheetMount` selects directly.
+   */
+  selectSlotOnMount?: number | null;
+  /** Fired once `selectSlotOnMount` has been acted on, so the owner can clear it. */
+  onSlotSelected?: () => void;
   children: React.ReactNode;
 }
 
@@ -83,6 +109,8 @@ export function SiteEditorProvider({
   communityId,
   blocks,
   onSelect,
+  selectSlotOnMount,
+  onSlotSelected,
   children,
 }: SiteEditorProviderProps) {
   const {
@@ -103,6 +131,36 @@ export function SiteEditorProvider({
     },
     [onSelect, selectInternal],
   );
+
+  /*
+   * Consume `selectSlotOnMount` — see the prop's doc for why it cannot be done
+   * by the caller.
+   *
+   * `selectInternal`, not `select`: `onSelect` reveals the Sections panel, and
+   * `EditorRoot` has already done that synchronously before switching page.
+   * Calling it again would be a second identical `setActiveTool`.
+   *
+   * Not a bare mount effect. `movableSections` is derived from `blocks`, which
+   * is already populated at mount on the real path (the block list is
+   * whole-site and cached, and `EditorRoot` narrows it synchronously) — but if
+   * the query is still in flight the list is empty and there is nothing to
+   * find, so the effect re-runs as it fills. `consumedRef` makes that "keep
+   * looking until it appears", not "select repeatedly": once a slot has been
+   * honoured on this instance, a later refetch cannot yank the PM's selection
+   * back to it.
+   */
+  const consumedSlotRef = useRef(false);
+  const onSlotSelectedRef = useRef(onSlotSelected);
+  onSlotSelectedRef.current = onSlotSelected;
+  useEffect(() => {
+    if (selectSlotOnMount === null || selectSlotOnMount === undefined) return;
+    if (consumedSlotRef.current) return;
+    const target = movableSections.find((b) => b.blockOrder === selectSlotOnMount);
+    if (!target) return;
+    consumedSlotRef.current = true;
+    selectInternal(target.id);
+    onSlotSelectedRef.current?.();
+  }, [movableSections, selectInternal, selectSlotOnMount]);
 
   const indexOf = useCallback(
     (blockId: number) => movableSections.findIndex((b) => b.id === blockId),

@@ -207,8 +207,14 @@ function rowBadge(page: SitePageSummary): { label: string; className: string } |
     };
   }
   if (!page.inNav) {
+    // "Not in nav", not "Hidden". `in_nav` removes the navigation LINK and
+    // nothing else: the page stays published, stays anon-readable at its own
+    // address, and is deliberately still listed in `sitemap.xml` (D16). A badge
+    // reading "Hidden" is the PM's most likely route to believing they have
+    // taken a page off their site when they have not — which for a page they
+    // wanted gone is a disclosure they think they made and did not.
     return {
-      label: 'Hidden',
+      label: 'Not in nav',
       className: 'bg-status-neutral-bg text-status-neutral',
     };
   }
@@ -288,9 +294,31 @@ export interface PagesPanelProps {
       announce?: string;
     },
   ) => void;
+  /**
+   * A page this PM has just deleted outright, told to the parent so its
+   * selection repair does not announce the PM's own action back at them.
+   *
+   * The repair says "The page you were editing is no longer available. You are
+   * now editing the home page." — written for the case it exists for, a
+   * co-manager publishing a staged removal of the page you had open. Fired one
+   * tick after the PM's own deliberate delete, on top of the "X was deleted."
+   * they already got, it reads as a second, unexplained event.
+   *
+   * Only the immediate hard delete needs this. A staged removal leaves the page
+   * in the list until publish, so it triggers no repair.
+   *
+   * Required, not optional: a prop whose absence silently disables a behaviour
+   * is how 11b-1 shipped a dead publish button.
+   */
+  onPageRemoved: (pageId: number) => void;
 }
 
-export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesPanelProps) {
+export function PagesPanel({
+  communityId,
+  selectedPageId,
+  onSelectPage,
+  onPageRemoved,
+}: PagesPanelProps) {
   const { data, isPending, isError, error, refetch } = useSitePages(communityId);
   // Shares the canvas's query key, so this adds no request. Read solely to say
   // how many sections a permanent delete takes with it (D36′).
@@ -325,6 +353,14 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
   // no registered Radix trigger, so Radix's own restore would strand focus on
   // <body>. See ConfirmDialog.
   const removeButtonRef = useRef<HTMLButtonElement>(null);
+  /**
+   * Where focus goes when the control it was on stops existing.
+   *
+   * `removeButtonRef` covers Cancel; it cannot cover Confirm, because the row
+   * holding that button unmounts a moment after the dialog closes. See the
+   * effect below.
+   */
+  const listRef = useRef<HTMLUListElement>(null);
 
   const pages = useMemo(() => data ?? [], [data]);
 
@@ -355,6 +391,24 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
   useEffect(() => {
     if (expandedPageId !== null && data !== undefined && !pages.some((p) => p.id === expandedPageId)) {
       setExpandedPageId(null);
+      /*
+       * …and take focus somewhere that still exists.
+       *
+       * `ConfirmDialog` restores focus to `removeButtonRef` on close, which is
+       * correct for Cancel and useless for Confirm: `confirmRemove` closes the
+       * dialog BEFORE the mutation resolves, so focus lands on the remove
+       * button, and the refetch that follows unmounts the row out from under
+       * it. A focused element removed from the DOM sends focus to `<body>`, and
+       * a keyboard PM is then at the top of the document with no idea where
+       * they are. The dialog's own `isConnected` guard cannot help — at the
+       * moment it runs, the button is still connected.
+       *
+       * The list container is the right landing spot rather than, say, the
+       * first row: it is where the deleted page WAS, it is stable across
+       * refetches, and it does not silently move the PM's attention onto a
+       * different page's controls.
+       */
+      listRef.current?.focus();
     }
   }, [data, expandedPageId, pages]);
 
@@ -579,6 +633,10 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
       {
         onSuccess: ({ staged }) => {
           if (!staged) {
+            // Told BEFORE the toast, so the parent's repair — which fires on
+            // the same invalidation — already knows this was self-inflicted and
+            // stays quiet. See `PagesPanelProps.onPageRemoved`.
+            onPageRemoved(page.id);
             // Nothing to offer here: there is no server-side path back, so an
             // Undo affordance would be a lie. The dialog was the guard.
             toast.success(`${page.name} was deleted.`);
@@ -604,7 +662,7 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
         },
       },
     );
-  }, [cancelStagedRemoval, deletePage, removeTarget]);
+  }, [cancelStagedRemoval, deletePage, onPageRemoved, removeTarget]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -750,7 +808,15 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
         the top, or End to move it to the bottom.
       </p>
 
-      <ul aria-label="Site pages" aria-busy={reorderPages.isPending} className="flex flex-col gap-1">
+      {/* `tabIndex={-1}`: programmatically focusable so a vanished row has
+          somewhere to send focus, but never a Tab stop of its own. */}
+      <ul
+        ref={listRef}
+        tabIndex={-1}
+        aria-label="Site pages"
+        aria-busy={reorderPages.isPending}
+        className="flex flex-col gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
         {pages.map((page, index) => {
           const selected = page.id === selectedPageId;
           const badge = rowBadge(page);
@@ -776,16 +842,25 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                 {/* Rendered for every row so the row keeps one shape and one tab
                     order; home is disabled rather than missing, because a
                     control that vanishes on one row makes the list jump. */}
+                {/*
+                  No `aria-roledescription="sortable item"` and no `cursor-grab`.
+                  Both promise a pointer drag this control does not implement —
+                  there are no pointer handlers here at all, only `onKeyDown`.
+                  `aria-roledescription` replaces the announced role outright, so
+                  a screen-reader user was told "sortable item" and given no way
+                  to sort it by the means that phrasing implies; `cursor-grab`
+                  told a mouse user the same lie. The real affordance is the
+                  arrow keys, and `aria-keyshortcuts` below is what announces it.
+                */}
                 <button
                   type="button"
-                  aria-roledescription="sortable item"
                   aria-label={`Reorder ${page.name}, position ${index + 1} of ${pages.length}`}
                   aria-describedby={hintId}
                   aria-keyshortcuts="ArrowUp ArrowDown Home End"
                   disabled={!canUp && !canDown}
                   onKeyDown={(event) => handleGripKeyDown(event, page)}
                   data-testid={`site-page-grip-${page.id}`}
-                  className="flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-sm text-content-tertiary hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-content-tertiary hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default disabled:text-content-disabled"
                 >
                   <GripVertical className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -793,7 +868,7 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                 <button
                   type="button"
                   onClick={() => onSelectPage(page.id)}
-                  aria-current={selected ? 'true' : undefined}
+                  aria-current={selected ? 'page' : undefined}
                   data-testid={`site-page-select-${page.id}`}
                   className="flex min-h-9 min-w-0 flex-1 flex-col items-start rounded-sm px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
@@ -860,6 +935,29 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                   className="space-y-3 rounded-md border border-edge p-3"
                 >
                   {/*
+                    The editor is a draft-then-publish surface and these
+                    controls are not, which nothing said.
+                    `site_pages` has no draft/published column pair, so a
+                    rename, a nav toggle and a reorder all reach the public site
+                    the instant they are saved — and `diff-pages.ts` correctly
+                    excludes them, so the publish sheet reports "0 changes"
+                    immediately afterwards. A PM who reads that as "nothing has
+                    happened yet" is wrong in the one direction that matters.
+
+                    Said once, at the top of the controls it applies to, rather
+                    than three times next to each: the toasts below repeat it
+                    per action. The address control is the exception and says so
+                    itself — it renders only on a page that is not live at all.
+                  */}
+                  <p
+                    data-testid={`site-page-live-hint-${page.id}`}
+                    className="text-xs text-content-secondary"
+                  >
+                    A page&apos;s name, navigation visibility and order go live straight away —
+                    they are not held back for your next publish.
+                  </p>
+
+                  {/*
                     ABSENT on a staged page, not disabled — the same rule D32′
                     applies to the address control just below.
                     `pageIssues` skips a staged page as a SUBJECT as well as a
@@ -894,7 +992,11 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                           updatePage.isPending
                         }
                         onClick={() =>
-                          saveField(page, { name: nameDraft.trim() }, `Page renamed to ${nameDraft.trim()}.`)
+                          saveField(
+                            page,
+                            { name: nameDraft.trim() },
+                            `Page renamed to ${nameDraft.trim()}. This is live on your site now.`,
+                          )
                         }
                       >
                         Save name
@@ -958,8 +1060,8 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                           page,
                           { inNav: !page.inNav },
                           page.inNav
-                            ? `${page.name} is hidden from your navigation.`
-                            : `${page.name} shows in your navigation.`,
+                            ? `${page.name} is out of your navigation now. The page itself stays online.`
+                            : `${page.name} shows in your navigation now.`,
                         )
                       }
                     >
@@ -977,6 +1079,18 @@ export function PagesPanel({ communityId, selectedPageId, onSelectPage }: PagesP
                       )}
                       Show in navigation
                     </Button>
+                  )}
+
+                  {/* Says what the toggle does NOT do. Taking a page out of the
+                      nav is the closest thing this panel has to "unpublish", and
+                      a PM reaching for it to take a page down would otherwise
+                      believe they had. */}
+                  {!page.isHome && (
+                    <p className="text-xs text-content-secondary">
+                      This only removes the link from your navigation. The page stays online at
+                      its own address and search engines can still find it. To take it off your
+                      site, remove it.
+                    </p>
                   )}
 
                   {/* Home has no removal control at all: every layout renders a

@@ -360,16 +360,98 @@ describe('useSiteDiff — grouping changes by page', () => {
   it('falls back to the site-wide group for a block no page has claimed', () => {
     // `pageId: null` is a real server value — a pre-11b row no write path has
     // adopted yet. It must not throw and must not be attributed to a page.
+    //
+    // A SECOND added block, on a real page, runs alongside it. Without that,
+    // `'site'` is the only group any change could possibly carry in this
+    // fixture, so the assertion passes for a map that resolved nothing at all
+    // as readily as for one that resolved this row correctly. The pair makes
+    // the fallback a CHOICE: one row lands on a page, the other does not.
     queries.published = [hero()];
     queries.draft = [
       hero(),
       block({ id: 9, pageId: null, blockOrder: 4, isDraft: true, publishedAt: null }),
+      block({
+        id: 10,
+        pageId: SECOND_PAGE_ID,
+        blockOrder: 5,
+        isDraft: true,
+        publishedAt: null,
+        content: { heading: 'Reach us', body: 'Front desk, 9-5.' },
+      }),
     ];
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
 
     const { result } = renderHook(() => useSiteDiff(42));
 
-    const added = result.current.diff.changes.find((c) => c.kind === 'added');
-    expect(added?.group).toBe('site');
+    const unclaimed = result.current.diff.changes.find((c) => c.toSlot === 4);
+    const claimed = result.current.diff.changes.find((c) => c.toSlot === 5);
+    expect(unclaimed?.group).toBe('site');
+    expect(claimed?.group).toBe(String(SECOND_PAGE_ID));
+  });
+});
+
+describe('useSiteDiff — the publish diff is WHOLE-SITE, never page-scoped', () => {
+  /*
+   * The file's own header calls a page-scoped publish diff "the worst failure
+   * mode this file has, and it is silent" — and until this describe existed
+   * nothing would have gone red if someone had scoped it. Every other case in
+   * this file changes exactly one page, so a diff narrowed to the selected page
+   * would have satisfied all of them.
+   *
+   * Revert check for these cases is a MUTATION, not a deletion, because the
+   * defect is an addition: wrap `draftQuery.data` at `use-site-diff.ts`'s
+   * `toSnapshot(draftQuery.data)` in `blocksForPage(..., HOME_PAGE_ID)` and
+   * both cases below go red — the contact-page change disappears and the group
+   * coverage collapses to one page. Nothing else in this file notices.
+   */
+  beforeEach(() => {
+    // Home: an EDIT (same slot, different content). Contact: an ADDITION.
+    // Two pages, two different change kinds, one publish.
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [hero(), block({ id: 1, blockOrder: 2, pageId: HOME_PAGE_ID })];
+    queries.draft = [
+      hero(),
+      block({
+        id: 2,
+        blockOrder: 2,
+        pageId: HOME_PAGE_ID,
+        isDraft: true,
+        publishedAt: null,
+        content: { heading: 'Pool rules', body: 'No glass, and no diving.' },
+      }),
+      block({
+        id: 7,
+        blockOrder: 3,
+        pageId: SECOND_PAGE_ID,
+        isDraft: true,
+        publishedAt: null,
+        content: { heading: 'Reach us', body: 'Front desk, 9-5.' },
+      }),
+    ];
+  });
+
+  it('reports section changes on BOTH pages, not only the one being edited', () => {
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const sectionChanges = result.current.diff.changes.filter(
+      (c) => !c.key.startsWith('page:'),
+    );
+    expect(sectionChanges).toHaveLength(2);
+    expect(sectionChanges.map((c) => c.kind).sort()).toEqual(['added', 'edited']);
+  });
+
+  it('groups them under their own pages, so the sheet can review a publish page by page', () => {
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const groups = new Map(
+      result.current.diff.changes
+        .filter((c) => !c.key.startsWith('page:'))
+        .map((c) => [c.group, c.kind]),
+    );
+    // Both pages are represented, and each carries its own change — an
+    // under-reporting diff would show one group and a plausible sheet.
+    expect(groups.get(String(HOME_PAGE_ID))).toBe('edited');
+    expect(groups.get(String(SECOND_PAGE_ID))).toBe('added');
   });
 });
 

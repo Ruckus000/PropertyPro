@@ -42,8 +42,12 @@ vi.mock('@/hooks/use-custom-css', () => ({
 }));
 
 const { toastSuccessMock } = vi.hoisted(() => ({ toastSuccessMock: vi.fn() }));
+// Every method the site-editor tree can reach, not only the ones this file
+// asserts on: corpus trap #3 — a factory missing an export yields `undefined`
+// at call time, which reads as an unrelated component breaking. `info` is the
+// selection repair's channel (`EditorRoot.tsx`) and had zero coverage repo-wide.
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccessMock, error: vi.fn() },
+  toast: { success: toastSuccessMock, error: vi.fn(), info: vi.fn(), dismiss: vi.fn() },
 }));
 
 import { StylingPanel } from '@/components/pm/site-editor-v3/panels/StylingPanel';

@@ -63,6 +63,12 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   // both render as null. Counting them would skip the empty state and leave a
   // bare bordered box with no explanation. Page scoping goes first, so "this
   // page is empty" is reported as an empty page and not as an empty site.
+  //
+  // The empty state's copy below has to agree with that, and for two rounds it
+  // did not — it said "Your site is empty" on a page-scoped surface, which
+  // tells a PM who just created a second page that the whole site is gone.
+  // `PreviewDialog` had it right all along ("Add a section to this page"); this
+  // is the canvas saying the same thing.
   const ordered = useMemo(
     () =>
       sortBlocks(blocksForPage(blocks, selectedPageId)).filter((b) =>
@@ -127,8 +133,8 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
       <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
         {ordered.length === 0 ? (
           <EmptyState
-            title="Your site is empty"
-            description="Add your first section to give visitors something to read."
+            title="This page is empty"
+            description="Add a section to give visitors something to read."
             action={
               onAddSection && (
                 <Button type="button" onClick={onAddSection}>

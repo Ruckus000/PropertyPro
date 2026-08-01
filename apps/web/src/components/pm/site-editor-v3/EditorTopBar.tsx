@@ -5,6 +5,20 @@ import { Button } from '@/components/ui/button';
 
 export interface EditorTopBarProps {
   communityName: string;
+  /**
+   * The site page currently being edited (Phase 11b-3).
+   *
+   * Optional because it is genuinely absent while the pages read is in flight
+   * or has failed — not because a caller may skip it. `EditorRoot` always
+   * passes `selectedPage?.name`.
+   *
+   * Load-bearing since the editor became multi-page: every other surface that
+   * names what you are editing (the canvas, the preview, the Pages panel) is
+   * either scrolled away or behind a tab, so with the Sections tool open there
+   * was nothing on screen at all distinguishing page B from the home page —
+   * while every write went to page B.
+   */
+  pageName?: string;
   /** Rendered on the right, before the actions — the save status line (Phase 3). */
   status?: React.ReactNode;
   onPreview?: () => void;
@@ -35,6 +49,7 @@ export interface EditorTopBarProps {
  */
 export function EditorTopBar({
   communityName,
+  pageName,
   status,
   onPreview,
   onPublish,
@@ -46,6 +61,20 @@ export function EditorTopBar({
         <h1 className="font-display text-[0.9375rem] font-semibold text-content">Website</h1>
         <span className="truncate text-xs text-content-secondary">{communityName}</span>
       </span>
+
+      {/*
+       * Outside the `<h1>`'s span rather than inside it: the heading is the
+       * route's identity and the breadcrumb trail's leaf, and it must not
+       * change every time the PM clicks a different page in the Pages panel.
+       */}
+      {pageName ? (
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-content-secondary">
+          <span aria-hidden="true">/</span>
+          <span className="truncate font-medium text-content" data-testid="editing-page-name">
+            {pageName}
+          </span>
+        </span>
+      ) : null}
 
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
         {status}

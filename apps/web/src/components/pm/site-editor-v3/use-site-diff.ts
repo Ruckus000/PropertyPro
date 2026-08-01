@@ -73,16 +73,20 @@ import { useCallback, useMemo } from 'react';
 import {
   diffPages,
   diffSite,
+  pageIssues,
   pageTitle,
   publishedPageBaseline,
+  TOMBSTONE_BLOCK_TYPE,
   type Change,
   type ChangeKey,
   type DiffResult,
+  type Issue,
   type SitePageRow,
   type SiteSnapshot,
 } from '@propertypro/shared';
 import { useContentBlocks, usePublishedBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
+import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
 import { toSnapshot } from '@/lib/site-editor/to-snapshot';
 
 /**
@@ -112,6 +116,27 @@ export interface SiteDiffState {
    * this phase ships.
    */
   slotGroups: ReadonlyMap<number, string>;
+  /**
+   * Page-SET problems, in the same `Issue` vocabulary as `siteIssues`.
+   *
+   * The publish sheet used to compute its blocking set from `siteIssues` plus
+   * contrast and never ran `pageIssues` at all — but the server runs it inside
+   * the publish transaction and refuses on no home, two homes, a duplicate name
+   * or slug, a reserved slug, or a retired-slug clash. So the PM met every one
+   * of those as a bare "This site cannot be published yet." AFTER clicking a
+   * button the client had told them was ready, with the reasons stripped.
+   *
+   * Two deliberate differences from the server's run:
+   *
+   *  - `retiredSlugs` is omitted. The redirect table is not on the client, so
+   *    the retired-slug rule stays server-only. That makes this a strict
+   *    SUBSET: it can miss a refusal, never invent one, which is the only safe
+   *    direction for a gate that disables a button.
+   *  - `reserveStagedSlugs` is left at its default (false), matching the
+   *    publish gate rather than the editor forms. At publish the staged page is
+   *    leaving, so its address is about to be free.
+   */
+  pageIssues: Issue[];
   isPending: boolean;
   isError: boolean;
   error: Error | null;
@@ -237,8 +262,9 @@ export function useSiteDiff(communityId: number): SiteDiffState {
      * then throws `NothingToPublishRollback`. Newly reachable because the RSC
      * now calls `listSitePages` on every load, which is what creates the row.
      *
-     * The server rule is `(isDraft && !isHome) || deleteStagedAt !== null`
-     * (site-blocks-service.ts:677-679). The `deleteStaged` arm needs no
+     * The server rule is `(isDraft && !isHome) || deleteStagedAt !== null` —
+     * search `site-blocks-service.ts` for `pendingPages`; a line number here
+     * had already drifted 22 lines by round 5. The `deleteStaged` arm needs no
      * counterpart here: `diffPages` independently treats a page that was never
      * published AND is already staged for removal as a net non-event, since
      * publishing it neither creates nor destroys anything a visitor could have
@@ -263,6 +289,65 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     };
   }, [published, next, pageRows, slotGroups]);
 
+  /*
+   * The page-set gate, stated BEFORE the button rather than after the click.
+   *
+   * `pageIssues` is the exact function the publish transaction runs
+   * (`site-blocks-service.ts`, Step 3b-pages). Running it here as well is not
+   * duplication for its own sake: without it the client's `blocking` set came
+   * from `siteIssues` and contrast only, so a duplicate slug or a missing home
+   * left Publish enabled, and the refusal arrived as an opaque server sentence
+   * on a sheet whose only advice was to try again.
+   *
+   * `deleteStaged` pages are already handled inside `pageIssues` (they are not
+   * validated, because a broken page must stay deletable), so no filtering is
+   * needed here — this passes the same `pageRows` the server passes.
+   */
+  const pageSetIssues = useMemo<Issue[]>(
+    () =>
+      pageIssues({
+        pages: pageRows,
+        isReserved: isReservedPublicSlug,
+      }),
+    [pageRows],
+  );
+
+  /*
+   * An empty page about to go live, as a WARNING.
+   *
+   * Warning, not error: an empty page is a legitimate thing to publish — a PM
+   * may be shipping the nav entry first — and blocking it would be this client
+   * inventing a rule the server does not have. But nothing said anything at
+   * all, and the result is a nav link to a page that renders chrome with a gap
+   * where the content should be, which reads to a resident as a broken site
+   * rather than an unfinished one.
+   *
+   * Scoped to pages the publish will CREATE (`isDraft`, excluding the lazily
+   * created home — same exclusion as `pendingPageRows` above). An existing
+   * published page that the PM has emptied is a different, deliberate act, and
+   * the section removals themselves already appear in the diff.
+   */
+  const emptyPageWarnings = useMemo<Issue[]>(() => {
+    const populated = new Set<number>();
+    for (const block of draftQuery.data ?? []) {
+      if (block.pageId === null || block.pageId === undefined) continue;
+      if (block.blockType === TOMBSTONE_BLOCK_TYPE) continue;
+      populated.add(block.pageId);
+    }
+    return (pagesQuery.data ?? [])
+      .filter((page) => page.isDraft && !page.isHome && !populated.has(page.id))
+      .map((page) => ({
+        field: `page:${page.id}.sections`,
+        message: `"${page.name}" has no sections yet, so visitors following its link will find an empty page.`,
+        severity: 'warning' as const,
+      }));
+  }, [draftQuery.data, pagesQuery.data]);
+
+  const allPageIssues = useMemo(
+    () => [...pageSetIssues, ...emptyPageWarnings],
+    [pageSetIssues, emptyPageWarnings],
+  );
+
   const refetch = useCallback(() => {
     void draftQuery.refetch();
     void publishedQuery.refetch();
@@ -275,6 +360,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     pageLabels,
     pageRank,
     slotGroups,
+    pageIssues: allPageIssues,
     // The pages query joins the gate rather than degrading quietly. A publish
     // sheet rendered while the page list is missing would omit an entire class
     // of pending change — a staged page removal shows up nowhere else — and

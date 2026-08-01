@@ -169,6 +169,11 @@ const PAGE_COLUMNS = {
  * The migration therefore needs its own backfill rather than assuming traffic
  * has healed everything — do not delete this paragraph without adding it.
  *
+ * Also recorded outside this file, in the 11b-3 plan's "Hand-off to 11c"
+ * section, alongside the two other assumptions that expire with 11c (the
+ * community-unique `block_order`, and `publishedPageBaseline`'s premise). A
+ * comment only reaches whoever opens the file it is in.
+ *
  * `is_draft` is derived exactly as 0046's backfill derived it: published if any
  * live block of the community is published, draft otherwise. A community with no
  * blocks at all gets a draft home page, which anon RLS hides — correct, since it

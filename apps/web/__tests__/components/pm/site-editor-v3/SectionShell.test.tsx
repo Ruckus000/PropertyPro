@@ -45,8 +45,12 @@ const toastError = vi.hoisted(() => vi.fn());
 // `dismiss` is here because `useUndoableRemove` takes the undo toast down
 // when its section unmounts. A factory missing a newly-added export yields
 // `undefined` at call time, which reads as an unrelated component breaking.
+// Every method the site-editor tree can reach, not only the ones this file
+// asserts on: corpus trap #3 — a factory missing an export yields `undefined`
+// at call time, which reads as an unrelated component breaking. `info` is the
+// selection repair's channel (`EditorRoot.tsx`) and had zero coverage repo-wide.
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccess, error: toastError, dismiss: vi.fn() },
+  toast: { success: toastSuccess, error: toastError, dismiss: vi.fn(), info: vi.fn() },
 }));
 
 /** Phase 11b — every SiteBlockSummary carries the page it belongs to. */

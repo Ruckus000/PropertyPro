@@ -48,8 +48,12 @@ const toastError = vi.hoisted(() => vi.fn());
 // when its section unmounts. A factory missing a newly-added export yields
 // `undefined` at call time, which reads as an unrelated component breaking.
 const toastDismiss = vi.hoisted(() => vi.fn());
+// Every method the site-editor tree can reach, not only the ones this file
+// asserts on: corpus trap #3 — a factory missing an export yields `undefined`
+// at call time, which reads as an unrelated component breaking. `info` is the
+// selection repair's channel (`EditorRoot.tsx`) and had zero coverage repo-wide.
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccess, error: toastError, dismiss: toastDismiss },
+  toast: { success: toastSuccess, error: toastError, dismiss: toastDismiss, info: vi.fn() },
 }));
 
 type ToastOptions = {

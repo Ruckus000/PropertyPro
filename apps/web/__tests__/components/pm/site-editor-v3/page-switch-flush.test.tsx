@@ -5,6 +5,18 @@
  * that true** — which is not obvious, because the key was chosen to reset the
  * canvas selection, not to protect a write.
  *
+ * **Read this next sentence before trusting anything below.** The `key` this
+ * file's harness carries is its OWN `<div key={pageId}>`, not the product's.
+ * So nothing here can prove the product still has one: delete
+ * `key={effectivePageId ?? 'none'}` from `EditorRoot.tsx` and every case in
+ * this file stays green. That half is guarded in `EditorRoot.test.tsx`
+ * ("UNMOUNTS the inspector on a page switch, which is what targets a pending
+ * write"), which drives the real tree. Neither file is sufficient alone, and
+ * asserting a `key` defined in a test's own harness while believing it
+ * asserted the product's is the exact mistake that produced a HIGH in review
+ * round 4. What this file proves is the CONSEQUENCE — given an unmount, the
+ * flush carries the pre-switch page id.
+ *
  * `useUpsertContentBlock` calls `useSelectedSitePage()` at RENDER time and its
  * `mutationFn` closes over that value (`use-content-blocks.ts`). With
  * `key={effectivePageId}` the outgoing subtree is UNMOUNTED rather than

@@ -53,8 +53,15 @@ export interface UseAutosaveOptions {
    * toast saying they were moved, and the last debounce window of typing
    * disappears with no error anywhere.
    *
-   * Called ONLY when the component is already gone. A mounted failure still
-   * goes to the status line, which can retry.
+   * Called ONLY when the component is already gone, and **at most once** per
+   * component lifetime. A mounted failure still goes to the status line, which
+   * can retry.
+   *
+   * Both halves of that are pinned in `use-block-form-unmount.test.tsx`
+   * ("does not toast a failure the MOUNTED status line is already reporting",
+   * "reports a failed flush ONCE even when a queued follow-up fails too") —
+   * the "only when" half is what the tests here originally could not see,
+   * because every one of them drove the failure through an unmount.
    */
   onUnmountedError?: (error: Error) => void;
 }
@@ -138,6 +145,23 @@ export function useAutosave<T>(
   const inFlightRef = useRef<Promise<void> | null>(null);
   const queuedRef = useRef(false);
   const attemptsRef = useRef(0);
+  /**
+   * Whether an unmounted failure has already been reported.
+   *
+   * `runSave`'s `finally` re-runs itself when `queuedRef` is set, and that path
+   * is deliberately NOT mount-gated (the queued value is newer and still worth
+   * writing). So one logical failure — an in-flight rejection plus its queued
+   * follow-up rejecting for the same reason — reached `onUnmountedError`
+   * twice, and `use-block-form` stacked two identical toasts with no `id` to
+   * collapse them. Two toasts read as two lost edits.
+   *
+   * A latch rather than a toast `id`, because the defect is the double REPORT,
+   * not the double render: a caller that logged instead of toasting had the
+   * same problem. Once per component lifetime is the right budget — after
+   * unmount the component never comes back, so there is no later failure this
+   * could wrongly swallow.
+   */
+  const reportedUnmountedRef = useRef(false);
 
   const clearDebounce = useCallback(() => {
     if (debounceRef.current !== null) {
@@ -182,9 +206,15 @@ export function useAutosave<T>(
         attemptsRef.current += 1;
         if (mountedRef.current) {
           setState((prev) => ({ status: 'error', lastSavedAt: prev.lastSavedAt, error }));
-        } else {
+        } else if (!reportedUnmountedRef.current) {
           // Nobody left to tell: no status line, and the retry below is gated on
           // being mounted too. Without this the write is lost in silence.
+          //
+          // The `else` is load-bearing, not stylistic: a MOUNTED failure is the
+          // status line's, which can retry, and reporting it here as well would
+          // double-report every ordinary transient failure with retry behind
+          // only one of the two. See `use-block-form-unmount.test.tsx`.
+          reportedUnmountedRef.current = true;
           onUnmountedErrorRef.current?.(error);
         }
         const backoff = RETRY_BACKOFF_MS[attemptsRef.current - 1];

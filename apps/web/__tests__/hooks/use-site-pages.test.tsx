@@ -14,6 +14,7 @@ import {
   useUpdateSitePage,
   type SitePageSummary,
 } from '@/hooks/use-site-pages';
+import { pagesListContract } from '@/app/api/v1/pm/site/pages/contract';
 
 const COMMUNITY_ID = 7;
 
@@ -32,6 +33,23 @@ function page(overrides: Partial<SitePageSummary> & { id: number }): SitePageSum
 }
 
 const HOME = page({ id: 1, name: 'Home', slug: '', isHome: true, sortOrder: 0 });
+
+/**
+ * Round-trips a page through the ROUTE CONTRACT's response schema.
+ *
+ * Nothing in `__tests__` is typechecked (`apps/web/tsconfig.json` includes
+ * `src/**` only), so a fixture typed `SitePageSummary` is a promise this repo
+ * never verifies — and `useSitePages` returns `payload.pages` verbatim, which
+ * makes any assertion on a local literal an assertion about the literal.
+ *
+ * Parsing makes the CONTRACT the thing under test: zod strips unknown keys, so
+ * a field deleted from `sitePageSchema` disappears here too and the assertion
+ * that reads it fails. Use this for anything asserting a field survives the
+ * wire; the plain `page()` helper is fine for the rest.
+ */
+function sitePageOnTheWire(row: SitePageSummary): SitePageSummary {
+  return pagesListContract.response.parse({ pages: [row] }).pages[0] as SitePageSummary;
+}
 
 function makeClient() {
   return new QueryClient({
@@ -84,7 +102,24 @@ describe('useSitePages', () => {
   });
 
   it('keeps deleteStagedAt on the wire — the editor renders a staged removal from it', async () => {
-    const staged = page({ id: 3, deleteStagedAt: '2026-07-30T09:00:00.000Z' });
+    /*
+     * The fixture is built by PARSING through the route contract, not from the
+     * local `page()` helper.
+     *
+     * With a local literal this test proved the fixture: `useSitePages` returns
+     * `payload.pages` verbatim, so the only revertable thing was in this file.
+     * Dropping `deleteStagedAt` from the contract would have broken production
+     * — the staged-removal banner, the publish diff's page changes, the Pages
+     * panel's "Removing" badge — and no test, because `__tests__` sits outside
+     * `apps/web/tsconfig.json`'s `src/**` include and is never typechecked.
+     *
+     * Zod strips unknown keys, so a contract without the field yields an object
+     * without it, and this assertion goes red.
+     *
+     * Revert check (production line): the `deleteStagedAt: z.string().nullable()`
+     * declaration in `apps/web/src/app/api/v1/pm/site/pages/contract.ts`.
+     */
+    const staged = sitePageOnTheWire(page({ id: 3, deleteStagedAt: '2026-07-30T09:00:00.000Z' }));
     mockOnce({ data: { pages: [HOME, staged] } });
     const { result } = renderHook(() => useSitePages(COMMUNITY_ID), {
       wrapper: wrap(makeClient()),
@@ -138,7 +173,23 @@ describe('useSitePages', () => {
     await waitFor(() => expect(result.current.data).toHaveLength(2));
   });
 
-  it('surfaces the server error message rather than a generic failure', async () => {
+  /*
+   * D2 (round 5). The four cases titled after a server GUARD — this one plus
+   * "rejects with the slug message", "rejects when the home page is targeted",
+   * and "surfaces the not-staged error" — are all decided by this file's own
+   * `fetch` stub. `useDeleteSitePage` has no home-page logic; `useCreateSitePage`
+   * has no slug logic. Each reduces to "`requestJson` turns `!ok` into a thrown
+   * Error carrying the server's message", which is pre-existing shared
+   * behaviour, not a property of these hooks.
+   *
+   * Kept rather than deleted — they DO pin that the hook does not swallow or
+   * rewrite the message, which is the difference between a PM reading "That web
+   * address is reserved." and "Request failed" — but retitled so nobody reads
+   * them as coverage of the guards themselves. The real guards are exercised
+   * against the database in `__tests__/lib/services/site-pages-service.test.ts`
+   * and `__tests__/integration/site-pages.integration.test.ts`.
+   */
+  it('does not swallow or rewrite the server message on a failed read', async () => {
     mockOnce({ error: { code: 'FORBIDDEN', message: 'Only property managers can manage site pages' } }, { ok: false });
     const { result } = renderHook(() => useSitePages(COMMUNITY_ID), {
       wrapper: wrap(makeClient()),
@@ -193,7 +244,7 @@ describe('useCreateSitePage', () => {
     );
   });
 
-  it('rejects with the slug message the service produced', async () => {
+  it('passes the create failure\'s message through, whatever the service said', async () => {
     mockOnce({ error: { code: 'VALIDATION_ERROR', message: 'That web address is reserved.' } }, { ok: false });
     const { result } = renderHook(() => useCreateSitePage(COMMUNITY_ID), {
       wrapper: wrap(makeClient()),
@@ -225,6 +276,22 @@ describe('useUpdateSitePage', () => {
     });
     await result.current.mutateAsync({ pageId: 4, inNav: false });
     expect(bodyOf()).toEqual({ communityId: COMMUNITY_ID, pageId: 4, inNav: false });
+  });
+
+  it('invalidates the pages query, so a rename is not left only in the old cache', async () => {
+    // Untested until round 5. Without it the panel keeps rendering the previous
+    // name until something else happens to refetch, and the PM re-types the
+    // rename believing the first one was lost.
+    mockOnce({ data: { ok: true, page: page({ id: 2, name: 'Facilities' }) } });
+    const client = makeClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useUpdateSitePage(COMMUNITY_ID), {
+      wrapper: wrap(client),
+    });
+    await result.current.mutateAsync({ pageId: 2, name: 'Facilities' });
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: sitePagesKey(COMMUNITY_ID) }),
+    );
   });
 
   it('surfaces redirectedFrom so the caller can report the old address still resolves', async () => {
@@ -316,6 +383,24 @@ describe('useReorderSitePages', () => {
     await pending;
   });
 
+  it('reconciles with the server on SETTLE, not only on success', async () => {
+    // `onSettled`, so the optimistic order is reconciled after a failure too —
+    // the `onError` rollback restores a snapshot, and without this the cache
+    // would sit on that snapshot until something else refetched. Untested
+    // until round 5.
+    mockOnce({ data: { ok: true } });
+    const client = makeClient();
+    client.setQueryData(sitePagesKey(COMMUNITY_ID), [HOME, page({ id: 2 }), page({ id: 3 })]);
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useReorderSitePages(COMMUNITY_ID), {
+      wrapper: wrap(client),
+    });
+    await result.current.mutateAsync({ orderedPageIds: [3, 2] });
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: sitePagesKey(COMMUNITY_ID) }),
+    );
+  });
+
   it('rolls the cache back when the server rejects a stale order', async () => {
     const client = makeClient();
     const cached = [HOME, page({ id: 2, sortOrder: 1 }), page({ id: 3, sortOrder: 2 })];
@@ -371,7 +456,7 @@ describe('useDeleteSitePage', () => {
     );
   });
 
-  it('rejects when the home page is targeted', async () => {
+  it('passes a delete refusal through — the home-page rule itself is the service\'s', async () => {
     mockOnce({ error: { code: 'VALIDATION_ERROR', message: 'The home page cannot be removed.' } }, { ok: false });
     const { result } = renderHook(() => useDeleteSitePage(COMMUNITY_ID), {
       wrapper: wrap(makeClient()),
@@ -409,7 +494,7 @@ describe('useUnstageSitePageDelete', () => {
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['pm', 'site'] });
   });
 
-  it('surfaces the not-staged error rather than silently succeeding', async () => {
+  it('passes an unstage refusal through rather than resolving quietly', async () => {
     mockOnce({ error: { code: 'VALIDATION_ERROR', message: 'That page is not staged for removal.' } }, { ok: false });
     const { result } = renderHook(() => useUnstageSitePageDelete(COMMUNITY_ID), {
       wrapper: wrap(makeClient()),

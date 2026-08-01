@@ -34,7 +34,7 @@ import userEvent from '@testing-library/user-event';
 // Imported, never spelled out: a literal here would keep passing after the
 // constant moved, and the assertion it guards is a section COUNT the PM reads
 // before an irreversible delete.
-import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
+import { SITE_PAGE_SLUG_PATTERN, TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 
 const {
   useSitePagesMock,
@@ -75,8 +75,12 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useContentBlocks: () => ({ data: blocksMock.data }),
 }));
 
+// Every method the site-editor tree can reach, not only the ones this file
+// asserts on: corpus trap #3 — a factory missing an export yields `undefined`
+// at call time, which reads as an unrelated component breaking. `info` is the
+// selection repair's channel (`EditorRoot.tsx`) and had zero coverage repo-wide.
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccessMock, error: toastErrorMock },
+  toast: { success: toastSuccessMock, error: toastErrorMock, info: vi.fn(), dismiss: vi.fn() },
 }));
 
 import {
@@ -113,6 +117,7 @@ const DRAFT_PAGE = page({
 });
 
 const onSelectPage = vi.fn();
+const onPageRemoved = vi.fn();
 
 function renderPanel({
   pages = [HOME, AMENITIES] as SitePageSummary[] | undefined,
@@ -129,7 +134,12 @@ function renderPanel({
     refetch: refetchMock,
   });
   return render(
-    <PagesPanel communityId={7} selectedPageId={selectedPageId} onSelectPage={onSelectPage} />,
+    <PagesPanel
+      communityId={7}
+      selectedPageId={selectedPageId}
+      onSelectPage={onSelectPage}
+      onPageRemoved={onPageRemoved}
+    />,
   );
 }
 
@@ -184,8 +194,25 @@ describe('PagesPanel — data states', () => {
     // Home keeps the order the server sent — it is pinned at the site root.
     expect(within(rows[0]!).getByText('Home')).toBeInTheDocument();
     expect(within(rows[0]!).getByText('/')).toBeInTheDocument();
+    // `HOME.slug` is `''`, so `/` is what BOTH branches of the address
+    // rendering produce — the `isHome` special case is invisible against this
+    // fixture. The case below varies only that flag.
     expect(within(rows[1]!).getByText('Amenities')).toBeInTheDocument();
     expect(within(rows[1]!).getByText('/amenities')).toBeInTheDocument();
+  });
+
+  it('renders the home page at the ROOT even if its row carries a slug', () => {
+    // Home is pinned at `/` by the `isHome` flag, not by its slug happening to
+    // be empty. A restored backup or a raw SQL fix can leave a non-empty slug
+    // on the home row; rendering `/legacy-home` there would send the PM to an
+    // address the public router never serves for that page.
+    renderPanel({ pages: [page({ id: 1, name: 'Home', slug: 'legacy-home', isHome: true, sortOrder: 0 }), AMENITIES] });
+
+    const rows = within(screen.getByRole('list', { name: 'Site pages' })).getAllByRole(
+      'listitem',
+    );
+    expect(within(rows[0]!).getByText('/')).toBeInTheDocument();
+    expect(within(rows[0]!).queryByText('/legacy-home')).not.toBeInTheDocument();
   });
 });
 
@@ -195,7 +222,10 @@ describe('PagesPanel — selection', () => {
 
     const current = screen
       .getAllByRole('button')
-      .filter((node) => node.getAttribute('aria-current') === 'true');
+      // `'page'`, not `'true'`. `aria-current="page"` is the conventional
+      // value for "this is the item you are on" and the one assistive tech
+      // announces as a location; `"true"` is the generic fallback.
+      .filter((node) => node.getAttribute('aria-current') === 'page');
     expect(current).toHaveLength(1);
     expect(current[0]).toHaveTextContent('Amenities');
   });
@@ -211,10 +241,20 @@ describe('PagesPanel — selection', () => {
   it('marks no row current until the parent says which page is selected', () => {
     // Controlled, deliberately: the panel renders the selection the block
     // writes actually use, never one of its own.
-    renderPanel({ selectedPageId: null });
-    expect(
-      screen.getAllByRole('button').filter((n) => n.getAttribute('aria-current') === 'true'),
-    ).toHaveLength(0);
+    //
+    // The `null` half alone is a vacuous negative — it passes for a panel that
+    // never marks anything, including one whose `aria-current` was deleted. The
+    // POSITIVE control below is what makes the negative mean something: the
+    // same fixture, differing only in `selectedPageId`, marks exactly one row.
+    const current = () =>
+      screen.getAllByRole('button').filter((n) => n.getAttribute('aria-current') === 'page');
+
+    const { unmount } = renderPanel({ selectedPageId: null });
+    expect(current()).toHaveLength(0);
+    unmount();
+
+    renderPanel({ selectedPageId: 2 });
+    expect(current()).toHaveLength(1);
   });
 
   /*
@@ -266,9 +306,15 @@ describe('PagesPanel — row state', () => {
     expect(within(screen.getByTestId('site-page-row-2')).getByText('Draft')).toBeInTheDocument();
   });
 
-  it('says a page kept out of the nav is hidden', () => {
+  it('says a page kept out of the nav is out of the NAV, not hidden', () => {
+    // "Hidden" over-claimed. `in_nav` removes the navigation link and nothing
+    // else: the page stays published, stays anon-readable at its own address,
+    // and is deliberately still in `sitemap.xml` (D16). A PM reaching for this
+    // to take a page down would have believed they had.
     renderPanel({ pages: [HOME, page({ id: 2, name: 'Amenities', inNav: false })] });
-    expect(within(screen.getByTestId('site-page-row-2')).getByText('Hidden')).toBeInTheDocument();
+    const row = within(screen.getByTestId('site-page-row-2'));
+    expect(row.getByText('Not in nav')).toBeInTheDocument();
+    expect(row.queryByText('Hidden')).not.toBeInTheDocument();
   });
 
   it('leads with the removal when a page is both staged and hidden', () => {
@@ -286,7 +332,7 @@ describe('PagesPanel — row state', () => {
     });
     const row = within(screen.getByTestId('site-page-row-2'));
     expect(row.getByText('Removing')).toBeInTheDocument();
-    expect(row.queryByText('Hidden')).not.toBeInTheDocument();
+    expect(row.queryByText('Not in nav')).not.toBeInTheDocument();
     expect(row.queryByText('Draft')).not.toBeInTheDocument();
   });
 
@@ -295,7 +341,7 @@ describe('PagesPanel — row state', () => {
     const row = within(screen.getByTestId('site-page-row-2'));
     expect(row.queryByText('Removing')).not.toBeInTheDocument();
     expect(row.queryByText('Draft')).not.toBeInTheDocument();
-    expect(row.queryByText('Hidden')).not.toBeInTheDocument();
+    expect(row.queryByText('Not in nav')).not.toBeInTheDocument();
   });
 });
 
@@ -356,6 +402,27 @@ describe('PagesPanel — adding a page', () => {
    * stale selection' for the scoping half.
    */
 
+  it('says so when the create request itself fails', async () => {
+    // `submitCreate`'s error branch had no test — a create that 409s or times
+    // out closed the form and said nothing, so the PM believed the page was
+    // made and went looking for it.
+    const user = userEvent.setup();
+    createMutate.mockImplementation((_input, options) =>
+      options.onError(new Error('That web address is reserved.')),
+    );
+    renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await user.type(screen.getByLabelText('Page name'), 'Pool Rules');
+    await user.click(screen.getByRole('button', { name: 'Add page' }));
+
+    expect(createMutate).toHaveBeenCalled();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("We couldn't add that page"),
+    );
+    expect(onSelectPage).not.toHaveBeenCalled();
+  });
+
   it('refuses an address an application route already owns', async () => {
     // `isReservedPublicSlug` is INJECTED into the shared validator, which is the
     // same function the server runs. A page at /documents would be shadowed by
@@ -368,7 +435,26 @@ describe('PagesPanel — adding a page', () => {
 
     expect(screen.getByText(/used by the resident portal/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add page' })).toBeDisabled();
+    // The trailing click is DOUBLY caused — the button is disabled AND
+    // `submitCreate` short-circuits on `!canCreate` — so on its own it cannot
+    // say which guard held. Deleting either one leaves it green. It is kept as
+    // the end-to-end statement ("this cannot be submitted"), with the
+    // `canCreate` half asserted independently in the sibling case below.
     await user.click(screen.getByRole('button', { name: 'Add page' }));
+    expect(createMutate).not.toHaveBeenCalled();
+  });
+
+  it('refuses the submit even when the disabled button is bypassed', async () => {
+    // The other half of the case above, isolated: `submitCreate`'s own
+    // `!canCreate` short-circuit. Submitting the FORM (Enter in the name field)
+    // does not go through the disabled button at all, so this reaches the guard
+    // the click could not distinguish.
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await user.type(screen.getByLabelText('Page name'), 'Documents{Enter}');
+
     expect(createMutate).not.toHaveBeenCalled();
   });
 
@@ -400,6 +486,21 @@ describe('PagesPanel — adding a page', () => {
     expect(screen.queryByRole('button', { name: 'Add a page' })).not.toBeInTheDocument();
   });
 
+  it('still offers Add at ONE page under the cap', () => {
+    // The negative control for the case above. Without it, "no Add button at
+    // 20 pages" is equally satisfied by a panel that never offers one — and
+    // 19 rather than 2, so the boundary itself is what is tested.
+    const many = [
+      HOME,
+      ...Array.from({ length: MAX_SITE_PAGES - 2 }, (_, i) => page({ id: i + 2 })),
+    ];
+    expect(many).toHaveLength(MAX_SITE_PAGES - 1);
+    renderPanel({ pages: many });
+
+    expect(screen.getByRole('button', { name: 'Add a page' })).toBeInTheDocument();
+    expect(screen.queryByTestId('site-pages-cap')).not.toBeInTheDocument();
+  });
+
   it('keeps the cap message and the cap itself in step', () => {
     // The message is a literal so the phase's grep can find it; this is what
     // stops the literal and the constant from drifting apart.
@@ -407,9 +508,47 @@ describe('PagesPanel — adding a page', () => {
   });
 
   it('slugifies to something the shared slug pattern accepts', () => {
-    expect(slugifyPageName('  Pool & Spa Rules!  ')).toBe('pool-spa-rules');
+    /*
+     * The old version never imported `SITE_PAGE_SLUG_PATTERN` despite being
+     * named after it, and its own `'!!!'` case falsified the title — that
+     * yields `''`, which the pattern REJECTS. It also missed the one behaviour
+     * the source comment singles out: trailing hyphens are stripped AFTER the
+     * length clamp, so a name truncated mid-word cannot produce `foo-`.
+     * `'A'.repeat(80)` cannot see that — it contains no hyphens at all — so
+     * swapping `.slice(0, 60)` and `.replace(/^-+|-+$/g, '')` left all three
+     * assertions green.
+     *
+     * Revert check (production line): swap those two calls in
+     * `PagesPanel.tsx`'s `slugifyPageName`. The clamp case below goes red.
+     */
+    const accepted = (name: string) => {
+      const slug = slugifyPageName(name);
+      expect(SITE_PAGE_SLUG_PATTERN.test(slug)).toBe(true);
+      return slug;
+    };
+
+    expect(accepted('  Pool & Spa Rules!  ')).toBe('pool-spa-rules');
+
+    // Punctuation-only yields the EMPTY string, which the pattern rejects — and
+    // that is correct, not a gap: the form requires a non-empty address and
+    // `pageIssues` reports "Give this page a web address." The helper's job is
+    // to suggest, not to invent.
     expect(slugifyPageName('!!!')).toBe('');
-    expect(slugifyPageName('A'.repeat(80))).toHaveLength(60);
+    expect(SITE_PAGE_SLUG_PATTERN.test('')).toBe(false);
+
+    // The clamp, with the hyphen landing on the LAST KEPT character — 59 'a's,
+    // then a space that becomes the hyphen at index 59. Off-by-one matters
+    // here and cost a revert-check: at index 60 the hyphen is cut either way
+    // and both orderings agree, so the case proves nothing. At index 59:
+    //   clamp → strip  ⇒ 'a'*59        (correct)
+    //   strip → clamp  ⇒ 'a'*59 + '-'  (the trailing hyphen the comment on
+    //                                   `slugifyPageName` promises cannot occur)
+    const clamped = accepted(`${'a'.repeat(59)} tail`);
+    expect(clamped).toBe('a'.repeat(59));
+    expect(clamped.endsWith('-')).toBe(false);
+
+    // And the plain length clamp still holds.
+    expect(accepted('A'.repeat(80))).toHaveLength(60);
   });
 });
 
@@ -427,6 +566,26 @@ describe('PagesPanel — renaming', () => {
     expect(updateMutate).toHaveBeenCalledWith(
       { pageId: 2, name: 'Amenity guide' },
       expect.anything(),
+    );
+  });
+
+  it('says so when a rename FAILS, rather than leaving the old name on screen silently', async () => {
+    // `saveField`'s error branch had no test. Its success branch is asserted by
+    // the live-copy case in the navigation describe; this is the other half.
+    const user = userEvent.setup();
+    updateMutate.mockImplementation((_input, options) =>
+      options.onError(new Error('Another page is already called that.')),
+    );
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Facilities');
+    await user.click(editor.getByRole('button', { name: 'Save name' }));
+
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("We couldn't save that change"),
     );
   });
 
@@ -466,18 +625,57 @@ describe('PagesPanel — renaming', () => {
     expect(editor.getByRole('button', { name: 'Save name' })).toBeDisabled();
   });
 
-  it('does not accuse a page of clashing with itself', async () => {
-    // The obvious wrong fix for the above — comparing names without excluding
-    // the edited page — would make every rename that keeps its own name, and
-    // every no-op open-and-close of the editor, report a clash.
+  it('tells a real clash apart from a page keeping its own name', async () => {
+    /*
+     * Replaces a static absence assertion that could not be made red.
+     *
+     * The old version typed a page's OWN name back into its own field and
+     * asserted no error — and its fixture never created a duplicate name at
+     * all, so it never reached the clash code it was named after.
+     *
+     * **The no-self-clash half genuinely CANNOT be made red by removing one
+     * line, and that is a fact about the code, not a weakness left in this
+     * test.** Two mechanisms guarantee it REDUNDANTLY, and each was verified
+     * sufficient on its own during the round-5 adoption:
+     *   - `editIssues`' `others` filter, which passes the edited page exactly
+     *     once (replacing it with `pages` → still green); and
+     *   - `pageIssues`' `clash !== page.pageId` guard (deleting the conjunct →
+     *     still green).
+     * Belt and braces. Claiming a single revert target for that half would be
+     * the same wrong-reason bookkeeping this rewrite exists to end.
+     *
+     * What the rewrite DOES buy is the other half, which the old test lacked
+     * entirely: an actual duplicate, asserted to REPORT. That makes the case
+     * sensitive to the clash detection existing at all.
+     *
+     * Revert check (production line, verified): neutralise the clash lookup in
+     * `packages/shared/src/site-diff/pages.ts` — `const clash =
+     * seenNames.get(nameKey)` → `const clash = undefined`. This case goes red,
+     * along with the two sibling rename cases. The old version stayed GREEN
+     * under that same change, because "no error appeared" is exactly what a
+     * detector that never fires produces.
+     */
     const user = userEvent.setup();
     renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE] });
 
     const editor = await openSettings(user, 2);
     const nameField = editor.getByLabelText('Page name');
+
+    // Its own name: quiet.
     await user.clear(nameField);
     await user.type(nameField, 'Amenities');
+    expect(editor.queryByText(/Another page is also called/)).not.toBeInTheDocument();
 
+    // Another page's name, in the same field, one keystroke sequence later:
+    // loud. DRAFT_PAGE is 'Board'.
+    await user.clear(nameField);
+    await user.type(nameField, 'Board');
+    expect(editor.getByText(/Another page is also called/)).toBeInTheDocument();
+
+    // And back to its own name: quiet again, so the error is a function of the
+    // value and not a latch that fires once and stays.
+    await user.clear(nameField);
+    await user.type(nameField, 'Amenities');
     expect(editor.queryByText(/Another page is also called/)).not.toBeInTheDocument();
   });
 });
@@ -640,6 +838,51 @@ describe('PagesPanel — navigation visibility', () => {
     expect(updateMutate).toHaveBeenCalledWith({ pageId: 2, inNav: false }, expect.anything());
   });
 
+  it('says these controls are LIVE, inside a draft-then-publish editor', async () => {
+    /*
+     * `site_pages` has no draft/published column pair, so a rename, a nav
+     * toggle and a reorder reach the public site the instant they are saved —
+     * and `diff-pages.ts` correctly excludes them, so the publish sheet says
+     * "0 changes" immediately afterwards. A PM reading that as "nothing has
+     * happened yet" is wrong in the one direction that matters. Nothing on
+     * screen said so; the only place the distinction appeared was the
+     * draft-address hint, which sits on the one control that is harmless.
+     *
+     * Revert check (production line): the `site-page-live-hint-*` paragraph in
+     * `PagesPanel.tsx`.
+     */
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    expect(editor.getByTestId('site-page-live-hint-2')).toHaveTextContent(/go live straight away/i);
+  });
+
+  it('says what taking a page out of the nav does NOT do', async () => {
+    // The closest thing this panel has to "unpublish", and it is not that: the
+    // page stays online at its own address and stays in `sitemap.xml` (D16).
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    expect(editor.getByText(/only removes the link from your navigation/i)).toBeInTheDocument();
+    expect(editor.getByText(/stays online at its own address/i)).toBeInTheDocument();
+  });
+
+  it('says the nav toggle took effect on the live site, not at the next publish', async () => {
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    await user.click(editor.getByRole('button', { name: 'Show in navigation' }));
+    // The mutation is stubbed, so fire its success callback to read the copy
+    // the PM actually gets.
+    updateMutate.mock.calls[0]?.[1]?.onSuccess?.();
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining('out of your navigation now'),
+    );
+  });
+
   it('reports a hidden page as not shown', async () => {
     const user = userEvent.setup();
     renderPanel({ pages: [HOME, page({ id: 2, name: 'Amenities', inNav: false })] });
@@ -740,11 +983,43 @@ describe('PagesPanel — reordering', () => {
     const user = userEvent.setup();
     renderPanel({ pages: THREE });
 
-    screen.getByTestId('site-page-grip-2').focus();
+    // Focus FIRST, and assert it landed. Without this the case cannot tell a
+    // soft stop from a grip that never received the keystroke at all — a
+    // disabled or unfocusable grip produces the same "no request" result, and
+    // would pass this test while the keyboard reorder was entirely dead.
+    const grip = screen.getByTestId('site-page-grip-2');
+    grip.focus();
+    expect(grip).toHaveFocus();
+
     await user.keyboard('{ArrowUp}');
     expect(reorderMutate).not.toHaveBeenCalled();
 
+    // The positive control on the SAME grip: Down is a real move, so the
+    // keystrokes are reaching it and only the boundary is refused.
+    await user.keyboard('{ArrowDown}');
+    expect(reorderMutate).toHaveBeenCalledTimes(1);
+
     expect(screen.getByRole('button', { name: 'Move Amenities up' })).toBeDisabled();
+  });
+
+  it('says so when a reorder fails, and puts the announcement right', async () => {
+    // `moveToIndex`'s error branch had no test at all. Both halves matter: the
+    // live region has already announced "moved to position 2", so leaving it
+    // there tells a screen-reader user a move landed when it did not.
+    const user = userEvent.setup();
+    reorderMutate.mockImplementation((_input, options) =>
+      options.onError(new Error('Upstream timed out')),
+    );
+    renderPanel({ pages: THREE });
+
+    await user.click(screen.getByRole('button', { name: 'Move Amenities down' }));
+
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("We couldn't reorder your pages"),
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /Amenities could not be moved/,
+    );
   });
 
   it('never lets home leave the site root', () => {
@@ -820,6 +1095,77 @@ describe('PagesPanel — removing a page', () => {
     // An Undo affordance on a path with no way back would be a lie.
     expect(toastSuccessMock).toHaveBeenCalledWith('Board was deleted.');
     expect(toastSuccessMock.mock.calls[0]).toHaveLength(1);
+    // And the parent is told it was self-inflicted, so its selection repair
+    // moves the PM to home WITHOUT announcing "the page you were editing is no
+    // longer available" on top of the toast above. See
+    // `PagesPanelProps.onPageRemoved` and `EditorRoot.test.tsx`.
+    expect(onPageRemoved).toHaveBeenCalledWith(3);
+  });
+
+  it('does NOT report a staged removal as a self-inflicted disappearance', async () => {
+    // The staged page stays in the list until publish, so no repair fires and
+    // there is nothing to suppress. Marking it would leave a stale suppression
+    // armed for a page that is still there.
+    const user = userEvent.setup();
+    deleteMutate.mockImplementation((_input, options) => options.onSuccess({ staged: true }));
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    await user.click(editor.getByRole('button', { name: 'Remove page' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove page' }));
+
+    expect(deleteMutate).toHaveBeenCalledWith({ pageId: 2 }, expect.anything());
+    expect(onPageRemoved).not.toHaveBeenCalled();
+  });
+
+  it('closes the open editor when its row disappears, and keeps focus in the panel', async () => {
+    /*
+     * Two findings in one path, neither of which had any test.
+     *
+     * The effect that closes an expanded editor when its row leaves the list
+     * was untested outright — an editor left open over a page the server no
+     * longer knows offers reorder and nav controls that act on a dead id.
+     *
+     * And focus: `ConfirmDialog` restores to `removeButtonRef`, which is right
+     * for Cancel and useless for Confirm — `confirmRemove` closes the dialog
+     * before the mutation resolves, so focus lands on the remove button and the
+     * refetch then unmounts the row out from under it. Removing a focused
+     * element sends focus to `<body>`, leaving a keyboard PM at the top of the
+     * document. The dialog's `isConnected` guard cannot catch it: at the moment
+     * that guard runs, the button is still connected.
+     *
+     * Revert check (production line): `listRef.current?.focus();` in that
+     * effect (`PagesPanel.tsx`). Removing only it turns the focus assertion red
+     * and leaves the "editor closed" assertion green — which is what shows the
+     * two are independent claims and not one.
+     */
+    const user = userEvent.setup();
+    const { rerender } = renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE] });
+
+    await openSettings(user, 3);
+    expect(screen.getByTestId('site-page-editor-3')).toBeInTheDocument();
+
+    // The delete landed and the invalidated list came back without it.
+    useSitePagesMock.mockReturnValue({
+      data: [HOME, AMENITIES],
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: refetchMock,
+    });
+    rerender(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={1}
+        onSelectPage={onSelectPage}
+        onPageRemoved={onPageRemoved}
+      />,
+    );
+
+    expect(screen.queryByTestId('site-page-editor-3')).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(screen.getByRole('list', { name: 'Site pages' }));
   });
 
   it('counts no sections honestly rather than saying "0 sections"', async () => {
