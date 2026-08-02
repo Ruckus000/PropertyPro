@@ -13,6 +13,7 @@
  * edit in the same file, rather than a new test somebody has to think of.
  */
 import { describe, it, expect } from 'vitest';
+import * as M from '@/lib/site-editor/describe-page-state';
 import {
   NAV_IS_NOT_REMOVAL,
   describeLiveImmediacy,
@@ -24,10 +25,12 @@ import {
   isStagedForRemoval,
   shouldExplainNavIsNotRemoval,
   type PageStateFacts,
+  type PageSentence,
 } from '@/lib/site-editor/describe-page-state';
 
 function page(overrides: Partial<PageStateFacts> = {}): PageStateFacts {
   return {
+    id: 2,
     name: 'Amenities',
     isDraft: false,
     inNav: true,
@@ -65,15 +68,15 @@ describe('page-state predicates', () => {
 
 describe('describeLiveImmediacy', () => {
   it('has a distinct sentence for each of the three states', () => {
-    expect(describeLiveImmediacy(PUBLISHED)).toMatch(/go live straight away/);
-    expect(describeLiveImmediacy(DRAFT)).toMatch(/isn't on your site yet/);
-    expect(describeLiveImmediacy(STAGED)).toMatch(/set to be removed/);
+    expect(describeLiveImmediacy(PUBLISHED).text).toMatch(/go live straight away/);
+    expect(describeLiveImmediacy(DRAFT).text).toMatch(/isn't on your site yet/);
+    expect(describeLiveImmediacy(STAGED).text).toMatch(/set to be removed/);
   });
 
   it('does not promise a NAME change on a staged page, whose rename control is absent', () => {
-    expect(describeLiveImmediacy(STAGED)).not.toMatch(/name/i);
+    expect(describeLiveImmediacy(STAGED).text).not.toMatch(/name/i);
     // …while the ordinary published sentence does, because that control is there.
-    expect(describeLiveImmediacy(PUBLISHED)).toMatch(/name/i);
+    expect(describeLiveImmediacy(PUBLISHED).text).toMatch(/name/i);
   });
 });
 
@@ -81,30 +84,30 @@ describe('describeNavToggled', () => {
   it('reads the value being SAVED, not the one being left', () => {
     // The caller has already inverted it. Reading the current value would
     // describe the state the PM just moved away from.
-    expect(describeNavToggled(PUBLISHED, true)).toMatch(/shows in your navigation now/);
-    expect(describeNavToggled(PUBLISHED, false)).toMatch(/out of your navigation now/);
+    expect(describeNavToggled(PUBLISHED, true).text).toMatch(/shows in your navigation now/);
+    expect(describeNavToggled(PUBLISHED, false).text).toMatch(/out of your navigation now/);
   });
 
   it('promises nothing "now" on a page with no public nav to be in', () => {
-    expect(describeNavToggled(DRAFT, true)).toMatch(/once it's published/);
-    expect(describeNavToggled(DRAFT, false)).toMatch(/isn't published yet/);
+    expect(describeNavToggled(DRAFT, true).text).toMatch(/once it's published/);
+    expect(describeNavToggled(DRAFT, false).text).toMatch(/isn't published yet/);
   });
 });
 
 describe('describeReordered', () => {
-  const contact = page({ name: 'Contact' });
-  const pool = page({ name: 'Pool' });
-  const draftBoard = page({ name: 'Board', isDraft: true });
+  const contact = page({ id: 10, name: 'Contact' });
+  const pool = page({ id: 11, name: 'Pool' });
+  const draftBoard = page({ id: 12, name: 'Board', isDraft: true });
 
   it('says the order is live when the public projection actually moved', () => {
-    expect(describeReordered(contact, [contact, pool], [pool, contact])).toMatch(
+    expect(describeReordered(contact, [contact, pool], [pool, contact]).text).toMatch(
       /live now/,
     );
   });
 
   it('says nothing changed when only a hidden page moved', () => {
     expect(
-      describeReordered(draftBoard, [contact, draftBoard], [draftBoard, contact]),
+      describeReordered(draftBoard, [contact, draftBoard], [draftBoard, contact]).text,
     ).toMatch(/didn't change what visitors see/);
   });
 
@@ -119,7 +122,7 @@ describe('describeReordered', () => {
         contact,
         [contact, draftBoard, pool],
         [draftBoard, contact, pool],
-      ),
+      ).text,
     ).toMatch(/didn't change what visitors see/);
   });
 });
@@ -143,49 +146,37 @@ describe('shouldExplainNavIsNotRemoval', () => {
 /*
  * ── The invariant ─────────────────────────────────────────────────────────
  *
- * Every describing function, over the whole matrix, in one assertion.
+ * The FIRST version of this section was a phrase whitelist, and a review round
+ * broke it in one probe: a describer returning "Visitors can already reach this
+ * page on your public website." for a DRAFT page passed, because that wording
+ * was in neither the test's list nor the guard's. It also relied on a
+ * hand-maintained `DESCRIBERS` array — an unregistered describer was invisible
+ * — which is the same shape as the hand-enumerated surface lists that produced
+ * the drift this module exists to end.
+ *
+ * Rebuilt on two mechanisms that need no vocabulary and no list:
+ *
+ *   1. Each describer DECLARES `claimsPublic` beside its words. The invariant is
+ *      then logic: a sentence may claim publicity only for a published page.
+ *   2. Describers are found by REFLECTION over the module's exports, so a new
+ *      one is covered on arrival rather than when someone remembers a list.
+ *
+ * The phrase heuristic survives as a secondary belt: it can only ADD failures
+ * (text that reads like a claim while declaring it is not one), never mask them.
  */
 
-/** Phrases that assert a page is on the public site RIGHT NOW. */
-const CLAIMS_PUBLIC_NOW = [
+/** Reads like a present-tense visibility claim. Belt, not braces — see above. */
+const READS_AS_PUBLIC_CLAIM = [
   /live on your site now/i,
   /\blive now\b/i,
   /go live straight away/i,
   /shows in your navigation now/i,
   /stays online/i,
-  /search engines can still find it/i,
+  /visitors can (already )?(see|reach)/i,
+  /on your public (site|website)/i,
 ];
 
-/**
- * Every sentence-producer, applied to one page.
- *
- * A new describing function is covered by adding one line here — which is in the
- * same file as the function, so the omission is visible at review time rather
- * than discoverable only by a later review round.
- */
-const DESCRIBERS: Array<{ name: string; run: (p: PageStateFacts) => string[] }> = [
-  { name: 'describeLiveImmediacy', run: (p) => [describeLiveImmediacy(p)] },
-  { name: 'describeRenamed', run: (p) => [describeRenamed(p, 'New name')] },
-  {
-    name: 'describeNavToggled',
-    run: (p) => [describeNavToggled(p, true), describeNavToggled(p, false)],
-  },
-  {
-    name: 'describeReordered',
-    // Both a real move and a no-op move, so neither arm escapes the sweep.
-    run: (p) => [
-      describeReordered(p, [p, page({ name: 'Other' })], [page({ name: 'Other' }), p]),
-      describeReordered(p, [p], [p]),
-    ],
-  },
-  {
-    name: 'NAV_IS_NOT_REMOVAL',
-    // Conditional copy: it only counts as "said" when the panel would show it.
-    run: (p) => (shouldExplainNavIsNotRemoval(p) ? [NAV_IS_NOT_REMOVAL] : []),
-  },
-];
-
-/** Every combination of the four flags that decide what a visitor can see. */
+/** Every combination of the flags that decide what a visitor can see. */
 const MATRIX: PageStateFacts[] = [true, false].flatMap((isDraft) =>
   [true, false].flatMap((inNav) =>
     [true, false].flatMap((isHome) =>
@@ -196,21 +187,89 @@ const MATRIX: PageStateFacts[] = [true, false].flatMap((isDraft) =>
   ),
 );
 
+/**
+ * Every exported describer, found by reflection.
+ *
+ * A describer is an exported function returning a `PageSentence`. Calling each
+ * with a plausible argument list is the one piece of per-function knowledge
+ * left, and it is a mechanical arity switch rather than a judgement — omitting a
+ * case makes the coverage assertion below fail loudly, not silently.
+ */
+function sentencesFor(state: PageStateFacts): Array<{ name: string; sentence: PageSentence }> {
+  const other = page({ id: 999, name: 'Other' });
+  const out: Array<{ name: string; sentence: PageSentence }> = [];
+
+  for (const [name, value] of Object.entries(M)) {
+    if (typeof value !== 'function' || !name.startsWith('describe')) continue;
+    const fn = value as (...args: unknown[]) => unknown;
+    const candidates: unknown[][] = [
+      [state],
+      [state, 'New name'],
+      [state, true],
+      [state, false],
+      // Both a real move and a no-op move, so neither reorder arm escapes.
+      [state, [state, other], [other, state]],
+      [state, [state], [state]],
+    ];
+    for (const args of candidates) {
+      let result: unknown;
+      try {
+        result = fn(...args);
+      } catch {
+        continue;
+      }
+      if (
+        typeof result === 'object' &&
+        result !== null &&
+        'text' in result &&
+        'claimsPublic' in result
+      ) {
+        out.push({ name, sentence: result as PageSentence });
+      }
+    }
+  }
+  return out;
+}
+
 describe('the invariant: nothing claims a visitor can see an unpublished page', () => {
+  it('finds every exported describer by reflection, so none can be forgotten', () => {
+    /*
+     * The coverage assertion. `DESCRIBERS` used to be a hand list, and an
+     * unregistered describer was simply invisible to the sweep. Reflection
+     * removes the list; this pins that reflection actually reaches everything,
+     * so a describer whose arguments the switch above cannot supply fails here
+     * rather than being silently skipped.
+     */
+    const exported = Object.entries(M)
+      .filter(([name, v]) => typeof v === 'function' && name.startsWith('describe'))
+      .map(([name]) => name)
+      .sort();
+    const reached = [...new Set(sentencesFor(page()).map((s) => s.name))].sort();
+
+    expect(exported.length).toBeGreaterThan(0);
+    expect(reached).toEqual(exported);
+  });
+
   it('holds for every describer, over the whole state matrix', () => {
     const violations: string[] = [];
 
     for (const state of MATRIX) {
-      if (isPublished(state)) continue; // the claim is legitimate here
-      for (const describer of DESCRIBERS) {
-        for (const sentence of describer.run(state)) {
-          for (const claim of CLAIMS_PUBLIC_NOW) {
-            if (claim.test(sentence)) {
-              violations.push(
-                `${describer.name} on {draft:${state.isDraft}, inNav:${state.inNav}, home:${state.isHome}, staged:${state.deleteStagedAt !== null}} said: "${sentence}"`,
-              );
-            }
-          }
+      for (const { name, sentence } of sentencesFor(state)) {
+        const where = `{draft:${state.isDraft}, inNav:${state.inNav}, home:${state.isHome}, staged:${state.deleteStagedAt !== null}}`;
+
+        // 1. THE INVARIANT. Declaring a public claim on an unpublished page is
+        //    the defect, whatever words it uses.
+        if (sentence.claimsPublic && !isPublished(state)) {
+          violations.push(`${name} on ${where} claimed public visibility: "${sentence.text}"`);
+        }
+
+        // 2. THE BELT. Text that reads like a claim while declaring otherwise is
+        //    either a mis-declaration or a wording that will mislead a PM. It can
+        //    only add failures — a wording the list misses is still caught by (1).
+        if (!sentence.claimsPublic && READS_AS_PUBLIC_CLAIM.some((r) => r.test(sentence.text))) {
+          violations.push(
+            `${name} on ${where} declared claimsPublic:false but reads as a claim: "${sentence.text}"`,
+          );
         }
       }
     }
@@ -218,19 +277,25 @@ describe('the invariant: nothing claims a visitor can see an unpublished page', 
     expect(violations).toEqual([]);
   });
 
-  it('is not vacuous — the same sweep DOES find claims on published pages', () => {
+  it('is not vacuous — EVERY describer claims publicity somewhere on the published half', () => {
     /*
-     * Anti-vacuity, because a property test that never matches anything passes
-     * for a module that says nothing at all. The published half of the matrix
-     * must produce claims, or `CLAIMS_PUBLIC_NOW` has stopped matching the copy
-     * and the assertion above is asleep.
+     * Per-describer, not aggregate. The old version asserted `claims.length > 0`
+     * across all describers at once, which `describeLiveImmediacy` alone
+     * satisfied forever — so a describer that stopped claiming anything (or was
+     * reworded out of the heuristic) went unnoticed. This fails on that.
      */
-    const claims = MATRIX.filter(isPublished).flatMap((state) =>
-      DESCRIBERS.flatMap((d) =>
-        d.run(state).filter((s) => CLAIMS_PUBLIC_NOW.some((c) => c.test(s))),
-      ),
-    );
+    const claimed = new Set<string>();
+    for (const state of MATRIX.filter(isPublished)) {
+      for (const { name, sentence } of sentencesFor(state)) {
+        if (sentence.claimsPublic) claimed.add(name);
+      }
+    }
 
-    expect(claims.length).toBeGreaterThan(0);
+    const exported = Object.entries(M)
+      .filter(([name, v]) => typeof v === 'function' && name.startsWith('describe'))
+      .map(([name]) => name)
+      .sort();
+
+    expect([...claimed].sort()).toEqual(exported);
   });
 });

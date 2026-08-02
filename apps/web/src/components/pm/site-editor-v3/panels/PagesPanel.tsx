@@ -805,7 +805,7 @@ export function PagesPanel({
                 .map((id) => pages.find((p) => p.id === id))
                 .filter((row): row is SitePageSummary => row !== undefined);
             toast.success(
-              describeReordered(page, rowsFor(reorderableIds), rowsFor(next)),
+              describeReordered(page, rowsFor(reorderableIds), rowsFor(next)).text,
               { id: 'site-page-reorder' },
             );
           },
@@ -1287,7 +1287,7 @@ export function PagesPanel({
                         (see the `!staged` guard below), so promising that a
                         name change goes live describes a control that is not
                         on screen. */}
-                    {describeLiveImmediacy(page)}
+                    {describeLiveImmediacy(page).text}
                   </p>
 
                   {/*
@@ -1345,7 +1345,7 @@ export function PagesPanel({
                             // only made when the page has one. An unpublished
                             // page is on no public surface — see
                             // `isPublished`/`isPubliclyVisible`.
-                            describeRenamed(page, nameDraft.trim()),
+                            describeRenamed(page, nameDraft.trim()).text,
                           )
                         }
                       >
@@ -1427,7 +1427,7 @@ export function PagesPanel({
                           // about the public nav, and a draft page is in no
                           // nav at all — `listNavPages` filters `is_draft`
                           // before it filters `in_nav`.
-                          describeNavToggled(page, !page.inNav),
+                          describeNavToggled(page, !page.inNav).text,
                         )
                       }
                     >

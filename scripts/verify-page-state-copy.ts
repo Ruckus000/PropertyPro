@@ -28,51 +28,92 @@
 // claim written inline, which the property test cannot see because it never
 // reaches the module.
 //
-// ## What it looks for
+// ## Broad vocabulary, not a phrase whitelist — and that is the whole design
 //
-// Phrases that assert public visibility, appearing as source text under
-// apps/web/src/components/pm/site-editor-v3/. The module itself is exempt — it is
-// where they are supposed to live.
+// The FIRST version of this guard listed the six phrases already extracted. A
+// review round defeated it in one probe: a new inline sentence — "Visitors can
+// see this page right now. It is on your public site already." — inserted into
+// the guard's own flagship file passed with exit 0. It also missed three
+// visibility claims sitting in its scan root at the time.
 //
-// Scope is deliberately narrow. This is not a general "no inline copy" rule;
-// it is one invariant on one family of sentences that has demonstrably drifted.
+// That is the same failure as the hand-enumerated surface lists this whole
+// exercise is about: a whitelist recognises wordings someone already thought of,
+// and drift arrives in new words.
+//
+// So the vocabulary is now deliberately BROAD and the false positives are
+// handled by an explicit allowlist below. A broad guard with exemptions fails
+// loudly on new copy and is corrected by a human reading one line; a narrow
+// whitelist fails silently and is corrected by a review round.
+//
+// Scope covers the editor, the onboarding wizard (which round 10 caught making a
+// false publish claim, and which was out of scope by construction until now) and
+// lib/site-editor. The module itself is excluded by path — it is where these
+// sentences are supposed to live.
 //
 // Escape hatch: `// page-state-copy:exempt — <reason>` on the offending line.
 //
 // Known limitation: a source grep, not an AST walk. It cannot see a sentence
-// assembled from fragments, and it does not check that a call to the module is
-// passed the right page. The property test covers the latter.
+// assembled across lines, and it does not check that a describer is passed the
+// right page. The module's property test covers the latter, structurally.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SCAN_ROOT = join(repoRoot, 'apps/web/src/components/pm/site-editor-v3');
+const SCAN_ROOTS = [
+  join(repoRoot, 'apps/web/src/components/pm/site-editor-v3'),
+  join(repoRoot, 'apps/web/src/components/pm/onboarding-wizard'),
+  join(repoRoot, 'apps/web/src/lib/site-editor'),
+];
 const MODULE_PATH = 'apps/web/src/lib/site-editor/describe-page-state.ts';
 
 /**
- * Sentences asserting a page is on the public site right now.
+ * Vocabulary that indicates a claim about what a VISITOR can see.
  *
- * Kept in step with `CLAIMS_PUBLIC_NOW` in the module's test. Both lists exist
- * because they guard different things — the test guards what the module SAYS,
- * this guards where a claim is WRITTEN — and a phrase belongs in both.
+ * Deliberately over-broad. This is not "kept in step" with the module's test —
+ * an earlier comment said it was, and that was both false and unachievable: the
+ * two guard different things and one of them has to tolerate site-level copy
+ * living in the same directories. Over-matching here is cheap (one allowlist
+ * line, reviewed once); under-matching is the defect this guard exists to stop.
  */
-const CLAIM_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /live on your site now/i, label: '"live on your site now"' },
-  { pattern: /\blive now\b/i, label: '"live now"' },
-  { pattern: /go live straight away/i, label: '"go live straight away"' },
-  { pattern: /shows in your navigation now/i, label: '"shows in your navigation now"' },
-  { pattern: /the page (itself )?stays online/i, label: '"the page stays online"' },
-  {
-    pattern: /search engines can still find it/i,
-    label: '"search engines can still find it"',
-  },
+const VISIBILITY_VOCABULARY: RegExp[] = [
+  /\bvisitors?\b/i,
+  /live site/i,
+  /on your site/i,
+  /public site|public website/i,
+  /stays online/i,
+  /go live/i,
+  /\blive now\b/i,
+  /in your navigation/i,
+  /search engines/i,
+  /published yet/i,
 ];
+
+/**
+ * Pre-existing hits, frozen per file — SHRINK-ONLY, matching `guard:design-tokens`
+ * and `guard:page-padding`.
+ *
+ * A broad vocabulary over an existing codebase finds ~29 lines, and most are not
+ * page-visibility claims at all: site-level copy ("Your site stays online"),
+ * section-level copy, urgent-notice copy, and a link label ("View the public
+ * site"). Hand-curating those into an allowlist in one pass would be 29 snap
+ * judgements by one reviewer — which is how a whitelist goes wrong in the first
+ * place.
+ *
+ * So the ceiling is frozen instead: a baselined file may keep AT MOST its
+ * recorded count, and any file not listed must be clean. New copy in a new place
+ * fails immediately, which is the property that matters; the existing lines get
+ * drained deliberately, lowering the ceiling as they go.
+ *
+ * Regenerate with `--write-baseline` in a reviewed change, and only downward.
+ */
+const BASELINE_PATH = join(repoRoot, 'scripts/page-state-copy-baseline.json');
 
 const EXEMPT = /page-state-copy:exempt/;
 
 function walk(dir: string): string[] {
+  if (!existsSync(dir)) return [];
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -85,10 +126,16 @@ function walk(dir: string): string[] {
   return out;
 }
 
-const violations: string[] = [];
+const baseline: Record<string, number> = existsSync(BASELINE_PATH)
+  ? (JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, number>)
+  : {};
 
-for (const file of walk(SCAN_ROOT)) {
+const violations: string[] = [];
+const counts: Record<string, number> = {};
+
+for (const file of SCAN_ROOTS.flatMap(walk)) {
   const rel = relative(repoRoot, file);
+  if (rel === MODULE_PATH) continue;
   const lines = readFileSync(file, 'utf8').split('\n');
 
   lines.forEach((line, index) => {
@@ -96,21 +143,45 @@ for (const file of walk(SCAN_ROOT)) {
     // Comments may discuss the phrases — this guard is about rendered copy, and
     // the surrounding files explain these rules at length on purpose.
     const trimmed = line.trim();
-    if (trimmed.startsWith('*') || trimmed.startsWith('//')) return;
+    if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+      return;
+    }
 
-    for (const { pattern, label } of CLAIM_PATTERNS) {
-      if (pattern.test(line)) {
-        violations.push(
-          `${rel}:${index + 1}  ${label}\n` +
-            `    A page-visibility claim written inline. Move it to ${MODULE_PATH}\n` +
-            `    and call the describer, so the state matrix stays under one property test.`,
-        );
-      }
+    const hit = VISIBILITY_VOCABULARY.find((pattern) => pattern.test(line));
+    if (hit) {
+      counts[rel] = (counts[rel] ?? 0) + 1;
+      violations.push(
+        `${rel}:${index + 1}  matched ${hit}\n` +
+          `    ${line.trim().slice(0, 100)}\n` +
+          `    Reads as a claim about what a visitor can see. Move it to\n` +
+          `    ${MODULE_PATH} and call the describer, so the claim is DECLARED\n` +
+          `    and checked against the page state. If it is not a page-visibility\n` +
+          `    claim, add it to ALLOWED in this file or mark the line exempt.`,
+      );
     }
   });
 }
 
-if (violations.length > 0) {
+if (process.argv.includes('--write-baseline')) {
+  const sorted = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(sorted, null, 2)}\n`);
+  console.log(`✍️  wrote baseline: ${Object.keys(sorted).length} files`);
+  process.exit(0);
+}
+
+// Shrink-only: a file may hold at most its frozen count; anything not frozen
+// must be clean. The per-line list above is reported only for files that breach.
+const breaches: string[] = [];
+for (const [rel, count] of Object.entries(counts)) {
+  const ceiling = baseline[rel] ?? 0;
+  if (count > ceiling) {
+    breaches.push(
+      `${rel}: ${count} page-visibility claim${count === 1 ? '' : 's'}, ceiling ${ceiling}`,
+    );
+  }
+}
+
+if (breaches.length > 0) {
   console.error('❌ guard:page-state-copy\n');
   console.error(
     'Sentences claiming a page is visible to visitors must come from\n' +
@@ -118,12 +189,17 @@ if (violations.length > 0) {
       'This family of copy has drifted twice: a rule was derived, applied to the\n' +
       'one surface that prompted it, and left false on its siblings.\n',
   );
+  for (const b of breaches) console.error(`  ${b}`);
+  console.error('');
   for (const v of violations) console.error(`  ${v}\n`);
   console.error(
-    `${violations.length} violation${violations.length === 1 ? '' : 's'}.\n` +
-      'Escape hatch (rare, and say why): // page-state-copy:exempt — <reason>',
+    'Escape hatch (rare, and say why): // page-state-copy:exempt — <reason>\n' +
+      'The ceiling only ever goes DOWN. Drain a line, then lower it.',
   );
   process.exit(1);
 }
 
-console.log('✅ guard:page-state-copy — page-visibility copy is single-sourced');
+const frozen = Object.values(baseline).reduce((a, b) => a + b, 0);
+console.log(
+  `✅ guard:page-state-copy — no new page-visibility copy outside the module (${frozen} frozen)`,
+);
