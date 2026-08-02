@@ -197,20 +197,33 @@ const PUBLISHED_OK: PublishSiteResult = {
 interface RenderOptions {
   onOpenChange?: (open: boolean) => void;
   onFixIssue?: (slot: number) => void;
+  onGoToPages?: () => void;
   open?: boolean;
 }
 
-function renderSheet({ onOpenChange = vi.fn(), onFixIssue, open = true }: RenderOptions = {}) {
+function renderSheet({
+  onOpenChange = vi.fn(),
+  onFixIssue,
+  // Defaulted, not optional-in-practice: `onGoToPages` is a REQUIRED prop, and
+  // `BlockingIssues` no longer guards the button on its presence — so a harness
+  // that omitted it rendered a live "Go to Pages" wired to `undefined` in every
+  // page-issue case. Nothing clicked it, so it was latent rather than red, which
+  // is exactly the shape that survives review. `__tests__` is outside the
+  // `src/**` program, so the type system cannot catch it here.
+  onGoToPages = vi.fn(),
+  open = true,
+}: RenderOptions = {}) {
   const element = (
     <PublishSheet
       open={open}
       onOpenChange={onOpenChange}
       communityId={7}
+      onGoToPages={onGoToPages}
       {...(onFixIssue ? { onFixIssue } : {})}
     />
   );
   const view = render(element);
-  return { ...view, element, onOpenChange, onFixIssue };
+  return { ...view, element, onOpenChange, onFixIssue, onGoToPages };
 }
 
 beforeEach(() => {
@@ -653,8 +666,17 @@ describe('PublishSheet — the PAGE SET can block a publish too', () => {
      * blocking issues in the sheet with NO action at all, under a footer
      * reading "Fix the problems above before publishing".
      *
-     * Revert check (production line): the `isPageIssue && onGoToPages` branch
-     * in `BlockingIssues`.
+     * Revert check (production line, verified): the `isPageIssue` branch in
+     * `BlockingIssues` — the `Go to Pages` `<Button>`. Replacing the condition
+     * with `false` turns this red and nothing else: 1 failed / 42 passed.
+     *
+     * The comment used to name `isPageIssue && onGoToPages`. That conjunct was
+     * DELETED in the same commit that wrote this line, when `onGoToPages` became
+     * required — so the named target could not be performed as written, which is
+     * the exact failure mode five rounds of review have been chasing. Note too
+     * that dropping only the `isPageIssue` guard (the transformation the old
+     * wording literally described, minus the deleted half) leaves this GREEN,
+     * because the button then renders for every issue.
      */
     const user = userEvent.setup();
     queries.pages = [CONTACT_PAGE]; // no home page
@@ -898,6 +920,36 @@ describe('PublishSheet — failure', () => {
     // Failure must not close the sheet out from under the message.
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('does not claim the publish happened on the receipt that says it did not', async () => {
+    /*
+     * `attempted` is computed BEFORE the request and is only ever RENDERED on
+     * the failure paths — success toasts and closes the sheet, so no receipt
+     * survives. In the past tense it stacked, in this order:
+     *
+     *     Publish stopped
+     *     You published 3 changes.
+     *     Someone else published while you were working, so nothing was published.
+     *
+     * `ReceiptProps.attempted` documents itself as "What was attempted, e.g.
+     * 'Publishing 3 changes'"; the caller was the half that drifted. Pre-dates
+     * this phase (Phase 5), repaired here because 11b-3 newly makes a refusal
+     * routine — the publish can now be blocked on page grounds.
+     *
+     * Revert check (production line): `attempted` in `PublishSheet.tsx`'s
+     * `onPublish`, restored to `` `You published ${plural(…)}.` ``.
+     */
+    const user = userEvent.setup();
+    mutateAsync.mockRejectedValue(new PublishConflictError('Site changed since load'));
+    renderSheet();
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+
+    const receipt = await screen.findByTestId('publish-receipt');
+    expect(within(receipt).getByText(/you tried to publish/i)).toBeInTheDocument();
+    // The exact sentence that read as a false claim, beside "nothing was published".
+    expect(within(receipt).queryByText(/^You published /)).not.toBeInTheDocument();
   });
 
   it('renders a persistent receipt that survives a re-render', async () => {

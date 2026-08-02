@@ -35,8 +35,10 @@ export interface EditorShellProps {
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   canPreview: boolean;
   status?: React.ReactNode;
-  onPreview?: () => void;
-  onPublish?: () => void;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  onPreview: () => void;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  onPublish: () => void;
   /**
    * Controlled active tool. Supply both to let something outside the shell
    * drive the panel — selecting a section on the canvas switches to Sections.

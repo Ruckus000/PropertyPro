@@ -301,6 +301,54 @@ describe('PagesPanel — selection', () => {
     expect(onFocusRestored).toHaveBeenCalledTimes(1);
   });
 
+  it('consumes a flag raised while it is already mounted', () => {
+    /*
+     * The fix for round 8's HIGH, and the case that pins it.
+     *
+     * The first version of this consumer was a mount-only effect (`[]` deps),
+     * which made the flag single-use PER REMOUNT rather than single-use. The
+     * parent arms it from `handleSelectPage` on every row click — including
+     * clicks that leave `effectivePageId` unchanged and therefore do not remount
+     * this panel through `EditorRoot`'s `key`. Re-clicking the row you are
+     * already on does that, and so does the very FIRST click on the home row
+     * (`selectedPageId` moves `null → home.id` while `effectivePageId` was
+     * already `home.id`). Nothing consumed the flag on those paths, so it stayed
+     * armed until the next unmount/remount — and the PM's next trip to Sections
+     * and back performed the focus ambush verbatim, which is the exact defect
+     * the flag exists to prevent.
+     *
+     * Simulated the way production reaches it: a rerender of the SAME instance
+     * with the flag flipping false → true. A remount would prove nothing here,
+     * because the mount-only version handled that case correctly.
+     *
+     * Revert check (production line): the deps array on the focus effect in
+     * `PagesPanel.tsx`, `[restoreFocusToSelectedRow, onFocusRestored]` → `[]`.
+     * That is the pre-fix code exactly.
+     */
+    useSitePagesMock.mockReturnValue({
+      data: [HOME, AMENITIES],
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: refetchMock,
+    });
+    const props = {
+      communityId: 7,
+      selectedPageId: 2,
+      onFocusRestored,
+      onSelectPage,
+      onPageRemoved,
+    };
+    const { rerender } = render(<PagesPanel {...props} restoreFocusToSelectedRow={false} />);
+    // Nothing yet: opening the tab must not steal focus.
+    expect(onFocusRestored).not.toHaveBeenCalled();
+
+    rerender(<PagesPanel {...props} restoreFocusToSelectedRow />);
+
+    expect(document.activeElement).toBe(screen.getByTestId('site-page-select-2'));
+    expect(onFocusRestored).toHaveBeenCalledTimes(1);
+  });
+
   it('does NOT steal focus when the panel is merely opened', () => {
     // The control, and the reason the flag exists rather than "focus the
     // selected row on mount": opening the Pages tab also mounts this panel,
@@ -558,6 +606,54 @@ describe('PagesPanel — adding a page', () => {
     expect(toastErrorMock).toHaveBeenCalledWith(expect.stringContaining('Pick another address'));
   });
 
+  it('keeps keyboard focus inside the add flow, at both ends', async () => {
+    /*
+     * The button and the form are two arms of one ternary, so each transition
+     * DESTROYS the focused element: opening removes the button the PM just
+     * pressed, cancelling removes the Cancel button. Focus falls to `<body>`
+     * both times and a keyboard PM is at the top of the document — with, on the
+     * way in, a form on screen they must re-Tab the whole panel to reach.
+     *
+     * This panel already guards the same stranding three other times (the
+     * selected-row restore, the vanished-row list focus, the confirm dialog's
+     * `restoreFocusTo`); the primary creation journey was the gap.
+     *
+     * Revert check (production lines): `autoFocus` on the `#site-page-new-name`
+     * `<Input>` for the first assertion, and `addButtonRef.current?.focus()` in
+     * Cancel's `onClick` for the second. Each turns exactly its own half red.
+     */
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    expect(screen.getByLabelText('Page name')).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(await screen.findByRole('button', { name: 'Add a page' })).toHaveFocus();
+  });
+
+  it('says a name is too long before the server does', async () => {
+    /*
+     * The wire caps both fields at 60 (`nameField`/`slugField` in the pages
+     * contract) and the panel checked neither, so an over-long name passed
+     * every visible check, enabled Add page, and came back as a raw zod
+     * sentence — "Too big: expected string to have <=60 characters" — carried
+     * through `fields` and printed by `refusalDetail` with NO field label. With
+     * both fields capped at 60 the PM could not tell which one to shorten.
+     *
+     * Revert check (production line): the `lengthErrors(newName.trim(), 'name')`
+     * term in `createNameErrors`.
+     */
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await user.type(screen.getByLabelText('Page name'), 'a'.repeat(61));
+
+    expect(screen.getByText(/up to 60 characters/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add page' })).toBeDisabled();
+  });
+
   it('refuses an address an application route already owns', async () => {
     // `isReservedPublicSlug` is INJECTED into the shared validator, which is the
     // same function the server runs. A page at /documents would be shadowed by
@@ -809,6 +905,57 @@ describe('PagesPanel — renaming', () => {
     await user.type(nameField, 'Board');
 
     expect(nameField).toHaveAccessibleDescription(/Another page is also called "Board"/);
+  });
+
+  it('does not offer to write a stale name back over a co-manager’s rename', async () => {
+    /*
+     * `useSitePages` sets `refetchOnWindowFocus: true` for exactly one reason —
+     * this is the list a SECOND manager can change — so a PM who leaves the
+     * settings row expanded and comes back gets a refetched list underneath it.
+     *
+     * The drafts were seeded once, in `openEditor`, and never again. So the row
+     * title rendered the new name while the input still held the old one, and —
+     * the dangerous half — `Save name` is disabled on
+     * `nameDraft.trim() === page.name`, so the moment those diverged the button
+     * ENABLED itself. Pressing it wrote the stale value back: a live, silent
+     * revert of the other manager's rename, with the enabled button as the
+     * invitation.
+     *
+     * Revert check (production line): the re-seeding effect in `PagesPanel.tsx`
+     * keyed on `[expandedPage?.id, expandedPage?.name, expandedPage?.slug]`.
+     * Removing it leaves the input on the old value and Save enabled.
+     */
+    const user = userEvent.setup();
+    const { rerender } = renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    expect(editor.getByLabelText('Page name')).toHaveValue('Amenities');
+    expect(editor.getByRole('button', { name: 'Save name' })).toBeDisabled();
+
+    // The co-manager's rename arrives on the focus refetch.
+    const renamed = { ...AMENITIES, name: 'Pool & Gym' };
+    useSitePagesMock.mockReturnValue({
+      data: [HOME, renamed],
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: refetchMock,
+    });
+    rerender(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={1}
+        restoreFocusToSelectedRow={false}
+        onFocusRestored={onFocusRestored}
+        onSelectPage={onSelectPage}
+        onPageRemoved={onPageRemoved}
+      />,
+    );
+
+    const reopened = within(screen.getByTestId('site-page-editor-2'));
+    expect(reopened.getByLabelText('Page name')).toHaveValue('Pool & Gym');
+    // …and therefore back to "nothing to save", not "press me to undo them".
+    expect(reopened.getByRole('button', { name: 'Save name' })).toBeDisabled();
   });
 
   it('tells a real clash apart from a page keeping its own name', async () => {
@@ -1219,10 +1366,24 @@ describe('PagesPanel — reordering', () => {
     expect(screen.getByRole('button', { name: 'Move Amenities up' })).toBeDisabled();
   });
 
-  it('says so when a reorder fails, and puts the announcement right', async () => {
-    // `moveToIndex`'s error branch had no test at all. Both halves matter: the
-    // live region has already announced "moved to position 2", so leaving it
-    // there tells a screen-reader user a move landed when it did not.
+  it('says so when a reorder fails, and stops claiming the move landed', async () => {
+    /*
+     * Both halves matter, and the second is the one with teeth: the live region
+     * has ALREADY announced "moved to position 3", optimistically, so leaving
+     * that standing tells a screen-reader user a move landed when it did not.
+     *
+     * Asserts the region no longer claims the move, rather than asserting a
+     * replacement sentence. That is the property the original version of this
+     * case was reaching for, and it is strictly stronger: a second sentence in
+     * the region would satisfy "the text changed" while ALSO announcing the
+     * failure twice — once here and once from sonner, which is itself a live
+     * region. The toast is the failure's single announcement.
+     *
+     * Revert check (production line): `setAnnouncement('')` in `moveToIndex`'s
+     * `onError`. Restoring the old `setAnnouncement(\`${page.name} could not be
+     * moved.\`)` also turns this red, which is the point — the region must be
+     * emptied, not rewritten.
+     */
     const user = userEvent.setup();
     reorderMutate.mockImplementation((_input, options) =>
       options.onError(new Error('Upstream timed out')),
@@ -1234,9 +1395,40 @@ describe('PagesPanel — reordering', () => {
     expect(toastErrorMock).toHaveBeenCalledWith(
       expect.stringContaining("We couldn't reorder your pages"),
     );
-    expect(screen.getByRole('status')).toHaveTextContent(
-      /Amenities could not be moved/,
-    );
+    expect(screen.getByRole('status')).not.toHaveTextContent(/moved to position/);
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('does not announce the same reorder twice', async () => {
+    /*
+     * The panel's live region and sonner's are BOTH `aria-live`, so a sentence
+     * present in each is announced twice to a screen-reader user. The header on
+     * `announcement` forbids exactly this, citing `GalleryImagesField` — and the
+     * reorder toast, when it was added, interpolated the region's own position
+     * sentence and did it anyway.
+     *
+     * The split now: the REGION states the move (immediately, optimistically),
+     * the TOAST states the consequence (once the server confirms). One fact
+     * each, no overlap.
+     *
+     * Revert check (production line): the toast text in `moveToIndex`'s
+     * `onSuccess`, restored to `` `${position} Your navigation order is live
+     * now.` ``. That turns this red while
+     * `'says out loud that the navigation change is already public'` and
+     * `'announces the move so a screen-reader user hears it land'` both stay
+     * green — neither can see the overlap, because each reads one channel.
+     */
+    const user = userEvent.setup();
+    reorderMutate.mockImplementation((_input, options) => options.onSuccess?.());
+    renderPanel({ pages: THREE });
+
+    await user.click(screen.getByRole('button', { name: 'Move Amenities down' }));
+
+    const region = screen.getByRole('status').textContent ?? '';
+    const [toastText] = toastSuccessMock.mock.calls[0]!;
+    expect(region).toContain('moved to position');
+    expect(toastText).not.toContain('moved to position');
+    expect(toastText).toContain('live now');
   });
 
   it('never lets home leave the site root', () => {

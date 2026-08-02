@@ -21,8 +21,17 @@ export interface EditorTopBarProps {
   pageName?: string;
   /** Rendered on the right, before the actions — the save status line (Phase 3). */
   status?: React.ReactNode;
-  onPreview?: () => void;
-  onPublish?: () => void;
+  /**
+   * Required, for the same reason `canOpenPublish` and `canPreview` below are.
+   *
+   * These are the other half of each button. A missing `can*` prop yields a
+   * button disabled for everyone; a missing handler yields one ENABLED and
+   * inert, which is strictly worse — it invites the click and swallows it. Both
+   * have exactly one production caller, so requiring them costs nothing and
+   * removes the shape that shipped 11b-1's dead publish button.
+   */
+  onPreview: () => void;
+  onPublish: () => void;
   /**
    * Whether Publish opens the review sheet. Required and undefaulted on
    * purpose: this prop shipped optional with a `= 0` default (as `changeCount`)

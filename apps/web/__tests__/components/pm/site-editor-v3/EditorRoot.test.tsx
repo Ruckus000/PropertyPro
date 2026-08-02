@@ -1382,6 +1382,33 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('false');
   });
+
+  it('arms the flag even when the click does not change the page', async () => {
+    /*
+     * The parent's half of the hole the flag-keyed effect closes.
+     *
+     * `handleSelectPage` arms the flag on EVERY row click, including ones that
+     * leave `effectivePageId` alone and therefore do not remount the panel
+     * through `EditorRoot`'s `key`. This case drives the sharpest instance:
+     * `selectedPageId` starts null while `effectivePageId` is ALREADY the
+     * seeded home id, so clicking the home row moves `null → home.id` with
+     * `effectivePageId` identical on both sides — no remount.
+     *
+     * That the flag is armed here is CORRECT and is not the defect; the defect
+     * was that nothing consumed it, because the panel's consumer keyed on mount
+     * rather than on the flag. This case pins the parent behaviour that makes
+     * the panel-side deps array load-bearing. **The fix itself is pinned in
+     * `PagesPanel.test.tsx`** (`'consumes a flag raised while it is already
+     * mounted'`), because the panel is STUBBED here — a mount-only effect in the
+     * real panel is invisible to this file, which is precisely why the first
+     * version of this fix passed its EditorRoot tests while still latching.
+     */
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
+
+    expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('true');
+  });
 });
 
 describe('EditorRoot — the publish sheet can reach the Pages panel', () => {
@@ -1455,6 +1482,41 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     queries.pages = [];
     await act(async () => {
       rerender(rootElement({ initialPages: [], canvasContext: {} }));
+    });
+
+    expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
+  });
+
+  it('does not spring the dialog back open when the pages read recovers', async () => {
+    /*
+     * Withholding a surface and forgetting the state that opened it is a
+     * DEFERRED POP-UP, not a gate. The render condition suppressed the dialog
+     * while `pagesUnavailable` was true but left `previewOpen` true underneath
+     * — so the moment a retry succeeded, the dialog reappeared over whatever the
+     * PM had moved on to, dismissed by nobody.
+     *
+     * Revert check (production line): the `if (pagesUnavailable)
+     * setPreviewOpen(false);` effect in `EditorRoot.tsx`. The two cases above
+     * stay green without it — neither reaches the recovery leg.
+     */
+    queries.pages = [seededHome];
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    expect(screen.getByText(/previewing/)).toBeInTheDocument();
+
+    // The read fails…
+    queries.isError = true;
+    queries.pages = [];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+    });
+    expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
+
+    // …and the PM's retry succeeds.
+    queries.isError = false;
+    queries.pages = [seededHome];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [seededHome], canvasContext: {} }));
     });
 
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();

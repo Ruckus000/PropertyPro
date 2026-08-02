@@ -295,6 +295,36 @@ function messagesFor(
     .map((issue) => issue.message);
 }
 
+/**
+ * The wire's 60-character cap on a page's name and address, said in advance.
+ *
+ * `MAX_FIELD_LENGTH` mirrors `nameField`/`slugField` in the pages contract. The
+ * server refuses a longer value with a raw zod message — "Too big: expected
+ * string to have <=60 characters" — carried through `fields` and therefore
+ * printed by `refusalDetail` with no field label. With BOTH fields capped at 60,
+ * the PM could not even tell which one to shorten; if `details.fields` is empty
+ * they get "Invalid request body" instead, which is worse. Either way it is a
+ * dead end in a panel whose every other refusal is a hand-written sentence.
+ *
+ * Deliberately NOT added to the shared `pageIssues`, despite that being where
+ * every other rule in this panel comes from. `pageIssues` is also the PUBLISH
+ * gate: a length rule there would newly BLOCK publishing for any community
+ * holding a name longer than 60 — rows this cap did not exist to create, but
+ * which nothing proves absent. Refusing a publish over a pre-existing name is a
+ * worse failure than the dead-end toast this replaces. The duplication is the
+ * price, and the constant names the contract it mirrors so the two move together.
+ */
+const MAX_FIELD_LENGTH = 60;
+
+function lengthErrors(value: string, field: 'name' | 'slug'): string[] {
+  if (value.length <= MAX_FIELD_LENGTH) return [];
+  return [
+    field === 'name'
+      ? `Page names can be up to ${MAX_FIELD_LENGTH} characters.`
+      : `Web addresses can be up to ${MAX_FIELD_LENGTH} characters.`,
+  ];
+}
+
 /** "no sections" / "1 section" / "4 sections" — the count D36′ requires, said in words. */
 function sectionPhrase(count: number): string {
   if (count === 0) return 'no sections';
@@ -336,9 +366,19 @@ export interface PagesPanelProps {
    * Pages — remounted the panel with a stale `true` and yanked focus onto the
    * row, which is exactly the ambush the flag exists to prevent.
    *
-   * Called from the mount effect whether or not a row was found to focus: the
-   * parent's intent has been spent either way, and a flag left armed by a missed
-   * ref would fire on the next unrelated mount.
+   * Called whether or not a row was found to focus: the parent's intent has been
+   * spent either way, and a flag left armed by a missed ref would fire on the
+   * next unrelated mount.
+   *
+   * The consuming effect watches the FLAG, not the mount. A mount-only version
+   * shipped first and closed only half the hole, because the parent arms the
+   * flag from `handleSelectPage` — which is also reached on clicks that do NOT
+   * change `effectivePageId`, and therefore do not remount this panel through
+   * `EditorRoot`'s `key`. Two first-click-level journeys do exactly that:
+   * re-clicking the row you are already on, and the very first click on the
+   * home row (`selectedPageId` moves `null → home.id` while `effectivePageId`
+   * was already `home.id`). Neither remounted, so nothing consumed the flag,
+   * and the next tool switch and return performed the ambush verbatim.
    */
   onFocusRestored: () => void;
   /**
@@ -383,8 +423,14 @@ export interface PagesPanelProps {
    * tick after the PM's own deliberate delete, on top of the "X was deleted."
    * they already got, it reads as a second, unexplained event.
    *
-   * Only the immediate hard delete needs this. A staged removal leaves the page
-   * in the list until publish, so it triggers no repair.
+   * Only the immediate hard delete needs this — a staged removal leaves the page
+   * in the list, so it triggers no repair AT DELETE TIME. It does trigger one at
+   * PUBLISH time, when the page finally leaves the list, and that is the more
+   * common route of the two (a published page cannot be hard-deleted at all).
+   * That case is handled in `EditorRoot`'s repair effect by the staging-state
+   * branch, not by this prop: staging is visible in the page row, so the repair
+   * can tell the two stories apart without an actor identity the client does not
+   * have.
    *
    * Required, not optional: a prop whose absence silently disables a behaviour
    * is how 11b-1 shipped a dead publish button.
@@ -412,15 +458,24 @@ export function PagesPanel({
   const unstageDelete = useUnstageSitePageDelete(communityId);
 
   const hintId = useId();
-  // Announces ONLY the changes that have no visible confirmation of their own
-  // AND do not switch page — which leaves the REORDER (the list rearranges in
-  // place). A creation also has no visible confirmation, but it moves the
-  // selection and therefore remounts this panel, so its announcement is handed
-  // to `EditorRoot` through `onSelectPage` instead; a live region rebuilt by
-  // the update it is reporting announces nothing.
+  // Carries the REORDER, and splits the job with that action's toast rather
+  // than duplicating it: this region states the MOVE ("Amenities moved to
+  // position 3 of 4") the instant it happens, optimistically; the toast states
+  // the CONSEQUENCE ("Your navigation order is live now.") when the server
+  // confirms. Two sentences, two facts, one announcement each.
   //
-  // Everything else toasts, and a toast is itself a live region: announcing in
-  // both is the double-announcement `GalleryImagesField` documents avoiding.
+  // That split is load-bearing, not tidiness. When the toast was added it
+  // interpolated this same position sentence, so a screen-reader user heard it
+  // twice — once here and once from sonner's own live region — which is the
+  // double-announcement `GalleryImagesField` documents avoiding, in the file
+  // whose comment forbade it.
+  //
+  // A creation also has no visible confirmation, but it moves the selection and
+  // therefore remounts this panel, so its announcement is handed to `EditorRoot`
+  // through `onSelectPage` instead; a live region rebuilt by the update it is
+  // reporting announces nothing.
+  //
+  // Everything else toasts alone, for the same no-double-announcement reason.
   const [announcement, setAnnouncement] = useState('');
   const [expandedPageId, setExpandedPageId] = useState<number | null>(null);
   const [nameDraft, setNameDraft] = useState('');
@@ -444,6 +499,17 @@ export function PagesPanel({
   const listRef = useRef<HTMLUListElement>(null);
   /** The row for the currently selected page — see `restoreFocusToSelectedRow`. */
   const selectedRowRef = useRef<HTMLButtonElement>(null);
+  /*
+   * The "Add a page" button, so Cancel can hand focus back to it.
+   *
+   * The button and the form are two arms of one ternary, so each transition
+   * DESTROYS the element that was focused: opening removes the button the PM
+   * just pressed, cancelling removes the Cancel button. Either way focus falls
+   * to `<body>` and a keyboard PM is at the top of the document — the same
+   * stranding this panel already guards against in three other places, missed
+   * on its primary creation journey.
+   */
+  const addButtonRef = useRef<HTMLButtonElement>(null);
 
   const pages = useMemo(() => data ?? [], [data]);
 
@@ -470,25 +536,26 @@ export function PagesPanel({
   /*
    * Focus follows the selection across the remount.
    *
-   * Mount-only (`[]`), and gated on a flag the PARENT sets: this panel is
-   * remounted both by a page switch (where the PM's focus was on a row that no
-   * longer exists) and by opening the Pages tab (where stealing focus would be
-   * an ambush). Only the first deserves it.
+   * Gated on a flag the PARENT sets: this panel is remounted both by a page
+   * switch (where the PM's focus was on a row that no longer exists) and by
+   * opening the Pages tab (where stealing focus would be an ambush). Only the
+   * first deserves it.
    *
    * The row is the right target rather than the list: the PM pressed a specific
    * row, and returning them to it keeps Tab order where they left it.
    *
-   * `onFocusRestored` fires unconditionally once the flag has been acted on,
-   * which is what makes the flag single-use. A flag that stayed armed turned
-   * every later reopen of this tab into the ambush the paragraph above rules
-   * out — see `PagesPanelProps.onFocusRestored`.
+   * Keyed on the FLAG, not on mount — `[]` deps closed only half the hole, and
+   * `PagesPanelProps.onFocusRestored` records which half and why. Watching the
+   * flag also removes the `exhaustive-deps` suppression the mount-only version
+   * needed, and it is self-limiting: consuming the flag flips it false, so the
+   * re-run this schedules lands on the early return. Opening the tab is still
+   * safe because the flag is false there.
    */
   useEffect(() => {
     if (!restoreFocusToSelectedRow) return;
     selectedRowRef.current?.focus();
     onFocusRestored();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
-  }, []);
+  }, [restoreFocusToSelectedRow, onFocusRestored]);
 
   // A row that disappeared underneath an open editor must not leave that editor
   // open over nothing — and the reorder/nav controls inside it would then be
@@ -519,6 +586,30 @@ export function PagesPanel({
   }, [data, expandedPageId, pages]);
 
   const expandedPage = pages.find((page) => page.id === expandedPageId) ?? null;
+
+  /*
+   * Re-seed the drafts when the SERVER row moves under an open editor.
+   *
+   * `useSitePages` sets `refetchOnWindowFocus: true` for one reason — this is
+   * the list a SECOND manager can change — so a PM who leaves the settings row
+   * expanded and comes back gets a refetched list. The drafts were seeded once,
+   * in `openEditor`, and never again. So the row's title rendered the new name
+   * while the input still held the old one, and worse: `Save name` is disabled
+   * on `nameDraft.trim() === page.name`, and those two had just diverged, so the
+   * button ENABLED itself. Pressing it wrote the stale value back — a live,
+   * silent revert of the other manager's rename, with the enabled button as the
+   * invitation.
+   *
+   * Discarding an unsaved local edit is the deliberate direction. Retyping a
+   * name costs seconds; a silently reverted live rename is invisible to both
+   * managers. Keying on the server values means an ordinary keystroke does not
+   * trigger this — only a real change to the row underneath.
+   */
+  useEffect(() => {
+    if (!expandedPage) return;
+    setNameDraft(expandedPage.name);
+    setSlugDraft(expandedPage.slug);
+  }, [expandedPage?.id, expandedPage?.name, expandedPage?.slug]);
 
   const openEditor = useCallback((page: SitePageSummary) => {
     setExpandedPageId((current) => {
@@ -551,8 +642,14 @@ export function PagesPanel({
       }),
     [newName, newSlug, pages],
   );
-  const createNameErrors = messagesFor(createIssues, NEW_PAGE_KEY, 'name');
-  const createSlugErrors = messagesFor(createIssues, NEW_PAGE_KEY, 'slug');
+  const createNameErrors = [
+    ...messagesFor(createIssues, NEW_PAGE_KEY, 'name'),
+    ...lengthErrors(newName.trim(), 'name'),
+  ];
+  const createSlugErrors = [
+    ...messagesFor(createIssues, NEW_PAGE_KEY, 'slug'),
+    ...lengthErrors(newSlug, 'slug'),
+  ];
   // Nothing is complained about before the PM has typed anything — an error
   // shown on an untouched form reads as the form being broken.
   const showCreateErrors = newName.trim().length > 0 || newSlug.length > 0;
@@ -592,8 +689,14 @@ export function PagesPanel({
     });
   }, [expandedPage, nameDraft, pages, slugDraft]);
   const editKey = expandedPage === null ? '' : String(expandedPage.id);
-  const editNameErrors = messagesFor(editIssues, editKey, 'name');
-  const editSlugErrors = messagesFor(editIssues, editKey, 'slug');
+  const editNameErrors = [
+    ...messagesFor(editIssues, editKey, 'name'),
+    ...lengthErrors(nameDraft.trim(), 'name'),
+  ];
+  const editSlugErrors = [
+    ...messagesFor(editIssues, editKey, 'slug'),
+    ...lengthErrors(slugDraft, 'slug'),
+  ];
 
   // ── Reorder ───────────────────────────────────────────────────────────────
   // Home is pinned at the site root and is not reorderable, so the submitted
@@ -638,13 +741,23 @@ export function PagesPanel({
              * a page three positions is three mutations, and sonner stacks
              * un-idded toasts. One toast that updates is the honest render of
              * one ongoing action.
+             *
+             * Deliberately does NOT repeat `position`. The live region above
+             * already said where the page went, and sonner's container is
+             * itself an `aria-live` region — interpolating it here announced the
+             * same sentence to a screen-reader user twice. This says the one
+             * thing the region does not: that the change is already public.
              */
-            toast.success(`${position} Your navigation order is live now.`, {
+            toast.success('Your navigation order is live now.', {
               id: 'site-page-reorder',
             });
           },
           onError: (mutationError) => {
-            setAnnouncement(`${page.name} could not be moved.`);
+            // Cleared, not replaced with a failure sentence: the toast below is
+            // itself a live region and will announce the failure, but the
+            // optimistic "moved to position N" above must not be left standing
+            // as an assertion about a move that did not happen.
+            setAnnouncement('');
             toast.error(`We couldn't reorder your pages. ${mutationError.message}`);
           },
         },
@@ -832,7 +945,12 @@ export function PagesPanel({
     <form onSubmit={submitCreate} className="space-y-3 rounded-md border border-edge p-3">
       <div className="space-y-1">
         <Label htmlFor="site-page-new-name">Page name</Label>
+        {/* `autoFocus` because opening the form destroys the button that was
+            focused — see `addButtonRef`. The first field is the right landing
+            spot: it is where the PM is going anyway, and it makes the form's
+            appearance audible to a screen reader without a live region. */}
         <Input
+          autoFocus
           id="site-page-new-name"
           value={newName}
           onChange={(event) => {
@@ -895,6 +1013,12 @@ export function PagesPanel({
             setNewName('');
             setNewSlug('');
             setSlugTouched(false);
+            // The form is about to unmount with focus inside it. React commits
+            // the state change before this runs to completion, so the button
+            // exists by the time the ref is read on the next paint — but read it
+            // from a microtask rather than assuming, since the alternative is a
+            // silent drop to `<body>`.
+            queueMicrotask(() => addButtonRef.current?.focus());
           }}
         >
           Cancel
@@ -902,7 +1026,13 @@ export function PagesPanel({
       </div>
     </form>
   ) : (
-    <Button type="button" size="sm" variant="outline" onClick={() => setAdding(true)}>
+    <Button
+      ref={addButtonRef}
+      type="button"
+      size="sm"
+      variant="outline"
+      onClick={() => setAdding(true)}
+    >
       <Plus className="h-4 w-4" aria-hidden="true" />
       Add a page
     </Button>

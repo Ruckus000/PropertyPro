@@ -281,9 +281,10 @@ interface BodyProps {
   brandColors?: ResolvedBrandColors;
   onFixIssue?: (slot: number) => void;
   // Required all the way down, matching `PublishSheetProps`. An optional
-  // restatement here would put the hole straight back: the outer component
-  // spreads its props through, so this interface is the one the render actually
-  // reads.
+  // restatement here would put the hole straight back: `PublishSheet` forwards
+  // this prop by name to `PublishSheetBody`, and it is THIS interface the
+  // render reads — so a required outer prop and an optional inner one buys
+  // nothing beyond a typecheck that passes.
   onGoToPages: () => void;
   onOpenChange: (open: boolean) => void;
 }
@@ -378,7 +379,21 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
 
   async function onPublish() {
     setReceipt(null);
-    const attempted = `You published ${plural(diff.changes.length, 'change')}.`;
+    /*
+     * "tried to", not "published" — this line is computed BEFORE the request and
+     * is only ever RENDERED on the paths where it failed. Success toasts and
+     * closes the sheet (below), so the receipt is a failure surface: the past
+     * tense put "You published 3 changes." directly above "…so nothing was
+     * published" and "Your live site is unchanged."
+     *
+     * `ReceiptProps.attempted` documents itself as "What was attempted, e.g.
+     * 'Publishing 3 changes'" — the caller was the half that drifted.
+     *
+     * Pre-dates this phase (Phase 5, `93bf00bc`); repaired here because it sits
+     * on the journey this PR rewrites and reads as a false claim to any PM whose
+     * publish is refused on page grounds — which 11b-3 newly makes possible.
+     */
+    const attempted = `You tried to publish ${plural(diff.changes.length, 'change')}.`;
     try {
       const result = await publish.mutateAsync({
         expectedPublishedAt: tokenQuery.data ?? null,

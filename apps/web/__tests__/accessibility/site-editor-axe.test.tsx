@@ -262,7 +262,7 @@ describe('Urgent notice — axe (Phase 7)', () => {
 
 describe('Pages panel — axe (Phase 11b-3)', () => {
   /*
-   * Every DATA state and every DISCLOSURE state.
+   * Every DATA state, and the disclosure states that contain form controls.
    *
    * The data states — loading skeleton, error banner, empty — are what a PM
    * meets on a bad connection, and an unlabelled control there is exactly as
@@ -277,10 +277,20 @@ describe('Pages panel — axe (Phase 11b-3)', () => {
    *
    * An axe audit has no single-line revert target, so instead: ANTI-VACUITY,
    * verified by running it. Dropping `htmlFor` from the expanded editor's
-   * `Page name` label reddens both expanded cases with axe's `form-field-multiple-labels`
-   * / orphaned-label rule ("no form control was found associated to that
-   * label") and leaves all four collapsed audits GREEN. That is the proof these
-   * cases see markup no existing case could.
+   * `Page name` label reddens BOTH expanded cases and leaves all four collapsed
+   * audits GREEN — the proof they see markup no existing case could.
+   *
+   * The two reds are not the same kind, and saying so matters: the first fails
+   * at `toHaveNoViolations` (a genuine axe orphaned-label violation), the second
+   * fails EARLIER, at `getByLabelText('Page name')`, before axe runs at all. So
+   * the second case's axe assertion is not what that probe exercises.
+   *
+   * The add-form case stays GREEN under that same probe — it is a different
+   * container — so its non-vacuity is pinned separately below.
+   *
+   * The STAGED row's expanded editor is a structurally different body — no
+   * name/slug inputs, a cancel-removal control instead — so it gets its own case
+   * rather than riding on the draft row's.
    */
   function renderPages(selectedPageId: number | null = 1) {
     return render(
@@ -352,7 +362,30 @@ describe('Pages panel — axe (Phase 11b-3)', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it('has no violations in the expanded editor of a page staged for removal', async () => {
+    // Page 3 carries `deleteStagedAt`, which suppresses the name and address
+    // controls entirely (renaming a page on its way out is not a thing the
+    // panel offers) and puts a cancel-removal control in their place. Different
+    // markup, so a different audit — and the `htmlFor` probe above cannot reach
+    // it, since this body has no labelled input at all.
+    //
+    // Anti-vacuity for THIS case, verified: wrapping "Cancel removal" in an
+    // `aria-hidden` span (leaving the button with no accessible name) reddens
+    // this case and nothing else — 1 failed / 15 passed.
+    const user = userEvent.setup();
+    const { container } = renderPages(3);
+
+    await user.click(screen.getByTestId('site-page-settings-3'));
+    await screen.findByTestId('site-page-editor-3');
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it('has no violations in the add-a-page form', async () => {
+    // Anti-vacuity for THIS case specifically, verified separately from the
+    // expanded-editor probe above (which leaves this one green, being a
+    // different container): dropping `htmlFor` from the add form's own
+    // `Page name` label reddens this case and no other.
     const user = userEvent.setup();
     const { container } = renderPages();
 

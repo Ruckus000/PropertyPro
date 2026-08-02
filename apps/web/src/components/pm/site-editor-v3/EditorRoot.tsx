@@ -540,6 +540,19 @@ export function EditorRoot({
   const selectedPage = (pages ?? initialPages).find((page) => page.id === effectivePageId);
   const selectedPageIsStaged = selectedPage?.deleteStagedAt != null;
 
+  /*
+   * The preview gate below unmounts the dialog; this is what closes it.
+   *
+   * Without this, `previewOpen` stays true while `pagesUnavailable` suppresses
+   * the render — so the moment a retry succeeds and the flag clears, the dialog
+   * springs back open over whatever the PM moved on to, having been dismissed
+   * by nobody. Withholding a surface and forgetting the state that opened it is
+   * a deferred pop-up, not a gate.
+   */
+  useEffect(() => {
+    if (pagesUnavailable) setPreviewOpen(false);
+  }, [pagesUnavailable]);
+
   // Guarded on `selectedPage !== undefined` deliberately: the tick that makes
   // the repair necessary is the tick the page stops being findable, so writing
   // unconditionally would overwrite the answer with `false`/`null` a render
