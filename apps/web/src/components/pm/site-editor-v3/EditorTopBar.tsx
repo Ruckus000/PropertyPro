@@ -35,6 +35,20 @@ export interface EditorTopBarProps {
    * and offer a retry, so a load error must not lock the PM out of it.
    */
   canOpenPublish: boolean;
+  /**
+   * Whether Preview can render a truthful page.
+   *
+   * Required and undefaulted for the same reason `canOpenPublish` is. False
+   * only when both page reads failed: the dialog is page-scoped, and with no
+   * page id `blocksForPage` returns every page's sections, so the preview shows
+   * a site that exists at no URL while claiming to be "what visitors see once
+   * you publish".
+   *
+   * Disabled with a title rather than hidden, matching Publish — and rather
+   * than left enabled over a gated dialog, which would give the PM a button
+   * that visibly does nothing.
+   */
+  canPreview: boolean;
 }
 
 /**
@@ -54,6 +68,7 @@ export function EditorTopBar({
   onPreview,
   onPublish,
   canOpenPublish,
+  canPreview,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3.5">
@@ -78,7 +93,13 @@ export function EditorTopBar({
 
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
         {status}
-        <Button variant="outline" size="sm" onClick={onPreview}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onPreview}
+          disabled={!canPreview}
+          title={canPreview ? undefined : "We couldn't load this site's pages"}
+        >
           <Eye className="h-4 w-4" aria-hidden="true" />
           Preview
         </Button>

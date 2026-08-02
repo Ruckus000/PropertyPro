@@ -111,8 +111,16 @@ export interface PublishSheetProps {
    * block a publish but have no section slot, so `onFixIssue` cannot reach
    * them — this is their equivalent, and without it they are the only blocking
    * issues the sheet reports with no way to act on them.
+   *
+   * REQUIRED, unlike `onFixIssue` above. A missing `onFixIssue` merely hides a
+   * shortcut to a section the PM can also reach by scrolling; a missing
+   * `onGoToPages` removes the ONLY action on a class of blocking issue, and it
+   * does so silently — no crash, no broken control, just the "blocked with
+   * nothing to press" state this prop was added to end. That is the shape that
+   * shipped 11b-1's dead publish button, and this sheet has exactly one caller
+   * (`PublishSheetMount`), so requiring it costs nothing.
    */
-  onGoToPages?: () => void;
+  onGoToPages: () => void;
 }
 
 /** `'site'` sorts first; page groups follow, in the site's own nav order. */
@@ -272,7 +280,11 @@ interface BodyProps {
   communityId: number;
   brandColors?: ResolvedBrandColors;
   onFixIssue?: (slot: number) => void;
-  onGoToPages?: () => void;
+  // Required all the way down, matching `PublishSheetProps`. An optional
+  // restatement here would put the hole straight back: the outer component
+  // spreads its props through, so this interface is the one the render actually
+  // reads.
+  onGoToPages: () => void;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -338,7 +350,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
   // over the panel the PM was just sent to is a second thing to dismiss.
   function goToPages() {
     onOpenChange(false);
-    onGoToPages?.();
+    onGoToPages();
   }
 
   /**
@@ -471,7 +483,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
           pageLabels={pageLabels}
           onFix={fixIssue}
           canFix={onFixIssue !== undefined}
-          {...(onGoToPages ? { onGoToPages: goToPages } : {})}
+          onGoToPages={goToPages}
         />
       ) : null}
 
@@ -619,8 +631,11 @@ interface BlockingIssuesProps {
    * Opens the Pages panel. Page-set problems are fixed there and nowhere else,
    * and `issueTarget` cannot produce a slot for them — so without this they
    * were the only blocking issues with no route out of the sheet at all.
+   *
+   * Required for the same reason as `PublishSheetProps.onGoToPages`: its absence
+   * deletes the action rather than degrading it.
    */
-  onGoToPages?: () => void;
+  onGoToPages: () => void;
 }
 
 function BlockingIssues({ issues, snapshot, pageLabels, onFix, canFix, onGoToPages }: BlockingIssuesProps) {
@@ -660,7 +675,7 @@ function BlockingIssues({ issues, snapshot, pageLabels, onFix, canFix, onGoToPag
                   Fix this
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
-              ) : isPageIssue && onGoToPages ? (
+              ) : isPageIssue ? (
                 <Button type="button" variant="outline" size="sm" onClick={onGoToPages}>
                   Go to Pages
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />

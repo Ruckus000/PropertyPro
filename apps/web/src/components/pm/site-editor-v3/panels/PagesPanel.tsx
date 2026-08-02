@@ -188,11 +188,15 @@ function pageAddress(page: SitePageSummary): string {
 }
 
 /**
- * The one state badge a row shows, most urgent first.
+ * The state badges a row shows, most urgent first.
  *
- * One rather than several on purpose: a row is at most 280px wide, and a page
- * that is both hidden from the nav and staged for removal only needs the
- * removal said out loud — that is the state with a deadline attached.
+ * A staged removal SUPERSEDES and shows alone — a row is at most 280px wide,
+ * and for a page that is about to stop existing the removal is the only state
+ * with a deadline attached. Otherwise "Draft" and "Not in nav" COMBINE: they
+ * are independent facts and each is the answer to a different question. (An
+ * earlier version of this header said one badge, always. That stopped being
+ * true when a draft page taken out of the nav turned out to show only "Draft",
+ * putting its nav state on no surface the PM reads.)
  */
 function rowBadges(page: SitePageSummary): Array<{ label: string; className: string }> {
   // A staged removal SUPERSEDES everything else and shows alone. Whether such a
@@ -235,6 +239,20 @@ function rowBadges(page: SitePageSummary): Array<{ label: string; className: str
  *
  * Falls back to the bare message for every other error class, which is what a
  * timeout or a 500 has.
+ *
+ * Returns the fields INSTEAD of the message, not alongside it, because the
+ * server's field messages are self-contained sentences ("\"/pool\" still
+ * forwards visitors to the page that replaced it. Pick another address.") —
+ * joining both would print the same rule twice.
+ *
+ * Deliberately NOT applied to the un-stage toast, which is the one refusal
+ * whose summary is BETTER than its fields: `unstageSitePageDelete` throws with
+ * `fields` carrying the generic "Another page is also called \"X\".", while the
+ * toast's own message explains the situation the PM is actually in ("…so this
+ * one cannot be restored under that name. Rename the other page first."). Using
+ * this helper there would trade the actionable sentence for the generic one.
+ * Reorder and remove pass their bare message too, but only because those throw
+ * with no `fields` at all — there, applying it would be a no-op.
  */
 function refusalDetail(error: Error): string {
   const fields = error instanceof ApiRequestError ? error.fields : undefined;
@@ -300,8 +318,29 @@ export interface PagesPanelProps {
    * NOT simply "focus the selected row on mount": opening the Pages tab also
    * mounts this panel, and stealing focus there would yank it out of whatever
    * the PM was doing.
+   *
+   * Required, not optional-defaulting-false, for the reason `onPageRemoved`
+   * spells out below: this panel is stubbed away in `EditorRoot`'s tests, so an
+   * optional prop the parent forgot would be invisible on both sides of the
+   * seam.
    */
-  restoreFocusToSelectedRow?: boolean;
+  restoreFocusToSelectedRow: boolean;
+  /**
+   * Consumes `restoreFocusToSelectedRow` — the flag is SINGLE-USE, and this is
+   * what makes it so.
+   *
+   * Without it the flag latched: `handleSelectPage` sets it true and only a
+   * repair or a "Fix this" ever cleared it, while this panel is rendered behind
+   * `if (tool === 'pages')` and therefore UNMOUNTS on a tool switch. So the
+   * ordinary journey — click a page, go to Sections to add content, come back to
+   * Pages — remounted the panel with a stale `true` and yanked focus onto the
+   * row, which is exactly the ambush the flag exists to prevent.
+   *
+   * Called from the mount effect whether or not a row was found to focus: the
+   * parent's intent has been spent either way, and a flag left armed by a missed
+   * ref would fire on the next unrelated mount.
+   */
+  onFocusRestored: () => void;
   /**
    * The page being edited, or `null` while none is known.
    *
@@ -356,7 +395,8 @@ export interface PagesPanelProps {
 export function PagesPanel({
   communityId,
   selectedPageId,
-  restoreFocusToSelectedRow = false,
+  restoreFocusToSelectedRow,
+  onFocusRestored,
   onSelectPage,
   onPageRemoved,
 }: PagesPanelProps) {
@@ -437,10 +477,16 @@ export function PagesPanel({
    *
    * The row is the right target rather than the list: the PM pressed a specific
    * row, and returning them to it keeps Tab order where they left it.
+   *
+   * `onFocusRestored` fires unconditionally once the flag has been acted on,
+   * which is what makes the flag single-use. A flag that stayed armed turned
+   * every later reopen of this tab into the ambush the paragraph above rules
+   * out — see `PagesPanelProps.onFocusRestored`.
    */
   useEffect(() => {
     if (!restoreFocusToSelectedRow) return;
     selectedRowRef.current?.focus();
+    onFocusRestored();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
   }, []);
 
@@ -573,12 +619,30 @@ export function PagesPanel({
       const next = [...reorderableIds];
       next.splice(from, 1);
       next.splice(toIndex, 0, page.id);
-      setAnnouncement(
-        `${page.name} moved to position ${toIndex + 1 + pinnedCount} of ${pages.length}.`,
-      );
+      const position = `${page.name} moved to position ${toIndex + 1 + pinnedCount} of ${pages.length}.`;
+      setAnnouncement(position);
       reorderPages.mutate(
         { orderedPageIds: next },
         {
+          onSuccess: () => {
+            /*
+             * Rename and the nav toggle both say "this is live now"; reorder
+             * said it nowhere a sighted PM would meet it. The one visible
+             * statement of live-immediacy sits inside the expanded settings
+             * disclosure, which reordering never requires opening — so the list
+             * rearranged, the publish sheet then read "Nothing to publish"
+             * (`diffPages` emits no page-order change, deliberately), and
+             * nothing anywhere said the public navigation had already changed.
+             *
+             * A stable `id` because these controls are click-repeatable: moving
+             * a page three positions is three mutations, and sonner stacks
+             * un-idded toasts. One toast that updates is the honest render of
+             * one ongoing action.
+             */
+            toast.success(`${position} Your navigation order is live now.`, {
+              id: 'site-page-reorder',
+            });
+          },
           onError: (mutationError) => {
             setAnnouncement(`${page.name} could not be moved.`);
             toast.error(`We couldn't reorder your pages. ${mutationError.message}`);
@@ -1042,14 +1106,27 @@ export function PagesPanel({
                   {!staged && (
                     <div className="space-y-1">
                       <Label htmlFor={`${editorId}-name`}>Page name</Label>
+                      {/* `aria-describedby` as well as `aria-invalid`, matching
+                          the add form above. `role="alert"` fires once, when
+                          the text appears; a PM who tabs back onto the field
+                          afterwards hears only "invalid entry", and without the
+                          association the reason is unreachable from the control
+                          it is about (WCAG 1.3.1 / 3.3.1). */}
                       <Input
                         id={`${editorId}-name`}
                         value={nameDraft}
                         onChange={(event) => setNameDraft(event.target.value)}
                         aria-invalid={editNameErrors.length > 0}
+                        {...(editNameErrors.length > 0
+                          ? { 'aria-describedby': `${editorId}-name-error` }
+                          : {})}
                       />
                       {editNameErrors.length > 0 && (
-                        <p role="alert" className="text-xs text-status-danger">
+                        <p
+                          id={`${editorId}-name-error`}
+                          role="alert"
+                          className="text-xs text-status-danger"
+                        >
                           {editNameErrors.join(' ')}
                         </p>
                       )}
@@ -1096,10 +1173,17 @@ export function PagesPanel({
                           value={slugDraft}
                           onChange={(event) => setSlugDraft(event.target.value)}
                           aria-invalid={editSlugErrors.length > 0}
+                          {...(editSlugErrors.length > 0
+                            ? { 'aria-describedby': `${editorId}-slug-error` }
+                            : {})}
                         />
                       </div>
                       {editSlugErrors.length > 0 && (
-                        <p role="alert" className="text-xs text-status-danger">
+                        <p
+                          id={`${editorId}-slug-error`}
+                          role="alert"
+                          className="text-xs text-status-danger"
+                        >
                           {editSlugErrors.join(' ')}
                         </p>
                       )}
@@ -1143,10 +1227,14 @@ export function PagesPanel({
                       }
                     >
                       {/* `aria-pressed` alone is invisible: an `outline` Button
-                          has no pressed styling, and the row's "Hidden" badge is
-                          suppressed whenever the page is also a draft or staged
-                          for removal — so a sighted PM would have no signal at
-                          all in exactly the states that matter. The icon carries
+                          has no pressed styling, and the row's "Not in nav"
+                          badge is suppressed while the page is staged for
+                          removal — so a sighted PM would have no signal at all
+                          in exactly that state. (This comment used to say
+                          "Hidden", and to claim a draft page suppressed it too.
+                          Neither survived: the badge was renamed because
+                          "Hidden" implied the page had left the site, and Draft
+                          and Not-in-nav now render together.) The icon carries
                           it, and stays `aria-hidden` because the accessible name
                           must keep describing the CONTROL, not its state. */}
                       {page.inNav ? (
@@ -1222,8 +1310,16 @@ export function PagesPanel({
           }
           description={
             removeTargetIsLive
-              ? // Staged: reversible, and the copy says how.
-                `${removeTarget.name} stays on your live site until you publish. You'll have a moment to undo this.`
+              ? // Staged: reversible, and the copy says how — but it names the
+                // section count for the same reason D36′ makes the permanent
+                // branch name it, and with more force. Without it the
+                // disclosure gradient was INVERTED: deleting an unpublished
+                // draft stated how much content went with it, while removing
+                // the page whose sections are actually on the internet
+                // mentioned content nowhere — not here, not on the publish
+                // sheet's row, and not in the receipt, whose `retiredCount`
+                // does not count rows the page-delete loop removes.
+                `${removeTarget.name} has ${sectionPhrase(removeTargetSections)}. It stays on your live site until you publish; publishing removes the page and everything on it. You'll have a moment to undo this.`
               : // D36′. Immediate, permanent, and the section count — and no
                 // form of the word "publish", which would imply a staged action
                 // this page cannot have.

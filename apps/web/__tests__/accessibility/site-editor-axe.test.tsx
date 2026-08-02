@@ -13,7 +13,7 @@
  * any single component's markup.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { SiteEditorProvider } from '@/components/pm/site-editor-v3/editor-context';
@@ -261,39 +261,104 @@ describe('Urgent notice — axe (Phase 7)', () => {
 });
 
 describe('Pages panel — axe (Phase 11b-3)', () => {
-  // Audited in every data state, not only the happy one: the loading skeleton
-  // and the error banner are what a PM meets on a bad connection, and an
-  // unlabelled control there is exactly as inaccessible as one in the list.
-  it('has no violations with the page list loaded', async () => {
-    const { container } = render(
-      <PagesPanel communityId={7} selectedPageId={1} onSelectPage={vi.fn()} />,
+  /*
+   * Every DATA state and every DISCLOSURE state.
+   *
+   * The data states — loading skeleton, error banner, empty — are what a PM
+   * meets on a bad connection, and an unlabelled control there is exactly as
+   * inaccessible as one in the list.
+   *
+   * The disclosure states are where the markup actually is, and for a while
+   * they were audited nowhere. Every `Input`, `Label`, `role="alert"`,
+   * `aria-pressed` toggle and destructive button this phase added lives inside
+   * either the expanded row editor or the add form, and both are collapsed on
+   * first paint — so four green audits covered a panel whose forms no audit had
+   * ever seen.
+   *
+   * An axe audit has no single-line revert target, so instead: ANTI-VACUITY,
+   * verified by running it. Dropping `htmlFor` from the expanded editor's
+   * `Page name` label reddens both expanded cases with axe's `form-field-multiple-labels`
+   * / orphaned-label rule ("no form control was found associated to that
+   * label") and leaves all four collapsed audits GREEN. That is the proof these
+   * cases see markup no existing case could.
+   */
+  function renderPages(selectedPageId: number | null = 1) {
+    return render(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={selectedPageId}
+        restoreFocusToSelectedRow={false}
+        onFocusRestored={vi.fn()}
+        onSelectPage={vi.fn()}
+        onPageRemoved={vi.fn()}
+      />,
     );
+  }
+
+  it('has no violations with the page list loaded', async () => {
+    const { container } = renderPages();
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it('has no violations while the list is loading', async () => {
     sitePagesMock.isPending = true;
     sitePagesMock.data = undefined;
-    const { container } = render(
-      <PagesPanel communityId={7} selectedPageId={null} onSelectPage={vi.fn()} />,
-    );
+    const { container } = renderPages(null);
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it('has no violations when the read failed', async () => {
     sitePagesMock.isError = true;
     sitePagesMock.data = undefined;
-    const { container } = render(
-      <PagesPanel communityId={7} selectedPageId={null} onSelectPage={vi.fn()} />,
-    );
+    const { container } = renderPages(null);
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it('has no violations in the empty state', async () => {
     sitePagesMock.data = [];
-    const { container } = render(
-      <PagesPanel communityId={7} selectedPageId={null} onSelectPage={vi.fn()} />,
-    );
+    const { container } = renderPages(null);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in an expanded page editor', async () => {
+    // Page 2 is a DRAFT, so this reaches the widest form: the name field, the
+    // address field (D32′ renders it only on a never-published page), the
+    // nav-visibility toggle and the destructive remove button.
+    const user = userEvent.setup();
+    const { container } = renderPages(2);
+
+    await user.click(screen.getByTestId('site-page-settings-2'));
+    await screen.findByTestId('site-page-editor-2');
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the expanded editor while both fields are refused', async () => {
+    // The error state, not just the resting one: `aria-invalid`,
+    // `aria-describedby` and the `role="alert"` text only exist once a value is
+    // rejected, so the resting audit cannot see them.
+    const user = userEvent.setup();
+    const { container } = renderPages(2);
+
+    await user.click(screen.getByTestId('site-page-settings-2'));
+    const editor = within(await screen.findByTestId('site-page-editor-2'));
+    // "Board" is page 3's name — a real clash, reported on both surfaces.
+    await user.clear(editor.getByLabelText('Page name'));
+    await user.type(editor.getByLabelText('Page name'), 'Board');
+    await user.clear(editor.getByLabelText('Web address'));
+    await user.type(editor.getByLabelText('Web address'), 'board');
+
+    expect(editor.getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the add-a-page form', async () => {
+    const user = userEvent.setup();
+    const { container } = renderPages();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await screen.findByLabelText('Page name');
+
     expect(await axe(container)).toHaveNoViolations();
   });
 });

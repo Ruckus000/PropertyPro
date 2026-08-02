@@ -119,6 +119,7 @@ const DRAFT_PAGE = page({
 
 const onSelectPage = vi.fn();
 const onPageRemoved = vi.fn();
+const onFocusRestored = vi.fn();
 
 function renderPanel({
   pages = [HOME, AMENITIES] as SitePageSummary[] | undefined,
@@ -126,6 +127,7 @@ function renderPanel({
   isError = false,
   error = null as Error | null,
   selectedPageId = 1 as number | null,
+  restoreFocusToSelectedRow = false,
 } = {}) {
   useSitePagesMock.mockReturnValue({
     data: isPending || isError ? undefined : pages,
@@ -138,6 +140,8 @@ function renderPanel({
     <PagesPanel
       communityId={7}
       selectedPageId={selectedPageId}
+      restoreFocusToSelectedRow={restoreFocusToSelectedRow}
+      onFocusRestored={onFocusRestored}
       onSelectPage={onSelectPage}
       onPageRemoved={onPageRemoved}
     />,
@@ -247,7 +251,7 @@ describe('PagesPanel — selection', () => {
     expect(onSelectPage).toHaveBeenCalledWith(2, { announce: 'Now editing Amenities.' });
   });
 
-  it('puts focus back on the row after the parent remounts the panel', () => {
+  it('puts focus on the selected row when the parent asks it to', () => {
     /*
      * `EditorRoot`'s `key={effectivePageId}` (D-SEL) remounts this panel on
      * every page switch, which destroys the button the PM just activated —
@@ -258,6 +262,12 @@ describe('PagesPanel — selection', () => {
      * Simulated the way production does it: a fresh mount with the new
      * selection and the parent's flag set, which is exactly what the remount
      * produces.
+     *
+     * The title says "when the parent asks", not "after the parent remounts",
+     * on purpose. This file supplies the flag itself, so it can only ever prove
+     * the panel's half of the bargain. Whether the parent asks at the right
+     * moments — and stops asking afterwards — is asserted in
+     * `EditorRoot.test.tsx`, which is where the flag lives and where it latched.
      *
      * Revert check (production line): `selectedRowRef.current?.focus()` in
      * `PagesPanel.tsx`'s mount effect.
@@ -274,12 +284,21 @@ describe('PagesPanel — selection', () => {
         communityId={7}
         selectedPageId={2}
         restoreFocusToSelectedRow
+        onFocusRestored={onFocusRestored}
         onSelectPage={onSelectPage}
         onPageRemoved={onPageRemoved}
       />,
     );
 
     expect(document.activeElement).toBe(screen.getByTestId('site-page-select-2'));
+    // Spent, not left armed. Without this the parent's flag stayed true across
+    // the tool switch that unmounts this panel, and the next reopen stole focus
+    // — the ambush the flag exists to prevent. The seam is in
+    // `EditorRoot.test.tsx`; this is the panel end of the same wire.
+    //
+    // Revert check (production line): the `onFocusRestored()` call in the mount
+    // effect. The focus assertion above stays green without it.
+    expect(onFocusRestored).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT steal focus when the panel is merely opened', () => {
@@ -289,6 +308,7 @@ describe('PagesPanel — selection', () => {
     renderPanel({ selectedPageId: 2 });
 
     expect(document.activeElement).not.toBe(screen.getByTestId('site-page-select-2'));
+    expect(onFocusRestored).not.toHaveBeenCalled();
   });
 
   it('marks no row current until the parent says which page is selected', () => {
@@ -516,7 +536,13 @@ describe('PagesPanel — adding a page', () => {
             fields: [
               {
                 field: 'slug',
-                message: 'It still forwards visitors to the page that replaced it. Pick another address.',
+                // Verbatim from `site-pages-service.ts`'s retired-slug refusal.
+                // The slug prefix matters to what this case proves: the
+                // server's field messages are SELF-CONTAINED sentences, which
+                // is why `refusalDetail` returns them instead of the summary
+                // rather than joining both.
+                message:
+                  '"/pool-rules" still forwards visitors to the page that replaced it. Pick another address.',
               },
             ],
           },
@@ -754,6 +780,35 @@ describe('PagesPanel — renaming', () => {
 
     expect(editor.getByText(/Another page is also called "Board"/)).toBeInTheDocument();
     expect(editor.getByRole('button', { name: 'Save name' })).toBeDisabled();
+  });
+
+  it('attaches the refusal to the field it is about, not just to the page', async () => {
+    /*
+     * `aria-invalid` on its own tells a screen-reader user THAT the value is
+     * wrong and never WHY. `role="alert"` announces the reason exactly once,
+     * when it appears — so a PM who fixes something else, tabs back onto the
+     * name field and asks "what's wrong with this?" hears "invalid entry" and
+     * nothing more, with the reason sitting unreachable one node away
+     * (WCAG 1.3.1 / 3.3.1).
+     *
+     * The add form 200 lines up in the same file already did this correctly;
+     * the expanded row editor did not. An asymmetry within one component is an
+     * oversight, not a decision.
+     *
+     * Revert check (production line): the `aria-describedby` spread on the
+     * `Page name` `<Input>` in `PagesPanel.tsx`'s expanded editor. The two
+     * rename cases above stay green without it — they read the error TEXT,
+     * which is present either way.
+     */
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE] });
+
+    const editor = await openSettings(user, 2);
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Board');
+
+    expect(nameField).toHaveAccessibleDescription(/Another page is also called "Board"/);
   });
 
   it('tells a real clash apart from a page keeping its own name', async () => {
@@ -1110,6 +1165,37 @@ describe('PagesPanel — reordering', () => {
     );
   });
 
+  it('says out loud that the navigation change is already public', async () => {
+    /*
+     * Reordering rewrites the LIVE navigation the instant it is clicked, and it
+     * said so nowhere a sighted PM would meet it. The live region above is
+     * sr-only; the one visible statement of live-immediacy sits inside the
+     * expanded settings disclosure, which reordering never requires opening.
+     * The publish sheet then reads "Nothing to publish" — correctly, since
+     * `diffPages` deliberately emits no page-order change — so the list
+     * rearranging was the only feedback that anything happened, and it says
+     * nothing about the public site.
+     *
+     * Rename and the nav toggle both already say it; this is the third.
+     *
+     * Revert check (production line): the `onSuccess` `toast.success` in
+     * `moveToIndex` in `PagesPanel.tsx`. The announcement case above stays
+     * green without it — they are independent channels.
+     */
+    const user = userEvent.setup();
+    reorderMutate.mockImplementation((_input, options) => options.onSuccess?.());
+    renderPanel({ pages: THREE });
+
+    await user.click(screen.getByRole('button', { name: 'Move Amenities down' }));
+
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining('Your navigation order is live now.'),
+      // A stable id: moving a page three positions is three mutations, and
+      // sonner stacks un-idded toasts.
+      { id: 'site-page-reorder' },
+    );
+  });
+
   it('stops softly at the ends rather than sending a request', async () => {
     const user = userEvent.setup();
     renderPanel({ pages: THREE });
@@ -1181,6 +1267,45 @@ describe('PagesPanel — removing a page', () => {
 
     options.action.onClick();
     expect(unstageMutate).toHaveBeenCalledWith({ pageId: 2 }, expect.anything());
+  });
+
+  it('the remove dialog for a LIVE page says how much content goes with it', async () => {
+    /*
+     * D36′ constrains the unpublished dialog to state the section count. The
+     * staged dialog stated none — which left the disclosure gradient INVERTED:
+     * deleting an unpublished draft told the PM how much content they were
+     * losing, while removing the page whose sections are actually on the
+     * internet mentioned content nowhere. Not here, not on the publish sheet's
+     * row, and not in the receipt, whose `retiredCount` does not count rows the
+     * page-delete loop removes.
+     *
+     * The reversibility copy stays: this one IS undoable, and saying so is the
+     * difference between the two dialogs.
+     *
+     * Revert check (production line): the `sectionPhrase(removeTargetSections)`
+     * clause in the `removeTargetIsLive` branch of the ConfirmDialog
+     * description in `PagesPanel.tsx`.
+     */
+    const user = userEvent.setup();
+    blocksMock.data = [
+      { id: 20, pageId: 2, blockType: 'text' },
+      { id: 21, pageId: 2, blockType: 'faq' },
+      { id: 22, pageId: 2, blockType: 'gallery' },
+      // On another page — must not be counted.
+      { id: 23, pageId: 1, blockType: 'text' },
+    ];
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    await user.click(editor.getByRole('button', { name: 'Remove page' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    const copy = dialog.textContent ?? '';
+    expect(copy).toContain('3 sections');
+    // Still the reversible story, not the permanent one.
+    expect(copy).toContain('until you publish');
+    expect(copy).toContain('undo');
+    expect(copy).not.toContain('cannot be undone');
   });
 
   it('the remove dialog for an unpublished page states the deletion is immediate and permanent', async () => {

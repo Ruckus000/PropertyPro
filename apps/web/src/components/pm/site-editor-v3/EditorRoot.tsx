@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
@@ -286,9 +286,35 @@ export function EditorRoot({
    * letting it fall to `<body>`. See `PagesPanelProps.restoreFocusToSelectedRow`.
    *
    * Reset on any other route to a page change (a "Fix this" jump, a repair), so
-   * it never steals focus for a switch the PM did not initiate here.
+   * it never steals focus for a switch the PM did not initiate here — AND
+   * released by the panel the moment it acts on it, via
+   * `PagesPanelProps.onFocusRestored`.
+   *
+   * That release is load-bearing, not tidiness. `PagesPanel` is rendered behind
+   * `if (tool === 'pages')`, so it unmounts on a tool switch and remounts on the
+   * way back. While the flag merely latched, the ordinary journey — click a
+   * page, go to Sections to add content, return to Pages — remounted the panel
+   * with a stale `true` and yanked focus onto the row, which is precisely the
+   * ambush the paragraph above says this flag prevents.
    */
   const [focusSelectedRow, setFocusSelectedRow] = useState(false);
+  const handleFocusRestored = useCallback(() => setFocusSelectedRow(false), []);
+  /**
+   * The selected page's last-known name and staging state, kept for the one
+   * moment the page itself is gone.
+   *
+   * Refs rather than state because the repair effect below reads them at the
+   * exact tick the page has just LEFT the list — `selectedPage` is `undefined`
+   * by then, so the live values say nothing about what was lost. They are
+   * written only while a page is actually found (see the sync effect after
+   * `selectedPageIsStaged`), so the last write is the page's final observed
+   * state rather than the hole it left.
+   *
+   * Refs also keep them out of the repair effect's dependency array: they must
+   * not be able to re-trigger the announcement.
+   */
+  const selectedPageWasStagedRef = useRef(false);
+  const selectedPageNameRef = useRef<string | null>(null);
   const handlePageRemoved = useCallback((pageId: number) => setSelfRemovedPageId(pageId), []);
 
   // Shares `useSiteDiff`'s query key, so this adds no request — the diff calls
@@ -438,7 +464,23 @@ export function EditorRoot({
     // matters is the one that never cries wolf. The repair still RUNS — only
     // the announcement is suppressed.
     if (selfInflicted) return;
-    const message = 'The page you were editing is no longer available. You are now editing the home page.';
+    // …and `selfRemovedPageId` only ever covers the IMMEDIATE hard delete, by
+    // design (`PagesPanelProps.onPageRemoved`). The far more common route to
+    // this effect is a published page, which cannot be hard-deleted at all: the
+    // PM stages it, publishes, `usePublishSite` invalidates the whole
+    // `['pm','site']` prefix (D10′), and the page leaves the list one beat after
+    // the success toast. That path fired the co-manager alarm at the person who
+    // had just deliberately caused it and been congratulated for it.
+    //
+    // The client still has no actor identity, and does not need one: the
+    // STAGING STATE is enough. A page the PM was watching go away — the
+    // `staged-page-banner` sat on this very screen saying so — needs a
+    // confirmation, not an alarm. A page that vanished with no staging visible
+    // is the genuinely unexplained event, and keeps the original wording.
+    // Both sentences are true whoever pressed publish.
+    const message = selectedPageWasStagedRef.current
+      ? `"${selectedPageNameRef.current ?? 'That page'}" has been removed. You are now editing the home page.`
+      : 'The page you were editing is no longer available. You are now editing the home page.';
     setPageAnnouncement(message);
     toast.info(message);
   }, [home, selectionNeedsRepair, selectedPageId, selfRemovedPageId]);
@@ -497,6 +539,16 @@ export function EditorRoot({
   // safer direction than warning about a removal that was cancelled.
   const selectedPage = (pages ?? initialPages).find((page) => page.id === effectivePageId);
   const selectedPageIsStaged = selectedPage?.deleteStagedAt != null;
+
+  // Guarded on `selectedPage !== undefined` deliberately: the tick that makes
+  // the repair necessary is the tick the page stops being findable, so writing
+  // unconditionally would overwrite the answer with `false`/`null` a render
+  // before it is read. See the refs' own note.
+  useEffect(() => {
+    if (!selectedPage) return;
+    selectedPageWasStagedRef.current = selectedPage.deleteStagedAt != null;
+    selectedPageNameRef.current = selectedPage.name;
+  }, [selectedPage]);
 
   /*
    * `publicSiteUrl` is passed through as the community ROOT, deliberately.
@@ -631,6 +683,11 @@ export function EditorRoot({
         // failed to load, because the sheet is the only surface that explains
         // that failure and offers a retry.
         canOpenPublish={diff.changes.length > 0 || diffFailed}
+        // Withheld for the same reason the canvas is (see the PreviewDialog
+        // render below). Disabled with a reason rather than left live and
+        // silently inert: a button that does nothing when pressed is the
+        // failure mode this whole branch exists to avoid.
+        canPreview={!pagesUnavailable}
         // Driven by whichever inspector form is open. StatusLine renders
         // nothing while idle with no prior save, so this stays invisible until
         // the PM actually edits something.
@@ -727,6 +784,7 @@ export function EditorRoot({
                 communityId={communityId}
                 selectedPageId={effectivePageId}
                 restoreFocusToSelectedRow={focusSelectedRow}
+                onFocusRestored={handleFocusRestored}
                 onSelectPage={handleSelectPage}
                 onPageRemoved={handlePageRemoved}
               />
@@ -773,7 +831,22 @@ export function EditorRoot({
         )}
       </EditorShell>
 
-      {previewOpen && canvasContext ? (
+      {/*
+        * `!pagesUnavailable` belongs here for the same reason it gates the
+        * canvas, the Add panel and the Inspector — and it was missing because
+        * that list was written out by hand and the preview is not rendered
+        * beside them.
+        *
+        * Left ungated, the preview was the WORST of the four. `blocksForPage`
+        * returns the list unchanged for a null page, so the dialog rendered
+        * every page's sections in one scroll, titled after the community
+        * because there was no page to name it after, under a caption asserting
+        * "This is the page you are editing… what visitors see once you
+        * publish." — a claim about what will ship, on a screen whose sibling
+        * banner says we do not know which page that is. `PreviewDialog`'s own
+        * header calls exactly that render "a worse lie than no preview at all".
+        */}
+      {previewOpen && canvasContext && !pagesUnavailable ? (
         <PreviewDialog
           open
           onOpenChange={setPreviewOpen}

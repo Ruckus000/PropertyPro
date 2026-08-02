@@ -48,10 +48,14 @@ vi.mock('next/dynamic', () => ({
     String(loader).includes('PagesPanel')
       ? ({
           selectedPageId,
+          restoreFocusToSelectedRow,
+          onFocusRestored,
           onSelectPage,
           onPageRemoved,
         }: {
           selectedPageId: number | null;
+          restoreFocusToSelectedRow: boolean;
+          onFocusRestored: () => void;
           onSelectPage: (
             pageId: number,
             options?: { pending?: boolean; announce?: string },
@@ -60,6 +64,21 @@ vi.mock('next/dynamic', () => ({
         }) => (
           <div>
             <p>Editing page {String(selectedPageId)}</p>
+            {/*
+             * The focus contract, echoed rather than performed. The real panel
+             * focuses a row on mount when this flag is set and then calls
+             * `onFocusRestored`; both halves are the PARENT's to get right and
+             * neither is visible from `PagesPanel.test.tsx`, which supplies the
+             * flag from its own JSX.
+             *
+             * `data-testid` on a mount-only echo is what lets a case assert the
+             * flag's value at the moment a fresh panel appears — which is the
+             * only moment it means anything.
+             */}
+            <p data-testid="pages-focus-flag">{String(restoreFocusToSelectedRow)}</p>
+            <button type="button" onClick={() => onFocusRestored()}>
+              Panel took the focus
+            </button>
             {/*
              * What the real panel does in `confirmRemove`'s `!staged` branch:
              * tell the parent the disappearance was self-inflicted, so the
@@ -125,10 +144,29 @@ vi.mock('next/dynamic', () => ({
         // context is page-scoped (D-C2), so the slot it hands back routinely
         // names a section on another page — the case that regressed.
         String(loader).includes('PublishSheet')
-        ? ({ onFixIssue }: { onFixIssue: (slot: number) => void }) => (
-            <button type="button" onClick={() => onFixIssue(FOREIGN_SLOT)}>
-              Fix this
-            </button>
+        ? ({
+            onFixIssue,
+            onGoToPages,
+          }: {
+            onFixIssue: (slot: number) => void;
+            onGoToPages: () => void;
+          }) => (
+            <>
+              <button type="button" onClick={() => onFixIssue(FOREIGN_SLOT)}>
+                Fix this
+              </button>
+              {/*
+               * The other half of the same seam. A page-set problem (duplicate
+               * address, no home page) has no section slot, so "Fix this"
+               * cannot reach it and this is the ONLY action the sheet offers.
+               * A parent that forgot the prop used to make that action vanish
+               * silently — no crash, no dead control — which is why the prop is
+               * now required and why the composition is asserted here.
+               */}
+              <button type="button" onClick={() => onGoToPages()}>
+                Go to Pages
+              </button>
+            </>
           )
         : () => null,
 }));
@@ -770,6 +808,50 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     expect(screen.getByTestId('site-page-announcement')).toHaveTextContent('');
   });
 
+  it('names the page in the repair when the PM watched it go away', async () => {
+    /*
+     * `selfRemovedPageId` — the suppression the case above tests — only ever
+     * covers the IMMEDIATE hard delete, by design: a staged removal leaves the
+     * page in the list, so it triggers no repair at delete time. It triggers
+     * one at PUBLISH time, and that is the MODAL path, because a published page
+     * cannot be hard-deleted at all.
+     *
+     * So the PM staged a live page, published, was congratulated, and one beat
+     * later got the alarm written for a co-manager's action. Not false — just
+     * the wrong surface's copy, describing something they deliberately did as
+     * something that befell them.
+     *
+     * Revert check (production line): `EditorRoot.tsx`'s
+     * `selectedPageWasStagedRef.current ? … :` ternary in the repair effect,
+     * collapsed to the unconditional co-manager sentence. Removing only that
+     * turns this red and leaves both cases above green.
+     */
+    const stagedSecond = {
+      ...seededHome,
+      id: SECOND_PAGE_ID,
+      name: 'Amenities',
+      slug: 'amenities',
+      isHome: false,
+      deleteStagedAt: '2026-07-30T09:00:00.000Z',
+    };
+    queries.pages = [seededHome, stagedSecond];
+
+    const { rerender } = renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    // The publish lands: `usePublishSite` invalidates `['pm','site']` and the
+    // page leaves the list. No hard delete was ever reported, exactly as in
+    // production.
+    queries.pages = [seededHome];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [seededHome] }));
+    });
+
+    expect(toastInfo).toHaveBeenCalledWith(expect.stringContaining('"Amenities" has been removed'));
+    expect(toastInfo).not.toHaveBeenCalledWith(expect.stringMatching(/no longer available/i));
+  });
+
   it('holds the selection on a page it has just created, before the list catches up', async () => {
     // `create` resolves and the selection moves to the new id while the cached
     // list is still the PRE-create one. Repairing on that would bounce the PM
@@ -1237,5 +1319,144 @@ describe('EditorRoot — the server page seed can fail', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — the row-focus flag is single-use', () => {
+  /*
+   * Both halves of this contract are the PARENT's, and neither is visible from
+   * `PagesPanel.test.tsx`, which supplies the flag from its own JSX and so can
+   * only ever exercise the value it chose.
+   *
+   * The defect this closes: `handleSelectPage` set the flag true and nothing
+   * cleared it on the ordinary route out. `PagesPanel` renders behind
+   * `if (tool === 'pages')`, so it unmounts on a tool switch — and the modal
+   * journey (click a page, go to Sections to add content, come back) remounted
+   * it with a stale `true` and yanked focus onto the row. That is exactly the
+   * ambush the flag's own JSDoc says it prevents, and the panel's negative
+   * control could not see it because it omits the prop, i.e. asserts `false` —
+   * a value production only holds BEFORE the PM's first row click.
+   */
+  beforeEach(() => {
+    queries.pages = [
+      seededHome,
+      { ...seededHome, id: SECOND_PAGE_ID, name: 'Amenities', slug: 'amenities', isHome: false },
+    ];
+  });
+
+  it('asks for focus on the row the PM just clicked', async () => {
+    // Revert check (production line): `restoreFocusToSelectedRow={focusSelectedRow}`
+    // on `<PagesPanel>` in `EditorRoot.tsx`.
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+
+    expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('true');
+  });
+
+  it('does NOT ask again when the panel is merely reopened', async () => {
+    /*
+     * Revert check (production line, verified): `handleFocusRestored`'s
+     * `setFocusSelectedRow(false)` in `EditorRoot.tsx`, neutered to `() => {}`.
+     * This case goes red with `expect(element).toHaveTextContent()`; the case
+     * above and all 51 siblings stay green.
+     *
+     * NOT the `onFocusRestored()` call in `PagesPanel.tsx`'s mount effect — an
+     * earlier version of this comment claimed either would do, and running it
+     * showed otherwise. The panel is STUBBED here, so its effect never runs;
+     * removing that call reddens `PagesPanel.test.tsx` and leaves this file
+     * entirely green. Two ends of one wire, one test and one revert target
+     * each — which is the shape this suite keeps getting wrong by assuming
+     * rather than running it.
+     */
+    renderRoot();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    // The real panel does this from its mount effect; the stub exposes it so
+    // the parent's half can be driven without a DOM focus race.
+    await userEvent.click(screen.getByRole('button', { name: 'Panel took the focus' }));
+
+    // Off to Sections — which UNMOUNTS the panel — and back.
+    await userEvent.click(screen.getByRole('tab', { name: /Sections/ }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+
+    expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('false');
+  });
+});
+
+describe('EditorRoot — the publish sheet can reach the Pages panel', () => {
+  it('opens the Pages tool when a page-set problem has no section to fix', async () => {
+    /*
+     * The other half of the "Fix this" seam. A page-set problem — a duplicate
+     * address, two home pages, no home page — blocks a publish but has no
+     * section slot, so `issueTarget` yields nothing and "Fix this" cannot be
+     * rendered. `onGoToPages` is the ONLY action the sheet offers on that class
+     * of issue, and while it was optional a parent that forgot it made that
+     * action vanish silently: no crash, no dead control, just the
+     * blocked-with-nothing-to-press state it was added to end.
+     *
+     * Revert check (production line): `onGoToPages={handleGoToPages}` on
+     * `<PublishSheetMount>` in `EditorRoot.tsx`. (It is a required prop now, so
+     * removing it is also a typecheck failure — but `__tests__` sits outside the
+     * `src/**` program, and this file is what fails at RUNTIME.)
+     */
+    queries.draft = [hero()];
+    queries.published = [];
+    renderRoot();
+
+    await userEvent.click(publishButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Go to Pages' }));
+
+    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('EditorRoot — Preview is withheld when the page is unknown', () => {
+  /*
+   * The fourth surface `pagesUnavailable` has to withhold, and the one the
+   * hand-written list forgot. It is also the worst of the four:
+   * `blocksForPage(blocks, null)` returns every page's sections, so the dialog
+   * rendered a site that exists at no URL, titled after the COMMUNITY because
+   * there was no page to name it after, under a caption asserting "This is the
+   * page you are editing… what visitors see once you publish" — beside a banner
+   * saying we do not know which page that is.
+   */
+  it('disables the Preview button, with a reason', () => {
+    // Revert check (production line): `canPreview={!pagesUnavailable}` on
+    // `<EditorShell>` in `EditorRoot.tsx`.
+    queries.isError = true;
+    queries.pages = [];
+    renderRoot({ initialPages: [], canvasContext: {} });
+
+    const preview = screen.getByRole('button', { name: /Preview/ });
+    expect(preview).toBeDisabled();
+    expect(preview).toHaveAttribute('title', expect.stringMatching(/couldn't load/i));
+  });
+
+  it('does not render the dialog even if the open state is somehow reached', async () => {
+    /*
+     * Belt to the disabled button's braces, and NOT redundant: the two are
+     * independent mechanisms and the render gate is the load-bearing one. A
+     * later change that re-enables the button — or an `open` state left over
+     * from before the read failed — must not put the lying preview back.
+     *
+     * Revert check (production line): the `&& !pagesUnavailable` conjunct on
+     * the `<PreviewDialog>` render in `EditorRoot.tsx`. Removing it leaves the
+     * button case above green.
+     */
+    queries.pages = [seededHome];
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    // Open it while a page IS known…
+    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    expect(screen.getByText(/previewing/)).toBeInTheDocument();
+
+    // …then lose the pages underneath it, which is what a failed refetch does.
+    queries.isError = true;
+    queries.pages = [];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+    });
+
+    expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
   });
 });

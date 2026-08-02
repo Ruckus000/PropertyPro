@@ -801,9 +801,14 @@ describe('PublishSheet — publishing', () => {
      * the delete said it did nothing.
      *
      * Revert check (production line): the `removedPageCount` clause in
-     * `describeOutcome`. Removing it turns this red — and removing
-     * `removedPageCount: removedPageIds.length` from the service's return does
-     * the same, since the count would then be absent on the wire.
+     * `describePublishedCounts`. Removing it turns this red.
+     *
+     * An earlier version of this comment also claimed that removing
+     * `removedPageCount: removedPageIds.length` from the SERVICE's return does
+     * the same. It does not — this case drives `mutateAsync.mockResolvedValue`,
+     * so the service is not in the render path at all. The service side is
+     * pinned by the db-backed integration case, and the route between them by
+     * `__tests__/api/pm/site/publish.test.ts`.
      */
     const user = userEvent.setup();
     mutateAsync.mockResolvedValue({

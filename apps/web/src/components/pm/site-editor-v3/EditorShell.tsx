@@ -32,6 +32,8 @@ export interface EditorShellProps {
   children?: React.ReactNode;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   canOpenPublish: boolean;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  canPreview: boolean;
   status?: React.ReactNode;
   onPreview?: () => void;
   onPublish?: () => void;
@@ -74,6 +76,7 @@ export function EditorShell({
   renderToolPanel,
   children,
   canOpenPublish,
+  canPreview,
   status,
   onPreview,
   onPublish,
@@ -115,6 +118,7 @@ export function EditorShell({
         pageName={pageName}
         status={status}
         canOpenPublish={canOpenPublish}
+        canPreview={canPreview}
         onPreview={onPreview}
         onPublish={onPublish}
       />
