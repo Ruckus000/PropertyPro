@@ -39,12 +39,17 @@ export interface PreviewDialogProps {
    * The selected page is staged for removal, so the caption must not promise it
    * to visitors — publishing DELETES it.
    *
-   * Optional with a `false` default is safe here, unlike the required props
-   * elsewhere in this tree: absence degrades to the ordinary caption, which is
-   * correct for every un-staged page. It is the only prop in this dialog whose
-   * default is the common case rather than an "off" that hides a feature.
+   * REQUIRED. This shipped optional-defaulting-false with a rationale that was
+   * wrong twice over: it claimed absence "degrades to the ordinary caption",
+   * when for a staged page absence makes the dialog assert "It is what visitors
+   * see once you publish" over a page publishing removes — the exact false
+   * statement the prop exists to prevent, which is the default-means-off class,
+   * not an exception to it. (It also claimed to be the only optional prop here
+   * with a common-case default; `pageName` and `now` are both that. `pageName`
+   * is the genuine contrast — its absence yields a less specific but TRUE
+   * title.) One caller, so requiring it costs a line.
    */
-  pageIsStaged?: boolean;
+  pageIsStaged: boolean;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
 }
@@ -96,7 +101,7 @@ export function PreviewDialog({
   communityId,
   context,
   pageName,
-  pageIsStaged = false,
+  pageIsStaged,
   now,
 }: PreviewDialogProps) {
   return (

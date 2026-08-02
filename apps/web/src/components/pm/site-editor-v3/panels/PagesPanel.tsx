@@ -332,6 +332,34 @@ function lengthErrors(value: string, field: 'name' | 'slug'): string[] {
   ];
 }
 
+/**
+ * Is this page on the PUBLIC site at all?
+ *
+ * Mirrors `listNavPages` / `getPageBySlug` in `public-community-reader.ts`:
+ * a page reaches a visitor only when it is published (`is_draft = false`) and,
+ * for the nav specifically, kept in it (`in_nav = true`).
+ *
+ * ONE predicate, because four separate surfaces in this panel make a claim
+ * about what a visitor can see, and they must agree. They did not: the reorder
+ * toast learned this rule while the rename toast, both nav toasts and the
+ * shared live-immediacy hint went on asserting "live on your site now" for a
+ * page that has never been published and 404s to the public. The comment on the
+ * reorder toast even NAMES rename and the nav toggle as the surfaces it was
+ * copying — and then applied the truth condition to itself alone.
+ *
+ * `deleteStagedAt` is deliberately NOT part of this. A staged page is still
+ * live until the publish lands, so a change to it IS visible to a visitor; that
+ * state has its own copy elsewhere.
+ */
+function isPubliclyVisible(page: SitePageSummary): boolean {
+  return !page.isDraft && page.inNav;
+}
+
+/** Published at all — the weaker test, for surfaces that are not nav-specific. */
+function isPublished(page: SitePageSummary): boolean {
+  return !page.isDraft;
+}
+
 /** "no sections" / "1 section" / "4 sections" — the count D36′ requires, said in words. */
 function sectionPhrase(count: number): string {
   if (count === 0) return 'no sections';
@@ -771,19 +799,38 @@ export function PagesPanel({
              * same sentence to a screen-reader user twice. This says the one
              * thing the region does not: what the move did to the public site.
              *
-             * …and for two row states that is NOTHING. `reorderableIds` is every
-             * non-home page, while the public nav is `is_draft = false AND
-             * in_nav = true` (`listNavPages`). So moving a page badged "Draft"
-             * or "Not in nav" — badges this panel renders precisely so the PM
-             * knows those pages are not public — changed no visitor-facing
-             * order, and claiming it did contradicts the badge on the row they
-             * just moved. The order IS saved, and says so.
+             * …and often that is NOTHING, in two different ways.
+             *
+             * The public nav is a FILTERED PROJECTION of this list —
+             * `is_draft = false AND in_nav = true` (`listNavPages`) — so the
+             * honest question is not "is the moved row public?" but "did the
+             * projection change?". Those differ, and testing only the moved row
+             * was wrong in both directions:
+             *
+             *  - moving a Draft or Not-in-nav page changes nothing public (the
+             *    row is filtered out either way);
+             *  - moving a PUBLIC page past a hidden one also changes nothing
+             *    public — [Contact, Board(draft), Pool] with Contact moved down
+             *    is [Board, Contact, Pool], and the projection is [Contact,
+             *    Pool] before and after.
+             *
+             * Comparing the projections catches both. Badges on these rows exist
+             * precisely so the PM knows which pages are not public; a toast
+             * claiming a visitor-facing change contradicts the badge on the row
+             * they moved, or on the row they moved past.
              */
-            const publiclyVisible = !page.isDraft && page.inNav;
+            const publicOrder = (ids: readonly number[]) =>
+              ids
+                .filter((id) => {
+                  const row = pages.find((p) => p.id === id);
+                  return row !== undefined && isPubliclyVisible(row);
+                })
+                .join(',');
+            const publicOrderChanged = publicOrder(reorderableIds) !== publicOrder(next);
             toast.success(
-              publiclyVisible
+              publicOrderChanged
                 ? 'Your navigation order is live now.'
-                : `Order saved. ${page.name} isn't in your public navigation, so nothing visitors see has changed.`,
+                : `Order saved. This didn't change what visitors see — ${page.name} isn't in your public navigation, or it moved past pages that aren't.`,
               { id: 'site-page-reorder' },
             );
           },
@@ -1259,8 +1306,17 @@ export function PagesPanel({
                     data-testid={`site-page-live-hint-${page.id}`}
                     className="text-xs text-content-secondary"
                   >
-                    A page&apos;s name, navigation visibility and order go live straight away —
-                    they are not held back for your next publish.
+                    {/* Three states, because the sentence is a claim about
+                        visitors and all three differ. A staged page does not
+                        name NAME: its rename control is deliberately absent
+                        (see the `!staged` guard below), so promising that a
+                        name change goes live describes a control that is not
+                        on screen. */}
+                    {!isPublished(page)
+                      ? "This page isn't on your site yet. Its name, navigation and order will apply once you publish it."
+                      : staged
+                        ? "This page's navigation and order go live straight away — but it is set to be removed, so your next publish takes it off the site."
+                        : "A page's name, navigation visibility and order go live straight away — they are not held back for your next publish."}
                   </p>
 
                   {/*
@@ -1314,7 +1370,13 @@ export function PagesPanel({
                           saveField(
                             page,
                             { name: nameDraft.trim() },
-                            `Page renamed to ${nameDraft.trim()}. This is live on your site now.`,
+                            // Live-immediacy is a claim about VISITORS, so it is
+                            // only made when the page has one. An unpublished
+                            // page is on no public surface — see
+                            // `isPublished`/`isPubliclyVisible`.
+                            isPublished(page)
+                              ? `Page renamed to ${nameDraft.trim()}. This is live on your site now.`
+                              : `Page renamed to ${nameDraft.trim()}. It isn't published yet, so nothing visitors see has changed.`,
                           )
                         }
                       >
@@ -1392,9 +1454,17 @@ export function PagesPanel({
                         saveField(
                           page,
                           { inNav: !page.inNav },
-                          page.inNav
-                            ? `${page.name} is out of your navigation now. The page itself stays online.`
-                            : `${page.name} shows in your navigation now.`,
+                          // Same rule as the rename above: "now" is a claim
+                          // about the public nav, and a draft page is in no
+                          // nav at all — `listNavPages` filters `is_draft`
+                          // before it filters `in_nav`.
+                          !isPublished(page)
+                            ? page.inNav
+                              ? `${page.name} won't appear in your navigation. It isn't published yet, so nothing visitors see has changed.`
+                              : `${page.name} will appear in your navigation once it's published.`
+                            : page.inNav
+                              ? `${page.name} is out of your navigation now. The page itself stays online.`
+                              : `${page.name} shows in your navigation now.`,
                         )
                       }
                     >
@@ -1421,8 +1491,16 @@ export function PagesPanel({
                   {/* Says what the toggle does NOT do. Taking a page out of the
                       nav is the closest thing this panel has to "unpublish", and
                       a PM reaching for it to take a page down would otherwise
-                      believe they had. */}
-                  {!page.isHome && (
+                      believe they had.
+
+                      Withheld on a STAGED page, where every clause is wrong: it
+                      is on its way off the site, the only control below is
+                      "Cancel removal", and "To take it off your site, remove
+                      it" is advice for an action already taken with no control
+                      to take it. Withheld on a DRAFT page too — it is on no
+                      public surface, so there is no link to remove and nothing
+                      for search engines to find. */}
+                  {!page.isHome && !staged && isPublished(page) && (
                     <p className="text-xs text-content-secondary">
                       This only removes the link from your navigation. The page stays online at
                       its own address and search engines can still find it. To take it off your

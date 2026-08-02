@@ -86,6 +86,7 @@ function renderDialog(open = true) {
       onOpenChange={onOpenChange}
       communityId={7}
       context={CONTEXT}
+      pageIsStaged={false}
       now={NOW}
     />,
   );
@@ -119,6 +120,7 @@ function renderDialogOnPage(pageId: number | null) {
         onOpenChange={onOpenChange}
         communityId={7}
         context={CONTEXT}
+        pageIsStaged={false}
         now={NOW}
       />
     </SelectedSitePageProvider>,
@@ -170,6 +172,7 @@ describe('PreviewDialog — open state', () => {
           communityId={7}
           context={CONTEXT}
           pageName="Amenities"
+          pageIsStaged={false}
           now={NOW}
         />
       </SelectedSitePageProvider>,

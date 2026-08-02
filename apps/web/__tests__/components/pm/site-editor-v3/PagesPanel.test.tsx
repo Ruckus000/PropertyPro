@@ -1015,6 +1015,126 @@ describe('PagesPanel — renaming', () => {
     expect(after.getByRole('button', { name: 'Save address' })).toBeEnabled();
   });
 
+  it('does not tell the PM a change is live on a page that is not published', async () => {
+    /*
+     * The panel makes FOUR claims about what a visitor can see, and until now
+     * one of them knew the truth condition. On a draft page — which every newly
+     * created page is, and which the lazily-created home page is on a brand-new
+     * community — the PM read, in one disclosure box:
+     *
+     *   hint:         "…go live straight away"
+     *   rename toast: "This is live on your site now."
+     *   nav toast:    "shows in your navigation now." / "stays online."
+     *   address hint: "This page is not on your live site yet."   ← ~60px below
+     *
+     * None of the first three is true: `listNavPages` filters `is_draft = false`
+     * before `in_nav`, and `getPageBySlug` filters `is_draft = false`, so the
+     * page 404s. The reorder toast learned this in an earlier round and its
+     * comment NAMES rename and the nav toggle as the surfaces it copied — then
+     * applied the condition to itself alone.
+     *
+     * Revert check (production lines): the `isPublished(page)` ternaries on the
+     * rename toast, the nav toast and the live hint in `PagesPanel.tsx`. Each
+     * turns its own assertion below red; the published-page case that follows
+     * stays green under all three.
+     */
+    const user = userEvent.setup();
+    updateMutate.mockImplementation((_input, options) => options.onSuccess?.());
+    renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE] });
+
+    const editor = await openSettings(user, 3);
+
+    // The hint, which governs the whole box.
+    expect(screen.getByTestId('site-page-live-hint-3')).toHaveTextContent(
+      /isn't on your site yet/i,
+    );
+
+    // The rename toast.
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Board room');
+    await user.click(editor.getByRole('button', { name: 'Save name' }));
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining("isn't published yet"),
+    );
+    expect(toastSuccessMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('live on your site now'),
+    );
+
+    // The nav toast.
+    toastSuccessMock.mockClear();
+    await user.click(editor.getByRole('button', { name: /navigation/i }));
+    const [navText] = toastSuccessMock.mock.calls[0]!;
+    expect(navText).not.toMatch(/now\.$/);
+    expect(navText).toMatch(/isn't published yet|once it's published/);
+  });
+
+  it('still says a change IS live on a published page', async () => {
+    // The positive control. Without it the case above passes for a panel that
+    // never claims liveness at all, including one whose ternaries always take
+    // the draft arm.
+    const user = userEvent.setup();
+    updateMutate.mockImplementation((_input, options) => options.onSuccess?.());
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    expect(screen.getByTestId('site-page-live-hint-2')).toHaveTextContent(
+      /go live straight away/i,
+    );
+
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Pool & Gym');
+    await user.click(editor.getByRole('button', { name: 'Save name' }));
+
+    expect(toastSuccessMock).toHaveBeenCalledWith(
+      expect.stringContaining('This is live on your site now.'),
+    );
+  });
+
+  it('keeps an unsaved NAME edit when the PM saves the address', async () => {
+    /*
+     * The mirror of the case above it, and the limb the split left unpinned:
+     * dropping `expandedPage?.slug` from the second effect's deps left the
+     * whole suite green, so half the fix was free to be deleted.
+     *
+     * Revert check (production line): the `expandedPage?.slug` dep on the slug
+     * re-seeding effect in `PagesPanel.tsx`.
+     */
+    const user = userEvent.setup();
+    const { rerender } = renderPanel({ pages: [HOME, DRAFT_PAGE] });
+
+    const editor = await openSettings(user, 3);
+    const nameField = editor.getByLabelText('Page name');
+    await user.clear(nameField);
+    await user.type(nameField, 'Board room');
+
+    // A co-manager changes only the ADDRESS.
+    useSitePagesMock.mockReturnValue({
+      data: [HOME, { ...DRAFT_PAGE, slug: 'board-room' }],
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: refetchMock,
+    });
+    rerender(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={1}
+        restoreFocusToSelectedRow={false}
+        onFocusRestored={onFocusRestored}
+        onSelectPage={onSelectPage}
+        onPageRemoved={onPageRemoved}
+      />,
+    );
+
+    const after = within(screen.getByTestId('site-page-editor-3'));
+    // The address took…
+    expect(after.getByLabelText('Web address')).toHaveValue('board-room');
+    // …and the name the PM typed survived.
+    expect(after.getByLabelText('Page name')).toHaveValue('Board room');
+  });
+
   it('tells a real clash apart from a page keeping its own name', async () => {
     /*
      * Replaces a static absence assertion that could not be made red.
@@ -1319,6 +1439,17 @@ describe('PagesPanel — navigation visibility', () => {
 
 describe('PagesPanel — reordering', () => {
   const THREE = [HOME, AMENITIES, DRAFT_PAGE];
+  /**
+   * Two PUBLIC non-home pages, so a move between them genuinely changes the
+   * public nav.
+   *
+   * `THREE`'s only reorderable pair is Amenities (public) and Board (draft) —
+   * and the public nav is a FILTERED projection, so swapping those two leaves
+   * the projection identical. Any case asserting "your navigation order is live
+   * now" against `THREE` was asserting the arm its own fixture cannot reach.
+   */
+  const RULES = page({ id: 4, name: 'Rules', slug: 'rules', sortOrder: 3 });
+  const TWO_PUBLIC = [HOME, AMENITIES, RULES];
 
   it('submits the full non-home order when a page moves down', async () => {
     const user = userEvent.setup();
@@ -1388,7 +1519,9 @@ describe('PagesPanel — reordering', () => {
      */
     const user = userEvent.setup();
     reorderMutate.mockImplementation((_input, options) => options.onSuccess?.());
-    renderPanel({ pages: THREE });
+    // TWO_PUBLIC, not THREE: moving a public page past a DRAFT one leaves the
+    // public projection untouched, so this arm is unreachable on that fixture.
+    renderPanel({ pages: TWO_PUBLIC });
 
     await user.click(screen.getByRole('button', { name: 'Move Amenities down' }));
 
@@ -1468,6 +1601,38 @@ describe('PagesPanel — reordering', () => {
     expect(screen.getByRole('status')).toHaveTextContent('');
   });
 
+  it('does not claim the public nav moved when a public page hops a hidden one', async () => {
+    /*
+     * The other direction, and the one testing the MOVED ROW could never see.
+     *
+     * The public nav is a filtered PROJECTION of this list
+     * (`is_draft = false AND in_nav = true`), so moving a public page past a
+     * hidden one leaves the projection identical:
+     *
+     *   [Amenities(public), Board(draft), Rules(public)]
+     *   move Amenities down → [Board, Amenities, Rules]
+     *   projection: [Amenities, Rules] → [Amenities, Rules]   ← unchanged
+     *
+     * The first version of this fix asked "is the moved row public?", which is
+     * true here, and toasted "live now" — contradicting the badge on the row it
+     * moved PAST rather than the one it moved.
+     *
+     * Revert check (production line): the `publicOrderChanged` comparison in
+     * `moveToIndex`'s `onSuccess`, replaced by `!page.isDraft && page.inNav`
+     * (the pre-fix predicate). That turns this red and leaves the draft case
+     * below green.
+     */
+    const user = userEvent.setup();
+    reorderMutate.mockImplementation((_input, options) => options.onSuccess?.());
+    renderPanel({ pages: [HOME, AMENITIES, DRAFT_PAGE, RULES] });
+
+    await user.click(screen.getByRole('button', { name: 'Move Amenities down' }));
+
+    const [text] = toastSuccessMock.mock.calls[0]!;
+    expect(text).toContain("didn't change what visitors see");
+    expect(text).not.toContain('live now');
+  });
+
   it('does not claim the public nav moved for a page that is not in it', async () => {
     /*
      * `reorderableIds` is every non-home page, while the PUBLIC nav is
@@ -1516,7 +1681,7 @@ describe('PagesPanel — reordering', () => {
      */
     const user = userEvent.setup();
     reorderMutate.mockImplementation((_input, options) => options.onSuccess?.());
-    renderPanel({ pages: THREE });
+    renderPanel({ pages: TWO_PUBLIC });
 
     await user.click(screen.getByRole('button', { name: 'Move Amenities down' }));
 

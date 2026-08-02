@@ -144,7 +144,7 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
           Confirm what&apos;s shown
         </h2>
         <p className="mt-1 text-sm text-content-secondary">
-          Here&apos;s the order visitors will see. Publish when you&apos;re ready — your draft
+          Every section on your site, in order. Publish when you&apos;re ready — your draft
           stays saved until you do.
         </p>
       </div>
@@ -204,8 +204,22 @@ export function ConfirmPublish({ communityId, communitySlug }: Props) {
           className="text-sm text-content-secondary"
           aria-live="polite"
         >
+          {/*
+            * Scoped to what it actually counted. `draftCount` filters the BLOCK
+            * summary by `isDraft`, so it cannot see page changes at all — and
+            * the Pages tool is available throughout the wizard (the editor's
+            * entry banner sits on screen the whole time). A PM who staged a
+            * live page for removal and stepped through to here was told "All
+            * changes already published." over an enabled Publish button that
+            * then deleted the page and everything on it.
+            *
+            * Narrowing the sentence is the honest fix at this size: it stops
+            * asserting a whole-site fact this component cannot establish. The
+            * receipt below already reports page counts correctly, via the
+            * `describePublishedCounts` round 6 shared with this surface.
+            */}
           {draftCount === 0
-            ? 'All changes already published.'
+            ? 'No draft sections to publish.'
             : `${draftCount} draft section${draftCount === 1 ? '' : 's'} ready to publish.`}
         </p>
         <div className="flex items-center gap-3">

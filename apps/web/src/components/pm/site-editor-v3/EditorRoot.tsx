@@ -244,6 +244,19 @@ export function EditorRoot({
   const { diff, isError: diffFailed, slotGroups } = useSiteDiff(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [previewOpen, setPreviewOpen] = useState(false);
+  /**
+   * `previewOpen`, mirrored — read by the preview gate effect below.
+   *
+   * The effect must know whether the dialog was open WITHOUT taking
+   * `previewOpen` as a dependency (that would re-run it on every open and
+   * close) and without reading it inside a `setPreviewOpen` updater, which
+   * React requires to be pure and calls more than once.
+   *
+   * Assignment during render is safe for a mirror ref: it derives nothing,
+   * triggers nothing, and is read only from effects.
+   */
+  const previewOpenRef = useRef(false);
+  previewOpenRef.current = previewOpen;
   const [publishOpen, setPublishOpen] = useState(false);
 
   // Which page the editor is editing. `null` until the PM picks one, at which
@@ -324,6 +337,10 @@ export function EditorRoot({
    * replaces the editor, which makes it the right destination.
    */
   const retryPagesRef = useRef<HTMLButtonElement>(null);
+  /** True while the gate holds focus on the retry, so it can hand it back. */
+  const previewGateTookFocusRef = useRef(false);
+  /** Focus destination for the return leg — re-enabled on the same render. */
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
   const handlePageRemoved = useCallback((pageId: number) => setSelfRemovedPageId(pageId), []);
 
   // Shares `useSiteDiff`'s query key, so this adds no request — the diff calls
@@ -573,11 +590,36 @@ export function EditorRoot({
      * Only when the dialog was actually open: this effect also runs on a first
      * paint that fails, where nothing had focus to lose and grabbing it would
      * be the ambush.
+     *
+     * Read from a REF, not from a `setPreviewOpen` updater. Scheduling the
+     * focus inside the updater made it a side effect in a function React
+     * requires to be pure — and calls more than once (the eager-state bail-out
+     * check, a render replay, StrictMode's double-invoke), so the focus was
+     * scheduled two or three times per transition. `focus()` is idempotent, so
+     * nothing was observably wrong; it was also unassertable, which is the
+     * other half of why it moves here.
+     *
+     * The RETURN leg is `previewGateTookFocusRef`: when the read recovers, the
+     * banner unmounts and takes the focused "Try again" with it, dropping the
+     * PM on `<body>` — the exact state this effect exists to prevent, on the
+     * way out of the same round trip. Focus goes back to Preview, which that
+     * same render re-enables.
      */
-    setPreviewOpen((wasOpen) => {
-      if (wasOpen) queueMicrotask(() => retryPagesRef.current?.focus());
-      return false;
-    });
+    if (previewOpenRef.current) {
+      previewGateTookFocusRef.current = true;
+      queueMicrotask(() => retryPagesRef.current?.focus());
+    }
+    setPreviewOpen(false);
+  }, [pagesUnavailable]);
+
+  // The return leg. Separate effect rather than an `else` above, because it
+  // must run on the render where `pagesUnavailable` goes FALSE — at which point
+  // the early return above has already fired.
+  useEffect(() => {
+    if (pagesUnavailable) return;
+    if (!previewGateTookFocusRef.current) return;
+    previewGateTookFocusRef.current = false;
+    queueMicrotask(() => previewButtonRef.current?.focus());
   }, [pagesUnavailable]);
 
   // Guarded on `selectedPage !== undefined` deliberately: the tick that makes
@@ -735,6 +777,17 @@ export function EditorRoot({
         // too. Mirroring only part of a render condition is how a control ends
         // up inviting a click it cannot honour.
         canPreview={!pagesUnavailable && canvasContext !== null}
+        // The button explains ITS OWN reason. Widening `canPreview` to cover
+        // `canvasContext` without widening the explanation left the disabled
+        // button blaming the pages read on a screen where the pages loaded
+        // fine, the Pages panel works, and the top bar is naming the selected
+        // page — telling the PM to retry a read that did not fail.
+        previewDisabledReason={
+          pagesUnavailable
+            ? "We couldn't load this site's pages"
+            : "We couldn't load this community's site settings"
+        }
+        previewButtonRef={previewButtonRef}
         // Driven by whichever inspector form is open. StatusLine renders
         // nothing while idle with no prior save, so this stays invisible until
         // the PM actually edits something.

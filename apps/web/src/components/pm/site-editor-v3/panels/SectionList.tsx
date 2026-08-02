@@ -27,7 +27,7 @@ export interface SectionListProps {
 }
 
 /**
- * The Sections tool panel: the community's content sections in slot order, with
+ * The Sections tool panel: the SELECTED PAGE's content sections in slot order, with
  * two equally capable ways to reorder them.
  *
  * **Why native HTML5 drag-and-drop.** `@dnd-kit` is deliberately not a

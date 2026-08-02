@@ -1547,6 +1547,77 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
   });
 
+  it('does NOT grab focus when the read fails on first paint', async () => {
+    /*
+     * The `previewOpenRef` guard. This effect also runs on a first paint that
+     * fails, where nothing had focus to lose — grabbing it there is the ambush
+     * the guard exists to prevent, and the guard was pinned by nothing: removing
+     * it left all 624 cases green.
+     *
+     * Revert check (production line): the `if (previewOpenRef.current)` guard in
+     * `EditorRoot.tsx`'s preview-gate effect.
+     */
+    queries.isError = true;
+    queries.pages = [];
+    renderRoot({ initialPages: [], canvasContext: {} });
+
+    expect(await screen.findByRole('button', { name: /Try again/ })).not.toHaveFocus();
+  });
+
+  it('hands focus BACK to Preview once the read recovers', async () => {
+    /*
+     * The return leg. The gate takes focus to "Try again" — and pressing it
+     * unmounts the banner that holds it, dropping the PM on `<body>`: the exact
+     * state the gate exists to prevent, on the way out of the same round trip.
+     * The JSDoc argues the destination is right because it "is the only
+     * actionable control on the surface that replaces the editor"; that argument
+     * applies verbatim to leaving.
+     *
+     * Revert check (production line): the return-leg effect in `EditorRoot.tsx`
+     * (`if (!previewGateTookFocusRef.current) return;` … focus Preview). The
+     * entry-leg case below stays green without it.
+     */
+    queries.pages = [seededHome];
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+
+    queries.isError = true;
+    queries.pages = [];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+    });
+    expect(await screen.findByRole('button', { name: /Try again/ })).toHaveFocus();
+
+    // …the PM retries and it works.
+    queries.isError = false;
+    queries.pages = [seededHome];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [seededHome], canvasContext: {} }));
+    });
+
+    expect(await screen.findByRole('button', { name: /Preview/ })).toHaveFocus();
+  });
+
+  it('blames the failure that actually happened', async () => {
+    /*
+     * `canPreview` covers two conjuncts; the explanation covered one. With the
+     * community row unread but the pages fine, the disabled button read "We
+     * couldn't load this site's pages" on a screen where the Pages panel works
+     * and the top bar is naming the selected page — telling the PM to retry a
+     * read that did not fail.
+     *
+     * Revert check (production line): the `previewDisabledReason` ternary on
+     * `<EditorShell>` in `EditorRoot.tsx`, pinned to the pages sentence.
+     */
+    queries.pages = [seededHome];
+    renderRoot({ initialPages: [seededHome], canvasContext: null });
+
+    expect(screen.getByRole('button', { name: /Preview/ })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/site settings/i),
+    );
+  });
+
   it('lands keyboard focus on the retry, not on <body>, when it closes the dialog', async () => {
     /*
      * The gate UNMOUNTS the dialog rather than closing it through Radix. Radix's

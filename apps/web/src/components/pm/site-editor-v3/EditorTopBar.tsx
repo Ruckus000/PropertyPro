@@ -68,6 +68,22 @@ export interface EditorTopBarProps {
    * that visibly does nothing.
    */
   canPreview: boolean;
+  /**
+   * Why Preview is unavailable, in the parent's words.
+   *
+   * Required alongside `canPreview` rather than hard-coded here, because only
+   * the parent knows WHICH conjunct of the render gate is false. A single
+   * sentence baked into this file blamed the pages read on a screen where the
+   * pages had loaded and the community row had not — advice to retry something
+   * that did not fail. Whoever widens the condition must widen the reason.
+   */
+  previewDisabledReason: string;
+  /**
+   * Focus destination when the parent hands focus back — see `EditorRoot`'s
+   * preview-gate effect, which takes focus to a failure banner and must return
+   * it once the banner goes away.
+   */
+  previewButtonRef?: React.Ref<HTMLButtonElement>;
 }
 
 /**
@@ -88,6 +104,8 @@ export function EditorTopBar({
   onPublish,
   canOpenPublish,
   canPreview,
+  previewDisabledReason,
+  previewButtonRef,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3.5">
@@ -113,11 +131,12 @@ export function EditorTopBar({
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
         {status}
         <Button
+          ref={previewButtonRef}
           variant="outline"
           size="sm"
           onClick={onPreview}
           disabled={!canPreview}
-          title={canPreview ? undefined : "We couldn't load this site's pages"}
+          title={canPreview ? undefined : previewDisabledReason}
         >
           <Eye className="h-4 w-4" aria-hidden="true" />
           Preview

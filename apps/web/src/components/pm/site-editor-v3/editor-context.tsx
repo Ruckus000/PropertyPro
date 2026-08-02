@@ -85,11 +85,30 @@ export interface SiteEditorProviderProps {
    * Same-page "Fix this" does not come through here — nothing remounts, so
    * `PublishSheetMount` selects directly.
    */
-  selectSlotOnMount?: number | null;
-  /** Fired once `selectSlotOnMount` has been acted on, so the owner can clear it. */
-  onSlotSelected?: () => void;
   children: React.ReactNode;
 }
+
+/**
+ * The cross-page "Fix this" hand-off — an all-or-nothing PAIR, enforced by the
+ * type, for the same reason `EditorShell`'s `ControlledToolProps` is.
+ *
+ * Supply `selectSlotOnMount` without `onSlotSelected` and the consuming effect
+ * selects the slot and then calls `onSlotSelectedRef.current?.()` — a silent
+ * no-op — so the owner's `pendingSelectSlot` is never cleared. `consumedSlotRef`
+ * only suppresses re-consumption on THIS instance, and `EditorRoot` keys this
+ * provider on the selected page, so the next page switch remounts it with the
+ * stale slot still armed and yanks the PM's selection to a section they left
+ * behind. Round 6 recorded that the clearing is load-bearing; nothing enforced
+ * it.
+ *
+ * Omitting BOTH is legitimate (most callers, and every canvas test), so this is
+ * a union rather than two required props.
+ */
+type SlotHandoffProps =
+  | { selectSlotOnMount: number | null; onSlotSelected: () => void }
+  | { selectSlotOnMount?: never; onSlotSelected?: never };
+
+export type SiteEditorProviderPropsWithSlot = SiteEditorProviderProps & SlotHandoffProps;
 
 /**
  * Shared editing state for the v3 editor: which section is selected, and how
@@ -112,7 +131,7 @@ export function SiteEditorProvider({
   selectSlotOnMount,
   onSlotSelected,
   children,
-}: SiteEditorProviderProps) {
+}: SiteEditorProviderPropsWithSlot) {
   const {
     selection,
     isSelected,

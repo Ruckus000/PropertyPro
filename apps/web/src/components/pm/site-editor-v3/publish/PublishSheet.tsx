@@ -703,13 +703,24 @@ function BlockingIssues({
                   type="button"
                   variant="outline"
                   size="sm"
+                  // Disambiguated: every issue renders a button reading "Fix
+                  // this", so a screen-reader user tabbing the list hears the
+                  // same name N times. The visible label is contained in the
+                  // accessible one, which keeps it WCAG 2.5.3-safe.
+                  aria-label={`Fix this: ${name}`}
                   onClick={() => onFix(target.slot)}
                 >
                   Fix this
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
               ) : isPageIssue ? (
-                <Button type="button" variant="outline" size="sm" onClick={onGoToPages}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label={`Go to Pages: ${name}`}
+                  onClick={onGoToPages}
+                >
                   Go to Pages
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
@@ -754,8 +765,11 @@ function describeTarget(
      * The page branch below has named its page since round 6; this branch is
      * the half of the same function that was left in machine syntax.
      *
-     * Omitted, not defaulted, when the slot maps to no page or to the site-wide
-     * sentinel: a bare section name is honest, "— site" is not.
+     * Omitted, not defaulted, when the slot maps to no page: a bare section
+     * name is honest, "— site" is not. (`buildSlotGroups` `continue`s on a null
+     * `pageId` and only ever stores `String(block.pageId)`, so the site-wide
+     * sentinel is never a VALUE here — only `groupForChange` mints it. An
+     * earlier version of this comment named that branch as reachable.)
      *
      * And omitted entirely on a ONE-page site, where every section is on the
      * only page there is and the suffix would be pure noise — the ambiguity
