@@ -35,6 +35,7 @@ const GUARDS = [
   'guard:token-coverage',
   'guard:design-tokens',
   'guard:page-padding',
+  'guard:page-state-copy',
   'guard:audit-log-trigger-overrides',
   'guard:sanitizer-deps',
   'guard:read-entitlement',

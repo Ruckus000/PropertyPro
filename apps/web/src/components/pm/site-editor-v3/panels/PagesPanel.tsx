@@ -114,6 +114,15 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ApiRequestError } from '@/lib/api/request-json';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
+import {
+  NAV_IS_NOT_REMOVAL,
+  describeLiveImmediacy,
+  describeNavToggled,
+  describeRenamed,
+  describeReordered,
+  isPublished,
+  shouldExplainNavIsNotRemoval,
+} from '@/lib/site-editor/describe-page-state';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import {
   useCreateSitePage,
@@ -330,34 +339,6 @@ function lengthErrors(value: string, field: 'name' | 'slug'): string[] {
       ? `Page names can be up to ${MAX_FIELD_LENGTH} characters.`
       : `Web addresses can be up to ${MAX_FIELD_LENGTH} characters.`,
   ];
-}
-
-/**
- * Is this page on the PUBLIC site at all?
- *
- * Mirrors `listNavPages` / `getPageBySlug` in `public-community-reader.ts`:
- * a page reaches a visitor only when it is published (`is_draft = false`) and,
- * for the nav specifically, kept in it (`in_nav = true`).
- *
- * ONE predicate, because four separate surfaces in this panel make a claim
- * about what a visitor can see, and they must agree. They did not: the reorder
- * toast learned this rule while the rename toast, both nav toasts and the
- * shared live-immediacy hint went on asserting "live on your site now" for a
- * page that has never been published and 404s to the public. The comment on the
- * reorder toast even NAMES rename and the nav toggle as the surfaces it was
- * copying — and then applied the truth condition to itself alone.
- *
- * `deleteStagedAt` is deliberately NOT part of this. A staged page is still
- * live until the publish lands, so a change to it IS visible to a visitor; that
- * state has its own copy elsewhere.
- */
-function isPubliclyVisible(page: SitePageSummary): boolean {
-  return !page.isDraft && page.inNav;
-}
-
-/** Published at all — the weaker test, for surfaces that are not nav-specific. */
-function isPublished(page: SitePageSummary): boolean {
-  return !page.isDraft;
 }
 
 /** "no sections" / "1 section" / "4 sections" — the count D36′ requires, said in words. */
@@ -819,18 +800,12 @@ export function PagesPanel({
              * claiming a visitor-facing change contradicts the badge on the row
              * they moved, or on the row they moved past.
              */
-            const publicOrder = (ids: readonly number[]) =>
+            const rowsFor = (ids: readonly number[]) =>
               ids
-                .filter((id) => {
-                  const row = pages.find((p) => p.id === id);
-                  return row !== undefined && isPubliclyVisible(row);
-                })
-                .join(',');
-            const publicOrderChanged = publicOrder(reorderableIds) !== publicOrder(next);
+                .map((id) => pages.find((p) => p.id === id))
+                .filter((row): row is SitePageSummary => row !== undefined);
             toast.success(
-              publicOrderChanged
-                ? 'Your navigation order is live now.'
-                : `Order saved. This didn't change what visitors see — ${page.name} isn't in your public navigation, or it moved past pages that aren't.`,
+              describeReordered(page, rowsFor(reorderableIds), rowsFor(next)),
               { id: 'site-page-reorder' },
             );
           },
@@ -1312,11 +1287,7 @@ export function PagesPanel({
                         (see the `!staged` guard below), so promising that a
                         name change goes live describes a control that is not
                         on screen. */}
-                    {!isPublished(page)
-                      ? "This page isn't on your site yet. Its name, navigation and order will apply once you publish it."
-                      : staged
-                        ? "This page's navigation and order go live straight away — but it is set to be removed, so your next publish takes it off the site."
-                        : "A page's name, navigation visibility and order go live straight away — they are not held back for your next publish."}
+                    {describeLiveImmediacy(page)}
                   </p>
 
                   {/*
@@ -1374,9 +1345,7 @@ export function PagesPanel({
                             // only made when the page has one. An unpublished
                             // page is on no public surface — see
                             // `isPublished`/`isPubliclyVisible`.
-                            isPublished(page)
-                              ? `Page renamed to ${nameDraft.trim()}. This is live on your site now.`
-                              : `Page renamed to ${nameDraft.trim()}. It isn't published yet, so nothing visitors see has changed.`,
+                            describeRenamed(page, nameDraft.trim()),
                           )
                         }
                       >
@@ -1458,13 +1427,7 @@ export function PagesPanel({
                           // about the public nav, and a draft page is in no
                           // nav at all — `listNavPages` filters `is_draft`
                           // before it filters `in_nav`.
-                          !isPublished(page)
-                            ? page.inNav
-                              ? `${page.name} won't appear in your navigation. It isn't published yet, so nothing visitors see has changed.`
-                              : `${page.name} will appear in your navigation once it's published.`
-                            : page.inNav
-                              ? `${page.name} is out of your navigation now. The page itself stays online.`
-                              : `${page.name} shows in your navigation now.`,
+                          describeNavToggled(page, !page.inNav),
                         )
                       }
                     >
@@ -1500,12 +1463,8 @@ export function PagesPanel({
                       to take it. Withheld on a DRAFT page too — it is on no
                       public surface, so there is no link to remove and nothing
                       for search engines to find. */}
-                  {!page.isHome && !staged && isPublished(page) && (
-                    <p className="text-xs text-content-secondary">
-                      This only removes the link from your navigation. The page stays online at
-                      its own address and search engines can still find it. To take it off your
-                      site, remove it.
-                    </p>
+                  {shouldExplainNavIsNotRemoval(page) && (
+                    <p className="text-xs text-content-secondary">{NAV_IS_NOT_REMOVAL}</p>
                   )}
 
                   {/* Home has no removal control at all: every layout renders a
