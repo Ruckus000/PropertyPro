@@ -958,6 +958,63 @@ describe('PagesPanel — renaming', () => {
     expect(reopened.getByRole('button', { name: 'Save name' })).toBeDisabled();
   });
 
+  it('keeps an unsaved address edit when the PM saves the NAME', async () => {
+    /*
+     * The re-seeding effect above discards a draft when its server value moves,
+     * which is the accepted trade for a co-manager's rename. As ONE effect
+     * writing both drafts it discarded far more than that.
+     *
+     * This editor renders two independent forms with two independent Save
+     * buttons. Edit the name AND the address, press `Save name`: the mutation
+     * invalidates, the refetch lands, `expandedPage.name` changes — and the
+     * single effect fired and reset `slugDraft` too. The PM's typed address
+     * vanished, `Save address` went disabled, and nothing was said. Their own
+     * save IS "a real change to the row underneath".
+     *
+     * Revert check (production line): collapse the two per-field effects in
+     * `PagesPanel.tsx` back into one that writes both drafts and is keyed on
+     * `[expandedPage?.id, expandedPage?.name, expandedPage?.slug]`.
+     */
+    const user = userEvent.setup();
+    // A DRAFT page, so both controls render (D32′ hides the address on a
+    // published page).
+    const { rerender } = renderPanel({ pages: [HOME, DRAFT_PAGE] });
+
+    const editor = await openSettings(user, 3);
+    const nameField = editor.getByLabelText('Page name');
+    const slugField = editor.getByLabelText('Web address');
+    await user.clear(nameField);
+    await user.type(nameField, 'Board room');
+    await user.clear(slugField);
+    await user.type(slugField, 'board-room');
+
+    // The PM saves only the NAME. The server echoes the new name back.
+    useSitePagesMock.mockReturnValue({
+      data: [HOME, { ...DRAFT_PAGE, name: 'Board room' }],
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: refetchMock,
+    });
+    rerender(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={1}
+        restoreFocusToSelectedRow={false}
+        onFocusRestored={onFocusRestored}
+        onSelectPage={onSelectPage}
+        onPageRemoved={onPageRemoved}
+      />,
+    );
+
+    const after = within(screen.getByTestId('site-page-editor-3'));
+    // The name took, because that is what was saved…
+    expect(after.getByLabelText('Page name')).toHaveValue('Board room');
+    // …and the address the PM typed is still there, still saveable.
+    expect(after.getByLabelText('Web address')).toHaveValue('board-room');
+    expect(after.getByRole('button', { name: 'Save address' })).toBeEnabled();
+  });
+
   it('tells a real clash apart from a page keeping its own name', async () => {
     /*
      * Replaces a static absence assertion that could not be made red.
@@ -1368,9 +1425,21 @@ describe('PagesPanel — reordering', () => {
 
   it('says so when a reorder fails, and stops claiming the move landed', async () => {
     /*
-     * Both halves matter, and the second is the one with teeth: the live region
-     * has ALREADY announced "moved to position 3", optimistically, so leaving
-     * that standing tells a screen-reader user a move landed when it did not.
+     * Both halves matter, and the second is the one with teeth: in PRODUCTION
+     * the live region has already announced "moved to position 3",
+     * optimistically, so leaving that standing tells a screen-reader user a
+     * move landed when it did not.
+     *
+     * "In production" is load-bearing. This mock calls `onError` SYNCHRONOUSLY,
+     * so both `setAnnouncement` calls land in one React batch and the region is
+     * never observably non-empty here — the sequence being described is the
+     * real one, not this test's. What this case actually pins is the END state,
+     * which is the part that matters and the part RC-F reddens.
+     *
+     * And clearing does not RETRACT: a polite live region announces changes,
+     * and a sentence already spoken cannot be unspoken. The failure reaches the
+     * user through sonner's own `aria-live`; emptying this region is for the
+     * PM who goes back and reads it, not a recall of what was said.
      *
      * Asserts the region no longer claims the move, rather than asserting a
      * replacement sentence. That is the property the original version of this
@@ -1397,6 +1466,33 @@ describe('PagesPanel — reordering', () => {
     );
     expect(screen.getByRole('status')).not.toHaveTextContent(/moved to position/);
     expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('does not claim the public nav moved for a page that is not in it', async () => {
+    /*
+     * `reorderableIds` is every non-home page, while the PUBLIC nav is
+     * `is_draft = false AND in_nav = true` (`listNavPages`). So moving a page
+     * badged "Draft" or "Not in nav" changed nothing a visitor can see — and
+     * "Your navigation order is live now." contradicted the badge on the very
+     * row the PM just moved. The order IS saved, which is what it now says.
+     *
+     * `DRAFT_PAGE` is unpublished, so this drives the draft arm; the nav-hidden
+     * arm is the same condition.
+     *
+     * Revert check (production line): the `publiclyVisible` ternary in
+     * `moveToIndex`'s `onSuccess` in `PagesPanel.tsx`. The published-page case
+     * above stays green.
+     */
+    const user = userEvent.setup();
+    reorderMutate.mockImplementation((_input, options) => options.onSuccess?.());
+    renderPanel({ pages: THREE });
+
+    // DRAFT_PAGE is id 3 — move it UP, so it actually moves.
+    await user.click(screen.getByRole('button', { name: 'Move Board up' }));
+
+    const [text] = toastSuccessMock.mock.calls[0]!;
+    expect(text).toContain("isn't in your public navigation");
+    expect(text).not.toContain('live now');
   });
 
   it('does not announce the same reorder twice', async () => {

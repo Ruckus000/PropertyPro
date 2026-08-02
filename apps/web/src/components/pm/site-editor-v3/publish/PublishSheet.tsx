@@ -297,6 +297,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
     next,
     pageLabels,
     pageRank,
+    slotGroups,
     pageIssues: pageSetIssues,
     isPending: diffPending,
     isError,
@@ -496,6 +497,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
           issues={blocking}
           snapshot={next}
           pageLabels={pageLabels}
+          slotGroups={slotGroups}
           onFix={fixIssue}
           canFix={onFixIssue !== undefined}
           onGoToPages={goToPages}
@@ -640,6 +642,14 @@ interface BlockingIssuesProps {
   snapshot: SiteSnapshot;
   /** Group id → page name, so a page issue names the page and not `page:47`. */
   pageLabels: ReadonlyMap<string, string>;
+  /**
+   * `block_order` → group id, so a SECTION issue can name its page too.
+   *
+   * Already built by `useSiteDiff` for change grouping; this reuses it rather
+   * than deriving a second slot→page map that could disagree with the one the
+   * change list is grouped by.
+   */
+  slotGroups: ReadonlyMap<number, string>;
   onFix: (slot: number) => void;
   canFix: boolean;
   /**
@@ -653,7 +663,15 @@ interface BlockingIssuesProps {
   onGoToPages: () => void;
 }
 
-function BlockingIssues({ issues, snapshot, pageLabels, onFix, canFix, onGoToPages }: BlockingIssuesProps) {
+function BlockingIssues({
+  issues,
+  snapshot,
+  pageLabels,
+  slotGroups,
+  onFix,
+  canFix,
+  onGoToPages,
+}: BlockingIssuesProps) {
   return (
     <section
       role="alert"
@@ -674,7 +692,7 @@ function BlockingIssues({ issues, snapshot, pageLabels, onFix, canFix, onGoToPag
       <ul className="space-y-3">
         {issues.map((issue, index) => {
           const target = issueTarget(issue.field, snapshot);
-          const name = describeTarget(issue, snapshot, pageLabels);
+          const name = describeTarget(issue, snapshot, pageLabels, slotGroups);
           const isPageIssue = issue.field.startsWith('page:') || issue.field.startsWith('pages.');
           return (
             <li key={`${issue.field}-${index}`} className="space-y-1 text-sm">
@@ -715,13 +733,38 @@ function describeTarget(
   issue: Issue,
   snapshot: SiteSnapshot,
   pageLabels: ReadonlyMap<string, string>,
+  slotGroups: ReadonlyMap<number, string>,
 ): string {
   if (issue.field === 'hero' || issue.field.startsWith('hero.')) {
     return 'Welcome section';
   }
   const target = issueTarget(issue.field, snapshot);
   if (target) {
-    return `Section ${target.slot} (${target.blockType})`;
+    /*
+     * Named with its PAGE once the site has more than one.
+     *
+     * `Section 12 (faq)` is a slot number, and a slot number appears on no
+     * other surface in the editor — not on a `SectionList` row, not on the
+     * canvas — so on a multi-page site it named an offender the PM could not
+     * locate without pressing "Fix this" and being carried away from the list
+     * they were triaging. Cross-page issues are the norm, not an edge: the
+     * publish diff is whole-site by design (D-C2) while the editor context is
+     * page-scoped, which is the entire reason `handleSelectSlot` exists.
+     *
+     * The page branch below has named its page since round 6; this branch is
+     * the half of the same function that was left in machine syntax.
+     *
+     * Omitted, not defaulted, when the slot maps to no page or to the site-wide
+     * sentinel: a bare section name is honest, "— site" is not.
+     *
+     * And omitted entirely on a ONE-page site, where every section is on the
+     * only page there is and the suffix would be pure noise — the ambiguity
+     * this resolves does not exist until there are two pages to confuse.
+     */
+    const pageLabel =
+      pageLabels.size > 1 ? pageLabels.get(slotGroups.get(target.slot) ?? '') : undefined;
+    const suffix = pageLabel ? ` — ${pageLabel}` : '';
+    return `Section ${target.slot} (${target.blockType})${suffix}`;
   }
   /*
    * Page-SET issues, which reach this component for the first time in 11b-3.

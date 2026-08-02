@@ -181,6 +181,39 @@ describe('PreviewDialog — open state', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('does not promise a staged page to visitors, because publishing deletes it', () => {
+    /*
+     * A PM previewing a page they have staged for removal is usually checking
+     * what they are about to lose — the editor behind this modal is showing the
+     * staged banner saying exactly that, and the modal covers it. The caption
+     * asserted "It is what visitors see once you publish." After that publish,
+     * visitors see a 404.
+     *
+     * The dialog's own header sets the standard: "a preview that could disagree
+     * with either the canvas or the published page would be worse than no
+     * preview at all."
+     *
+     * Revert check (production line): the `pageIsStaged ? … :` ternary on the
+     * `DialogDescription` in `PreviewDialog.tsx`.
+     */
+    render(
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <PreviewDialog
+          open
+          onOpenChange={onOpenChange}
+          communityId={7}
+          context={CONTEXT}
+          pageName="Pool"
+          pageIsStaged
+          now={NOW}
+        />
+      </SelectedSitePageProvider>,
+    );
+
+    expect(screen.getByText(/set to be removed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/what visitors see once you publish/i)).not.toBeInTheDocument();
+  });
+
   it('closes on Escape', async () => {
     const user = userEvent.setup();
     renderDialog();

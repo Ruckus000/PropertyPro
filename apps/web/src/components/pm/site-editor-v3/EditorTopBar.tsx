@@ -47,11 +47,21 @@ export interface EditorTopBarProps {
   /**
    * Whether Preview can render a truthful page.
    *
-   * Required and undefaulted for the same reason `canOpenPublish` is. False
-   * only when both page reads failed: the dialog is page-scoped, and with no
-   * page id `blocksForPage` returns every page's sections, so the preview shows
-   * a site that exists at no URL while claiming to be "what visitors see once
-   * you publish".
+   * Required and undefaulted for the same reason `canOpenPublish` is.
+   *
+   * False whenever the dialog would not render, which is TWO states, not one:
+   *
+   *  - both page reads failed — the dialog is page-scoped, and with no page id
+   *    `blocksForPage` returns every page's sections, so the preview would show
+   *    a site that exists at no URL while claiming to be "what visitors see
+   *    once you publish";
+   *  - the canvas context is null — the community row could not be read, and
+   *    the dialog is gated on it having a theme to render with.
+   *
+   * It must track EVERY conjunct of that render gate. It first shipped tracking
+   * only the page-read one, which left the button live and inert in the
+   * canvas-context state — precisely the "enabled and swallows the click" shape
+   * the paragraph below rules out.
    *
    * Disabled with a title rather than hidden, matching Publish — and rather
    * than left enabled over a gated dialog, which would give the PM a button

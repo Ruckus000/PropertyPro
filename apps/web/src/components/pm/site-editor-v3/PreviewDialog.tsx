@@ -35,6 +35,16 @@ export interface PreviewDialogProps {
    * `Preview — Amenities` but a far better one than an empty heading.
    */
   pageName?: string;
+  /**
+   * The selected page is staged for removal, so the caption must not promise it
+   * to visitors — publishing DELETES it.
+   *
+   * Optional with a `false` default is safe here, unlike the required props
+   * elsewhere in this tree: absence degrades to the ordinary caption, which is
+   * correct for every un-staged page. It is the only prop in this dialog whose
+   * default is the common case rather than an "off" that hides a feature.
+   */
+  pageIsStaged?: boolean;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
 }
@@ -56,6 +66,12 @@ export interface PreviewDialogProps {
  * Accessibility is Radix's: `DialogTitle` names the dialog, Esc closes it, and
  * focus is trapped while open and restored to the trigger on close. We add no
  * focus management of our own — a second manager only fights Radix's.
+ *
+ * ONE exception, and it is the parent's: `EditorRoot` UNMOUNTS this dialog when
+ * both page reads fail, rather than closing it. Radix then restores focus to a
+ * Preview button the same render has disabled, which is a no-op — so `EditorRoot`
+ * moves focus to the failure banner's "Try again" itself. That is the only path
+ * on which focus does not return to the trigger.
  *
  * No width/device toggle. `PhoneFrame` frames an **iframe `src`**, and the only
  * URL available renders the *published* site, not the draft; and clamping this
@@ -80,6 +96,7 @@ export function PreviewDialog({
   communityId,
   context,
   pageName,
+  pageIsStaged = false,
   now,
 }: PreviewDialogProps) {
   return (
@@ -88,8 +105,18 @@ export function PreviewDialog({
         <DialogHeader>
           <DialogTitle>{`Preview — ${pageName ?? context.community.name}`}</DialogTitle>
           <DialogDescription>
-            This is the page you are editing as it stands right now, including
-            unpublished changes. It is what visitors see once you publish.
+            {pageIsStaged
+              ? /*
+                 * The caption cannot promise this page to visitors when the
+                 * next publish deletes it. A PM previewing a staged page is
+                 * usually checking what they are about to lose — the editor
+                 * behind this modal is showing the staged banner saying exactly
+                 * that, and the modal covers it. Asserting "what visitors see
+                 * once you publish" over a page that publishing removes is the
+                 * disagreement this dialog's own header rules out.
+                 */
+                `This is ${pageName ?? 'the page'} as it stands right now, including unpublished changes. This page is set to be removed, so publishing takes it off your site rather than updating it.`
+              : 'This is the page you are editing as it stands right now, including unpublished changes. It is what visitors see once you publish.'}
           </DialogDescription>
         </DialogHeader>
 

@@ -349,11 +349,16 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     [pageSetIssues, emptyPageWarnings],
   );
 
+  // Depends on the three `refetch` FUNCTIONS, which TanStack keeps stable — not
+  // on the query objects, which v5 rebuilds on every render, so those deps never
+  // compared equal and this `useCallback` memoised nothing. Harmless while the
+  // only consumer is an `onClick`, and an infinite loop the first time someone
+  // puts this in an effect's dependency array.
   const refetch = useCallback(() => {
     void draftQuery.refetch();
     void publishedQuery.refetch();
     void pagesQuery.refetch();
-  }, [draftQuery, publishedQuery, pagesQuery]);
+  }, [draftQuery.refetch, publishedQuery.refetch, pagesQuery.refetch]);
 
   return {
     diff,

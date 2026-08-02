@@ -61,7 +61,16 @@ export function blocksForPage<T extends PageScopedBlock>(
   // An unadopted (`pageId === null`) row is NOT folded into the selected page.
   // Including it would render one row on every page and let an edit made on
   // page B rewrite it — the same cross-page write this slice exists to stop.
-  // Excluding it is recoverable (a page-list read adopts it and the next
-  // refetch shows it); a wrong write is not.
+  // Excluding it is recoverable; a wrong write is not.
+  //
+  // The recovery is a BLOCK WRITE, not a page-list read — this said the latter,
+  // which stopped being true when `listSitePages` went lock-free. Its fast path
+  // returns before `ensureHomePageInTransaction`, so `adoptPagelessBlocks` now
+  // runs only for a community that has no home page at all. See the paragraph
+  // in `site-pages-service.ts` ending "do not delete this paragraph without
+  // adding it" — §3b hand-off obligation 1 — and note that nothing currently
+  // WRITES a null `page_id` (0046 backfilled every row, soft-deleted included,
+  // and every write path resolves a page), so this is a guard against a future
+  // producer rather than a state a PM can reach today.
   return blocks.filter((block) => block.pageId === pageId);
 }

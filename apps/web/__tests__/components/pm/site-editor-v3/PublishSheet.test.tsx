@@ -504,11 +504,55 @@ describe('PublishSheet — blocking issues', () => {
 
     const alert = screen.getByRole('alert');
     // Named, not "fix errors": the slot and the offending type are both stated.
+    // No page suffix here — the default fixture is a single-page site, so
+    // naming the only page there is would be noise. The multi-page case is
+    // asserted below.
     expect(within(alert).getByText('Section 3 (not_a_real_block)')).toBeInTheDocument();
     expect(within(alert).getByText(/not a section type this site can show/i)).toBeInTheDocument();
     expect(screen.getByTestId('publish-hint')).toHaveTextContent(
       /fix the problems above before publishing/i,
     );
+  });
+
+  it('names the PAGE an offending section is on, once there is more than one', async () => {
+    /*
+     * `Section 12 (faq)` is a `block_order`, and a block_order appears on no
+     * other surface in this editor — not on a `SectionList` row, not on the
+     * canvas. On a single-page site that does not matter; the moment there are
+     * two, a blocked publish was naming an offender the PM could not locate
+     * without pressing "Fix this" and being carried out of the list they were
+     * triaging.
+     *
+     * Cross-page issues are the norm here, not an edge case: the publish diff
+     * is whole-site by design (D-C2) while the editor context is page-scoped,
+     * which is the entire reason `handleSelectSlot` exists.
+     *
+     * The sibling branch of `describeTarget` has named its page since round 6;
+     * this is the section half of the same function, which was left in machine
+     * syntax.
+     *
+     * Revert check (production line): the `pageLabel`/`suffix` pair in
+     * `describeTarget`'s `target` branch in `PublishSheet.tsx`.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.draft = [
+      heroBlock(),
+      // The blocker lives on CONTACT, not on home.
+      block({
+        id: 9,
+        pageId: CONTACT_PAGE_ID,
+        blockOrder: 7,
+        blockType: 'not_a_real_block',
+        content: {},
+        isDraft: true,
+      }),
+    ];
+    renderSheet();
+
+    const alert = screen.getByRole('alert');
+    expect(
+      within(alert).getByText('Section 7 (not_a_real_block) — Contact'),
+    ).toBeInTheDocument();
   });
 
   it('never fires a publish request while blocked', async () => {

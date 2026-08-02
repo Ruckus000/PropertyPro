@@ -285,8 +285,10 @@ describe('Pages panel — axe (Phase 11b-3)', () => {
    * fails EARLIER, at `getByLabelText('Page name')`, before axe runs at all. So
    * the second case's axe assertion is not what that probe exercises.
    *
-   * The add-form case stays GREEN under that same probe — it is a different
-   * container — so its non-vacuity is pinned separately below.
+   * **Each of the other two cases carries its OWN probe, and the probes are not
+   * interchangeable.** The add-form and staged-row bodies are different
+   * containers and stay green under the `htmlFor` one. Citing a single probe
+   * for all four is the mistake this file has already made twice.
    *
    * The STAGED row's expanded editor is a structurally different body — no
    * name/slug inputs, a cancel-removal control instead — so it gets its own case
@@ -352,13 +354,25 @@ describe('Pages panel — axe (Phase 11b-3)', () => {
 
     await user.click(screen.getByTestId('site-page-settings-2'));
     const editor = within(await screen.findByTestId('site-page-editor-2'));
-    // "Board" is page 3's name — a real clash, reported on both surfaces.
+    // "Home" is page 1's name — LIVE and un-staged, so it is genuinely taken.
+    //
+    // This used to type "Board", page 3's name, and the comment called it "a
+    // real clash". It is not: page 3 carries `deleteStagedAt`, `pageIssues`
+    // builds `seenNames` only from `live` (`pages.ts` — `const live =
+    // pages.filter((page) => !page.deleteStaged)`), and a staged page's NAME is
+    // deliberately free (no unique index — `toValidationShape` says so). So no
+    // name issue was raised at all, the alert assertion below was satisfied by
+    // the SLUG alert alone, and the name field's `aria-invalid` /
+    // `aria-describedby` / `role="alert"` triple — the whole reason this case
+    // exists — was audited nowhere in the suite.
     await user.clear(editor.getByLabelText('Page name'));
-    await user.type(editor.getByLabelText('Page name'), 'Board');
+    await user.type(editor.getByLabelText('Page name'), 'Home');
     await user.clear(editor.getByLabelText('Web address'));
     await user.type(editor.getByLabelText('Web address'), 'board');
 
-    expect(editor.getAllByRole('alert').length).toBeGreaterThan(0);
+    // BOTH, counted — `toBeGreaterThan(0)` was satisfied by either one alone,
+    // which is how the name half went unaudited while the case was named for it.
+    expect(editor.getAllByRole('alert')).toHaveLength(2);
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -382,10 +396,16 @@ describe('Pages panel — axe (Phase 11b-3)', () => {
   });
 
   it('has no violations in the add-a-page form', async () => {
-    // Anti-vacuity for THIS case specifically, verified separately from the
-    // expanded-editor probe above (which leaves this one green, being a
-    // different container): dropping `htmlFor` from the add form's own
-    // `Page name` label reddens this case and no other.
+    // Anti-vacuity for THIS case, verified: wrapping the SUBMIT BUTTON's label
+    // (`{createPage.isPending ? 'Adding…' : 'Add page'}`) in an
+    // `<span aria-hidden="true">` leaves the button with no accessible name —
+    // 1 red / 15 passed, and the red is at `toHaveNoViolations`.
+    //
+    // NOT `htmlFor` on this form's own `Page name` label, which was the first
+    // probe recorded here and does not prove what it claims: it reddens this
+    // case at `findByLabelText` two lines below, BEFORE axe runs, leaving the
+    // axe assertion unexercised. That is exactly the distinction the header
+    // draws for the expanded cases — written, and then not applied here.
     const user = userEvent.setup();
     const { container } = renderPages();
 

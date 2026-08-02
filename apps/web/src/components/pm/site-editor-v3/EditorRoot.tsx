@@ -315,6 +315,15 @@ export function EditorRoot({
    */
   const selectedPageWasStagedRef = useRef(false);
   const selectedPageNameRef = useRef<string | null>(null);
+  /**
+   * The banner's "Try again", so the preview gate has somewhere to put focus.
+   *
+   * The gate unmounts the dialog instead of closing it, and Radix then restores
+   * focus to a Preview button the same render disables — a no-op, landing the
+   * PM on `<body>`. This is the only actionable control on the surface that
+   * replaces the editor, which makes it the right destination.
+   */
+  const retryPagesRef = useRef<HTMLButtonElement>(null);
   const handlePageRemoved = useCallback((pageId: number) => setSelfRemovedPageId(pageId), []);
 
   // Shares `useSiteDiff`'s query key, so this adds no request — the diff calls
@@ -550,7 +559,25 @@ export function EditorRoot({
    * a deferred pop-up, not a gate.
    */
   useEffect(() => {
-    if (pagesUnavailable) setPreviewOpen(false);
+    if (!pagesUnavailable) return;
+    /*
+     * The STATE half and the FOCUS half. The first version did only the state.
+     *
+     * This gate UNMOUNTS the dialog rather than closing it through Radix, so
+     * `FocusScope`'s cleanup restores focus to the element it stored on open —
+     * the Preview button — which the same render has just disabled via
+     * `canPreview`. `focus()` on a disabled button is a no-op, so a keyboard PM
+     * lands on `<body>`, at the top of a document whose main surface has just
+     * been replaced by a danger banner and a retry they now have to Tab to find.
+     *
+     * Only when the dialog was actually open: this effect also runs on a first
+     * paint that fails, where nothing had focus to lose and grabbing it would
+     * be the ambush.
+     */
+    setPreviewOpen((wasOpen) => {
+      if (wasOpen) queueMicrotask(() => retryPagesRef.current?.focus());
+      return false;
+    });
   }, [pagesUnavailable]);
 
   // Guarded on `selectedPage !== undefined` deliberately: the tick that makes
@@ -700,7 +727,14 @@ export function EditorRoot({
         // render below). Disabled with a reason rather than left live and
         // silently inert: a button that does nothing when pressed is the
         // failure mode this whole branch exists to avoid.
-        canPreview={!pagesUnavailable}
+        //
+        // BOTH conjuncts of that render gate, not just the page one. This
+        // shipped as `!pagesUnavailable` alone, which left the button enabled
+        // and inert whenever `canvasContext` is null — the community row failed
+        // to read, the canvas already says so, and the dialog is gated on it
+        // too. Mirroring only part of a render condition is how a control ends
+        // up inviting a click it cannot honour.
+        canPreview={!pagesUnavailable && canvasContext !== null}
         // Driven by whichever inspector form is open. StatusLine renders
         // nothing while idle with no prior save, so this stays invisible until
         // the PM actually edits something.
@@ -716,7 +750,12 @@ export function EditorRoot({
               title="We couldn't load this site's pages."
               description="Editing is paused until we know which page you're on — without it, changes could be saved to the wrong page. Your site is unchanged."
               action={
-                <Button size="sm" variant="outline" onClick={() => void refetchPages()}>
+                <Button
+                  ref={retryPagesRef}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void refetchPages()}
+                >
                   Try again
                 </Button>
               }
@@ -867,6 +906,8 @@ export function EditorRoot({
           context={canvasContext}
           // The dialog renders ONE page, so it is titled after that page.
           pageName={selectedPage?.name}
+          // …and must not promise a page the next publish deletes.
+          pageIsStaged={selectedPageIsStaged}
         />
       ) : null}
 

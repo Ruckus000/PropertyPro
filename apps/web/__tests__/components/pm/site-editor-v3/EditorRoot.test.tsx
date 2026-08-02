@@ -71,9 +71,12 @@ vi.mock('next/dynamic', () => ({
              * neither is visible from `PagesPanel.test.tsx`, which supplies the
              * flag from its own JSX.
              *
-             * `data-testid` on a mount-only echo is what lets a case assert the
-             * flag's value at the moment a fresh panel appears — which is the
-             * only moment it means anything.
+             * `data-testid` on the echo is what lets a case assert the flag's
+             * value at the moment a fresh panel appears — and, since the flag
+             * is now consumed without a remount too, at any render. (This said
+             * "a mount-only echo … the only moment it means anything", which
+             * the round-8 case beside it contradicts: it asserts the flag on a
+             * click that deliberately does NOT remount.)
              */}
             <p data-testid="pages-focus-flag">{String(restoreFocusToSelectedRow)}</p>
             <button type="button" onClick={() => onFocusRestored()}>
@@ -1487,6 +1490,28 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
   });
 
+  it('disables Preview when the canvas context is the thing that failed', () => {
+    /*
+     * The OTHER conjunct of the dialog's render gate. `canPreview` shipped as
+     * `!pagesUnavailable` alone, so when `canvasContext` is null — the community
+     * row could not be read, and the canvas already renders "We couldn't load
+     * this community's site settings." — the button stayed ENABLED over a gate
+     * that would never let the dialog render. Pressing it did nothing at all,
+     * which is the shape `EditorTopBarProps` codifies as strictly worse than
+     * disabled.
+     *
+     * Pages are healthy here, which is what isolates this from the case above.
+     *
+     * Revert check (production line): the `&& canvasContext !== null` conjunct
+     * on `canPreview` in `EditorRoot.tsx`. The two cases above stay green — they
+     * drive the page-read failure, where the first conjunct already decides it.
+     */
+    queries.pages = [seededHome];
+    renderRoot({ initialPages: [seededHome], canvasContext: null });
+
+    expect(screen.getByRole('button', { name: /Preview/ })).toBeDisabled();
+  });
+
   it('does not spring the dialog back open when the pages read recovers', async () => {
     /*
      * Withholding a surface and forgetting the state that opened it is a
@@ -1520,5 +1545,35 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     });
 
     expect(screen.queryByText(/previewing/)).not.toBeInTheDocument();
+  });
+
+  it('lands keyboard focus on the retry, not on <body>, when it closes the dialog', async () => {
+    /*
+     * The gate UNMOUNTS the dialog rather than closing it through Radix. Radix's
+     * `FocusScope` cleanup then restores focus to the element it stored on open
+     * — the Preview button — which the same render has just DISABLED via
+     * `canPreview`. `focus()` on a disabled button is a no-op, so a keyboard PM
+     * lands on `<body>`, at the top of a document whose main surface has just
+     * been replaced by a danger banner and a retry they now have to find.
+     *
+     * Fixing the state without the focus is half a fix: the first version of
+     * this gate cleared `previewOpen` and left the PM stranded.
+     *
+     * Revert check (production line): the `queueMicrotask(() =>
+     * retryPagesRef.current?.focus())` in `EditorRoot.tsx`'s preview-gate
+     * effect. The state-only cases above stay green without it.
+     */
+    queries.pages = [seededHome];
+    const { rerender } = renderRoot({ initialPages: [seededHome], canvasContext: {} });
+    await userEvent.click(screen.getByRole('button', { name: /Preview/ }));
+    expect(screen.getByText(/previewing/)).toBeInTheDocument();
+
+    queries.isError = true;
+    queries.pages = [];
+    await act(async () => {
+      rerender(rootElement({ initialPages: [], canvasContext: {} }));
+    });
+
+    expect(await screen.findByRole('button', { name: /Try again/ })).toHaveFocus();
   });
 });

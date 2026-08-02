@@ -312,7 +312,14 @@ function messagesFor(
  * holding a name longer than 60 — rows this cap did not exist to create, but
  * which nothing proves absent. Refusing a publish over a pre-existing name is a
  * worse failure than the dead-end toast this replaces. The duplication is the
- * price, and the constant names the contract it mirrors so the two move together.
+ * price, and the constant names the contract it mirrors so they move together.
+ *
+ * THREE sites, not two: `MAX_PAGE_NAME_LENGTH`/`MAX_SLUG_LENGTH` in
+ * `site-pages-service.ts` are a third copy — and one that is unreachable through
+ * the API, because the contract's `nameField`/`slugField` reject at the route
+ * boundary first. That is exactly why the raw-zod-sentence problem above is the
+ * one a PM meets. Named here so a later phase relaxing the contract cap does not
+ * do it believing the service still guards the value.
  */
 const MAX_FIELD_LENGTH = 60;
 
@@ -604,12 +611,28 @@ export function PagesPanel({
    * name costs seconds; a silently reverted live rename is invisible to both
    * managers. Keying on the server values means an ordinary keystroke does not
    * trigger this — only a real change to the row underneath.
+   *
+   * TWO effects, one per field, and that is not tidiness. A single effect keyed
+   * on either server value but WRITING BOTH drafts discarded the wrong thing on
+   * the most ordinary journey there is: this editor renders two independent
+   * forms with two independent Save buttons, so a PM who edits the name AND the
+   * address and presses `Save name` invalidates, refetches, sees `name` change
+   * — and had their untouched-by-anyone ADDRESS reset to the server value, with
+   * `Save address` going disabled and nothing said. The PM's own save IS "a
+   * real change to the row underneath", which is exactly what the paragraph
+   * above says triggers a re-seed.
+   *
+   * Per-field, each edit is discarded only by a change to ITS OWN server value,
+   * which is the trade that was actually accepted.
    */
   useEffect(() => {
     if (!expandedPage) return;
     setNameDraft(expandedPage.name);
+  }, [expandedPage?.id, expandedPage?.name]);
+  useEffect(() => {
+    if (!expandedPage) return;
     setSlugDraft(expandedPage.slug);
-  }, [expandedPage?.id, expandedPage?.name, expandedPage?.slug]);
+  }, [expandedPage?.id, expandedPage?.slug]);
 
   const openEditor = useCallback((page: SitePageSummary) => {
     setExpandedPageId((current) => {
@@ -746,11 +769,23 @@ export function PagesPanel({
              * already said where the page went, and sonner's container is
              * itself an `aria-live` region — interpolating it here announced the
              * same sentence to a screen-reader user twice. This says the one
-             * thing the region does not: that the change is already public.
+             * thing the region does not: what the move did to the public site.
+             *
+             * …and for two row states that is NOTHING. `reorderableIds` is every
+             * non-home page, while the public nav is `is_draft = false AND
+             * in_nav = true` (`listNavPages`). So moving a page badged "Draft"
+             * or "Not in nav" — badges this panel renders precisely so the PM
+             * knows those pages are not public — changed no visitor-facing
+             * order, and claiming it did contradicts the badge on the row they
+             * just moved. The order IS saved, and says so.
              */
-            toast.success('Your navigation order is live now.', {
-              id: 'site-page-reorder',
-            });
+            const publiclyVisible = !page.isDraft && page.inNav;
+            toast.success(
+              publiclyVisible
+                ? 'Your navigation order is live now.'
+                : `Order saved. ${page.name} isn't in your public navigation, so nothing visitors see has changed.`,
+              { id: 'site-page-reorder' },
+            );
           },
           onError: (mutationError) => {
             // Cleared, not replaced with a failure sentence: the toast below is
@@ -942,7 +977,14 @@ export function PagesPanel({
       {PAGE_CAP_MESSAGE}
     </p>
   ) : isAdding ? (
-    <form onSubmit={submitCreate} className="space-y-3 rounded-md border border-edge p-3">
+    // Named, because `autoFocus` below lands a screen-reader user straight on
+    // the first field: without a label on the form they hear "Page name, edit
+    // text" and nothing about what just opened.
+    <form
+      aria-label="Add a page"
+      onSubmit={submitCreate}
+      className="space-y-3 rounded-md border border-edge p-3"
+    >
       <div className="space-y-1">
         <Label htmlFor="site-page-new-name">Page name</Label>
         {/* `autoFocus` because opening the form destroys the button that was
