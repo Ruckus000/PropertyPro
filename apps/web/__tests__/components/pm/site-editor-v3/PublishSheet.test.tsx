@@ -25,7 +25,9 @@ import userEvent from '@testing-library/user-event';
 import { TOMBSTONE_BLOCK_TYPE, type Change } from '@propertypro/shared';
 import {
   PublishSheet,
+  describeRefusalNextStep,
   groupChanges,
+  isPageSetRefusal,
   stagedPageRemoval,
 } from '@/components/pm/site-editor-v3/publish/PublishSheet';
 import { ApiRequestError } from '@/lib/api/request-json';
@@ -1065,6 +1067,80 @@ describe('PublishSheet — failure', () => {
     expect(within(receipt).queryByText(/^You published /)).not.toBeInTheDocument();
   });
 
+  it('offers a route to the Pages panel when only the SERVER could see the problem', async () => {
+    /*
+     * The retired-slug rule is deliberately server-only — the redirect table is
+     * not on the client (`SiteDiffState.pageIssues` says so). So this refusal
+     * never reaches `BlockingIssues`, which is the surface that normally carries
+     * "Go to Pages"; the receipt named the Pages panel and offered no way to get
+     * there, over a Publish button still ENABLED because the client never saw
+     * the issue. The most available action was the one guaranteed to fail
+     * identically forever.
+     *
+     * Revert check (production line): the `goToPages: true` spread on the error
+     * receipt in `PublishSheet.tsx`.
+     */
+    const user = userEvent.setup();
+    mutateAsync.mockRejectedValue(
+      new ApiRequestError('This site cannot be published yet.', {
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        details: {
+          fields: [
+            {
+              field: 'page:2.slug',
+              message: '"/pool" still forwards visitors to the page that replaced it.',
+            },
+          ],
+        },
+      }),
+    );
+    const onOpenChange = vi.fn();
+    const onGoToPages = vi.fn();
+    renderSheet({ onOpenChange, onGoToPages });
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+    const receipt = await screen.findByTestId('publish-receipt');
+    expect(within(receipt).getByText(/in the Pages panel/i)).toBeInTheDocument();
+
+    await user.click(within(receipt).getByRole('button', { name: /go to pages/i }));
+    expect(onGoToPages).toHaveBeenCalled();
+    // Closes first, like every other route out of this sheet.
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('does not send the PM to Pages to fix a SECTION, which that panel cannot edit', async () => {
+    /*
+     * The server stamps the same `page:<id>.` prefix on section-content
+     * refusals (`page:7.sections.2.body`), so keying on the presence of `fields`
+     * alone sent those to the Pages panel too — advice the PM cannot follow,
+     * since that panel edits pages and not sections.
+     *
+     * Revert check (production line): the `isPageSetRefusal(fields)` guard on
+     * the `goToPages` spread, and the `describeRefusalNextStep` branch.
+     */
+    const user = userEvent.setup();
+    mutateAsync.mockRejectedValue(
+      new ApiRequestError('This site cannot be published yet.', {
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        details: {
+          fields: [
+            { field: 'page:7.sections.2.body', message: 'Add some text to this section.' },
+          ],
+        },
+      }),
+    );
+    renderSheet();
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+    const receipt = await screen.findByTestId('publish-receipt');
+
+    expect(within(receipt).getByText(/fix the sections listed above/i)).toBeInTheDocument();
+    expect(within(receipt).queryByText(/in the Pages panel/i)).not.toBeInTheDocument();
+    expect(within(receipt).queryByRole('button', { name: /go to pages/i })).not.toBeInTheDocument();
+  });
+
   it('renders a persistent receipt that survives a re-render', async () => {
     const user = userEvent.setup();
     mutateAsync.mockRejectedValue(new Error('Upstream timed out'));
@@ -1165,5 +1241,48 @@ describe('PublishSheet — failure', () => {
     const receipt = await screen.findByTestId('publish-receipt');
     expect(within(receipt).getByText(/nothing left to publish/i)).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+});
+
+// ── the refusal discriminator ──────────────────────────────────────────────
+
+describe('isPageSetRefusal', () => {
+  it('recognises the page-SET fields `pageIssues` emits', () => {
+    expect(isPageSetRefusal([{ field: 'page:2.slug' }])).toBe(true);
+    expect(isPageSetRefusal([{ field: 'page:2.name' }])).toBe(true);
+  });
+
+  it('rejects section-content fields, which share the same prefix', () => {
+    // This is the whole reason the check is on the SUFFIX: both refusals are
+    // page-qualified, so a prefix test would classify them identically.
+    expect(isPageSetRefusal([{ field: 'page:7.sections.2.body' }])).toBe(false);
+    expect(isPageSetRefusal([{ field: 'page:7.hero.headline' }])).toBe(false);
+  });
+
+  it('rejects a MIXED refusal, where Pages alone cannot resolve it', () => {
+    expect(
+      isPageSetRefusal([{ field: 'page:2.slug' }, { field: 'page:7.sections.2.body' }]),
+    ).toBe(false);
+  });
+
+  it('claims nothing when there are no fields at all', () => {
+    // A 500 or a timeout carries none; naming a destination would be invented.
+    expect(isPageSetRefusal(undefined)).toBe(false);
+    expect(isPageSetRefusal([])).toBe(false);
+  });
+});
+
+describe('describeRefusalNextStep', () => {
+  it('always states that the live site and draft are safe', () => {
+    // The one clause that is true on every path, and the one the PM most needs.
+    for (const fields of [undefined, [], [{ field: 'page:2.slug' }], [{ field: 'page:7.hero.x' }]]) {
+      expect(describeRefusalNextStep(fields)).toMatch(/live site is unchanged/i);
+    }
+  });
+
+  it('names a destination only when it knows one', () => {
+    expect(describeRefusalNextStep(undefined)).toMatch(/try publishing again/i);
+    expect(describeRefusalNextStep([{ field: 'page:2.slug' }])).toMatch(/Pages panel/i);
+    expect(describeRefusalNextStep([{ field: 'page:7.hero.headline' }])).toMatch(/sections/i);
   });
 });

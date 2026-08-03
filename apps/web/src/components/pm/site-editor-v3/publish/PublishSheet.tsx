@@ -123,6 +123,35 @@ export interface PublishSheetProps {
   onGoToPages: () => void;
 }
 
+/**
+ * Is this refusal about the page SET, rather than a section's content?
+ *
+ * `pageIssues` emits `page:<id>.name` / `page:<id>.slug`; the section-content
+ * refusal emits `page:<id>.sections.<n>.<field>` or `page:<id>.hero.<field>`.
+ * Same prefix, so only the suffix distinguishes them — and they need different
+ * advice, because the Pages panel can fix the first and not the second.
+ *
+ * Empty or absent fields is NOT a page-set refusal: a 500 or a timeout carries
+ * none, and claiming to know where to fix it would be an invention.
+ */
+export function isPageSetRefusal(
+  fields: ReadonlyArray<{ field: string }> | undefined,
+): boolean {
+  if (!fields || fields.length === 0) return false;
+  return fields.every((f) => /^page:[^.]+\.(name|slug)$/.test(f.field));
+}
+
+/** The `nextStep` line, which must name somewhere the PM can actually reach. */
+export function describeRefusalNextStep(
+  fields: ReadonlyArray<{ field: string }> | undefined,
+): string {
+  const safe = 'Your live site is unchanged and your draft is safe.';
+  if (!fields || fields.length === 0) return `${safe} Try publishing again.`;
+  return isPageSetRefusal(fields)
+    ? `${safe} Fix the problems above in the Pages panel, then publish again.`
+    : `${safe} Fix the sections listed above, then publish again.`;
+}
+
 /** `'site'` sorts first; page groups follow, in the site's own nav order. */
 const SITE_GROUP = SITE_CHANGE_GROUP;
 
@@ -237,6 +266,17 @@ interface ReceiptState {
   nextStep: string;
   /** Per-field reasons from a server `ValidationError` — see `ReceiptProps.reasons`. */
   reasons?: string[];
+  /**
+   * Offer a route to the Pages panel.
+   *
+   * Only for a page-SET refusal, where that panel is genuinely where the fix
+   * is. `BlockingIssues` already offers this for issues the CLIENT computed —
+   * but a refusal that only the server can see (the retired-slug rule, whose
+   * redirect table is not on the client) never reaches `BlockingIssues` at all,
+   * so this receipt was the one surface that named a destination and gave no
+   * way to get there.
+   */
+  goToPages?: boolean;
 }
 
 export function PublishSheet({
@@ -461,10 +501,26 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
         status: 'error',
         attempted,
         outcome: error instanceof Error ? error.message : 'The publish request failed.',
-        nextStep: fields
-          ? 'Your live site is unchanged and your draft is safe. Fix the problems above in the Pages panel, then publish again.'
-          : 'Your live site is unchanged and your draft is safe. Try publishing again.',
+        /*
+         * The advice has to name a place the PM can actually get to, and the
+         * right place depends on WHICH refusal this is. Both arrive as
+         * `page:<id>.<field>` (`pageIssues` stamps that prefix, and the
+         * section-content refusal re-stamps it so a failure on one of several
+         * pages says which), so the discriminator is the suffix:
+         *
+         *   `page:7.slug`            → a page-SET problem, fixed in Pages
+         *   `page:7.sections.2.body` → a section's CONTENT, fixed on the canvas
+         *
+         * Sending someone to the Pages panel to fix a section's body is advice
+         * they cannot follow — that panel cannot edit a section. And the
+         * previous wording sent EVERY `fields` refusal there, then offered no
+         * control to go, over a Publish button still enabled because the client
+         * never saw the issue: the most available action was the one guaranteed
+         * to fail identically forever.
+         */
+        nextStep: describeRefusalNextStep(fields),
         ...(fields ? { reasons: fields.map((f) => f.message) } : {}),
+        ...(isPageSetRefusal(fields) ? { goToPages: true } : {}),
       });
     }
   }
@@ -506,6 +562,16 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
           outcome={receipt.outcome}
           {...(receipt.reasons ? { reasons: receipt.reasons } : {})}
           nextStep={receipt.nextStep}
+          {...(receipt.goToPages
+            ? {
+                action: (
+                  <Button type="button" variant="outline" size="sm" onClick={goToPages}>
+                    Go to Pages
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                ),
+              }
+            : {})}
           onDismiss={() => setReceipt(null)}
         />
       ) : null}
