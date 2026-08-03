@@ -16,6 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 import { useSiteDiff } from '@/components/pm/site-editor-v3/use-site-diff';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
@@ -586,6 +587,51 @@ describe('useSiteDiff — the blocking gate validates PER PAGE', () => {
     // …and it is not ALSO counted on the home page.
     const home = result.current.validated.find((v) => v.pageId === String(HOME_PAGE_ID))!;
     expect(home.snapshot.sections).toHaveLength(0);
+  });
+
+  it('keeps a tombstone from suppressing the same slot on ANOTHER page', () => {
+    /*
+     * `tombstonedSlots` is a bare `number[]`, and both `siteIssues` and
+     * `diffSite` consume it as a `Set<number>` — `validate.ts` skips content
+     * validation for a tombstoned slot, `diff.ts` drops it from the draft side.
+     *
+     * Built from a flattened snapshot, a tombstone at slot 4 on Contact would
+     * put `4` in the site-wide set and silently exempt Home's slot 4 from
+     * validation too — a broken section shipping because a DIFFERENT page
+     * happens to be deleting the same slot number. Per-page snapshots give each
+     * page its own set.
+     *
+     * Revert check: the same per-page `validated` construction as the cases
+     * above; there is no separate line to remove for this one, which is the
+     * point — it falls out of the structure rather than being a rule anyone has
+     * to remember.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [
+      hero(),
+      // Home's slot 4 is a real, live section.
+      block({ id: 8, blockOrder: 4, pageId: HOME_PAGE_ID }),
+      // Contact's slot 4 is staged for removal.
+      block({
+        id: 9,
+        blockOrder: 4,
+        pageId: SECOND_PAGE_ID,
+        blockType: TOMBSTONE_BLOCK_TYPE,
+        content: {},
+        isDraft: true,
+      }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const home = result.current.validated.find((v) => v.pageId === String(HOME_PAGE_ID))!;
+    const contact = result.current.validated.find((v) => v.pageId === String(SECOND_PAGE_ID))!;
+    // Home's section survives and is NOT exempted by Contact's tombstone.
+    expect(home.snapshot.sections.map((s) => s.slot)).toEqual([4]);
+    expect(home.snapshot.tombstonedSlots ?? []).not.toContain(4);
+    // Contact's tombstone stays on Contact.
+    expect(contact.snapshot.tombstonedSlots ?? []).toContain(4);
   });
 
   it('falls back to a whole-site snapshot when the pages query has not resolved', () => {
