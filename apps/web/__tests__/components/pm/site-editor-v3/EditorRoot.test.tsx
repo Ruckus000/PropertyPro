@@ -1249,9 +1249,10 @@ describe('EditorRoot — BOTH page reads fail', () => {
    * same reason — the same lock, the same database. `effectivePageId` is then
    * null, and `blocksForPage(blocks, null)` returns the list UNCHANGED: every
    * page's sections concatenated into one canvas, with no banner and no hint
-   * that anything is wrong. Adds land on the live home page, and editing a
-   * foreign section fails with "Position 7 is already used by another page" —
-   * an instruction the editor offers no control to follow.
+   * that anything is wrong. Adds land on the live home page, and an edit made
+   * against a foreign section is written to whichever page the write resolves
+   * to — silently, since 11c removed the cross-page slot refusal that used to
+   * turn this into a visible (if unactionable) error.
    *
    * `use-selected-site-page.tsx` states the invariant this violated in its own
    * header: the editor must not render block-editing affordances before it

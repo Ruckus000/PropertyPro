@@ -38,16 +38,22 @@ export const siteBlocks = pgTable(
     /**
      * The page this block belongs to (website editor v3, Phase 11 multi-page).
      *
-     * NULLABLE on purpose, and it stays that way until Phase 11c: 11a's expand
-     * migration backfills every existing row to its community's home page, but
-     * `SET NOT NULL` is gate G3 — it can only run once the 11b code that always
-     * writes a `page_id` is LIVE in production. Until then a NULL here means a
-     * row written by pre-11b code, not a row without a page.
+     * NOT NULL since Phase 11c (migration 0048). It was nullable through the
+     * 11a→11c window because `SET NOT NULL` is gate G3: it could only run once
+     * the 11b code that always writes a `page_id` — and the 11c-0 client that
+     * copes with slots repeating across pages — were both LIVE in production.
+     * Both shipped, so a NULL here is no longer a state the schema admits.
+     *
+     * 0048 re-ran 0046's home-page INSERT before backfilling, because the read
+     * path stopped healing NULLs when `listSitePages` went lock-free in 11b-3
+     * (healing reaches write paths only), so a community could still arrive
+     * with page-less blocks and no home row.
      *
      * The FK is COMPOSITE `(community_id, page_id)` — see the table extras
-     * below.
+     * below. MATCH SIMPLE made it inert while this was NULL; with NOT NULL it
+     * is now an unconditional guarantee.
      */
-    pageId: bigint('page_id', { mode: 'number' }),
+    pageId: bigint('page_id', { mode: 'number' }).notNull(),
     blockOrder: integer('block_order').notNull(),
     blockType: text('block_type').notNull(),
     content: jsonb('content').notNull().default('{}'),
@@ -58,19 +64,15 @@ export const siteBlocks = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (table) => [
-    // BOTH ordering indexes exist on purpose between Phases 11a and 11c.
+    // The 3-column ordering index (community_id, block_order, is_draft) was
+    // DROPPED by 0048. It existed alongside the 4-column one through the
+    // 11a→11c window so 11b stayed revertible; gate G3 was the deploy wait for
+    // 11b and 11c-0 both being live, and both are.
     //
-    // The 3-column one is what pre-11b code relies on; dropping it is gate G3,
-    // and G3 is a DEPLOY WAIT, not just an apply — it can only happen once the
-    // 11b code is live in production. Keeping it is exactly what makes 11b
-    // revertible. Do not "clean this up".
-    uniqueIndex('site_blocks_community_order_draft_partial')
-      .on(
-        table.communityId,
-        table.blockOrder,
-        table.isDraft,
-      )
-      .where(sql`${table.deletedAt} IS NULL`),
+    // Its removal is what makes two pages able to hold the same slot. Anything
+    // that still assumes a slot names at most one block community-wide is now
+    // wrong — see 0048's preamble for the consumers that were re-keyed.
+    //
     // The 4-column successor: with pages, ordering is per-page, so uniqueness
     // is (community, page, order, draft). Added by 0046.
     uniqueIndex('site_blocks_community_page_order_draft_partial')

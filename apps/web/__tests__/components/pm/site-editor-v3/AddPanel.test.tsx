@@ -306,21 +306,24 @@ describe('AddPanel', () => {
   });
 
   describe('page targeting', () => {
-    it('computes the next slot from every page, not just the selected one', async () => {
-      // D-C3, and the single most dangerous correction in the phase. `block_order`
-      // is unique across the WHOLE community until 11c drops the surviving
-      // 3-column index, so the slot allocator must see every page's blocks.
-      // Narrowing it to the selected page — which reads like the obvious fix for a
-      // cross-page collision — returns `max(this page) + 1`, here 3, which the
-      // home page already holds. That write is refused by
-      // `assertSlotFreeAcrossPages`, and before that guard existed it was an
-      // opaque 500. Scanning every page is what makes the answer free.
-      //
-      // The fixture is built so the two answers DIFFER — the About page's
-      // highest slot is 5 but the home page runs on to 6, so page-filtering
-      // yields 6 (taken) and scanning every page yields 7 (free). A fixture
-      // where the selected page happens to hold the highest slot passes either
-      // way and proves nothing.
+    it('computes the next slot from the TARGET PAGE, not the whole site', async () => {
+      /*
+       * Inverted at Phase 11c, and the inversion is the deliverable.
+       *
+       * Through 11b this asserted the opposite, and it was right to: the
+       * 3-column index made `block_order` unique community-wide, so
+       * `max(this page) + 1` was very likely a slot another page held and the
+       * write failed the unique constraint. Migration 0048 dropped that index.
+       *
+       * The fixture is unchanged so the two answers still DIFFER, which is what
+       * makes the case discriminating: About's highest slot is 5, home runs on
+       * to 6. Page-scoped now yields 6 — legal, because home's 6 no longer
+       * constrains About. Community-wide would yield 7 and waste a position.
+       *
+       * ORDERING: this had to wait for the migration. Page-scoping the
+       * allocator while the 3-column index still existed would have made every
+       * add on a multi-page site fail, which is why it is not in 11c-0 (#888).
+       */
       state.blocks = [
         block({ id: 1, blockType: 'hero', blockOrder: 1 }),
         block({ id: 2, blockOrder: 2 }),
@@ -333,12 +336,12 @@ describe('AddPanel', () => {
       await userEvent.click(screen.getByTestId('add-section-text'));
 
       expect(upsertMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ blockOrder: 7 }),
-      );
-      // 6 is `max(About) + 1`, which is what a page-filtered allocator returns —
-      // and the home page is sitting on it.
-      expect(upsertMutateAsync).not.toHaveBeenCalledWith(
         expect.objectContaining({ blockOrder: 6 }),
+      );
+      // 7 is what scanning every page returns. It is not wrong on the server
+      // any more, just wasteful — About would skip a position it owns.
+      expect(upsertMutateAsync).not.toHaveBeenCalledWith(
+        expect.objectContaining({ blockOrder: 7 }),
       );
     });
 

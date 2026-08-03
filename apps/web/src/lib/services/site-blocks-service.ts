@@ -122,68 +122,6 @@ async function resolvePageId(
   return rows[0].id;
 }
 
-/**
- * Refuses a slot another PAGE already holds, with a message a PM can act on.
- *
- * `block_order` is community-wide until Phase 11c: the pre-11a index
- * `site_blocks_community_order_draft_partial (community_id, block_order,
- * is_draft)` is stricter than the new 4-column one and is not dropped until then.
- * So a PM adding a section to a second page at a slot the first page already uses
- * violates that index — and a raw unique-constraint violation surfaces as an
- * opaque 500 with no indication of what to do about it.
- *
- * Checked here rather than left to the constraint because this is reachable
- * today: the pages API ships in 11b-1 and accepts a `pageId` on every block
- * write. When 11c drops the index this function should be deleted, not relaxed —
- * at that point the collision is genuinely legal.
- *
- * ## Why there is no `is_draft` filter (Phase 11b-3, D-SLOT)
- *
- * This used to match `is_draft = isDraft` as well, on the stated reasoning that
- * without it "writing a draft over a published slot on the SAME page would be
- * refused". That reasoning was wrong, and it left a hole big enough to freeze a
- * community's publishing:
- *
- *  - Same-page writes were never at risk. `foreign` below discriminates on
- *    `pageId`, so every row belonging to THIS page is ignored whatever its draft
- *    state. Draft-over-published on one page still works with no draft filter at
- *    all — which is why the filter was pure harm.
- *  - Across pages it was actively dangerous. A DRAFT on page A at slot N was
- *    accepted while page B held a PUBLISHED row at N, because the two rows
- *    disagreed on `is_draft` and never met. Publish then promotes every draft to
- *    published in one transaction, producing two live rows at one slot, which
- *    violates the surviving 3-column index, rolls back the WHOLE publish, and
- *    leaves the community unable to publish anything until someone hand-edits
- *    `block_order` in production.
- *
- * So the query spans BOTH layers: a slot is free for this page only when no
- * other page holds it in either the draft or the published layer.
- */
-async function assertSlotFreeAcrossPages(
-  communityId: number,
-  pageId: number,
-  blockOrder: number,
-  tx: Tx,
-): Promise<void> {
-  const clashes = await tx
-    .select({ pageId: siteBlocks.pageId })
-    .from(siteBlocks)
-    .where(
-      and(
-        eq(siteBlocks.communityId, communityId),
-        eq(siteBlocks.blockOrder, blockOrder),
-        isNull(siteBlocks.deletedAt),
-      ),
-    );
-  const foreign = clashes.find((row) => row.pageId !== null && row.pageId !== pageId);
-  if (foreign) {
-    throw new ValidationError(
-      `Position ${blockOrder} is already used by another page on this site. Section positions are shared across pages for now — pick a different position.`,
-      { fields: [{ field: 'blockOrder', message: `Position ${blockOrder} is taken by another page.` }] },
-    );
-  }
-}
-
 async function insertAuditEventInTransaction(
   tx: AuditInsertExecutor,
   params: {
@@ -456,25 +394,18 @@ export async function upsertPublishedBlock({
     // `publishCommunitySite`, `discardSiteDrafts` and `revertToSnapshot` all
     // take. This was the one write path in the file that skipped it.
     //
-    // It became load-bearing when D-SLOT dropped the draft predicate from
-    // `assertSlotFreeAcrossPages` below. That widened the guard to the
-    // CROSS-LAYER case — a draft on page A against a PUBLISHED row on page B at
-    // the same slot — which no index covers, because the surviving
-    // `(community_id, block_order, is_draft)` index sees the two rows as
-    // distinct. Before the widening a lost race degraded to a unique violation:
-    // an opaque 500, but loud and immediate. After it, a lost race COMMITS, and
-    // the damage surfaces at the next publish as a unique violation that rolls
-    // the whole publish back and keeps rolling it back — a community that can
-    // no longer publish anything, with an error naming an index rather than a
-    // page, days after the write that caused it.
-    //
-    // A read-then-write guard is only as good as the lock under it.
+    // It was added because `assertSlotFreeAcrossPages` was a read-then-write
+    // guard, and 11c deleted that guard along with the 3-column index it
+    // enforced. The lock STAYS, for the reason every other write path has one:
+    // the soft-delete + insert + audit-log triple below must not interleave
+    // with a concurrent publish promoting the rows it is rewriting. Removing it
+    // would make this the only unserialized writer in the file, and the failure
+    // would be a torn write rather than a loud constraint violation.
     await tx.execute(
       sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
     );
 
     const pageId = await resolvePageId(communityId, requestedPageId, tx);
-    await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, tx);
     // Scoped client bound to the transaction — preserves tenant isolation
     // while keeping the soft-delete + insert + audit-log triple atomic.
     const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
@@ -753,10 +684,15 @@ export async function publishCommunitySite({
       })
       .from(siteBlocks)
       .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
-    // `page_id` is nullable until 11c, but `ensureHomePage` above adopted every
-    // page-less row, so a NULL here would mean a row inserted mid-transaction by
-    // something else. Coalescing to home keeps the rest of this function
-    // non-nullable rather than sprinkling `?? homePageId` through it.
+    // `page_id` is NOT NULL as of 0048, so drizzle types this non-nullable and
+    // the coalesce is a no-op at the type level. KEPT DELIBERATELY, and not as
+    // dead code: this PR's code deploys BEFORE the migration is applied by hand,
+    // so there is a window in which production still has nullable `page_id` and
+    // possibly NULL rows while this code is live. Removing the fallback would
+    // make that window a crash instead of a no-op.
+    //
+    // Safe to drain in a LATER change, once 0048 is confirmed applied — not in
+    // the PR that ships the migration file.
     const liveRows = liveRowsRaw.map((r) => ({ ...r, pageId: r.pageId ?? homePageId }));
 
     // Keyed on the PAGE and the order — one winner per slot per page.
@@ -1919,27 +1855,14 @@ export async function revertToSnapshot({
       )
       .sort((a, b) => a.pageId - b.pageId || a.blockOrder - b.blockOrder);
 
-    // Both insert sets below write `is_draft = true` rows, and the surviving
-    // pre-11a index is (community_id, block_order, is_draft) — community-wide, not
-    // page-scoped. So a slot whose PAGE OWNERSHIP moved between this snapshot's
-    // capture and now cannot be expressed: the snapshot wants order N restored to
-    // page A while the live site has order N published on page B, and staging both
-    // means two drafts at order N.
-    //
-    // Refused, for the same reason the missing-page case above is refused: a
-    // half-applied revert of a statutory site is worse than one the PM can read
-    // and reason about. When 11c drops that index this whole check becomes
-    // unnecessary — delete it then rather than relaxing it.
-    const insertOrders = [...restoreBlocks, ...removalSlots].map((r) => r.blockOrder);
-    const collidingOrder = insertOrders.find(
-      (order, i) => insertOrders.indexOf(order) !== i,
-    );
-    if (collidingOrder !== undefined) {
-      throw new ValidationError(
-        `This version cannot be restored: section position ${collidingOrder} now belongs to a different page than it did when this version was published. Move that section first, then restore.`,
-      );
-    }
-
+    // NOTE for anyone re-adding a cross-page slot check here: there was one,
+    // and 11c deleted it with the 3-column index it existed for. It refused a
+    // revert whose snapshot restored order N to page A while the live site had
+    // order N on page B, because both would be staged as drafts and the
+    // community-wide index could not hold two. Slots are per-page now, so that
+    // shape is legal and refusing it would block perfectly ordinary reverts of
+    // any multi-page site. The 4-column index still catches a genuine
+    // (page, order) duplicate.
     // STEP 1 — clear the whole live draft layer (edits, staged reorders, and
     // staged deletions alike). This MUST precede every insert below: it is
     // what takes the existing rows out of the partial unique index.
