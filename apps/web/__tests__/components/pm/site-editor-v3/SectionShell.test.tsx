@@ -35,6 +35,9 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
 }));
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useDeleteContentBlock: () => ({ mutate: deleteMutate, isPending: false }),
   // FloatControls' undo replays the removed section through the upsert.
   useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),

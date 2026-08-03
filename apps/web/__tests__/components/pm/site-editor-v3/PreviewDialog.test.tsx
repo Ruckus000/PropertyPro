@@ -14,6 +14,9 @@ const blocksState = vi.hoisted(() => ({
 const refetch = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useContentBlocks: () => ({ ...blocksState.value, refetch }),
   // Imported transitively (Canvas → SectionShell → FloatControls) because the
   // dialog reuses `sortBlocks` from Canvas. Never rendered here.

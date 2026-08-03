@@ -11,7 +11,7 @@
  * test would only duplicate what we already have a handle on.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
@@ -34,10 +34,21 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   }),
 }));
 
+/**
+ * The PUBLISHED side of the shared blocks query.
+ *
+ * `FloatControls` reads it to decide which of the two removal shapes the
+ * confirm dialog describes — the same `(pageId, blockOrder)` match the server
+ * makes. Empty by default, i.e. a section that has never been published.
+ */
+const publishedBlocks = vi.hoisted(() => ({ value: [] as unknown[] }));
 const deleteMutate = vi.hoisted(() => vi.fn());
 const upsertMutate = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: publishedBlocks.value }),
   useDeleteContentBlock: () => ({ mutate: deleteMutate, isPending: false }),
   useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
 }));
@@ -108,6 +119,7 @@ async function openConfirm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 beforeEach(() => {
+  publishedBlocks.value = [];
   vi.clearAllMocks();
 });
 
@@ -147,6 +159,69 @@ describe('removal confirmation', () => {
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(deleteMutate).not.toHaveBeenCalled();
+  });
+
+  it('does not promise a live-site change for a section that was never published', async () => {
+    /*
+     * The dialog said, unconditionally:
+     *
+     *   "It disappears from your site straight away, and from the live site the
+     *    next time you publish."
+     *
+     * …while the toast it fires seconds later branches on exactly the fact it
+     * ignored, and the toast is the one that is right. On a page the PM has just
+     * created — which since 11b-3 is every page they add — publishing removes
+     * the section from nothing, because it was never there.
+     *
+     * Not merely untrue: it invites an action on a false premise. A PM who
+     * believes the removal is half-done publishes to finish it, and publishing
+     * is all-or-nothing, so everything else in the draft ships with it.
+     *
+     * Revert check (production line): `describeSectionRemoval(hasPublishedCounterpart)`
+     * in `FloatControls.tsx`, restored to the unconditional string.
+     */
+    const user = userEvent.setup();
+    publishedBlocks.value = []; // never published
+    renderControls();
+    const dialog = await openConfirm(user);
+
+    expect(within(dialog).getByText(/never been published/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/next time you publish/i)).not.toBeInTheDocument();
+  });
+
+  it('DOES promise a live-site change for a section that is published', async () => {
+    /*
+     * The positive control, and what stops the fix becoming "never mention the
+     * live site". Same slot, same page — only the published side differs, which
+     * is the one dimension under test.
+     */
+    const user = userEvent.setup();
+    publishedBlocks.value = [
+      { id: 99, pageId: HOME_PAGE_ID, blockOrder: 4, blockType: 'text', content: {} },
+    ];
+    renderControls();
+    const dialog = await openConfirm(user);
+
+    expect(within(dialog).getByText(/next time you publish/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/never been published/i)).not.toBeInTheDocument();
+  });
+
+  it('matches the published row by page AND slot, not by slot alone', async () => {
+    /*
+     * `block_order` is community-unique only until 11c drops the three-column
+     * index, and the server compares `(pageId, blockOrder)`. A slot-only match
+     * would read another page's published row as this section's and describe the
+     * wrong outcome — silently, and only on multi-page sites.
+     */
+    const user = userEvent.setup();
+    publishedBlocks.value = [
+      // Same slot, DIFFERENT page.
+      { id: 99, pageId: HOME_PAGE_ID + 1, blockOrder: 4, blockType: 'text', content: {} },
+    ];
+    renderControls();
+    const dialog = await openConfirm(user);
+
+    expect(within(dialog).getByText(/never been published/i)).toBeInTheDocument();
   });
 
   it('deletes by block order once confirmed', async () => {

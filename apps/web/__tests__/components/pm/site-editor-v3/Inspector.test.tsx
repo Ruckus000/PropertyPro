@@ -32,6 +32,9 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
 // TextForm reaches the blocks hook. Mocked completely — a partial factory
 // fails at module load and reads as the inspector breaking.
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useUpsertContentBlock: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 

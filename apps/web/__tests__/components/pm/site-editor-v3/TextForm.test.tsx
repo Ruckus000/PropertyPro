@@ -14,6 +14,9 @@ import { TextForm } from '@/components/pm/site-editor-v3/inspector/forms/TextFor
 
 const upsertMock = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   // Mock the module COMPLETELY for what this subtree reaches. A partial
   // factory fails only at module load, for whichever component reaches the
   // missing export, and reads as an unrelated component breaking.

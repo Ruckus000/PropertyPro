@@ -18,6 +18,9 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const reorderMutate = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useReorderBlocks: () => ({ mutate: reorderMutate, isPending: false }),
 }));
 

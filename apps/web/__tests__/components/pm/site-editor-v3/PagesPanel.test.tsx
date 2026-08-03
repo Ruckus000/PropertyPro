@@ -73,6 +73,9 @@ vi.mock('@/hooks/use-site-pages', () => ({
 }));
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useContentBlocks: () => ({ data: blocksMock.data }),
 }));
 

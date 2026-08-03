@@ -66,7 +66,18 @@ const SCAN_ROOTS = [
   join(repoRoot, 'apps/web/src/components/pm/onboarding-wizard'),
   join(repoRoot, 'apps/web/src/lib/site-editor'),
 ];
+/**
+ * The describer modules — where these sentences are SUPPOSED to live, so they
+ * are excluded from the scan rather than baselined.
+ *
+ * A set, not one path: `describe-section-state.ts` joined it when the section
+ * removal dialog's claim was extracted, and hard-coding a single module is the
+ * hand-enumerated-list shape this guard exists to discourage. Any file matching
+ * `describe-*-state.ts` under `lib/site-editor` is a describer module.
+ */
 const MODULE_PATH = 'apps/web/src/lib/site-editor/describe-page-state.ts';
+const isDescriberModule = (rel: string) =>
+  /^apps\/web\/src\/lib\/site-editor\/describe-[a-z-]+-state\.ts$/.test(rel);
 
 /**
  * Vocabulary that indicates a claim about what a VISITOR can see.
@@ -135,7 +146,7 @@ const counts: Record<string, number> = {};
 
 for (const file of SCAN_ROOTS.flatMap(walk)) {
   const rel = relative(repoRoot, file);
-  if (rel === MODULE_PATH) continue;
+  if (isDescriberModule(rel)) continue;
   const lines = readFileSync(file, 'utf8').split('\n');
 
   lines.forEach((line, index) => {
