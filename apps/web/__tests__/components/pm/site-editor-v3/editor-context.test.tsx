@@ -18,11 +18,18 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const reorderMutate = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useReorderBlocks: () => ({ mutate: reorderMutate, isPending: false }),
 }));
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: overrides.id,
     content: {},

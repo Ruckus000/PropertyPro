@@ -119,6 +119,67 @@ describe('POST /api/v1/pm/site/publish', () => {
     expect(json.data.publishedAt).toBe('2026-05-15T12:00:00.000Z');
   });
 
+  it('carries the PAGE counts through to the wire, not just the section counts', async () => {
+    /*
+     * The seam nothing covered. The counts are pinned at the service (a
+     * db-backed integration case) and at the component (a mocked result), and
+     * neither can see this route dropping or renaming them in between.
+     *
+     * It matters more here than for most fields because the contract's response
+     * is `z.unknown()` — deliberately, since `publishedAt` round-trips
+     * Date → string and a tight schema would fail on the pre-serialization
+     * safeParse. So nothing validates this shape at runtime, and both counts
+     * are OPTIONAL on `PublishSiteResult` (a browser tab can be older or newer
+     * than the server mid-deploy). A typo in the field name would therefore
+     * degrade silently and permanently to "Published — your changes are live."
+     * — the deploy-skew fallback, firing for a bug instead.
+     *
+     * REVERT CHECK — and the first version of this comment got it wrong twice,
+     * which is worth recording because it is the mistake this suite keeps
+     * making. It named `addedPageCount`/`removedPageCount` in
+     * `publishCommunitySite`'s return: unreachable, because the service is
+     * `vi.mock`ed at the top of this file, so those fields are pinned by the
+     * db-backed integration case and by nothing here. It also named
+     * `return result;` in the route: real, but shared — that line is a
+     * whole-object passthrough already pinned by the two "verbatim" cases
+     * below, so removing it reddens them identically and says nothing about
+     * this one.
+     *
+     * The check that reddens THIS case and only this case is a MUTATION, not a
+     * removal — verified by running it:
+     *
+     *     const { addedPageCount: _a, removedPageCount: _r, ...rest } =
+     *       result as Record<string, unknown>;
+     *     return rest;
+     *
+     * → 1 failed, 19 passed. No other fixture in this file carries the page
+     * counts, so no other case notices. (A whole-hog field-picking rewrite
+     * reddens the `nothing-to-publish` case too, because that fixture's
+     * `reason` goes with it — which is a fact about that case, not this one.)
+     *
+     * `toEqual` rather than `toMatchObject` because the interesting failure is
+     * a field going MISSING, and `toMatchObject` passes on a subset.
+     */
+    publishMock.mockResolvedValueOnce({
+      published: true,
+      publishedAt: new Date('2026-05-15T12:00:00.000Z'),
+      promotedCount: 0,
+      retiredCount: 0,
+      addedPageCount: 0,
+      removedPageCount: 1,
+    });
+    const res = await POST(makeRequest(VALID_BODY));
+    const json = await res.json();
+    expect(json.data).toEqual({
+      published: true,
+      publishedAt: '2026-05-15T12:00:00.000Z',
+      promotedCount: 0,
+      retiredCount: 0,
+      addedPageCount: 0,
+      removedPageCount: 1,
+    });
+  });
+
   it('returns the nothing-to-publish result body verbatim', async () => {
     publishMock.mockResolvedValueOnce({
       published: false,

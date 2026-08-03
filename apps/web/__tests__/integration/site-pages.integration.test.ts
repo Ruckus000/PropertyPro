@@ -12,7 +12,7 @@
  * shared provider `initTestKit` registers.
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValidationError } from '@/lib/api/errors';
 import {
   publishCommunitySite,
@@ -24,6 +24,7 @@ import {
   ensureHomePage,
   listSitePages,
   stageSitePageDelete,
+  unstageSitePageDelete,
   updateSitePage,
 } from '@/lib/services/site-pages-service';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
@@ -230,8 +231,15 @@ describeDb('multi-page site (db-backed integration)', () => {
   });
 
   it('does not confuse a published row with a draft one at the same slot', async () => {
-    // The guard matches on is_draft too, or writing a draft over a published slot
-    // on the SAME page would be refused — which is the normal edit flow.
+    // Writing a draft over a published slot on the SAME page is the normal edit
+    // flow and must not be refused.
+    //
+    // This comment used to read "the guard matches on is_draft too, or [this]
+    // would be refused". That was a FALSE PREMISE, and it is what hid the hole
+    // the next case now covers: both writes below carry the SAME pageId, and the
+    // guard discriminates on pageId, so this passes whether or not the query
+    // filters on is_draft. The is_draft filter was never what made this work —
+    // it only ever hid cross-page clashes between the two layers (D-SLOT).
     const communityId = await createCommunity('slot-draft-vs-published');
     const homePageId = await ensureHomePage(communityId);
     await upsertPublishedBlock({
@@ -244,6 +252,68 @@ describeDb('multi-page site (db-backed integration)', () => {
     });
     const atNine = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 9);
     expect(atNine).toHaveLength(2);
+  });
+
+  it('refuses a DRAFT on one page at a slot another page holds as PUBLISHED', async () => {
+    // D-SLOT — the hole the corrected comment above was hiding, and the worst
+    // failure mode in the slot rules.
+    //
+    // With `eq(site_blocks.is_draft, isDraft)` in the guard's query, the two rows
+    // below never met: page A's row is published, page B's is a draft, so the
+    // draft was ACCEPTED. Nothing was wrong until the next publish, which
+    // promotes every draft to published in ONE transaction — producing two live
+    // rows at slot 12, violating the surviving 3-column index, rolling back the
+    // whole publish, and leaving the community unable to publish ANYTHING until
+    // someone hand-edits block_order in production.
+    //
+    // Refusing the write is the recoverable half of that trade: the PM gets an
+    // actionable 400 naming the position, and nothing has been written.
+    const communityId = await createCommunity('slot-cross-layer');
+    const homePageId = await ensureHomePage(communityId);
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'text', blockOrder: 12, content: { body: 'Home twelve, live' }, isDraft: false,
+    });
+
+    await expect(
+      upsertPublishedBlock({
+        communityId, actorUserId, pageId: about.id,
+        blockType: 'text', blockOrder: 12, content: { body: 'About twelve, draft' }, isDraft: true,
+      }),
+    ).rejects.toThrow(ValidationError);
+
+    // Nothing was written: page A's published row is still the only row at 12.
+    const atTwelve = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 12);
+    expect(atTwelve).toHaveLength(1);
+    expect(atTwelve[0]).toMatchObject({ pageId: homePageId, isDraft: false });
+  });
+
+  it('refuses a PUBLISHED write at a slot another page holds as a DRAFT', async () => {
+    // The mirror image, and the reason the guard drops the filter rather than
+    // inverting it: the collision is symmetric, so the query has to span BOTH
+    // layers in BOTH directions. (This direction is reachable on a community
+    // that was poisoned before the fix landed.)
+    const communityId = await createCommunity('slot-cross-layer-mirror');
+    const homePageId = await ensureHomePage(communityId);
+    const about = await createSitePage({
+      communityId, actorUserId, name: 'About', slug: 'about',
+    });
+
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: about.id,
+      blockType: 'text', blockOrder: 13, content: { body: 'About thirteen, draft' }, isDraft: true,
+    });
+
+    await expect(
+      upsertPublishedBlock({
+        communityId, actorUserId, pageId: homePageId,
+        blockType: 'text', blockOrder: 13, content: { body: 'Home thirteen, live' }, isDraft: false,
+      }),
+    ).rejects.toThrow(ValidationError);
   });
 
   it('still forbids two pages sharing a (block_order, is_draft) until 11c', async () => {
@@ -373,6 +443,60 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect((await liveBlocks(communityId)).some((b) => b.pageId === about.id)).toBe(false);
   });
 
+  it('counts the pages a publish added and removed, so the receipt can say what happened', async () => {
+    /*
+     * A publish can consist ENTIRELY of page changes, and the result reported
+     * neither. A created page with no sections promotes zero blocks; a staged
+     * removal deletes the page, its sections and its slug history through a
+     * loop `retiredCount` does not count. Both came back
+     * `{ promotedCount: 0, retiredCount: 0 }`, so the toast — the only record
+     * the PM gets, since the sheet closes on success — read
+     * "Published — 0 sections live." for the most irreversible thing this phase
+     * ships.
+     *
+     * Asserted here rather than only in the component test because the counts
+     * are a property of the TRANSACTION: `removedPageCount` comes from the loop
+     * that soft-deletes, and `addedPageCount` from rows read before any of the
+     * transaction's own writes. A mocked result would assert the fixture.
+     *
+     * Revert check (production line): `addedPageCount` / `removedPageCount` in
+     * `publishCommunitySite`'s return.
+     */
+    const communityId = await createCommunity('publish-page-counts');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+
+    // A page with NO sections on it: the case that promoted zero blocks and so
+    // reported zero of everything.
+    const empty = await createSitePage({
+      communityId, actorUserId, name: 'Contact', slug: 'contact',
+    });
+    const added = await publishCommunitySite({
+      communityId, actorUserId, expectedPublishedAt: null,
+    });
+    expect(added.published).toBe(true);
+    if (!added.published) throw new Error('unreachable');
+    expect(added.addedPageCount).toBe(1);
+    expect(added.removedPageCount).toBe(0);
+    // The lazily-created home page is NOT counted — it is an artefact of
+    // `ensureHomePage`, not something this PM asked for, and counting it would
+    // tell every first-time manager they had added a page they never made.
+    expect(added.promotedCount).toBe(0);
+
+    // Now the destructive half.
+    await stageSitePageDelete({ communityId, actorUserId, pageId: empty.id });
+    const removed = await publishCommunitySite({
+      communityId, actorUserId, expectedPublishedAt: null,
+    });
+    expect(removed.published).toBe(true);
+    if (!removed.published) throw new Error('unreachable');
+    expect(removed.removedPageCount).toBe(1);
+    expect(removed.addedPageCount).toBe(0);
+  });
+
   it('retires the removed page\'s slug history so its addresses are reusable', async () => {
     // Leaving the redirects live would forward visitors to a page that no longer
     // exists — a 404 with extra steps — and would keep every slug the page ever
@@ -451,6 +575,375 @@ describeDb('multi-page site (db-backed integration)', () => {
       communityId, actorUserId, pageId: about.id, slug: 'about',
     });
     expect(reclaimed.page.slug).toBe('about');
+  });
+
+  it('refuses a duplicate page name on the write, not on the next publish', async () => {
+    // The editor runs the same rule client-side, but the pages API carries no
+    // feature flag — `site_pages` shipped in 11a and any authenticated PM with
+    // an HTTP client can reach it. Without a server rule, a duplicate name
+    // saved cleanly and then blocked EVERY subsequent publish, because
+    // `publishCommunitySite` runs `pageIssues` itself and throws — naming a
+    // page the PM may never have touched. A write that quietly makes the site
+    // unpublishable is refused at the write.
+    const communityId = await createCommunity('duplicate-name');
+    await ensureHomePage(communityId);
+    const amenities = await createSitePage({
+      communityId, actorUserId, name: 'Amenities', slug: 'amenities',
+    });
+    const board = await createSitePage({
+      communityId, actorUserId, name: 'Board', slug: 'board',
+    });
+
+    // Both directions: the client bug was that only one of them was caught.
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: amenities.id, name: 'Board' }),
+    ).rejects.toThrow(ValidationError);
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: board.id, name: 'Amenities' }),
+    ).rejects.toThrow(ValidationError);
+
+    // Case-insensitively: names are nav labels, so two differing only in case
+    // are indistinguishable to a visitor.
+    await expect(
+      updateSitePage({ communityId, actorUserId, pageId: amenities.id, name: 'bOaRd' }),
+    ).rejects.toThrow(ValidationError);
+
+    // Creation is the same hole seen from the other side.
+    await expect(
+      createSitePage({ communityId, actorUserId, name: 'Board', slug: 'board-2' }),
+    ).rejects.toThrow(ValidationError);
+
+    // A page keeping its own name is not a clash with itself, and an unrelated
+    // rename still works — the guard must not be a blanket refusal.
+    const renamed = await updateSitePage({
+      communityId, actorUserId, pageId: amenities.id, name: 'Amenities',
+    });
+    expect(renamed.page.name).toBe('Amenities');
+    const moved = await updateSitePage({
+      communityId, actorUserId, pageId: amenities.id, name: 'Amenity guide',
+    });
+    expect(moved.page.name).toBe('Amenity guide');
+  });
+
+  it('frees a staged page\'s name for reuse before the publish lands', async () => {
+    // Staging is what releases the name — that is the rule `pageIssues` already
+    // applies client-side (`live = pages.filter(p => !p.deleteStaged)`) and the
+    // one the Pages panel documents. A server gate that counted staged pages
+    // would be STRICTER than the invariant it protects: `publishCommunitySite`
+    // runs `pageIssues`, so it would publish this state happily, while the PM
+    // was told the name is taken by a page they had already marked for
+    // deletion. The only escape would be publishing that deletion — which also
+    // ships every other pending draft.
+    const communityId = await createCommunity('staged-name-reuse');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const events = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events',
+    });
+    // Published, so the removal STAGES rather than deleting outright — the row
+    // is still present and still `deletedAt IS NULL` while staged.
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    const staged = await stageSitePageDelete({
+      communityId, actorUserId, pageId: events.id,
+    });
+    expect(staged).toEqual({ staged: true });
+
+    const replacement = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events-2026',
+    });
+    expect(replacement.name).toBe('Events');
+  });
+
+  /*
+   * These two are REGRESSION tests for the lock-free refactor, not proof of it.
+   * Both pass with the fast path deleted — verified by reverting. What they pin
+   * is that the refactor changed no ANSWER: both branches return the same pages,
+   * and the lazy ensure still seeds home exactly once.
+   *
+   * An earlier version of this comment said the lock removal "cannot be
+   * observed" through the service API. That was wrong, and wrong in a
+   * self-serving direction — it turned an admission into a justification. A
+   * second connection observes it directly: hold
+   * `SELECT id FROM communities WHERE id = $1 FOR UPDATE` open on one, and
+   * `listSitePages` on another resolves now where it would previously have
+   * blocked.
+   *
+   * That test now exists — see the `the community lock` describe below, which
+   * holds `FOR UPDATE` on one connection and races the read on another. These
+   * two remain answer-regression tests; the lock itself is pinned there.
+   */
+  it('creates the home page on a community that has none, and reads without doing so afterwards', async () => {
+    const communityId = await createCommunity('lazy-ensure');
+
+    // No pages yet: the slow branch runs and seeds home.
+    const first = await listSitePages(communityId, { includeDrafts: true });
+    expect(first).toHaveLength(1);
+    expect(first[0]?.isHome).toBe(true);
+
+    // Now the fast branch. Same answer, and it must not create a second home —
+    // which is also what would happen if the emptiness check were wrong.
+    const second = await listSitePages(communityId, { includeDrafts: true });
+    expect(second).toHaveLength(1);
+    expect(second[0]?.id).toBe(first[0]?.id);
+  });
+
+  it('does not re-run the ensure for a community whose only page is a DRAFT home', async () => {
+    // The landmine the unfiltered read exists to avoid. A community that has
+    // never published has a draft home, so deciding the fast path on an
+    // `includeDrafts: false` read would come back empty and take the lock on
+    // EVERY call — for exactly the communities most likely to be new. Both
+    // current callers pass `includeDrafts: true`, so this would have sat unnoticed.
+    //
+    // Same caveat as above: this pins the ANSWER (a filtered view being empty
+    // must not provoke a second home page), not the lock behaviour.
+    const communityId = await createCommunity('draft-home-only');
+    const homePageId = await ensureHomePage(communityId);
+
+    const publishedOnly = await listSitePages(communityId, { includeDrafts: false });
+    expect(publishedOnly).toEqual([]);
+
+    // The draft home is still there and still the only page — the filtered view
+    // being empty must not have provoked a second one.
+    const all = await listSitePages(communityId, { includeDrafts: true });
+    expect(all).toHaveLength(1);
+    expect(all[0]?.id).toBe(homePageId);
+    expect(all[0]?.isDraft).toBe(true);
+  });
+
+  it('re-creates home for a community that has pages but no HOME page', async () => {
+    /*
+     * The fast-path guard is `existing.some((p) => p.isHome)`, not
+     * `existing.length > 0`, and until now nothing tested the difference:
+     * reverting it to `length > 0` broke no test at all.
+     *
+     * The two coincide only while home is undeletable, which is a property of
+     * today's write paths rather than of the data. A community with pages and
+     * no home short-circuits forever under `length > 0` — `listSitePages`
+     * keeps answering "nothing to do", `EditorRoot` falls through to
+     * `pages?.[0]`, and every block write is scoped to a NON-home page while
+     * the public root serves nothing. The function's promise is "a home page
+     * exists", so that is what the guard has to check.
+     *
+     * The state is reached by soft-deleting the home row directly, which is
+     * the honest way to build a state no service will produce — a restored
+     * backup or a raw SQL fix is exactly how it would arise in production.
+     */
+    if (!state) throw new Error('Not initialized');
+    const communityId = await createCommunity('home-less');
+    const originalHomeId = await ensureHomePage(communityId);
+    await createSitePage({
+      communityId,
+      actorUserId,
+      name: 'Amenities',
+      slug: 'amenities',
+    });
+
+    await state.db
+      .update(state.dbModule.sitePages)
+      .set({ deletedAt: new Date() })
+      .where(eq(state.dbModule.sitePages.id, originalHomeId));
+
+    // Precondition read straight from the table, NOT through `listSitePages` —
+    // that call is the thing under test and would repair the state before the
+    // assertion could observe it.
+    const before = await state.db
+      .select({
+        id: state.dbModule.sitePages.id,
+        isHome: state.dbModule.sitePages.isHome,
+      })
+      .from(state.dbModule.sitePages)
+      .where(
+        and(
+          eq(state.dbModule.sitePages.communityId, communityId),
+          isNull(state.dbModule.sitePages.deletedAt),
+        ),
+      );
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.some((p) => p.isHome)).toBe(false);
+
+    const after = await listSitePages(communityId, { includeDrafts: true });
+    const homes = after.filter((p) => p.isHome);
+    expect(homes).toHaveLength(1);
+    expect(homes[0]?.id).not.toBe(originalHomeId);
+    // And the non-home page is untouched — the repair adds, it does not rebuild.
+    expect(after.some((p) => p.slug === 'amenities')).toBe(true);
+  });
+
+  /*
+   * The lock-free fast path, asserted directly.
+   *
+   * The two cases above pin that no ANSWER changed and pass with the fast path
+   * deleted — which is honest but leaves the actual property untested. It IS
+   * observable, with two connections: hold `FOR UPDATE` on the community row,
+   * then see whether a pages read comes back.
+   *
+   * `listSitePages` opens its own client via `createUnscopedClient()`, so it
+   * contends with `state.sqlClient` rather than sharing its pool.
+   *
+   * Neither case can hang CI: every wait is raced against a timer, the lock is
+   * released in a `finally`, and the outstanding promise is always awaited
+   * afterwards so nothing is left dangling.
+   */
+  describe('the community lock', () => {
+    const WAIT_MS = 2_000;
+
+    /**
+     * Holds `SELECT … FOR UPDATE` on one connection for the duration of `body`.
+     * The transaction is always ended, even if `body` throws.
+     */
+    async function whileCommunityRowLocked<T>(
+      communityId: number,
+      body: () => Promise<T>,
+    ): Promise<T> {
+      if (!state) throw new Error('Not initialized');
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // Hand-rolled rather than `Promise.withResolvers` — the repo runs Node 20
+      // (.nvmrc), where that is not available.
+      let signalAcquired!: () => void;
+      const acquired = new Promise<void>((resolve) => {
+        signalAcquired = resolve;
+      });
+
+      const held = state.sqlClient
+        .begin(async (tx) => {
+          await tx`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`;
+          signalAcquired();
+          await released;
+        })
+        // Swallow here so a transaction failure surfaces as the body's timeout
+        // rather than as an unhandled rejection in an unrelated test.
+        .catch(() => signalAcquired());
+
+      await acquired;
+      try {
+        return await body();
+      } finally {
+        release();
+        await held;
+      }
+    }
+
+    /** Resolves `{ settled: false }` rather than hanging. */
+    async function settlesWithin<T>(
+      promise: Promise<T>,
+      ms: number,
+    ): Promise<{ settled: boolean }> {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), ms);
+      });
+      // The promise is awaited by the caller either way; this only observes it.
+      const outcome = await Promise.race([promise.then(() => 'settled' as const), timeout]);
+      if (timer) clearTimeout(timer);
+      return { settled: outcome === 'settled' };
+    }
+
+    it('does not block a pages read on a community that already has a home page', async () => {
+      const communityId = await createCommunity('lock-fast-path');
+      await ensureHomePage(communityId);
+
+      // The read is handed OUT of the locked section rather than awaited inside
+      // it. Awaiting a blocked read in there would deadlock — the `finally` that
+      // releases the lock cannot run until the body returns — and vitest's
+      // default timeout killing a held transaction is precisely the failure mode
+      // this harness exists to avoid.
+      const { outcome, read } = await whileCommunityRowLocked(communityId, async () => {
+        const pending = listSitePages(communityId, { includeDrafts: true });
+        return { outcome: await settlesWithin(pending, WAIT_MS), read: pending };
+      });
+
+      const pages = await read;
+      expect(pages).toHaveLength(1);
+
+      expect(
+        outcome.settled,
+        `listSitePages blocked for ${WAIT_MS}ms while another transaction held the ` +
+          'community row. The fast path should not take that lock — every editor ' +
+          'load and every pages refetch goes through here.',
+      ).toBe(true);
+    });
+
+    it('DOES block when the community has no home page yet, because that branch writes', async () => {
+      // The positive control, and the reason the case above means anything: it
+      // proves this harness can actually detect blocking. Without it, "resolved
+      // quickly" would also be what a broken lock-holder produced.
+      const communityId = await createCommunity('lock-slow-path');
+
+      const { outcome, read } = await whileCommunityRowLocked(communityId, async () => {
+        const pending = listSitePages(communityId, { includeDrafts: true });
+        return { outcome: await settlesWithin(pending, WAIT_MS), read: pending };
+      });
+
+      expect(
+        outcome.settled,
+        'A community with no pages must take the lock: that branch creates the ' +
+          'home page, and two concurrent first-touches would race find-then-insert.',
+      ).toBe(false);
+
+      // Released now, so it completes — and correctly.
+      const pages = await read;
+      expect(pages).toHaveLength(1);
+      expect(pages[0]?.isHome).toBe(true);
+    });
+  });
+
+  it('refuses to CANCEL a removal when the name has since been taken', async () => {
+    // The other side of freeing the name, and the hole freeing it opened.
+    // "Cancel removal" is always offered and has no time limit, so without a
+    // re-check the sequence stage → create replacement → cancel leaves two live
+    // pages under one name. Nothing downstream stops it: `publishCommunitySite`
+    // runs `pageIssues`, which errors on the duplicate, so EVERY later publish
+    // is blocked — and the PM is told a name clashes right after doing
+    // something they think of as an undo.
+    //
+    // The clash cannot exist until the replacement is created, which is why the
+    // check belongs here and not at staging time.
+    const communityId = await createCommunity('unstage-name-clash');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const events = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events',
+    });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    await stageSitePageDelete({ communityId, actorUserId, pageId: events.id });
+    await createSitePage({ communityId, actorUserId, name: 'Events', slug: 'events-2026' });
+
+    await expect(
+      unstageSitePageDelete({ communityId, actorUserId, pageId: events.id }),
+    ).rejects.toThrow(ValidationError);
+
+    // Still staged — a refused cancel must not half-apply.
+    const pages = await listSitePages(communityId, { includeDrafts: true });
+    expect(pages.find((p) => p.id === events.id)?.deleteStagedAt).not.toBeNull();
+  });
+
+  it('still cancels a removal when nothing took the name', async () => {
+    // The guard must not make every cancel fail — the ordinary undo still works.
+    const communityId = await createCommunity('unstage-clean');
+    const homePageId = await ensureHomePage(communityId);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: homePageId,
+      blockType: 'hero', blockOrder: 1, content: { headline: 'Live' }, isDraft: false,
+    });
+    const events = await createSitePage({
+      communityId, actorUserId, name: 'Events', slug: 'events',
+    });
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+    await stageSitePageDelete({ communityId, actorUserId, pageId: events.id });
+
+    const restored = await unstageSitePageDelete({
+      communityId, actorUserId, pageId: events.id,
+    });
+    expect(restored.deleteStagedAt).toBeNull();
   });
 
   it('refuses to publish when a page holds a slug reserved by an app route', async () => {

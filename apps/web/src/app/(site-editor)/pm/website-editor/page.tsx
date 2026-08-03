@@ -17,6 +17,7 @@
  * subscription state are all enforced here.
  */
 import { redirect } from 'next/navigation';
+import { captureMessage } from '@sentry/nextjs';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { resolveLifecycleState, isEntitledState } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -33,6 +34,8 @@ import {
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
+import { listSitePages, type SitePageRecord } from '@/lib/services/site-pages-service';
+import type { SitePageSummary } from '@/hooks/use-site-pages';
 import {
   resolveFooterSettings,
   resolveSiteSettings,
@@ -42,6 +45,59 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
+}
+
+/**
+ * Serialises a page row for the client. Mirrors the pages route's `toSummary` —
+ * the wire shape is the contract's, and diverging here would give the editor two
+ * different notions of one row depending on whether it came from the seed or the
+ * query.
+ */
+function toPageSummary(page: SitePageRecord): SitePageSummary {
+  return {
+    id: page.id,
+    name: page.name,
+    slug: page.slug,
+    inNav: page.inNav,
+    sortOrder: page.sortOrder,
+    isHome: page.isHome,
+    isDraft: page.isDraft,
+    publishedAt: page.publishedAt ? page.publishedAt.toISOString() : null,
+    deleteStagedAt: page.deleteStagedAt ? page.deleteStagedAt.toISOString() : null,
+  };
+}
+
+/**
+ * The seed, or `[]` if it could not be read.
+ *
+ * Swallowing the failure is deliberate. This read is new to a route that has
+ * worked without it since Phase 2, and letting it throw would turn any pages
+ * hiccup — a lock timeout, a slow transaction — into a dead editor for a PM who
+ * may only have come to change a phone number. `[]` degrades to the pre-11b-3
+ * behaviour (no page id sent, the server defaults to home) and the Pages panel
+ * still fetches its own list, so the manager sees a real error where the pages
+ * actually live rather than an error boundary over the whole editor. It is the
+ * same trade the canvas already makes with a null `canvasContext`.
+ *
+ * It is NOT swallowed silently, though. The degraded mode is the quiet kind —
+ * the editor loads, looks right, and every block write falls back to the home
+ * page — so a bare `catch {}` would hide it for as long as nobody happened to
+ * notice their edits landing on the wrong page. Sentry gets a warning.
+ */
+async function loadInitialPages(communityId: number): Promise<SitePageSummary[]> {
+  try {
+    const pages = await listSitePages(communityId, { includeDrafts: true });
+    return pages.map(toPageSummary);
+  } catch (error) {
+    captureMessage('site_editor_pages_seed_failure', {
+      level: 'warning',
+      extra: {
+        communityId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return [];
+  }
 }
 
 export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
@@ -114,6 +170,28 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=subscription-lapsed');
   }
 
+  // Phase 11b-3. Read AFTER the role / feature / lifecycle gates above, not
+  // inside the `Promise.all`, and it is not a micro-optimisation: `listSitePages`
+  // takes a `FOR UPDATE` lock on the community row and CREATES the home page if
+  // the community has none. Doing that in parallel with the gates would mean a
+  // manager without the site feature, or a lapsed community, wrote a page row on
+  // the way to being redirected away. The cost is one serial round-trip on a
+  // route that already makes six.
+  //
+  // The lock is accepted, and it is NO LONGER taken on every list — that claim
+  // stood here after the lock-free refactor made it false. `listSitePages` now
+  // reads without a lock on the common path and takes `FOR UPDATE` only on the
+  // branch that WRITES: a community with no home page yet. So this read locks
+  // once, on a community's very first touch, and never again. That branch is
+  // what stops two concurrent first-touches racing to insert the home page and
+  // failing the partial unique index with an opaque 500. Both halves are pinned
+  // by the `the community lock` describe in `site-pages.integration.test.ts`,
+  // which races two connections.
+  //
+  // Seeded rather than left to the client because `EditorRoot` needs the page id
+  // on its FIRST paint — see `EditorRootProps.initialPages`.
+  const initialPages = await loadInitialPages(communityId);
+
   return (
     <EditorFrame
       communityId={communityId}
@@ -173,6 +251,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         // editor load for a tab most PMs never open.
         initialCustomCss={branding?.customCssOverrides ?? null}
         showWizardBanner={onboardingCompletedAt === null}
+        initialPages={initialPages}
       />
     </EditorFrame>
   );

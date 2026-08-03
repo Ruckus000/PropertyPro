@@ -1,4 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react';
+import { ApiRequestError } from '@/lib/api/request-json';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -100,7 +101,15 @@ describe('useResidents', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error).toEqual(new Error('Forbidden'));
+    // `toEqual(new Error(...))` until round 5, which compared the CLASS as well
+    // as the message — so it broke when `requestJson` began throwing
+    // `ApiRequestError` to carry the server's `code`/`details` through. The
+    // claim these cases were making is "the server's message reaches the
+    // caller"; asserting the message plus the class states that, and states the
+    // new contract too, rather than deep-equalling an object whose extra fields
+    // are the point of the change.
+    expect(result.current.error).toBeInstanceOf(ApiRequestError);
+    expect(result.current.error?.message).toBe('Forbidden');
   });
 
   it('refetches when communityId changes', async () => {

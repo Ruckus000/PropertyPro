@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PreviewDialog } from '@/components/pm/site-editor-v3/PreviewDialog';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 
 const blocksState = vi.hoisted(() => ({
@@ -13,6 +14,9 @@ const blocksState = vi.hoisted(() => ({
 const refetch = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useContentBlocks: () => ({ ...blocksState.value, refetch }),
   // Imported transitively (Canvas → SectionShell → FloatControls) because the
   // dialog reuses `sortBlocks` from Canvas. Never rendered here.
@@ -85,19 +89,46 @@ function renderDialog(open = true) {
       onOpenChange={onOpenChange}
       communityId={7}
       context={CONTEXT}
+      pageIsStaged={false}
       now={NOW}
     />,
   );
 }
 
-const block = (id: number, blockType: string, blockOrder: number, content: unknown) => ({
+/** The two pages the scope cases use. */
+const HOME_PAGE_ID = 10;
+const ABOUT_PAGE_ID = 11;
+
+const block = (
+  id: number,
+  blockType: string,
+  blockOrder: number,
+  content: unknown,
+  pageId: number | null = HOME_PAGE_ID,
+) => ({
   id,
+  pageId,
   blockType,
   blockOrder,
   content,
   isDraft: true,
   publishedAt: null,
 });
+
+function renderDialogOnPage(pageId: number | null) {
+  return render(
+    <SelectedSitePageProvider pageId={pageId}>
+      <PreviewDialog
+        open
+        onOpenChange={onOpenChange}
+        communityId={7}
+        context={CONTEXT}
+        pageIsStaged={false}
+        now={NOW}
+      />
+    </SelectedSitePageProvider>,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -118,11 +149,75 @@ describe('PreviewDialog — open state', () => {
     expect(screen.queryByText('About us')).not.toBeInTheDocument();
   });
 
-  it('has an accessible name naming the community', () => {
+  it('falls back to the community name when the page is not known', () => {
+    // The pages read can genuinely fail. A community-named preview is a worse
+    // title than a page-named one and a far better one than an empty heading.
     renderDialog();
     expect(
       screen.getByRole('dialog', { name: /Preview — Sunset Condos/ }),
     ).toBeInTheDocument();
+  });
+
+  it('names the PAGE it is previewing, not the community', () => {
+    // The dialog renders exactly one page (D-C2). Titling it after the
+    // community reads as "this is your site" over a single page's sections —
+    // the misreading the scoping exists to prevent, restated in the heading.
+    //
+    // Revert check (production line): `PreviewDialog.tsx`'s
+    // `${pageName ?? context.community.name}`. Reverting only that expression
+    // to `context.community.name` turns this red and leaves the fallback case
+    // above green.
+    render(
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <PreviewDialog
+          open
+          onOpenChange={onOpenChange}
+          communityId={7}
+          context={CONTEXT}
+          pageName="Amenities"
+          pageIsStaged={false}
+          now={NOW}
+        />
+      </SelectedSitePageProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: /Preview — Amenities/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', { name: /Preview — Sunset Condos/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not promise a staged page to visitors, because publishing deletes it', () => {
+    /*
+     * A PM previewing a page they have staged for removal is usually checking
+     * what they are about to lose — the editor behind this modal is showing the
+     * staged banner saying exactly that, and the modal covers it. The caption
+     * asserted "It is what visitors see once you publish." After that publish,
+     * visitors see a 404.
+     *
+     * The dialog's own header sets the standard: "a preview that could disagree
+     * with either the canvas or the published page would be worse than no
+     * preview at all."
+     *
+     * Revert check (production line): the `pageIsStaged ? … :` ternary on the
+     * `DialogDescription` in `PreviewDialog.tsx`.
+     */
+    render(
+      <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+        <PreviewDialog
+          open
+          onOpenChange={onOpenChange}
+          communityId={7}
+          context={CONTEXT}
+          pageName="Pool"
+          pageIsStaged
+          now={NOW}
+        />
+      </SelectedSitePageProvider>,
+    );
+
+    expect(screen.getByText(/set to be removed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/what visitors see once you publish/i)).not.toBeInTheDocument();
   });
 
   it('closes on Escape', async () => {
@@ -193,6 +288,56 @@ describe('PreviewDialog — draft content', () => {
     };
     renderDialog();
     expect(screen.getByText("There's nothing to preview yet")).toBeInTheDocument();
+  });
+});
+
+describe('PreviewDialog — page scope (D-C2)', () => {
+  function twoPages() {
+    blocksState.value = {
+      data: [
+        block(2, 'text', 2, { heading: 'Home section', body: 'Home body.' }, HOME_PAGE_ID),
+        block(3, 'text', 3, { heading: 'About section', body: 'About body.' }, ABOUT_PAGE_ID),
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+  }
+
+  it('previews only the page being edited', () => {
+    // A preview that concatenated every page into one scroll would not
+    // correspond to any URL a visitor can open — a lie the PM would then
+    // publish against.
+    twoPages();
+    renderDialogOnPage(ABOUT_PAGE_ID);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('About section')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Home section')).not.toBeInTheDocument();
+  });
+
+  it('follows the selection back to the home page', () => {
+    twoPages();
+    renderDialogOnPage(HOME_PAGE_ID);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Home section')).toBeInTheDocument();
+    expect(within(dialog).queryByText('About section')).not.toBeInTheDocument();
+  });
+
+  it('says there is nothing to preview on a page with no sections', () => {
+    twoPages();
+    renderDialogOnPage(99);
+    expect(screen.getByText("There's nothing to preview yet")).toBeInTheDocument();
+  });
+
+  it('previews everything when no page is selected', () => {
+    twoPages();
+    renderDialogOnPage(null);
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Home section')).toBeInTheDocument();
+    expect(within(dialog).getByText('About section')).toBeInTheDocument();
   });
 });
 

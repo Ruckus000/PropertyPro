@@ -7,6 +7,8 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { hasView } from '@/components/public-site/blocks/view-registry';
 import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
+import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { CanvasBlock } from './CanvasBlock';
 import { SectionShell } from './SectionShell';
@@ -35,9 +37,23 @@ export interface CanvasProps {
  * Each block is wrapped in a `SectionShell`, which owns the selection chrome
  * and the hover/focus control cluster. The shell must be mounted inside a
  * `SiteEditorProvider` (see `EditorRoot`).
+ *
+ * ## Page scope (Phase 11b-3, D-C2)
+ *
+ * `useContentBlocks` returns EVERY page's blocks in one response — deliberately,
+ * because the publish diff has to see the whole site. The canvas is one of the
+ * two callers that must NOT (the other is `PreviewDialog`): it renders one page,
+ * so it narrows the list with `blocksForPage` against the editor's selected
+ * page. Without that, opening page B shows page A's sections, and clicking one
+ * hands the inspector a block whose edits are written against the wrong page.
+ *
+ * The narrowing is a `useMemo` over the raw query result rather than a change to
+ * the hook, so the publish path (`use-site-diff`) and the slot allocator
+ * (`nextContentSlot`, D-C3) keep the community-wide list they require.
  */
 export function Canvas({ communityId, context, onAddSection, now }: CanvasProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
+  const selectedPageId = useSelectedSitePage();
   // One timestamp for the whole render pass — otherwise two blocks with the
   // same window could disagree about where the cutoff falls.
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
@@ -45,10 +61,20 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
   // Filter BEFORE the empty check. The PM blocks endpoint returns tombstone
   // rows (staged deletions) and could return a type this build has no view for;
   // both render as null. Counting them would skip the empty state and leave a
-  // bare bordered box with no explanation.
+  // bare bordered box with no explanation. Page scoping goes first, so "this
+  // page is empty" is reported as an empty page and not as an empty site.
+  //
+  // The empty state's copy below has to agree with that, and for two rounds it
+  // did not — it said "Your site is empty" on a page-scoped surface, which
+  // tells a PM who just created a second page that the whole site is gone.
+  // `PreviewDialog` had it right all along ("Add a section to this page"); this
+  // is the canvas saying the same thing.
   const ordered = useMemo(
-    () => sortBlocks(blocks ?? []).filter((b) => hasView(b.blockType as never)),
-    [blocks],
+    () =>
+      sortBlocks(blocksForPage(blocks, selectedPageId)).filter((b) =>
+        hasView(b.blockType as never),
+      ),
+    [blocks, selectedPageId],
   );
 
   // Built once per block-list change rather than per render. `SectionShell`
@@ -107,8 +133,8 @@ export function Canvas({ communityId, context, onAddSection, now }: CanvasProps)
       <div className="overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
         {ordered.length === 0 ? (
           <EmptyState
-            title="Your site is empty"
-            description="Add your first section to give visitors something to read."
+            title="This page is empty"
+            description="Add a section to give visitors something to read."
             action={
               onAddSection && (
                 <Button type="button" onClick={onAddSection}>

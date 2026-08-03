@@ -14,6 +14,8 @@ const PANEL_ID = 'site-editor-tool-panel';
 
 export interface EditorShellProps {
   communityName: string;
+  /** Forwarded to the top bar; see `EditorTopBarProps.pageName` (Phase 11b-3). */
+  pageName?: string;
   publicSiteUrl: string | null;
   proToolAccess: ProToolAccess;
   /**
@@ -30,16 +32,17 @@ export interface EditorShellProps {
   children?: React.ReactNode;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   canOpenPublish: boolean;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  canPreview: boolean;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  previewDisabledReason: string;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  previewButtonRef: React.Ref<HTMLButtonElement>;
   status?: React.ReactNode;
-  onPreview?: () => void;
-  onPublish?: () => void;
-  /**
-   * Controlled active tool. Supply both to let something outside the shell
-   * drive the panel — selecting a section on the canvas switches to Sections.
-   * Omit both and the shell keeps its own state.
-   */
-  activeTool?: EditorToolId;
-  onActiveToolChange?: (tool: EditorToolId) => void;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  onPreview: () => void;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  onPublish: () => void;
   /** The inspector column. Rendered at >=1280px; below that it overlays. */
   inspector?: React.ReactNode;
   /**
@@ -55,6 +58,30 @@ export interface EditorShellProps {
 }
 
 /**
+ * The controlled active tool — an all-or-nothing PAIR, enforced by the type.
+ *
+ * Supply both to let something outside the shell drive the panel (selecting a
+ * section on the canvas switches to Sections); omit both and the shell keeps
+ * its own state. What the type now forbids is the HALF-controlled shape:
+ * `activeTool` without `onActiveToolChange` fell back to `setUncontrolledTool`,
+ * whose value `controlledTool ?? uncontrolledTool` immediately discards — a
+ * fully enabled, fully inert tab strip.
+ *
+ * That is the same "a missing handler yields a control that invites the click
+ * and swallows it" shape that made `onPreview`/`onPublish`, `onGoToPages`,
+ * `onPageRemoved` and `restoreFocusToSelectedRow` required in earlier rounds.
+ * It cannot be fixed the same way, because omitting BOTH is a legitimate mode —
+ * hence a union rather than two required props. `never` on the absent arm is
+ * what makes the half-supplied shape fail to typecheck rather than merely be
+ * discouraged by a comment.
+ */
+type ControlledToolProps =
+  | { activeTool: EditorToolId; onActiveToolChange: (tool: EditorToolId) => void }
+  | { activeTool?: never; onActiveToolChange?: never };
+
+export type EditorShellPropsWithTool = EditorShellProps & ControlledToolProps;
+
+/**
  * Three-column editor: tool panel · canvas · (inspector, from Phase 2b).
  *
  * The whole editor is unmounted below 768px rather than hidden — see PhoneGate.
@@ -63,6 +90,7 @@ export interface EditorShellProps {
  */
 export function EditorShell({
   communityName,
+  pageName,
   publicSiteUrl,
   proToolAccess,
   communityId,
@@ -71,6 +99,9 @@ export function EditorShell({
   renderToolPanel,
   children,
   canOpenPublish,
+  canPreview,
+  previewDisabledReason,
+  previewButtonRef,
   status,
   onPreview,
   onPublish,
@@ -78,8 +109,11 @@ export function EditorShell({
   onActiveToolChange,
   inspector,
   banner,
-}: EditorShellProps) {
+}: EditorShellPropsWithTool) {
   const [uncontrolledTool, setUncontrolledTool] = useState<EditorToolId>('sections');
+  // Both `??`s are now decided by the SAME arm of `ControlledToolProps`, so
+  // they cannot disagree — which is the half-controlled inert tab strip the
+  // union exists to make unrepresentable.
   const activeTool = controlledTool ?? uncontrolledTool;
   const setActiveTool = onActiveToolChange ?? setUncontrolledTool;
   const [panelWidth, setPanelWidth] = usePanelWidth();
@@ -109,8 +143,12 @@ export function EditorShell({
     <div className="flex min-h-0 flex-1 flex-col">
       <EditorTopBar
         communityName={communityName}
+        pageName={pageName}
         status={status}
         canOpenPublish={canOpenPublish}
+        canPreview={canPreview}
+        previewDisabledReason={previewDisabledReason}
+        previewButtonRef={previewButtonRef}
         onPreview={onPreview}
         onPublish={onPublish}
       />

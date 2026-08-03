@@ -14,6 +14,9 @@ import { GalleryForm } from '@/components/pm/site-editor-v3/inspector/forms/Gall
 
 const upsertMock = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useUpsertContentBlock: () => ({ mutateAsync: upsertMock, isPending: false }),
 }));
 

@@ -16,6 +16,15 @@
  *    the re-insert replaces (cancelling the staged removal). See
  *    `apps/web/src/lib/services/site-blocks-service.ts`.
  *
+ *    Phase 11b-3 adds `pageId` to that captured set (D-UNDO). The write hooks
+ *    otherwise read the CURRENTLY-selected page, and "currently" is the wrong
+ *    tense for a replay: an undo issued after the PM switched pages would
+ *    restore the section onto the page they are looking at rather than the one
+ *    they removed it from — silently, with the PM believing they undid
+ *    something. The page is part of what "this section was here" means, so it
+ *    is captured at removal time alongside the type, order and content, and
+ *    passed back as an explicit override on both the delete and the replay.
+ *
  * 2. **An expired undo must be impossible, not merely ineffective.** The
  *    captured payload is released when the window closes, and each removal
  *    carries a token the undo closure must still match. A toast that outlives
@@ -28,22 +37,18 @@
  * simply gets no Undo affordance instead of a cast that would 400 at runtime.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import {
   useDeleteContentBlock,
-  useUpsertContentBlock,
   type SiteBlockSummary,
   type UpsertContentBlockInput,
 } from '@/hooks/use-content-blocks';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
+import { useUndoableRemoveHost } from './undoable-remove-context';
 import { sectionLabel } from './section-label';
 
-/**
- * How long Undo stays offered. Long enough to notice the toast and act, short
- * enough that the captured payload isn't held against a slot the PM has since
- * refilled.
- */
-export const UNDO_WINDOW_MS = 10_000;
+export { UNDO_WINDOW_MS } from './undoable-remove-context';
 
 type RestorableBlockType = UpsertContentBlockInput['blockType'];
 
@@ -68,11 +73,6 @@ function isRestorable(blockType: string): blockType is RestorableBlockType {
   return (RESTORABLE_BLOCK_TYPES as readonly string[]).includes(blockType);
 }
 
-interface PendingRestore {
-  token: number;
-  input: UpsertContentBlockInput;
-}
-
 export interface UseUndoableRemoveResult {
   /** Whether the confirmation dialog is open. */
   isConfirmOpen: boolean;
@@ -95,61 +95,34 @@ export function useUndoableRemove(
   block: SiteBlockSummary,
 ): UseUndoableRemoveResult {
   const remove = useDeleteContentBlock(communityId);
-  const restore = useUpsertContentBlock(communityId);
+  const selectedPageId = useSelectedSitePage();
+  const { offerUndo } = useUndoableRemoveHost();
   const [isConfirmOpen, setConfirmOpen] = useState(false);
 
-  const pendingRef = useRef<PendingRestore | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tokenRef = useRef(0);
-
-  const release = useCallback(() => {
-    pendingRef.current = null;
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  // Unmounting the canvas (navigating away, discarding drafts) must not leave a
-  // live timer holding a payload for a slot this session no longer owns.
-  useEffect(() => release, [release]);
-
   const label = sectionLabel(block.blockType);
-
-  const undo = useCallback(
-    (token: number) => {
-      const pending = pendingRef.current;
-      // Expired, already used, or superseded by a later removal.
-      if (pending === null || pending.token !== token) return;
-      release();
-
-      restore.mutate(pending.input, {
-        onSuccess: () => {
-          toast.success(`${label} section restored.`);
-        },
-        onError: (error) => {
-          toast.error(`We couldn't restore that section. ${error.message}`);
-        },
-      });
-    },
-    [label, release, restore],
-  );
 
   const confirmRemove = useCallback(() => {
     setConfirmOpen(false);
 
     // Captured BEFORE the delete — afterwards the row is gone and the content
     // is unrecoverable from the client.
+    //
+    // The block's own page wins over the current selection: they agree today
+    // (the canvas only shows the selected page's blocks) but the correctness of
+    // the replay must not depend on that coincidence. The selection is the
+    // fallback only for an unadopted pre-11b row, whose `pageId` is null.
+    const removedFromPageId = block.pageId ?? selectedPageId;
     const restorable = isRestorable(block.blockType)
       ? ({
           blockType: block.blockType,
           blockOrder: block.blockOrder,
           content: block.content,
+          pageId: removedFromPageId,
         } satisfies UpsertContentBlockInput)
       : null;
 
     remove.mutate(
-      { blockOrder: block.blockOrder },
+      { blockOrder: block.blockOrder, pageId: removedFromPageId },
       {
         onSuccess: ({ staged }) => {
           const message = staged
@@ -161,32 +134,18 @@ export function useUndoableRemove(
             return;
           }
 
-          const token = tokenRef.current + 1;
-          tokenRef.current = token;
-          // A prior pending removal is superseded, not stacked: its token no
-          // longer matches, so its Undo can no longer fire.
-          release();
-          pendingRef.current = { token, input: restorable };
-          timerRef.current = setTimeout(release, UNDO_WINDOW_MS);
-
-          toast.success(message, {
-            duration: UNDO_WINDOW_MS,
-            dismissible: true,
-            closeButton: true,
-            action: {
-              label: 'Undo',
-              onClick: () => undo(token),
-            },
-            onDismiss: release,
-            onAutoClose: release,
-          });
+          // Handed UP. This component is about to unmount — the tombstone the
+          // delete just wrote has a new row id and no view, so `SectionShell`
+          // leaves the canvas on the refetch — and an undo owned here would go
+          // with it.
+          offerUndo({ message, input: restorable, label });
         },
         onError: (error) => {
           toast.error(`We couldn't remove that section. ${error.message}`);
         },
       },
     );
-  }, [block, label, release, remove, undo]);
+  }, [block, label, offerUndo, remove, selectedPageId]);
 
   const requestRemove = useCallback(() => setConfirmOpen(true), []);
 
@@ -195,6 +154,8 @@ export function useUndoableRemove(
     setConfirmOpen,
     requestRemove,
     confirmRemove,
-    isPending: remove.isPending || restore.isPending,
+    // The restore's pending state belongs to the host now — it outlives this
+    // component, so it could not be reported here truthfully anyway.
+    isPending: remove.isPending,
   };
 }

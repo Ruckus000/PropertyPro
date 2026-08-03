@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
@@ -34,6 +35,9 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
 }));
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useDeleteContentBlock: () => ({ mutate: deleteMutate, isPending: false }),
   // FloatControls' undo replays the removed section through the upsert.
   useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
@@ -41,10 +45,23 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
-vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: toastError } }));
+// `dismiss` is here because `useUndoableRemove` takes the undo toast down
+// when its section unmounts. A factory missing a newly-added export yields
+// `undefined` at call time, which reads as an unrelated component breaking.
+// Every method the site-editor tree can reach, not only the ones this file
+// asserts on: corpus trap #3 — a factory missing an export yields `undefined`
+// at call time, which reads as an unrelated component breaking. `info` is the
+// selection repair's channel (`EditorRoot.tsx`) and had zero coverage repo-wide.
+vi.mock('sonner', () => ({
+  toast: { success: toastSuccess, error: toastError, dismiss: vi.fn(), info: vi.fn() },
+}));
+
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
 
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: 2,
     content: {},
@@ -59,9 +76,11 @@ const HERO = block({ id: 1, blockType: 'hero', blockOrder: 1 });
 
 function renderShell(b: SiteBlockSummary = TEXT) {
   return render(
+    <UndoableRemoveProvider communityId={7}>
     <SectionShell block={b} communityId={7}>
       <p>Section body</p>
     </SectionShell>,
+    </UndoableRemoveProvider>
   );
 }
 

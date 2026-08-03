@@ -10,9 +10,13 @@ import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 import { toSnapshot, issueTarget, HERO_SLOT } from '@/lib/site-editor/to-snapshot';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function block(overrides: Partial<SiteBlockSummary> = {}): SiteBlockSummary {
   return {
     id: 1,
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: 2,
     content: { heading: 'Pool rules', body: 'No glass by the pool.' },

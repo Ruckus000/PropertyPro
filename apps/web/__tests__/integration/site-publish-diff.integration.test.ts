@@ -96,6 +96,9 @@ describeDb('publish diff model vs. the real publish transaction (db-backed)', ()
     const rows = await state.db
       .select({
         id: state.dbModule.siteBlocks.id,
+        // Phase 11b — the page the row belongs to; read from the DB rather than
+        // fabricated, so a write path that forgets to stamp it shows up here.
+        pageId: state.dbModule.siteBlocks.pageId,
         blockType: state.dbModule.siteBlocks.blockType,
         blockOrder: state.dbModule.siteBlocks.blockOrder,
         content: state.dbModule.siteBlocks.content,
@@ -111,6 +114,7 @@ describeDb('publish diff model vs. the real publish transaction (db-backed)', ()
       );
     return rows.map((r) => ({
       id: r.id,
+      pageId: r.pageId,
       blockType: r.blockType,
       blockOrder: r.blockOrder,
       content: r.content,

@@ -46,7 +46,8 @@ export const publishCommunitySiteContract = defineRoute({
   },
   /**
    * Loose response — the handler returns either
-   *   { published: true,  publishedAt: Date, promotedCount: number, retiredCount: number }
+   *   { published: true,  publishedAt: Date, promotedCount, retiredCount,
+   *     addedPageCount, removedPageCount }
    * or
    *   { published: false, reason: 'nothing-to-publish' }
    *

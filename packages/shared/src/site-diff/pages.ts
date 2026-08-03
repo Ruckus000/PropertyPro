@@ -54,6 +54,29 @@ export interface PageIssuesInput {
    * which is the one that matters.
    */
   isReserved?: (slug: string) => boolean;
+  /**
+   * Whether a page STAGED for removal still holds its web address.
+   *
+   * There are two different questions here, and the answer differs:
+   *
+   *  - **"Is the set of pages about to go live valid?"** — the publish gate.
+   *    A staged page is leaving, so it neither needs validating nor holds
+   *    anything. **`false`** (the default), which is what makes a page with a
+   *    broken address still deletable.
+   *
+   *  - **"Can this page take this address right now?"** — an editor form.
+   *    A staged page is still a live row until the publish lands, and
+   *    `site_pages_community_slug_partial` is unique on
+   *    `(community_id, slug) WHERE deleted_at IS NULL`, so it still owns its
+   *    address. **`true`**, or the form tells the PM an address is free that
+   *    the server will refuse — with a raw unique-violation rather than a
+   *    clean error, if the service-layer check were ever relaxed to match.
+   *
+   * NAMES are unaffected either way: they are nav labels with no unique index,
+   * so a staged page's name is genuinely free (see `assertNameAvailable`).
+   * That asymmetry is deliberate, not an oversight.
+   */
+  reserveStagedSlugs?: boolean;
 }
 
 function issue(
@@ -68,17 +91,39 @@ function issue(
 /**
  * Cross-page issues. Errors block a publish; warnings are surfaced only.
  *
- * A page staged for removal is skipped: it is about to stop existing, so holding
- * the publish on its name or address would make a broken page impossible to
- * delete.
+ * A page staged for removal is never VALIDATED: it is about to stop existing,
+ * so holding the publish on its name or address would make a broken page
+ * impossible to delete.
+ *
+ * Whether it still OCCUPIES its address is a separate question with a separate
+ * answer, and the caller has to say which one it is asking — see
+ * `reserveStagedSlugs`. The publish gate says no (the page is leaving); an
+ * editor form says yes (the row is still live in the unique slug index, so the
+ * server will refuse the address). Its NAME is free either way.
  */
 export function pageIssues({
   pages,
   retiredSlugs = [],
   isReserved,
+  reserveStagedSlugs = false,
 }: PageIssuesInput): Issue[] {
   const issues: Issue[] = [];
   const live = pages.filter((page) => !page.deleteStaged);
+
+  // A staged page is never VALIDATED — it is about to stop existing, and
+  // holding the publish on its name or address would make a broken page
+  // impossible to delete. But it may still OCCUPY its address, because until
+  // the publish lands its row is still live in the unique slug index. The two
+  // are separate concerns and only the second is optional; see
+  // `reserveStagedSlugs`.
+  const stagedSlugOwners = new Map<string, string>();
+  if (reserveStagedSlugs) {
+    for (const page of pages) {
+      if (page.deleteStaged === true && page.slug.length > 0) {
+        stagedSlugOwners.set(page.slug, page.pageId);
+      }
+    }
+  }
 
   const homes = live.filter((page) => page.isHome);
   if (homes.length === 0) {
@@ -161,6 +206,30 @@ export function pageIssues({
           page.pageId,
           'slug',
           `Another page used to live at "/${page.slug}", and it still forwards visitors to its replacement.`,
+        ),
+      );
+    }
+    // Named as the staged page rather than reported as a generic clash: the
+    // colliding row is invisible in the list's normal reading (it is marked for
+    // removal, so a PM reads it as already gone), and the two ways out —
+    // publish the removal, or "Cancel removal" — are not guessable from
+    // "another page already uses this".
+    // No `&& stagedOwner !== page.pageId` here, unlike the two clashes below.
+    // It cannot fire: `stagedSlugOwners` is built ONLY from pages with
+    // `deleteStaged === true`, and this loop iterates `live`, which is the
+    // complement of that set — so the owner is never this page. It was
+    // unreachable-true, which made `pages.test.ts`'s "does not accuse the
+    // staged page of clashing with itself" pass for a reason unrelated to what
+    // it claimed (the staged page is filtered out of `live` and is never a loop
+    // SUBJECT at all). Deleting the conjunct is behaviour-preserving; keeping
+    // it invited exactly that misreading.
+    const stagedOwner = stagedSlugOwners.get(page.slug);
+    if (stagedOwner !== undefined) {
+      issues.push(
+        issue(
+          page.pageId,
+          'slug',
+          `A page you have staged for removal still uses "/${page.slug}" until you publish. Publish the removal first, or cancel it and pick another address.`,
         ),
       );
     }

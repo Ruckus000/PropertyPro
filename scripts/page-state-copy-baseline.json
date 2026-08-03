@@ -1,0 +1,14 @@
+{
+  "apps/web/src/components/pm/onboarding-wizard/ConfirmPublish.tsx": 1,
+  "apps/web/src/components/pm/onboarding-wizard/IdentityEditor.tsx": 2,
+  "apps/web/src/components/pm/site-editor-v3/canvas/Canvas.tsx": 1,
+  "apps/web/src/components/pm/site-editor-v3/EditorRoot.tsx": 1,
+  "apps/web/src/components/pm/site-editor-v3/panels/PagesPanel.tsx": 7,
+  "apps/web/src/components/pm/site-editor-v3/panels/SitePanel.tsx": 3,
+  "apps/web/src/components/pm/site-editor-v3/panels/StylingPanel.tsx": 2,
+  "apps/web/src/components/pm/site-editor-v3/panels/UrgentNoticeForm.tsx": 2,
+  "apps/web/src/components/pm/site-editor-v3/panels/UrgentNoticePanel.tsx": 1,
+  "apps/web/src/components/pm/site-editor-v3/PhoneGate.tsx": 2,
+  "apps/web/src/components/pm/site-editor-v3/PreviewDialog.tsx": 1,
+  "apps/web/src/components/pm/site-editor-v3/publish/PublishSheet.tsx": 4
+}

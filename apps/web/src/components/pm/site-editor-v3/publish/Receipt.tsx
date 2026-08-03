@@ -29,6 +29,16 @@ export interface ReceiptProps {
   attempted: string;
   /** What happened. The server's message, verbatim, when there is one. */
   outcome: string;
+  /**
+   * The individual reasons behind `outcome`, when the server sent any.
+   *
+   * A `ValidationError` refusing a publish carries a `fields` array naming each
+   * offending page and what is wrong with it; `outcome` alone is the summary
+   * sentence ("This site cannot be published yet."), which on its own tells the
+   * PM nothing they can act on. Rendered as a list rather than folded into
+   * `outcome` so several reasons stay several reasons.
+   */
+  reasons?: readonly string[];
   /** What to do next. Never omitted — a receipt with no next step is a dead end. */
   nextStep: string;
   /** Optional action, e.g. "Try again". */
@@ -68,6 +78,7 @@ export function Receipt({
   status,
   attempted,
   outcome,
+  reasons,
   nextStep,
   action,
   onDismiss,
@@ -96,6 +107,16 @@ export function Receipt({
           <p className="font-semibold text-content">{tone.label}</p>
           <p className="text-content-secondary">{attempted}</p>
           <p className="text-content break-words">{outcome}</p>
+          {reasons && reasons.length > 0 ? (
+            <ul
+              data-testid="publish-receipt-reasons"
+              className="list-disc space-y-1 pl-5 text-content break-words"
+            >
+              {reasons.map((reason) => (
+                <li key={reason}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
           <p className="text-content-secondary">{nextStep}</p>
           {action ? <div className="pt-2">{action}</div> : null}
         </div>

@@ -13,15 +13,18 @@
  * any single component's markup.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { SiteEditorProvider } from '@/components/pm/site-editor-v3/editor-context';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
 import { SitePanel } from '@/components/pm/site-editor-v3/panels/SitePanel';
+import { PagesPanel } from '@/components/pm/site-editor-v3/panels/PagesPanel';
+import type { SitePageSummary } from '@/hooks/use-site-pages';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
@@ -39,6 +42,13 @@ global.ResizeObserver = class ResizeObserver {
 // reads as an unrelated component breaking rather than a mock being short.
 // Anything FloatControls' undo path reaches has to be listed.
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
+  // Phase 11b-3: the Pages panel reads the block list so the permanent-delete
+  // dialog can say how many sections go with the page (D36′). Empty here — the
+  // audit is of the list's markup, not of a count.
+  useContentBlocks: () => ({ data: [] }),
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
@@ -67,6 +77,29 @@ vi.mock('@/hooks/use-urgent-notice', () => ({
     ['pm', 'site', 'urgent-notice', communityId] as const,
 }));
 
+// Phase 11b-3. Same rule as above — mock the module COMPLETELY.
+const sitePagesMock = vi.hoisted(() => ({
+  data: undefined as unknown,
+  isPending: false,
+  isError: false,
+}));
+vi.mock('@/hooks/use-site-pages', () => ({
+  useSitePages: () => ({
+    data: sitePagesMock.data,
+    isPending: sitePagesMock.isPending,
+    isError: sitePagesMock.isError,
+    error: null,
+    refetch: vi.fn(),
+  }),
+  useCreateSitePage: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUpdateSitePage: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useReorderSitePages: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useDeleteSitePage: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUnstageSitePageDelete: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  applyPageOrder: (pages: unknown) => pages,
+  sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId] as const,
+}));
+
 // The inspector docks at >=1280px; false = wide. Both modes are audited.
 const isNarrowMock = vi.hoisted(() => ({ value: false }));
 vi.mock('@/hooks/use-media-query', () => ({
@@ -74,8 +107,18 @@ vi.mock('@/hooks/use-media-query', () => ({
   useIsDesktop: () => !isNarrowMock.value,
 }));
 
+// `pageId` is REQUIRED on SiteBlockSummary (D13'), but `apps/web/tsconfig.json`
+// includes only `src/**`, so nothing typechecks this file — a missing `pageId`
+// would silently yield `undefined` and `blocksForPage` would throw the first
+// time these rows reached a page-scoped surface. It is a real page id, not
+// `null`: `blocksForPage` deliberately EXCLUDES unadopted (`null`) rows when a
+// page is selected, so `null` here would make the whole fixture vanish rather
+// than render. 1 is SITE_PAGES[0] below, the home page.
+const FIXTURE_PAGE_ID = 1;
+
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: FIXTURE_PAGE_ID,
     blockType: 'text',
     blockOrder: overrides.id,
     content: {},
@@ -94,6 +137,7 @@ const BLOCKS: SiteBlockSummary[] = [
 
 function renderEditorSurfaces() {
   return render(
+    <UndoableRemoveProvider communityId={7}>
     <SiteEditorProvider communityId={7} blocks={BLOCKS}>
       <div>
         <SectionList />
@@ -106,13 +150,53 @@ function renderEditorSurfaces() {
         </div>
         <Inspector communityId={7} />
       </div>
-    </SiteEditorProvider>,
+    </SiteEditorProvider>
+    </UndoableRemoveProvider>,
   );
 }
+
+const SITE_PAGES: SitePageSummary[] = [
+  {
+    id: 1,
+    name: 'Home',
+    slug: '',
+    inNav: true,
+    sortOrder: 0,
+    isHome: true,
+    isDraft: false,
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    deleteStagedAt: null,
+  },
+  {
+    id: 2,
+    name: 'Amenities',
+    slug: 'amenities',
+    inNav: false,
+    sortOrder: 1,
+    isHome: false,
+    isDraft: true,
+    publishedAt: null,
+    deleteStagedAt: null,
+  },
+  {
+    id: 3,
+    name: 'Board',
+    slug: 'board',
+    inNav: true,
+    sortOrder: 2,
+    isHome: false,
+    isDraft: false,
+    publishedAt: '2026-07-01T00:00:00.000Z',
+    deleteStagedAt: '2026-07-30T00:00:00.000Z',
+  },
+];
 
 beforeEach(() => {
   vi.clearAllMocks();
   isNarrowMock.value = false;
+  sitePagesMock.data = SITE_PAGES;
+  sitePagesMock.isPending = false;
+  sitePagesMock.isError = false;
 });
 
 describe('Website editor v3 — axe', () => {
@@ -175,6 +259,162 @@ describe('Urgent notice — axe (Phase 7)', () => {
         notice={{ urgentNoticeText: 'Boil water order in effect', urgentNoticeExpiresAt: null }}
       />,
     );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Pages panel — axe (Phase 11b-3)', () => {
+  /*
+   * Every DATA state, and the disclosure states that contain form controls.
+   *
+   * The data states — loading skeleton, error banner, empty — are what a PM
+   * meets on a bad connection, and an unlabelled control there is exactly as
+   * inaccessible as one in the list.
+   *
+   * The disclosure states are where the markup actually is, and for a while
+   * they were audited nowhere. Every `Input`, `Label`, `role="alert"`,
+   * `aria-pressed` toggle and destructive button this phase added lives inside
+   * either the expanded row editor or the add form, and both are collapsed on
+   * first paint — so four green audits covered a panel whose forms no audit had
+   * ever seen.
+   *
+   * An axe audit has no single-line revert target, so instead: ANTI-VACUITY,
+   * verified by running it. Dropping `htmlFor` from the expanded editor's
+   * `Page name` label reddens BOTH expanded cases and leaves all four collapsed
+   * audits GREEN — the proof they see markup no existing case could.
+   *
+   * The two reds are not the same kind, and saying so matters: the first fails
+   * at `toHaveNoViolations` (a genuine axe orphaned-label violation), the second
+   * fails EARLIER, at `getByLabelText('Page name')`, before axe runs at all. So
+   * the second case's axe assertion is not what that probe exercises.
+   *
+   * **Each of the other two cases carries its OWN probe, and the probes are not
+   * interchangeable.** The add-form and staged-row bodies are different
+   * containers and stay green under the `htmlFor` one. Citing a single probe
+   * for all four is the mistake this file has already made twice.
+   *
+   * The STAGED row's expanded editor is a structurally different body — no
+   * name/slug inputs, a cancel-removal control instead — so it gets its own case
+   * rather than riding on the draft row's.
+   */
+  function renderPages(selectedPageId: number | null = 1) {
+    return render(
+      <PagesPanel
+        communityId={7}
+        selectedPageId={selectedPageId}
+        restoreFocusToSelectedRow={false}
+        onFocusRestored={vi.fn()}
+        onSelectPage={vi.fn()}
+        onPageRemoved={vi.fn()}
+      />,
+    );
+  }
+
+  it('has no violations with the page list loaded', async () => {
+    const { container } = renderPages();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations while the list is loading', async () => {
+    sitePagesMock.isPending = true;
+    sitePagesMock.data = undefined;
+    const { container } = renderPages(null);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations when the read failed', async () => {
+    sitePagesMock.isError = true;
+    sitePagesMock.data = undefined;
+    const { container } = renderPages(null);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the empty state', async () => {
+    sitePagesMock.data = [];
+    const { container } = renderPages(null);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in an expanded page editor', async () => {
+    // Page 2 is a DRAFT, so this reaches the widest form: the name field, the
+    // address field (D32′ renders it only on a never-published page), the
+    // nav-visibility toggle and the destructive remove button.
+    const user = userEvent.setup();
+    const { container } = renderPages(2);
+
+    await user.click(screen.getByTestId('site-page-settings-2'));
+    await screen.findByTestId('site-page-editor-2');
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the expanded editor while both fields are refused', async () => {
+    // The error state, not just the resting one: `aria-invalid`,
+    // `aria-describedby` and the `role="alert"` text only exist once a value is
+    // rejected, so the resting audit cannot see them.
+    const user = userEvent.setup();
+    const { container } = renderPages(2);
+
+    await user.click(screen.getByTestId('site-page-settings-2'));
+    const editor = within(await screen.findByTestId('site-page-editor-2'));
+    // "Home" is page 1's name — LIVE and un-staged, so it is genuinely taken.
+    //
+    // This used to type "Board", page 3's name, and the comment called it "a
+    // real clash". It is not: page 3 carries `deleteStagedAt`, `pageIssues`
+    // builds `seenNames` only from `live` (`pages.ts` — `const live =
+    // pages.filter((page) => !page.deleteStaged)`), and a staged page's NAME is
+    // deliberately free (no unique index — `toValidationShape` says so). So no
+    // name issue was raised at all, the alert assertion below was satisfied by
+    // the SLUG alert alone, and the name field's `aria-invalid` /
+    // `aria-describedby` / `role="alert"` triple — the whole reason this case
+    // exists — was audited nowhere in the suite.
+    await user.clear(editor.getByLabelText('Page name'));
+    await user.type(editor.getByLabelText('Page name'), 'Home');
+    await user.clear(editor.getByLabelText('Web address'));
+    await user.type(editor.getByLabelText('Web address'), 'board');
+
+    // BOTH, counted — `toBeGreaterThan(0)` was satisfied by either one alone,
+    // which is how the name half went unaudited while the case was named for it.
+    expect(editor.getAllByRole('alert')).toHaveLength(2);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the expanded editor of a page staged for removal', async () => {
+    // Page 3 carries `deleteStagedAt`, which suppresses the name and address
+    // controls entirely (renaming a page on its way out is not a thing the
+    // panel offers) and puts a cancel-removal control in their place. Different
+    // markup, so a different audit — and the `htmlFor` probe above cannot reach
+    // it, since this body has no labelled input at all.
+    //
+    // Anti-vacuity for THIS case, verified: wrapping "Cancel removal" in an
+    // `aria-hidden` span (leaving the button with no accessible name) reddens
+    // this case and nothing else — 1 failed / 15 passed.
+    const user = userEvent.setup();
+    const { container } = renderPages(3);
+
+    await user.click(screen.getByTestId('site-page-settings-3'));
+    await screen.findByTestId('site-page-editor-3');
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the add-a-page form', async () => {
+    // Anti-vacuity for THIS case, verified: wrapping the SUBMIT BUTTON's label
+    // (`{createPage.isPending ? 'Adding…' : 'Add page'}`) in an
+    // `<span aria-hidden="true">` leaves the button with no accessible name —
+    // 1 red / 15 passed, and the red is at `toHaveNoViolations`.
+    //
+    // NOT `htmlFor` on this form's own `Page name` label, which was the first
+    // probe recorded here and does not prove what it claims: it reddens this
+    // case at `findByLabelText` two lines below, BEFORE axe runs, leaving the
+    // axe assertion unexercised. That is exactly the distinction the header
+    // draws for the expanded cases — written, and then not applied here.
+    const user = userEvent.setup();
+    const { container } = renderPages();
+
+    await user.click(screen.getByRole('button', { name: 'Add a page' }));
+    await screen.findByLabelText('Page name');
+
     expect(await axe(container)).toHaveNoViolations();
   });
 });

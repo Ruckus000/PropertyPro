@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { usePublishedBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
+import { describeSectionRemoval } from '@/lib/site-editor/describe-section-state';
 
 const ConfirmDialog = dynamic(
   () => import('../ConfirmDialog').then((m) => m.ConfirmDialog),
@@ -44,6 +45,29 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
   const { canMove, move, isMoving } = useSiteEditor();
   const { isConfirmOpen, setConfirmOpen, requestRemove, confirmRemove, isPending } =
     useUndoableRemove(communityId, block);
+
+  /*
+   * Whether this slot has a PUBLISHED row, which is what decides whether the
+   * removal is staged or immediate.
+   *
+   * The same discriminator the server uses — `site-blocks-service.ts` computes
+   * `rows.some((r) => !r.isDraft)` at this slot — read on the client so the
+   * confirm dialog can say which of the two things is about to happen. The
+   * toast already branched on the server's answer; the dialog asserted both
+   * shapes at once and was wrong for every never-published section.
+   *
+   * Costs no request: `usePublishedBlocks` shares the blocks query key and
+   * differs only by `select` (see use-content-blocks.ts).
+   *
+   * Matched on `(pageId, blockOrder)` rather than on row id, because a section
+   * is re-inserted on every write — ids churn, and the draft row's id is not the
+   * published row's. `block.pageId` is the page this section belongs to, which
+   * is what the server compares too.
+   */
+  const { data: publishedBlocks } = usePublishedBlocks(communityId);
+  const hasPublishedCounterpart = (publishedBlocks ?? []).some(
+    (row) => row.pageId === block.pageId && row.blockOrder === block.blockOrder,
+  );
   // Focus returns here when the confirm closes — the dialog has no registered
   // Radix trigger because it is mounted on demand. See ConfirmDialog.
   const trashRef = useRef<HTMLButtonElement>(null);
@@ -118,7 +142,7 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
             onOpenChange={setConfirmOpen}
             restoreFocusTo={trashRef}
             title={`Remove the ${label} section?`}
-            description="It disappears from your site straight away, and from the live site the next time you publish. You'll have a moment to undo it."
+            description={describeSectionRemoval(hasPublishedCounterpart).text}
             confirmLabel="Remove section"
             cancelLabel="Keep section"
             destructive

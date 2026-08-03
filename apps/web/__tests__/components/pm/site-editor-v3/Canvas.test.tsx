@@ -1,9 +1,11 @@
 /**
- * The editor canvas — render path, states, and ordering.
+ * The editor canvas — render path, states, ordering, and page scope.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Canvas, sortBlocks } from '@/components/pm/site-editor-v3/canvas/Canvas';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
+import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 
 const blocksState = vi.hoisted(() => ({
@@ -12,6 +14,9 @@ const blocksState = vi.hoisted(() => ({
 const refetch = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-content-blocks', () => ({
+  // FloatControls reads the published side to decide whether a removal is
+  // staged or immediate; a factory missing it yields `undefined` at call time.
+  usePublishedBlocks: () => ({ data: [] }),
   useContentBlocks: () => ({ ...blocksState.value, refetch }),
   // Reached through SectionShell → FloatControls, which wraps every block.
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
@@ -78,8 +83,31 @@ const CONTEXT: CanvasContext = {
   },
 };
 
+/** The two pages every scope case uses. HOME is what EditorRoot seeds. */
+const HOME_PAGE_ID = 10;
+const ABOUT_PAGE_ID = 11;
+
+/**
+ * Renders with no `SelectedSitePageProvider`, so `useSelectedSitePage()` is
+ * `null` and the canvas shows the whole (single-page) list — the pre-11b-3
+ * behaviour every state/ordering case below is about.
+ */
 function renderCanvas() {
-  return render(<Canvas communityId={7} context={CONTEXT} now={NOW} />);
+  return render(
+    <UndoableRemoveProvider communityId={7}>
+      <Canvas communityId={7} context={CONTEXT} now={NOW} />
+    </UndoableRemoveProvider>,
+  );
+}
+
+function renderCanvasOnPage(pageId: number | null) {
+  return render(
+    <UndoableRemoveProvider communityId={7}>
+      <SelectedSitePageProvider pageId={pageId}>
+        <Canvas communityId={7} context={CONTEXT} now={NOW} />
+      </SelectedSitePageProvider>
+    </UndoableRemoveProvider>,
+  );
 }
 
 beforeEach(() => {
@@ -110,7 +138,7 @@ describe('Canvas — states', () => {
 
   it('shows an empty state rather than a blank canvas', () => {
     renderCanvas();
-    expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+    expect(screen.getByText('This page is empty')).toBeInTheDocument();
     // No handler passed: the copy still stands on its own, and no dead button
     // is rendered.
     expect(screen.queryByRole('button', { name: 'Add a section' })).not.toBeInTheDocument();
@@ -133,6 +161,7 @@ describe('Canvas — rendering blocks', () => {
       data: [
         {
           id: 10,
+          pageId: HOME_PAGE_ID,
           blockType: 'text',
           blockOrder: 0,
           content: { heading: 'About us', body: 'A community.' },
@@ -156,6 +185,7 @@ describe('Canvas — rendering blocks', () => {
       data: [
         {
           id: 11,
+          pageId: HOME_PAGE_ID,
           blockType: 'announcements',
           blockOrder: 0,
           content: { limit: 5, timeWindowDays: 30 },
@@ -178,6 +208,7 @@ describe('Canvas — rendering blocks', () => {
       data: [
         {
           id: 12,
+          pageId: HOME_PAGE_ID,
           blockType: 'announcements',
           blockOrder: 0,
           content: {},
@@ -198,23 +229,24 @@ describe('Canvas — rendering blocks', () => {
     // them before filtering left a bare bordered box with no explanation.
     blocksState.value = {
       data: [
-        { id: 20, blockType: 'tombstone', blockOrder: 0, content: {}, isDraft: true, publishedAt: null },
-        { id: 21, blockType: 'tombstone', blockOrder: 1, content: {}, isDraft: true, publishedAt: null },
+        { id: 20, pageId: HOME_PAGE_ID, blockType: 'tombstone', blockOrder: 0, content: {}, isDraft: true, publishedAt: null },
+        { id: 21, pageId: HOME_PAGE_ID, blockType: 'tombstone', blockOrder: 1, content: {}, isDraft: true, publishedAt: null },
       ],
       isPending: false,
       isError: false,
       error: null,
     };
     renderCanvas();
-    expect(screen.getByText('Your site is empty')).toBeInTheDocument();
+    expect(screen.getByText('This page is empty')).toBeInTheDocument();
   });
 
   it('skips a block type it has no view for instead of crashing', () => {
     blocksState.value = {
       data: [
-        { id: 13, blockType: 'tombstone', blockOrder: 0, content: {}, isDraft: true, publishedAt: null },
+        { id: 13, pageId: HOME_PAGE_ID, blockType: 'tombstone', blockOrder: 0, content: {}, isDraft: true, publishedAt: null },
         {
           id: 14,
+          pageId: HOME_PAGE_ID,
           blockType: 'text',
           blockOrder: 1,
           content: { heading: 'Still here', body: 'Rendered anyway.' },
@@ -231,9 +263,110 @@ describe('Canvas — rendering blocks', () => {
   });
 });
 
+describe('Canvas — page scope (D-C2)', () => {
+  const textBlock = (id: number, pageId: number | null, heading: string) => ({
+    id,
+    pageId,
+    blockType: 'text',
+    blockOrder: id,
+    content: { heading, body: `Body of ${heading}.` },
+    isDraft: true,
+    publishedAt: null,
+  });
+
+  function twoPages() {
+    blocksState.value = {
+      data: [
+        textBlock(2, HOME_PAGE_ID, 'Home section'),
+        textBlock(3, ABOUT_PAGE_ID, 'About section'),
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+  }
+
+  it('renders only the selected page and not another page', () => {
+    // THE regression. `useContentBlocks` returns EVERY page's blocks in one
+    // response, so an unscoped canvas renders the whole site under whichever
+    // page is open — and clicking a foreign section hands the inspector a block
+    // that any edit writes against the wrong page.
+    twoPages();
+    renderCanvasOnPage(ABOUT_PAGE_ID);
+
+    expect(screen.getByText('About section')).toBeInTheDocument();
+    expect(screen.queryByText('Home section')).not.toBeInTheDocument();
+  });
+
+  it('follows the selection back to the home page', () => {
+    twoPages();
+    renderCanvasOnPage(HOME_PAGE_ID);
+
+    expect(screen.getByText('Home section')).toBeInTheDocument();
+    expect(screen.queryByText('About section')).not.toBeInTheDocument();
+  });
+
+  it('shows the empty state for a page that has no sections of its own', () => {
+    // Without page scoping this rendered the OTHER page's sections and looked
+    // like a working page, which is how an edit lands on the wrong one.
+    //
+    // The COPY is asserted here as well as the state, and that is the point of
+    // the string this expects. For two rounds the canvas said "Your site is
+    // empty" on a page-scoped surface — so the PM's first act after creating a
+    // second page was being told their whole site had gone. `Canvas.tsx`'s own
+    // comment claimed the opposite behaviour throughout.
+    twoPages();
+    renderCanvasOnPage(99);
+
+    expect(screen.getByText('This page is empty')).toBeInTheDocument();
+    expect(screen.queryByText(/your site is empty/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Home section')).not.toBeInTheDocument();
+    expect(screen.queryByText('About section')).not.toBeInTheDocument();
+  });
+
+  it('shows everything when no page is selected, rather than blanking', () => {
+    // A provider that has not resolved a page yet supplies null. Filtering to
+    // nothing there would blank a single-page community's canvas on every load.
+    twoPages();
+    renderCanvasOnPage(null);
+
+    expect(screen.getByText('Home section')).toBeInTheDocument();
+    expect(screen.getByText('About section')).toBeInTheDocument();
+  });
+
+  it('does not fold an unadopted (pageId null) row into the selected page', () => {
+    // A pre-11b row no write path has adopted yet. Rendering it on every page
+    // would let an edit made while page B is open rewrite it — the same
+    // cross-page write this scoping exists to stop.
+    blocksState.value = {
+      data: [textBlock(2, HOME_PAGE_ID, 'Home section'), textBlock(4, null, 'Orphan section')],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderCanvasOnPage(HOME_PAGE_ID);
+
+    expect(screen.getByText('Home section')).toBeInTheDocument();
+    expect(screen.queryByText('Orphan section')).not.toBeInTheDocument();
+  });
+
+  it('fails loudly on a block with an undefined pageId instead of hiding it', () => {
+    // `__tests__` is outside the typecheck program, so a stale fixture would
+    // otherwise type-check fine and silently vanish from the canvas — exactly
+    // the symptom this slice exists to make impossible (D13′).
+    blocksState.value = {
+      data: [{ id: 5, blockType: 'text', blockOrder: 5, content: {}, isDraft: true, publishedAt: null }],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    expect(() => renderCanvasOnPage(HOME_PAGE_ID)).toThrow(/undefined pageId/);
+  });
+});
+
 describe('sortBlocks', () => {
   const b = (id: number, blockType: string, blockOrder: number) =>
-    ({ id, blockType, blockOrder, content: {}, isDraft: false, publishedAt: null }) as never;
+    ({ id, pageId: HOME_PAGE_ID, blockType, blockOrder, content: {}, isDraft: false, publishedAt: null }) as never;
 
   it('pins the hero first regardless of its stored order', () => {
     // The published site always leads with the hero; the canvas has to agree or

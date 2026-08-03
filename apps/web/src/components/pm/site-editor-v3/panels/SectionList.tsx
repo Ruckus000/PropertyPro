@@ -27,7 +27,7 @@ export interface SectionListProps {
 }
 
 /**
- * The Sections tool panel: the community's content sections in slot order, with
+ * The Sections tool panel: the SELECTED PAGE's content sections in slot order, with
  * two equally capable ways to reorder them.
  *
  * **Why native HTML5 drag-and-drop.** `@dnd-kit` is deliberately not a
@@ -89,8 +89,15 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
         <EmptyState
           size="sm"
           icon={Layers}
-          title="Add your first section"
-          description="Sections you add to your site show up here, ready to reorder."
+          // PAGE-scoped, like the list it stands in for. `movableSections` has
+          // been narrowed to the selected page since D-C2, so on a PM's second
+          // page "Add your first section" / "your site" was flatly false beside
+          // a 12-section home page — and contradicted the canvas one column
+          // over, which says "This page is empty". Round 5 corrected the canvas
+          // copy from a hand-written list of surfaces that did not include this
+          // one; this is the same panel's half of that fix.
+          title="This page has no sections yet"
+          description="Sections you add to this page show up here, ready to reorder."
           action={
             onAddSection && (
               <Button type="button" size="sm" onClick={onAddSection}>

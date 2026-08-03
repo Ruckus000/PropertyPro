@@ -5,10 +5,33 @@ import { Button } from '@/components/ui/button';
 
 export interface EditorTopBarProps {
   communityName: string;
+  /**
+   * The site page currently being edited (Phase 11b-3).
+   *
+   * Optional because it is genuinely absent while the pages read is in flight
+   * or has failed — not because a caller may skip it. `EditorRoot` always
+   * passes `selectedPage?.name`.
+   *
+   * Load-bearing since the editor became multi-page: every other surface that
+   * names what you are editing (the canvas, the preview, the Pages panel) is
+   * either scrolled away or behind a tab, so with the Sections tool open there
+   * was nothing on screen at all distinguishing page B from the home page —
+   * while every write went to page B.
+   */
+  pageName?: string;
   /** Rendered on the right, before the actions — the save status line (Phase 3). */
   status?: React.ReactNode;
-  onPreview?: () => void;
-  onPublish?: () => void;
+  /**
+   * Required, for the same reason `canOpenPublish` and `canPreview` below are.
+   *
+   * These are the other half of each button. A missing `can*` prop yields a
+   * button disabled for everyone; a missing handler yields one ENABLED and
+   * inert, which is strictly worse — it invites the click and swallows it. Both
+   * have exactly one production caller, so requiring them costs nothing and
+   * removes the shape that shipped 11b-1's dead publish button.
+   */
+  onPreview: () => void;
+  onPublish: () => void;
   /**
    * Whether Publish opens the review sheet. Required and undefaulted on
    * purpose: this prop shipped optional with a `= 0` default (as `changeCount`)
@@ -21,6 +44,54 @@ export interface EditorTopBarProps {
    * and offer a retry, so a load error must not lock the PM out of it.
    */
   canOpenPublish: boolean;
+  /**
+   * Whether Preview can render a truthful page.
+   *
+   * Required and undefaulted for the same reason `canOpenPublish` is.
+   *
+   * False whenever the dialog would not render, which is TWO states, not one:
+   *
+   *  - both page reads failed — the dialog is page-scoped, and with no page id
+   *    `blocksForPage` returns every page's sections, so the preview would show
+   *    a site that exists at no URL while claiming to be "what visitors see
+   *    once you publish";
+   *  - the canvas context is null — the community row could not be read, and
+   *    the dialog is gated on it having a theme to render with.
+   *
+   * It must track EVERY conjunct of that render gate. It first shipped tracking
+   * only the page-read one, which left the button live and inert in the
+   * canvas-context state — precisely the "enabled and swallows the click" shape
+   * the paragraph below rules out.
+   *
+   * Disabled with a title rather than hidden, matching Publish — and rather
+   * than left enabled over a gated dialog, which would give the PM a button
+   * that visibly does nothing.
+   */
+  canPreview: boolean;
+  /**
+   * Why Preview is unavailable, in the parent's words.
+   *
+   * Required alongside `canPreview` rather than hard-coded here, because only
+   * the parent knows WHICH conjunct of the render gate is false. A single
+   * sentence baked into this file blamed the pages read on a screen where the
+   * pages had loaded and the community row had not — advice to retry something
+   * that did not fail. Whoever widens the condition must widen the reason.
+   */
+  previewDisabledReason: string;
+  /**
+   * Focus destination when the parent hands focus back — see `EditorRoot`'s
+   * preview-gate effect, which takes focus to a failure banner and must return
+   * it once the banner goes away.
+   *
+   * Required, for the same reason as `previewDisabledReason` above: the return
+   * leg is `queueMicrotask(() => previewButtonRef.current?.focus())`, and
+   * `.current` on a ref that was never attached is null. Optional, the prop
+   * could be dropped at either seam and the effect would silently no-op —
+   * landing the PM on `<body>` at the top of a document whose main surface has
+   * just been replaced, which is the exact state that effect exists to prevent.
+   * A missing prop must fail typecheck, not fail quietly on a keyboard.
+   */
+  previewButtonRef: React.Ref<HTMLButtonElement>;
 }
 
 /**
@@ -35,10 +106,14 @@ export interface EditorTopBarProps {
  */
 export function EditorTopBar({
   communityName,
+  pageName,
   status,
   onPreview,
   onPublish,
   canOpenPublish,
+  canPreview,
+  previewDisabledReason,
+  previewButtonRef,
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[52px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3.5">
@@ -47,9 +122,30 @@ export function EditorTopBar({
         <span className="truncate text-xs text-content-secondary">{communityName}</span>
       </span>
 
+      {/*
+       * Outside the `<h1>`'s span rather than inside it: the heading is the
+       * route's identity and the breadcrumb trail's leaf, and it must not
+       * change every time the PM clicks a different page in the Pages panel.
+       */}
+      {pageName ? (
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-content-secondary">
+          <span aria-hidden="true">/</span>
+          <span className="truncate font-medium text-content" data-testid="editing-page-name">
+            {pageName}
+          </span>
+        </span>
+      ) : null}
+
       <div className="ml-auto flex min-w-0 items-center gap-2.5">
         {status}
-        <Button variant="outline" size="sm" onClick={onPreview}>
+        <Button
+          ref={previewButtonRef}
+          variant="outline"
+          size="sm"
+          onClick={onPreview}
+          disabled={!canPreview}
+          title={canPreview ? undefined : previewDisabledReason}
+        >
           <Eye className="h-4 w-4" aria-hidden="true" />
           Preview
         </Button>

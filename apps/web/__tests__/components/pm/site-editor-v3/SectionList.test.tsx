@@ -44,8 +44,11 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
   },
 }));
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function section(id: number, blockType: string, blockOrder: number, isDraft = false) {
-  return { id, blockType, blockOrder, content: {}, isDraft, publishedAt: null };
+  return { id, pageId: HOME_PAGE_ID, blockType, blockOrder, content: {}, isDraft, publishedAt: null };
 }
 
 /** Slot orders deliberately non-contiguous — `toOrder` is a slot, not an index. */
@@ -98,8 +101,30 @@ describe('SectionList — rendering', () => {
   it('shows an empty state rather than a bare list when there are no sections', () => {
     state.sections = [];
     render(<SectionList />);
-    expect(screen.getByText('Add your first section')).toBeInTheDocument();
+    expect(screen.getByText('This page has no sections yet')).toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('scopes the empty state to the PAGE, not the site', () => {
+    /*
+     * `movableSections` has been page-scoped since D-C2, so this panel's empty
+     * state is reached on a PM's second page while home still holds a dozen
+     * sections. It said "Add your first section" / "Sections you add to YOUR
+     * SITE" — false on both counts, and contradicting the canvas one column
+     * over, which round 5 corrected to "This page is empty" for exactly this
+     * reason. Round 5's fix list was hand-written and this panel was not on it.
+     *
+     * Revert check (production line): the `title`/`description` pair on
+     * `SectionList.tsx`'s `EmptyState`.
+     */
+    state.sections = [];
+    render(<SectionList />);
+
+    // BOTH lines are page-scoped — the title and the description. Matching
+    // once would pass on a fix that corrected only the heading.
+    expect(screen.getAllByText(/this page/i)).toHaveLength(2);
+    expect(screen.queryByText(/your site/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/your first section/i)).not.toBeInTheDocument();
   });
 
   it('offers a way to add when the empty state names adding', () => {
@@ -116,7 +141,7 @@ describe('SectionList — rendering', () => {
   it('still renders standalone without an add handler', () => {
     state.sections = [];
     render(<SectionList />);
-    expect(screen.getByText('Add your first section')).toBeInTheDocument();
+    expect(screen.getByText('This page has no sections yet')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add a section' })).not.toBeInTheDocument();
   });
 });

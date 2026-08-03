@@ -13,8 +13,12 @@ import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 import { useCanvasSelection } from '@/components/pm/site-editor-v3/canvas/use-canvas-selection';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
+/** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
+const HOME_PAGE_ID = 10;
+
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: overrides.id,
     content: {},

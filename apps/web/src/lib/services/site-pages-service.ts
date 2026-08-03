@@ -155,9 +155,24 @@ const PAGE_COLUMNS = {
  *     inserted without a page.
  *
  * So this ALSO adopts any of the community's page-less blocks — the same
- * `page_id` UPDATE the migration ran, scoped to one community. That makes the
- * function self-healing rather than merely lazy, which matters because 11c sets
- * `page_id NOT NULL` and every NULL left behind is a failed migration.
+ * `page_id` UPDATE the migration ran, scoped to one community.
+ *
+ * **That healing now reaches WRITE paths only, and 11c must not rely on it.**
+ * It used to run on every `listSitePages` call, so merely opening the editor
+ * repaired a community. `listSitePages` is now a lock-free read on the common
+ * path (it has to be — it runs on every editor load and every pages refetch),
+ * and this is an UPDATE, so it cannot ride along. A community whose blocks
+ * carry `page_id NULL`, and which already has a home page, is now repaired only
+ * when someone writes a block.
+ *
+ * 11c sets `page_id NOT NULL`, and every NULL left behind fails that migration.
+ * The migration therefore needs its own backfill rather than assuming traffic
+ * has healed everything — do not delete this paragraph without adding it.
+ *
+ * Also recorded outside this file, in the 11b-3 plan's "Hand-off to 11c"
+ * section, alongside the two other assumptions that expire with 11c (the
+ * community-unique `block_order`, and `publishedPageBaseline`'s premise). A
+ * comment only reaches whoever opens the file it is in.
  *
  * `is_draft` is derived exactly as 0046's backfill derived it: published if any
  * live block of the community is published, draft otherwise. A community with no
@@ -172,9 +187,18 @@ export async function ensureHomePage(
   tx?: Tx,
   options: EnsureHomePageOptions = {},
 ): Promise<number> {
-  // A caller's `tx` already holds the community lock — every entry point in this
-  // file and in site-blocks-service takes it first. When opening our own
-  // transaction we have to take it too: without it, two concurrent first-touches
+  // A caller passing `tx` MUST already hold the community lock. Every write
+  // path in this file and in site-blocks-service takes it first. (That was not
+  // true until 11b-3: `upsertPublishedBlock` was the one exception, and it is
+  // what made D-SLOT's widened slot guard a read-then-write with nothing under
+  // it. Do not add another exception.)
+  //
+  // `listSitePages` is the one READ that reaches here, and it takes the lock
+  // only on the branch that calls this — its fast path returns before it. That
+  // is the contract: unlocked reads must not reach this function.
+  //
+  // When opening our own transaction we take the lock too: without it, two
+  // concurrent first-touches
   // of the same community both pass the find-then-insert and the loser hits
   // `site_pages_community_home_partial` as an opaque 500. The index keeps the data
   // correct either way; the lock is what keeps the error out of the PM's face.
@@ -303,20 +327,56 @@ export interface ListSitePagesOptions {
  * The community's pages in nav order (home first). Ensures the home page exists,
  * so a brand-new community's editor opens on a real page rather than an empty
  * list it cannot act on.
+ *
+ * The ensure is LAZY: it costs a locked transaction, so it runs only when the
+ * community genuinely has no pages. Every other call is a plain read. See the
+ * body — the ordering there is what keeps a pages refetch from serializing
+ * against publishes.
  */
 export async function listSitePages(
   communityId: number,
   { includeDrafts = false }: ListSitePagesOptions = {},
 ): Promise<SitePageRecord[]> {
   const db = createUnscopedClient();
+
+  // Fast path: a plain read, no lock and no write.
+  //
+  // This used to lock unconditionally, because the read can CREATE the home
+  // page. But the create is needed only for a community that has never had one,
+  // which is once in a community's lifetime — while the read happens on every
+  // editor load AND on every pages refetch. Paying a `FOR UPDATE` on the
+  // community row for all of them made a read serialize against publishes,
+  // reorders and every other block write.
+  //
+  // Read UNFILTERED and apply the caller's filter here. Deciding on a filtered
+  // read would be a landmine rather than a bug today: a community that has never
+  // published has a DRAFT home page, so an `includeDrafts: false` read comes back
+  // empty and would take the lock on EVERY call for exactly the communities most
+  // likely to be new. Both current callers pass `includeDrafts: true`, so it
+  // would sit there unnoticed until one did not.
+  const existing = await db.transaction(async (tx) =>
+    listPagesInTransaction(communityId, tx, { includeDrafts: true }),
+  );
+  // `some(isHome)`, not `length > 0`. The invariant this function promises is
+  // "a home page exists", and those two only coincide while home is
+  // undeletable. A community with pages but no home would otherwise
+  // short-circuit forever, and `EditorRoot` would fall through to `pages[0]` and
+  // scope every write to a non-home page — the state its own comment calls "a
+  // community whose home flag is somehow unset". Not constructible today; this
+  // is what keeps it that way.
+  if (existing.some((page) => page.isHome)) {
+    return includeDrafts ? existing : existing.filter((page) => !page.isDraft);
+  }
+
+  // No pages at all — the once-per-community case. NOW take the lock: two
+  // concurrent first-touches (two editor tabs, or a load racing a prefetch)
+  // would otherwise both pass find-then-insert and the loser would hit the home
+  // partial unique index as an opaque 500. `ensureHomePageInTransaction` skips
+  // the public wrapper's lock, so it has to be taken here.
+  //
+  // Racing into this branch is safe: the loser blocks on the lock, then
+  // `ensureHomePageInTransaction` finds the home page the winner just made.
   return db.transaction(async (tx) => {
-    // Locked even though this is a read: it can CREATE the home page, and two
-    // concurrent first-touches (two editor tabs, or a load racing a prefetch)
-    // would otherwise both pass find-then-insert and the loser would hit the home
-    // partial unique index as an opaque 500. Calling
-    // `ensureHomePageInTransaction` directly skips the public wrapper's lock, so
-    // the lock has to be taken here — this was the one entry point in the file
-    // without it.
     await lockCommunity(tx, communityId);
     await ensureHomePageInTransaction(communityId, tx);
     return listPagesInTransaction(communityId, tx, { includeDrafts });
@@ -367,6 +427,75 @@ async function loadPage(
 // ---------------------------------------------------------------------------
 
 /**
+ * Refuse a page name another live page in this community already uses.
+ *
+ * The editor runs the same rule through `pageIssues`, but that is a client
+ * check on an endpoint with no feature flag — `site_pages` shipped in 11a and
+ * the pages API has been reachable by any authenticated PM with an HTTP client
+ * ever since. Without this, a duplicate name saves cleanly and then blocks
+ * EVERY subsequent publish: `publishCommunitySite` runs `pageIssues` itself and
+ * throws, naming a page the PM may never have touched. A write that quietly
+ * makes the site unpublishable is worth refusing at the write.
+ *
+ * Compared case-insensitively on the trimmed value, matching `pageIssues`'
+ * `toLowerCase()` — names are nav labels, so two that differ only in case are
+ * indistinguishable to a visitor.
+ *
+ * A page STAGED for removal is skipped, matching `pageIssues`' `live` filter
+ * (`packages/shared/src/site-diff/pages.ts`) and the panel's own note that
+ * staging is what frees a page's name and address for reuse before the publish
+ * lands. Counting it would make this gate stricter than the invariant it
+ * protects: `publishCommunitySite` runs `pageIssues`, so it would publish that
+ * state happily, and the PM would be told a name is taken by a page they have
+ * already marked for deletion — escapable only by publishing the deletion,
+ * which also ships every other pending draft.
+ *
+ * Callers hold the community lock, so the read-then-write is not racy.
+ */
+async function assertNameAvailable(
+  communityId: number,
+  name: string,
+  tx: Tx,
+  {
+    excludePageId,
+    summary,
+  }: {
+    excludePageId?: number;
+    /**
+     * Overrides the top-line message. The clash reads very differently
+     * depending on what the PM just did — "another page uses that name" is
+     * right for a rename, and baffling for someone who clicked "Cancel
+     * removal".
+     */
+    summary?: string;
+  } = {},
+): Promise<void> {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return; // `assertUsableName` owns the empty case.
+
+  const rows = await tx
+    .select({ id: sitePages.id, name: sitePages.name })
+    .from(sitePages)
+    .where(
+      and(
+        eq(sitePages.communityId, communityId),
+        isNull(sitePages.deletedAt),
+        isNull(sitePages.deleteStagedAt),
+      ),
+    );
+
+  const target = trimmed.toLowerCase();
+  const clash = rows.some(
+    (row) => row.id !== excludePageId && row.name.trim().toLowerCase() === target,
+  );
+  if (clash) {
+    throw new ValidationError(summary ?? 'Another page already uses that name.', {
+      fields: [{ field: 'name', message: `Another page is also called "${trimmed}".` }],
+    });
+  }
+}
+
+/**
  * Rejects a slug the community cannot use, with a message a PM can act on.
  *
  * Four failure modes, and RESERVED is the security-relevant one: a community
@@ -376,6 +505,13 @@ async function loadPage(
  * `isReservedPublicSlug`, which derives it from `PROTECTED_FIRST_SEGMENTS`.
  * Never re-list the names here: the routing rule and the validator must not
  * become two lists that drift.
+ *
+ * Unlike `assertNameAvailable` above, this deliberately COUNTS a page staged
+ * for deletion. `site_pages_community_slug_partial` is unique on
+ * `(community_id, slug) WHERE deleted_at IS NULL`, and a staged page still has
+ * `deleted_at` null — so letting a second page claim that slug would turn a
+ * clean `ValidationError` into a raw unique-violation 500. Names carry no such
+ * index, which is what makes the asymmetry correct rather than an oversight.
  */
 export async function assertUsableSlug(
   communityId: number,
@@ -508,6 +644,9 @@ export async function createSitePage({
   return db.transaction(async (tx) => {
     await lockCommunity(tx, communityId);
     await ensureHomePageInTransaction(communityId, tx);
+    // After `ensureHomePage`, so a name colliding with the lazily-created home
+    // page is caught rather than depending on whether home existed yet.
+    await assertNameAvailable(communityId, name, tx);
     await assertUsableSlug(communityId, slug, tx);
 
     const highest = await tx
@@ -596,6 +735,11 @@ export async function updateSitePage({
       throw new ValidationError('The home page always lives at the site root.', {
         fields: [{ field: 'slug', message: 'The home page address cannot be changed.' }],
       });
+    }
+
+    // Inside the lock and before the update, alongside the slug rule it mirrors.
+    if (name !== undefined) {
+      await assertNameAvailable(communityId, name, tx, { excludePageId: pageId });
     }
 
     const slugChanged = slug !== undefined && slug !== current.slug && !current.isHome;
@@ -814,6 +958,25 @@ export async function unstageSitePageDelete({
     if (page.deleteStagedAt === null) {
       throw new ValidationError('That page is not staged for removal.');
     }
+
+    // Staging FREES this page's name (`assertNameAvailable` skips staged rows,
+    // deliberately — names have no unique index). So by the time a removal is
+    // cancelled, another page may legitimately have taken the name, and
+    // restoring this one would put two live pages under it. Nothing downstream
+    // stops that: `publishCommunitySite` runs `pageIssues`, which errors on the
+    // duplicate, so EVERY later publish is blocked — and the PM is told a name
+    // clashes, having last done something they think of as an undo.
+    //
+    // Re-checked here rather than at staging time, because the clash cannot
+    // exist until the replacement is created, which happens after.
+    //
+    // The slug needs no equivalent: a staged page keeps its row inside
+    // `site_pages_community_slug_partial`, so no replacement could ever have
+    // taken its address.
+    await assertNameAvailable(communityId, page.name, tx, {
+      excludePageId: pageId,
+      summary: `Another page is now called "${page.name.trim()}", so this one cannot be restored under that name. Rename the other page first.`,
+    });
 
     await scopedFor(communityId, tx).update(
       sitePages,

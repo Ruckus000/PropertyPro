@@ -17,14 +17,27 @@ import {
   useSiteEditor,
   type SiteEditorContextValue,
 } from '@/components/pm/site-editor-v3/editor-context';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 // `next/dynamic` resolves its import asynchronously, which would make the
 // image flow untestable here. AddImageFlow has its own test file.
 vi.mock('next/dynamic', () => ({
-  default: () => function DynamicStub() {
-    return <div data-testid="add-image-flow" />;
-  },
+  default: () =>
+    // Props are forwarded onto the stub so the page id the panel hands the
+    // upload flow is observable. Without that, `pageId` could be dropped on the
+    // image path and no test in this file would notice — and the image path is
+    // the one that writes AFTER an upload, so a wrong page there also strands
+    // the bytes.
+    function DynamicStub(props: { blockOrder: number | null; pageId: number | null }) {
+      return (
+        <div
+          data-testid="add-image-flow"
+          data-block-order={String(props.blockOrder)}
+          data-page-id={String(props.pageId)}
+        />
+      );
+    },
 }));
 
 const upsertMutateAsync = vi.hoisted(() => vi.fn());
@@ -58,8 +71,13 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
+/** The two pages the page-scope cases use. */
+const HOME_PAGE_ID = 10;
+const ABOUT_PAGE_ID = 11;
+
 function block(overrides: Partial<SiteBlockSummary> & { id: number }): SiteBlockSummary {
   return {
+    pageId: HOME_PAGE_ID,
     blockType: 'text',
     blockOrder: overrides.id,
     content: {},
@@ -78,12 +96,19 @@ function Probe() {
 function renderPanel({
   hasPolishBlocks = true,
   onSelect,
-}: { hasPolishBlocks?: boolean; onSelect?: (id: number) => void } = {}) {
+  pageId = HOME_PAGE_ID,
+}: {
+  hasPolishBlocks?: boolean;
+  onSelect?: (id: number) => void;
+  pageId?: number | null;
+} = {}) {
   return render(
-    <SiteEditorProvider communityId={7} blocks={state.blocks} onSelect={onSelect}>
-      <AddPanel communityId={7} hasPolishBlocks={hasPolishBlocks} />
-      <Probe />
-    </SiteEditorProvider>,
+    <SelectedSitePageProvider pageId={pageId}>
+      <SiteEditorProvider communityId={7} blocks={state.blocks} onSelect={onSelect}>
+        <AddPanel communityId={7} hasPolishBlocks={hasPolishBlocks} />
+        <Probe />
+      </SiteEditorProvider>
+    </SelectedSitePageProvider>,
   );
 }
 
@@ -129,6 +154,7 @@ describe('AddPanel', () => {
       blockType: 'text',
       blockOrder: 3,
       content: expect.objectContaining({ body: expect.any(String) }),
+      pageId: HOME_PAGE_ID,
     });
   });
 
@@ -153,7 +179,8 @@ describe('AddPanel', () => {
   });
 
   it('disables every type while the block list is loading', () => {
-    // `EditorRoot` passes `blocks ?? []`, so loading looks exactly like an
+    // The panel reads `useContentBlocks` itself precisely so it can tell these
+    // apart: collapsing `undefined` to `[]` makes loading look exactly like an
     // empty site — and the slot for an empty site is 2, which would overwrite
     // whatever really sits there.
     state.isPending = true;
@@ -227,10 +254,12 @@ describe('AddPanel', () => {
       ];
       state.blocks = withNew;
       rerender(
-        <SiteEditorProvider communityId={7} blocks={withNew} onSelect={onSelect}>
-          <AddPanel communityId={7} hasPolishBlocks />
-          <Probe />
-        </SiteEditorProvider>,
+        <SelectedSitePageProvider pageId={HOME_PAGE_ID}>
+          <SiteEditorProvider communityId={7} blocks={withNew} onSelect={onSelect}>
+            <AddPanel communityId={7} hasPolishBlocks />
+            <Probe />
+          </SiteEditorProvider>
+        </SelectedSitePageProvider>,
       );
 
       await waitFor(() => expect(api.selection?.blockId).toBe(55));
@@ -274,5 +303,85 @@ describe('AddPanel', () => {
 
     expect(screen.getByTestId('add-image-flow')).toBeInTheDocument();
     expect(upsertMutateAsync).not.toHaveBeenCalled();
+  });
+
+  describe('page targeting', () => {
+    it('computes the next slot from every page, not just the selected one', async () => {
+      // D-C3, and the single most dangerous correction in the phase. `block_order`
+      // is unique across the WHOLE community until 11c drops the surviving
+      // 3-column index, so the slot allocator must see every page's blocks.
+      // Narrowing it to the selected page — which reads like the obvious fix for a
+      // cross-page collision — returns `max(this page) + 1`, here 3, which the
+      // home page already holds. That write is refused by
+      // `assertSlotFreeAcrossPages`, and before that guard existed it was an
+      // opaque 500. Scanning every page is what makes the answer free.
+      //
+      // The fixture is built so the two answers DIFFER — the About page's
+      // highest slot is 5 but the home page runs on to 6, so page-filtering
+      // yields 6 (taken) and scanning every page yields 7 (free). A fixture
+      // where the selected page happens to hold the highest slot passes either
+      // way and proves nothing.
+      state.blocks = [
+        block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+        block({ id: 2, blockOrder: 2 }),
+        block({ id: 3, blockOrder: 3 }),
+        block({ id: 5, pageId: ABOUT_PAGE_ID, blockOrder: 5 }),
+        block({ id: 6, blockOrder: 6 }),
+      ];
+      renderPanel({ pageId: ABOUT_PAGE_ID });
+
+      await userEvent.click(screen.getByTestId('add-section-text'));
+
+      expect(upsertMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ blockOrder: 7 }),
+      );
+      // 6 is `max(About) + 1`, which is what a page-filtered allocator returns —
+      // and the home page is sitting on it.
+      expect(upsertMutateAsync).not.toHaveBeenCalledWith(
+        expect.objectContaining({ blockOrder: 6 }),
+      );
+    });
+
+    it('writes to the selected page, not the home page', async () => {
+      // D-WRITE. The server defaults an ABSENT pageId to the community's HOME
+      // page, so a write that omits it does not fail — it silently rewrites the
+      // live home page. The override is passed explicitly rather than left to the
+      // hook's default because "page being added to" and "page selected" are the
+      // same value by coincidence, not by contract.
+      state.blocks = [
+        block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+        block({ id: 2, pageId: ABOUT_PAGE_ID, blockOrder: 2 }),
+      ];
+      renderPanel({ pageId: ABOUT_PAGE_ID });
+
+      await userEvent.click(screen.getByTestId('add-section-documents'));
+
+      expect(upsertMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ pageId: ABOUT_PAGE_ID }),
+      );
+    });
+
+    it('hands the image flow the same page it would write itself', async () => {
+      renderPanel({ pageId: ABOUT_PAGE_ID });
+      await userEvent.click(screen.getByTestId('add-section-image'));
+
+      expect(screen.getByTestId('add-image-flow')).toHaveAttribute(
+        'data-page-id',
+        String(ABOUT_PAGE_ID),
+      );
+    });
+
+    it('falls back to the server default when no page is selected', async () => {
+      // `null` is what a provider that has not resolved a page yet supplies, and
+      // what `useSelectedSitePage` returns outside a provider. It must reproduce
+      // the pre-11b-3 behaviour rather than throw.
+      renderPanel({ pageId: null });
+
+      await userEvent.click(screen.getByTestId('add-section-documents'));
+
+      expect(upsertMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ pageId: null }),
+      );
+    });
   });
 });

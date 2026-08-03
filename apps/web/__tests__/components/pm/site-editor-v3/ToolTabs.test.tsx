@@ -148,4 +148,36 @@ describe('ToolTabs — gating', () => {
       /Professional feature/,
     );
   });
+
+  it('does not label Pages as a Professional feature on any plan', () => {
+    // Multi-page ships wherever the editor ships — the pages API carries no plan
+    // feature of its own. This pins that Pages stays OUT of `TOOL_PLAN_FEATURE`,
+    // and it is worth pinning in both directions: membership in that map only
+    // adds an sr-only "Professional feature" label, so adding Pages to it in the
+    // belief that it RESTRICTS anything would ship an ungated feature wearing a
+    // Pro badge. Any real gating belongs inside the panel.
+    renderTabs({ proToolAccess: { styling: false, domain: false } });
+    expect(screen.getByRole('tab', { name: /Pages/ })).toBeEnabled();
+    expect(screen.getByRole('tab', { name: /Pages/ })).not.toHaveAccessibleName(
+      /Professional feature/,
+    );
+  });
+});
+
+describe('ToolTabs — the Pages tool (Phase 11b-3)', () => {
+  it('offers Pages immediately before Sections', () => {
+    // Not cosmetic: Sections and Add both operate on whichever page Pages has
+    // selected, so the tool that changes what they show sits beside them.
+    renderTabs();
+    const labels = screen.getAllByRole('tab').map((tab) => tab.textContent);
+    expect(labels).toContain('Pages');
+    expect(labels.indexOf('Pages')).toBe(labels.indexOf('Sections') - 1);
+  });
+
+  it('selects the Pages tool on click', async () => {
+    const user = userEvent.setup();
+    renderTabs();
+    await user.click(screen.getByRole('tab', { name: /Pages/ }));
+    expect(onSelect).toHaveBeenCalledWith('pages');
+  });
 });

@@ -38,6 +38,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   TOMBSTONE_BLOCK_TYPE,
+  isLazyDraftHome,
   pageIssues,
   publishBlocked,
   siteIssues,
@@ -135,12 +136,33 @@ async function resolvePageId(
  * today: the pages API ships in 11b-1 and accepts a `pageId` on every block
  * write. When 11c drops the index this function should be deleted, not relaxed —
  * at that point the collision is genuinely legal.
+ *
+ * ## Why there is no `is_draft` filter (Phase 11b-3, D-SLOT)
+ *
+ * This used to match `is_draft = isDraft` as well, on the stated reasoning that
+ * without it "writing a draft over a published slot on the SAME page would be
+ * refused". That reasoning was wrong, and it left a hole big enough to freeze a
+ * community's publishing:
+ *
+ *  - Same-page writes were never at risk. `foreign` below discriminates on
+ *    `pageId`, so every row belonging to THIS page is ignored whatever its draft
+ *    state. Draft-over-published on one page still works with no draft filter at
+ *    all — which is why the filter was pure harm.
+ *  - Across pages it was actively dangerous. A DRAFT on page A at slot N was
+ *    accepted while page B held a PUBLISHED row at N, because the two rows
+ *    disagreed on `is_draft` and never met. Publish then promotes every draft to
+ *    published in one transaction, producing two live rows at one slot, which
+ *    violates the surviving 3-column index, rolls back the WHOLE publish, and
+ *    leaves the community unable to publish anything until someone hand-edits
+ *    `block_order` in production.
+ *
+ * So the query spans BOTH layers: a slot is free for this page only when no
+ * other page holds it in either the draft or the published layer.
  */
 async function assertSlotFreeAcrossPages(
   communityId: number,
   pageId: number,
   blockOrder: number,
-  isDraft: boolean,
   tx: Tx,
 ): Promise<void> {
   const clashes = await tx
@@ -150,7 +172,6 @@ async function assertSlotFreeAcrossPages(
       and(
         eq(siteBlocks.communityId, communityId),
         eq(siteBlocks.blockOrder, blockOrder),
-        eq(siteBlocks.isDraft, isDraft),
         isNull(siteBlocks.deletedAt),
       ),
     );
@@ -430,8 +451,30 @@ export async function upsertPublishedBlock({
   const db = createUnscopedClient();
 
   await db.transaction(async (tx) => {
+    // Serialize against concurrent publishes, reorders and other block writes
+    // for this community — the same lock `reorderSiteBlock`, `removeSiteBlock`,
+    // `publishCommunitySite`, `discardSiteDrafts` and `revertToSnapshot` all
+    // take. This was the one write path in the file that skipped it.
+    //
+    // It became load-bearing when D-SLOT dropped the draft predicate from
+    // `assertSlotFreeAcrossPages` below. That widened the guard to the
+    // CROSS-LAYER case — a draft on page A against a PUBLISHED row on page B at
+    // the same slot — which no index covers, because the surviving
+    // `(community_id, block_order, is_draft)` index sees the two rows as
+    // distinct. Before the widening a lost race degraded to a unique violation:
+    // an opaque 500, but loud and immediate. After it, a lost race COMMITS, and
+    // the damage surfaces at the next publish as a unique violation that rolls
+    // the whole publish back and keeps rolling it back — a community that can
+    // no longer publish anything, with an error naming an index rather than a
+    // page, days after the write that caused it.
+    //
+    // A read-then-write guard is only as good as the lock under it.
+    await tx.execute(
+      sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`,
+    );
+
     const pageId = await resolvePageId(communityId, requestedPageId, tx);
-    await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, isDraft, tx);
+    await assertSlotFreeAcrossPages(communityId, pageId, blockOrder, tx);
     // Scoped client bound to the transaction — preserves tenant isolation
     // while keeping the soft-delete + insert + audit-log triple atomic.
     const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
@@ -513,6 +556,26 @@ export type PublishCommunitySiteResult =
       publishedAt: Date;
       promotedCount: number;
       retiredCount: number;
+      /**
+       * Pages this publish put on the live site (Phase 11b-3).
+       *
+       * Reported because a publish can consist ENTIRELY of page changes: a
+       * created page with no sections yet promotes zero blocks, so the receipt
+       * read "Published — 0 sections live." for work that did something. The
+       * destructive case was worse — a staged removal deletes the page, its
+       * sections and its slug history, and `retiredCount` counts none of them
+       * (the block soft-delete happens in its own loop, not in the retire
+       * update), so the most irreversible operation this phase ships also
+       * reported zero.
+       *
+       * EXCLUDES the lazily-created draft home page, mirroring `pendingPages`:
+       * `ensureHomePage` creates it for any community that has never published,
+       * so counting it would tell every first-time PM they had added a page
+       * they never asked for.
+       */
+      addedPageCount: number;
+      /** Pages this publish took off the live site, with everything on them. */
+      removedPageCount: number;
     }
   | {
       published: false;
@@ -655,7 +718,7 @@ export async function publishCommunitySite({
       .from(sitePages)
       .where(and(eq(sitePages.communityId, communityId), isNull(sitePages.deletedAt)));
     const pendingPages = pageRows.filter(
-      (p) => (p.isDraft && !p.isHome) || p.deleteStagedAt !== null,
+      (p) => (p.isDraft && !isLazyDraftHome(p)) || p.deleteStagedAt !== null,
     );
 
     // Nothing pending at all → nothing to publish. Roll back BEFORE any mutation
@@ -913,6 +976,26 @@ export async function publishCommunitySite({
       .returning({ id: sitePages.id });
     const promotedPageCount = promotedPageResult.length;
 
+    /*
+     * What the RECEIPT reports, which is not `promotedPageCount`.
+     *
+     * That count is every draft page the promote above touched, including the
+     * lazily-created home page `ensureHomePage` makes for a community that has
+     * never published — an artefact of lazy creation, not a PM action, and the
+     * exact row `pendingPages` excludes for the same reason. Reporting it would
+     * tell every first-time PM they had just added a page they never asked for.
+     *
+     * Derived from `pageRows` (read before any of this transaction's writes) so
+     * it states what the PM ASKED for, and it matches the client's own diff
+     * one-for-one: `useSiteDiff` filters `isHome && isDraft` and
+     * `publishedPageBaseline` drops drafts, so a page counted here is exactly a
+     * page the sheet listed as "Added". A staged page is excluded because it is
+     * being deleted, not published — it is counted below instead.
+     */
+    const addedPageCount = pageRows.filter(
+      (p) => p.isDraft && !isLazyDraftHome(p) && p.deleteStagedAt === null,
+    ).length;
+
     // Step 5c: reconcile the stamp with what actually landed.
     //
     // A REMOVAL-ONLY publish promotes zero rows: the only pending draft was a
@@ -1003,7 +1086,7 @@ export async function publishCommunitySite({
         // from the pre-mutation `pageRows`, because by now the promote has
         // already flipped `is_draft`.
         ...summarizePageChanges(
-          pageRows.filter((p) => p.isDraft && !p.isHome && !removedPages.has(p.id)),
+          pageRows.filter((p) => p.isDraft && !isLazyDraftHome(p) && !removedPages.has(p.id)),
           pageRows.filter((p) => removedPages.has(p.id)),
         ),
       ],
@@ -1060,6 +1143,8 @@ export async function publishCommunitySite({
       publishedAt: effectivePublishedAt,
       promotedCount,
       retiredCount,
+      addedPageCount,
+      removedPageCount: removedPageIds.length,
     };
   })
     .catch((err: unknown) => {

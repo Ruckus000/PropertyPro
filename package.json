@@ -51,6 +51,7 @@
     "guard:token-coverage": "tsx scripts/verify-token-coverage.ts",
     "guard:design-tokens": "tsx scripts/verify-design-tokens.ts",
     "guard:page-padding": "tsx scripts/verify-page-padding.ts",
+    "guard:page-state-copy": "tsx scripts/verify-page-state-copy.ts",
     "guard:audit-log-trigger-overrides": "tsx scripts/verify-audit-log-trigger-overrides.ts",
     "guard:sanitizer-deps": "tsx scripts/verify-sanitizer-deps.ts",
     "guard:read-entitlement": "tsx scripts/verify-read-entitlement-coverage.ts",

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useAutosave, stableStringify, type UseAutosaveResult } from '../useAutosave';
 import { useAutosaveReporter } from './autosave-status';
 
@@ -145,7 +146,36 @@ export function useBlockForm<TDraft>({
     await saveRef.current(value);
   }, []);
 
-  const autosave = useAutosave(canonical, persist, { enabled: canonical !== null });
+  const autosave = useAutosave(canonical, persist, {
+    enabled: canonical !== null,
+    /*
+     * The form is already gone, so the status line cannot carry this and the
+     * retry is gated on being mounted. A toast outlives the tree and is the
+     * only surface left.
+     *
+     * Reachable on more paths than the page switch that motivated it, and all
+     * of them look identical from here — the hook knows a flush failed, not
+     * why the form went away:
+     *
+     *  - a page switch after a focus refetch discovers a co-manager removed
+     *    the page being edited (selection repair remounts the subtree);
+     *  - deleting the section you were editing with an edit still pending;
+     *  - crossing the 768/1280px breakpoints, which swaps the inspector
+     *    between its sheet and column presentations;
+     *  - an aborted request on route change.
+     *
+     * Which is why the copy names the SECTION rather than the page, and why it
+     * does not concatenate `error.message`: on the middle two paths the server
+     * text ("Page not found for this community") describes a state the PM did
+     * not cause and cannot act on. `.claude/rules/design.md` asks for what
+     * happened plus what to do, and "open it again and re-apply" is the one
+     * instruction that is true on every path above.
+     */
+    onUnmountedError: () =>
+      toast.error(
+        "We couldn't save your last change to that section. Open it again and re-apply the edit.",
+      ),
+  });
 
   // Consume the adoption flag. Runs after the render that adopted, and after
   // the debounce effect has armed — which is fine, because `markClean` cancels

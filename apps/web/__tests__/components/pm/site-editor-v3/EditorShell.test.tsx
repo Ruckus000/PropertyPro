@@ -25,6 +25,18 @@ function renderShell(overrides: Partial<React.ComponentProps<typeof EditorShell>
       initialNotice={null}
       renderToolPanel={(tool) => <p>panel:{tool}</p>}
       canOpenPublish={false}
+      // True by default because that is the ordinary state — it is false only
+      // when BOTH page reads failed. Supplied explicitly rather than left to
+      // `undefined`: this file is outside the `src/**` typecheck program, so a
+      // missing required prop would silently disable the Preview button here
+      // and make every case that touches it pass for the wrong reason.
+      canPreview
+      // Supplied for the same reason as `canPreview`: this file is outside the
+      // `src/**` typecheck program, so a required prop omitted here fails only
+      // at runtime — and a handler that is merely absent produces a button that
+      // silently does nothing, which no assertion in this file would notice.
+      onPreview={() => {}}
+      onPublish={() => {}}
       {...overrides}
     >
       <p>canvas</p>

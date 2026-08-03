@@ -39,8 +39,12 @@ vi.mock('@/hooks/use-urgent-notice', () => ({
     ['pm', 'site', 'urgent-notice', communityId] as const,
 }));
 
+// Every method the site-editor tree can reach, not only the ones this file
+// asserts on: corpus trap #3 — a factory missing an export yields `undefined`
+// at call time, which reads as an unrelated component breaking. `info` is the
+// selection repair's channel (`EditorRoot.tsx`) and had zero coverage repo-wide.
 vi.mock('sonner', () => ({
-  toast: { success: toastSuccessMock, error: toastErrorMock },
+  toast: { success: toastSuccessMock, error: toastErrorMock, info: vi.fn(), dismiss: vi.fn() },
 }));
 
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
