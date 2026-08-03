@@ -39,7 +39,13 @@ const CREATED_PAGE_ID = 91;
 /** Mount/unmount trail for the inspector stub — see the dynamic mock below. */
 const inspectorLifecycle = vi.hoisted(() => [] as string[]);
 
-/** A `block_order` held by a section on SECOND_PAGE_ID, not on home. */
+/**
+ * A `block_order` held by a section on SECOND_PAGE_ID, not on home.
+ *
+ * "Foreign" is about the PAGE, and since 11c-0 the page travels with it:
+ * `onFixIssue` takes `{ pageId, slot }` because a slot alone stops identifying
+ * a section once two pages may hold the same one.
+ */
 const FOREIGN_SLOT = 3;
 
 vi.mock('next/dynamic', () => ({
@@ -151,11 +157,30 @@ vi.mock('next/dynamic', () => ({
             onFixIssue,
             onGoToPages,
           }: {
-            onFixIssue: (slot: number) => void;
+            onFixIssue: (target: { pageId: string; slot: number }) => void;
             onGoToPages: () => void;
           }) => (
             <>
-              <button type="button" onClick={() => onFixIssue(FOREIGN_SLOT)}>
+              <button
+                type="button"
+                onClick={() => {
+                  /*
+                   * The page is DERIVED from the offending block, not hardcoded.
+                   *
+                   * The real sheet reads `issue.pageId`, and the issue comes
+                   * from whichever page's snapshot raised it — so a fixture that
+                   * moves the block between pages must move the handoff with it.
+                   * Hardcoding a page here would make the "stays put" case below
+                   * fire a cross-page switch its fixture does not describe, and
+                   * that case would then pass or fail for the wrong reason.
+                   */
+                  const offender = queries.draft.find((b) => b.blockOrder === FOREIGN_SLOT);
+                  onFixIssue({
+                    pageId: String(offender?.pageId ?? SECOND_PAGE_ID),
+                    slot: FOREIGN_SLOT,
+                  });
+                }}
+              >
                 Fix this
               </button>
               {/*

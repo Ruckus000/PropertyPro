@@ -16,6 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
+import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 import { useSiteDiff } from '@/components/pm/site-editor-v3/use-site-diff';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
@@ -452,6 +453,199 @@ describe('useSiteDiff — the publish diff is WHOLE-SITE, never page-scoped', ()
     // under-reporting diff would show one group and a plausible sheet.
     expect(groups.get(String(HOME_PAGE_ID))).toBe('edited');
     expect(groups.get(String(SECOND_PAGE_ID))).toBe('added');
+  });
+});
+
+describe('useSiteDiff — sections are never correlated ACROSS pages', () => {
+  it('reports a move between pages as a removal and an addition, not as nothing', () => {
+    /*
+     * The mis-pairing case, and it reports NOTHING when it goes wrong.
+     *
+     * `diffSite` correlates draft rows to published rows by content and slot.
+     * Published has one section at slot 2 on HOME; the draft has an identical
+     * section at slot 2 on the SECOND page and nothing on home. One flattened
+     * call sees `[A@2]` on both sides, pairs them, and reports no change at all
+     * — while the truth is that home lost a section and another page gained
+     * one. A publish sheet claiming "no changes" over two real ones is the
+     * silent under-report this hook's header calls its worst failure mode.
+     *
+     * Impossible today only because the 3-column index forbids the fixture:
+     * two pages cannot both hold slot 2 until 11c drops it.
+     *
+     * Revert check (production line): the per-page `diffSite` loop in
+     * `use-site-diff.ts`, collapsed back to one whole-site call.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [hero(), block({ id: 1, blockOrder: 2, pageId: HOME_PAGE_ID })];
+    queries.draft = [
+      hero(),
+      // Same slot, same content — on a DIFFERENT page.
+      block({ id: 1, blockOrder: 2, pageId: SECOND_PAGE_ID }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const sectionChanges = result.current.diff.changes.filter((c) => !c.key.startsWith('page:'));
+    const byGroup = new Map(sectionChanges.map((c) => [c.group, c.kind]));
+    expect(byGroup.get(String(HOME_PAGE_ID))).toBe('removed');
+    expect(byGroup.get(String(SECOND_PAGE_ID))).toBe('added');
+  });
+
+  it('gives two pages holding the same slot distinct change keys', () => {
+    // `block:d2` twice would be one dedupe/revert key for two different
+    // sections, and one duplicated React key in the publish sheet.
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [
+      block({ id: 8, blockOrder: 2, pageId: HOME_PAGE_ID }),
+      block({ id: 9, blockOrder: 2, pageId: SECOND_PAGE_ID }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const keys = result.current.diff.changes
+      .filter((c) => !c.key.startsWith('page:'))
+      .map((c) => c.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('useSiteDiff — the blocking gate validates PER PAGE', () => {
+  /*
+   * The counterpart to the describe above, and the two must not be collapsed:
+   * the DIFF is whole-site (D-C2) and VALIDATION is per page. They read like
+   * the same question and have opposite answers.
+   *
+   * `siteIssues` raises `Duplicate blockOrder N` as an ERROR. Slots are unique
+   * community-wide only while the pre-11c 3-column index survives; once 11c
+   * drops it, a flattened snapshot reports every page's second section as a
+   * duplicate and disables Publish forever. The server has always validated per
+   * page — `publishCommunitySite` builds one snapshot from
+   * `winners.filter(r => r.pageId === page.id)`.
+   */
+  it('yields one snapshot per page, each carrying its own sections', () => {
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [
+      hero(),
+      block({ id: 2, blockOrder: 2, pageId: HOME_PAGE_ID }),
+      block({ id: 7, blockOrder: 2, pageId: SECOND_PAGE_ID }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const byPage = new Map(result.current.validated.map((v) => [v.pageId, v]));
+    expect([...byPage.keys()].sort()).toEqual([String(HOME_PAGE_ID), String(SECOND_PAGE_ID)]);
+    // The same slot on two pages — legal after 11c, and the exact shape that a
+    // flattened snapshot turns into a bogus `Duplicate blockOrder 2` error.
+    expect(byPage.get(String(HOME_PAGE_ID))!.snapshot.sections.map((s) => s.slot)).toEqual([2]);
+    expect(byPage.get(String(SECOND_PAGE_ID))!.snapshot.sections.map((s) => s.slot)).toEqual([2]);
+  });
+
+  it('marks only the home page as hero-expecting, so no other page is nagged for one', () => {
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 7, blockOrder: 2, pageId: SECOND_PAGE_ID })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const byPage = new Map(result.current.validated.map((v) => [v.pageId, v.isHome]));
+    expect(byPage.get(String(HOME_PAGE_ID))).toBe(true);
+    expect(byPage.get(String(SECOND_PAGE_ID))).toBe(false);
+  });
+
+  it('omits a page staged for removal, so a broken page stays deletable', () => {
+    const staged = page({
+      id: SECOND_PAGE_ID,
+      name: 'Contact',
+      slug: 'contact',
+      isHome: false,
+      deleteStagedAt: '2026-07-30T00:00:00.000Z',
+    });
+    queries.pages = [HOME_PAGE, staged];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 7, blockOrder: 2, pageId: SECOND_PAGE_ID })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.validated.map((v) => v.pageId)).toEqual([String(HOME_PAGE_ID)]);
+  });
+
+  it('keeps an unadopted block in its own bucket rather than dropping it', () => {
+    // A `page_id IS NULL` row belongs to no page, so no page loop reaches it.
+    // Dropping it would HIDE a real refusal — the one direction this gate must
+    // never move in. 11c's SET NOT NULL retires this bucket.
+    queries.pages = [HOME_PAGE];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 9, blockOrder: 4, pageId: null })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const orphan = result.current.validated.find((v) => v.pageId === 'site');
+    expect(orphan).toBeDefined();
+    expect(orphan!.snapshot.sections.map((s) => s.slot)).toEqual([4]);
+    // …and it is not ALSO counted on the home page.
+    const home = result.current.validated.find((v) => v.pageId === String(HOME_PAGE_ID))!;
+    expect(home.snapshot.sections).toHaveLength(0);
+  });
+
+  it('keeps a tombstone from suppressing the same slot on ANOTHER page', () => {
+    /*
+     * `tombstonedSlots` is a bare `number[]`, and both `siteIssues` and
+     * `diffSite` consume it as a `Set<number>` — `validate.ts` skips content
+     * validation for a tombstoned slot, `diff.ts` drops it from the draft side.
+     *
+     * Built from a flattened snapshot, a tombstone at slot 4 on Contact would
+     * put `4` in the site-wide set and silently exempt Home's slot 4 from
+     * validation too — a broken section shipping because a DIFFERENT page
+     * happens to be deleting the same slot number. Per-page snapshots give each
+     * page its own set.
+     *
+     * Revert check: the same per-page `validated` construction as the cases
+     * above; there is no separate line to remove for this one, which is the
+     * point — it falls out of the structure rather than being a rule anyone has
+     * to remember.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [
+      hero(),
+      // Home's slot 4 is a real, live section.
+      block({ id: 8, blockOrder: 4, pageId: HOME_PAGE_ID }),
+      // Contact's slot 4 is staged for removal.
+      block({
+        id: 9,
+        blockOrder: 4,
+        pageId: SECOND_PAGE_ID,
+        blockType: TOMBSTONE_BLOCK_TYPE,
+        content: {},
+        isDraft: true,
+      }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const home = result.current.validated.find((v) => v.pageId === String(HOME_PAGE_ID))!;
+    const contact = result.current.validated.find((v) => v.pageId === String(SECOND_PAGE_ID))!;
+    // Home's section survives and is NOT exempted by Contact's tombstone.
+    expect(home.snapshot.sections.map((s) => s.slot)).toEqual([4]);
+    expect(home.snapshot.tombstonedSlots ?? []).not.toContain(4);
+    // Contact's tombstone stays on Contact.
+    expect(contact.snapshot.tombstonedSlots ?? []).toContain(4);
+  });
+
+  it('falls back to a whole-site snapshot when the pages query has not resolved', () => {
+    // Guessing per-page groups without page rows means guessing `isHome`, and
+    // guessing it wrong either invents a hero error or hides one.
+    queries.pages = [];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 2, blockOrder: 2, pageId: HOME_PAGE_ID })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.validated).toHaveLength(1);
+    expect(result.current.validated[0]!.isHome).toBe(true);
+    expect(result.current.validated[0]!.snapshot.sections.map((s) => s.slot)).toEqual([2]);
   });
 });
 

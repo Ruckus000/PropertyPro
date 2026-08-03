@@ -90,7 +90,40 @@ export type SectionRef = `p${number}` | `d${number}`;
  * stays declared so the grouping code is written once, and so turning it on
  * later is not a breaking change.
  */
-export type ChangeKey = 'hero' | 'style' | 'order' | `block:${SectionRef}` | `page:${string}`;
+export type ChangeKey =
+  | 'hero'
+  | 'style'
+  | 'order'
+  | `block:${SectionRef}`
+  | `page:${string}`
+  | PageScopedChangeKey;
+
+/**
+ * The same three per-page keys, prefixed with the page they belong to.
+ *
+ * `diffSite` diffs ONE page and numbers its sections from that page's slots, so
+ * `block:d5`, `order` and `hero` are unique only within a single call. Phase 11
+ * concatenates one call per page into a single `DiffResult` — at which point two
+ * pages each holding slot 5 produce two changes keyed `block:d5`, and a page
+ * reorder on each produces two keyed `order`.
+ *
+ * That is not a cosmetic clash. `ChangeKey` is documented as revert-targeting
+ * and dedupe, so a collision means a per-change revert restoring the right slot
+ * on the WRONG PAGE — the wrong-but-plausible failure this codebase keeps
+ * paying for. It is also the React key the publish sheet renders by.
+ *
+ * `diffSite` emits this form whenever its snapshot carries a `pageId`, and the
+ * bare form when it does not. A single-page or page-unaware caller therefore
+ * keeps exactly the keys it had; the prefix appears precisely where ambiguity
+ * would otherwise be introduced.
+ *
+ * Unique across pages because a page id is unique — see `SiteSnapshot.pageId`,
+ * which the caller stringifies from `site_pages.id`.
+ */
+export type PageScopedChangeKey =
+  | `${string}/hero`
+  | `${string}/order`
+  | `${string}/block:${SectionRef}`;
 
 /**
  * One page as it exists on one side of a page diff — see `diffPages`.

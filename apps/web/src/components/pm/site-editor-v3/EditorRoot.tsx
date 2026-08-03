@@ -28,6 +28,8 @@ const PublishSheet = dynamic(
   () => import('./publish/PublishSheet').then((m) => m.PublishSheet),
   { loading: () => null },
 );
+// Type-only: erased at build, so the sheet stays code-split.
+import type { SlotTarget } from './publish/PublishSheet';
 
 // Phase 7. Deferred for the same budget reason, and it works because the panel
 // body is only rendered when its tab is active — so the chunk (form + the Radix
@@ -242,7 +244,7 @@ export function EditorRoot({
   // Shares the blocks query key, so this adds no request — and the publish
   // sheet calls the same hook, so the button's state and the sheet's "N changes
   // ready to publish" can never disagree.
-  const { diff, isError: diffFailed, slotGroups } = useSiteDiff(communityId);
+  const { diff, isError: diffFailed } = useSiteDiff(communityId);
   const [activeTool, setActiveTool] = useState<EditorToolId>('sections');
   const [previewOpen, setPreviewOpen] = useState(false);
   /**
@@ -661,17 +663,23 @@ export function EditorRoot({
   const handleSelect = useCallback(() => setActiveTool('sections'), []);
   const handlePreview = useCallback(() => setPreviewOpen(true), []);
   const handlePublish = useCallback(() => setPublishOpen(true), []);
-  // "Fix this" hands back a block_order slot. Surfacing the Sections panel is
-  // this component's job; selecting the row needs the editor context, so it
-  // happens one level down in PublishSheetMount.
+  // "Fix this" hands back the PAGE and the block_order slot together. Surfacing
+  // the Sections panel is this component's job; selecting the row needs the
+  // editor context, so it happens one level down in PublishSheetMount.
   //
   // It also switches PAGE when the offending section is on another one. Since
   // D-C2 the editor context is page-scoped while the publish sheet's issues
-  // come from the whole-site snapshot, so an issue's slot routinely names a
-  // section the current page's `movableSections` does not contain — and
-  // `PublishSheetMount`'s `find` would silently return undefined, closing the
-  // sheet and selecting nothing. The slot → page map comes from `useSiteDiff`,
-  // which already builds it for change grouping.
+  // cover every page, so an issue routinely names a section the current page's
+  // `movableSections` does not contain — and `PublishSheetMount`'s `find` would
+  // silently return undefined, closing the sheet and selecting nothing.
+  //
+  // The page arrives WITH the issue rather than being looked up from the slot.
+  // The old form asked a slot→page map which page a slot was on, and that
+  // question stops having one answer the moment 11c lets two pages hold the
+  // same slot: the lookup would return whichever page won, and "Fix this" would
+  // carry the PM confidently to the wrong page's section — right slot number,
+  // wrong page, no error anywhere. `Issue.pageId` has carried the answer since
+  // 11b; this now uses it.
   //
   // Switching page was only HALF the fix, and the other half was missing for a
   // round: `PublishSheetMount` resolves the slot against the PRE-switch
@@ -680,20 +688,18 @@ export function EditorRoot({
   // parked in `pendingSelectSlot` and honoured by the provider that replaces
   // this one, which is the first instance whose blocks are the right page's.
   const handleSelectSlot = useCallback(
-    (slot: number) => {
+    (target: SlotTarget) => {
       setActiveTool('sections');
-      const group = slotGroups.get(slot);
-      if (group === undefined) return;
-      const targetPageId = Number(group);
+      const targetPageId = Number(target.pageId);
       // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
       if (!Number.isFinite(targetPageId) || targetPageId === effectivePageId) return;
       setSelectedPageId(targetPageId);
       setPendingSelectionId(null);
-      setPendingSelectSlot(slot);
+      setPendingSelectSlot(target.slot);
       setFocusSelectedRow(false);
       setPageAnnouncement('');
     },
-    [effectivePageId, slotGroups],
+    [effectivePageId],
   );
   const handleSlotSelected = useCallback(() => setPendingSelectSlot(null), []);
   // The empty states in the Sections panel and on the canvas both name adding a
@@ -998,14 +1004,14 @@ function PublishSheetMount({
   communityId: number;
   theme: CanvasContext['theme'] | null;
   onOpenChange: (open: boolean) => void;
-  onFixIssue: (slot: number) => void;
+  onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
 }) {
   const { movableSections, select } = useSiteEditor();
 
   const handleFixIssue = useCallback(
-    (slot: number) => {
-      onFixIssue(slot);
+    (target: SlotTarget) => {
+      onFixIssue(target);
       // `Issue.slot` is a block_order, not an index — resolve it against the
       // current list rather than treating it as a position.
       //
@@ -1017,8 +1023,8 @@ function PublishSheetMount({
       // the target page's blocks. Do not "fix" this by reaching for the new
       // page's list here: there isn't one yet, and the instance that would hold
       // the selection is about to be thrown away.
-      const target = movableSections.find((b) => b.blockOrder === slot);
-      if (target) select(target.id);
+      const row = movableSections.find((b) => b.blockOrder === target.slot);
+      if (row) select(row.id);
     },
     [movableSections, onFixIssue, select],
   );
