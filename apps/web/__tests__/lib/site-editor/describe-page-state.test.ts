@@ -105,6 +105,24 @@ describe('describeLiveImmediacy', () => {
     // …and an ordinary draft page, which HAS both controls, still gets both.
     expect(describeLiveImmediacy(DRAFT).text).toMatch(/navigation and order/);
   });
+
+  it('does not offer the PUBLISHED home page those two controls either', () => {
+    /*
+     * The same defect on the state every established community sits in, which
+     * makes it the more common instance rather than a rarer one. Home is
+     * excluded from `reorderableIds` so both chevrons are disabled, and the nav
+     * toggle is gated `!page.isHome` — published or not, the only control in
+     * home's disclosure is Page name.
+     */
+    const publishedHome = page({ isHome: true, name: 'Home' });
+    expect(describeLiveImmediacy(publishedHome).text).toMatch(/goes live straight away/);
+    expect(describeLiveImmediacy(publishedHome).text).toMatch(/name/i);
+    expect(describeLiveImmediacy(publishedHome).text).not.toMatch(/navigation|order/i);
+    // Still a claim about the live site — home IS published here.
+    expect(describeLiveImmediacy(publishedHome).claimsPublic).toBe(true);
+    // …and an ordinary published page, which HAS all three, still gets all three.
+    expect(describeLiveImmediacy(PUBLISHED).text).toMatch(/navigation visibility and order/);
+  });
 });
 
 describe('describeRenamed', () => {

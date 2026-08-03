@@ -98,12 +98,22 @@ export function isStagedForRemoval(page: Pick<PageStateFacts, 'deleteStagedAt'>)
  * so promising that a name change goes live would describe a control that is
  * not on screen.
  *
- * The draft arm splits on `isHome` for exactly that reason, one state over. On
- * the lazily created draft HOME page — the first screen a PM ever sees on a new
- * community — the disclosure holds ONE control, Page name: the nav toggle and
- * the address field are both gated `!page.isHome` in `PagesPanel`, and home is
- * pinned to position one so there is nothing to reorder. Listing "navigation
- * and order" there names two controls the PM cannot find and sends them looking.
+ * BOTH the draft and the published arm split on `isHome` for exactly that
+ * reason. Home's disclosure holds ONE control, Page name: the nav toggle and the
+ * address field are both gated `!page.isHome` in `PagesPanel`, and home is
+ * excluded from `reorderableIds`, so `canReorder` is false and both chevrons are
+ * disabled. Naming "navigation" and "order" there points at two controls the PM
+ * cannot find and sends them looking for them.
+ *
+ * The draft half of this was fixed first because the lazily created draft home
+ * page is the first screen a PM ever sees on a new community. The PUBLISHED half
+ * is the same defect on the state every established community sits in, so it is
+ * the more common instance, not a rarer one.
+ *
+ * The STAGED arm is deliberately left unsplit: home has no removal control at
+ * all (`PagesPanel` gates it `!page.isHome`) and the server refuses, so a staged
+ * home page is unreachable. A branch for it would be a sentence no PM can read,
+ * written to make a matrix look symmetrical.
  */
 export function describeLiveImmediacy(
   page: Pick<PageStateFacts, 'isDraft' | 'deleteStagedAt' | 'isHome'>,
@@ -123,7 +133,9 @@ export function describeLiveImmediacy(
     };
   }
   return {
-    text: "A page's name, navigation visibility and order go live straight away — they are not held back for your next publish.",
+    text: page.isHome
+      ? "A page's name goes live straight away — it is not held back for your next publish."
+      : "A page's name, navigation visibility and order go live straight away — they are not held back for your next publish.",
     claimsPublic: true,
   };
 }

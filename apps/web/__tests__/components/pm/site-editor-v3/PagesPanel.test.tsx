@@ -1098,6 +1098,33 @@ describe('PagesPanel — renaming', () => {
     expect(editor.queryByLabelText('Web address')).not.toBeInTheDocument();
   });
 
+  it('does not offer the PUBLISHED home page a nav toggle or a reorder in its hint', async () => {
+    /*
+     * The same fix as the draft home case above, on the state every established
+     * community sits in. `HOME` here is published, and the panel still gives it
+     * neither control: the toggle is gated `!page.isHome` and home is excluded
+     * from `reorderableIds`, so both chevrons are disabled.
+     *
+     * Revert check (production line): the `page.isHome` arm of
+     * `describeLiveImmediacy`'s PUBLISHED branch (`describe-page-state.ts`).
+     */
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 1);
+    const hint = screen.getByTestId('site-page-live-hint-1');
+    expect(hint).toHaveTextContent(/goes live straight away/i);
+    expect(hint).not.toHaveTextContent(/navigation|order/i);
+    expect(editor.queryByRole('button', { name: 'Show in navigation' })).not.toBeInTheDocument();
+    // The positive control: the sibling published page still gets all three,
+    // so this cannot pass for a panel whose hint stopped naming controls at all.
+    const sibling = await openSettings(user, 2);
+    expect(screen.getByTestId('site-page-live-hint-2')).toHaveTextContent(
+      /navigation visibility and order/i,
+    );
+    expect(sibling.getByRole('button', { name: 'Show in navigation' })).toBeInTheDocument();
+  });
+
   it('still says a change IS live on a published page', async () => {
     // The positive control. Without it the case above passes for a panel that
     // never claims liveness at all, including one whose ternaries always take
