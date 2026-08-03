@@ -1072,6 +1072,32 @@ describe('PagesPanel — renaming', () => {
     expect(navText).toMatch(/isn't published yet|once it's published/);
   });
 
+  it('does not offer the draft HOME page a nav toggle or a reorder in its hint', async () => {
+    /*
+     * The first screen a PM ever sees on a new community: home is created
+     * lazily as a draft, and its disclosure holds ONE control — Page name. The
+     * nav toggle and the address field are both gated `!page.isHome` and home is
+     * pinned at position one, so the hint's "name, navigation and order" named
+     * two controls that are not on screen and sent the PM looking for them.
+     * Same rule the staged page already follows one arm over.
+     *
+     * Revert check (production line): the `page.isHome` arm of
+     * `describeLiveImmediacy`'s draft branch (`describe-page-state.ts`).
+     */
+    const user = userEvent.setup();
+    const draftHome = page({ id: 1, name: 'Home', slug: '', isHome: true, sortOrder: 0, isDraft: true });
+    renderPanel({ pages: [draftHome] });
+
+    const editor = await openSettings(user, 1);
+    const hint = screen.getByTestId('site-page-live-hint-1');
+    expect(hint).toHaveTextContent(/isn't on your site yet/i);
+    expect(hint).toHaveTextContent(/name/i);
+    expect(hint).not.toHaveTextContent(/navigation|order/i);
+    // …and the hint is honest about the box: neither control is there.
+    expect(editor.queryByRole('button', { name: 'Show in navigation' })).not.toBeInTheDocument();
+    expect(editor.queryByLabelText('Web address')).not.toBeInTheDocument();
+  });
+
   it('still says a change IS live on a published page', async () => {
     // The positive control. Without it the case above passes for a panel that
     // never claims liveness at all, including one whose ternaries always take
@@ -1380,6 +1406,31 @@ describe('PagesPanel — navigation visibility', () => {
     const editor = await openSettings(user, 2);
     expect(editor.getByText(/only removes the link from your navigation/i)).toBeInTheDocument();
     expect(editor.getByText(/stays online at its own address/i)).toBeInTheDocument();
+  });
+
+  it('announces that sentence with the toggle it qualifies, not merely beside it', async () => {
+    /*
+     * The paragraph's entire purpose is to stop a PM believing this toggle
+     * unpublishes the page. As a bare sibling it reached a screen-reader user
+     * only if they browsed the surrounding text: operating the control
+     * announced "Show in navigation, toggle button" and nothing else — the
+     * warning was present in the DOM and absent from the interaction.
+     *
+     * Revert check (production line): the `aria-describedby` spread on the nav
+     * toggle Button in `PagesPanel.tsx`.
+     */
+    const user = userEvent.setup();
+    renderPanel({ pages: [HOME, AMENITIES] });
+
+    const editor = await openSettings(user, 2);
+    const toggle = editor.getByRole('button', { name: 'Show in navigation' });
+    const describedBy = toggle.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    // The id must resolve to the paragraph itself. An `aria-describedby`
+    // pointing at nothing announces nothing and looks correct.
+    expect(document.getElementById(describedBy as string)).toHaveTextContent(
+      /only removes the link from your navigation/i,
+    );
   });
 
   it('says the nav toggle took effect on the live site, not at the next publish', async () => {

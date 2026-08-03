@@ -10,6 +10,5 @@
   "apps/web/src/components/pm/site-editor-v3/panels/UrgentNoticePanel.tsx": 1,
   "apps/web/src/components/pm/site-editor-v3/PhoneGate.tsx": 2,
   "apps/web/src/components/pm/site-editor-v3/PreviewDialog.tsx": 1,
-  "apps/web/src/components/pm/site-editor-v3/publish/PublishSheet.tsx": 5,
-  "apps/web/src/components/pm/site-editor-v3/use-site-diff.ts": 1
+  "apps/web/src/components/pm/site-editor-v3/publish/PublishSheet.tsx": 5
 }

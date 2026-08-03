@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
+import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import dynamic from 'next/dynamic';
 import { EditorShell } from './EditorShell';
@@ -564,7 +565,7 @@ export function EditorRoot({
   // falls back to a seed that can be stale — an under-warning, which is the
   // safer direction than warning about a removal that was cancelled.
   const selectedPage = (pages ?? initialPages).find((page) => page.id === effectivePageId);
-  const selectedPageIsStaged = selectedPage?.deleteStagedAt != null;
+  const selectedPageIsStaged = selectedPage !== undefined && isStagedForRemoval(selectedPage);
 
   /*
    * The preview gate below unmounts the dialog; this is what closes it.
@@ -628,7 +629,7 @@ export function EditorRoot({
   // before it is read. See the refs' own note.
   useEffect(() => {
     if (!selectedPage) return;
-    selectedPageWasStagedRef.current = selectedPage.deleteStagedAt != null;
+    selectedPageWasStagedRef.current = isStagedForRemoval(selectedPage);
     selectedPageNameRef.current = selectedPage.name;
   }, [selectedPage]);
 

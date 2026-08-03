@@ -986,7 +986,7 @@ export function PagesPanel({
   }
 
   const atCap = pages.length >= MAX_SITE_PAGES;
-  const removeTargetIsLive = removeTarget !== null && !removeTarget.isDraft;
+  const removeTargetIsLive = removeTarget !== null && isPublished(removeTarget);
   const removeTargetSections =
     removeTarget === null
       ? 0
@@ -1364,7 +1364,7 @@ export function PagesPanel({
                       pinned to the root". Two different rules that happen to
                       agree today — collapsing them would couple this control to
                       a publish-accounting decision it has nothing to do with. */}
-                  {page.isDraft && !page.isHome && (
+                  {!isPublished(page) && !page.isHome && (
                     <div className="space-y-1">
                       <Label htmlFor={`${editorId}-slug`}>Web address</Label>
                       <div className="flex items-center gap-1">
@@ -1418,6 +1418,20 @@ export function PagesPanel({
                       size="sm"
                       variant="outline"
                       aria-pressed={page.inNav}
+                      // The paragraph below is the whole reason a PM does not
+                      // mistake this toggle for "unpublish", and as a bare
+                      // sibling it was reachable only by browsing the
+                      // surrounding text — a screen-reader user operating the
+                      // control heard "Show in navigation, toggle button" and
+                      // nothing else. Described-by, so it is announced with the
+                      // control it qualifies, exactly as the expanded editor's
+                      // fields already do. Spread conditionally on the same
+                      // predicate that renders it: pointing at an id that is not
+                      // in the document is an aria-describedby that announces
+                      // nothing and looks correct.
+                      {...(shouldExplainNavIsNotRemoval(page)
+                        ? { 'aria-describedby': `${editorId}-nav-note` }
+                        : {})}
                       disabled={updatePage.isPending}
                       onClick={() =>
                         saveField(
@@ -1464,7 +1478,12 @@ export function PagesPanel({
                       public surface, so there is no link to remove and nothing
                       for search engines to find. */}
                   {shouldExplainNavIsNotRemoval(page) && (
-                    <p className="text-xs text-content-secondary">{NAV_IS_NOT_REMOVAL}</p>
+                    <p
+                      id={`${editorId}-nav-note`}
+                      className="text-xs text-content-secondary"
+                    >
+                      {NAV_IS_NOT_REMOVAL}
+                    </p>
                   )}
 
                   {/* Home has no removal control at all: every layout renders a
@@ -1491,7 +1510,7 @@ export function PagesPanel({
                         onClick={() => setRemoveTarget(page)}
                         className="text-status-danger"
                       >
-                        {page.isDraft ? 'Delete page' : 'Remove page'}
+                        {isPublished(page) ? 'Remove page' : 'Delete page'}
                       </Button>
                     ))}
                 </div>

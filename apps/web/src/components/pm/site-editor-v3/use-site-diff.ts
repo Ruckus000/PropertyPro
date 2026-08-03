@@ -87,6 +87,7 @@ import {
 } from '@propertypro/shared';
 import { useContentBlocks, usePublishedBlocks, type SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
+import { warnEmptyPage } from '@/lib/site-editor/describe-page-state';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
 import { toSnapshot } from '@/lib/site-editor/to-snapshot';
 
@@ -389,7 +390,11 @@ export function useSiteDiff(communityId: number): SiteDiffState {
       .filter((page) => page.isDraft && !isLazyDraftHome(page) && !populated.has(page.id))
       .map((page) => ({
         field: `page:${page.id}.sections`,
-        message: `"${page.name}" has no sections yet, so visitors following its link will find an empty page.`,
+        // The sentence branches on whether the page will be LINKED once this
+        // publish lands — see `warnEmptyPage`. It lives in the describer module
+        // rather than here so there stays one place to be wrong about what a
+        // visitor can reach.
+        message: warnEmptyPage(page),
         severity: 'warning' as const,
       }));
   }, [draftQuery.data, pagesQuery.data]);

@@ -857,7 +857,41 @@ describe('PublishSheet — the PAGE SET can block a publish too', () => {
     renderSheet();
 
     expect(screen.getByText(/"Pool Rules" has no sections yet/)).toBeInTheDocument();
+    // The page IS going into the nav, so promising a link is honest here.
+    expect(screen.getByText(/visitors following its link/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+  });
+
+  it('does not promise a link for a new page the PM kept OUT of the nav', () => {
+    /*
+     * Varying only `inNav`. `listNavPages` filters `in_nav`, so nothing on the
+     * site links to this page and no visitor "follows its link" to anything —
+     * the warning and the row's own "Not in nav" badge said opposite things two
+     * panels apart. The honest risk is that nobody finds it; it is still in
+     * `sitemap.xml` (D16), so claiming it is invisible would be the opposite
+     * over-claim.
+     *
+     * Revert check (production line): the `isPubliclyVisible` branch in
+     * `warnEmptyPage` (`describe-page-state.ts`).
+     */
+    queries.pages = [
+      HOME_PAGE,
+      sitePage({
+        id: 9,
+        name: 'Pool Rules',
+        slug: 'pool-rules',
+        sortOrder: 2,
+        isHome: false,
+        isDraft: true,
+        inNav: false,
+        publishedAt: null,
+      }),
+    ];
+    renderSheet();
+
+    expect(screen.getByText(/"Pool Rules" has no sections yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/following its link/)).not.toBeInTheDocument();
+    expect(screen.getByText(/unlikely to find it at all/)).toBeInTheDocument();
   });
 
   it('says nothing about a new page that DOES have a section', () => {

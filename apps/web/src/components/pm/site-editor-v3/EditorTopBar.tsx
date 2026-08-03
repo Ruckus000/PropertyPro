@@ -82,8 +82,16 @@ export interface EditorTopBarProps {
    * Focus destination when the parent hands focus back — see `EditorRoot`'s
    * preview-gate effect, which takes focus to a failure banner and must return
    * it once the banner goes away.
+   *
+   * Required, for the same reason as `previewDisabledReason` above: the return
+   * leg is `queueMicrotask(() => previewButtonRef.current?.focus())`, and
+   * `.current` on a ref that was never attached is null. Optional, the prop
+   * could be dropped at either seam and the effect would silently no-op —
+   * landing the PM on `<body>` at the top of a document whose main surface has
+   * just been replaced, which is the exact state that effect exists to prevent.
+   * A missing prop must fail typecheck, not fail quietly on a keyboard.
    */
-  previewButtonRef?: React.Ref<HTMLButtonElement>;
+  previewButtonRef: React.Ref<HTMLButtonElement>;
 }
 
 /**

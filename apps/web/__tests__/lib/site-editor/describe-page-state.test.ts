@@ -9,8 +9,18 @@
  * That is the exact bug this module was extracted to end, and it recurred twice
  * because each fix was written against one call site. A property over the matrix
  * cannot be satisfied by fixing one arm — and a seventh sentence added to the
- * module is covered the moment it is added to `DESCRIBERS`, which is a one-line
- * edit in the same file, rather than a new test somebody has to think of.
+ * module is covered ON ARRIVAL, with no registration step: the sweep finds
+ * describers by REFLECTION over the module's exports, and each one DECLARES
+ * `claimsPublic` beside its words, so the property is logic over that
+ * declaration rather than a search for wordings someone anticipated.
+ *
+ * This paragraph used to say a new describer was covered "the moment it is added
+ * to `DESCRIBERS`, which is a one-line edit in the same file". There is no
+ * `DESCRIBERS`: it was a hand-maintained array, an unregistered describer was
+ * invisible to the sweep, and it was replaced precisely because a hand list is
+ * the same shape as the hand-enumerated surface lists that produced the drift.
+ * The long comment above the invariant, at the bottom of this file, has the
+ * whole account.
  */
 import { describe, it, expect } from 'vitest';
 import * as M from '@/lib/site-editor/describe-page-state';
@@ -24,6 +34,7 @@ import {
   isPubliclyVisible,
   isStagedForRemoval,
   shouldExplainNavIsNotRemoval,
+  warnEmptyPage,
   type PageStateFacts,
   type PageSentence,
 } from '@/lib/site-editor/describe-page-state';
@@ -78,6 +89,36 @@ describe('describeLiveImmediacy', () => {
     // …while the ordinary published sentence does, because that control is there.
     expect(describeLiveImmediacy(PUBLISHED).text).toMatch(/name/i);
   });
+
+  it('does not promise the draft HOME page a nav toggle or a reorder it does not have', () => {
+    /*
+     * The same rule as the staged case above, on the first screen a PM ever
+     * sees: the lazily created draft home page's disclosure holds ONE control,
+     * Page name. `PagesPanel` gates the nav toggle and the address field
+     * `!page.isHome`, and home is pinned at position one, so "navigation and
+     * order" names two controls the PM cannot find.
+     */
+    const draftHome = page({ isDraft: true, isHome: true, name: 'Home' });
+    expect(describeLiveImmediacy(draftHome).text).toMatch(/isn't on your site yet/);
+    expect(describeLiveImmediacy(draftHome).text).toMatch(/name/i);
+    expect(describeLiveImmediacy(draftHome).text).not.toMatch(/navigation|order/i);
+    // …and an ordinary draft page, which HAS both controls, still gets both.
+    expect(describeLiveImmediacy(DRAFT).text).toMatch(/navigation and order/);
+  });
+});
+
+describe('describeRenamed', () => {
+  it('says the new name is live only on a page a visitor can reach', () => {
+    expect(describeRenamed(PUBLISHED, 'Amenities & Pool').text).toBe(
+      'Page renamed to Amenities & Pool. This is live on your site now.',
+    );
+  });
+
+  it('promises nothing "now" on a page that is on no public surface', () => {
+    // `getPageBySlug` filters `is_draft = false`, so the renamed page 404s.
+    expect(describeRenamed(DRAFT, 'Pool Rules v2').text).toMatch(/isn't published yet/);
+    expect(describeRenamed(DRAFT, 'Pool Rules v2').claimsPublic).toBe(false);
+  });
 });
 
 describe('describeNavToggled', () => {
@@ -124,6 +165,51 @@ describe('describeReordered', () => {
         [draftBoard, contact, pool],
       ).text,
     ).toMatch(/didn't change what visitors see/);
+  });
+});
+
+describe('warnEmptyPage', () => {
+  /*
+   * Both pages here are drafts, because that is the only kind the publish sheet
+   * warns about — it warns about pages the publish will CREATE. So the split is
+   * `inNav`, read as the visibility the page will have on the far side of the
+   * publish that clears `isDraft`.
+   */
+  it('promises a link only to a page that will actually be linked', () => {
+    expect(warnEmptyPage(page({ isDraft: true, inNav: true, name: 'Pool' }))).toMatch(
+      /visitors following its link/,
+    );
+  });
+
+  it('does not promise a link the PM has already switched off', () => {
+    /*
+     * `listNavPages` filters `in_nav`, so nothing on the site links to this
+     * page and no visitor "follows its link" to anything — the warning and the
+     * row's own "Not in nav" badge contradicted each other two panels apart.
+     * The honest risk is that nobody finds it; it is still in `sitemap.xml`
+     * (D16), so "invisible" would be the opposite over-claim.
+     */
+    const hiddenDraft = page({ isDraft: true, inNav: false, name: 'Board archive' });
+    expect(warnEmptyPage(hiddenDraft)).not.toMatch(/following its link/);
+    expect(warnEmptyPage(hiddenDraft)).toMatch(/isn't in your navigation/);
+    expect(warnEmptyPage(hiddenDraft)).toMatch(/unlikely to find it/);
+  });
+
+  it('names the page in both arms', () => {
+    expect(warnEmptyPage(page({ isDraft: true, inNav: true, name: 'Pool' }))).toContain('"Pool"');
+    expect(warnEmptyPage(page({ isDraft: true, inNav: false, name: 'Pool' }))).toContain('"Pool"');
+  });
+
+  it('is not in the describer sweep, and that is deliberate', () => {
+    /*
+     * It answers "what will a visitor find AFTER the pending publish?", not
+     * "what can a visitor see right now?" — so it has no `claimsPublic` for the
+     * invariant to check, and entering it in the sweep would make it a describer
+     * that can never satisfy the non-vacuity assertion below. Pinned here so the
+     * naming is a decision rather than an accident somebody later "fixes".
+     */
+    expect('warnEmptyPage'.startsWith('describe')).toBe(false);
+    expect(typeof warnEmptyPage(page())).toBe('string');
   });
 });
 

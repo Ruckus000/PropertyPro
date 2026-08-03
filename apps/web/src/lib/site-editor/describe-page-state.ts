@@ -97,13 +97,22 @@ export function isStagedForRemoval(page: Pick<PageStateFacts, 'deleteStagedAt'>)
  * NOT mention the page's NAME: the rename control is absent on a staged page,
  * so promising that a name change goes live would describe a control that is
  * not on screen.
+ *
+ * The draft arm splits on `isHome` for exactly that reason, one state over. On
+ * the lazily created draft HOME page — the first screen a PM ever sees on a new
+ * community — the disclosure holds ONE control, Page name: the nav toggle and
+ * the address field are both gated `!page.isHome` in `PagesPanel`, and home is
+ * pinned to position one so there is nothing to reorder. Listing "navigation
+ * and order" there names two controls the PM cannot find and sends them looking.
  */
 export function describeLiveImmediacy(
-  page: Pick<PageStateFacts, 'isDraft' | 'deleteStagedAt'>,
+  page: Pick<PageStateFacts, 'isDraft' | 'deleteStagedAt' | 'isHome'>,
 ): PageSentence {
   if (!isPublished(page)) {
     return {
-      text: "This page isn't on your site yet. Its name, navigation and order will apply once you publish it.",
+      text: page.isHome
+        ? "This page isn't on your site yet. Its name will apply once you publish it."
+        : "This page isn't on your site yet. Its name, navigation and order will apply once you publish it.",
       claimsPublic: false,
     };
   }
@@ -217,3 +226,40 @@ export function shouldExplainNavIsNotRemoval(page: PageStateFacts): boolean {
 /** The text that explanation carries. */
 export const NAV_IS_NOT_REMOVAL =
   'This only removes the link from your navigation. The page stays online at its own address and search engines can still find it. To take it off your site, remove it.';
+
+/**
+ * The publish-sheet warning for a page the publish will create with no sections.
+ *
+ * ## Why this is not a `describe*`
+ *
+ * Every other sentence here answers "what can a visitor see RIGHT NOW?", which
+ * is the question `claimsPublic` declares an answer to and the property test
+ * checks against the page state. This one answers "what will a visitor find
+ * AFTER the pending publish?" — and it is only ever called for pages the publish
+ * will CREATE, so the page is a draft by construction and every arm is
+ * future-tense. There is no present-tense claim for the invariant to check, and
+ * declaring `claimsPublic: false` on both arms would enter it in the sweep as a
+ * describer that can never satisfy the non-vacuity assertion. It lives in this
+ * module because this is where visitor-facing vocabulary belongs, not because it
+ * is a describer, and it is named so the reflection sweep does not collect it.
+ *
+ * ## Why it branches
+ *
+ * `inNav` decides it, and `isDraft` cannot: the publish is what clears
+ * `isDraft`, so the visibility that matters is the one the page will have on the
+ * far side of it. That is why the caller asks `isPubliclyVisible` about the
+ * POST-publish shape rather than about `page`, for which it is false by
+ * construction here.
+ *
+ * The unconditional version promised a link the PM had already switched off:
+ * `listNavPages` filters `in_nav`, so a page badged "Not in nav" is linked from
+ * nowhere and no visitor "follows its link" to anything. The badge and the
+ * warning contradicted each other two panels apart. For that page the honest
+ * risk is that nobody finds it at all — it is still in `sitemap.xml` (D16), so
+ * "invisible" would be the opposite over-claim.
+ */
+export function warnEmptyPage(page: Pick<PageStateFacts, 'name' | 'inNav'>): string {
+  return isPubliclyVisible({ isDraft: false, inNav: page.inNav })
+    ? `"${page.name}" has no sections yet, so visitors following its link will find an empty page.`
+    : `"${page.name}" has no sections yet, and it isn't in your navigation — nothing on your site links to it, so visitors are unlikely to find it at all.`;
+}

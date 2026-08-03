@@ -36,8 +36,8 @@ export interface EditorShellProps {
   canPreview: boolean;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   previewDisabledReason: string;
-  /** Forwarded to the top bar — the parent's focus-return destination. */
-  previewButtonRef?: React.Ref<HTMLButtonElement>;
+  /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
+  previewButtonRef: React.Ref<HTMLButtonElement>;
   status?: React.ReactNode;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   onPreview: () => void;
@@ -148,7 +148,7 @@ export function EditorShell({
         canOpenPublish={canOpenPublish}
         canPreview={canPreview}
         previewDisabledReason={previewDisabledReason}
-        {...(previewButtonRef ? { previewButtonRef } : {})}
+        previewButtonRef={previewButtonRef}
         onPreview={onPreview}
         onPublish={onPublish}
       />
