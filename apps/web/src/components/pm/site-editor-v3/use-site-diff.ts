@@ -102,6 +102,12 @@ export interface SiteDiffState {
   diff: DiffResult;
   /** The draft snapshot — also what `siteIssues`/`issueTarget` run against. */
   next: SiteSnapshot;
+  /**
+   * `next`, minus the sections of pages staged for deletion — the input the
+   * blocking gate must validate so it cannot invent a refusal the server would
+   * not make. See the construction site for why it is not simply `next`.
+   */
+  validated: SiteSnapshot;
   /** Group id → human label, for the page groups. Site-wide is the sheet's own copy. */
   pageLabels: ReadonlyMap<string, string>;
   /** Group id → nav position, so page groups render in the site's own order. */
@@ -215,6 +221,50 @@ export function useSiteDiff(communityId: number): SiteDiffState {
   const pagesQuery = useSitePages(communityId);
 
   const next: SiteSnapshot = useMemo(() => toSnapshot(draftQuery.data), [draftQuery.data]);
+
+  /**
+   * The snapshot the BLOCKING GATE validates — `next` minus the sections of any
+   * page this publish is about to delete.
+   *
+   * Mirrors `publishCommunitySite`, which skips those pages outright:
+   *
+   *     // A page being removed by this publish is about to stop existing;
+   *     // holding the publish on its content would block the removal of a
+   *     // broken page.
+   *     if (page.deleteStagedAt !== null) continue;
+   *
+   * Without the mirror the client INVENTS a refusal the server would not make.
+   * A page holding an invalid section — a legacy row, a tightened schema, a
+   * block type dropped from the view registry — cannot be got rid of: the PM
+   * stages it for removal (the only remedy the product offers for a broken
+   * page), opens Publish, and the sheet disables the button over a section on
+   * the page they have already told it to delete. "Fix this" then carries them
+   * onto a page whose own banner says it is being deleted.
+   *
+   * `SiteDiffState.pageIssues` states the contract this restores: the client
+   * gate "can miss a refusal, never invent one, which is the only safe
+   * direction for a gate that disables a button." `pageIssues` honoured it;
+   * `siteIssues` — which owns the disabled state — did not.
+   *
+   * SEPARATE from `next` rather than a narrowing of it, deliberately. `next`
+   * feeds `diffSite`, and the publish diff is whole-site by design (D-C2): a
+   * staged page's sections still ship in the same transaction and still belong
+   * in the change list. This is a validation input, not a scoping change.
+   */
+  const validated: SiteSnapshot = useMemo(() => {
+    const stagedPageIds = new Set(
+      (pagesQuery.data ?? [])
+        .filter((page) => page.deleteStagedAt !== null)
+        .map((page) => page.id),
+    );
+    if (stagedPageIds.size === 0) return next;
+    // `pageId === null` is an unadopted block — it belongs to no page, so it is
+    // on no STAGED page and must survive the filter. Dropping it would hide a
+    // real refusal, which is the direction this gate must never move in.
+    return toSnapshot(
+      (draftQuery.data ?? []).filter((b) => b.pageId === null || !stagedPageIds.has(b.pageId)),
+    );
+  }, [draftQuery.data, pagesQuery.data, next]);
 
   const published: SiteSnapshot | null = useMemo(() => {
     const rows = publishedQuery.data;
@@ -363,6 +413,7 @@ export function useSiteDiff(communityId: number): SiteDiffState {
   return {
     diff,
     next,
+    validated,
     pageLabels,
     pageRank,
     slotGroups,

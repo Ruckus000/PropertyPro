@@ -555,6 +555,75 @@ describe('PublishSheet — blocking issues', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not block a publish over a section on a page being DELETED by it', async () => {
+    /*
+     * The client gate must be a strict SUBSET of the server's, and it was not.
+     *
+     * `SiteDiffState.pageIssues` states the contract in as many words: it "can
+     * miss a refusal, never invent one, which is the only safe direction for a
+     * gate that disables a button." `pageIssues` honoured it. `siteIssues` —
+     * which is what actually owns the disabled state — ran over the whole-site
+     * snapshot, including the sections of pages the publish is about to delete.
+     *
+     * The server does the opposite, and says why:
+     *
+     *     // A page being removed by this publish is about to stop existing;
+     *     // holding the publish on its content would block the removal of a
+     *     // broken page.
+     *     if (page.deleteStagedAt !== null) continue;
+     *
+     * So a page holding an invalid section could not be got rid of. Staging it
+     * for removal — the only remedy the product offers for a broken page — left
+     * the PM with a disabled Publish naming a section on the page they had
+     * already told the editor to delete, and a "Fix this" carrying them onto a
+     * page whose own banner says it is being removed.
+     *
+     * Revert check (production line): `siteIssues(validated)` in
+     * `PublishSheet.tsx`, restored to `siteIssues(next)`.
+     */
+    queries.pages = [HOME_PAGE, { ...CONTACT_PAGE, deleteStagedAt: '2026-07-30T09:00:00.000Z' }];
+    queries.draft = [
+      heroBlock(),
+      // Unrenderable, on the page that is going away.
+      block({
+        id: 9,
+        pageId: CONTACT_PAGE_ID,
+        blockOrder: 7,
+        blockType: 'not_a_real_block',
+        content: {},
+        isDraft: true,
+      }),
+    ];
+    renderSheet();
+
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+    expect(screen.queryByText(/stopping this publish/i)).not.toBeInTheDocument();
+  });
+
+  it('still blocks over the SAME section when its page is not being deleted', async () => {
+    /*
+     * The positive control, and it is what stops the fix from becoming "never
+     * validate anything". Identical fixture, minus the staging: the gate must
+     * still refuse.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.draft = [
+      heroBlock(),
+      block({
+        id: 9,
+        pageId: CONTACT_PAGE_ID,
+        blockOrder: 7,
+        blockType: 'not_a_real_block',
+        content: {},
+        isDraft: true,
+      }),
+    ];
+    renderSheet();
+
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeDisabled();
+    expect(screen.getByText(/stopping this publish/i)).toBeInTheDocument();
+  });
+
   it('never fires a publish request while blocked', async () => {
     const user = userEvent.setup();
     queries.draft = DRAFT_WITH_BLOCKER;

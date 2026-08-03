@@ -295,6 +295,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
   const {
     diff,
     next,
+    validated,
     pageLabels,
     pageRank,
     slotGroups,
@@ -314,7 +315,24 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
 
   const issues: Issue[] = useMemo(() => {
-    const structural = siteIssues(next);
+    /*
+     * `validated`, not `next`.
+     *
+     * The two differ by exactly the sections of pages this publish is about to
+     * DELETE, which the server skips validating for a stated reason: "holding
+     * the publish on its content would block the removal of a broken page."
+     * Running the gate over `next` made the client invent a refusal the server
+     * would never make, and it invented it on the one path that repairs a broken
+     * page — stage it, publish, gone. The PM instead got a disabled button
+     * naming a section on the page they had already told the editor to delete,
+     * and a "Fix this" that carried them onto a page whose banner says it is
+     * being removed.
+     *
+     * `next` is still the right snapshot for the DIFF (whole-site, D-C2) and for
+     * `issueTarget` below, which resolves an issue's slot to a section: every
+     * slot in `validated` is also in `next`, so resolution is unaffected.
+     */
+    const structural = siteIssues(validated);
     // Advisory at publish on purpose: branding is unstaged and already live on
     // the public site, so blocking here cannot un-ship a bad ratio — it would
     // only stop an unrelated copy fix. See the note on `contrastIssues`.
@@ -334,7 +352,7 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
      * refusal, never invent one.
      */
     return [...structural, ...pageSetIssues, ...contrast];
-  }, [next, brandColors, pageSetIssues]);
+  }, [validated, brandColors, pageSetIssues]);
 
   const blocking = useMemo(() => issues.filter((i) => i.severity === 'error'), [issues]);
   const warnings = useMemo(() => issues.filter((i) => i.severity === 'warning'), [issues]);
