@@ -230,6 +230,27 @@ describe('diffSite — result invariants', () => {
     expect(result.changes[0]!.group).toBe('home');
   });
 
+  it('page-qualifies its keys once the snapshot names a page', () => {
+    /*
+     * Phase 11 concatenates one `diffSite` call per page into one `DiffResult`.
+     * `block:d2` from two pages would then be the same dedupe/revert key for
+     * two different sections — and the same React key in the publish sheet.
+     * See `PageScopedChangeKey`.
+     */
+    const home = diffSite(snap([]), snap([text(2, 'A')], { pageId: '1' }));
+    const contact = diffSite(snap([]), snap([text(2, 'A')], { pageId: '2' }));
+    expect(home.changes[0]!.key).toBe('1/block:d2');
+    expect(contact.changes[0]!.key).toBe('2/block:d2');
+    expect(home.changes[0]!.key).not.toBe(contact.changes[0]!.key);
+  });
+
+  it('leaves a page-unaware caller exactly the keys it had', () => {
+    // The prefix appears only where the ambiguity it prevents could arise, so
+    // every other case in this file keeps asserting the bare form.
+    const result = diffSite(snap([]), snap([text(2, 'A')]));
+    expect(result.changes[0]!.key).toBe('block:d2');
+  });
+
   it('never emits a style change in this phase', () => {
     // Branding is unstaged and live-immediately, so both sides carry the same
     // value and there is nothing to diff until Phase 8 gives it a draft layer.

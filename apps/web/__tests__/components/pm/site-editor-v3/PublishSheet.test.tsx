@@ -198,7 +198,7 @@ const PUBLISHED_OK: PublishSiteResult = {
 
 interface RenderOptions {
   onOpenChange?: (open: boolean) => void;
-  onFixIssue?: (slot: number) => void;
+  onFixIssue?: (target: { pageId: string; slot: number }) => void;
   onGoToPages?: () => void;
   open?: boolean;
 }
@@ -602,6 +602,48 @@ describe('PublishSheet — blocking issues', () => {
     expect(screen.queryByText(/stopping this publish/i)).not.toBeInTheDocument();
   });
 
+  it('names the section an issue is actually about, not the one at that INDEX', async () => {
+    /*
+     * `Issue.field` is `sections.<i>` where `i` indexes the array of the
+     * snapshot that RAISED the issue — per page. `issueTarget` resolves that
+     * index against whatever snapshot it is handed, and the sheet hands it the
+     * whole-site `next`. The two arrays differ, so the index means different
+     * sections in each, and the sheet named the wrong one — then "Fix this"
+     * selected it. A confidently wrong jump, with nothing to signal it.
+     *
+     * Here home holds slots 2 and 3, and the offender is slot 4 on the Contact
+     * page. In Contact's own snapshot it is `sections.0`; in the whole-site
+     * snapshot `sections.0` is home's slot 2. So the old path named "Section 2"
+     * — a valid section on a different page.
+     *
+     * `Issue.slot` is a SLOT, not a position, and `siteIssues` stamps it on
+     * every section issue for exactly this reason.
+     *
+     * Revert check (production line): `targetOf` in `PublishSheet.tsx`, with
+     * the `issue.slot` branch removed so it falls through to `issueTarget`.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.draft = [
+      heroBlock(),
+      block({ id: 5, pageId: HOME_PAGE_ID, blockOrder: 2, isDraft: true }),
+      block({ id: 6, pageId: HOME_PAGE_ID, blockOrder: 3, isDraft: true }),
+      // The offender: first in ITS page's array, third in the whole site's.
+      block({
+        id: 9,
+        pageId: CONTACT_PAGE_ID,
+        blockOrder: 4,
+        blockType: 'not_a_real_block',
+        content: {},
+        isDraft: true,
+      }),
+    ];
+    renderSheet();
+
+    const alert = screen.getByRole('alert');
+    expect(within(alert).getByText(/Section 4/)).toBeInTheDocument();
+    expect(within(alert).queryByText(/Section 2/)).not.toBeInTheDocument();
+  });
+
   it('does not invent a duplicate-slot refusal when two pages share a slot', async () => {
     /*
      * The 11c blocker, pinned BEFORE 11c so the migration cannot introduce it.
@@ -676,7 +718,9 @@ describe('PublishSheet — blocking issues', () => {
     await user.click(screen.getByRole('button', { name: /fix this/i }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(onFixIssue).toHaveBeenCalledWith(3);
+    // The PAGE travels with the slot: a slot alone stops identifying a
+    // section once 11c lets two pages hold the same one.
+    expect(onFixIssue).toHaveBeenCalledWith({ pageId: String(HOME_PAGE_ID), slot: 3 });
   });
 
   it('omits "Fix this" when the editor gave it nowhere to go', () => {

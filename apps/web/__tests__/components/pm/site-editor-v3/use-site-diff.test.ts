@@ -455,6 +455,60 @@ describe('useSiteDiff — the publish diff is WHOLE-SITE, never page-scoped', ()
   });
 });
 
+describe('useSiteDiff — sections are never correlated ACROSS pages', () => {
+  it('reports a move between pages as a removal and an addition, not as nothing', () => {
+    /*
+     * The mis-pairing case, and it reports NOTHING when it goes wrong.
+     *
+     * `diffSite` correlates draft rows to published rows by content and slot.
+     * Published has one section at slot 2 on HOME; the draft has an identical
+     * section at slot 2 on the SECOND page and nothing on home. One flattened
+     * call sees `[A@2]` on both sides, pairs them, and reports no change at all
+     * — while the truth is that home lost a section and another page gained
+     * one. A publish sheet claiming "no changes" over two real ones is the
+     * silent under-report this hook's header calls its worst failure mode.
+     *
+     * Impossible today only because the 3-column index forbids the fixture:
+     * two pages cannot both hold slot 2 until 11c drops it.
+     *
+     * Revert check (production line): the per-page `diffSite` loop in
+     * `use-site-diff.ts`, collapsed back to one whole-site call.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [hero(), block({ id: 1, blockOrder: 2, pageId: HOME_PAGE_ID })];
+    queries.draft = [
+      hero(),
+      // Same slot, same content — on a DIFFERENT page.
+      block({ id: 1, blockOrder: 2, pageId: SECOND_PAGE_ID }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const sectionChanges = result.current.diff.changes.filter((c) => !c.key.startsWith('page:'));
+    const byGroup = new Map(sectionChanges.map((c) => [c.group, c.kind]));
+    expect(byGroup.get(String(HOME_PAGE_ID))).toBe('removed');
+    expect(byGroup.get(String(SECOND_PAGE_ID))).toBe('added');
+  });
+
+  it('gives two pages holding the same slot distinct change keys', () => {
+    // `block:d2` twice would be one dedupe/revert key for two different
+    // sections, and one duplicated React key in the publish sheet.
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [
+      block({ id: 8, blockOrder: 2, pageId: HOME_PAGE_ID }),
+      block({ id: 9, blockOrder: 2, pageId: SECOND_PAGE_ID }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const keys = result.current.diff.changes
+      .filter((c) => !c.key.startsWith('page:'))
+      .map((c) => c.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
 describe('useSiteDiff — the blocking gate validates PER PAGE', () => {
   /*
    * The counterpart to the describe above, and the two must not be collapsed:

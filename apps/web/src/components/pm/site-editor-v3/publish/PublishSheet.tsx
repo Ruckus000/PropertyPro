@@ -82,12 +82,32 @@ import {
   type PublishSiteResult,
 } from '@/hooks/use-publish-site';
 import { useUnstageSitePageDelete } from '@/hooks/use-site-pages';
-import { issueTarget } from '@/lib/site-editor/to-snapshot';
+import { issueTarget, type IssueTarget } from '@/lib/site-editor/to-snapshot';
 import { cn } from '@/lib/utils';
 import { SITE_CHANGE_GROUP, useSiteDiff } from '../use-site-diff';
 import { ApiRequestError } from '@/lib/api/request-json';
 import { describePublishedCounts } from '@/lib/site-editor/describe-publish-outcome';
 import { Receipt, type ReceiptStatus } from './Receipt';
+
+/**
+ * Where "Fix this" sends the PM: a page AND a slot, never a slot alone.
+ *
+ * A `block_order` identifies a section only within one page. It was treated as
+ * community-unique because the pre-11c 3-column index made it so, and the page
+ * was recovered afterwards from a slot→page map. That lookup stops having one
+ * answer the moment 11c lets two pages hold slot 5: it would return whichever
+ * page won the map, and "Fix this" would carry the PM confidently to the wrong
+ * page's section — right slot, wrong page, and nothing anywhere would error.
+ *
+ * Carrying both makes the ambiguity unrepresentable. `Issue.pageId` has been
+ * emitted since 11b for exactly this.
+ */
+export interface SlotTarget {
+  /** `site_pages.id` stringified, matching `Issue.pageId` and `Change.group`. */
+  pageId: string;
+  /** `site_blocks.block_order` within that page. */
+  slot: number;
+}
 
 export interface PublishSheetProps {
   /** Controlled — the editor's top bar owns the open state. */
@@ -105,7 +125,7 @@ export interface PublishSheetProps {
    * Jump to the section a blocking issue is about. The sheet closes first, then
    * calls this with the section's `block_order` slot; the editor owns selection.
    */
-  onFixIssue?: (slot: number) => void;
+  onFixIssue?: (target: SlotTarget) => void;
   /**
    * Open the Pages panel. Page-SET problems (a duplicate address, no home page)
    * block a publish but have no section slot, so `onFixIssue` cannot reach
@@ -319,7 +339,7 @@ export function PublishSheet({
 interface BodyProps {
   communityId: number;
   brandColors?: ResolvedBrandColors;
-  onFixIssue?: (slot: number) => void;
+  onFixIssue?: (target: SlotTarget) => void;
   // Required all the way down, matching `PublishSheetProps`. An optional
   // restatement here would put the hole straight back: `PublishSheet` forwards
   // this prop by name to `PublishSheetBody`, and it is THIS interface the
@@ -338,7 +358,6 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
     validated,
     pageLabels,
     pageRank,
-    slotGroups,
     pageIssues: pageSetIssues,
     isPending: diffPending,
     isError,
@@ -416,9 +435,9 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
   const isPending = diffPending || tokenQuery.isPending;
   const hasChanges = diff.changes.length > 0;
 
-  function fixIssue(slot: number) {
+  function fixIssue(target: SlotTarget) {
     onOpenChange(false);
-    onFixIssue?.(slot);
+    onFixIssue?.(target);
   }
 
   // Same shape as `fixIssue`: close first, then hand over. A sheet left open
@@ -596,7 +615,6 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
           issues={blocking}
           snapshot={next}
           pageLabels={pageLabels}
-          slotGroups={slotGroups}
           onFix={fixIssue}
           canFix={onFixIssue !== undefined}
           onGoToPages={goToPages}
@@ -748,8 +766,7 @@ interface BlockingIssuesProps {
    * than deriving a second slot→page map that could disagree with the one the
    * change list is grouped by.
    */
-  slotGroups: ReadonlyMap<number, string>;
-  onFix: (slot: number) => void;
+  onFix: (target: SlotTarget) => void;
   canFix: boolean;
   /**
    * Opens the Pages panel. Page-set problems are fixed there and nowhere else,
@@ -766,7 +783,6 @@ function BlockingIssues({
   issues,
   snapshot,
   pageLabels,
-  slotGroups,
   onFix,
   canFix,
   onGoToPages,
@@ -790,8 +806,8 @@ function BlockingIssues({
       </h3>
       <ul className="space-y-3">
         {issues.map((issue, index) => {
-          const target = issueTarget(issue.field, snapshot);
-          const name = describeTarget(issue, snapshot, pageLabels, slotGroups);
+          const target = targetOf(issue, snapshot);
+          const name = describeTarget(issue, snapshot, pageLabels);
           const isPageIssue = issue.field.startsWith('page:') || issue.field.startsWith('pages.');
           return (
             <li key={`${issue.field}-${index}`} className="space-y-1 text-sm">
@@ -807,7 +823,9 @@ function BlockingIssues({
                   // same name N times. The visible label is contained in the
                   // accessible one, which keeps it WCAG 2.5.3-safe.
                   aria-label={`Fix this: ${name}`}
-                  onClick={() => onFix(target.slot)}
+                  // The page comes from the ISSUE, which is the only thing that
+                  // knows it once slots repeat across pages.
+                  onClick={() => onFix({ pageId: issue.pageId ?? SITE_CHANGE_GROUP, slot: target.slot })}
                 >
                   Fix this
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -839,16 +857,40 @@ function BlockingIssues({
  * actionable, `sections.2.content.items.0.question` is not. Falls back to the
  * raw field only for issues that are not about a section at all.
  */
+/**
+ * The section a blocking issue is about.
+ *
+ * Prefers the issue's OWN `slot`/`blockType`, which `siteIssues` stamps on
+ * every section issue (`shape()` and `withTarget()` both set them), and falls
+ * back to `issueTarget`'s positional lookup only for an issue that carries
+ * neither.
+ *
+ * The order matters and is the fix for a real defect. `issueTarget` resolves
+ * `sections.<i>` as an INDEX into a snapshot's `sections` array, and the
+ * snapshot it was handed here is the whole-site `next` — while the issues come
+ * from a DIFFERENT snapshot: per page now, and even before that, `validated`
+ * with staged pages' sections removed. Any difference in the section list
+ * shifts the indices, so the sheet resolved the issue to the wrong section and
+ * "Fix this" selected it: a confidently wrong jump with nothing to signal it.
+ * `Issue.slot` is a slot, not a position, so it is immune to the shift — which
+ * is why `Issue` carries it, per its own JSDoc.
+ */
+function targetOf(issue: Issue, snapshot: SiteSnapshot): IssueTarget | null {
+  if (issue.slot !== undefined) {
+    return { slot: issue.slot, blockType: issue.blockType ?? 'section' };
+  }
+  return issueTarget(issue.field, snapshot);
+}
+
 function describeTarget(
   issue: Issue,
   snapshot: SiteSnapshot,
   pageLabels: ReadonlyMap<string, string>,
-  slotGroups: ReadonlyMap<number, string>,
 ): string {
   if (issue.field === 'hero' || issue.field.startsWith('hero.')) {
     return 'Welcome section';
   }
-  const target = issueTarget(issue.field, snapshot);
+  const target = targetOf(issue, snapshot);
   if (target) {
     /*
      * Named with its PAGE once the site has more than one.
@@ -864,18 +906,22 @@ function describeTarget(
      * The page branch below has named its page since round 6; this branch is
      * the half of the same function that was left in machine syntax.
      *
-     * Omitted, not defaulted, when the slot maps to no page: a bare section
-     * name is honest, "— site" is not. (`buildSlotGroups` `continue`s on a null
-     * `pageId` and only ever stores `String(block.pageId)`, so the site-wide
-     * sentinel is never a VALUE here — only `groupForChange` mints it. An
-     * earlier version of this comment named that branch as reachable.)
+     * Read straight off the ISSUE, not looked up from the slot. The old form
+     * asked a slot→page map which page a slot was on — a question that stops
+     * having one answer once 11c lets two pages hold the same slot, and whose
+     * wrong answer is a plausible-looking label naming the wrong page.
+     *
+     * Omitted, not defaulted, when the issue names no page or names the
+     * site-wide bucket: a bare section name is honest, "— site" is not.
      *
      * And omitted entirely on a ONE-page site, where every section is on the
      * only page there is and the suffix would be pure noise — the ambiguity
      * this resolves does not exist until there are two pages to confuse.
      */
     const pageLabel =
-      pageLabels.size > 1 ? pageLabels.get(slotGroups.get(target.slot) ?? '') : undefined;
+      pageLabels.size > 1 && issue.pageId !== undefined && issue.pageId !== SITE_CHANGE_GROUP
+        ? pageLabels.get(issue.pageId)
+        : undefined;
     const suffix = pageLabel ? ` — ${pageLabel}` : '';
     return `Section ${target.slot} (${target.blockType})${suffix}`;
   }

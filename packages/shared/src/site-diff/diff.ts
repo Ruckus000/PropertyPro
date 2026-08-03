@@ -88,6 +88,22 @@ export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): Di
   const group = next.pageId ?? 'site';
   const changes: Change[] = [];
 
+  /*
+   * Page-qualify the three per-page keys — see `PageScopedChangeKey`.
+   *
+   * This function diffs ONE page and numbers sections by that page's slots, so
+   * `block:d5`, `order` and `hero` are unique only within one call. Phase 11
+   * concatenates one call per page, where two pages holding slot 5 would
+   * otherwise both emit `block:d5` — a dedupe/revert key that names two
+   * different sections, and a duplicated React key in the publish sheet.
+   *
+   * Only when a `pageId` is actually present: a page-unaware caller keeps
+   * exactly the keys it had, so the prefix appears precisely where the
+   * ambiguity it prevents could arise.
+   */
+  const qualify = <K extends string>(key: K): ChangeKey =>
+    (next.pageId === undefined ? key : `${next.pageId}/${key}`) as ChangeKey;
+
   // --- hero ---------------------------------------------------------------
   // The hero is a block at slot 1 but is never reorderable and never
   // removable, so it gets its own key and is excluded from section matching.
@@ -95,7 +111,11 @@ export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): Di
   const nextHero = next.hero ?? null;
   if (publishedHero || nextHero) {
     const heroChange = diffHero(publishedHero, nextHero, group);
-    if (heroChange) changes.push(heroChange);
+    // Qualified here rather than inside `diffHero`, which is handed `group` and
+    // so cannot tell a page-unaware caller (`pageId` undefined → `'site'`) from
+    // a page literally named `site`. Only the hero KEY is page-scoped; the rest
+    // of the change is unchanged.
+    if (heroChange) changes.push({ ...heroChange, key: qualify('hero') });
   }
 
   // --- sections -----------------------------------------------------------
@@ -189,7 +209,7 @@ export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): Di
     const pi = pairOf.get(di);
     if (pi === undefined) {
       changes.push({
-        key: `block:${refD(d.slot)}`,
+        key: qualify(`block:${refD(d.slot)}`),
         kind: 'added',
         group,
         title: `${sectionTitle(d.blockType)} section`,
@@ -204,7 +224,7 @@ export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): Di
     if (p.fp === d.fp) return; // matched and identical — nothing to report
     const moved = positionBefore.get(pi) !== positionAfter.get(pi);
     changes.push({
-      key: `block:${refP(p.slot)}`,
+      key: qualify(`block:${refP(p.slot)}`),
       kind: 'edited',
       group,
       title: `${sectionTitle(d.blockType)} section`,
@@ -219,7 +239,7 @@ export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): Di
   P.forEach((p, pi) => {
     if (matchedP[pi]) return;
     changes.push({
-      key: `block:${refP(p.slot)}`,
+      key: qualify(`block:${refP(p.slot)}`),
       kind: 'removed',
       group,
       title: `${sectionTitle(p.blockType)} section`,
@@ -232,7 +252,7 @@ export function diffSite(published: SiteSnapshot | null, next: SiteSnapshot): Di
 
   if (reordered) {
     changes.push({
-      key: 'order',
+      key: qualify('order'),
       kind: 'reordered',
       group,
       title: 'Section order',

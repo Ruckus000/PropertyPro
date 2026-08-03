@@ -48,25 +48,30 @@
  * removal. `diffPages` owns that rule; this hook only supplies the rows and
  * merges the resulting `Change[]` fragment into the section diff.
  *
- * ## Grouping is by page, and the slot map is a UNION of both sides
+ * ## `diffSite` is called ONCE PER PAGE, and that is not a narrowing
  *
- * `diffSite` stamps one `group` on every change it emits (`next.pageId ?? 'site'`),
- * because it diffs one snapshot pair and knows nothing about pages. The
- * per-page grouping the review sheet renders is therefore applied here, by
- * mapping each change's slot back to the page that slot lives on.
+ * Whole-site SCOPE and per-page COMPUTATION are different things, and the
+ * section above is about the first. Every page is diffed and the results are
+ * concatenated, so the sheet still reports every change the publish will ship.
+ * What per-page computation removes is the ability to correlate sections ACROSS
+ * pages: `diffSite` matches draft rows to published rows by slot, so one
+ * flattened call would pair page A's published section with page B's draft
+ * section the moment two pages may hold the same slot — reporting an "edited"
+ * or "reordered" that never happened. That becomes possible when 11c drops the
+ * three-column index, and diffing each page against itself makes it
+ * unrepresentable rather than merely unlikely.
  *
- * That map is built from the union of the draft and published block lists, and
- * the union is the whole point: a `removed` change describes a section that
- * exists **only on the published side** — there is no draft row to read a
- * `pageId` off. A draft-only map would silently file every removal under the
- * site-wide group, i.e. the one change kind where "which page is losing this?"
- * is the question the PM is actually asking. A slot present in neither list
- * (and a block not yet adopted onto a page, `pageId === null`) falls back to
- * the site-wide group explicitly.
+ * The page set is the UNION of both block lists, not the page rows. A `removed`
+ * change describes a section that exists **only on the published side**, and a
+ * page can outlive its row — so iterating page rows alone would silently drop
+ * exactly the change kind where "which page is losing this?" is the question
+ * the PM is asking. Blocks not yet adopted onto a page (`pageId === null`) get
+ * the site-wide group.
  *
- * This is sound only while `block_order` is community-unique — true until 11c
- * drops the three-column index. When per-page slots land, the slot alone stops
- * identifying a page and `diffSite` will have to be called per page instead.
+ * This replaced a slot→page map (`buildSlotGroups`) applied after a single
+ * whole-site call. `diffSite` already stamps `group = next.pageId`, so grouping
+ * is now what the diff SAYS rather than something recovered afterwards from a
+ * lookup that only worked while `block_order` was community-unique.
  */
 
 import { useCallback, useMemo } from 'react';
@@ -77,6 +82,7 @@ import {
   pageIssues,
   pageTitle,
   publishedPageBaseline,
+  SITE_DIFF_SCHEMA_VERSION,
   TOMBSTONE_BLOCK_TYPE,
   type Change,
   type ChangeKey,
@@ -139,17 +145,6 @@ export interface SiteDiffState {
   /** Group id → nav position, so page groups render in the site's own order. */
   pageRank: ReadonlyMap<string, number>;
   /**
-   * `block_order` → the page id that slot's section lives on.
-   *
-   * Exposed for "Fix this" in the publish sheet. Blocking issues are computed
-   * from the WHOLE-SITE snapshot (D-C2 — the publish diff must see every page),
-   * while the editor context is scoped to the selected page, so an issue's slot
-   * routinely names a section the editor cannot currently reach. Without this
-   * the fix affordance silently does nothing for exactly the multi-page case
-   * this phase ships.
-   */
-  slotGroups: ReadonlyMap<number, string>;
-  /**
    * Page-SET problems, in the same `Issue` vocabulary as `siteIssues`.
    *
    * The publish sheet used to compute its blocking set from `siteIssues` plus
@@ -194,51 +189,6 @@ function toPageRow(page: SitePageSummary): SitePageRow {
     isDraft: page.isDraft,
     deleteStaged: page.deleteStagedAt !== null,
   };
-}
-
-/**
- * `block_order` → the group its section belongs to.
- *
- * Published rows are laid down first and draft rows second, so a draft wins a
- * disagreement — the same draft-wins rule the merged editor list uses. The two
- * can only disagree if a slot has moved between pages, which the pre-11c
- * community-wide slot index does not allow.
- */
-function buildSlotGroups(
-  draft: readonly SiteBlockSummary[] | undefined,
-  published: readonly SiteBlockSummary[] | undefined,
-): Map<number, string> {
-  const slots = new Map<number, string>();
-  for (const rows of [published, draft]) {
-    for (const block of rows ?? []) {
-      // `null` is a real server value (a pre-11b row no write path has adopted
-      // onto a page yet) and `undefined` is a stale hand-built literal. Neither
-      // names a page, so neither may claim a slot — both fall through to the
-      // site-wide group below. This deliberately does NOT throw the way
-      // `blocksForPage` does: that guards the canvas, where a missing row is
-      // invisible, whereas throwing here would take out the publish sheet
-      // entirely and leave the PM with no way to ship at all.
-      if (block.pageId === null || block.pageId === undefined) continue;
-      slots.set(block.blockOrder, String(block.pageId));
-    }
-  }
-  return slots;
-}
-
-/**
- * Which group a section-level change belongs to.
- *
- * `toSlot ?? fromSlot` covers all four kinds: `added` carries only `toSlot`,
- * `removed` only `fromSlot`, `edited` both (preferring the draft's slot, which
- * is where the section will actually be after publishing). The `reordered`
- * change carries neither — section order is one community-wide sequence today,
- * so it stays site-wide rather than being attributed to a page it is not
- * exclusively about.
- */
-function groupForChange(change: Change, slots: ReadonlyMap<number, string>): string {
-  const slot = change.toSlot ?? change.fromSlot;
-  if (slot === null) return SITE_CHANGE_GROUP;
-  return slots.get(slot) ?? SITE_CHANGE_GROUP;
 }
 
 export function useSiteDiff(communityId: number): SiteDiffState {
@@ -346,11 +296,6 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     return toSnapshot(rows);
   }, [publishedQuery.data]);
 
-  const slotGroups = useMemo(
-    () => buildSlotGroups(draftQuery.data, publishedQuery.data),
-    [draftQuery.data, publishedQuery.data],
-  );
-
   const pageRows = useMemo<SitePageRow[]>(
     () => (pagesQuery.data ?? []).map(toPageRow),
     [pagesQuery.data],
@@ -370,7 +315,73 @@ export function useSiteDiff(communityId: number): SiteDiffState {
   );
 
   const diff = useMemo<DiffResult>(() => {
-    const base = diffSite(published, next);
+    const draftRows = draftQuery.data ?? [];
+    const publishedRows = publishedQuery.data ?? [];
+
+    /*
+     * ONE `diffSite` CALL PER PAGE — still whole-site in SCOPE (D-C2).
+     *
+     * Per-page computation is not a narrowing: every page is diffed and the
+     * results are concatenated, so the sheet still reports every change the
+     * publish will ship. What it stops doing is correlating sections ACROSS
+     * pages. `diffSite` matches draft rows to published rows by slot, and slots
+     * are unique community-wide only until 11c drops the 3-column index — after
+     * which one flattened call would pair page A's published section with page
+     * B's draft section and report an "edited" or "reordered" that never
+     * happened. Diffing each page against itself makes that unrepresentable.
+     *
+     * It also deletes `buildSlotGroups`/`groupForChange`: `diffSite` already
+     * stamps `group = next.pageId`, so grouping by page is now what the diff
+     * says rather than something recovered afterwards from a slot→page map that
+     * only worked while slots were community-unique.
+     *
+     * The page set is the union of both block lists, NOT `pageRows`. A block
+     * whose page row is missing — a page removed by a publish that its
+     * published sections outlived — must still appear in the diff. Dropping it
+     * would be exactly the silent under-report this file's header calls its
+     * worst failure mode.
+     */
+    const pageIds: (number | null)[] = [];
+    const seenPageIds = new Set<number | null>();
+    const notePageId = (id: number | null) => {
+      if (seenPageIds.has(id)) return;
+      seenPageIds.add(id);
+      pageIds.push(id);
+    };
+    // `pageRows` first so groups come out in the site's own nav order; then any
+    // page id only the blocks know about, including `null` (unadopted).
+    for (const row of pageRows) notePageId(Number(row.pageId));
+    for (const block of [...publishedRows, ...draftRows]) notePageId(block.pageId);
+
+    /*
+     * NOT `blocksForPage` for the `null` case: that helper returns the list
+     * UNCHANGED for a null page id, because null there means "no page selected
+     * yet" on the canvas. Here null means the block genuinely belongs to no
+     * page, so it needs the opposite of that behaviour.
+     */
+    const forPage = (rows: readonly SiteBlockSummary[], pageId: number | null) =>
+      pageId === null ? rows.filter((b) => b.pageId === null) : blocksForPage(rows, pageId);
+
+    const sectionChanges: Change[] = [];
+    for (const pageId of pageIds) {
+      const draftForPage = forPage(draftRows, pageId);
+      const publishedForPage = forPage(publishedRows, pageId);
+      if (draftForPage.length === 0 && publishedForPage.length === 0) continue;
+
+      const group = pageId === null ? SITE_CHANGE_GROUP : String(pageId);
+      /*
+       * `null`, never an empty snapshot — the same rule the whole-site call
+       * followed. A page with no published rows has no previous order to have
+       * changed, so `diffSite` correctly suppresses its `order` change; an
+       * empty-but-present snapshot would claim one.
+       */
+      const publishedSnapshot =
+        publishedForPage.length === 0 ? null : toSnapshot(publishedForPage, { pageId: group });
+      sectionChanges.push(
+        ...diffSite(publishedSnapshot, toSnapshot(draftForPage, { pageId: group })).changes,
+      );
+    }
+
     /*
      * Mirror the server's draft-home exclusion, which is deliberate and which
      * this diff omitted.
@@ -395,21 +406,26 @@ export function useSiteDiff(communityId: number): SiteDiffState {
      */
     const pendingPageRows = pageRows.filter((page) => !isLazyDraftHome(page));
     const pageChanges = diffPages(publishedPageBaseline(pageRows), pendingPageRows);
-    const sectionChanges = base.changes.map((change) => {
-      const group = groupForChange(change, slotGroups);
-      return group === change.group ? change : { ...change, group };
-    });
     // Page changes first so "Contact page — Added" heads its own group rather
     // than trailing the sections it brought with it.
     const changes = [...pageChanges, ...sectionChanges];
     return {
-      ...base,
+      schemaVersion: SITE_DIFF_SCHEMA_VERSION,
       changes,
       // Derived from the merged list, never concatenated from two key arrays —
       // that is the only form in which `keys` cannot disagree with `changes`.
       keys: changes.map((change) => change.key) as ChangeKey[],
+      /*
+       * SITE-level, not per page. `diffSite` reports `firstPublish` for the
+       * snapshot pair it was given, so a brand-new page on a long-published
+       * site would report it — and the sheet would announce "this will be your
+       * site's first publish" over a site that has published many times. The
+       * question is about the SITE, so it is answered from the site's published
+       * rows, exactly as the single whole-site call used to answer it.
+       */
+      firstPublish: publishedRows.length === 0,
     };
-  }, [published, next, pageRows, slotGroups]);
+  }, [draftQuery.data, publishedQuery.data, pageRows]);
 
   /*
    * The page-set gate, stated BEFORE the button rather than after the click.
@@ -491,7 +507,6 @@ export function useSiteDiff(communityId: number): SiteDiffState {
     validated,
     pageLabels,
     pageRank,
-    slotGroups,
     pageIssues: allPageIssues,
     // The pages query joins the gate rather than degrading quietly. A publish
     // sheet rendered while the page list is missing would omit an entire class
