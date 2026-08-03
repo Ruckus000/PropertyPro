@@ -89,6 +89,7 @@ import { useContentBlocks, usePublishedBlocks, type SiteBlockSummary } from '@/h
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
 import { warnEmptyPage } from '@/lib/site-editor/describe-page-state';
 import { isReservedPublicSlug } from '@/lib/middleware/public-host-routes';
+import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { toSnapshot } from '@/lib/site-editor/to-snapshot';
 
 /**
@@ -99,16 +100,40 @@ import { toSnapshot } from '@/lib/site-editor/to-snapshot';
  */
 export const SITE_CHANGE_GROUP = 'site';
 
+/**
+ * One page's slice of the draft, ready for `siteIssues`.
+ *
+ * `isHome` rides along because it decides `heroExpected`: only the home page is
+ * supposed to have a hero, and running the default (`true`) over every page
+ * would put "This site has no welcome section" on each of them. The server
+ * passes exactly this — `siteIssues(snapshot, { heroExpected: page.isHome })`.
+ */
+export interface ValidatedPage {
+  /** `site_pages.id` stringified, or `SITE_CHANGE_GROUP` for unadopted blocks. */
+  pageId: string;
+  isHome: boolean;
+  snapshot: SiteSnapshot;
+}
+
 export interface SiteDiffState {
   diff: DiffResult;
   /** The draft snapshot — also what `siteIssues`/`issueTarget` run against. */
   next: SiteSnapshot;
   /**
-   * `next`, minus the sections of pages staged for deletion — the input the
-   * blocking gate must validate so it cannot invent a refusal the server would
-   * not make. See the construction site for why it is not simply `next`.
+   * The blocking gate's input: ONE SNAPSHOT PER PAGE, minus pages staged for
+   * deletion — so the gate cannot invent a refusal the server would not make.
+   *
+   * Per page, not one flattened snapshot, because `siteIssues` raises
+   * `Duplicate blockOrder N` as an ERROR. Slots are unique community-wide only
+   * while the pre-11c 3-column index survives; the moment 11c drops it and two
+   * pages may each hold slot 2, a flattened snapshot reports every page's
+   * second section as a duplicate and disables Publish permanently, over a
+   * slot number that appears on no UI surface. The server has always validated
+   * per page — see `publishCommunitySite`, which builds one snapshot from
+   * `winners.filter(r => r.pageId === page.id)` — so this is the client
+   * catching up to it, not a new rule.
    */
-  validated: SiteSnapshot;
+  validated: readonly ValidatedPage[];
   /** Group id → human label, for the page groups. Site-wide is the sheet's own copy. */
   pageLabels: ReadonlyMap<string, string>;
   /** Group id → nav position, so page groups render in the site's own order. */
@@ -251,21 +276,66 @@ export function useSiteDiff(communityId: number): SiteDiffState {
    * feeds `diffSite`, and the publish diff is whole-site by design (D-C2): a
    * staged page's sections still ship in the same transaction and still belong
    * in the change list. This is a validation input, not a scoping change.
+   *
+   * ONE SNAPSHOT PER PAGE — see `SiteDiffState.validated` for why a flattened
+   * one becomes a permanently disabled Publish button the moment 11c lands.
    */
-  const validated: SiteSnapshot = useMemo(() => {
-    const stagedPageIds = new Set(
-      (pagesQuery.data ?? [])
-        .filter((page) => page.deleteStagedAt !== null)
-        .map((page) => page.id),
-    );
-    if (stagedPageIds.size === 0) return next;
-    // `pageId === null` is an unadopted block — it belongs to no page, so it is
-    // on no STAGED page and must survive the filter. Dropping it would hide a
-    // real refusal, which is the direction this gate must never move in.
-    return toSnapshot(
-      (draftQuery.data ?? []).filter((b) => b.pageId === null || !stagedPageIds.has(b.pageId)),
-    );
-  }, [draftQuery.data, pagesQuery.data, next]);
+  const validated = useMemo<readonly ValidatedPage[]>(() => {
+    const pages = pagesQuery.data ?? [];
+    const blocks = draftQuery.data ?? [];
+
+    /*
+     * No page rows yet — validate exactly as before, whole-site.
+     *
+     * The pages query can be pending, or fail, while the blocks query has
+     * resolved. Guessing per-page groupings from `block.pageId` alone would
+     * mean guessing `isHome` too, and guessing it wrong puts a spurious
+     * "no welcome section" warning on the home page or hides a real hero
+     * error. Falling back to today's behaviour is the direction that cannot
+     * invent a refusal.
+     */
+    if (pages.length === 0) {
+      return [{ pageId: SITE_CHANGE_GROUP, isHome: true, snapshot: toSnapshot(blocks) }];
+    }
+
+    const out: ValidatedPage[] = [];
+    for (const page of pages) {
+      // A page being removed by this publish is about to stop existing; holding
+      // the publish on its content would block the removal of a broken page.
+      // This is `publishCommunitySite`'s rule, quoted from its own comment.
+      if (page.deleteStagedAt !== null) continue;
+      out.push({
+        pageId: String(page.id),
+        isHome: page.isHome,
+        snapshot: toSnapshot(blocksForPage(blocks, page.id), { pageId: String(page.id) }),
+      });
+    }
+
+    /*
+     * Unadopted blocks (`page_id IS NULL`) get their own bucket.
+     *
+     * They belong to no page, so no page loop reaches them — and silently
+     * dropping them would hide a real refusal, which is the one direction this
+     * gate must never move in. `heroExpected: false` because a bucket that is
+     * not a page cannot be missing a hero; every other rule still runs.
+     *
+     * Transitional by construction: 11c's `page_id SET NOT NULL` makes this
+     * bucket unreachable, and it should be deleted with the rest of the
+     * NULL-handling then.
+     */
+    // `null` only: a MISSING `pageId` is a stale fixture, and `blocksForPage`
+    // has already thrown on it in the loop above rather than letting it vanish.
+    const unadopted = blocks.filter((b) => b.pageId === null);
+    if (unadopted.length > 0) {
+      out.push({
+        pageId: SITE_CHANGE_GROUP,
+        isHome: false,
+        snapshot: toSnapshot(unadopted),
+      });
+    }
+
+    return out;
+  }, [draftQuery.data, pagesQuery.data]);
 
   const published: SiteSnapshot | null = useMemo(() => {
     const rows = publishedQuery.data;

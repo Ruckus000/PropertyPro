@@ -455,6 +455,100 @@ describe('useSiteDiff — the publish diff is WHOLE-SITE, never page-scoped', ()
   });
 });
 
+describe('useSiteDiff — the blocking gate validates PER PAGE', () => {
+  /*
+   * The counterpart to the describe above, and the two must not be collapsed:
+   * the DIFF is whole-site (D-C2) and VALIDATION is per page. They read like
+   * the same question and have opposite answers.
+   *
+   * `siteIssues` raises `Duplicate blockOrder N` as an ERROR. Slots are unique
+   * community-wide only while the pre-11c 3-column index survives; once 11c
+   * drops it, a flattened snapshot reports every page's second section as a
+   * duplicate and disables Publish forever. The server has always validated per
+   * page — `publishCommunitySite` builds one snapshot from
+   * `winners.filter(r => r.pageId === page.id)`.
+   */
+  it('yields one snapshot per page, each carrying its own sections', () => {
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [
+      hero(),
+      block({ id: 2, blockOrder: 2, pageId: HOME_PAGE_ID }),
+      block({ id: 7, blockOrder: 2, pageId: SECOND_PAGE_ID }),
+    ];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const byPage = new Map(result.current.validated.map((v) => [v.pageId, v]));
+    expect([...byPage.keys()].sort()).toEqual([String(HOME_PAGE_ID), String(SECOND_PAGE_ID)]);
+    // The same slot on two pages — legal after 11c, and the exact shape that a
+    // flattened snapshot turns into a bogus `Duplicate blockOrder 2` error.
+    expect(byPage.get(String(HOME_PAGE_ID))!.snapshot.sections.map((s) => s.slot)).toEqual([2]);
+    expect(byPage.get(String(SECOND_PAGE_ID))!.snapshot.sections.map((s) => s.slot)).toEqual([2]);
+  });
+
+  it('marks only the home page as hero-expecting, so no other page is nagged for one', () => {
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 7, blockOrder: 2, pageId: SECOND_PAGE_ID })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const byPage = new Map(result.current.validated.map((v) => [v.pageId, v.isHome]));
+    expect(byPage.get(String(HOME_PAGE_ID))).toBe(true);
+    expect(byPage.get(String(SECOND_PAGE_ID))).toBe(false);
+  });
+
+  it('omits a page staged for removal, so a broken page stays deletable', () => {
+    const staged = page({
+      id: SECOND_PAGE_ID,
+      name: 'Contact',
+      slug: 'contact',
+      isHome: false,
+      deleteStagedAt: '2026-07-30T00:00:00.000Z',
+    });
+    queries.pages = [HOME_PAGE, staged];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 7, blockOrder: 2, pageId: SECOND_PAGE_ID })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.validated.map((v) => v.pageId)).toEqual([String(HOME_PAGE_ID)]);
+  });
+
+  it('keeps an unadopted block in its own bucket rather than dropping it', () => {
+    // A `page_id IS NULL` row belongs to no page, so no page loop reaches it.
+    // Dropping it would HIDE a real refusal — the one direction this gate must
+    // never move in. 11c's SET NOT NULL retires this bucket.
+    queries.pages = [HOME_PAGE];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 9, blockOrder: 4, pageId: null })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    const orphan = result.current.validated.find((v) => v.pageId === 'site');
+    expect(orphan).toBeDefined();
+    expect(orphan!.snapshot.sections.map((s) => s.slot)).toEqual([4]);
+    // …and it is not ALSO counted on the home page.
+    const home = result.current.validated.find((v) => v.pageId === String(HOME_PAGE_ID))!;
+    expect(home.snapshot.sections).toHaveLength(0);
+  });
+
+  it('falls back to a whole-site snapshot when the pages query has not resolved', () => {
+    // Guessing per-page groups without page rows means guessing `isHome`, and
+    // guessing it wrong either invents a hero error or hides one.
+    queries.pages = [];
+    queries.published = [];
+    queries.draft = [hero(), block({ id: 2, blockOrder: 2, pageId: HOME_PAGE_ID })];
+
+    const { result } = renderHook(() => useSiteDiff(42));
+
+    expect(result.current.validated).toHaveLength(1);
+    expect(result.current.validated[0]!.isHome).toBe(true);
+    expect(result.current.validated[0]!.snapshot.sections.map((s) => s.slot)).toEqual([2]);
+  });
+});
+
 describe('useSiteDiff — query states', () => {
   it('reports an empty diff while loading rather than a spurious one', () => {
     queries.isPending = true;

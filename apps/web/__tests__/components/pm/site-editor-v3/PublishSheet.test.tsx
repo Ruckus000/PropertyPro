@@ -602,6 +602,38 @@ describe('PublishSheet — blocking issues', () => {
     expect(screen.queryByText(/stopping this publish/i)).not.toBeInTheDocument();
   });
 
+  it('does not invent a duplicate-slot refusal when two pages share a slot', async () => {
+    /*
+     * The 11c blocker, pinned BEFORE 11c so the migration cannot introduce it.
+     *
+     * `siteIssues` raises `Duplicate blockOrder N` as an ERROR, and the client
+     * ran it over ONE flattened community-wide snapshot while the server has
+     * always run it per page. The 3-column index makes slots community-unique
+     * today, so nothing could reach the bug; the moment 11c drops that index
+     * and two pages may each hold slot 2, every page's second section reads as
+     * a duplicate. Publish would be disabled permanently, over a slot number
+     * that appears on no UI surface, for a publish the server would accept.
+     *
+     * That is the client gate INVENTING a refusal — the one direction
+     * `SiteDiffState.pageIssues` says it must never move in.
+     *
+     * Revert check (production line): the per-page `validated.flatMap(...)` in
+     * `PublishSheet.tsx`, restored to a single `siteIssues(validated)` over a
+     * flattened snapshot.
+     */
+    queries.pages = [HOME_PAGE, CONTACT_PAGE];
+    queries.draft = [
+      heroBlock(),
+      // Both perfectly valid, both at slot 2, on different pages.
+      block({ id: 8, pageId: HOME_PAGE_ID, blockOrder: 2, isDraft: true }),
+      block({ id: 9, pageId: CONTACT_PAGE_ID, blockOrder: 2, isDraft: true }),
+    ];
+    renderSheet();
+
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+    expect(screen.queryByText(/duplicate blockorder/i)).not.toBeInTheDocument();
+  });
+
   it('still blocks over the SAME section when its page is not being deleted', async () => {
     /*
      * The positive control, and it is what stops the fix from becoming "never

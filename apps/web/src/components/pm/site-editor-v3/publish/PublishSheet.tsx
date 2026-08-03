@@ -371,8 +371,23 @@ function PublishSheetBody({ communityId, brandColors, onFixIssue, onGoToPages, o
      * `next` is still the right snapshot for the DIFF (whole-site, D-C2) and for
      * `issueTarget` below, which resolves an issue's slot to a section: every
      * slot in `validated` is also in `next`, so resolution is unaffected.
+     *
+     * PER PAGE, mirroring `publishCommunitySite`'s own loop. A flattened
+     * snapshot makes `siteIssues` raise `Duplicate blockOrder N` — an ERROR —
+     * for every page's second section as soon as 11c allows two pages to hold
+     * the same slot, permanently disabling Publish over a slot number that
+     * appears nowhere in the UI. `heroExpected: page.isHome` is the server's
+     * argument too: only home is supposed to have one.
+     *
+     * Each issue is stamped with the page it came from, so the sheet can say
+     * WHICH page a blocking issue is on without reverse-engineering it from a
+     * slot — the lookup that stops being possible at all after 11c.
      */
-    const structural = siteIssues(validated);
+    const structural = validated.flatMap((page) =>
+      siteIssues(page.snapshot, { heroExpected: page.isHome }).map((issue) =>
+        issue.pageId === undefined ? { ...issue, pageId: page.pageId } : issue,
+      ),
+    );
     // Advisory at publish on purpose: branding is unstaged and already live on
     // the public site, so blocking here cannot un-ship a bad ratio — it would
     // only stop an unrelated copy fix. See the note on `contrastIssues`.
