@@ -124,24 +124,44 @@ describe('nextContentSlot', () => {
     expect(nextContentSlot(blocks)).toBeNull();
   });
 
-  it('computes the next slot from every page, not just the selected one', () => {
-    // D-C3. `block_order` is unique across the WHOLE community until 11c drops
-    // the surviving 3-column index, so the allocator's input must span every
-    // page. This case is the shape a page-filtered caller would produce: the
-    // About page holds only slot 5, so filtering first yields 6 — which the home
-    // page already occupies, and which the server now refuses outright.
+  it('computes the next slot from the TARGET PAGE only, not the whole site', () => {
+    /*
+     * The inverse of what this case asserted through 11b, and the inversion is
+     * the point rather than an edit.
+     *
+     * Until migration 0048 the allocator HAD to span every page: `block_order`
+     * was unique community-wide, so `max(this page) + 1` was very likely a slot
+     * another page held, and the write failed the unique index. 0048 dropped
+     * that index. Slots are per-page now, so spanning every page is the wrong
+     * input in the opposite direction — it skips past other pages' numbers and
+     * pushes this page toward the 99 ceiling long before it has used its own 98
+     * positions.
+     *
+     * `AddPanel` therefore narrows with `blocksForPage(blocks, targetPageId)`
+     * before calling this. The function itself is unchanged; what changed is
+     * the list it is given.
+     */
+    const aboutPageOnly = [{ blockOrder: 5 }];
+    expect(nextContentSlot(aboutPageOnly)).toBe(6);
+
+    // Slot 6 being occupied on ANOTHER page is now irrelevant — that page's
+    // numbers do not constrain this one. Under the pre-0048 index this exact
+    // expectation was the bug the old case existed to prevent.
     const everyPage = [
       { blockOrder: 1 }, // hero, home
       { blockOrder: 2 }, // home
-      { blockOrder: 5 }, // ABOUT — the only block a page-filtered list would see
+      { blockOrder: 5 }, // about
       { blockOrder: 6 }, // home
     ];
-    expect(nextContentSlot(everyPage)).toBe(7);
-
-    // And the value the tempting "fix" would have produced, spelled out so the
-    // collision is visible rather than implied.
-    const onlyTheAboutPage = [{ blockOrder: 5 }];
-    expect(nextContentSlot(onlyTheAboutPage)).toBe(6);
     expect(everyPage.some((b) => b.blockOrder === 6)).toBe(true);
+    expect(nextContentSlot(aboutPageOnly)).toBe(6);
+  });
+
+  it('still refuses to hand out a slot the SAME page already holds', () => {
+    // The half that did not change: within one page a slot still names at most
+    // one block, and the 4-column index still enforces it.
+    const onePage = [{ blockOrder: 2 }, { blockOrder: 3 }];
+    expect(nextContentSlot(onePage)).toBe(4);
+    expect(onePage.some((b) => b.blockOrder === 4)).toBe(false);
   });
 });

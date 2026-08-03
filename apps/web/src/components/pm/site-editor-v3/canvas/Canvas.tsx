@@ -48,8 +48,14 @@ export interface CanvasProps {
  * hands the inspector a block whose edits are written against the wrong page.
  *
  * The narrowing is a `useMemo` over the raw query result rather than a change to
- * the hook, so the publish path (`use-site-diff`) and the slot allocator
- * (`nextContentSlot`, D-C3) keep the community-wide list they require.
+ * the hook, so the publish path keeps the community-wide list it requires — it
+ * must report every page's changes (D-C2), even though since 11c-0 it DIFFS
+ * each page separately.
+ *
+ * The slot allocator used to be named here as a second consumer of the
+ * community-wide list. It no longer is: migration 0048 dropped the 3-column
+ * index, so `nextContentSlot` is page-scoped too and `AddPanel` narrows before
+ * calling it.
  */
 export function Canvas({ communityId, context, onAddSection, now }: CanvasProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);

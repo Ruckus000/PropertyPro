@@ -51,9 +51,28 @@ afterAll(async () => {
  * type, not that the DATABASE did. The constraint is the thing under test.
  */
 async function insertBlockType(communityId: number, blockType: string): Promise<void> {
+  // `page_id` is NOT NULL as of 0048, so even a raw insert has to name a page.
+  // Created inline rather than via `ensureHomePage` for the same reason the
+  // insert is raw: this file tests the DATABASE constraint, and routing through
+  // a service would prove the service accepted the type instead.
+  const [page] = await state.db.execute<{ id: number }>(sql`
+    INSERT INTO site_pages (community_id, name, slug, in_nav, sort_order, is_home, is_draft)
+    VALUES (${communityId}, 'Home', '', true, 0, true, true)
+    ON CONFLICT DO NOTHING
+    RETURNING id
+  `);
+  const pageId =
+    page?.id ??
+    (
+      await state.db.execute<{ id: number }>(sql`
+        SELECT id FROM site_pages
+        WHERE community_id = ${communityId} AND is_home AND deleted_at IS NULL
+      `)
+    )[0]!.id;
+
   await state.db.execute(sql`
-    INSERT INTO site_blocks (community_id, block_type, block_order, content, is_draft)
-    VALUES (${communityId}, ${blockType}, ${90}, ${'{}'}::jsonb, ${true})
+    INSERT INTO site_blocks (community_id, page_id, block_type, block_order, content, is_draft)
+    VALUES (${communityId}, ${pageId}, ${blockType}, ${90}, ${'{}'}::jsonb, ${true})
   `);
   await state.db.execute(sql`
     DELETE FROM site_blocks WHERE community_id = ${communityId} AND block_order = 90

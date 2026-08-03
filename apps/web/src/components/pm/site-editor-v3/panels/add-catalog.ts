@@ -203,10 +203,14 @@ export const ADD_CATALOG: readonly AddCatalogEntry[] = [
 /**
  * The hero owns slot 1; content sections run 2..99 (the contract's bounds).
  *
- * These bounds are COMMUNITY-wide, not per page: the surviving pre-11a index
+ * These bounds are PER PAGE as of Phase 11c (migration 0048), which dropped
  * `site_blocks_community_order_draft_partial (community_id, block_order,
- * is_draft)` is not dropped until 11c, so two pages cannot share a slot and the
- * 98 content positions are shared by the whole site.
+ * is_draft)`. Each page now gets its own 98 content positions, and two pages
+ * holding slot 2 is an ordinary state rather than a constraint violation.
+ *
+ * This comment used to say the opposite, and said it as load-bearing rationale.
+ * It is inverted rather than deleted so the next reader does not re-derive the
+ * community-wide rule from the surrounding code and "fix" the allocator back.
  */
 export const FIRST_CONTENT_SLOT = 2;
 export const LAST_CONTENT_SLOT = 99;

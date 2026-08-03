@@ -2293,10 +2293,51 @@ describeDb('P4-55 RLS policies (integration)', () => {
       createdChecklistItemIds.add(checklistItemAId);
       createdChecklistItemIds.add(checklistItemOtherUserId);
 
+      // Every block needs a page as of 0048 (`page_id` NOT NULL). These are
+      // this describe's own pages — the ones further down belong to a later
+      // describe and are not in scope here. Nothing about the GUC policies
+      // under test depends on which page a block sits on.
+      //
+      // Deliberately NOT home pages: `site_pages_community_home_partial` allows
+      // one live home per community, and the 0046 describe below asserts that
+      // by creating its own. Claiming home here would make this fixture the
+      // reason that assertion fails — a fixture collision, not a policy fact.
+      const [pageA] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityAId,
+          name: 'GUC fixture A',
+          // Plain kebab: `site_pages_slug_shape_check` rejects the runTag's
+          // underscores. Slug uniqueness is per community, so a fixed value is
+          // safe across the two communities below.
+          slug: 'guc-fixture',
+          inNav: false,
+          sortOrder: 90,
+          isHome: false,
+          isDraft: false,
+        })
+        .returning({ id: sitePages.id });
+      const [pageB] = await db
+        .insert(sitePages)
+        .values({
+          communityId: seed.communityBId,
+          name: 'GUC fixture B',
+          slug: 'guc-fixture',
+          inNav: false,
+          sortOrder: 90,
+          isHome: false,
+          isDraft: false,
+        })
+        .returning({ id: sitePages.id });
+      if (!pageA || !pageB) throw new Error('Failed to seed site pages');
+      createdSitePageIds.add(pageA.id);
+      createdSitePageIds.add(pageB.id);
+
       const [publishedA] = await db
         .insert(siteBlocks)
         .values({
           communityId: seed.communityAId,
+          pageId: pageA.id,
           blockOrder: 1,
           blockType: 'text',
           content: { runTag: seed.runTag },
@@ -2307,6 +2348,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
         .insert(siteBlocks)
         .values({
           communityId: seed.communityAId,
+          pageId: pageA.id,
           blockOrder: 2,
           blockType: 'text',
           content: { runTag: seed.runTag },
@@ -2317,6 +2359,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
         .insert(siteBlocks)
         .values({
           communityId: seed.communityBId,
+          pageId: pageB.id,
           blockOrder: 1,
           blockType: 'text',
           content: { runTag: seed.runTag },
@@ -2628,7 +2671,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       ).rejects.toThrow();
     });
 
-    it('keeps site_blocks.page_id NULLABLE until gate G3 (Phase 11c)', async () => {
+    it('has site_blocks.page_id NOT NULL — gate G3 closed (Phase 11c, 0048)', async () => {
       const [column] = await adminSql<{ is_nullable: string }[]>`
         select is_nullable
         from information_schema.columns
@@ -2636,29 +2679,34 @@ describeDb('P4-55 RLS policies (integration)', () => {
           and table_name = 'site_blocks'
           and column_name = 'page_id'
       `;
-      expect(column?.is_nullable).toBe('YES');
+      // Flipped by 0048. A block now belongs to exactly one page, which is what
+      // makes the composite (community_id, page_id) FK an unconditional
+      // guarantee rather than one MATCH SIMPLE leaves inert on NULLs.
+      expect(column?.is_nullable).toBe('NO');
     });
 
-    it('keeps BOTH ordering indexes until gate G3 (Phase 11c)', async () => {
-      // The 3-column index is what pre-11b code relies on; its survival is what
-      // makes 11b revertible.
+    it('keeps ONLY the per-page ordering index — gate G3 closed (Phase 11c, 0048)', async () => {
+      // The 3-column index was what pre-11b code relied on, and its survival
+      // through the 11a->11c window is what made 11b revertible. 0048 dropped
+      // it, which is the change that lets two pages hold the same slot.
       const rows = await adminSql<{ indexname: string }[]>`
         select indexname from pg_indexes
         where schemaname = 'public' and tablename = 'site_blocks'
       `;
       const names = new Set(rows.map((r) => r.indexname));
-      expect(names.has('site_blocks_community_order_draft_partial')).toBe(true);
+      expect(names.has('site_blocks_community_order_draft_partial')).toBe(false);
       expect(names.has('site_blocks_community_page_order_draft_partial')).toBe(true);
     });
 
-    it('does NOT yet allow the same (block_order, is_draft) on two different pages', async () => {
-      // Per-page ordering is what the 4-column index BUYS, but it is not
-      // available yet and this asserts that honestly: the surviving 3-column
-      // index is (community, block_order, is_draft) with no page dimension, so
-      // during the 11a->11c window two pages still cannot share an order at the
-      // same draft level. This test is the definition of what gate G3 unlocks —
-      // when 11c drops the 3-column index, this expectation flips, and that flip
-      // is the signal that the contract migration actually landed.
+    it('allows the same (block_order, is_draft) on two different pages', async () => {
+      // THE flip. Through the 11a->11c window this asserted the opposite, and
+      // its own comment named this inversion as "the signal that the contract
+      // migration actually landed". 0048 dropped the community-wide 3-column
+      // index, so uniqueness is now (community, page, order, draft) and two
+      // pages holding the same slot at the same draft level is ordinary.
+      //
+      // This is the assertion the whole phase exists to make true. If it ever
+      // goes back to rejecting, the index came back.
       const [first] = await db
         .insert(siteBlocks)
         .values({
@@ -2673,6 +2721,24 @@ describeDb('P4-55 RLS policies (integration)', () => {
       if (!first) throw new Error('Failed to seed block');
       createdSiteBlockIds.add(first.id);
 
+      const [second] = await db
+        .insert(siteBlocks)
+        .values({
+          communityId: seed.communityAId,
+          pageId: draftPageAId,
+          blockOrder: orderBase + 10,
+          blockType: 'text',
+          content: { runTag: seed.runTag },
+          isDraft: true,
+        })
+        .returning({ id: siteBlocks.id });
+      if (!second) throw new Error('Second page insert was refused');
+      createdSiteBlockIds.add(second.id);
+      expect(second.id).not.toBe(first.id);
+
+      // …and the 4-column index still refuses a genuine duplicate: SAME page,
+      // same slot, same draft level. Without this the case above would pass
+      // against a table with no ordering constraint at all.
       await expect(
         db.insert(siteBlocks).values({
           communityId: seed.communityAId,

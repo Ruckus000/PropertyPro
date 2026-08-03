@@ -216,13 +216,28 @@ describeDb('migration 0043 — site_published_at backfill', () => {
     return value ? new Date(value) : null;
   }
 
-  // `site_blocks_community_order_draft_partial` is a real unique index: one
-  // published row per (community, block_order). Each insert therefore gets its
-  // own slot.
+  // Every `site_blocks` row needs a page as of 0048 (`page_id` NOT NULL), so
+  // these fixtures put one behind them. One home page per community, reused.
+  //
+  // The ordering index is now `(community, page, block_order, is_draft)`, so
+  // each insert still needs its own slot — on this page.
+  let fixturePageId: number | null = null;
+  async function ensureFixturePage(): Promise<number> {
+    if (fixturePageId !== null) return fixturePageId;
+    const rows = await state.sqlClient.unsafe(
+      `INSERT INTO site_pages (community_id, name, slug, in_nav, sort_order, is_home, is_draft)
+       VALUES (${communityId}, 'Home', '', true, 0, true, true)
+       RETURNING id`,
+    );
+    fixturePageId = (rows[0] as { id: number }).id;
+    return fixturePageId;
+  }
+
   async function insertPublishedBlock(publishedAt: string, blockOrder: number) {
+    const pageId = await ensureFixturePage();
     await state.sqlClient.unsafe(
-      `INSERT INTO site_blocks (community_id, block_type, block_order, content, is_draft, published_at)
-       VALUES (${communityId}, 'text', ${blockOrder}, '{"body":"hi"}'::jsonb, false, '${publishedAt}')`,
+      `INSERT INTO site_blocks (community_id, page_id, block_type, block_order, content, is_draft, published_at)
+       VALUES (${communityId}, ${pageId}, 'text', ${blockOrder}, '{"body":"hi"}'::jsonb, false, '${publishedAt}')`,
     );
   }
 
@@ -237,13 +252,14 @@ describeDb('migration 0043 — site_published_at backfill', () => {
 
   it('ignores drafts and soft-deleted rows', async () => {
     await insertPublishedBlock('2026-03-01T00:00:00Z', 2);
+    const pageId = await ensureFixturePage();
     await state.sqlClient.unsafe(
-      `INSERT INTO site_blocks (community_id, block_type, block_order, content, is_draft, published_at)
-       VALUES (${communityId}, 'text', 3, '{"body":"draft"}'::jsonb, true, '2026-09-01T00:00:00Z')`,
+      `INSERT INTO site_blocks (community_id, page_id, block_type, block_order, content, is_draft, published_at)
+       VALUES (${communityId}, ${pageId}, 'text', 3, '{"body":"draft"}'::jsonb, true, '2026-09-01T00:00:00Z')`,
     );
     await state.sqlClient.unsafe(
-      `INSERT INTO site_blocks (community_id, block_type, block_order, content, is_draft, published_at, deleted_at)
-       VALUES (${communityId}, 'text', 4, '{"body":"gone"}'::jsonb, false, '2026-10-01T00:00:00Z', now())`,
+      `INSERT INTO site_blocks (community_id, page_id, block_type, block_order, content, is_draft, published_at, deleted_at)
+       VALUES (${communityId}, ${pageId}, 'text', 4, '{"body":"gone"}'::jsonb, false, '2026-10-01T00:00:00Z', now())`,
     );
 
     await state.sqlClient.unsafe(BACKFILL_SQL);

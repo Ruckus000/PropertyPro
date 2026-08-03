@@ -140,30 +140,47 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(pages[0]).toMatchObject({ isHome: true, slug: '', sortOrder: 0 });
   });
 
-  it('adopts blocks written without a page_id', async () => {
-    // The rollout window: the pre-11b deploy writes rows with page_id NULL, and
-    // every one left behind is a failed 11c `SET NOT NULL`. Simulated with a
-    // direct insert because no service can produce that row any more.
-    const communityId = await createCommunity('adopt');
+  it('no longer admits a block without a page_id at all', async () => {
+    /*
+     * This case used to assert ADOPTION: the pre-11b deploy wrote rows with
+     * `page_id` NULL, and `ensureHomePage` healed them onto the home page. It
+     * simulated the row with a direct insert "because no service can produce
+     * that row any more".
+     *
+     * As of migration 0048 the DATABASE cannot produce it either — `page_id` is
+     * NOT NULL — so the state the old case set up is unrepresentable and the
+     * assertion it made is unreachable. Rewritten to assert the stronger fact
+     * that replaced it rather than deleted, because "NULLs can no longer occur"
+     * is exactly what 11c bought and is worth a standing guard.
+     *
+     * `adoptPagelessBlocks` itself is deliberately KEPT in the service: this
+     * code deploys before 0048 is applied by hand, so there is a window where
+     * production still has nullable `page_id`. It becomes dead only once the
+     * migration is confirmed applied.
+     */
+    const communityId = await createCommunity('no-null-page');
     if (!state) throw new Error('Not initialized');
-    await state.db.insert(state.dbModule.siteBlocks).values({
-      communityId,
-      blockOrder: 1,
-      blockType: 'hero',
-      content: { headline: 'Legacy row' },
-      isDraft: false,
-      publishedAt: new Date('2026-06-01T00:00:00Z'),
-    });
 
+    // Asserted on the DRIVER error, not the message: drizzle wraps the failure
+    // as "Failed query: …", so matching the text would pass for any broken
+    // statement. `23502` is Postgres' not_null_violation and nothing else.
+    const error = await state.db
+      .execute(
+        sql`INSERT INTO site_blocks (community_id, block_type, block_order, content, is_draft)
+            VALUES (${communityId}, 'hero', 1, '{}'::jsonb, false)`,
+      )
+      .then(
+        () => null,
+        (e: unknown) => e as { cause?: { code?: string }; code?: string } | null,
+      );
+    expect(error).not.toBeNull();
+    expect(error?.cause?.code ?? error?.code).toBe('23502');
+
+    // …and the ordinary path still produces a published home page for a
+    // community whose blocks are published, which is what the old case's
+    // second half was really protecting.
     const homePageId = await ensureHomePage(communityId);
-
-    const blocks = await liveBlocks(communityId);
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]!.pageId).toBe(homePageId);
-    // A community whose blocks are already published must get a PUBLISHED home
-    // page — a draft one would be hidden by anon RLS while its content was served.
-    const pages = await listSitePages(communityId, { includeDrafts: true });
-    expect(pages[0]).toMatchObject({ isDraft: false });
+    expect(homePageId).toBeGreaterThan(0);
   });
 
   // -------------------------------------------------------------------------
@@ -192,12 +209,21 @@ describeDb('multi-page site (db-backed integration)', () => {
     ).rejects.toThrow();
   });
 
-  it('refuses a slot another page holds with a readable 400, not a raw constraint 500', async () => {
-    // Reachable TODAY: the pages API ships in 11b-1 and every block write accepts a
-    // pageId, so a PM can put page 2's first section at a slot page 1 already uses.
-    // The surviving 3-column index makes that a unique violation; unguarded it
-    // surfaces as an opaque 500 with nothing to act on.
-    const communityId = await createCommunity('slot-clash-message');
+  it('lets two pages hold the same slot — the point of the phase', async () => {
+    /*
+     * Inverted by migration 0048, and this is what 11c is FOR.
+     *
+     * Through 11b this refused with a readable 400, because the community-wide
+     * 3-column index made the second write a unique violation and an opaque 500
+     * was worse than a refusal. 0048 dropped that index: uniqueness is now
+     * (community, page, block_order, is_draft), so page 2's section at slot 7
+     * is simply a different row from page 1's.
+     *
+     * `assertSlotFreeAcrossPages` was DELETED rather than relaxed, as its own
+     * comment instructed — a relaxed version would still be a read-then-write
+     * guard protecting an invariant that no longer exists.
+     */
+    const communityId = await createCommunity('slot-shared-across-pages');
     const homePageId = await ensureHomePage(communityId);
     const about = await createSitePage({
       communityId, actorUserId, name: 'About', slug: 'about',
@@ -207,12 +233,14 @@ describeDb('multi-page site (db-backed integration)', () => {
       blockType: 'text', blockOrder: 7, content: { body: 'Home seven' }, isDraft: true,
     });
 
-    await expect(
-      upsertPublishedBlock({
-        communityId, actorUserId, pageId: about.id,
-        blockType: 'text', blockOrder: 7, content: { body: 'About seven' }, isDraft: true,
-      }),
-    ).rejects.toThrow(ValidationError);
+    await upsertPublishedBlock({
+      communityId, actorUserId, pageId: about.id,
+      blockType: 'text', blockOrder: 7, content: { body: 'About seven' }, isDraft: true,
+    });
+
+    const atSeven = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 7);
+    expect(atSeven).toHaveLength(2);
+    expect(new Set(atSeven.map((b) => b.pageId))).toEqual(new Set([homePageId, about.id]));
   });
 
   it('lets the SAME page overwrite its own slot (the guard is cross-page only)', async () => {
@@ -254,20 +282,23 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(atNine).toHaveLength(2);
   });
 
-  it('refuses a DRAFT on one page at a slot another page holds as PUBLISHED', async () => {
-    // D-SLOT — the hole the corrected comment above was hiding, and the worst
-    // failure mode in the slot rules.
-    //
-    // With `eq(site_blocks.is_draft, isDraft)` in the guard's query, the two rows
-    // below never met: page A's row is published, page B's is a draft, so the
-    // draft was ACCEPTED. Nothing was wrong until the next publish, which
-    // promotes every draft to published in ONE transaction — producing two live
-    // rows at slot 12, violating the surviving 3-column index, rolling back the
-    // whole publish, and leaving the community unable to publish ANYTHING until
-    // someone hand-edits block_order in production.
-    //
-    // Refusing the write is the recoverable half of that trade: the PM gets an
-    // actionable 400 naming the position, and nothing has been written.
+  it('accepts the cross-LAYER pair that used to poison the next publish', async () => {
+    /*
+     * D-SLOT's worst case, now legal.
+     *
+     * Page A published at slot 12, page B drafting at slot 12. Under the
+     * 3-column index these two rows did not collide on insert (they differ on
+     * is_draft) but WOULD collide at publish, when every draft is promoted in
+     * one transaction — producing two live rows at slot 12, rolling the whole
+     * publish back, and leaving the community unable to publish anything. The
+     * service refused the write up front to keep that recoverable.
+     *
+     * 0048 removes the collision entirely: after promotion the two rows differ
+     * on page_id, which the 4-column index counts. So the write is accepted AND
+     * the publish that follows it succeeds — which is the half worth asserting,
+     * because "the insert no longer throws" alone would not prove the poisoning
+     * is gone.
+     */
     const communityId = await createCommunity('slot-cross-layer');
     const homePageId = await ensureHomePage(communityId);
     const about = await createSitePage({
@@ -278,71 +309,20 @@ describeDb('multi-page site (db-backed integration)', () => {
       communityId, actorUserId, pageId: homePageId,
       blockType: 'text', blockOrder: 12, content: { body: 'Home twelve, live' }, isDraft: false,
     });
-
-    await expect(
-      upsertPublishedBlock({
-        communityId, actorUserId, pageId: about.id,
-        blockType: 'text', blockOrder: 12, content: { body: 'About twelve, draft' }, isDraft: true,
-      }),
-    ).rejects.toThrow(ValidationError);
-
-    // Nothing was written: page A's published row is still the only row at 12.
-    const atTwelve = (await liveBlocks(communityId)).filter((b) => b.blockOrder === 12);
-    expect(atTwelve).toHaveLength(1);
-    expect(atTwelve[0]).toMatchObject({ pageId: homePageId, isDraft: false });
-  });
-
-  it('refuses a PUBLISHED write at a slot another page holds as a DRAFT', async () => {
-    // The mirror image, and the reason the guard drops the filter rather than
-    // inverting it: the collision is symmetric, so the query has to span BOTH
-    // layers in BOTH directions. (This direction is reachable on a community
-    // that was poisoned before the fix landed.)
-    const communityId = await createCommunity('slot-cross-layer-mirror');
-    const homePageId = await ensureHomePage(communityId);
-    const about = await createSitePage({
-      communityId, actorUserId, name: 'About', slug: 'about',
-    });
-
     await upsertPublishedBlock({
       communityId, actorUserId, pageId: about.id,
-      blockType: 'text', blockOrder: 13, content: { body: 'About thirteen, draft' }, isDraft: true,
+      blockType: 'text', blockOrder: 12, content: { body: 'About twelve, draft' }, isDraft: true,
     });
 
-    await expect(
-      upsertPublishedBlock({
-        communityId, actorUserId, pageId: homePageId,
-        blockType: 'text', blockOrder: 13, content: { body: 'Home thirteen, live' }, isDraft: false,
-      }),
-    ).rejects.toThrow(ValidationError);
+    // The publish that the old index would have rolled back.
+    await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null });
+
+    const atTwelve = (await liveBlocks(communityId)).filter(
+      (b) => b.blockOrder === 12 && !b.isDraft,
+    );
+    expect(atTwelve).toHaveLength(2);
+    expect(new Set(atTwelve.map((b) => b.pageId))).toEqual(new Set([homePageId, about.id]));
   });
-
-  it('still forbids two pages sharing a (block_order, is_draft) until 11c', async () => {
-    // The surviving 3-column index is STRICTER than the new 4-column one, so
-    // block_order stays community-wide for the whole of 11b. This is the
-    // assertion that defines what gate G3 unlocks: when 11c drops that index,
-    // this expectation flips.
-    const communityId = await createCommunity('slot-budget');
-    const homePageId = await ensureHomePage(communityId);
-    const about = await createSitePage({
-      communityId, actorUserId, name: 'About', slug: 'about',
-    });
-
-    await upsertPublishedBlock({
-      communityId, actorUserId, pageId: homePageId,
-      blockType: 'text', blockOrder: 4, content: { body: 'Home four' }, isDraft: true,
-    });
-
-    await expect(
-      upsertPublishedBlock({
-        communityId, actorUserId, pageId: about.id,
-        blockType: 'text', blockOrder: 4, content: { body: 'About four' }, isDraft: true,
-      }),
-    ).rejects.toThrow();
-  });
-
-  // -------------------------------------------------------------------------
-  // Publish isolation across pages
-  // -------------------------------------------------------------------------
 
   it('publishing a draft on one page does not retire another page\'s published row', async () => {
     // THE regression the (page, order) pair predicate exists for. Slots are
@@ -1013,12 +993,23 @@ describeDb('multi-page site (db-backed integration)', () => {
     expect(restored[0]!.pageId).toBe(homePageId);
   });
 
-  it('refuses a revert when a slot changed page ownership since the snapshot', async () => {
-    // Both the restore and the staged-removal insert write is_draft=true rows, and
-    // the surviving pre-11a index is community-wide on (block_order, is_draft). So
-    // "restore order 3 to page A" and "stage removal of order 3 on page B" cannot
-    // both be expressed — unguarded this was a raw unique violation surfacing as a
-    // 500 rather than something the PM could act on.
+  it('reverts a slot that changed page ownership since the snapshot', async () => {
+    /*
+     * Inverted by Phase 11c (migration 0048), and this is the user-visible
+     * payoff of the whole phase.
+     *
+     * Through the 11a->11c window this REFUSED. Both the restore and the
+     * staged-removal insert write is_draft=true rows, and the community-wide
+     * 3-column index meant "restore order 3 to page A" and "stage removal of
+     * order 3 on page B" could not both be expressed — so the service refused
+     * with a readable message rather than letting a raw unique violation
+     * surface as a 500.
+     *
+     * 0048 dropped that index. Both rows are now legal simultaneously because
+     * uniqueness is per (page, order), so the refusal became a FALSE one — it
+     * would block ordinary reverts of any multi-page site. The guard was
+     * deleted rather than relaxed, exactly as its own comment instructed.
+     */
     const communityId = await createCommunity('revert-slot-moved');
     const homePageId = await ensureHomePage(communityId);
     await upsertPublishedBlock({
@@ -1058,9 +1049,22 @@ describeDb('multi-page site (db-backed integration)', () => {
       .returning({ id: state.dbModule.sitePublishSnapshots.id });
     if (!snapshotRow) throw new Error('Failed to seed snapshot');
 
-    await expect(
-      revertToSnapshot({ communityId, actorUserId, snapshotId: snapshotRow.id }),
-    ).rejects.toThrow(/belongs to a different page/);
+    const result = await revertToSnapshot({
+      communityId,
+      actorUserId,
+      snapshotId: snapshotRow.id,
+    });
+
+    // The snapshot's order-3 section is restored to HOME as a draft, while the
+    // live About page keeps its own order 3. Same slot, two pages, both fine.
+    expect(result.restoredCount).toBe(1);
+    const drafts = (await liveBlocks(communityId)).filter((b) => b.isDraft);
+    const restoredOnHome = drafts.find(
+      (b) => b.pageId === homePageId && b.blockOrder === 3,
+    );
+    expect(restoredOnHome).toBeDefined();
+    const published = (await liveBlocks(communityId)).filter((b) => !b.isDraft);
+    expect(published.some((b) => b.pageId === about.id && b.blockOrder === 3)).toBe(true);
   });
 
   it('refuses to restore a v2 snapshot naming a page that no longer exists', async () => {

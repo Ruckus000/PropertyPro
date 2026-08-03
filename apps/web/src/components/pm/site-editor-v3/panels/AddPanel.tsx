@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
+import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { ADD_CATALOG, nextContentSlot, type AddCatalogEntry } from './add-catalog';
 
 // Only mounted once the PM picks Image or Gallery, which keeps the upload
@@ -64,17 +65,21 @@ export interface AddPanelProps {
  * `useContentBlocks` here shares the query key (no extra request) and exposes
  * the `isPending` the slot maths needs.
  *
- * ## Why the slot list is NOT page-scoped (Phase 11b-3, D-C3)
+ * ## The slot list IS page-scoped, as of Phase 11c
  *
- * This is the one place in the phase where the community-wide list is the
- * correct input and narrowing it would be the bug. `block_order` is unique
- * across the WHOLE community until 11c drops the surviving 3-column index, so
- * `nextContentSlot` has to see every page's blocks to return a slot that is
- * actually free. Filtering to the selected page would return
- * `max(this page) + 1` — a value another page is very likely already holding,
- * which the server now refuses (`assertSlotFreeAcrossPages`) and which before
- * that guard existed surfaced as an opaque 500. `nextContentSlot(blocks)` below
- * therefore takes the raw query result, deliberately.
+ * Through 11b this was deliberately the community-wide list, and narrowing it
+ * was the bug: `block_order` was unique across the WHOLE community, so
+ * `max(this page) + 1` was very likely a slot another page already held, which
+ * the server refused and which before that guard surfaced as an opaque 500.
+ *
+ * Migration 0048 dropped that index. Slots are per-page now, so the community-
+ * wide list is the wrong input in the opposite direction — it would skip past
+ * every other page's slots and hand this page a needlessly high number, running
+ * it into the 99 ceiling far sooner than the 98 positions it actually owns.
+ *
+ * The order of these two facts matters: page-scoping this BEFORE the index
+ * dropped would have made every add on a multi-page site fail the unique
+ * constraint. That is why it is here and not in 11c-0 (#888).
  *
  * ## Why the write carries an explicit page id (D-WRITE)
  *
@@ -94,9 +99,15 @@ export function AddPanel({ communityId, hasPolishBlocks }: AddPanelProps) {
   const [announcement, setAnnouncement] = useState('');
 
   // Tombstones INCLUDED — they are staged deletions that still hold their slot,
-  // and writing over one cancels the deletion. `blocks` is the raw list;
-  // `movableSections` would filter them out and is the wrong input here.
-  const slot = blocks === undefined ? null : nextContentSlot(blocks);
+  // and writing over one cancels the deletion. `movableSections` would filter
+  // them out and is the wrong input here.
+  //
+  // Scoped to the page being WRITTEN TO (`targetPageId`), not the whole
+  // community: slots are per-page since 0048. `blocksForPage` returns the list
+  // unchanged for a null page id, which is the right fallback — with no page
+  // resolved yet the write defaults to home, and so should the slot maths.
+  const slot =
+    blocks === undefined ? null : nextContentSlot(blocksForPage(blocks, targetPageId));
   const isFull = blocks !== undefined && slot === null;
 
   const handleAdded = useCallback(
