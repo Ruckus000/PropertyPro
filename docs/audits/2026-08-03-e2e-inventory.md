@@ -271,3 +271,25 @@ once the suite is meaningfully green, revisit a full CI job.
 6. `signup-trialing` fails instead of skipping, after a 3-minute timeout.
 7. Local setup needs an undocumented `documents` bucket and `stripe_prices` rows;
    neither is in the seed. Both belong in `pnpm seed:demo` or the local recipe.
+
+---
+
+## Addendum — the cheap recommendation landed the same day
+
+The "worth doing now" item above was implemented immediately: `activation-smoke`
+and `marketing-smoke` joined `pdfjs-runtime` in the single `test:e2e:prod`
+invocation inside `perf-check`.
+
+**CI now runs 3 specs / 8 of 39 blocks**, up from 1 spec / 4 blocks, in **5.4 s**
+— about one second more than pdfjs alone, since all three share one server boot.
+
+Verified under CI's exact conditions before the workflow was touched, because the
+local pass in this audit did **not** prove it: this audit ran them against a
+**dev server with a real database**, whereas `perf-check` runs a **production
+build with an unreachable one**. Reproducing that env — stub `DATABASE_URL`,
+`https://placeholder.supabase.co`, and no `SUPABASE_SERVICE_ROLE_KEY` — the build
+succeeds and all 8 blocks pass. That two-axis difference is now written into
+`ci.yml` and `CLAUDE.md` as the precondition for adding any further spec.
+
+Everything else in this note stands: **31 blocks remain unexercised by CI**, and
+the recommendation against a job covering the authenticated suite is unchanged.
