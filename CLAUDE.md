@@ -92,11 +92,24 @@ pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 > wildcard DNS for `*.localtest.me` → 127.0.0.1 (works unconfigured on macOS)
 > and starts its own server on :3002.
 >
-> **CI runs exactly one spec** — `pdfjs-runtime.spec.ts`, inside `perf-check`,
-> precisely because it is the only one with no DB/auth/seed dependency. Every
-> other spec is unexercised by CI: do not assume a Playwright spec guards
-> anything on a PR. Adding a CI e2e job is blocked on getting Supabase Auth +
-> a seed into a workflow, not on Playwright.
+> **CI runs three specs — 8 of the suite's 39 test blocks** —
+> `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`, in one
+> `test:e2e:prod` invocation inside `perf-check` (~5s). Those three are exactly
+> the ones needing no DB, no Auth and no seed, which is what lets them run in a
+> job whose `DATABASE_URL` points at a stub that was never started.
+>
+> **The other 31 blocks are unexercised by CI — do not assume a Playwright spec
+> guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
+> them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
+> `docs/audits/2026-08-03-e2e-inventory.md` measured the whole suite: **15 of 39
+> blocks pass locally, and 10 never execute at all** (five specs use
+> `describe.configure({ mode: 'serial' })`, so one early failure skips the rest).
+> A CI job over the remainder would be red on day one and stay red.
+>
+> **Adding a spec to `perf-check` requires proving it passes against a
+> PRODUCTION build with an UNREACHABLE database.** Passing under `pnpm test:e2e`
+> proves nothing about that job — that command runs a dev server against a real
+> database, differing on both axes.
 
 # Other guards (run individually; all bundled into `pnpm lint`)
 pnpm guard:breadcrumbs          # Breadcrumb coverage
