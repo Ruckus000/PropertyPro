@@ -81,8 +81,11 @@ scripts/with-env-local.sh pnpm test:integration:preflight
 pnpm playwright:install         # Install browsers (once)
 pnpm test:e2e                   # dev server on :3000 (+ admin on :3001)
 pnpm test:e2e:tenant            # tenant-host specs; dev server on localtest.me:3002
-pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
-                                # production build on :3100; the only spec CI runs
+pnpm --filter @propertypro/web test:e2e:prod
+                                # production build on :3100; the only specs CI runs.
+                                # Takes NO spec paths — the list is PROD_SAFE_SPECS
+                                # in playwright.prod.config.ts. A CLI path list
+                                # overrides testMatch and silently diverges.
 
 > **E2E preconditions, and what CI does NOT cover.** These specs are not
 > self-contained: they need `NODE_ENV=development`, a live Supabase **Auth**
@@ -91,6 +94,23 @@ pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 > `pnpm seed:demo` for the demo users. `test:e2e:tenant` additionally needs
 > wildcard DNS for `*.localtest.me` → 127.0.0.1 (works unconfigured on macOS)
 > and starts its own server on :3002.
+>
+> **Two local-stack requirements that are easy to miss** (both cost a full
+> investigation on 2026-08-05 — see the seventh addendum of the audit note):
+> 1. Set **`auto_expose_new_tables = true`** under `[api]` in
+>    `supabase/config.toml`. The Supabase CLI now defaults this OFF, so tables
+>    created by our migrations get NO Data API grants and routes fail with
+>    `permission denied for table … (42501)` — 85 of 100 public tables. Prod is
+>    not like this. On an existing DB, apply
+>    `scripts/sql/local-supabase-post-migrate.sql` after a blanket grant.
+> 2. Launch the suite through **`scripts/with-env-local-demo-db.sh`**. `next dev`
+>    reads `.env.local`, whose `DATABASE_URL` is **production**; it is safe only
+>    because Next's loader does not overwrite vars already in `process.env`, so
+>    the wrapper's loopback exports must come first.
+>
+> The admin app (`:3001`) additionally needs a row in `platform_admin_users`,
+> which **nothing seeds** — so admin-app specs (`support-access`) cannot pass
+> today.
 >
 > **CI runs three specs — 8 of the suite's 39 test blocks** —
 > `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`, in one
@@ -101,10 +121,18 @@ pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 > **The other 31 blocks are unexercised by CI — do not assume a Playwright spec
 > guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
 > them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
-> `docs/audits/2026-08-03-e2e-inventory.md` measured the whole suite: **15 of 39
-> blocks pass locally, and 10 never execute at all** (five specs use
-> `describe.configure({ mode: 'serial' })`, so one early failure skips the rest).
-> A CI job over the remainder would be red on day one and stay red.
+> `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite; as of the
+> **seventh addendum (2026-08-05)** the default suite is **19 passed / 8 failed /
+> 2 never ran** at `workers: 1`, up from 11/9/7, after the DB connection-pool
+> leak that was starving GoTrue was fixed. Before trusting a local number,
+> confirm the port is clear AND `ps -eo comm | grep -c vitest` is 0 — a parallel
+> unit run in another worktree drove one measurement to 24.9 min and failed both
+> canaries. Blocks still "never run" because five
+> specs use `describe.configure({ mode: 'serial' })`, so one early failure skips
+> the rest. A CI job over the remainder would still be red on day one: three
+> blockers are recorded and unfixed (Stripe placeholder price ids, an onboarding
+> wizard the spec describes but that was never built, and an unseeded
+> `platform_admin_users`).
 >
 > **Adding a spec to `perf-check` requires proving it passes against a
 > PRODUCTION build with an UNREACHABLE database.** Passing under `pnpm test:e2e`

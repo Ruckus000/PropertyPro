@@ -68,6 +68,13 @@ export async function GET(request: Request) {
   });
 
   if (linkError || !linkData?.properties?.hashed_token) {
+    // Dev-only route (404s outside development), so this logging is bounded.
+    // Without it the failure is invisible: the E2E helper is the only caller
+    // that ever sees the body, and until 2026-08-05 it discarded it.
+    console.error(
+      `[agent-login] generateLink failed for role=${role} (${email}):`,
+      linkError?.message ?? 'no hashed_token in response',
+    );
     return NextResponse.json(
       {
         error: 'Failed to generate login link',
@@ -118,6 +125,10 @@ export async function GET(request: Request) {
   });
 
   if (authError || !authData.user) {
+    console.error(
+      `[agent-login] verifyOtp failed for role=${role} (${email}):`,
+      authError?.message ?? 'no user in response',
+    );
     return NextResponse.json(
       {
         error: 'OTP verification failed',

@@ -29,13 +29,53 @@ export default defineConfig({
     '**/wave-2-ga-staging.spec.ts',
   ],
   fullyParallel: true,
+  // ONE worker. Measured 2026-08-05 on an otherwise-idle machine, same stack and
+  // seed, port force-cleared before each arm:
+  //
+  //   workers | passed | failed | never ran | wall  | `Test timeout` | `ERR_ABORTED`
+  //   --------|--------|--------|-----------|-------|----------------|--------------
+  //         1 |   15   |    8   |     6     | 6.6m  |        4       |      0
+  //         2 |   10   |   11   |     8     | 6.2m  |       11       |      0
+  //         3 |    7   |   14   |     8     | 5.8m  |       15       |      3
+  //
+  // Parallelism buys 13% of wall clock and costs HALF the pass rate. The extra
+  // failures are not real defects: they are `Test timeout of 30000ms exceeded`
+  // and `net::ERR_ABORTED; maybe frame was detached?`, i.e. one `next dev`
+  // server unable to serve several browsers doing first-compile navigations at
+  // once. A suite that reports 7 passes at 3 workers and 15 at 1 is not telling
+  // you about the app.
+  //
+  // 53 seconds is a cheap price for a result that means something. Revisit only
+  // with a new measurement — not on the assumption that more workers are faster.
+  workers: 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    // MUST be `localhost`, not `127.0.0.1`, even though the dev server binds
+    // 127.0.0.1 and both reach it.
+    //
+    // `next dev` pins its own origin to `http://localhost:<port>` and builds
+    // middleware redirects from it, regardless of the request's Host header
+    // (measured 2026-08-05: `Host: 127.0.0.1:3000`, `Host: localhost:3000` and
+    // `Host: example.test:3000` all produced
+    // `location: http://localhost:3000/auth/login`).
+    //
+    // Browsers treat `localhost` and `127.0.0.1` as DIFFERENT hosts for cookie
+    // purposes. So with a 127.0.0.1 baseURL, the session cookie was set on
+    // 127.0.0.1 and any test that followed a middleware or server-side redirect
+    // crossed to localhost, arrived with NO cookies, and was bounced to
+    // /auth/login — a logged-in test failing as though it were logged out.
+    // `add-community.spec.ts:40` is the case that exposed it.
+    baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
   },
+  // `dev:e2e` begins with `rm -rf .next`, so BOTH servers below do a cold
+  // webpack build before they answer. 120s was not enough for that on a busy
+  // machine — an entire run aborted with
+  // `Error: Timed out waiting 120000ms from config.webServer`, which reads like
+  // a broken app rather than a slow build. This budget is only ever spent
+  // waiting for readiness; a server that starts in 40s still starts in 40s.
   webServer: [
     {
       command: 'pnpm dev:e2e',
@@ -43,13 +83,13 @@ export default defineConfig({
       // Always allow reuse: if nothing is listening, Playwright still starts dev:e2e.
       // When CI is set in a dev shell and 3000 is already taken, false would error.
       reuseExistingServer: true,
-      timeout: 120_000,
+      timeout: 300_000,
     },
     {
       command: 'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: true,
-      timeout: 120_000,
+      timeout: 300_000,
     },
   ],
   projects: [

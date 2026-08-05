@@ -294,31 +294,34 @@ jobs:
 
       # The only e2e that runs on a PR, and the list is deliberately short.
       #
-      # These three specs share one property that nothing else in `apps/web/e2e`
-      # has: they need NO database, NO Supabase Auth and NO seed. That is why
-      # they can run in this job, whose `DATABASE_URL` points at a stub that was
-      # never started and which deliberately omits `SUPABASE_SERVICE_ROLE_KEY`.
+      # THE LIST LIVES IN ONE PLACE: `PROD_SAFE_SPECS` in
+      # `apps/web/playwright.prod.config.ts`, which the config applies as its
+      # `testMatch`. Do NOT re-list spec paths on the command line here — a CLI
+      # list overrides `testMatch`, so the two silently diverge and a spec added
+      # to the allowlist never actually runs in CI.
       #
-      # The other 35 blocks are NOT missing by oversight. They call
+      # Those specs share one property that nothing else in `apps/web/e2e` has:
+      # they need NO database, NO Supabase Auth and NO seed. That is why they can
+      # run in this job, whose `DATABASE_URL` points at a stub that was never
+      # started and which deliberately omits `SUPABASE_SERVICE_ROLE_KEY`.
+      #
+      # The remaining blocks are NOT missing by oversight. They call
       # `/dev/agent-login`, which needs a live GoTrue plus `pnpm seed:demo`, and
       # getting that into a workflow is the actual blocker — not Playwright.
-      # docs/audits/2026-08-03-e2e-inventory.md measured the suite end to end:
-      # 15 of 39 blocks pass locally, so a CI job covering the rest would be red
-      # on day one and stay red. A permanently-red required check is worse than
-      # no check — it is how these specs rotted unnoticed in the first place.
+      # docs/audits/2026-08-03-e2e-inventory.md measured the suite end to end;
+      # well under half the blocks pass locally, so a CI job covering the rest
+      # would be red on day one and stay red. A permanently-red required check is
+      # worse than no check — it is how these specs rotted unnoticed in the first
+      # place.
       #
-      # Before adding a spec here, confirm it passes against a PRODUCTION build
-      # with an UNREACHABLE database. Passing under `pnpm test:e2e` proves
-      # nothing about this job: that command runs a dev server against a real
-      # database, which differs on both axes.
+      # Before adding a spec to `PROD_SAFE_SPECS`, confirm it passes against a
+      # PRODUCTION build with an UNREACHABLE database. Passing under
+      # `pnpm test:e2e` proves nothing about this job: that command runs a dev
+      # server against a real database, which differs on both axes.
       - name: Run production smoke tests (public pages + PDF.js)
         env:
           PDFJS_TEST_ENABLED: '1'
-        run: >
-          pnpm --filter @propertypro/web test:e2e:prod --
-          e2e/pdfjs-runtime.spec.ts
-          e2e/activation-smoke.spec.ts
-          e2e/marketing-smoke.spec.ts
+        run: pnpm --filter @propertypro/web test:e2e:prod
 
       - name: Run performance budget check
         run: pnpm perf:check

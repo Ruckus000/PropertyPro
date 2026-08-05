@@ -131,14 +131,20 @@ async function assertCheckoutSessionStarted(page: Page): Promise<void> {
   // Capture the winner rather than re-querying the DOM after the poll: a second
   // read is a fresh observation, so it can disagree with the one the assertion
   // actually passed on.
-  let outcome: 'failed' | 'mounted' | 'pending' = 'pending';
+  //
+  // Held in an object, not a bare `let`. TypeScript narrows a `let` to its
+  // initializer's literal type and does not track writes made inside the poll
+  // callback, so `outcome === 'failed'` below narrowed to a comparison between
+  // '"pending"' and '"failed"' — TS2367, "no overlap". The runtime behaviour was
+  // always correct; the property form is what makes the checker agree.
+  const state: { outcome: 'failed' | 'mounted' | 'pending' } = { outcome: 'pending' };
 
   await expect
     .poll(
       async () => {
         const [failed, mounted] = await Promise.all([failure.count(), iframe.count()]);
-        outcome = failed ? 'failed' : mounted ? 'mounted' : 'pending';
-        return outcome;
+        state.outcome = failed ? 'failed' : mounted ? 'mounted' : 'pending';
+        return state.outcome;
       },
       {
         timeout: 30_000,
@@ -149,7 +155,7 @@ async function assertCheckoutSessionStarted(page: Page): Promise<void> {
     )
     .not.toBe('pending');
 
-  if (outcome === 'failed') {
+  if (state.outcome === 'failed') {
     throw new Error(
       'Stripe Checkout session creation FAILED — the app rendered "Unable to start checkout". ' +
         'The usual cause is that STRIPE_SECRET_KEY cannot see the ids in the `stripe_prices` ' +

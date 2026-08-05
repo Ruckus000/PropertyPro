@@ -12,23 +12,21 @@ const PALM_ORIGIN = `http://${PALM_SLUG}.localtest.me:3002`;
 const APEX_ORIGIN = 'http://localtest.me:3002';
 
 async function resetPalmTransparencyDisabled(page: import('@playwright/test').Page): Promise<void> {
-  const loginRes = await page.request.get('/dev/agent-login?as=founding_admin', {
-    headers: { accept: 'application/json' },
-  });
-  if (!loginRes.ok()) return;
+  // Uses the shared helper so a transient agent-login 5xx retries and then
+  // FAILS LOUDLY with the response body. This used to be a hand-rolled
+  // `page.request.get(...)` with `if (!loginRes.ok()) return;` — a single 500
+  // turned this fixture reset into a silent no-op, and the serial suite below
+  // then failed on stale transparency state with a completely misleading
+  // assertion error.
+  const { communityId } = await loginAs(page, 'founding_admin', { communitySlug: PALM_SLUG });
 
-  const loginJson = (await loginRes.json()) as {
-    community: { id: number } | null;
-    allCommunities?: Array<{ id: number; slug: string }>;
-  };
-  const palmId =
-    loginJson.community?.id
-    ?? loginJson.allCommunities?.find((c) => c.slug === PALM_SLUG)?.id;
-  if (!palmId) return;
-
-  await page.request.patch('/api/v1/transparency/settings', {
-    data: { communityId: palmId, enabled: false, acknowledged: false },
+  const res = await page.request.patch('/api/v1/transparency/settings', {
+    data: { communityId, enabled: false, acknowledged: false },
   });
+  expect(
+    res.ok(),
+    `failed to reset Palm transparency state: ${res.status()} ${await res.text()}`,
+  ).toBeTruthy();
 }
 
 test.describe.configure({ mode: 'serial' });

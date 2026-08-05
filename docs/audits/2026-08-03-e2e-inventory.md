@@ -477,7 +477,16 @@ only. Neither is closed on "we could not be bothered": each has a measurement
 that contradicts the recorded symptom, and both measurements are stated so the
 next person starts from data rather than from this note's prose.
 
-### 3 — connection exhaustion: the app is not the source
+### ~~3 — connection exhaustion: the app is not the source~~ — **REFUTED 2026-08-05**
+
+> **This finding is wrong. See the seventh addendum.** The app *is* the source:
+> `next dev` re-evaluates `drizzle.ts` as it compiles routes, and each module
+> instance opened its own postgres-js pool. Measured across a real suite run the
+> app reached **78** connections and climbing, starving GoTrue out with
+> `SQLSTATE 53300` — which is the long-unexplained `/dev/agent-login` 500. The
+> probes below held at 1 because they exercised only two routes; the leak is per
+> module-graph instantiation, not per request. Left in place unedited, per this
+> note's append-don't-rewrite rule.
 
 Measured on a `next dev` server against the local stack, counting
 `pg_stat_activity` rows that are app client backends (excluding Supabase's own
@@ -616,7 +625,13 @@ Do not read this as "set workers=1". Read it as: the dev server cannot serve 7
 concurrent browsers doing first-compile navigations, so **measure at
 `--workers=1` and triage the assertion failures that survive**.
 
-### Still open: `/dev/agent-login` intermittently 500s mid-suite
+### ~~Still open:~~ **RESOLVED 2026-08-05** — `/dev/agent-login` intermittently 500s mid-suite
+
+> Cause found and fixed; see the seventh addendum. It was Postgres connection
+> exhaustion starving GoTrue, caused by a pool leak in the app. Everything ruled
+> out below was correctly ruled out — all three hypotheses concerned the
+> endpoint, and the endpoint was never the problem. The instruction below
+> ("capture that body") is exactly what solved it.
 
 Four blocks at `--workers=1` failed with `agent-login failed for
 role=board_president: 500` (`phase1-roadmap-smoke`, `support-access`, and two
@@ -644,3 +659,297 @@ POSITIONAL test-file filter, so Playwright matches nothing, prints
 `Error: No tests found`, and exits **1** — which reads as a failing suite
 rather than a malformed command. Use
 `pnpm exec playwright test -c playwright.config.ts --workers=1`.
+
+---
+
+## Seventh addendum — the agent-login 500 was CONNECTION EXHAUSTION, and the app *was* the source
+
+Date: **2026-08-05**. Same method as the sixth addendum: local Supabase stack
+(`max_connections = 100`), `pnpm seed:demo`, port force-cleared before every
+measurement, `--workers=1`.
+
+### The 500 is identified and FIXED
+
+The sixth addendum's instruction — capture the response body before theorising
+again — was the whole investigation. `e2e/helpers/dev-login.ts` now reads the
+body and folds it into the assertion message. First run, first failure:
+
+```
+agent-login failed for role=board_president (?as=board_president): 500
+{"error":"Failed to generate login link","details":"Database error finding user",
+ "hint":"Ensure \"board.president@sunset.local\" exists in Supabase Auth ..."}
+```
+
+So the failing call was `generateLink`, not `verifyOtp`. GoTrue's own log gives
+the rest:
+
+```
+error finding user: failed to connect to host=supabase_db_… user=supabase_auth_admin:
+FATAL: remaining connection slots are reserved for roles with the
+SUPERUSER attribute (SQLSTATE 53300)
+```
+
+**Postgres was out of connection slots, so GoTrue could not open one.** That is
+why it "worked early in a run and broke later" — later is when the slots ran
+out. Every ruled-out hypothesis in the sixth addendum was correctly ruled out;
+all three were about the endpoint, and the endpoint was never the problem.
+
+### STRIKING the fifth addendum's finding "3 — connection exhaustion: the app is not the source"
+
+That heading is **wrong**, and so is its structural claim that
+
+> `packages/db/src/drizzle.ts` holds the **only** `postgres()` call in the
+> package — a module-scope singleton … dev-server recompilation does not leak
+> pools either.
+
+A module-scope `const` is one pool per **module instance**, not per process.
+`next dev` re-evaluates the module graph as it compiles routes on demand, so a
+long dev session accumulates several instances, each opening a fresh postgres-js
+pool (default `max: 10`) and never closing the previous one.
+
+Measured with `pg_stat_activity` grouped by `application_name` — the grouping
+the fifth addendum itself asked for:
+
+| | total conns | app (`postgres.js`) | GoTrue reachable |
+|---|---:|---:|---|
+| dev servers down (Supabase's own services only) | 26 | 0 | yes |
+| mid-run, before fix | **104** | **78**, climbing monotonically | **no — 53300** |
+| mid-run, after fix | 34 | **8**, flat | yes |
+
+The fifth addendum's probes (120 and 250 concurrent requests over two routes,
+8 forced recompiles) held app connections at 1 because they exercised **two
+routes**. The leak is per distinct module-graph instantiation, so it only shows
+up across a full suite touching dozens of routes over minutes — which is exactly
+the shape of the run where the symptom appeared.
+
+**The ORIGINAL note had this right.** Its "APP — the app returns an error page"
+section quoted the server log verbatim —
+`Failed query: select … from "user_roles" … [cause]: remaining connection slots
+are reserved` — and concluded "it is a real property of the app's connection
+handling and is the kind of thing an e2e suite exists to find." That was
+correct. The fifth addendum overturned it on a probe too narrow to reproduce it.
+The original observation stands; only its scale was underestimated.
+
+Raising `max_connections` 100 → 500 (tried in the original four-run matrix and
+recorded as "rejected as the cause") does not fix this either — an unbounded leak
+just takes longer to exhaust a bigger ceiling. That is why that experiment moved
+the pass rate so little.
+
+**Fixed** in `packages/db/src/drizzle.ts`: the client is cached on `globalThis`
+and `max` is set explicitly. `closeDb()` clears the cache so scripts that close
+and re-import still get a usable pool. After the fix, a full `--workers=1` run
+contains **zero** `agent-login failed` lines, down from four blocks.
+
+This also retires the fifth addendum's "remaining candidates … the audit
+session's own concurrent tooling". No seed, vitest or `tsx` was running during
+the measurements above; `psql` is counted separately and never exceeded 1.
+
+### A second, unrelated defect this surfaced: `127.0.0.1` vs `localhost`
+
+`playwright.config.ts` used `baseURL: 'http://127.0.0.1:3000'`. But `next dev`
+pins its own origin to `http://localhost:<port>` and builds middleware redirects
+from it **regardless of the request's Host header** — measured with
+`Host: 127.0.0.1:3000`, `Host: localhost:3000` and `Host: example.test:3000`,
+all three answering `location: http://localhost:3000/auth/login`.
+
+Browsers treat `localhost` and `127.0.0.1` as different hosts for cookies. So
+the session cookie was set on `127.0.0.1`, and any test that followed a
+middleware or server-side redirect crossed to `localhost`, arrived with no
+cookies, and was bounced to `/auth/login` — **a logged-in test failing as though
+it were logged out**. `add-community.spec.ts:40` (a redirect-only page) is the
+case that exposed it; it passes with `baseURL` and `ADMIN_BASE_URL` moved to
+`localhost`.
+
+### The e2e suite was never type-checked
+
+`apps/web/tsconfig.json` included `src/**` but not `e2e/**`, so no spec or helper
+was ever seen by `pnpm typecheck`. Adding `e2e/**/*.ts` produced **4** errors
+across the whole suite, all real:
+
+- `onboarding-first-run.spec.ts` passed `skipPortalNav: true`, an option
+  `LoginAsOptions` never declared — silently ignored at runtime, so the helper
+  kept navigating to the portal the spec was trying to skip. (Now implemented.)
+- `stripe-e2e.ts` compared a `let` against a value TS had narrowed away
+  (TS2367). Runtime behaviour was correct; the checker could not see the write
+  inside the poll callback.
+- `pdfjs-runtime.spec.ts` imported a browser-side runtime URL.
+
+`e2e/**/*.ts` is now in the typecheck gate, so this class cannot recur silently.
+
+### Also corrected
+
+`.claude/rules/agent-testing.md`'s role table claimed six roles land in Sunset
+Condos. Measured against `pnpm seed:demo`, **four of them do not** — `owner`,
+`board_president`, `cam` and `pm_admin` are all multi-community, and the bare
+default is `communities[0]` ordered by `communities.name`, i.e. **Palm Shores
+HOA** (Essentials, where most surfaces are plan-gated). The sixth addendum named
+only `board_president`. The table now states the ordering rule and documents
+pinning.
+
+The shared helper now **throws** when `communitySlug` does not match one of the
+user's communities, instead of silently falling back to that alphabetical
+default — the failure mode PR #898 spent a PR diagnosing.
+
+### Triage of the nine `--workers=1` failures
+
+Every one has a named cause. Six are fixed; three are recorded as blocked, with
+the blocker identified.
+
+| Block | Cause | Status |
+|---|---|---|
+| `phase1-roadmap-smoke:32` | agent-login 500 (connection exhaustion). Also raced the compatibility redirect into `/payments?tab=assessments` on a 5s budget. | **fixed** — pool leak + settle on the redirect target |
+| `add-community:40` | `baseURL` was `127.0.0.1`, the redirect target `localhost` → session cookie not sent → bounced to `/auth/login`. | **fixed** — baseURL/ADMIN_BASE_URL now `localhost` |
+| `demo-flows:30`, `demo-flows:87` | Comma-joined selector mixing the `text=` engine into a CSS list. Playwright threw `Unexpected token "="`; these assertions had never executed. `:87` additionally expected a `<table>` for what is now a card list. | **fixed** — `.or()`, plus a locator the list actually renders |
+| `demo-flows:126` | Navigated to `/pm/dashboard`, which has **no `page.tsx`** — the portfolio view moved to `/pm/dashboard/communities`. The 404 still satisfied the spec's `toContain('/pm/')`. | **fixed** — uses the portal agent-login returns |
+| `meeting-create-spacebar:8` | Two causes: bare login landed on Palm Shores (Essentials), and `waitUntil: 'networkidle'` never settled. Then the real one: **"Meetings & Calendar" is a `<div>`, not a heading**, so `getByRole('heading')` could never match — and the route rendered **no `<h1>` at all**, violating the page-title rule in `.claude/rules/design.md`. `guard:breadcrumbs` misses it because its glob only covers `[param]`/`new`/`edit` pages. | **fixed in the APP** — the page title is now an `<h1>` (classes unchanged, visual identical) |
+| `esign-and-documents-flow:212` | Two causes. All five navigations used `waitUntil: 'networkidle'` on pages that render PDF.js previews, which keep fetching indefinitely, so `page.goto` blew the 120s timeout before any assertion ran. Underneath that: the spec waited 60s for a category pill named **`Rules & Regulations`, which does not exist** — `document_categories` has `Rules` (0 docs) and `Governing Documents` (13), and the very next line opens "Sunset Condos Annual Budget", which is itself in `Governing Documents`. The assertion contradicted the line after it. | **fixed** — `domcontentloaded`, and the real category |
+| `phase1-roadmap-smoke:60` | The Stripe connection card is a client component that had not mounted (not even its skeleton) inside the 5s default. Accepted states unchanged. | **fixed** — realistic wait |
+| `signup-trialing:39` | **Environment, not a defect.** `seed:demo` inserts placeholder Stripe price ids (`price_placeholder_essentials_condo_718_month`); no Stripe key can resolve them. The app diagnoses this itself in the dev log. Needs real test-mode price ids. | **recorded** |
+| `onboarding-first-run:120` (and `:144`) | **The spec targets a wizard that was never built.** It waits for `data-testid="condo-onboarding-wizard"` with `data-hydrated="true"`; `git log -S` shows that identifier has only ever appeared in `specs/phase-2-multi-tenancy/39-condo-onboarding-wizard.md` and in this spec — never in `apps/web/src`. The shipped `/onboarding/condo` is a different, 2-step wizard. **This spec has never been capable of passing.** | **recorded — bigger than a selector fix** |
+| `support-access:97` | Two layers. (1) Local-stack artifact: the Supabase CLI now defaults `auto_expose_new_tables` OFF, so a migrations-only database grants the Data API roles nothing — **85 of 100 public tables** had no `service_role` SELECT, and the toggle's POST 500'd with `permission denied … (42501)`. Production is not like this (`local-supabase-post-migrate.sql` records the measured prod posture: service_role reads all). (2) After fixing that, the real blocker: **`platform_admin_users` is empty and nothing seeds it**, so the admin app answers `access_denied` and no admin-app spec can pass. | **(1) fixed in the local recipe; (2) recorded** |
+
+**Two things worth pulling out of that table.**
+
+`onboarding-first-run.spec.ts` is not stale — it is fiction. It was written from a
+design document, and both of its blocks assert against markup that has never
+existed. Rewriting it against the shipped 2-step wizard is a real piece of work
+with product questions attached (what should first-run onboarding guarantee?),
+not a selector swap, so it is recorded rather than guessed at.
+
+Seeding a platform admin is a one-row change, but it grants `super_admin` in
+shared demo data. That is a security-posture decision for whoever owns the demo
+seed, not something to slip into an e2e-repair pass. Until it lands, **the entire
+admin app is unreachable from e2e.**
+
+### The local-stack recipe has a new required line
+
+Add to `supabase/config.toml` under `[api]`:
+
+```toml
+auto_expose_new_tables = true
+```
+
+Without it the local stack is **stricter than production** and produces
+`permission denied for table …` failures that do not exist in the real app. On an
+already-created database, apply `scripts/sql/local-supabase-post-migrate.sql`
+after a blanket grant — that file is the repo's source of truth for which tables
+production deliberately keeps closed to `anon`/`authenticated`.
+
+### One more trap: `.env.local` does not override the shell
+
+`next dev` loads `.env.local`, whose `DATABASE_URL` is **production**. It is safe
+to run the e2e suite only because Next's env loader does **not** overwrite
+variables already present in `process.env` (verified directly against
+`@next/env` 15.5.12). So the suite must be launched through
+`scripts/with-env-local-demo-db.sh`, which exports loopback values first and
+asserts they are loopback. Running `pnpm test:e2e` bare, with a `.env.local`
+symlinked in, points the dev server at production.
+
+### Worker count: measured, then capped at 1
+
+The sixth addendum said "do not read this as *set workers=1*" and asked for a
+measurement. Here it is — otherwise-idle machine, same stack and seed, port
+force-cleared before each arm, `workers` the only variable:
+
+| workers | passed | failed | never ran | wall clock | `Test timeout` | `ERR_ABORTED` |
+|---:|---:|---:|---:|---|---:|---:|
+| **1** | **15** | 8 | 6 | **6.6 min** | 4 | **0** |
+| 2 | 10 | 11 | 8 | 6.2 min | 11 | 0 |
+| 3 | 7 | 14 | 8 | 5.8 min | 15 | 3 |
+
+**Parallelism buys 13% of wall clock and costs half the pass rate.** The extra
+failures are not defects — they are timeouts and detached frames, i.e. one
+`next dev` server failing to serve several browsers doing first-compile
+navigations at once. `workers: 1` is now set in `playwright.config.ts` with this
+table inline. 53 seconds is a cheap price for a result that means anything.
+
+The four remaining `Test timeout` lines at `workers=1` are not contention: they
+are the genuinely-failing blocks in the table above (`support-access`'s 120s cap,
+`signup-trialing`'s Stripe wait, and the onboarding wizard that does not exist).
+
+**Caveat on measuring on this machine:** an earlier attempt at this same matrix
+produced `workers=1 → 7 passed, 19 timeouts, 20.6 min`. That arm was worthless —
+a *different worktree* was running the 937-file unit suite across every core at
+the time. Check `ps -eo comm | grep -c vitest` and prefer an idle machine before
+recording any e2e timing, exactly as the port check is already required.
+
+---
+
+## Where the number stands after this pass
+
+| default suite, one worker | passed | failed | never ran | notes |
+|---|---:|---:|---:|---|
+| before (sixth addendum) | 11 | 9 | 7 | |
+| after the pool-leak fix alone | 12 | 10 | 7 | specs untouched |
+| after the spec/app fixes | **19** | 8 | 2 | **0 timeouts, 0 aborts, 0 agent-login 500s** |
+
+**19 passed / 8 failed / 2 never ran** is the number, taken on a quiet machine at
+`workers: 1`. Counting the whole suite the way the Headline table does — default
++ tenant (3) + pdfjs (4) — that is **26 of 39 blocks**, up from 13.
+
+The qualitative change matters more than the count: that run contained **zero**
+`Test timeout`, **zero** `ERR_ABORTED` and **zero** `agent-login failed` lines.
+Every remaining failure is a specific assertion with a named cause, which is the
+state the sixth addendum was trying to reach.
+
+### What is NOT in the 19, and what confirms each piece
+
+Fixes landed after that measurement. Some were confirmed by later partial runs
+before the environment failed; some were not. Stated individually so the next
+person does not have to guess which:
+
+| Fix | Status |
+|---|---|
+| `demo-flows` compliance + owner-documents first-render budgets | **confirmed passing** in a later run (10.2s / 17.0s) |
+| `add-community` — `domcontentloaded`, per-test budget above the assertion budget | **confirmed passing** in a later run |
+| `activation-smoke` per-test budget | **confirmed passing** (18.3s, having previously blown 30s) |
+| `webServer.timeout` 120s → 300s | **confirmed** — a run that previously aborted with `Timed out waiting 120000ms from config.webServer` got past startup |
+| `esign` → `Governing Documents` category | **NOT yet observed passing** |
+| meetings-dialog and owner-payment-portal budgets | **NOT yet observed passing** |
+| `demo-flows` FIRST_RENDER_TIMEOUT 30s → 60s | **NOT yet observed passing** |
+
+The three unconfirmed entries are each justified by the exact failure they were
+derived from — a category that provably does not exist in
+`document_categories`, and two assertions that died at the 5s default on
+client-rendered content — but **nobody has yet seen a full green run containing
+them.** Run one before quoting a number higher than 19.
+
+### The confirming run never happened: the environment died twice
+
+Two attempts, two infrastructure failures, neither related to the app:
+
+1. **Both canaries failed** at load average 358, with 13 `vitest` workers from
+   another worktree. Discarded per the rule above.
+2. **Docker exited**, taking the entire local Supabase stack with it. Every
+   authenticated block then failed fast, and `/dev/agent-login` returned
+   `"details":"fetch failed"` — GoTrue was simply gone. `psql` to :55322 gave
+   `Connection refused` and `docker ps` gave `Cannot connect to the Docker
+   daemon`.
+
+The second one is worth its own note, because the symptom mimics an app
+regression precisely: authenticated specs failing in 7–11 seconds while public
+ones pass. **Before triaging a sudden cliff like that, check the stack is alive**
+— `docker info`, then `psql -p 55322 -c 'select 1'`. It is one command and it
+would have saved this pass an entire diagnostic detour.
+
+### A measurement that had to be thrown away — and why you should throw yours away too
+
+The confirming run after those three fixes returned 12 passed / 9 failed in
+**24.9 minutes**, against 10.3 minutes for the same suite an hour earlier. It is
+worthless, and the note's own rule says so: **`marketing-smoke` failed, and with
+`activation-smoke` that is both canaries**. Two specs that need no auth, no
+database and no seed do not regress; the environment does.
+
+The cause was measurable and external — load average **358** and **13 `vitest`
+workers belonging to a different worktree**, which started a 937-file unit run
+partway through. An earlier arm of the worker matrix was lost the same way
+(`workers=1 → 7 passed, 19 timeouts, 20.6 min`).
+
+So, alongside the existing port check, add this to the local-run checklist:
+
+```bash
+ps -eo comm | grep -c vitest    # expect 0
+```
+
+A shared machine is a variable, and on this one it is the largest variable there
+is. The two canaries are what tell you it moved.

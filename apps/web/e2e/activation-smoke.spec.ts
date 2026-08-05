@@ -4,6 +4,26 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Wave 1a activation smoke', () => {
+  // LOCAL ONLY — deliberately not applied in CI.
+  //
+  // Locally this is load-bearing: `pnpm test:e2e` runs a dev server that
+  // compiles on demand, and the checkout block below navigates to TWO
+  // not-yet-compiled routes inside a single 30s default, which it exceeded on a
+  // cold `.next`. This spec is one of the suite's two canaries (no auth, no
+  // database), so a false failure here reads as "the environment is broken" and
+  // invalidates the whole run.
+  //
+  // In CI it would be actively harmful. `perf-check` runs this spec against a
+  // PRODUCTION build where every route is prebuilt and each block takes
+  // seconds, and that job is capped at `timeout-minutes: 15` while also owning
+  // the only production build. With `retries: 2`, a 120s budget turns one
+  // genuinely broken block into 6 minutes of retrying; two of them exhaust the
+  // job. A job that exceeds `timeout-minutes` reports as CANCELLED, not failed,
+  // so `gh pr checks` would read green on an unmergeable PR.
+  if (!process.env.CI) {
+    test.setTimeout(120_000);
+  }
+
   test('marketing pricing states 30-day trial and card required', async ({ page }) => {
     await page.goto('/#pricing');
 
