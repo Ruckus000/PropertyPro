@@ -11,6 +11,7 @@ import { AdminLayout } from '@/components/AdminLayout';
 import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
 import type { CommunitySettings } from '@/components/clients/community-settings';
 import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,11 @@ const CommunityRowSchema = z.object({
 });
 
 export default async function ClientWorkspacePage({ params }: PageProps) {
+  // AUTHZ: platform-admin only. This page reads a single tenant's full record
+  // with the service-role client (RLS-bypassing), so it re-asserts the identity
+  // middleware already verified rather than trusting the matcher alone.
+  await requireAdminPageSession();
+
   const { id } = await params;
   const communityId = Number(id);
 

@@ -8,6 +8,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { AdminLayout } from '@/components/AdminLayout';
 import { ClientPortfolio } from '@/components/clients/ClientPortfolio';
 import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,11 @@ async function fetchAllComplianceRows(
 }
 
 export default async function ClientsPage() {
+  // AUTHZ: platform-admin only. This page reads cross-tenant data with the
+  // service-role client (RLS-bypassing), so it re-asserts the identity
+  // middleware already verified rather than trusting the matcher alone.
+  await requireAdminPageSession();
+
   const db = createAdminClient();
 
   // Fetch communities and stale demos in parallel

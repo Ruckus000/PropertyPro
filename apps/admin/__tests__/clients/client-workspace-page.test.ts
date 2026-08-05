@@ -6,9 +6,21 @@ const notFoundMock = vi.fn(() => {
 
 const createAdminClientMock = vi.fn();
 const getCoolingDeletionRequestCountMock = vi.fn();
+const requireAdminPageSessionMock = vi.fn(async () => ({
+  id: 'admin-1',
+  email: 'admin@getpropertypro.com',
+  role: 'super_admin' as const,
+}));
 
 vi.mock('next/navigation', () => ({
   notFound: notFoundMock,
+}));
+
+// AUTHZ: this page re-asserts the platform-admin identity before touching the
+// service-role client. Mocked here so the page can render outside a request
+// scope (the real helper reads forwarded headers via next/headers).
+vi.mock('@/lib/request/admin-page-context', () => ({
+  requireAdminPageSession: requireAdminPageSessionMock,
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
@@ -140,5 +152,29 @@ describe('ClientWorkspacePage data pass-through', () => {
 
     await expect(ClientWorkspacePage({ params: Promise.resolve({ id: 'abc' }) })).rejects.toThrow('NOT_FOUND');
     expect(notFoundMock).toHaveBeenCalled();
+  });
+
+  // AUTHZ regression guard: this page reads a full tenant record with the
+  // service-role client (RLS-bypassing). It shipped with no per-page auth check
+  // at all, relying solely on the middleware matcher. Deleting the
+  // requireAdminPageSession() call must fail here.
+  it('asserts platform-admin identity before reading tenant data', async () => {
+    const { default: ClientWorkspacePage } = await import('@/app/clients/[id]/page');
+
+    await ClientWorkspacePage({ params: Promise.resolve({ id: '42' }) });
+
+    expect(requireAdminPageSessionMock).toHaveBeenCalled();
+  });
+
+  it('does not touch the service-role client when the admin check rejects', async () => {
+    requireAdminPageSessionMock.mockRejectedValueOnce(
+      Object.assign(new Error('NEXT_REDIRECT'), { digest: 'NEXT_REDIRECT' }),
+    );
+    const { default: ClientWorkspacePage } = await import('@/app/clients/[id]/page');
+
+    await expect(
+      ClientWorkspacePage({ params: Promise.resolve({ id: '42' }) }),
+    ).rejects.toThrow('NEXT_REDIRECT');
+    expect(createAdminClientMock).not.toHaveBeenCalled();
   });
 });

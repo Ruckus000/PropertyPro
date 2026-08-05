@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { createBrowserClient } from '@supabase/ssr';
+import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import {
   BarChart3,
   LayoutGrid,
@@ -42,6 +44,40 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount }: SidebarProps) {
   const pathname = usePathname();
   const [coolingCount, setCoolingCount] = useState(initialCoolingCount ?? 0);
+  const [signingOut, setSigningOut] = useState(false);
+
+  /**
+   * Sign out client-side, matching apps/web's ProfileMenu.
+   *
+   * This replaces a `<form action="/api/auth/signout" method="POST">` that
+   * posted to a route which has never existed in this app — clicking "Sign out"
+   * 404'd and left the session intact.
+   *
+   * ADMIN_COOKIE_OPTIONS is required: the admin session cookie is named
+   * `sb-admin-auth-token`, so a default browser client would clear the web
+   * app's cookie name instead and leave the operator still signed in.
+   */
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (url && key) {
+      try {
+        const supabase = createBrowserClient(url, key, {
+          cookieOptions: ADMIN_COOKIE_OPTIONS,
+        });
+        await supabase.auth.signOut();
+      } catch {
+        // Fall through to the redirect — middleware re-checks the session and
+        // will bounce an already-invalid one back to the login page anyway.
+      }
+    }
+
+    // Hard navigation so middleware re-runs and the server sees the cleared cookie.
+    window.location.href = '/auth/login';
+  }
 
   useEffect(() => {
     setCoolingCount(initialCoolingCount ?? 0);
@@ -132,19 +168,19 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
 
       {/* Footer */}
       <div className="border-t border-gray-700 px-2 py-3">
-        <form action="/api/auth/signout" method="POST">
-          <button
-            type="submit"
-            title={collapsed ? 'Sign out' : undefined}
-            className={[
-              'flex w-full items-center rounded-md py-2 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors',
-              collapsed ? 'justify-center px-2' : 'gap-2.5 px-3',
-            ].join(' ')}
-          >
-            <LogOut size={16} className="shrink-0" />
-            {!collapsed && 'Sign out'}
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          title={collapsed ? 'Sign out' : undefined}
+          className={[
+            'flex w-full items-center rounded-md py-2 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-60',
+            collapsed ? 'justify-center px-2' : 'gap-2.5 px-3',
+          ].join(' ')}
+        >
+          <LogOut size={16} className="shrink-0" aria-hidden="true" />
+          {!collapsed && (signingOut ? 'Signing out…' : 'Sign out')}
+        </button>
       </div>
     </aside>
   );
