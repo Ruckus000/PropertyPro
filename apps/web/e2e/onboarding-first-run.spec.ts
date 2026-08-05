@@ -1,3 +1,36 @@
+/**
+ * First-run onboarding journeys — BOTH BLOCKS ARE `test.fixme`.
+ *
+ * These tests describe a wizard that was never built. They were authored from a
+ * design document (`specs/phase-2-multi-tenancy/39-condo-onboarding-wizard.md`),
+ * not from the app, so they have never been capable of passing:
+ *
+ *   - They wait on `data-testid="condo-onboarding-wizard"` /
+ *     `"apartment-onboarding-wizard"` with `data-hydrated="true"`. Neither test id
+ *     has ever existed in `apps/web/src` (`git log -S` finds only the spec and the
+ *     design doc), and `data-hydrated` appears on exactly one unrelated component
+ *     app-wide (`components/help/article-feedback.tsx`).
+ *   - They drive a 4-/5-step flow (statutory documents → profile → branding →
+ *     units → rules → invite). What ships is a **2-step** wizard for BOTH
+ *     community types — "Community Profile" → "Compliance Preview"
+ *     (`components/onboarding/condo-wizard.tsx:29`,
+ *     `components/onboarding/apartment-wizard.tsx:32`). The app contains exactly
+ *     two step components: `steps/profile-step.tsx` and `compliance-preview.tsx`.
+ *     The API contracts agree — `MAX_STEP_INDEX = 1`
+ *     (`app/api/v1/onboarding/condo/contract.ts:12`).
+ *
+ * Marking `fixme` rather than deleting keeps the coverage gap visible in the
+ * suite. Rewriting these against the shipped 2-step flow is a from-scratch spec,
+ * not an edit, and is a product decision about what first-run onboarding should
+ * guarantee — deliberately not taken here.
+ *
+ * NOT a blocker: the `/dev/reset-onboarding` fixture below is still correct. It
+ * writes `onboarding_wizard_state` keyed `(community_id, wizard_type)` with
+ * `last_completed_step = NULL`, which is exactly what the shipped
+ * `GET /api/v1/onboarding/{condo,apartment}` reads. It needs no change.
+ *
+ * See `docs/audits/2026-08-03-e2e-inventory.md` (eighth addendum).
+ */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
 
@@ -117,7 +150,9 @@ test.describe('first-run onboarding journeys', () => {
     await resetWizardFixture(request, APARTMENT_WIZARD_SLUG, 'apartment');
   });
 
-  test('condo/HOA first-run wizard is reachable and completable for a board admin', async ({ page }) => {
+  // fixme: drives a 4-step flow; the shipped condo wizard has 2 steps and no
+  // `condo-onboarding-wizard` test id. See the file header.
+  test.fixme('condo/HOA first-run wizard is reachable and completable for a board admin', async ({ page }) => {
     const { communityId } = await loginAs(page, 'board_president', {
       communitySlug: HOA_WIZARD_SLUG,
       skipPortalNav: true,
@@ -141,7 +176,9 @@ test.describe('first-run onboarding journeys', () => {
     });
   });
 
-  test('apartment first-run wizard is reachable and completable for site manager', async ({ page }) => {
+  // fixme: drives a 5-step flow; the shipped apartment wizard has the same 2
+  // steps as condo and no `apartment-onboarding-wizard` test id. See the header.
+  test.fixme('apartment first-run wizard is reachable and completable for site manager', async ({ page }) => {
     const { communityId } = await loginAs(page, 'site_manager', {
       communitySlug: APARTMENT_WIZARD_SLUG,
       skipPortalNav: true,

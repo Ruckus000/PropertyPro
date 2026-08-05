@@ -15,7 +15,17 @@ import { expect, test, type Page } from '@playwright/test';
 import { loginAs, loginAsPlatformAdmin } from './helpers/dev-login';
 
 const SUNSET_CONDOS_SLUG = 'sunset-condos';
-const ADMIN_CLIENT_URL = 'http://127.0.0.1:3001/clients/1';
+// MUST stay on the same host as `loginAsPlatformAdmin` (localhost:3001). Supabase
+// auth cookies are host-only, and `localhost` and `127.0.0.1` are different hosts
+// even though they resolve to the same address — a session established on one is
+// simply not sent to the other. This constant previously said `127.0.0.1` while
+// the login helper used `localhost`, so every request here arrived
+// unauthenticated, the middleware redirected to /auth/login, and the assertion
+// that failed was the missing "Support" tab — a symptom three redirects removed
+// from the cause. `localhost` (not `127.0.0.1`) is the correct choice: Next's dev
+// server normalises `request.url` to `localhost` regardless of `--hostname`, so
+// the admin app's own redirects land there.
+const ADMIN_CLIENT_URL = 'http://localhost:3001/clients/1';
 const TARGET_USER_LABEL = 'owner.one@sunset.local (resident)';
 
 test.describe.configure({ mode: 'serial' });
@@ -147,7 +157,10 @@ test.describe('support access flow', () => {
         supportPage.getByRole('alert').getByText('Support Mode — Read-Only'),
       ).toBeVisible();
       await expect(
-        supportPage.getByRole('heading', { name: /Welcome back, Olivia/i }),
+        // Copy is "Welcome, {firstName}" (components/dashboard/dashboard-welcome.tsx).
+        // The spec said "Welcome back, Olivia" until this was fixed; the greeting
+        // was renamed in ec8fb6c9 and this assertion had never run since.
+        supportPage.getByRole('heading', { name: /Welcome, Olivia/i }),
       ).toBeVisible();
       await expect(
         supportPage.getByRole('button', { name: /Olivia Owner/i }),

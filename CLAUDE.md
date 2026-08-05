@@ -108,9 +108,16 @@ pnpm --filter @propertypro/web test:e2e:prod
 >    because Next's loader does not overwrite vars already in `process.env`, so
 >    the wrapper's loopback exports must come first.
 >
-> The admin app (`:3001`) additionally needs a row in `platform_admin_users`,
-> which **nothing seeds** — so admin-app specs (`support-access`) cannot pass
-> today.
+> The admin app (`:3001`) needs a row in `platform_admin_users`. **Nothing seeds
+> it, deliberately** — that would put platform-wide `super_admin` into shared demo
+> data. Instead `apps/admin/src/app/dev/agent-login/route.ts` provisions a
+> dedicated `e2e.platform.admin@local` identity and its grant on demand, in
+> `development` only. `pnpm seed:demo` still leaves the table at 0 rows, and the
+> demo persona `pm.admin@sunset.local` never holds platform privilege.
+> **Use `localhost:3001`, never `127.0.0.1:3001`,** for admin-app specs: Supabase
+> auth cookies are host-only and Next's dev server normalises `request.url` to
+> `localhost` regardless of `--hostname`, so mixing the two silently drops the
+> session (see the eighth addendum).
 >
 > **CI runs three specs — 8 of the suite's 39 test blocks** —
 > `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`, in one
@@ -122,17 +129,22 @@ pnpm --filter @propertypro/web test:e2e:prod
 > guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
 > them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
 > `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite; as of the
-> **seventh addendum (2026-08-05)** the default suite is **19 passed / 8 failed /
-> 2 never ran** at `workers: 1`, up from 11/9/7, after the DB connection-pool
-> leak that was starving GoTrue was fixed. Before trusting a local number,
-> confirm the port is clear AND `ps -eo comm | grep -c vitest` is 0 — a parallel
-> unit run in another worktree drove one measurement to 24.9 min and failed both
-> canaries. Blocks still "never run" because five
-> specs use `describe.configure({ mode: 'serial' })`, so one early failure skips
-> the rest. A CI job over the remainder would still be red on day one: three
-> blockers are recorded and unfixed (Stripe placeholder price ids, an onboarding
-> wizard the spec describes but that was never built, and an unseeded
-> `platform_admin_users`).
+> **eighth addendum (2026-08-05)** the default suite is **22 passed / 4 failed /
+> 2 skipped / 1 never ran** in 6.0 min at `workers: 1`, up from 19/8/2. Before
+> trusting a local number, confirm the port is clear AND
+> `ps -eo comm | grep -c vitest` is 0 — a parallel unit run in another worktree
+> drove one measurement to 24.9 min and failed both canaries. Blocks still "never
+> run" because five specs use `describe.configure({ mode: 'serial' })`, so one
+> early failure skips the rest. A CI job over the remainder would still be red on
+> day one. Remaining failures: Stripe placeholder price ids (`signup-trialing`);
+> two overlays that never open — a Radix dialog in `meeting-create-spacebar` and
+> the template picker in `esign` (both fail a *30s* wait, so these are **not** the
+> budget misses they were previously recorded as); and `support-access`, where
+> middleware forwards a **mixed identity** during impersonation (`middleware.ts:1128`
+> overrides only `USER_ID_HEADER`, leaving the admin's name/email) — the spec is
+> right and the app is wrong. The onboarding-wizard blocker is now two
+> `test.fixme` blocks: the spec describes a 4-/5-step flow, but **both** condo and
+> apartment ship the same 2-step wizard.
 >
 > **Adding a spec to `perf-check` requires proving it passes against a
 > PRODUCTION build with an UNREACHABLE database.** Passing under `pnpm test:e2e`
