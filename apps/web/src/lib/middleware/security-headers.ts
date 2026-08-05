@@ -129,13 +129,28 @@ export function buildSecurityHeaders(options?: { isPreview?: boolean }): Record<
  * until nonce-based CSP is implemented (tracked as a future hardening item).
  */
 export function buildCspHeader(options?: { isPreview?: boolean }): string {
+  // Keep the configured URL's SCHEME rather than assuming https. A hosted
+  // Supabase project is https, so this is a no-op there — but a local stack is
+  // `http://127.0.0.1:<port>`, and hardcoding https silently blocked the browser
+  // from reaching Supabase Auth at all (`Failed to fetch` on /auth/v1/user),
+  // which broke client-side auth in every local e2e run.
+  //
+  // This does not widen anything: the host is already trusted by these
+  // directives; only the scheme naming it is corrected.
+  let supabaseOrigin: string;
   let supabaseHost: string;
+  let supabaseWsScheme: 'ws' | 'wss';
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    supabaseHost = url ? new URL(url).host : '*.supabase.co';
+    const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const url = raw ? new URL(raw) : null;
+    supabaseHost = url ? url.host : '*.supabase.co';
+    supabaseOrigin = url ? url.origin : 'https://*.supabase.co';
+    supabaseWsScheme = url?.protocol === 'http:' ? 'ws' : 'wss';
   } catch {
     console.error('Invalid NEXT_PUBLIC_SUPABASE_URL for CSP, falling back to wildcard.');
     supabaseHost = '*.supabase.co';
+    supabaseOrigin = 'https://*.supabase.co';
+    supabaseWsScheme = 'wss';
   }
 
   const directives = [
@@ -144,9 +159,9 @@ export function buildCspHeader(options?: { isPreview?: boolean }): string {
     "script-src 'self' 'unsafe-inline' https://js.stripe.com" +
       (process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''),
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https://${supabaseHost}`,
-    `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://*.ingest.sentry.io https://api.stripe.com`,
-    `frame-src 'self' https://${supabaseHost} https://js.stripe.com https://hooks.stripe.com`,
+    `img-src 'self' data: blob: ${supabaseOrigin}`,
+    `connect-src 'self' ${supabaseOrigin} ${supabaseWsScheme}://${supabaseHost} https://*.ingest.sentry.io https://api.stripe.com`,
+    `frame-src 'self' ${supabaseOrigin} https://js.stripe.com https://hooks.stripe.com`,
     "font-src 'self' data:",
     "worker-src 'self'",
     options?.isPreview
