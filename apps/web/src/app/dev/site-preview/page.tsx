@@ -9,6 +9,24 @@ import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 
 /**
+ * Opt out of the static export pass.
+ *
+ * This is the only App Router *page* under `/dev` — the other dev surfaces are
+ * Route Handlers, which are structurally exempt from prerendering. Without this
+ * export the route is statically prerendered (`○` in the build output) and a
+ * 307 to `/` is baked into `.next`, because the NODE_ENV guard below fires
+ * before `await searchParams` and so never triggers a dynamic bailout.
+ *
+ * Prerendering a dev-only surface buys nothing: middleware already 404s
+ * `/dev/site-preview` in production (`shouldHideDevSurfaceInProduction`), so
+ * the baked output is unreachable. It also puts the route in the pass where
+ * `docs/audits/2026-08-03-e2e-inventory.md` recorded a build failure against a
+ * reachable database. That failure did **not** reproduce at this commit (see
+ * the audit addendum), so this is hardening, not a verified fix for it.
+ */
+export const dynamic = 'force-dynamic';
+
+/**
  * Dev-only preview route for testing community branding.
  *
  * Usage: /dev/site-preview?communityId=1
