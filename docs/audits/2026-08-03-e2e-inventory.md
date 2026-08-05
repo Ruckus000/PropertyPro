@@ -262,8 +262,11 @@ once the suite is meaningfully green, revisit a full CI job.
 
 ## Follow-ups this produced — recorded, not fixed
 
-1. `scripts/with-env-local-demo-db.sh` advertises `pnpm test:e2e` in its usage
-   text but does not redirect Supabase Auth. **Actively dangerous.**
+1. ~~`scripts/with-env-local-demo-db.sh` advertises `pnpm test:e2e` in its usage
+   text but does not redirect Supabase Auth. **Actively dangerous.**~~
+   **FIXED** — see the second addendum below. It was worse than the `test:e2e`
+   line: `pnpm seed:demo`, the script's other documented example, reached
+   production Auth and Storage on every run.
 2. `/dev/site-preview` breaks `next build` whenever the database is reachable.
 3. The app exhausts a 100-connection Postgres under e2e load.
 4. `playwright.prod.config.ts`'s non-spreading `webServer.env`.
@@ -293,3 +296,38 @@ succeeds and all 8 blocks pass. That two-axis difference is now written into
 
 Everything else in this note stands: **31 blocks remain unexercised by CI**, and
 the recommendation against a job covering the authenticated suite is unchanged.
+
+
+---
+
+## Second addendum — follow-up 1 fixed, and it was worse than recorded
+
+The note filed the wrapper as a documentation hazard: it recommends
+`pnpm test:e2e` while redirecting only `DATABASE_URL`. Reading `seed-demo.ts`
+before fixing it showed the sharper version.
+
+**`pnpm seed:demo` — the script's OTHER documented example — reached production
+on every run.** It calls `createAdminClient()` then
+`admin.auth.admin.listUsers()`, and uploads seeded PDFs through
+`admin.storage.from('documents')`. With only Postgres redirected, that wrote to a
+local database while creating users and objects in **production Supabase, with
+the production service-role key**. `DEMO_SEED_SYNC_AUTH_USERS` defaults to ON, so
+nothing stopped it — and `esign-and-documents-flow.spec.ts` documented
+`DEMO_SEED_SYNC_AUTH_USERS=0` as a workaround, which patched the symptom in an
+error message rather than the script.
+
+**The fix** makes the invariant *local Postgres implies local Supabase*:
+`NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_URL` are redirected to a local default; the
+anon and service-role keys are **unset** unless local ones are supplied, so
+`createAdminClient()` throws by name instead of authenticating somewhere real;
+and a loopback guard exits **78** if any resolved URL names a remote host.
+Commands needing no Supabase (`db:migrate`) are unaffected.
+
+**Measured against a fake `.env.local` holding production-shaped values:** the
+shipped script leaks **3** of them to the child process, including
+`SUPABASE_SERVICE_ROLE_KEY`. The fixed script leaks **0**.
+
+**Residual, deliberately not addressed:** the wrapper still passes through other
+production credentials from `.env.local` (`RESEND_API_KEY`, Stripe). It governs
+the database/Supabase axis only, which is what its name claims. Anything needing
+a fully isolated env should use a real local stack, not this wrapper.
