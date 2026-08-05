@@ -12,19 +12,32 @@ import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
 
 test.describe('PM Add Community Flow', () => {
+  // Above Playwright's 30s default: this describe compiles the FIRST
+  // authenticated route of the run, and a 30s per-assertion budget is
+  // unreachable while the test itself is also capped at 30s.
+  test.setTimeout(120_000);
+
   test('PM can open the Add Community modal from the dashboard', async ({ page }) => {
     await loginAs(page, 'pm_admin');
 
-    await page.goto('/pm/dashboard/communities', { waitUntil: 'networkidle' });
+    // `domcontentloaded`, not `networkidle`. This is the FIRST authenticated
+    // route the suite compiles, so it pays the largest cold-compile cost of any
+    // block — and `networkidle` never settles on a dev-server page, so it blew
+    // the 30s test timeout inside `page.goto` before any assertion ran. The
+    // assertions below auto-wait for what actually matters.
+    await page.goto('/pm/dashboard/communities', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /communities/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /communities/i })).toBeVisible({
+      timeout: 30_000,
+    });
 
     const addButton = page.getByRole('button', { name: /add community/i });
     await expect(addButton).toBeVisible();
     await addButton.click();
 
-    // Modal opens with title
-    await expect(page.getByRole('dialog')).toBeVisible();
+    // Modal opens with title. A click only waits for actionability, not for
+    // React to have hydrated the handler, so the dialog can open a beat late.
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('heading', { name: /add a community/i })).toBeVisible();
 
     // Core form fields are present
@@ -40,8 +53,8 @@ test.describe('PM Add Community Flow', () => {
   test('legacy /communities/new URL redirects back to the dashboard', async ({ page }) => {
     await loginAs(page, 'pm_admin');
 
-    await page.goto('/pm/dashboard/communities/new', { waitUntil: 'networkidle' });
+    await page.goto('/pm/dashboard/communities/new', { waitUntil: 'domcontentloaded' });
 
-    await expect(page).toHaveURL(/\/pm\/dashboard\/communities(\?|$)/);
+    await expect(page).toHaveURL(/\/pm\/dashboard\/communities(\?|$)/, { timeout: 30_000 });
   });
 });

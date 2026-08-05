@@ -5,22 +5,42 @@ import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
 
 test.describe('Create Meeting spacebar and focus', () => {
+  // A first-compile dev-server render of the meetings calendar does not fit in
+  // Playwright's 30s default.
+  test.setTimeout(90_000);
+
   test('after opening Create Meeting, focus is not left on the trigger; Title accepts spaces', async ({
     page,
   }) => {
-    const { communityId } = await loginAs(page, 'board_president');
-
-    await page.goto(`/communities/${communityId}/meetings`, {
-      waitUntil: 'networkidle',
+    // Pin the community. A bare `board_president` login resolves
+    // `communities[0]` ordered by `communities.name` and lands on Palm Shores
+    // HOA (Essentials) — this spec was loading `/communities/2/meetings`, not
+    // Sunset Condos'. See `.claude/rules/agent-testing.md`.
+    const { communityId } = await loginAs(page, 'board_president', {
+      communitySlug: 'sunset-condos',
     });
 
-    await expect(page.getByRole('heading', { name: /Meetings & Calendar/i })).toBeVisible();
+    // `domcontentloaded`, not `networkidle`. A first-compile dev-server page
+    // keeps chatting past the 30s test timeout, so `networkidle` failed here in
+    // `page.goto` before a single assertion ran. The assertions below already
+    // auto-wait for what actually matters.
+    await page.goto(`/communities/${communityId}/meetings`, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page.getByRole('heading', { name: /Meetings & Calendar/i })).toBeVisible({
+      timeout: 30_000,
+    });
 
     const openCreate = page.getByRole('button', { name: 'Create Meeting' }).first();
     await openCreate.click();
 
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
+    // Clicking a button only waits for it to be *actionable*, not for React to
+    // have attached its handler. On a first-compile page the click can land
+    // before hydration, so the dialog opens a beat later than the 5s default
+    // allows. The assertion is unchanged — the dialog must still appear.
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
     await expect(dialog.getByRole('heading', { name: 'Create Meeting' })).toBeVisible();
 
     const activeAfterOpen = await page.evaluate(() => {

@@ -29,12 +29,32 @@ async function loginAs(page: Page, role: DevRole): Promise<number> {
 test.describe('phase 1 roadmap smoke', () => {
   test.describe.configure({ mode: 'serial' });
 
+  // Playwright's 30s default is a first-compile budget here, not a correctness
+  // one: these seven blocks each visit a different heavy authenticated route,
+  // so each pays a fresh `next dev` compile. Blocks were dying inside
+  // `page.goto` (`Test timeout of 30000ms exceeded`, and once
+  // `net::ERR_ABORTED; maybe frame was detached?` on `/emergency/new`) before a
+  // single assertion ran — and because this describe is `serial`, one such
+  // death skips every block after it. No assertion is relaxed by this.
+  test.setTimeout(90_000);
+
   test('Phase 1A assessment manager opens its creation flow for a board user', async ({ page }) => {
     const communityId = await loginAs(page, 'board_president');
 
-    await page.goto(`/communities/${communityId}/assessments`);
+    // `/communities/[id]/assessments` is a compatibility redirect into the
+    // consolidated payments surface. Settle on the redirect TARGET before
+    // asserting: the default 5s expect budget was expiring while the run was
+    // still reported as "waiting for …/payments?tab=assessments navigation to
+    // finish", i.e. the assertion was racing a first-compile page load rather
+    // than observing a missing heading.
+    await page.goto(`/communities/${communityId}/assessments`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await expect(page).toHaveURL(/\/payments\?tab=assessments$/, { timeout: 30_000 });
 
-    await expect(page.getByRole('heading', { name: 'Assessments' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Assessments' })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByRole('button', { name: 'Create Assessment' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create Assessment' }).click();
@@ -53,11 +73,15 @@ test.describe('phase 1 roadmap smoke', () => {
 
     await expect(page.getByRole('heading', { name: 'Payment Settings' })).toBeVisible();
     await expect(page.getByText(/Florida Trust Fund Compliance/i)).toBeVisible();
+    // The connection card is a client component that mounts after the server
+    // shell; on a first-compile dev render it was not yet in the DOM (not even
+    // its loading skeleton) when the 5s default budget expired. The set of
+    // accepted states is unchanged — only the wait is realistic.
     await expect(
       page.getByText(
         /Connect with Stripe|Setup Incomplete|Stripe Connected|Failed to load payment connection status\./i,
       ),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test('Phase 1A finance dashboard tab shell renders for a board user', async ({ page }) => {
@@ -154,7 +178,9 @@ test.describe('phase 1 roadmap smoke', () => {
 
     await page.goto(`/communities/${communityId}/payments`);
 
-    await expect(page.getByText('Current Balance')).toBeVisible();
+    // First assertion after the navigation, so it carries the route's first
+    // `next dev` compile plus the client-side statement fetch.
+    await expect(page.getByText('Current Balance')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('Total Due')).toBeVisible();
     await expect(page.getByRole('button', { name: /Payment History/i })).toBeVisible();
 

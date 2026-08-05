@@ -60,9 +60,19 @@ export function MeetingsPageShell({
       <Card className="border-[var(--border-subtle)] bg-[var(--surface-card)]">
         <CardContent className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+            {/*
+              This is the page title and must stay an <h1>. The route renders no
+              other heading, so as a <div> the page had NO h1 at all — which
+              breaks the rule in .claude/rules/design.md that every
+              authenticated page expose a page-title <h1> for the shell
+              breadcrumb's leaf label, and left assistive tech with no document
+              outline for the route. `guard:breadcrumbs` did not catch it
+              because its glob only covers `[param]`/`new`/`edit` pages.
+              Classes are unchanged, so the visual is identical.
+            */}
+            <h1 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               Meetings & Calendar
-            </div>
+            </h1>
             <div className="text-2xl font-semibold text-[var(--text-primary)]">
               Stay ahead of meetings, votes, and assessment due dates.
             </div>

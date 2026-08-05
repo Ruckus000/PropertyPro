@@ -20,6 +20,10 @@ test.describe('PDF.js runtime', () => {
     ));
 
     const runtimeResultPromise = page.evaluate(async (pdfBase64) => {
+      // Runtime URL served by the app, not a resolvable module specifier —
+      // this import is evaluated in the BROWSER via page.evaluate, so there is
+      // nothing for tsc to resolve at build time.
+      // @ts-expect-error -- browser-side dynamic import of a served asset
       const pdfjs = await import('/pdfjs/pdf.mjs');
       pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 
