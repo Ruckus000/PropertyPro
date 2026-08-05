@@ -1,32 +1,28 @@
 import { expect, test, type Page } from '@playwright/test';
+import { loginAs as devLoginAs, type DevRole } from './helpers/dev-login';
 
-type DevRole = 'board_president' | 'owner';
+/**
+ * Every surface this spec exercises — assessments, payments, finance,
+ * violations — is plan-gated above Essentials.
+ *
+ * `/dev/agent-login` resolves the session's community from `communities[0]`,
+ * ordered by `communities.name` (see `findUserCommunitiesUnscoped`), so a bare
+ * login as `board_president` lands on **Palm Shores HOA** — alphabetically
+ * first, and seeded on **Essentials**, where all of the above render an
+ * "Upgrade now" state instead. That is why this spec failed at its first
+ * assertion and, being `mode: 'serial'`, skipped its six siblings.
+ *
+ * Pin to the seeded **professional** community instead. Note
+ * `.claude/rules/agent-testing.md` still claims `board_president` maps to
+ * Sunset Condos; it does not, and that doc is what the next person will trust.
+ */
+const PLAN_GATED_DEMO_COMMUNITY = 'sunset-condos';
 
 async function loginAs(page: Page, role: DevRole): Promise<number> {
-  const response = await page.request.get(`/dev/agent-login?as=${role}`, {
-    headers: {
-      accept: 'application/json',
-    },
+  const { communityId, portal } = await devLoginAs(page, role, {
+    communitySlug: PLAN_GATED_DEMO_COMMUNITY,
   });
-  expect(response.ok()).toBeTruthy();
-
-  const payload = await response.json() as {
-    ok: boolean;
-    portal: string;
-    community: { id: number } | null;
-  };
-
-  expect(payload.ok).toBe(true);
-
-  const portalUrl = new URL(payload.portal, 'http://127.0.0.1:3000');
-  const communityId = Number(portalUrl.searchParams.get('communityId') ?? payload.community?.id);
-
-  if (!Number.isInteger(communityId) || communityId <= 0) {
-    throw new Error(`Expected dev login for ${role} to resolve a valid communityId. Portal: ${payload.portal}`);
-  }
-
-  await page.goto(payload.portal, { waitUntil: 'domcontentloaded' });
-
+  await page.goto(portal, { waitUntil: 'domcontentloaded' });
   return communityId;
 }
 
@@ -67,14 +63,20 @@ test.describe('phase 1 roadmap smoke', () => {
   test('Phase 1A finance dashboard tab shell renders for a board user', async ({ page }) => {
     const communityId = await loginAs(page, 'board_president');
 
+    // `/communities/[id]/finance` is now a compatibility redirect into the
+    // consolidated payments surface (`?tab=overview`), where the sub-surfaces
+    // are ROLE=TAB rather than the standalone buttons this spec was written
+    // against. Same assertions, real locators: the summary tiles render, the
+    // sub-tabs are reachable, and Ledger exposes its filter control.
     await page.goto(`/communities/${communityId}/finance`);
 
-    await expect(page.getByText('Total Collected')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Ledger' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Delinquent Units' })).toBeVisible();
+    await expect(page.getByText('Total Assessed')).toBeVisible();
+    await expect(page.getByText('Collected This Month')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Ledger' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Delinquency' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Ledger' }).click();
-    await expect(page.getByRole('combobox')).toBeVisible();
+    await page.getByRole('tab', { name: 'Ledger' }).click();
+    await expect(page.getByRole('combobox').first()).toBeVisible();
   });
 
   test('Phase 1B emergency alert composer steps are reachable for a board user', async ({ page }) => {
@@ -118,20 +120,36 @@ test.describe('phase 1 roadmap smoke', () => {
     await expect(page.getByLabel('Filter violations until date')).toBeVisible();
 
     const rows = page.getByRole('button', { name: /Violation #/i });
+    const emptyState = page.getByText(/No violations have been reported/i);
+
+    // `count()` does NOT auto-wait, unlike `expect()`. Branching on it directly
+    // races the list render: against a seeded community the rows are still
+    // loading, count() returns 0, the empty branch is taken, and the test then
+    // fails looking for an empty state that was never going to appear. Settle
+    // on a real outcome first, then branch.
+    await expect
+      .poll(async () => ((await rows.count()) > 0 ? 'rows' : (await emptyState.count()) > 0 ? 'empty' : 'pending'), {
+        timeout: 15_000,
+        message: 'violations inbox rendered neither a violation row nor its empty state',
+      })
+      .not.toBe('pending');
+
     if ((await rows.count()) > 0) {
       await rows.first().click();
       await expect(page.getByText('Description')).toBeVisible();
     } else {
-      await expect(page.getByText(/No violations have been reported/i)).toBeVisible();
+      await expect(emptyState).toBeVisible();
     }
   });
 
   test('Phase 1A owner payment portal renders summary and tabs for a resident owner', async ({ page }) => {
-    test.fail(
-      true,
-      'Seeded dev owner currently has no unit association in demo data, so the payment statement API returns 403.',
-    );
-
+    // Was `test.fail(true, 'Seeded dev owner currently has no unit association
+    // in demo data, so the payment statement API returns 403.')`. That was
+    // never a demo-data gap: `owner.one@sunset.local` holds unit_id=1 in
+    // Sunset Condos and NULL in Palm Shores, and the spec was silently landing
+    // on the latter. With the community pinned, this passes — so the
+    // expected-failure annotation is removed rather than left to mask a real
+    // assertion.
     const communityId = await loginAs(page, 'owner');
 
     await page.goto(`/communities/${communityId}/payments`);
