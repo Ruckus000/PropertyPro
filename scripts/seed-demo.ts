@@ -24,7 +24,6 @@ import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 // guarded subpath (DBB-01, #803 removed the root-barrel re-export).
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
-  ensureDocumentsBucket,
   SEED_DOCUMENTS_BUCKET,
   ensureSeededDocumentStorage,
   ensureNotificationPreference,
@@ -1491,7 +1490,6 @@ async function uploadSeedEsignSourceDocument(
 
   const pdfBytes = await pdfDoc.save();
   const storagePath = `communities/${communityId}/esign-templates/${sanitizeStorageSegment(templateName)}.pdf`;
-  await ensureDocumentsBucket();
   const admin = createAdminClient();
   await retryStorageSeedOperation(
     `upload ${storagePath}`,
@@ -1698,10 +1696,11 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   const syncAuthUsers = options.syncAuthUsers ?? true;
   debugSeed(`runDemoSeed start (syncAuthUsers=${String(syncAuthUsers)})`);
 
-  // Prerequisites a fresh local stack does not have. Both used to abort the run
-  // partway through — leaving a half-seeded database — so provision them before
-  // anything is written. Both are no-ops when already present.
-  await ensureDocumentsBucket();
+  // `stripe_prices` is reference data with no other provisioning path, and its
+  // absence used to abort the run partway through — leaving a half-seeded
+  // database — so fill it before anything is written. No-op when already
+  // present. (The `documents` storage bucket was the other such prerequisite;
+  // migration 0049 now owns it.)
   await ensureSeedStripePrices();
 
   const communityIdsBySlug: Partial<Record<DemoCommunitySlug, number>> = {};

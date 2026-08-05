@@ -344,6 +344,13 @@
       "when": 1785755245574,
       "tag": "0048_site_blocks_page_id_not_null",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1785929283429,
+      "tag": "0049_documents_storage_bucket",
+      "breakpoints": true
     }
   ]
 }
