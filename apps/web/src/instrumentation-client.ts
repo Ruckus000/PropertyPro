@@ -34,6 +34,11 @@ async function initClientInstrumentation(): Promise<void> {
       dsn: clientDsn,
       enabled: true,
 
+      // Keeps browser events separable from apps/admin inside the shared
+      // `property-pro` Sentry project. See sentry.server.config.ts for why one
+      // project rather than two.
+      initialScope: { tags: { app: 'web' } },
+
       // Performance tracing
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 

@@ -59,9 +59,12 @@ export function withAdminErrorHandler<TArgs extends unknown[]>(
       // Unknown error — 500, nothing internal exposed [AGENTS #43].
       console.error('Unhandled admin error:', error);
 
+      // NOTE: no `app` tag here — sentry.server.config.ts / sentry.edge.config.ts
+      // set it via `initialScope`, so it lands on EVERY admin event including the
+      // ones this handler never sees (error boundaries, direct captureException
+      // calls). Setting it again here would just be duplication.
       Sentry.withScope((scope) => {
         scope.setTag('request_id', requestId);
-        scope.setTag('app', 'admin');
         if (sentryContext.communityId) {
           scope.setTag('community_id', sentryContext.communityId);
         }
