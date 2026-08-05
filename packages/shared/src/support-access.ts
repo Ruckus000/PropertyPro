@@ -50,6 +50,24 @@ export interface SupportSessionJwtPayload {
   session_id: number;
   /** Access level */
   scope: SupportAccessLevel;
+  /**
+   * Display name of the impersonated user, captured at session creation.
+   *
+   * The web middleware forwards the page shell's identity headers, and before
+   * this claim existed it overrode only the user *id* during impersonation —
+   * leaving the authenticating admin's name and email in place, so the chrome
+   * showed the admin's identity over the impersonated user's data. Carrying the
+   * name here means middleware can stamp the correct identity with **no extra
+   * per-request query**: it is resolved once, when the session is signed.
+   *
+   * Optional because tokens issued before this claim existed are still valid
+   * until they expire (≤30 min). Middleware treats a missing value as
+   * "unknown" and CLEARS the identity headers rather than falling back to the
+   * admin's — absent is safe, wrong is not.
+   */
+  target_name?: string | null;
+  /** Email of the impersonated user. Same capture, same fallback rule. */
+  target_email?: string | null;
   /** Expiration (unix timestamp) */
   exp: number;
   /** Issued at */

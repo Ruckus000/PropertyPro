@@ -1139,3 +1139,96 @@ package "@propertypro/api-contract"` — the workspace packages have no `dist` u
 The signature is unmistakable once you know it: hundreds of failed *files* but only
 a handful of failed *tests*, because the files never executed. Build the packages
 before believing any local unit number from a new worktree.
+
+---
+
+## Ninth addendum — the mixed impersonation identity is FIXED, and `support-access` passes
+
+Date: **2026-08-05**. Same environment and method as the eighth addendum.
+
+The eighth addendum recorded the mixed-identity defect and deliberately left it
+unfixed, naming the trade-off: a per-request lookup in a hot path, versus changing
+the signed token. **The token approach was chosen and implemented.**
+
+### The fix
+
+`SupportSessionJwtPayload` gains two optional claims, `target_name` and
+`target_email` (`packages/shared/src/support-access.ts`). They are resolved
+**once**, when the admin app creates the session and already makes several queries
+(`apps/admin/src/app/api/admin/support/sessions/route.ts`), and signed into the
+token. The web middleware then stamps the impersonated identity from claims it
+already has in hand — **zero added per-request queries**, which is what made this
+the right shape for a path the nav-performance programme cares about.
+
+`apps/web/src/middleware.ts` now moves all identity headers together instead of
+only the id.
+
+Three details that carry the safety of this change:
+
+1. **Absent claims CLEAR, they never inherit.** Tokens signed before these claims
+   existed stay valid until they expire (≤30 min). For those, middleware deletes
+   `USER_FULL_NAME_HEADER` / `USER_EMAIL_HEADER` rather than leaving the admin's
+   values — which is the precise bug being fixed. An anonymous account menu is the
+   safe degradation; a confidently wrong name is not.
+2. **Non-string claims are discarded, not coerced.** `parseImpersonationCookie`
+   accepts these values only when they are strings, because they are rendered as
+   the operator's "who am I acting as" signal.
+3. **`USER_PHONE_HEADER` is unconditionally dropped.** It was leaking the admin's
+   phone into impersonated requests for the same reason. It has no counterpart
+   claim on purpose — the header is not displayed in the chrome, and adding a phone
+   number to a signed token that rides in a cookie is a worse trade than dropping
+   it. This was **not** in the eighth addendum's description of the defect; it was
+   found while fixing it.
+
+### Verification, including the revert-check
+
+New coverage: `apps/web/__tests__/middleware/support-impersonation-identity.test.ts`
+(5 tests, driving the real `middleware()` export and asserting on
+`x-middleware-request-*`) and three claim round-trip tests appended to
+`__tests__/support/impersonation.test.ts`.
+
+**The revert-check named a production line.** With the middleware block reverted to
+its pre-fix form, the new tests fail reading
+`expected 'Ada Admin' to be 'Olivia Owner'` — the admin's name leaking through,
+which is the defect verbatim. The two control cases (non-impersonated request;
+support marker headers) keep passing under the revert, so the file is not merely
+globally broken.
+
+One trap recorded while writing it: the middleware test must drive
+**`/api/v1/documents`**, not `/dashboard`. A signed-in user with no community
+redirects to `/select-community` and never reaches the support branch, so every
+`forwarded()` assertion reads `null` and the negative assertions
+(`not.toBe(admin)`) **pass vacuously**. The mocked user also needs
+`emailVerified: true` or middleware diverts to `/auth/verify-email` first. Both
+failure modes look like a broken fix rather than a broken harness.
+
+### `support-access.spec.ts` passes — the first time it ever has
+
+It now runs the whole flow: admin dev-login → Support tab → session creation →
+impersonation showing the **impersonated** user's identity → read-only enforcement
+→ session end → revert to the board president's own session.
+
+Fixing the app surfaced one last stale assertion: a **second** `Welcome back`
+occurrence at line 204, missed on the first pass because only the first was
+corrected. It asserts the post-session state, where the popup falls back to the
+board president's own session (it shares a browser context with `boardPage`), so
+the expected name is `Sam President`. Both occurrences are now `Welcome, …`.
+
+### Where the number stands
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| eighth addendum | 22 | 4 | 2 | 1 | 6.0 min |
+| **this pass** | **23** | **3** | 2 | 1 | **5.9 min** |
+
+Both canaries green; zero timeouts, aborts or agent-login failures.
+
+The remaining three are unchanged and each has a named cause: the two overlays
+that never open (`esign` template picker, `meeting-create-spacebar` dialog — still
+failing a *30s* wait, still not budget problems) and `signup-trialing`'s
+placeholder Stripe price ids.
+
+Full verification for this pass: `tsc --noEmit` clean on web, admin **and**
+shared; 21/21 guards; unit **11,068 passed / 0 failed** (940 files, +8 new);
+integration unchanged at 310 app + 121 RLS. Nothing touched production.

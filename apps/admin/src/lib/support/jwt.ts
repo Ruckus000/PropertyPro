@@ -48,6 +48,12 @@ export async function signSupportToken(
     community_id: payload.community_id,
     session_id: payload.session_id,
     scope: payload.scope,
+    // Identity of the impersonated user, resolved once here so the web
+    // middleware never has to query per request. `null` is meaningful and is
+    // preserved: it tells the verifier "resolved, but unknown", which still
+    // clears the admin's identity rather than leaking it.
+    target_name: payload.target_name ?? null,
+    target_email: payload.target_email ?? null,
   })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(payload.sub)

@@ -1124,8 +1124,41 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Stamp support session headers for downstream route handlers
+    // Stamp support session headers for downstream route handlers.
+    //
+    // The identity headers must ALL move together. This block used to override
+    // only the id, leaving USER_EMAIL_HEADER / USER_FULL_NAME_HEADER set to the
+    // authenticating admin's values from earlier in this function. The page
+    // shell builds its user entirely from these three headers
+    // (lib/request/page-auth-context.ts), so the chrome showed the *admin's*
+    // name and email above the *impersonated user's* data — an operator could
+    // not tell from the account menu whose account they were in.
+    //
+    // Name and email come from the signed token (resolved once when the session
+    // was created), so correcting this costs no per-request lookup.
     forwardedHeaders.set(USER_ID_HEADER, supportSession.sub);
+
+    // Absent claim → CLEAR, never inherit. A token signed before these claims
+    // existed is still valid, and falling back to the admin's identity is the
+    // exact bug being fixed. An anonymous account menu is the safe degradation.
+    if (supportSession.target_name) {
+      forwardedHeaders.set(USER_FULL_NAME_HEADER, supportSession.target_name);
+    } else {
+      forwardedHeaders.delete(USER_FULL_NAME_HEADER);
+    }
+
+    if (supportSession.target_email) {
+      forwardedHeaders.set(USER_EMAIL_HEADER, supportSession.target_email);
+    } else {
+      forwardedHeaders.delete(USER_EMAIL_HEADER);
+    }
+
+    // Phone is forwarded too (line ~426) and has no counterpart claim: it is not
+    // shown in the chrome, and adding a phone number to a signed token that
+    // rides in a cookie is a worse trade than dropping it. Always cleared, so
+    // the admin's phone never reaches an impersonated request.
+    forwardedHeaders.delete(USER_PHONE_HEADER);
+
     forwardedHeaders.set('x-support-session', '1');
     forwardedHeaders.set('x-support-admin-id', supportSession.act.sub);
     forwardedHeaders.set('x-support-session-id', String(supportSession.session_id));

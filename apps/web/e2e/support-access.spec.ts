@@ -201,7 +201,11 @@ test.describe('support access flow', () => {
         supportPage.getByText('Support Mode — Read-Only'),
       ).toHaveCount(0);
       await expect(
-        supportPage.getByRole('heading', { name: /Welcome back, Sam/i }),
+        // Same "Welcome back" → "Welcome" rename as above (ec8fb6c9). After the
+        // session ends this popup falls back to the board president's own
+        // session — it shares a browser context with `boardPage` — so the
+        // expected name is Sam President, not the impersonated resident.
+        supportPage.getByRole('heading', { name: /Welcome, Sam/i }),
       ).toBeVisible();
     } finally {
       try {

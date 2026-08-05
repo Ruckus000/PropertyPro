@@ -129,22 +129,27 @@ pnpm --filter @propertypro/web test:e2e:prod
 > guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
 > them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
 > `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite; as of the
-> **eighth addendum (2026-08-05)** the default suite is **22 passed / 4 failed /
-> 2 skipped / 1 never ran** in 6.0 min at `workers: 1`, up from 19/8/2. Before
+> **ninth addendum (2026-08-05)** the default suite is **23 passed / 3 failed /
+> 2 skipped / 1 never ran** in 5.9 min at `workers: 1`, up from 19/8/2. Before
 > trusting a local number, confirm the port is clear AND
 > `ps -eo comm | grep -c vitest` is 0 — a parallel unit run in another worktree
 > drove one measurement to 24.9 min and failed both canaries. Blocks still "never
 > run" because five specs use `describe.configure({ mode: 'serial' })`, so one
 > early failure skips the rest. A CI job over the remainder would still be red on
-> day one. Remaining failures: Stripe placeholder price ids (`signup-trialing`);
-> two overlays that never open — a Radix dialog in `meeting-create-spacebar` and
-> the template picker in `esign` (both fail a *30s* wait, so these are **not** the
-> budget misses they were previously recorded as); and `support-access`, where
-> middleware forwards a **mixed identity** during impersonation (`middleware.ts:1128`
-> overrides only `USER_ID_HEADER`, leaving the admin's name/email) — the spec is
-> right and the app is wrong. The onboarding-wizard blocker is now two
-> `test.fixme` blocks: the spec describes a 4-/5-step flow, but **both** condo and
-> apartment ship the same 2-step wizard.
+> day one. Remaining failures: Stripe placeholder price ids (`signup-trialing`)
+> and two overlays that never open — a Radix dialog in `meeting-create-spacebar`
+> and the template picker in `esign` (both fail a *30s* wait, so these are **not**
+> the budget misses they were previously recorded as). The onboarding-wizard
+> blocker is now two `test.fixme` blocks: the spec describes a 4-/5-step flow, but
+> **both** condo and apartment ship the same 2-step wizard.
+>
+> **Support impersonation forwards ONE identity.** The web middleware's support
+> branch must move `x-user-id`, `x-user-full-name` and `x-user-email` together;
+> name/email come from the `target_name`/`target_email` claims on the signed
+> support JWT (resolved once at session creation, so there is no per-request
+> query), and `x-user-phone` is always dropped. When a claim is absent the headers
+> are **cleared, never inherited** — overriding only the id is what previously
+> showed the admin's identity over the impersonated user's data.
 >
 > **Adding a spec to `perf-check` requires proving it passes against a
 > PRODUCTION build with an UNREACHABLE database.** Passing under `pnpm test:e2e`
