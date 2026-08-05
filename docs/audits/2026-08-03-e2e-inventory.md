@@ -267,7 +267,9 @@ once the suite is meaningfully green, revisit a full CI job.
    **FIXED** — see the second addendum below. It was worse than the `test:e2e`
    line: `pnpm seed:demo`, the script's other documented example, reached
    production Auth and Storage on every run.
-2. `/dev/site-preview` breaks `next build` whenever the database is reachable.
+2. ~~`/dev/site-preview` breaks `next build` whenever the database is reachable.~~
+   **CLOSED — did not reproduce; the route was hardened anyway.** See the
+   fourth addendum.
 3. The app exhausts a 100-connection Postgres under e2e load.
 4. ~~`playwright.prod.config.ts`'s non-spreading `webServer.env`.~~
    **CLOSED — the stated diagnosis was wrong.** See the third addendum.
@@ -424,3 +426,41 @@ wall clock of which essentially all is `next dev` boot.
 
 tsc 0 · 21/21 guards · 11,042 unit passed · 310 app + 121 RLS integration — all
 at the recorded baseline.
+
+---
+
+## Fourth addendum — follow-up 2 (PR B): did not reproduce
+
+`pnpm build` was run against a **live, migrated, seeded** local Postgres at
+commit `3f2190d8`, four times, across every environment axis that plausibly
+differed from this note's run:
+
+| # | Variant | Result |
+|---|---|---|
+| 1 | live DB, `NODE_ENV=development` in `.env.local` | **exit 0** |
+| 2 | live DB, no `NODE_ENV` override | **exit 0** |
+| 3 | live DB, `NODE_ENV=development` exported in the shell | **exit 0** |
+| 4 | live DB, built **over Turbopack `next dev` artifacts** in `.next` | **exit 0** |
+
+No `Error occurred prerendering page "/dev/site-preview"`, no `useContext` null,
+no `<Html>` error, no `/_error` failure. No app code changed between `fe7727d0`
+(this note's commit) and `3f2190d8` — the three intervening commits are docs,
+CI config and a shell script — so the difference is environmental and was not
+identified.
+
+**What the builds did show, and what was fixed.** `/dev/site-preview` was
+statically prerendered (`○` in the build output) and baked a 307 to `/` into
+`.next/server/app/dev/site-preview.{html,meta,rsc}`. It is the only App Router
+*page* under `/dev` — the other three dev surfaces are Route Handlers, which are
+structurally exempt from prerendering — and it never bails out of the static
+pass, because the `NODE_ENV` guard `redirect()`s before `await searchParams`.
+
+`export const dynamic = 'force-dynamic'` removes it from the static export pass:
+verified `○` → `ƒ`, and the baked `.html`/`.meta` no longer emitted.
+
+**This is hardening, not a verified fix.** It removes the route from the pass
+where the failure was reported, and prerendering a dev-only surface that
+middleware already 404s in production buys nothing — but the original crash was
+never reproduced, so no claim is made that this is its cause. Recorded here
+rather than quietly dropped, because the next person to hit it should know the
+build has been green on this axis since `3f2190d8`.
