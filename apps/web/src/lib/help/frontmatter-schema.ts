@@ -15,6 +15,13 @@
  * will fail.
  */
 import { z } from 'zod';
+// Shared with the public marketing-resources corpus — see
+// lib/content/frontmatter-patterns.ts for why these are single-sourced.
+import {
+  ISO_DATE_REGEX,
+  SLUG_REGEX,
+  STATUTE_REGEX,
+} from '@/lib/content/frontmatter-patterns';
 
 export const COMMUNITY_FEATURE_KEYS = [
   'hasCompliance',
@@ -53,13 +60,6 @@ export const COMMUNITY_FEATURE_KEYS = [
 ] as const;
 
 export type CommunityFeatureKey = (typeof COMMUNITY_FEATURE_KEYS)[number];
-
-const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}/;
-const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-// Accepts Florida statute references (§718.111(12)(g)) and Florida bill
-// references (HB 1203, SB 4-D). Both forms appear in real frontmatter and
-// are documented in .claude/rules/florida-compliance.md.
-const STATUTE_REGEX = /^(§\d+\.\d+|(?:HB|SB)\s*\d+)/;
 
 export const helpFrontmatterSchema = z
   .object({

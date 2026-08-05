@@ -131,7 +131,7 @@
     "arbitrary-color": 2
   },
   "apps/admin/src/components/leads/LeadsDashboard.tsx": {
-    "raw-palette": 34
+    "raw-palette": 18
   },
   "apps/admin/src/components/loading/AdminPageLoading.tsx": {
     "raw-palette": 2

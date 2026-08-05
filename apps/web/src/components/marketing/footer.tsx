@@ -43,6 +43,7 @@ export function MarketingFooter({
           </div>
           <div>
             <h5>Company</h5>
+            <a href="/resources">Resources</a>
             <a href="/transparency">Community Transparency</a>
             <a href="mailto:support@getpropertypro.com">Contact</a>
           </div>

@@ -30,6 +30,26 @@ describe('public host route helpers', () => {
     expect(parsePathBasedPublicRoute('/www')).toBeNull();
   });
 
+  it('leaves apex marketing routes alone', () => {
+    // Regression: every one of these is a real page under `(marketing)/`, and
+    // without MARKETING_FIRST_SEGMENTS each was read as a community slug and
+    // 308'd to a subdomain that does not exist. `/transparency` shipped that
+    // way and was dead in production while still linked from the footer.
+    expect(parsePathBasedPublicRoute('/transparency')).toBeNull();
+    expect(parsePathBasedPublicRoute('/resources')).toBeNull();
+    expect(parsePathBasedPublicRoute('/contact')).toBeNull();
+    expect(parsePathBasedPublicRoute('/legal')).toBeNull();
+  });
+
+  it('still redirects real slug routes that share a marketing suffix', () => {
+    // Only the BARE segment belongs to marketing. `/<slug>/transparency` is a
+    // genuine community route and must keep redirecting to the subdomain.
+    expect(parsePathBasedPublicRoute('/sunset-condos/transparency')).toEqual({
+      slug: 'sunset-condos',
+      path: '/transparency',
+    });
+  });
+
   it('treats www and apex hosts as path-deprecation targets', () => {
     expect(isApexHost('www.getpropertypro.com', 'getpropertypro.com')).toBe(true);
     expect(isApexHost('getpropertypro.com', 'getpropertypro.com')).toBe(true);

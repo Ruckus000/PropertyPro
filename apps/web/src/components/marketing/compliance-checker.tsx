@@ -144,14 +144,19 @@ export function ComplianceChecker() {
 
             {capture === 'done' ? (
               <p style={{ marginTop: 16, fontSize: 14 }}>
-                Thanks — we’ll send your compliance summary to{' '}
-                <b>{email.trim()}</b>.
+                Thanks — we’ll be in touch at <b>{email.trim()}</b>.
               </p>
             ) : (
               <form onSubmit={onCapture} style={{ marginTop: 16 }}>
+                {/*
+                  This used to promise an emailed summary. Nothing sent one — the
+                  lead was only recorded — so the copy now describes what actually
+                  happens: a human follows up. See docs/gtm/03-LAUNCH-READINESS.md
+                  B1 and the week 1–3 motion in docs/gtm/04-90-DAY-PLAN.md.
+                */}
                 <p style={{ fontSize: 14, marginBottom: 8 }}>
-                  Want this summary in writing? We’ll email your obligation and a
-                  checklist of what needs posting.
+                  Want help getting compliant? Leave your email and we’ll follow
+                  up with what your association needs to post.
                 </p>
                 <div className="mk-field">
                   <label htmlFor="mk-lead-email" className="sr-only">
@@ -188,7 +193,7 @@ export function ComplianceChecker() {
                     className="mk-pill mk-pill-primary"
                     disabled={capture === 'submitting'}
                   >
-                    {capture === 'submitting' ? 'Sending…' : 'Email it to me'}
+                    {capture === 'submitting' ? 'Saving…' : 'Have someone follow up'}
                   </button>
                 </div>
                 {captureError ? (

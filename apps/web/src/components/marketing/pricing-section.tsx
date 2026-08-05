@@ -26,6 +26,12 @@ const TIERS: Tier[] = [
       'Compliance dashboard',
     ],
     cta: { label: 'Start free trial', href: '/signup?plan=essentials&communityType=condo_718' },
+    featured: true,
+    // Not "Most popular" — that is a claim about customers we do not have yet,
+    // and this codebase already un-rendered a fabricated testimonial and logo
+    // strip for exactly that reason (see (marketing)/page.tsx). This states
+    // where we point boards, which is true today.
+    ribbon: 'Where most self-managed boards start',
   },
   {
     name: 'Professional',
@@ -52,13 +58,21 @@ const TIERS: Tier[] = [
       'Centralized compliance reporting',
       'Volume pricing & dedicated onboarding',
     ],
-    cta: { label: 'Talk to sales', href: 'mailto:support@getpropertypro.com?subject=Portfolio%20sales%20inquiry' },
-    featured: true,
-    ribbon: 'Recommended for portfolios',
+    cta: { label: 'Talk to us about a portfolio', href: '/contact' },
   },
 ];
 
-/** Pricing — Property Manager tier carries the primary emphasis. */
+/**
+ * Pricing — Essentials carries the primary emphasis.
+ *
+ * It used to be the Property Manager tier, which was the most prominent thing
+ * on the page while routing to a `mailto:` with no funnel behind it. The board
+ * channel is where we actually sell (docs/gtm/01-RECONCILIATION.md §5) and
+ * Essentials is the plan a self-managed 25–149 unit board buys, so the emphasis
+ * now matches the motion. `featured` and `ribbon` must move together: only
+ * `.mk-price.mk-feat` sets `position:relative`, and `.mk-ribbon` is absolutely
+ * positioned against it.
+ */
 export function PricingSection() {
   return (
     <section className="mk-band" id="pricing">

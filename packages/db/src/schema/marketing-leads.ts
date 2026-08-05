@@ -42,6 +42,23 @@ export const marketingLeads = pgTable(
     /** Self-reported unit/parcel count. The primary ICP qualification field. */
     unitCount: integer('unit_count'),
     /**
+     * How many communities a management company runs. Deliberately NOT folded
+     * into `unit_count`: the admin console reads a 25–149 `unit_count` as the
+     * ICP band, so a 40-community portfolio stored there would show up as a
+     * textbook self-managed condo and corrupt the one number on the dashboard
+     * that is acted on.
+     */
+    communityCount: integer('community_count'),
+    /**
+     * Free text from an inbound inquiry form.
+     *
+     * Separate from `notes` for a security reason, not a tidiness one: `notes`
+     * is sales-owned and the capture service never writes it, because the
+     * capture endpoint is UNAUTHENTICATED and upserts on normalized email —
+     * anyone knowing a lead's address could otherwise overwrite triage notes.
+     */
+    message: text('message'),
+    /**
      * Whether the checker determined a statutory website obligation applies.
      * Stored as computed at capture time so later statute changes don't
      * retroactively rewrite what the visitor was actually told.
@@ -62,6 +79,10 @@ export const marketingLeads = pgTable(
     check(
       'marketing_leads_status_check',
       sql`${table.status} IN ('new','contacted','qualified','disqualified')`,
+    ),
+    check(
+      'marketing_leads_community_count_check',
+      sql`${table.communityCount} IS NULL OR (${table.communityCount} > 0 AND ${table.communityCount} <= 10000)`,
     ),
   ],
 );

@@ -1,7 +1,7 @@
 /**
  * Marketing Leads API for the admin console.
  *
- * GET   /api/admin/leads — list leads (optional ?status= filter)
+ * GET   /api/admin/leads — list leads (optional ?status= and ?source= filters)
  * PATCH /api/admin/leads — update a lead's triage status / notes
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,9 +12,10 @@ export async function GET(request: NextRequest) {
   await requirePlatformAdmin();
 
   const status = request.nextUrl.searchParams.get('status');
+  const source = request.nextUrl.searchParams.get('source');
 
   try {
-    const data = await getLeadsData({ status });
+    const data = await getLeadsData({ status, source });
     return NextResponse.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load leads';

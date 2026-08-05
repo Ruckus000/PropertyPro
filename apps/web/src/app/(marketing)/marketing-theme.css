@@ -221,6 +221,53 @@
 .marketing-theme .mk-prose li{margin:6px 0}
 .marketing-theme .mk-prose hr{border:none;border-top:1px solid var(--mk-line);margin:32px 0}
 
+/* long-form article prose — elements the legal pages never used but real
+   articles do. Vars only: this file sits at its design-token baseline ceiling
+   (raw-hex 50 / raw-color-fn 12), so a literal here fails guard:design-tokens. */
+.marketing-theme .mk-prose ol{margin:0 0 16px;padding-left:1.4em;list-style:decimal;color:var(--mk-ink-soft)}
+.marketing-theme .mk-prose blockquote{margin:24px 0;padding:4px 0 4px 18px;border-left:3px solid var(--mk-coral);color:var(--mk-ink-soft);font-style:italic}
+.marketing-theme .mk-prose code{background:var(--mk-cream-2);border:1px solid var(--mk-line);border-radius:6px;padding:1px 5px;font-size:.92em}
+.marketing-theme .mk-prose pre{background:var(--mk-cream-2);border:1px solid var(--mk-line);border-radius:12px;padding:16px 18px;overflow-x:auto;margin:0 0 16px}
+.marketing-theme .mk-prose pre code{background:none;border:none;padding:0}
+.marketing-theme .mk-prose img{max-width:100%;height:auto;border-radius:14px;border:1px solid var(--mk-line)}
+.marketing-theme .mk-table-wrap{overflow-x:auto;margin:0 0 16px}
+.marketing-theme .mk-prose table{width:100%;border-collapse:collapse;font-size:14.5px}
+.marketing-theme .mk-prose th,.marketing-theme .mk-prose td{border:1px solid var(--mk-line);padding:10px 12px;text-align:left;color:var(--mk-ink-soft)}
+.marketing-theme .mk-prose thead th{background:var(--mk-cream-2);color:var(--mk-ink);font-weight:700}
+
+/* callout — one class for the article legal notice, statute citations, and
+   form hint blocks, so the three never drift apart visually */
+.marketing-theme .mk-note{background:var(--mk-cream-2);border:1px solid var(--mk-line);border-left:3px solid var(--mk-gold);border-radius:14px;padding:16px 18px;font-size:14px;line-height:1.6;color:var(--mk-ink-soft);margin:20px 0}
+.marketing-theme .mk-note strong{color:var(--mk-ink)}
+.marketing-theme .mk-note-legal{border-left-color:var(--mk-coral)}
+
+/* resources index */
+.marketing-theme .mk-res-list{display:grid;gap:18px;margin-top:36px}
+.marketing-theme .mk-res-card{display:block;padding:24px 26px;text-decoration:none;color:inherit}
+.marketing-theme .mk-res-card h2{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;font-size:22px;color:var(--mk-ink);margin:0 0 8px}
+.marketing-theme .mk-res-card:hover{border-color:var(--mk-coral)}
+.marketing-theme .mk-res-card:focus-visible{outline:2px solid var(--mk-coral);outline-offset:2px}
+.marketing-theme .mk-res-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;font-size:13px;color:var(--mk-ink-soft)}
+.marketing-theme .mk-prose .mk-res-byline{font-size:14px;color:var(--mk-ink-soft);margin:-6px 0 22px}
+
+/* marketing forms on LIGHT surfaces. The only other field styling in this file
+   is `.mk-checker`-scoped for its dark panel — deliberately not widened, since
+   its brown-on-brown palette is unreadable on cream. */
+.marketing-theme .mk-form{display:grid;gap:16px;max-width:34em}
+.marketing-theme .mk-form-row{display:grid;gap:6px}
+.marketing-theme .mk-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.marketing-theme .mk-label{font-size:13px;font-weight:600;color:var(--mk-ink)}
+.marketing-theme .mk-input,.marketing-theme .mk-textarea{width:100%;min-height:44px;border-radius:12px;border:1px solid var(--mk-line);background:var(--mk-card);color:var(--mk-ink);padding:12px 15px;font-size:15px;font-family:inherit}
+.marketing-theme .mk-textarea{min-height:130px;resize:vertical;line-height:1.6}
+.marketing-theme .mk-input::placeholder,.marketing-theme .mk-textarea::placeholder{color:var(--mk-ink-soft)}
+.marketing-theme .mk-input:focus-visible,.marketing-theme .mk-textarea:focus-visible{outline:2px solid var(--mk-coral);outline-offset:2px;border-color:var(--mk-coral)}
+.marketing-theme .mk-input[aria-invalid=true],.marketing-theme .mk-textarea[aria-invalid=true]{border-color:var(--mk-coral-d)}
+.marketing-theme .mk-form-error{color:var(--mk-coral-d);font-size:13px;margin:0}
+.marketing-theme .mk-form-hint{color:var(--mk-ink-soft);font-size:13px;margin:0}
+@media(max-width:480px){
+  .marketing-theme .mk-form-grid{grid-template-columns:1fr}
+}
+
 /* legal modal — Radix dialog styled to the marketing theme */
 .marketing-theme .mk-modal-overlay{position:fixed;inset:0;z-index:80;background:rgba(36,23,18,.55)}
 .marketing-theme .mk-modal-content{position:fixed;z-index:81;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,calc(100vw - 32px));max-height:85vh;display:flex;flex-direction:column;background:var(--mk-card);border:1px solid var(--mk-line);border-radius:16px;box-shadow:var(--mk-shadow);overflow:hidden}

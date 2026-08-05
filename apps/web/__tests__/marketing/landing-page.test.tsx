@@ -154,9 +154,23 @@ describe('marketing landing page', () => {
       expect(html.replace(/&#x27;/g, "'")).toContain("Let's talk");
     });
 
-    it('marks the Property Manager tier as the recommended path', () => {
+    it('puts the featured emphasis on Essentials, not the PM tier', () => {
+      // The PM tier used to carry it while routing to a mailto with no funnel
+      // behind it. We sell through the board channel, and Essentials is what a
+      // self-managed 25–149 unit board buys (docs/gtm/01-RECONCILIATION.md §5).
       const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('Recommended for portfolios');
+      expect(html).toContain('Where most self-managed boards start');
+      expect(html).not.toContain('Recommended for portfolios');
+    });
+
+    it('keeps the ribbon and the featured border on the same card', () => {
+      // Only `.mk-price.mk-feat` sets position:relative, and `.mk-ribbon` is
+      // absolutely positioned — split them and the badge floats off.
+      const html = renderToStaticMarkup(<PricingSection />);
+      const featuredCard = html
+        .split('class="mk-card mk-price')
+        .find((chunk) => chunk.startsWith(' mk-feat'));
+      expect(featuredCard).toContain('Where most self-managed boards start');
     });
 
     it('includes the pricing anchor id and signup CTA', () => {
@@ -168,10 +182,12 @@ describe('marketing landing page', () => {
       expect(html).toContain('href="/signup?plan=professional&amp;communityType=condo_718"');
     });
 
-    it('points the Property Manager "Talk to sales" CTA at a mailto', () => {
+    it('routes the Property Manager CTA to the inbound form, not a mailto', () => {
+      // B3: the most prominent CTA on the page used to open an email client and
+      // leave no record. It now lands in marketing_leads like everything else.
       const html = renderToStaticMarkup(<PricingSection />);
-      expect(html).toContain('Talk to sales');
-      expect(html).toContain('mailto:support@getpropertypro.com');
+      expect(html).toContain('href="/contact"');
+      expect(html).not.toContain('mailto:');
     });
   });
 
@@ -287,9 +303,17 @@ describe('FinalCtaSection', () => {
     expect(html).toContain('href="/signup"');
   });
 
-  it('points the "Talk to us" CTA at a mailto', () => {
+  it('points the "Talk to us" CTA at the inbound form', () => {
     const html = renderToStaticMarkup(<FinalCtaSection />);
     expect(html).toContain('Talk to us');
-    expect(html).toContain('mailto:support@getpropertypro.com');
+    expect(html).toContain('href="/contact"');
+    expect(html).not.toContain('mailto:');
+  });
+
+  it('does not claim an existing customer base', () => {
+    // Same defect class as the fabricated testimonial and logo strip that were
+    // un-rendered from the landing page — see (marketing)/page.tsx.
+    const html = renderToStaticMarkup(<FinalCtaSection />);
+    expect(html).not.toMatch(/join the florida management companies/i);
   });
 });

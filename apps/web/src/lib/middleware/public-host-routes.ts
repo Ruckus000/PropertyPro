@@ -97,6 +97,32 @@ const PROTECTED_FIRST_SEGMENTS = new Set<string>([
 ]);
 
 /**
+ * First segments owned by the APEX marketing site.
+ *
+ * `parsePathBasedPublicRoute` treats any one-segment path on the apex host as a
+ * legacy community slug and 308s it to `<slug>.getpropertypro.com` — it reads no
+ * database, so it cannot tell `/contact` from `/sunset-condos`. Every marketing
+ * page that is not nested under a reserved segment therefore has to be listed
+ * here or it silently redirects to a subdomain that does not exist.
+ *
+ * `/transparency` was exactly that bug: it shipped as a real route, was linked
+ * from the footer, and had been redirecting away on the apex host.
+ *
+ * Deliberately NOT wired into `isReservedPublicSlug`. That set governs what a
+ * community may slug a page on its OWN subdomain, and the apex host serves no
+ * community — reserving a marketing path here says nothing about tenant slugs.
+ * Adding `contact` there would forbid every community from creating a page
+ * called "contact", which is among the most common page slugs there is.
+ */
+export const MARKETING_FIRST_SEGMENTS = new Set([
+  'transparency',
+  'resources',
+  'contact',
+  'pricing',
+  'legal',
+]);
+
+/**
  * Path-based public routes like `/sunset-condos/transparency` on the apex host.
  * Returns null when the path is not a deprecated public slug route.
  */
@@ -108,6 +134,11 @@ export function parsePathBasedPublicRoute(pathname: string): { slug: string; pat
   if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) return null;
   if (isReservedSubdomain(slug)) return null;
   if (PROTECTED_FIRST_SEGMENTS.has(slug)) return null;
+  // Checked after the reserved sets so a marketing path can never re-open one
+  // of them, and before the length branch so `/transparency` (a bare marketing
+  // route) is distinguished from `/sunset-condos/transparency` (a real slug
+  // route, which keeps redirecting).
+  if (segments.length === 1 && MARKETING_FIRST_SEGMENTS.has(slug)) return null;
 
   if (segments.length === 1) {
     return { slug, path: '/' };

@@ -19,6 +19,16 @@ export const LEAD_STATUSES: LeadStatus[] = [
   'disqualified',
 ];
 
+/** Known capture surfaces. `source` is a free-text column, so treat this as a display hint. */
+export const SOURCE_LABELS: Record<string, string> = {
+  compliance_checker: 'Compliance checker',
+  pm_inquiry: 'Portfolio inquiry',
+};
+
+export function labelForSource(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
+}
+
 export interface AdminLead {
   id: number;
   email: string;
@@ -26,6 +36,8 @@ export interface AdminLead {
   contactName: string | null;
   associationType: string | null;
   unitCount: number | null;
+  communityCount: number | null;
+  message: string | null;
   obligationRequired: boolean | null;
   source: string;
   status: LeadStatus;
@@ -42,12 +54,14 @@ export interface AdminLead {
 
 export interface LeadFilters {
   status?: string | null;
+  source?: string | null;
 }
 
 export interface LeadStats {
   total: number;
   new: number;
   inIcp: number;
+  pmInquiries: number;
   last7Days: number;
 }
 
@@ -57,8 +71,17 @@ function throwIfError(error: { message: string } | null, context: string): void 
   }
 }
 
-function isInIcp(unitCount: number | null): boolean {
-  return unitCount !== null && unitCount >= 25 && unitCount <= 149;
+/**
+ * The ICP band is about a SINGLE self-managed association of 25–149 units.
+ *
+ * Gated on source because a PM inquiry's unit count is a portfolio total: a
+ * 40-community management company reporting 120 units across them is not a
+ * textbook ICP condo, and counting it as one puts noise in the number this
+ * dashboard exists to surface.
+ */
+function isInIcp(row: MarketingLeadRow): boolean {
+  if (row.source !== 'compliance_checker') return false;
+  return row.unit_count !== null && row.unit_count >= 25 && row.unit_count <= 149;
 }
 
 function mapLead(row: MarketingLeadRow): AdminLead {
@@ -69,6 +92,8 @@ function mapLead(row: MarketingLeadRow): AdminLead {
     contactName: row.contact_name,
     associationType: row.association_type,
     unitCount: row.unit_count,
+    communityCount: row.community_count,
+    message: row.message,
     obligationRequired:
       row.obligation_required === null ? null : row.obligation_required === 'true',
     source: row.source,
@@ -76,7 +101,7 @@ function mapLead(row: MarketingLeadRow): AdminLead {
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    inIcp: isInIcp(row.unit_count),
+    inIcp: isInIcp(row),
   };
 }
 
@@ -94,6 +119,10 @@ export async function getLeadsData(
     query = query.eq('status', filters.status as LeadStatus);
   }
 
+  if (filters.source && filters.source !== 'all') {
+    query = query.eq('source', filters.source);
+  }
+
   const { data, error } = await query;
   throwIfError(error, 'Failed to load leads');
 
@@ -109,6 +138,7 @@ export async function getLeadsData(
       total: leads.length,
       new: leads.filter((lead) => lead.status === 'new').length,
       inIcp: leads.filter((lead) => lead.inIcp).length,
+      pmInquiries: leads.filter((lead) => lead.source === 'pm_inquiry').length,
       last7Days: leads.filter(
         (lead) => new Date(lead.createdAt).getTime() >= sevenDaysAgo,
       ).length,

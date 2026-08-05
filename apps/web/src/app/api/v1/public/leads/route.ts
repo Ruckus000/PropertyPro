@@ -16,8 +16,8 @@
  * into an oracle for whether a given address is already in our pipeline.
  */
 import { runRoute } from '@propertypro/api-contract';
-import type { NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';
+import { resolveClientIp } from '@/lib/api/client-ip';
 import { RateLimitError } from '@/lib/api/errors';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
 import { captureMarketingLead } from '@/lib/services/marketing-leads-service';
@@ -25,15 +25,6 @@ import { publicLeadsPostContract } from './contract';
 
 const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_MS = 60_000;
-
-function resolveClientIp(req: NextRequest): string {
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return req.headers.get('x-real-ip') ?? 'unknown';
-}
 
 const leadHandler = runRoute(publicLeadsPostContract, async ({ body }) => {
   await captureMarketingLead({

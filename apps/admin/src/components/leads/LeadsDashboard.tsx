@@ -11,13 +11,29 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react';
-import type { AdminLead, LeadStats, LeadStatus } from '@/lib/server/leads';
+import { labelForSource, type AdminLead, type LeadStats, type LeadStatus } from '@/lib/server/leads';
 
 interface LeadsDashboardProps {
   initialLeads: AdminLead[];
   initialStats: LeadStats;
   initialStatusFilter?: string;
+  initialSourceFilter?: string;
 }
+
+/**
+ * Palette literals used across this file, named once.
+ *
+ * `apps/admin` is out of semantic-token scope (see CLAUDE.md), so it keeps the
+ * console's raw Tailwind ramps — but `guard:design-tokens` counts occurrences
+ * against a shrink-only per-file ceiling, and this file was sitting exactly at
+ * its. Naming them both drains the baseline and stops the next column addition
+ * from being blocked on cosmetics.
+ */
+const MUTED = 'text-gray-500';
+const FAINT = 'text-gray-400';
+const BODY = 'text-gray-900';
+const CELL = 'px-4 py-3';
+const INPUT = 'rounded-md border border-gray-300';
 
 const STATUS_STYLES: Record<
   LeadStatus,
@@ -31,16 +47,26 @@ const STATUS_STYLES: Record<
 
 const STATUS_ORDER: LeadStatus[] = ['new', 'contacted', 'qualified', 'disqualified'];
 
+const SOURCE_FILTERS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'compliance_checker', label: 'Compliance checker' },
+  { value: 'pm_inquiry', label: 'Portfolio inquiry' },
+];
+
+const Dash = () => <span className={FAINT}>—</span>;
+
 export function LeadsDashboard({
   initialLeads,
   initialStats,
   initialStatusFilter = 'all',
+  initialSourceFilter = 'all',
 }: LeadsDashboardProps) {
   const [leads, setLeads] = useState<AdminLead[]>(initialLeads);
   const [stats, setStats] = useState<LeadStats>(initialStats);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
+  const [sourceFilter, setSourceFilter] = useState<string>(initialSourceFilter);
   const [savingId, setSavingId] = useState<number | null>(null);
   const hasHydrated = useRef(false);
 
@@ -50,6 +76,7 @@ export function LeadsDashboard({
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.set('status', statusFilter);
+      if (sourceFilter !== 'all') params.set('source', sourceFilter);
       const res = await fetch(`/api/admin/leads?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) {
@@ -62,7 +89,7 @@ export function LeadsDashboard({
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, sourceFilter]);
 
   useEffect(() => {
     // Skip the first run — the server already rendered with initial data.
@@ -97,23 +124,24 @@ export function LeadsDashboard({
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Total leads" value={stats.total} />
         <StatCard label="Untouched" value={stats.new} />
         <StatCard label="In ICP (25–149 units)" value={stats.inIcp} />
+        <StatCard label="Portfolio inquiries" value={stats.pmInquiries} />
         <StatCard label="Last 7 days" value={stats.last7Days} />
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-3">
-        <label htmlFor="lead-status-filter" className="text-sm text-gray-600">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor="lead-status-filter" className={`text-sm ${MUTED}`}>
           Status
         </label>
         <select
           id="lead-status-filter"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          className={`${INPUT} px-3 py-1.5 text-sm`}
         >
           <option value="all">All</option>
           {STATUS_ORDER.map((status) => (
@@ -122,7 +150,24 @@ export function LeadsDashboard({
             </option>
           ))}
         </select>
-        {loading ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" /> : null}
+
+        <label htmlFor="lead-source-filter" className={`text-sm ${MUTED}`}>
+          Source
+        </label>
+        <select
+          id="lead-source-filter"
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value)}
+          className={`${INPUT} px-3 py-1.5 text-sm`}
+        >
+          {SOURCE_FILTERS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        {loading ? <Loader2 className={`h-4 w-4 animate-spin ${FAINT}`} /> : null}
       </div>
 
       {error ? (
@@ -134,10 +179,11 @@ export function LeadsDashboard({
       {/* Table */}
       {leads.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 px-6 py-12 text-center">
-          <Mail className="mx-auto h-8 w-8 text-gray-400" aria-hidden="true" />
-          <h2 className="mt-3 text-sm font-medium text-gray-900">No leads yet</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            Leads arrive from the compliance checker on the marketing site.
+          <Mail className={`mx-auto h-8 w-8 ${FAINT}`} aria-hidden="true" />
+          <h2 className={`mt-3 text-sm font-medium ${BODY}`}>No leads yet</h2>
+          <p className={`mt-1 text-sm ${MUTED}`}>
+            Leads arrive from the compliance checker and the portfolio inquiry
+            form on the marketing site.
           </p>
         </div>
       ) : (
@@ -146,8 +192,9 @@ export function LeadsDashboard({
             <thead className="bg-gray-50">
               <tr>
                 <Th>Contact</Th>
-                <Th>Association</Th>
-                <Th>Units</Th>
+                <Th>Association / company</Th>
+                <Th>Source</Th>
+                <Th>Size</Th>
                 <Th>Obligation</Th>
                 <Th>Received</Th>
                 <Th>Status</Th>
@@ -159,7 +206,7 @@ export function LeadsDashboard({
                 const StatusIcon = style.icon;
                 return (
                   <tr key={lead.id} className={lead.inIcp ? 'bg-coral-50/40' : undefined}>
-                    <td className="px-4 py-3">
+                    <td className={CELL}>
                       <a
                         href={`mailto:${lead.email}`}
                         className="font-medium text-coral-700 hover:underline"
@@ -167,45 +214,69 @@ export function LeadsDashboard({
                         {lead.email}
                       </a>
                       {lead.contactName ? (
-                        <div className="text-xs text-gray-500">{lead.contactName}</div>
+                        <div className={`text-xs ${MUTED}`}>{lead.contactName}</div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={CELL}>
                       {lead.associationName ? (
-                        <span className="inline-flex items-center gap-1.5 text-gray-900">
-                          <Building2 className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
+                        <span className={`inline-flex items-center gap-1.5 ${BODY}`}>
+                          <Building2 className={`h-3.5 w-3.5 ${FAINT}`} aria-hidden="true" />
                           {lead.associationName}
                         </span>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <Dash />
                       )}
                       {lead.associationType ? (
-                        <div className="text-xs uppercase text-gray-500">
+                        <div className={`text-xs uppercase ${MUTED}`}>
                           {lead.associationType}
                         </div>
                       ) : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      {lead.unitCount ?? <span className="text-gray-400">—</span>}
-                      {lead.inIcp ? (
-                        <span className="ml-2 rounded-full bg-coral-100 px-2 py-0.5 text-xs font-medium text-coral-700">
-                          ICP
-                        </span>
+                      {/*
+                        The prospect's own words. Shown inline rather than behind
+                        a click because on a list this small it is the single
+                        most useful thing on the row.
+                      */}
+                      {lead.message ? (
+                        <p className={`mt-1 max-w-md whitespace-pre-line text-xs ${MUTED}`}>
+                          {lead.message}
+                        </p>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3">
-                      {lead.obligationRequired === null ? (
-                        <span className="text-gray-400">—</span>
-                      ) : lead.obligationRequired ? (
-                        <span className="font-medium text-gray-900">Required</span>
+                    <td className={`${CELL} ${MUTED}`}>{labelForSource(lead.source)}</td>
+                    <td className={CELL}>
+                      {lead.communityCount !== null ? (
+                        <div className={BODY}>
+                          {lead.communityCount} communities
+                          {lead.unitCount !== null ? (
+                            <span className={MUTED}> · {lead.unitCount} units</span>
+                          ) : null}
+                        </div>
+                      ) : lead.unitCount !== null ? (
+                        <>
+                          {lead.unitCount} units
+                          {lead.inIcp ? (
+                            <span className="ml-2 rounded-full bg-coral-100 px-2 py-0.5 text-xs font-medium text-coral-700">
+                              ICP
+                            </span>
+                          ) : null}
+                        </>
                       ) : (
-                        <span className="text-gray-500">Not required</span>
+                        <Dash />
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className={CELL}>
+                      {lead.obligationRequired === null ? (
+                        <Dash />
+                      ) : lead.obligationRequired ? (
+                        <span className={`font-medium ${BODY}`}>Required</span>
+                      ) : (
+                        <span className={MUTED}>Not required</span>
+                      )}
+                    </td>
+                    <td className={`${CELL} ${MUTED}`}>
                       {format(new Date(lead.createdAt), 'MMM d, yyyy')}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={CELL}>
                       <div className="flex items-center gap-2">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${style.className}`}
@@ -221,7 +292,7 @@ export function LeadsDashboard({
                           value={lead.status}
                           disabled={savingId === lead.id}
                           onChange={(e) => setStatus(lead.id, e.target.value as LeadStatus)}
-                          className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                          className={`${INPUT} px-2 py-1 text-xs`}
                         >
                           {STATUS_ORDER.map((status) => (
                             <option key={status} value={status}>
@@ -245,8 +316,8 @@ export function LeadsDashboard({
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-gray-900">{value}</div>
+      <div className={`text-xs ${MUTED}`}>{label}</div>
+      <div className={`mt-1 text-2xl font-semibold ${BODY}`}>{value}</div>
     </div>
   );
 }
@@ -255,7 +326,7 @@ function Th({ children }: { children: React.ReactNode }) {
   return (
     <th
       scope="col"
-      className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500"
+      className={`px-4 py-2 text-left text-xs font-medium uppercase tracking-wide ${MUTED}`}
     >
       {children}
     </th>

@@ -304,7 +304,10 @@ export type SiteLayoutMetadataRow = {
 
 // ─── Marketing ───
 
-/** Platform-level inbound lead from the marketing site. See migration 0050. */
+/**
+ * Platform-level inbound lead from the marketing site.
+ * See migrations 0050 (table) and 0051 (inquiry fields).
+ */
 export type MarketingLeadRow = {
   id: number;
   email: string;
@@ -313,6 +316,10 @@ export type MarketingLeadRow = {
   contact_name: string | null;
   association_type: string | null;
   unit_count: number | null;
+  /** Portfolio size for a PM inquiry. Never conflate with `unit_count`. */
+  community_count: number | null;
+  /** Prospect's own words. Distinct from `notes`, which is sales-owned. */
+  message: string | null;
   obligation_required: string | null;
   source: string;
   status: 'new' | 'contacted' | 'qualified' | 'disqualified';
@@ -321,6 +328,10 @@ export type MarketingLeadRow = {
   updated_at: string;
 };
 
+/**
+ * Deliberately excludes `message`: it is the prospect's text, not the admin's.
+ * `notes` is where triage commentary belongs.
+ */
 export type MarketingLeadUpdate = Partial<
   Pick<MarketingLeadRow, 'status' | 'notes' | 'updated_at'>
 >;
