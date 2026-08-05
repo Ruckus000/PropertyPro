@@ -1232,3 +1232,124 @@ placeholder Stripe price ids.
 Full verification for this pass: `tsc --noEmit` clean on web, admin **and**
 shared; 21/21 guards; unit **11,068 passed / 0 failed** (940 files, +8 new);
 integration unchanged at 310 app + 121 RLS. Nothing touched production.
+
+---
+
+## Tenth addendum — the two "overlays that never open" were ONE root cause: clicking before hydration
+
+Date: **2026-08-05**.
+
+The seventh and eighth addenda recorded `esign-and-documents-flow` and
+`meeting-create-spacebar` as failing on overlays that never open, and the eighth
+noted they shared a shape. They share a **cause**, and it is not what either
+spec's comments claimed.
+
+### Root cause, measured
+
+Playwright's actionability checks are DOM checks — visible, stable, enabled,
+receives events. **None of them mean React has attached a handler.** On a
+server-rendered page the button exists and is fully "actionable" before hydration
+runs, so a `.click()` in that window is dispatched into markup with no listener
+and is **silently swallowed**.
+
+Probing `__reactFiber$` / `__reactProps$` on the exact trigger nodes, at the
+moment each spec clicks them:
+
+| Spec | trigger hydrated when the spec clicks? | hydrated after |
+|---|---|---|
+| `meeting-create-spacebar` | **no** — `hasFiber: false` | 511 ms |
+| `esign-and-documents-flow` | **no** — `hasFiber: false` | 259 ms |
+
+In both cases a click issued *after* that point opens the overlay immediately
+(`anyDialogRole: 1`; esign's search box `visible: true`). There were **zero** page
+errors and no console errors on either page.
+
+**This is why raising the timeouts to 30s could never work: the timeout is on the
+wrong side of the lost event.** The click already happened; no further click is
+ever sent; the overlay will not appear no matter how long the assertion waits.
+The eighth addendum's reading — "not the budget misses they were recorded as" —
+was right that budgets were not the problem, but the mechanism is sharper than
+"the overlay layer": *the event never reached React*.
+
+Two pieces of folklore this retires:
+
+- Waiting for a heading is **not** a proxy for interactivity. The heading is in
+  the server HTML and appears before hydration by definition. Both specs gated on
+  a heading and then clicked.
+- The `esign` file header blamed "a stale process on port 3000 serving an old
+  bundle". That produces the same symptom and was worth ruling out, but it was not
+  the cause. The header has been corrected.
+
+### The fix
+
+`apps/web/e2e/helpers/hydration.ts` — `clickWhenHydrated(locator)`: waits until
+React has attached an `onClick` to that node, then clicks **once**.
+
+Deliberately not a retry-click loop. A retry is unsafe for anything that TOGGLES:
+esign's trigger is a popover, so a second click fired just after the first one
+finally opened it closes it again, converting a deterministic failure into a flaky
+one. One click to a live handler has no such race.
+
+The probe reads React's expando keys, which is an implementation detail. That is a
+deliberate, contained trade: it is test-only, and if React renames those keys the
+helper stops finding them and **times out loudly**. It cannot silently pass a click
+through unhydrated markup.
+
+### A real accessibility bug this uncovered
+
+With the meetings dialog finally opening, the next assertion failed:
+`dialog.getByRole('heading', { name: 'Create Meeting' })` found nothing.
+
+The dialog rendered its title as `<Dialog.Title asChild><CardTitle>`, and
+`CardTitle` renders a **`<div>`** — so the modal had **no heading at all**. The
+canonical `ui/dialog.tsx` `DialogTitle` renders the Radix primitive directly and
+therefore emits `<h2>`; `meeting-form.tsx` and `meeting-detail-modal.tsx` were the
+only two components in the app that hand-rolled it this way. The spec was right and
+the app was wrong.
+
+Both now render `Dialog.Title` directly with CardTitle's exact classes — semantics
+restored, no visual change (Tailwind preflight already zeroes heading margin and
+size). This was a genuine a11y defect on two user-facing modals, not a test-only
+fix.
+
+### A third finding: `esign` line 187 is order/load dependent
+
+Once the overlay fix landed, `esign` failed further along, at
+`getByText(/Signing as:/i)` on `/sign/[externalId]/[slug]`. Measured:
+
+- passes **3/3 in isolation**, including immediately after a full suite (so it is
+  not accumulated database state),
+- fails **deterministically** at the 5s default in a full-suite run.
+
+`/sign/[externalId]/[slug]` is a route the run has not compiled yet and
+`domcontentloaded` returns before it renders; in a full suite the dev server has
+already compiled ~20 other routes. Given 30s — matching the neighbouring
+assertions in the same file — **both esign blocks passed in a full suite for the
+first time**, including block 2, which this note has never previously observed
+running.
+
+### Measurement status — read this before quoting a number
+
+Confirmed and repeatable in isolation: `esign` 2/2, `meeting-create-spacebar` 1/1,
+`support-access` 1/1.
+
+The best full-suite numbers this pass, in order:
+
+| run | result | wall | note |
+|---|---|---:|---|
+| overlay fix, before the line-187 fix | 24 passed / 2 failed | 6.3 min | `meeting-create-spacebar` green in-suite; esign still failing at 187 |
+| + line-187 fix | both esign blocks green | 8.5 min | but `phase1-roadmap-smoke` failed; load average 14 |
+| repeat | 16 passed | 12.1 min | **discarded** |
+
+**The last run is discarded under this note's own rule.** `marketing-smoke` took
+**16.9s against a 3.0s baseline** (5.6×), `add-community` 49.1s against 11.6s, and
+the failures are bare `Test timeout of 120000ms exceeded` — with load average
+**15.95**. The canaries technically passed, which is a refinement worth recording:
+**a canary that passes but is 5× slower is still telling you the environment
+moved.** Treat canary *timings*, not just their pass/fail, as the signal.
+
+The cause was self-inflicted: back-to-back full suites on a shared machine. So
+**a clean confirming full-suite run of the combined state has not been taken** —
+same honesty as the seventh addendum's "the confirming run never happened". The
+per-spec results above are solid; the suite total for the combined state is not
+yet measured. Take it on a quiet machine before quoting one.

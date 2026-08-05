@@ -136,12 +136,18 @@ pnpm --filter @propertypro/web test:e2e:prod
 > drove one measurement to 24.9 min and failed both canaries. Blocks still "never
 > run" because five specs use `describe.configure({ mode: 'serial' })`, so one
 > early failure skips the rest. A CI job over the remainder would still be red on
-> day one. Remaining failures: Stripe placeholder price ids (`signup-trialing`)
-> and two overlays that never open — a Radix dialog in `meeting-create-spacebar`
-> and the template picker in `esign` (both fail a *30s* wait, so these are **not**
-> the budget misses they were previously recorded as). The onboarding-wizard
+> day one. The remaining known failure is Stripe placeholder price ids
+> (`signup-trialing`). The onboarding-wizard
 > blocker is now two `test.fixme` blocks: the spec describes a 4-/5-step flow, but
 > **both** condo and apartment ship the same 2-step wizard.
+>
+> **Never click straight after waiting for a heading — use `clickWhenHydrated`**
+> (`apps/web/e2e/helpers/hydration.ts`). Playwright actionability is a DOM check
+> and does NOT mean React attached a handler; a click on server-rendered markup is
+> **swallowed**, so no timeout can recover it. A heading is in the server HTML and
+> appears *before* hydration by definition. This one cause kept two specs red for
+> months behind 30s waits, misdiagnosed twice as first-render budgets and once as
+> a stale dev server. Measured hydration lag was only ~260–510ms.
 >
 > **Support impersonation forwards ONE identity.** The web middleware's support
 > branch must move `x-user-id`, `x-user-full-name` and `x-user-email` together;

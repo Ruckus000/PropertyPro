@@ -3,6 +3,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
+import { clickWhenHydrated } from './helpers/hydration';
 
 test.describe('Create Meeting spacebar and focus', () => {
   // A first-compile dev-server render of the meetings calendar does not fit in
@@ -33,13 +34,15 @@ test.describe('Create Meeting spacebar and focus', () => {
     });
 
     const openCreate = page.getByRole('button', { name: 'Create Meeting' }).first();
-    await openCreate.click();
+    // The earlier comment here had the diagnosis half right and the fix wrong.
+    // The click DOES land before hydration — measured at ~510ms after the
+    // heading appears — but the consequence is that the event is SWALLOWED, not
+    // merely delayed. So raising this assertion's timeout to 30s could never
+    // work: no second click is ever sent, and the dialog never opens. Waiting
+    // for React to own the button first is the actual fix.
+    await clickWhenHydrated(openCreate);
 
     const dialog = page.getByRole('dialog');
-    // Clicking a button only waits for it to be *actionable*, not for React to
-    // have attached its handler. On a first-compile page the click can land
-    // before hydration, so the dialog opens a beat later than the 5s default
-    // allows. The assertion is unchanged — the dialog must still appear.
     await expect(dialog).toBeVisible({ timeout: 30_000 });
     await expect(dialog.getByRole('heading', { name: 'Create Meeting' })).toBeVisible();
 
