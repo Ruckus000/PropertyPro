@@ -117,8 +117,6 @@
 .marketing-theme .mk-checker input{flex:1;min-width:120px}
 .marketing-theme .mk-checker .mk-res{margin-top:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:13px;padding:17px;font-size:14px}
 .marketing-theme .mk-checker .mk-res b{color:var(--mk-gold)}
-.marketing-theme .mk-pen{display:inline-flex;align-items:baseline;gap:8px;margin-top:8px}
-.marketing-theme .mk-pen .mk-big{font-family:var(--font-fraunces),serif;font-size:36px;color:var(--mk-gold);font-weight:600}
 
 /* steps */
 .marketing-theme .mk-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:38px}

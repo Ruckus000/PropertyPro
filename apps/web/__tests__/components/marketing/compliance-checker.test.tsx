@@ -16,14 +16,28 @@ function clickCheck() {
 }
 
 describe('ComplianceChecker', () => {
-  it('renders the prompt and an initial penalty fact', () => {
+  it('renders the prompt and the obligation deadlines', () => {
     render(<ComplianceChecker />);
     expect(screen.getByText(/Is your association required to comply/i)).toBeTruthy();
-    expect(screen.getByText(/\$50/)).toBeTruthy();
     // Reframed present-tense default copy.
     expect(
       screen.getByText(/now required to maintain a compliant website/i),
     ).toBeTruthy();
+    // The deadline cadence replaced the money claim as the default hook.
+    expect(screen.getByText(/30 days/)).toBeTruthy();
+    expect(screen.getByText(/48 hours/)).toBeTruthy();
+  });
+
+  it('makes no penalty claim in the default state', () => {
+    // Regression guard. "$50 per day, per association" was presented here as the
+    // penalty for lacking a website. It is really minimum damages for an
+    // unanswered written records request (§718.111(12)(c)), capped at 10 days.
+    // We sell records integrity to fiduciaries — an overstated citation on our
+    // own homepage undermines the exact attribute being bought.
+    const { container } = render(<ComplianceChecker />);
+    expect(container.textContent).not.toMatch(/\$\d/);
+    expect(container.textContent).not.toMatch(/per day/i);
+    expect(container.textContent).not.toMatch(/penalty|fine/i);
   });
 
   it('computes a condo 84-unit obligation on check', () => {

@@ -206,12 +206,24 @@ export function ComplianceChecker() {
           </>
         ) : (
           <>
-            Most <b>condos with 25+ units</b> are now required to maintain a
-            compliant website. The penalty for falling behind:
-            <span className="mk-pen">
-              <span className="mk-big">$50</span>
-              <span style={{ opacity: 0.85 }}>per day, per association</span>
-            </span>
+            {/*
+              This used to headline "$50 per day, per association" as the penalty
+              for lacking a website. That figure is minimum damages under
+              §718.111(12)(c) for failing to answer an owner's written RECORDS
+              REQUEST — capped at 10 days, and unrelated to whether a website
+              exists. There is no automatic fine for not having one.
+
+              Do not reintroduce a money claim here. We sell records integrity to
+              fiduciaries; a prospect who checks the citation and finds it
+              overstated has been handed a reason to distrust the exact thing
+              we're selling. The deadlines below are true and carry the urgency
+              on their own. /resources/condo-website-requirements explains the
+              $50 figure properly, for readers who meet it elsewhere.
+            */}
+            Most <b>condos with 25+ units</b> — and <b>HOAs with 100+ parcels</b>{' '}
+            — are now required to maintain a compliant website. Records go up
+            within <b>30 days</b>, owner meeting notices <b>14 days</b> ahead,
+            board meetings <b>48 hours</b> ahead.
           </>
         )}
       </div>

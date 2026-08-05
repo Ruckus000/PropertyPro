@@ -197,10 +197,19 @@ describe('marketing landing page', () => {
       expect(html).toContain('on autopilot');
     });
 
-    it('retains the $50/day and 30-day statute facts', () => {
+    it('retains the 30-day statute fact', () => {
       const html = renderToStaticMarkup(<ComplianceUrgencySection />);
-      expect(html).toContain('$50');
       expect(html).toContain('30 days');
+    });
+
+    it('makes no penalty claim', () => {
+      // The "$50/day penalty" this used to assert is records-request damages
+      // under §718.111(12)(c) — capped at 10 days and unrelated to whether a
+      // website exists. There is no automatic fine for lacking one.
+      const html = renderToStaticMarkup(<ComplianceUrgencySection />);
+      expect(html).not.toContain('$50');
+      expect(html).not.toMatch(/per day/i);
+      expect(html).not.toMatch(/penalty|fine/i);
     });
 
     it('references the §718/§720 framework', () => {

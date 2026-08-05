@@ -40,8 +40,10 @@ export function getComplianceObligation({
         required: true,
         status: 'required-now',
         headline: 'Required now',
+        // No "Enforcement is active." — that was an unsourced assertion about
+        // how the DBPR actually behaves. The requirement itself is the fact.
         detail:
-          'Condominium associations of 150+ units are already required to maintain a compliant website with posted official records. Enforcement is active.',
+          'Condominium associations of 150+ units have been required to maintain a compliant website with posted official records for several years.',
         deadline: null,
       };
     }
