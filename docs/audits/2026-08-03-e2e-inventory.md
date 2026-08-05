@@ -269,11 +269,14 @@ once the suite is meaningfully green, revisit a full CI job.
    production Auth and Storage on every run.
 2. `/dev/site-preview` breaks `next build` whenever the database is reachable.
 3. The app exhausts a 100-connection Postgres under e2e load.
-4. `playwright.prod.config.ts`'s non-spreading `webServer.env`.
+4. ~~`playwright.prod.config.ts`'s non-spreading `webServer.env`.~~
+   **CLOSED — the stated diagnosis was wrong.** See the third addendum.
 5. The tenant config's webServer takes hours to become healthy.
-6. `signup-trialing` fails instead of skipping, after a 3-minute timeout.
-7. Local setup needs an undocumented `documents` bucket and `stripe_prices` rows;
-   neither is in the seed. Both belong in `pnpm seed:demo` or the local recipe.
+6. ~~`signup-trialing` fails instead of skipping, after a 3-minute timeout.~~
+   **FIXED** — see the third addendum.
+7. ~~Local setup needs an undocumented `documents` bucket and `stripe_prices` rows;
+   neither is in the seed. Both belong in `pnpm seed:demo` or the local recipe.~~
+   **FIXED — `pnpm seed:demo` now provisions both.** See the third addendum.
 
 ---
 
@@ -331,3 +334,93 @@ shipped script leaks **3** of them to the child process, including
 production credentials from `.env.local` (`RESEND_API_KEY`, Stripe). It governs
 the database/Supabase axis only, which is what its name claims. Anything needing
 a fully isolated env should use a real local stack, not this wrapper.
+
+
+---
+
+## Third addendum — follow-ups 4, 6 and 7 (PR A)
+
+Worked on a fresh local Supabase stack rebuilt from this note's own recipe
+(ports 553xx, `[analytics] enabled = false`), at commit `3f2190d8`.
+
+### 7 — FIXED: `pnpm seed:demo` is now self-sufficient
+
+Both blockers are provisioned by the seed itself, idempotently, up front:
+
+- **`documents` bucket** — `ensureDocumentsBucket()`
+  (`packages/db/src/seed/seed-community.ts`), memoised, `listBuckets()` then
+  create-if-absent. Created **private and unrestricted**: the seed writes PDFs
+  and the app writes draft images to the same bucket, so a local bucket
+  *tighter* than the real one is the failure mode worth avoiding.
+- **`stripe_prices`** — `ensureSeedStripePrices()` (`scripts/seed-demo.ts`),
+  `on conflict … do nothing`, and skipped entirely if the table already holds
+  any non-placeholder id.
+
+**Only the 10 legal combinations are inserted**, from `PLANS_BY_COMMUNITY_TYPE`
+× `{month, year}` — not the 18-row cross product this note inserted by hand.
+Nine of those 18 are combinations checkout rejects; see follow-up 6.
+
+**Measured:** on a stack seeded with no manual SQL, `pnpm seed:demo` exits 0 and
+writes 36 storage objects and 10 price rows; a second consecutive run also exits
+0 and inserts nothing.
+
+**Third undocumented prerequisite, found on the way:** the seed also refuses to
+start without `PROPERTYPRO_SEED_ENV=development`. That one is self-describing —
+it prints its own remediation — so it was left alone.
+
+### 4 — CLOSED, not fixed: the recorded diagnosis is wrong
+
+This note says `webServer.env` "does not spread `process.env`", so `next start`
+receives only `PDFJS_TEST_ENABLED`. **Playwright already spreads it.** From
+`playwright/lib/plugins/webServerPlugin.js` at the pinned 1.58.2:
+
+```js
+env: { ...DEFAULT_ENVIRONMENT_VARIABLES, ...process.env, ...this._options.env }
+```
+
+The proposed one-line fix would have been a no-op. Two experiments, both green,
+also rule out the follow-on hypothesis that `NEXT_PUBLIC_*` inlining is
+responsible:
+
+| Build env | Server env | Result |
+|---|---|---|
+| valid Supabase vars | valid | 8/8 pass in 5.8 s, server healthy |
+| **no** Supabase vars at all | valid | passes — middleware reads `process.env` at runtime |
+
+The original failure did not reproduce. What *is* real in that config, and is
+now fixed, is unrelated to env: `testDir: './e2e'` carried no
+`testMatch`, so a bare `pnpm test:e2e:prod` collected **all 39 tests in 13
+files** and pointed the 25 auth-dependent blocks at a production server where
+`/dev/agent-login` is 404'd. CI escaped this only by passing three paths on the
+command line. A `PROD_SAFE_SPECS` allowlist now pins it to the three DB-free
+specs — bare run **39 → 8 tests**, CI's explicit-path form unchanged at 8. The
+`env` block carries a comment recording the measurement above so the no-op fix
+is not proposed again.
+
+### 6 — FIXED: the 3-minute timeout is now a named, immediate failure
+
+The guard was never keyed on `stripe_prices` rows — `stripeE2eConfigured()`
+requires `E2E_STRIPE=1` and an `sk_test_` key. The three-minute burn came from
+downstream: when session creation fails, `/signup/checkout` renders "Unable to
+start checkout" and **no iframe**, so `fillStripeEmbeddedCheckout` waited out the
+full 180 s test timeout and reported `locator.fill: Test timeout` — a symptom
+naming nothing.
+
+The trigger was this note's own hand-inserted rows: they used the id prefix
+`price_local_…`, which `isPlaceholderStripePriceId` (matching
+`price_placeholder_`) does not recognise, so the seed treated fake ids as real
+and handed them to Stripe. Follow-up 7's rows use the recognised prefix.
+
+`fillStripeEmbeddedCheckout` now races the checkout iframe against the app's
+error copy and throws immediately, naming key/price mode mismatch and
+placeholder ids as the causes. **No assertion was weakened** — the requirement
+that checkout must mount is unchanged; it simply stopped being expressed as a
+180 s wait for an element that cannot appear.
+
+**Measured:** with Stripe unconfigured the spec now skips, and the run is 23 s
+wall clock of which essentially all is `next dev` boot.
+
+### Gates
+
+tsc 0 · 21/21 guards · 11,042 unit passed · 310 app + 121 RLS integration — all
+at the recorded baseline.

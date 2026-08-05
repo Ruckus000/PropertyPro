@@ -98,6 +98,69 @@ export const STRIPE_E2E_SKIP_REASON =
   '`stripe listen --forward-to 127.0.0.1:3000/api/v1/webhooks/stripe`. ' +
   'See docs/audits/2026-07-11-stripe-cancel-smoke.md.';
 
+/**
+ * The copy `/signup/checkout` renders when `createCheckoutSession` returns
+ * `{ ok: false }` (see `apps/web/src/lib/actions/checkout.ts`). Matching it is
+ * how the spec tells "Stripe Checkout has not mounted yet" apart from "Stripe
+ * Checkout is never going to mount".
+ */
+const CHECKOUT_FAILURE_COPY = /unable to start checkout/i;
+
+/**
+ * Embedded-checkout iframe. Stripe owns this markup, so it is the string in
+ * this file most likely to need updating — keep it in ONE place. If the mount
+ * check and the fill used different selectors, the mount check could pass while
+ * `frameLocator` then timed out, which is exactly the confusing failure
+ * `assertCheckoutSessionStarted` exists to prevent.
+ */
+const CHECKOUT_IFRAME_SELECTOR =
+  'iframe[title="Secure checkout"], iframe[name^="embedded-checkout"], iframe[src*="checkout.stripe.com"]';
+
+/**
+ * Waits for embedded Stripe Checkout to mount, and fails immediately — with the
+ * cause named — if the app reports a session-creation failure instead.
+ *
+ * This is a diagnosis fix, not a relaxation: the assertion that checkout must
+ * mount is unchanged, it just stops being expressed as a 180s wait for a field
+ * that cannot appear.
+ */
+async function assertCheckoutSessionStarted(page: Page): Promise<void> {
+  const failure = page.getByText(CHECKOUT_FAILURE_COPY);
+  const iframe = page.locator(CHECKOUT_IFRAME_SELECTOR);
+
+  // Capture the winner rather than re-querying the DOM after the poll: a second
+  // read is a fresh observation, so it can disagree with the one the assertion
+  // actually passed on.
+  let outcome: 'failed' | 'mounted' | 'pending' = 'pending';
+
+  await expect
+    .poll(
+      async () => {
+        const [failed, mounted] = await Promise.all([failure.count(), iframe.count()]);
+        outcome = failed ? 'failed' : mounted ? 'mounted' : 'pending';
+        return outcome;
+      },
+      {
+        timeout: 30_000,
+        message:
+          'Stripe embedded Checkout never mounted and the app reported no error — ' +
+          'check that the dev server is up and /signup/checkout was reached with a valid signupRequestId.',
+      },
+    )
+    .not.toBe('pending');
+
+  if (outcome === 'failed') {
+    throw new Error(
+      'Stripe Checkout session creation FAILED — the app rendered "Unable to start checkout". ' +
+        'The usual cause is that STRIPE_SECRET_KEY cannot see the ids in the `stripe_prices` ' +
+        'table: either the key and the stored prices are in different Stripe modes (test vs ' +
+        'live), or the table holds placeholder ids from a local seed (`price_placeholder_…`), ' +
+        'which no Stripe account can resolve. Check the dev-server log for ' +
+        '`checkout.session_creation_failed`.',
+    );
+  }
+}
+
 /** Stripe's universally-accepted test card — never charged in test mode. */
 export const STRIPE_TEST_CARD = {
   number: '4242424242424242',
@@ -213,11 +276,9 @@ export async function confirmSupabaseEmail(email: string): Promise<void> {
  * minor label changes.
  */
 export async function fillStripeEmbeddedCheckout(page: Page): Promise<void> {
-  const checkout = page
-    .frameLocator(
-      'iframe[title="Secure checkout"], iframe[name^="embedded-checkout"], iframe[src*="checkout.stripe.com"]',
-    )
-    .first();
+  await assertCheckoutSessionStarted(page);
+
+  const checkout = page.frameLocator(CHECKOUT_IFRAME_SELECTOR).first();
 
   await checkout.getByLabel(/card number/i).fill(STRIPE_TEST_CARD.number);
   await checkout.getByLabel(/expiration|expiry|MM \/ YY/i).fill(STRIPE_TEST_CARD.expiry);

@@ -172,18 +172,81 @@ function buildSeedPlaceholderPdf(
   return new TextEncoder().encode(pdf);
 }
 
+/** The storage bucket every seeded document and e-sign source PDF is written to. */
+export const SEED_DOCUMENTS_BUCKET = 'documents';
+
+/**
+ * Memoised so a seed run issues at most one `listBuckets()` regardless of how
+ * many documents it writes.
+ */
+let documentsBucketEnsured: Promise<void> | null = null;
+
+/**
+ * Creates the `documents` storage bucket if it is absent.
+ *
+ * A fresh local Supabase stack has no `documents` bucket: no migration creates
+ * it (unlike `community-site-assets`, which migration 0006 provisions), and
+ * neither did the seed — so `pnpm seed:demo` aborted on the first document with
+ * Supabase's verbatim `Bucket not found`. That prerequisite existed only in an
+ * audit note, which is a prerequisite nobody finds.
+ *
+ * Deliberately a no-op when the bucket already exists, so this is safe against
+ * a stack that was provisioned by hand.
+ *
+ * The bucket is created **private and unrestricted** (no MIME allowlist, no
+ * size cap). The seed writes PDFs and the app also writes draft images here, so
+ * a restrictive local bucket would fail in ways a real environment does not —
+ * the failure mode worth engineering against is a local bucket that is *tighter*
+ * than the real one.
+ *
+ * **Best-effort by design: this never throws.** `ensureSeededDocumentStorage`
+ * is not local-only — it is reached in production by `POST /api/admin/demos`
+ * (via `seedCommunity`, behind `requirePlatformAdmin`). There the bucket always
+ * exists, so this is a no-op; but a transient `listBuckets()` failure must not
+ * become a NEW way for that route to fail. The upload immediately after is the
+ * authority and already reports `Bucket not found` precisely. So this call can
+ * only ever help, never newly break.
+ */
+export async function ensureDocumentsBucket(): Promise<void> {
+  // The never-throws guarantee lives in exactly one place — the boundary
+  // `.catch` — so a check added inside the body inherits it instead of having
+  // to remember its own swallow.
+  documentsBucketEnsured ??= (async () => {
+    const admin = createAdminClient();
+
+    const { data, error } = await admin.storage.listBuckets();
+    if (error) throw error;
+    if (data?.some((bucket) => bucket.name === SEED_DOCUMENTS_BUCKET)) return;
+
+    const { error: createError } = await admin.storage.createBucket(SEED_DOCUMENTS_BUCKET, {
+      public: false,
+    });
+    // "Already exists" means a concurrent seed won the race — that is success.
+    if (createError && !/already exists|duplicate/i.test(createError.message)) throw createError;
+
+    debugSeed(`ensured storage bucket "${SEED_DOCUMENTS_BUCKET}"`);
+  })().catch((error: unknown) => {
+    debugSeed(
+      `bucket check skipped, leaving it to the upload: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
+  return documentsBucketEnsured;
+}
+
 export async function ensureSeededDocumentStorage(
   storagePath: string,
   title: string,
   summary: string,
 ): Promise<number> {
   const pdfBytes = buildSeedPlaceholderPdf(title, summary, storagePath);
+  await ensureDocumentsBucket();
   const admin = createAdminClient();
 
   await retryStorageSeedOperation(
     `upload ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).upload(storagePath, pdfBytes, {
         contentType: 'application/pdf',
         upsert: true,
       });
@@ -199,8 +262,7 @@ export async function ensureSeededDocumentStorage(
   await retryStorageSeedOperation(
     `list ${storagePath}`,
     async () => {
-      const result = await admin.storage
-        .from('documents')
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET)
         .list(storageFolder, { limit: 100, search: storageFileName });
 
       const listed = (result.data ?? []).some((file) => file.name === storageFileName);
@@ -218,7 +280,7 @@ export async function ensureSeededDocumentStorage(
   await retryStorageSeedOperation(
     `download ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').download(storagePath);
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).download(storagePath);
       if (result.error || !result.data) {
         throw new Error(
           `Failed to verify seeded document PDF download: ${result.error?.message ?? 'No data returned'}`,

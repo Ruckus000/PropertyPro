@@ -24,6 +24,8 @@ import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 // guarded subpath (DBB-01, #803 removed the root-barrel re-export).
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
+  ensureDocumentsBucket,
+  SEED_DOCUMENTS_BUCKET,
   ensureSeededDocumentStorage,
   ensureNotificationPreference,
   seedCommunity,
@@ -37,7 +39,15 @@ import {
 } from '@propertypro/db/seed/seed-community';
 // AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
-import { BOARD_DESIGNATIONS, getComplianceTemplate, type CommunityType, type PlanId } from '@propertypro/shared';
+import {
+  BOARD_DESIGNATIONS,
+  COMMUNITY_TYPES,
+  PLANS_BY_COMMUNITY_TYPE,
+  PLAN_MONTHLY_PRICES_USD,
+  getComplianceTemplate,
+  type CommunityType,
+  type PlanId,
+} from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
 import { runSeedSafetyChecks } from './lib/seed-safety';
@@ -365,6 +375,90 @@ function isStripeCustomer(
   return !('deleted' in customer && customer.deleted);
 }
 
+/**
+ * Marks a `stripe_prices` row as locally-provisioned rather than a real Stripe
+ * id. Single source for the probe, the generated ids, and
+ * `isPlaceholderStripePriceId`.
+ */
+const PLACEHOLDER_STRIPE_PRICE_PREFIX = 'price_placeholder_';
+
+/**
+ * Provisions placeholder `stripe_prices` rows for any (plan, community type,
+ * interval) combination that has none.
+ *
+ * `stripe_prices` is reference data with no local provisioning path: no
+ * migration seeds it (the archived `_archive/0120_stripe_prices.sql` predates
+ * the NOT NULL `unit_amount_cents` and would not run today), so a fresh local
+ * stack aborted the seed on `Missing stripe_prices row`.
+ *
+ * Two deliberate constraints:
+ *
+ * 1. **Only the legal combinations.** `PLANS_BY_COMMUNITY_TYPE` is the single
+ *    source of truth for which plans a community type can buy. Inserting the
+ *    full cross product — as the 2026-08-03 audit did by hand — creates rows
+ *    that checkout rejects and is the recorded cause of `signup-trialing`
+ *    burning three minutes instead of skipping.
+ * 2. **`do nothing`, never `do update`.** A developer with real Stripe price
+ *    ids must not have them silently replaced by placeholders.
+ *
+ * The prefix is load-bearing: `isPlaceholderStripePriceId` routes demo billing
+ * through the local path instead of calling Stripe. All three uses of it — the
+ * probe below, the generated ids, and that helper — derive from one constant,
+ * so changing it cannot leave the probe unable to recognise its own rows.
+ */
+async function ensureSeedStripePrices(): Promise<void> {
+  // If this environment already carries REAL price ids, leave the table alone
+  // entirely. A half-placeholder table is the dangerous state: month resolves
+  // to a real id, so the seed calls Stripe, while year is fake.
+  // Raw SQL because `notLike` is not exported from the guarded
+  // `@propertypro/db/filters` barrel, and widening that shared module is more
+  // blast radius than this probe is worth. The prefix is still a bound param.
+  const realRows = await db.execute(sql`
+    select 1 from stripe_prices
+    where stripe_price_id not like ${`${PLACEHOLDER_STRIPE_PRICE_PREFIX}%`}
+    limit 1
+  `);
+  if (realRows.length > 0) {
+    debugSeed('stripe_prices already holds real Stripe price ids; leaving it untouched');
+    return;
+  }
+
+  const rows = COMMUNITY_TYPES.flatMap((communityType) =>
+    PLANS_BY_COMMUNITY_TYPE[communityType].flatMap((planId) =>
+      (['month', 'year'] as const).map((billingInterval) => {
+        const monthlyCents = PLAN_MONTHLY_PRICES_USD[planId] * 100;
+        return {
+          planId,
+          communityType,
+          billingInterval,
+          // Ten months for an annual term is the discount the marketing pages
+          // quote; nothing reads it locally, but a wrong-by-12x number in a
+          // table named "prices" is worth not writing.
+          unitAmountCents: billingInterval === 'year' ? monthlyCents * 10 : monthlyCents,
+          stripePriceId: `${PLACEHOLDER_STRIPE_PRICE_PREFIX}${planId}_${communityType}_${billingInterval}`,
+        };
+      }),
+    ),
+  );
+
+  // One statement, not one per row: the rows are independent and the typed
+  // builder keeps the column names and the conflict target checked against
+  // `packages/db/src/schema/stripe-prices.ts` rather than restated as SQL text.
+  const inserted = await db
+    .insert(stripePrices)
+    .values(rows)
+    .onConflictDoNothing({
+      target: [stripePrices.planId, stripePrices.communityType, stripePrices.billingInterval],
+    })
+    .returning({ id: stripePrices.id });
+
+  if (inserted.length > 0) {
+    debugSeed(
+      `provisioned ${inserted.length} placeholder stripe_prices row(s) of ${rows.length} legal combinations`,
+    );
+  }
+}
+
 async function resolveSeedStripePriceId(
   planId: PlanId,
   communityType: CommunityType,
@@ -391,7 +485,7 @@ async function resolveSeedStripePriceId(
 }
 
 function isPlaceholderStripePriceId(priceId: string): boolean {
-  return priceId.startsWith('price_placeholder_');
+  return priceId.startsWith(PLACEHOLDER_STRIPE_PRICE_PREFIX);
 }
 
 function isRecoverableDemoBillingStripeError(error: unknown): boolean {
@@ -1397,11 +1491,12 @@ async function uploadSeedEsignSourceDocument(
 
   const pdfBytes = await pdfDoc.save();
   const storagePath = `communities/${communityId}/esign-templates/${sanitizeStorageSegment(templateName)}.pdf`;
+  await ensureDocumentsBucket();
   const admin = createAdminClient();
   await retryStorageSeedOperation(
     `upload ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).upload(storagePath, pdfBytes, {
         contentType: 'application/pdf',
         upsert: true,
       });
@@ -1417,8 +1512,7 @@ async function uploadSeedEsignSourceDocument(
   await retryStorageSeedOperation(
     `list ${storagePath}`,
     async () => {
-      const result = await admin.storage
-        .from('documents')
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET)
         .list(storageFolder, { limit: 100, search: storageFileName });
 
       const listed = (result.data ?? []).some((file) => file.name === storageFileName);
@@ -1436,7 +1530,7 @@ async function uploadSeedEsignSourceDocument(
   await retryStorageSeedOperation(
     `download ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').download(storagePath);
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).download(storagePath);
       if (result.error || !result.data) {
         throw new Error(
           `Failed to verify seeded e-sign source PDF download: ${result.error?.message ?? 'No data returned'}`,
@@ -1603,6 +1697,12 @@ async function seedEsignData(
 export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> {
   const syncAuthUsers = options.syncAuthUsers ?? true;
   debugSeed(`runDemoSeed start (syncAuthUsers=${String(syncAuthUsers)})`);
+
+  // Prerequisites a fresh local stack does not have. Both used to abort the run
+  // partway through — leaving a half-seeded database — so provision them before
+  // anything is written. Both are no-ops when already present.
+  await ensureDocumentsBucket();
+  await ensureSeedStripePrices();
 
   const communityIdsBySlug: Partial<Record<DemoCommunitySlug, number>> = {};
   const communitySeedResults: SeedCommunityResult[] = [];
