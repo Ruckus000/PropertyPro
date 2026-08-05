@@ -270,10 +270,13 @@ once the suite is meaningfully green, revisit a full CI job.
 2. ~~`/dev/site-preview` breaks `next build` whenever the database is reachable.~~
    **CLOSED — did not reproduce; the route was hardened anyway.** See the
    fourth addendum.
-3. The app exhausts a 100-connection Postgres under e2e load.
+3. ~~The app exhausts a 100-connection Postgres under e2e load.~~
+   **RECORDED, NOT FIXED — measured peak is 1 connection.** See the fifth
+   addendum.
 4. ~~`playwright.prod.config.ts`'s non-spreading `webServer.env`.~~
    **CLOSED — the stated diagnosis was wrong.** See the third addendum.
-5. The tenant config's webServer takes hours to become healthy.
+5. ~~The tenant config's webServer takes hours to become healthy.~~
+   **RECORDED, NOT FIXED — measured at 40 seconds.** See the fifth addendum.
 6. ~~`signup-trialing` fails instead of skipping, after a 3-minute timeout.~~
    **FIXED** — see the third addendum.
 7. ~~Local setup needs an undocumented `documents` bucket and `stripe_prices` rows;
@@ -464,3 +467,76 @@ middleware already 404s in production buys nothing — but the original crash wa
 never reproduced, so no claim is made that this is its cause. Recorded here
 rather than quietly dropped, because the next person to hit it should know the
 build has been green on this axis since `3f2190d8`.
+
+---
+
+## Fifth addendum — follow-ups 3 and 5 (PR C): both recorded, not fixed
+
+Both are closed as **recorded**, which the follow-up brief permits for these two
+only. Neither is closed on "we could not be bothered": each has a measurement
+that contradicts the recorded symptom, and both measurements are stated so the
+next person starts from data rather than from this note's prose.
+
+### 3 — connection exhaustion: the app is not the source
+
+Measured on a `next dev` server against the local stack, counting
+`pg_stat_activity` rows that are app client backends (excluding Supabase's own
+realtime / PostgREST / pg_net / pg_cron connections, which account for a
+constant 12):
+
+| Load | Peak app connections |
+|---|---:|
+| idle, warm server | 1 |
+| 120 concurrent authenticated requests across `/dashboard` and `/documents`, **120/120 returned 200** | **1** |
+| 250 concurrent requests, two routes, five waves | **1** |
+| 8 successive source edits forcing recompiles, each followed by two authenticated requests | **1** |
+
+The structural reason: `packages/db/src/drizzle.ts` holds the **only**
+`postgres()` call in the package — a module-scope singleton, postgres.js default
+`max` of 10. The app does **not** open a connection per request, and dev-server
+recompilation does not leak pools either, which was the leading hypothesis for
+how a single process could reach 100.
+
+So the exhaustion this note observed was real but did not originate in the app's
+connection handling. The remaining candidates are the audit session's own
+concurrent tooling — seed runs, `tsx` scripts, vitest workers and `psql` all
+sharing one 100-connection Postgres — none of which exists in production, which
+additionally sits behind Supabase's pooler.
+
+**Not fixed, deliberately.** Adding an explicit `max` to the shared pool on the
+strength of an unreproduced symptom would be tuning against a number nobody
+measured. If this resurfaces, measure `pg_stat_activity` **grouped by
+`application_name` and `backend_type`** first — the undifferentiated count is
+what made "the app" look responsible.
+
+**One genuine find along the way:** the middleware rate limiter returns 429 well
+before the app is under any real load, and it is exempted only when
+`PLAYWRIGHT_TENANT_E2E=1` (`rate-limit-config.ts`). `pnpm test:e2e` does **not**
+set that, so the default suite runs rate-limited. Whether that contributes to
+the 12 always-failing blocks is untested and worth a look before the next triage
+pass.
+
+### 5 — tenant webServer: 40 seconds, not 3.7 hours
+
+`pnpm test:e2e:tenant`, unmodified config, clean stack:
+
+```
+start 23:20:20
+end   23:21:00      →  40 s wall clock
+3 passed, 1 failed, 2 did not run  (39.0s)
+```
+
+Same pass/fail shape this note recorded (3 passed / 1 failed / 2 never ran, the
+failure being `wave-2-ga-staging.spec.ts:75` on `expect(NaN).toBeGreaterThan`),
+at **1/330th** of the wall clock. The 3.7-hour figure did not reproduce at all.
+
+Worth stating because it changes the recommendation this note makes: the config
+sets `timeout: 180_000`, so Playwright could not have been *waiting* on
+`webServer` for 3.7 hours — it would have aborted at three minutes. Whatever
+consumed that time was outside the documented startup path, and on the evidence
+here it is most plausibly the exhausted Postgres of follow-up 3 stalling the
+same machine.
+
+**Not fixed.** There is nothing to fix in the config on this evidence, and the
+G1 recommendation's "the tenant config's 3.7-hour wall clock would have to be
+fixed first" should be read as no longer blocking.
