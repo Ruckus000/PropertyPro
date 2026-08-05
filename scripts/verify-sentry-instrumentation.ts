@@ -60,12 +60,39 @@ function referencesSentry(configPath: string): boolean {
   return /@sentry\/nextjs/.test(src);
 }
 
-/** Sentry init sites, relative to `apps/<name>/`. Missing files are skipped. */
+/**
+ * Candidate Sentry init sites, relative to `apps/<name>/`. Missing files are
+ * skipped; a file is only checked if it actually calls `Sentry.init(`.
+ *
+ * `src/instrumentation.ts` is included because Next.js supports calling
+ * `Sentry.init` directly from `register()`. Today both apps only re-export the
+ * config modules from there, so it is skipped — but if init ever moves inline,
+ * this list is what keeps it enforced instead of silently unguarded.
+ */
 const SENTRY_INIT_FILES = [
   'src/sentry.server.config.ts',
   'src/sentry.edge.config.ts',
   'src/instrumentation-client.ts',
+  'src/instrumentation.ts',
 ];
+
+/**
+ * Strip comments so the tag check cannot be satisfied by commented-out or
+ * documentation text.
+ *
+ * Without this, a developer who comments the tag out while debugging
+ * (`// initialScope: { tags: { app: 'admin' } },`) still gets a green guard
+ * while the live init ships untagged — the precise rot this guard exists to
+ * catch, with a passing check asserting the opposite.
+ *
+ * The line-comment pattern deliberately refuses to fire on `//` preceded by a
+ * colon, so DSNs and other `https://` literals survive intact.
+ */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:"'\\])\/\/.*$/gm, '$1');
+}
 
 /**
  * Assert each Sentry init site tags its events with the owning app.
@@ -73,14 +100,20 @@ const SENTRY_INIT_FILES = [
  * Matches `tags: { app: '<name>' }` (the `initialScope` form) so the tag is
  * attached from the first event, rather than a post-init `setTag` that races
  * early errors.
+ *
+ * Returns the number of init sites found, so the caller can fail an app that
+ * references @sentry/nextjs but calls `Sentry.init` nowhere at all.
  */
-function checkAppTags(appPath: string, app: string, problems: Problem[]): void {
+function checkAppTags(appPath: string, app: string, problems: Problem[]): number {
+  let initSites = 0;
+
   for (const rel of SENTRY_INIT_FILES) {
     const filePath = join(appPath, rel);
     if (!existsSync(filePath)) continue;
 
-    const src = readFileSync(filePath, 'utf-8');
+    const src = stripComments(readFileSync(filePath, 'utf-8'));
     if (!/Sentry\.init\(/.test(src)) continue;
+    initSites++;
 
     const tagMatch = src.match(/tags:\s*\{\s*app:\s*['"]([^'"]+)['"]/);
     if (!tagMatch) {
@@ -107,6 +140,8 @@ function checkAppTags(appPath: string, app: string, problems: Problem[]): void {
 
     console.log(`  ${app}: ✓ ${rel} tags app='${app}'`);
   }
+
+  return initSites;
 }
 
 function main(): void {
@@ -154,7 +189,17 @@ function main(): void {
       console.log(`  ${app}: ✓ src/instrumentation.ts present`);
     }
 
-    checkAppTags(appPath, app, problems);
+    const initSites = checkAppTags(appPath, app, problems);
+    if (initSites === 0) {
+      problems.push({
+        app,
+        message:
+          `${app}/next.config.* imports @sentry/nextjs but no Sentry.init() call was ` +
+          `found in any of: ${SENTRY_INIT_FILES.join(', ')}. Either Sentry never ` +
+          `initialises for this app, or init moved somewhere this guard does not ` +
+          `look — both leave its events untagged in the shared project.`,
+      });
+    }
   }
 
   if (checked === 0) {
