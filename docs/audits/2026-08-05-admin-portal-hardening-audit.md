@@ -32,7 +32,31 @@ Everything is fixable with focused work; nothing requires an architectural rewri
 
 ## P0 — Ship-blockers
 
-### P0-1 · Admin never deploys on admin-only changes
+### P0-1 · Admin has not deployed to production in 69 days
+
+> **Severity corrected 2026-08-05 after querying the Vercel API.** The original
+> finding below said admin "never deploys on admin-only changes." The measured
+> reality is worse: **it has not deployed at all since 2026-05-28.**
+>
+> | | |
+> |---|---|
+> | Vercel project | `property-pro-admin` (`prj_qVuIdXqyykxBRy4RvO1kftPhvSOT`) |
+> | Last `READY` production deploy | `47311e04`, **2026-05-28 01:44 UTC** |
+> | `ignoreCommand` committed (`9ac5e657`) | **2026-05-28 01:53 UTC** — nine minutes later |
+> | Every deployment since | `CANCELED` — including **7** with `target: production` from `main` |
+> | Commits on `main` since | **728**, of which **42 touch `apps/admin`** |
+>
+> `admin.getpropertypro.com` is live and returns `200` from `/api/health`, so
+> operators have been using a **69-day-old console** with no signal that it was
+> stale — which is exactly what P2-4 (no post-deploy verification, no uptime
+> monitoring) predicts. Everything merged into `apps/admin` since May 28 —
+> site-templates, the coral rebrand, role-v3 admin fixes, block-registry, the
+> Phase 9/11 site-editor admin work — is **not in production**.
+>
+> The git integration *is* connected and *does* fire on `main` with
+> `target: production`; the Ignored Build Step cancels every one.
+
+
 `apps/admin/vercel.json:4`:
 ```
 git diff --quiet HEAD^ HEAD -- 'apps/web/src/app/api/v1/' 'apps/admin/src/app/api/' 'packages/api-contract/' 'scripts/verify-contracts.ts' && exit 0 || exit 1

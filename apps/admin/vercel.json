@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- 'apps/admin/' 'packages/' 'pnpm-lock.yaml' 'turbo.json' && exit 0 || exit 1",
+  "ignoreCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then exit 0; fi; git diff --quiet HEAD^ HEAD -- 'apps/admin/' 'packages/' 'pnpm-lock.yaml' 'turbo.json' && exit 0 || exit 1",
   "buildCommand": "pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/ui' --filter '@propertypro/tokens' build && pnpm exec turbo run build --filter=@propertypro/admin",
   "installCommand": "pnpm install --frozen-lockfile",
   "headers": [
