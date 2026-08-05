@@ -1141,14 +1141,25 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // Absent claim → CLEAR, never inherit. A token signed before these claims
     // existed is still valid, and falling back to the admin's identity is the
     // exact bug being fixed. An anonymous account menu is the safe degradation.
-    if (supportSession.target_name) {
-      forwardedHeaders.set(USER_FULL_NAME_HEADER, supportSession.target_name);
+    //
+    // These MUST go through `normalizeForwardedHeaderValue`, exactly as the
+    // non-impersonated path above does. The values originate in `users.full_name`
+    // / `users.email`, which are free text: a CR/LF (reachable via the CSV
+    // resident import) makes `Headers.set` THROW, and the throw is uncaught here,
+    // so every request carrying the support cookie would 500 until the session
+    // expired — the operator could not even navigate away to end it. The helper
+    // also maps whitespace-only to null, so a blank name clears rather than
+    // setting an empty header.
+    const impersonatedName = normalizeForwardedHeaderValue(supportSession.target_name);
+    if (impersonatedName) {
+      forwardedHeaders.set(USER_FULL_NAME_HEADER, impersonatedName);
     } else {
       forwardedHeaders.delete(USER_FULL_NAME_HEADER);
     }
 
-    if (supportSession.target_email) {
-      forwardedHeaders.set(USER_EMAIL_HEADER, supportSession.target_email);
+    const impersonatedEmail = normalizeForwardedHeaderValue(supportSession.target_email);
+    if (impersonatedEmail) {
+      forwardedHeaders.set(USER_EMAIL_HEADER, impersonatedEmail);
     } else {
       forwardedHeaders.delete(USER_EMAIL_HEADER);
     }

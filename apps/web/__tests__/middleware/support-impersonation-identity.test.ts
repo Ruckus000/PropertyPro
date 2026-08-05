@@ -177,6 +177,38 @@ describe('support impersonation — forwarded identity', () => {
     expect(forwarded(res, 'x-user-email')).toBe(ADMIN.email);
   });
 
+  it('sanitizes CR/LF out of the impersonated identity instead of throwing', async () => {
+    // `users.full_name` / `users.email` are free text and reachable via the CSV
+    // resident import. `Headers.set` THROWS on CR/LF, and the throw is uncaught
+    // in middleware — without normalization every request carrying the support
+    // cookie 500s until the session expires, so the operator cannot even
+    // navigate away to end it.
+    resolveActiveSupportSessionMock.mockResolvedValue(
+      supportSession({
+        target_name: 'Ada\r\nX-Injected: 1',
+        target_email: 'owner@x.test\r\nX-Evil: 2',
+      }),
+    );
+
+    const res = await middleware(requestWithSupportCookie('/api/v1/documents'));
+
+    expect(forwarded(res, 'x-user-full-name')).toBe('Ada X-Injected: 1');
+    expect(forwarded(res, 'x-user-email')).toBe('owner@x.test X-Evil: 2');
+    expect(forwarded(res, 'x-injected')).toBeNull();
+    expect(forwarded(res, 'x-evil')).toBeNull();
+  });
+
+  it('clears rather than sets an empty header for a whitespace-only name', async () => {
+    resolveActiveSupportSessionMock.mockResolvedValue(
+      supportSession({ target_name: '   ', target_email: 'owner@x.test' }),
+    );
+
+    const res = await middleware(requestWithSupportCookie('/api/v1/documents'));
+
+    expect(forwarded(res, 'x-user-full-name')).toBeNull();
+    expect(forwarded(res, 'x-user-email')).toBe('owner@x.test');
+  });
+
   it('still marks the request as a support session', async () => {
     resolveActiveSupportSessionMock.mockResolvedValue(
       supportSession({ target_name: 'Olivia Owner', target_email: 'o@x.test' }),
