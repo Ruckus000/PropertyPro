@@ -1,11 +1,9 @@
-import { AppError } from './AppError';
-
 /**
- * 422 Unprocessable Entity — syntactically valid request but semantically invalid payload.
+ * Re-export shim. The class now lives in `@propertypro/shared` so that
+ * apps/web and apps/admin share one definition — a second copy would make
+ * `instanceof AppError` silently false in one of them.
+ *
+ * This file is kept so the ~340 existing deep imports
+ * (`@/lib/api/errors/UnprocessableEntityError`) keep resolving unchanged.
  */
-export class UnprocessableEntityError extends AppError {
-  constructor(message = 'Request payload is semantically invalid', details?: Record<string, unknown>) {
-    super(message, 422, 'UNPROCESSABLE_ENTITY', details);
-    this.name = 'UnprocessableEntityError';
-  }
-}
+export { UnprocessableEntityError } from '@propertypro/shared/http';

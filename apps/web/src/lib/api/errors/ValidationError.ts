@@ -1,14 +1,9 @@
-import { AppError } from './AppError';
-
 /**
- * 400 Bad Request — invalid input data.
+ * Re-export shim. The class now lives in `@propertypro/shared` so that
+ * apps/web and apps/admin share one definition — a second copy would make
+ * `instanceof AppError` silently false in one of them.
  *
- * Use UnprocessableEntityError (422) for semantically invalid but structurally valid
- * payloads (e.g. Zod field failures on a well-formed JSON body with fields present).
+ * This file is kept so the ~340 existing deep imports
+ * (`@/lib/api/errors/ValidationError`) keep resolving unchanged.
  */
-export class ValidationError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message, 400, 'VALIDATION_ERROR', details);
-    this.name = 'ValidationError';
-  }
-}
+export { ValidationError } from '@propertypro/shared/http';

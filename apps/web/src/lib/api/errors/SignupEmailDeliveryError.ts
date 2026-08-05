@@ -1,18 +1,9 @@
-import { AppError } from './AppError';
-
 /**
- * 503 Service Unavailable — transient signup verification email delivery failure.
+ * Re-export shim. The class now lives in `@propertypro/shared` so that
+ * apps/web and apps/admin share one definition — a second copy would make
+ * `instanceof AppError` silently false in one of them.
  *
- * This is used when the signup flow cannot deliver the verification email due to
- * provider/configuration issues, but the request itself is otherwise valid and
- * may succeed on retry.
+ * This file is kept so the ~340 existing deep imports
+ * (`@/lib/api/errors/SignupEmailDeliveryError`) keep resolving unchanged.
  */
-export class SignupEmailDeliveryError extends AppError {
-  constructor(
-    message = 'We could not send your verification email right now. Please try again.',
-    details?: Record<string, unknown>,
-  ) {
-    super(message, 503, 'SIGNUP_EMAIL_DELIVERY_FAILED', details);
-    this.name = 'SignupEmailDeliveryError';
-  }
-}
+export { SignupEmailDeliveryError } from '@propertypro/shared/http';
