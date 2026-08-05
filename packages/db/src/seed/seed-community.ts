@@ -172,12 +172,71 @@ function buildSeedPlaceholderPdf(
   return new TextEncoder().encode(pdf);
 }
 
+/** The storage bucket every seeded document and e-sign source PDF is written to. */
+export const SEED_DOCUMENTS_BUCKET = 'documents';
+
+/**
+ * Memoised so a seed run issues at most one `listBuckets()` regardless of how
+ * many documents it writes.
+ */
+let documentsBucketEnsured: Promise<void> | null = null;
+
+/**
+ * Creates the `documents` storage bucket if it is absent.
+ *
+ * A fresh local Supabase stack has no `documents` bucket: no migration creates
+ * it (unlike `community-site-assets`, which migration 0006 provisions), and
+ * neither did the seed — so `pnpm seed:demo` aborted on the first document with
+ * Supabase's verbatim `Bucket not found`. That prerequisite existed only in an
+ * audit note, which is a prerequisite nobody finds.
+ *
+ * Deliberately a no-op when the bucket already exists, so this is safe against
+ * a stack that was provisioned by hand.
+ *
+ * The bucket is created **private and unrestricted** (no MIME allowlist, no
+ * size cap). The seed writes PDFs and the app also writes draft images here, so
+ * a restrictive local bucket would fail in ways a real environment does not —
+ * the failure mode worth engineering against is a local bucket that is *tighter*
+ * than the real one.
+ */
+export async function ensureDocumentsBucket(): Promise<void> {
+  documentsBucketEnsured ??= (async () => {
+    const admin = createAdminClient();
+
+    const existing = await admin.storage.listBuckets();
+    if (existing.error) {
+      throw new Error(`Failed to list storage buckets: ${existing.error.message}`);
+    }
+    if ((existing.data ?? []).some((bucket) => bucket.name === SEED_DOCUMENTS_BUCKET)) {
+      return;
+    }
+
+    const created = await admin.storage.createBucket(SEED_DOCUMENTS_BUCKET, { public: false });
+    if (created.error) {
+      // A concurrent seed can win the race; that is success, not failure.
+      if (/already exists|duplicate/i.test(created.error.message)) return;
+      throw new Error(
+        `Failed to create the "${SEED_DOCUMENTS_BUCKET}" storage bucket: ${created.error.message}`,
+      );
+    }
+
+    debugSeed(`created missing storage bucket "${SEED_DOCUMENTS_BUCKET}"`);
+  })().catch((error) => {
+    // Do not cache a failure — the next call should retry rather than inherit it.
+    documentsBucketEnsured = null;
+    throw error;
+  });
+
+  return documentsBucketEnsured;
+}
+
 export async function ensureSeededDocumentStorage(
   storagePath: string,
   title: string,
   summary: string,
 ): Promise<number> {
   const pdfBytes = buildSeedPlaceholderPdf(title, summary, storagePath);
+  await ensureDocumentsBucket();
   const admin = createAdminClient();
 
   await retryStorageSeedOperation(

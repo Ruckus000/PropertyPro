@@ -98,6 +98,56 @@ export const STRIPE_E2E_SKIP_REASON =
   '`stripe listen --forward-to 127.0.0.1:3000/api/v1/webhooks/stripe`. ' +
   'See docs/audits/2026-07-11-stripe-cancel-smoke.md.';
 
+/**
+ * The copy `/signup/checkout` renders when `createCheckoutSession` returns
+ * `{ ok: false }` (see `apps/web/src/lib/actions/checkout.ts`). Matching it is
+ * how the spec tells "Stripe Checkout has not mounted yet" apart from "Stripe
+ * Checkout is never going to mount".
+ */
+const CHECKOUT_FAILURE_COPY = /unable to start checkout/i;
+
+/**
+ * Waits for embedded Stripe Checkout to mount, and fails immediately — with the
+ * cause named — if the app reports a session-creation failure instead.
+ *
+ * This is a diagnosis fix, not a relaxation: the assertion that checkout must
+ * mount is unchanged, it just stops being expressed as a 180s wait for a field
+ * that cannot appear.
+ */
+async function assertCheckoutSessionStarted(page: Page): Promise<void> {
+  const failure = page.getByText(CHECKOUT_FAILURE_COPY);
+  const iframe = page.locator(
+    'iframe[title="Secure checkout"], iframe[name^="embedded-checkout"], iframe[src*="checkout.stripe.com"]',
+  );
+
+  await expect
+    .poll(
+      async () => {
+        if (await failure.count()) return 'failed';
+        if (await iframe.count()) return 'mounted';
+        return 'pending';
+      },
+      {
+        timeout: 30_000,
+        message:
+          'Stripe embedded Checkout never mounted and the app reported no error — ' +
+          'check that the dev server is up and /signup/checkout was reached with a valid signupRequestId.',
+      },
+    )
+    .not.toBe('pending');
+
+  if (await failure.count()) {
+    throw new Error(
+      'Stripe Checkout session creation FAILED — the app rendered "Unable to start checkout". ' +
+        'The usual cause is that STRIPE_SECRET_KEY cannot see the ids in the `stripe_prices` ' +
+        'table: either the key and the stored prices are in different Stripe modes (test vs ' +
+        'live), or the table holds placeholder ids from a local seed (`price_placeholder_…`), ' +
+        'which no Stripe account can resolve. Check the dev-server log for ' +
+        '`checkout.session_creation_failed`.',
+    );
+  }
+}
+
 /** Stripe's universally-accepted test card — never charged in test mode. */
 export const STRIPE_TEST_CARD = {
   number: '4242424242424242',
@@ -213,6 +263,15 @@ export async function confirmSupabaseEmail(email: string): Promise<void> {
  * minor label changes.
  */
 export async function fillStripeEmbeddedCheckout(page: Page): Promise<void> {
+  // The app renders its own error copy and NO iframe when session creation
+  // fails — most often because the configured Stripe key cannot see the
+  // `stripe_prices` ids (a key/price mode mismatch, or placeholder ids from a
+  // local seed). Waiting for a card field in that state burned the full 180s
+  // test timeout and reported `locator.fill: Test timeout` — a symptom that
+  // says nothing about the cause. Race the two outcomes so the real one wins
+  // in about the time it takes to render.
+  await assertCheckoutSessionStarted(page);
+
   const checkout = page
     .frameLocator(
       'iframe[title="Secure checkout"], iframe[name^="embedded-checkout"], iframe[src*="checkout.stripe.com"]',

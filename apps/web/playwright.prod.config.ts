@@ -1,7 +1,31 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/**
+ * The three specs this config is allowed to run.
+ *
+ * They share the one property that makes them viable against a PRODUCTION
+ * build: they need no database, no Supabase Auth and no seed. That is what
+ * lets `perf-check` run them in a job whose `DATABASE_URL` points at a stub
+ * that was never started.
+ *
+ * Without this allowlist, `testDir: './e2e'` collected the WHOLE suite — 39
+ * tests in 13 files. A bare `pnpm test:e2e:prod` therefore pointed the 25
+ * auth-dependent blocks at a production server, where `/dev/agent-login` (the
+ * only way those specs authenticate) is a dev-only route that middleware 404s.
+ * CI was saved from this only by passing three paths on the command line.
+ *
+ * Adding a spec here requires proving it passes against a production build
+ * with an UNREACHABLE database — see the E2E section of CLAUDE.md.
+ */
+const PROD_SAFE_SPECS = [
+  'pdfjs-runtime.spec.ts',
+  'activation-smoke.spec.ts',
+  'marketing-smoke.spec.ts',
+];
+
 export default defineConfig({
   testDir: './e2e',
+  testMatch: PROD_SAFE_SPECS,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
@@ -15,6 +39,15 @@ export default defineConfig({
     url: 'http://127.0.0.1:3100',
     reuseExistingServer: false,
     timeout: 120_000,
+    // `env` is MERGED OVER `process.env`, not a replacement for it — Playwright
+    // spawns the command with `{...process.env, ...env}`
+    // (playwright/lib/plugins/webServerPlugin.js). The 2026-08-03 audit recorded
+    // the opposite ("next start gets only PDFJS_TEST_ENABLED") and proposed
+    // spreading `...process.env` here; that change is a no-op. Measured at
+    // playwright 1.58.2 — do not "fix" this again without re-checking.
+    //
+    // The real precondition is the BUILD: `next start` serves whatever `.next`
+    // holds, so this config assumes `pnpm build` already ran.
     env: {
       PDFJS_TEST_ENABLED: '1',
     },
