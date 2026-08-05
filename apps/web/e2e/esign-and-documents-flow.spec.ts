@@ -74,7 +74,11 @@ async function gotoEsignOrSkipForSeedMismatch(
   ) {
     testInfo.skip(
       true,
-      'Sunset Condos is not on a hasEsign-enabled plan in this database. Run: DEMO_SEED_SYNC_AUTH_USERS=0 scripts/with-env-local-demo-db.sh pnpm seed:demo',
+      // `DEMO_SEED_SYNC_AUTH_USERS=0` was a workaround for the wrapper leaving
+      // Supabase pointed at production; the wrapper now redirects Supabase to
+      // local and refuses to run otherwise, so the seed is safe with auth sync
+      // ON — given local keys. See the script's own usage text.
+      'Sunset Condos is not on a hasEsign-enabled plan in this database. Run: scripts/with-env-local-demo-db.sh pnpm seed:demo (supply PROPERTYPRO_LOCAL_SUPABASE_* keys from `supabase status`).',
     );
     return false;
   }
@@ -124,7 +128,7 @@ test.describe('E-Sign send flow (CAM)', () => {
     } catch {
       testInfo.skip(
         true,
-        'No Violation Acknowledgment template in UI. Run: DEMO_SEED_SYNC_AUTH_USERS=0 scripts/with-env-local-demo-db.sh pnpm seed:demo',
+        'No Violation Acknowledgment template in UI. Run: scripts/with-env-local-demo-db.sh pnpm seed:demo (supply PROPERTYPRO_LOCAL_SUPABASE_* keys from `supabase status`).',
       );
       return;
     }
