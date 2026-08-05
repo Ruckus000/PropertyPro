@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { PLAN_IDS } from '@propertypro/shared';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const writeLevel = z.enum(['all_members', 'admin_only']);
 
@@ -37,7 +38,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -73,9 +74,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ community: data });
-}
+});
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
   const admin = await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -166,4 +167,4 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ community: updated });
-}
+});

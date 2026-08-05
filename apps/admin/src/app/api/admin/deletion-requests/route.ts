@@ -6,8 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDeletionRequestsData } from '@/lib/server/deletion-requests';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const status = request.nextUrl.searchParams.get('status');
@@ -20,4 +21,4 @@ export async function GET(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Failed to load deletion requests';
     return NextResponse.json({ error: { message } }, { status: 500 });
   }
-}
+});

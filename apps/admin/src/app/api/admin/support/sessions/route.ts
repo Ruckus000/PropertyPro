@@ -9,10 +9,11 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { signSupportToken } from '@/lib/support/jwt';
 import { CreateSessionSchema, SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const DAILY_SESSION_LIMIT = 10;
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
   // Validate request body
@@ -148,9 +149,9 @@ export async function POST(request: NextRequest) {
     { sessionId: session.id, token, expiresAt: expiresAt.toISOString() },
     { status: 201 },
   );
-}
+});
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const communityIdParam = request.nextUrl.searchParams.get('communityId');
@@ -175,4 +176,4 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ sessions: data ?? [] });
-}
+});

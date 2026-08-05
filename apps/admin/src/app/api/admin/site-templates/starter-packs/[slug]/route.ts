@@ -12,6 +12,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { validateStarterPackBlocks } from '@propertypro/shared';
 import { PACK_COLUMNS, StarterPackRow, shapePack, validationErrorResponse, zodErrorResponse } from '../_shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const patchBodySchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
@@ -20,7 +21,7 @@ const patchBodySchema = z.object({
   isArchived: z.boolean().optional(),
 });
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: { params: Promise<{ slug: string }> }) => {
   await requirePlatformAdmin();
   const { slug } = await context.params;
   if (!slug || typeof slug !== 'string') {
@@ -51,9 +52,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     return NextResponse.json({ error: { message: error.message } }, { status: 500 });
   }
   return NextResponse.json({ pack: shapePack(data as StarterPackRow) });
-}
+});
 
-export async function DELETE(_request: NextRequest, context: { params: Promise<{ slug: string }> }) {
+export const DELETE = withAdminErrorHandler(async (_request: NextRequest, context: { params: Promise<{ slug: string }> }) => {
   await requirePlatformAdmin();
   const { slug } = await context.params;
   if (!slug || typeof slug !== 'string') {
@@ -90,4 +91,4 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     .from('site_starter_packs').update({ is_archived: true, updated_at: new Date().toISOString() }).eq('slug', slug);
   if (archiveErr) return NextResponse.json({ error: { message: archiveErr.message } }, { status: 500 });
   return NextResponse.json({ archived: true, deleted: false });
-}
+});

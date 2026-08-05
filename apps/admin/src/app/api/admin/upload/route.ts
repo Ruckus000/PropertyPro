@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
@@ -60,7 +61,7 @@ function detectMimeFromBuffer(buffer: Uint8Array): AllowedMime | null {
   return null;
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   // Defense in depth: verify platform admin even though middleware checks too
   await requirePlatformAdmin();
 
@@ -131,4 +132,4 @@ export async function POST(request: NextRequest) {
       path: storagePath,
     },
   });
-}
+});

@@ -6,8 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const communityIdParam = request.nextUrl.searchParams.get('communityId');
@@ -33,4 +34,4 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ entries: data ?? [] });
-}
+});

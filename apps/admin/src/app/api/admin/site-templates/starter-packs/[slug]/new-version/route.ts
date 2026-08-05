@@ -11,6 +11,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { validateStarterPackBlocks } from '@propertypro/shared';
 import { PACK_COLUMNS, StarterPackRow, baseSlug, shapePack, validationErrorResponse, zodErrorResponse } from '../../_shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const bodySchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
@@ -18,7 +19,7 @@ const bodySchema = z.object({
   blocks: z.unknown().optional(),
 });
 
-export async function POST(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
+export const POST = withAdminErrorHandler(async (request: NextRequest, context: { params: Promise<{ slug: string }> }) => {
   await requirePlatformAdmin();
   const { slug } = await context.params;
   if (!slug || typeof slug !== 'string') {
@@ -60,4 +61,4 @@ export async function POST(request: NextRequest, context: { params: Promise<{ sl
     return NextResponse.json({ error: { message: error.message } }, { status: 500 });
   }
   return NextResponse.json({ pack: shapePack(data as StarterPackRow) }, { status: 201 });
-}
+});

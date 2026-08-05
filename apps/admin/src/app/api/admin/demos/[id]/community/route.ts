@@ -10,6 +10,7 @@ import { captureException } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoCommunityId, markDemoCustomized } from '@/lib/db/demo-queries';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -23,7 +24,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -59,9 +60,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ community: data });
-}
+});
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
   const admin = await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -152,4 +153,4 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
 
   return NextResponse.json({ community: updated });
-}
+});

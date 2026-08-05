@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -22,7 +23,7 @@ interface UserRoleRow {
   updated_at: string;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -107,4 +108,4 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   });
 
   return NextResponse.json({ members });
-}
+});

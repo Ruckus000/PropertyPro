@@ -8,6 +8,7 @@ vi.mock('@/lib/auth/platform-admin', () => ({ requirePlatformAdmin: requirePlatf
 vi.mock('@propertypro/db/supabase/admin', () => ({ createAdminTypedClient: createAdminTypedClientMock }));
 
 import { PATCH, DELETE } from '@/app/api/admin/site-templates/starter-packs/[slug]/route';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const ctx = (slug: string) => ({ params: Promise.resolve({ slug }) });
 function patchReq(body: unknown) {
@@ -85,13 +86,13 @@ describe('DELETE [slug] (archive)', () => {
 });
 
 describe('auth', () => {
-  it('PATCH rejects when not a platform admin', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
-    await expect(PATCH(patchReq({ displayName: 'X' }) as any, ctx('florida-condo-v1'))).rejects.toThrow('not-admin');
+  it('PATCH returns 403 when not a platform admin', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
+    await expect(PATCH(patchReq({ displayName: 'X' }) as any, ctx('florida-condo-v1'))).resolves.toHaveProperty('status', 403);
   });
 
-  it('DELETE rejects when not a platform admin', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
-    await expect(DELETE(new Request('http://localhost/x', { method: 'DELETE' }) as any, ctx('florida-condo-v1'))).rejects.toThrow('not-admin');
+  it('DELETE returns 403 when not a platform admin', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
+    await expect(DELETE(new Request('http://localhost/x', { method: 'DELETE' }) as any, ctx('florida-condo-v1'))).resolves.toHaveProperty('status', 403);
   });
 });

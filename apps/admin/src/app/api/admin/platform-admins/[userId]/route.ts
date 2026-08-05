@@ -6,11 +6,12 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
-export async function DELETE(
+export const DELETE = withAdminErrorHandler(async (
   _request: NextRequest,
   { params }: { params: Promise<{ userId: string }> },
-) {
+) => {
   const currentAdmin = await requirePlatformAdmin();
   const { userId } = await params;
 
@@ -49,4 +50,4 @@ export async function DELETE(
   }
 
   return NextResponse.json({ success: true });
-}
+});

@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const RESTORE_WINDOW_DAYS = 30;
 
@@ -29,10 +30,10 @@ const bodySchema = z.object({
   confirmCommunitySlug: z.string().min(1).max(240),
 });
 
-export async function POST(
+export const POST = withAdminErrorHandler(async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-) {
+) => {
   const admin = await requirePlatformAdmin();
 
   const { id: rawId } = await context.params;
@@ -213,4 +214,4 @@ export async function POST(
     },
     { status: 201 },
   );
-}
+});
