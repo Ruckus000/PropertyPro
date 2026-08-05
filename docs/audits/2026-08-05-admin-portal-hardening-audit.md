@@ -165,6 +165,20 @@ Unlogged today: platform-admin **add** (`platform-admins/route.ts:102`) and **re
 
 Each phase is independently shippable. **Phase 1 must land first** — until P0-1 is fixed, nothing else reaches prod.
 
+### Review gate — applies to EVERY phase, not just the last
+
+No phase is pushed or opened as a PR until it has passed **both** reviews. Correctness verification (typecheck / lint / guards / tests / builds) is not a substitute: it answers *does it work*, not *is it safe* or *is it well-built*.
+
+1. Implement the phase, then run its correctness gate (see Verification below).
+2. **Security review** of the branch diff — identify pass, then parallel false-positive filters; report findings at confidence ≥ 8.
+3. **Code review** of the branch diff in parallel, prompted with the conventions the diff must satisfy (CLAUDE.md, `.claude/rules/`, and the admin-specific exemptions: service-role client is sanctioned here, raw Tailwind ramps are baselined).
+4. **Fix real defects even when the filter scores them below the reporting threshold.** The threshold governs what lands in the report, not what is worth fixing.
+5. Push and open the PR.
+
+This is not ceremony. In Phase 1 the security review found a genuine defect in code written during that same phase — the rewritten sign-out discarded the `{ error }` supabase-js *resolves* with (it does not throw), and auth-js returns early **before** clearing the cookie for anything that isn't a 401/403/404. It navigated to `/auth/login`, a public path that does not bounce an authenticated user, leaving a live `sb-admin-auth-token` while telling the operator they were signed out. Every correctness gate was green and none of them could have caught it. That finding scored 7 — below the reporting bar — and was still worth fixing.
+
+Expect the highest-value findings to be in code written during the phase itself.
+
 ### Phase 1 — Make it deploy & function (P0)
 The enabling phase. Small, mechanical, unblocks everything.
 1. **P0-1** fix `apps/admin/vercel.json` `ignoreCommand` (or add an admin deploy job). *Verify with a page-only commit that produces a deploy.*
