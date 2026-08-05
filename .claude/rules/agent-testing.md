@@ -32,16 +32,49 @@ preview_snapshot()
 
 ## Available Roles
 
-| `?as=` value | Role | Community |
-|---|---|---|
-| `owner` | Unit Owner | Sunset Condos |
-| `tenant` | Tenant/Renter | Sunset Condos |
-| `board_president` | Board President | Sunset Condos |
-| `board_member` | Board Member | Sunset Condos |
-| `cam` | Community Assoc. Manager | Sunset Condos |
-| `pm_admin` | PM Company Admin | Sunset Condos |
-| `founding_admin` | Root Manager (Essentials) | Palm Shores HOA |
-| `site_manager` | Site Manager | Sunset Ridge Apartments |
+> **The community you land in is NOT a property of the role.** With no
+> `?communityId=`, the route picks `communities[0]` from
+> `findUserCommunitiesUnscoped`, which ends in `.orderBy(communities.name)` — so
+> a multi-community demo user lands in whichever of their communities sorts
+> **first alphabetically**. Today that is *Palm Shores HOA*, which is seeded on
+> **Essentials**, where Payments / Violations / Board / Operations are all
+> plan-gated and render "Upgrade now". This silently changes whenever a seed
+> community is added or renamed.
+>
+> An earlier version of this table listed "Sunset Condos" for six roles. That
+> was wrong for four of them. The column below is measured against
+> `pnpm seed:demo` on 2026-08-05 — treat it as a snapshot, not a guarantee.
+
+| `?as=` value | Role | Member of | Lands in **without** a pin |
+|---|---|---|---|
+| `owner` | Unit Owner | Palm Shores, Sunset Condos | **Palm Shores HOA** (Essentials) |
+| `tenant` | Tenant/Renter | Sunset Condos | Sunset Condos |
+| `board_president` | Board President | Palm Shores, Sunset Condos | **Palm Shores HOA** (Essentials) |
+| `board_member` | Board Member | Sunset Condos | Sunset Condos |
+| `cam` | Community Assoc. Manager | Palm Shores, Sunset Condos | **Palm Shores HOA** (Essentials) |
+| `pm_admin` | PM Company Admin | all three | `/pm/dashboard/communities` (PM tier — no community pin) |
+| `founding_admin` | Root Manager | Palm Shores | Palm Shores HOA (Essentials) |
+| `site_manager` | Site Manager | Sunset Ridge Apartments | Sunset Ridge Apartments |
+
+Seeded plans: Sunset Condos = `professional`, Palm Shores HOA = `essentials`,
+Sunset Ridge Apartments = `operations_plus`.
+
+### Pinning a community (do this whenever the surface is plan-gated)
+
+Append `&communityId=<id>` to the endpoint:
+
+```
+preview_eval: window.location.href = '/dev/agent-login?as=board_president&communityId=1'
+```
+
+In Playwright, use the shared helper's `communitySlug` option rather than a raw
+id — it resolves the slug from the login payload and **throws** if the slug is
+not one of the user's communities:
+
+```ts
+import { loginAs } from './helpers/dev-login';
+await loginAs(page, 'board_president', { communitySlug: 'sunset-condos' });
+```
 
 ## Switching Roles
 
