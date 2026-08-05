@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 /** Row shape for platform_admin_users (not in generated Supabase types). */
 interface PlatformAdminRow {
@@ -21,7 +22,7 @@ const addAdminSchema = z.object({
   email: z.string().email(),
 });
 
-export async function GET() {
+export const GET = withAdminErrorHandler(async () => {
   await requirePlatformAdmin();
 
   const db = createAdminClient();
@@ -56,9 +57,9 @@ export async function GET() {
   });
 
   return NextResponse.json({ admins });
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const currentAdmin = await requirePlatformAdmin();
 
   const body = await request.json();
@@ -123,4 +124,4 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     },
   }, { status: 201 });
-}
+});

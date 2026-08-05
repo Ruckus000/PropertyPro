@@ -21,8 +21,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy-production:
-    name: Deploy to Production
+  # Shared gate for every app's deploy. Extracted into its own job so the
+  # Integration Tests check is resolved ONCE per run instead of being duplicated
+  # (and re-polled) in each deploy job.
+  #
+  # The deploy jobs below carry no `if:` of their own — a skipped `needs`
+  # dependency skips its dependents, so this condition governs all of them.
+  gate:
+    name: Require Integration Tests
     # Auto: only when CI actually succeeded. Manual: the operator has decided,
     # and a dispatch carries no workflow_run conclusion to check — without this
     # second branch the dispatch trigger above would be accepted and then
@@ -33,16 +39,10 @@ jobs:
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: production
     permissions:
       contents: read
       # Needed by the Integration Tests gate below to read another workflow's runs.
       actions: read
-
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
       # `Integration Tests` is a required check for MERGING, but it is a separate
@@ -97,6 +97,21 @@ jobs:
             sleep 20
           done
 
+  deploy-production:
+    name: Deploy to Production
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -133,42 +148,34 @@ jobs:
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build project
-        # `vercel build` runs the ENTIRE monorepo build ON THIS RUNNER (4 vCPU /
-        # 16 GB) — NOT in Vercel's build container. apps/web/vercel.json's
-        # buildCommand ends in `pnpm build` -> `turbo run build`, which carries
-        # no filter, so a *web* deploy also compiles apps/admin: two concurrent
-        # `next build` processes. On 2026-08-05 this step began aborting with
-        # "FATAL ERROR: Reached heap limit Allocation failed" (exit 134) — a
-        # clean V8 abort at Node 20's default ~4 GB old-space cap — and blocked
-        # every deploy after 3fcc9939.
+        # `vercel build` runs the monorepo build ON THIS RUNNER (4 vCPU / 16 GB)
+        # — NOT in Vercel's build container.
         #
-        # This is NOT a product memory regression. CI's perf-check job runs the
-        # same `pnpm build` on the same tree on the same runner image and
-        # passes. Two things differ HERE: admin is built too, and `vercel pull`
-        # supplies SENTRY_AUTH_TOKEN (docs/DEPLOYMENT.md lists it "Build only"),
-        # which un-gates Sentry source-map generation + upload for BOTH apps —
-        # apps/web/next.config.ts and apps/admin/next.config.ts both key
-        # `sourcemaps.disable` off that token, and perf-check deliberately never
-        # sets it.
+        # HISTORY: apps/web/vercel.json's buildCommand used to end in a bare
+        # `pnpm build` -> `turbo run build` with no filter, so a *web* deploy
+        # also compiled apps/admin — two concurrent `next build` processes. On
+        # 2026-08-05 this step began aborting with "FATAL ERROR: Reached heap
+        # limit Allocation failed" (exit 134), a clean V8 abort at Node 20's
+        # default ~4 GB old-space cap, and blocked every deploy after 3fcc9939.
+        # The stopgap was this 6144 ceiling.
         #
-        # 6144, deliberately NOT 8192: NODE_OPTIONS is inherited by every node
-        # process in the tree, and the two `next build`s run concurrently. Two
-        # processes at an 8 GB ceiling can exceed the runner's ~14 GB usable RAM
-        # and be SIGKILLed by the kernel, which surfaces as **exit 137 with no
-        # error text at all** — strictly worse to debug than the exit-134 abort
-        # this replaces. 2 x 6 GB = 12 GB stays under. So: if you ever see exit
-        # 137 on this step, this number is too HIGH, not too low.
+        # That buildCommand is now filtered (`--filter=@propertypro/web`), which
+        # is the fix the previous note asked for: "this production deploy has no
+        # reason to build apps/admin at all." apps/admin has its own deploy job
+        # below, on its own runner, building only itself. So this step now runs
+        # ONE `next build`, not two.
         #
-        # If 6144 stops being enough, do NOT just raise it. Fix the duplicated
-        # work — this production deploy has no reason to build apps/admin at
-        # all. The other lever is pinning turbo concurrency (`--concurrency=1`),
-        # which halves peak memory but serialises two Next builds; check this
-        # job's `timeout-minutes: 20` before reaching for it.
+        # The 6144 ceiling is retained deliberately. `vercel pull` supplies
+        # SENTRY_AUTH_TOKEN (docs/DEPLOYMENT.md lists it "Build only"), which
+        # un-gates Sentry source-map generation + upload — that is the other
+        # half of why this step is heavier than CI's perf-check, which never
+        # sets that token. One build at 6 GB has ample headroom on a 16 GB
+        # runner; there is no longer a 2 x 6 GB = 12 GB constraint to respect.
         #
-        # Verified before merge: `NODE_OPTIONS` propagates pnpm -> turbo ->
-        # next build (a constrained run aborts with the turbo prefix
-        # `@propertypro/web:build:`), and a cold full build of both apps at 6144
-        # completes 8/8 tasks in 113s with zero OOM.
+        # Still do NOT raise this to 8192 casually: NODE_OPTIONS is inherited by
+        # every node process in the tree, and a ceiling above the runner's ~14 GB
+        # usable RAM surfaces as SIGKILL (exit 137, no error text) rather than a
+        # readable V8 abort.
         env:
           NODE_OPTIONS: --max-old-space-size=6144
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
@@ -186,6 +193,111 @@ jobs:
         run: |
           SMOKE_URL="${DEPLOY_URL%/}/auth/login"
           echo "Verifying deployment at $SMOKE_URL"
+          BYPASS_HEADER=""
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            BYPASS_HEADER="-H x-vercel-protection-bypass:$VERCEL_AUTOMATION_BYPASS_SECRET"
+          fi
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" $BYPASS_HEADER "$SMOKE_URL" || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Smoke test passed (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "Smoke test failed after 5 attempts"
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # apps/admin — the platform operator console (admin.getpropertypro.com).
+  #
+  # Until this job existed, apps/admin had NO deploy path from this workflow at
+  # all: it reached production only via the native Vercel git integration, which
+  # apps/admin/vercel.json's `ignoreCommand` gated on API-contract paths only.
+  # Any commit touching admin pages, components, lib/ or middleware.ts produced
+  # no deploy whatsoever — including auth and security changes.
+  #
+  # Runs in parallel with deploy-production (separate runner, separate Vercel
+  # project, separate checkout, so no `.vercel/project.json` contention) and
+  # shares the same Integration Tests gate.
+  # ---------------------------------------------------------------------------
+  deploy-admin:
+    name: Deploy Admin to Production
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      # Distinct project from web. `vercel pull/build/deploy` take no project
+      # flag — they read this — so the two apps CANNOT share one id.
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_ADMIN }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - name: Verify admin project is configured
+        # Fail loudly rather than deploying admin into the WEB project, which is
+        # what an unset id would silently do.
+        run: |
+          if [ -z "${VERCEL_PROJECT_ID}" ]; then
+            echo "::error::VERCEL_PROJECT_ID_ADMIN is not set. Add the admin Vercel project id as a repository secret; see docs/DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # As with web: CODE ONLY. Migrations are applied manually per
+      # .claude/rules/migration-safety.md.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: pnpm add -g vercel@50.23.2
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build project
+        # One `next build` (apps/admin/vercel.json filters turbo to this app).
+        # Same 6144 ceiling as web, for the same reason: `vercel pull` supplies
+        # SENTRY_AUTH_TOKEN, which un-gates Sentry source-map generation.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to production
+        id: deploy
+        run: |
+          DEPLOYMENT_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test
+        # /api/health is the console's only unauthenticated route (see
+        # apps/admin/src/middleware.ts PUBLIC_PATH_PREFIXES). Every other path
+        # redirects to /auth/login, so this is the one endpoint that proves the
+        # deployment actually booted rather than merely redirecting.
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          SMOKE_URL="${DEPLOY_URL%/}/api/health"
+          echo "Verifying admin deployment at $SMOKE_URL"
           BYPASS_HEADER=""
           if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             BYPASS_HEADER="-H x-vercel-protection-bypass:$VERCEL_AUTOMATION_BYPASS_SECRET"

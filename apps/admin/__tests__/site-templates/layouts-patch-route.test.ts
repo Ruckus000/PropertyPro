@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const {
   requirePlatformAdminMock,
@@ -162,15 +163,15 @@ describe('PATCH /api/admin/site-templates/layouts/[slug]', () => {
     expect(json.error.message).toBe('boom');
   });
 
-  it('throws when requirePlatformAdmin rejects (handler aborts before DB write)', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects (handler aborts before DB write)', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { PATCH } = await importHandler();
     await expect(
       PATCH(
         makeRequest({ displayName: 'X' }) as unknown as Parameters<typeof PATCH>[0],
         { params: Promise.resolve({ slug: 'tidewater' }) },
       ),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
     expect(updateMock).not.toHaveBeenCalled();
   });
 

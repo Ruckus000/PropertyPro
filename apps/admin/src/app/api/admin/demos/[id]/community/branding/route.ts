@@ -12,6 +12,7 @@ import { getDemoCommunityId, markDemoCustomized } from '@/lib/db/demo-queries';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { isValidHexColor } from '@propertypro/shared';
 import { ALLOWED_FONTS } from '@propertypro/theme';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a valid hex color (e.g. #2563EB)' });
 const FONT = z.string().refine(
@@ -32,7 +33,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -67,9 +68,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ branding: (data as Record<string, unknown>).branding ?? {} });
-}
+});
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
   const admin = await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -154,4 +155,4 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
 
   return NextResponse.json({ branding: (updated as Record<string, unknown>).branding ?? {} });
-}
+});

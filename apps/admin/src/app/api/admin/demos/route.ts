@@ -20,6 +20,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { insertDemo, sanitizeDemoRow } from '@/lib/db/demo-queries';
 import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -51,7 +52,7 @@ const createDemoSchema = z.object({
   ).optional(),
 });
 
-export async function GET() {
+export const GET = withAdminErrorHandler(async () => {
   await requirePlatformAdmin();
 
   try {
@@ -64,9 +65,9 @@ export async function GET() {
       { status: 500 },
     );
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   let body: unknown;
@@ -281,4 +282,4 @@ export async function POST(request: NextRequest) {
     },
     { status: 201 },
   );
-}
+});

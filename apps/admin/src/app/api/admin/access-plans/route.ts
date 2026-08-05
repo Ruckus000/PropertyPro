@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 function computeStatus(row: {
   revoked_at: string | null;
@@ -22,7 +23,7 @@ function computeStatus(row: {
   return 'expired';
 }
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const communityId = request.nextUrl.searchParams.get('communityId');
@@ -60,9 +61,9 @@ export async function GET(request: NextRequest) {
   }));
 
   return NextResponse.json({ plans });
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
   const body = await request.json();
@@ -121,4 +122,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ plan: data }, { status: 201 });
-}
+});

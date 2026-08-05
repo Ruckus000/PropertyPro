@@ -13,6 +13,7 @@ vi.mock('@/lib/auth/platform-admin', () => ({ requirePlatformAdmin: requirePlatf
 vi.mock('@propertypro/db/supabase/admin', () => ({ createAdminTypedClient: createAdminTypedClientMock }));
 
 import { GET, POST } from '@/app/api/admin/site-templates/starter-packs/route';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const HERO = { headline: 'Welcome', subtitle: 'A community.', ctaText: 'Resident Login', ctaTarget: '/auth/login' };
 const VALID_BLOCKS = [
@@ -93,8 +94,8 @@ describe('POST /api/admin/site-templates/starter-packs', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects (throws) when not a platform admin', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
-    await expect(GET(new Request('http://localhost/api/admin/site-templates/starter-packs') as any)).rejects.toThrow('not-admin');
+  it('returns 403 when not a platform admin', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
+    await expect(GET(new Request('http://localhost/api/admin/site-templates/starter-packs') as any)).resolves.toHaveProperty('status', 403);
   });
 });

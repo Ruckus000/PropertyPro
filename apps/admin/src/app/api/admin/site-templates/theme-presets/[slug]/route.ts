@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const tokensSchema = z.object({
   primaryColor: z.string().min(1),
@@ -74,10 +75,10 @@ function shape(row: SiteThemePresetRow) {
   };
 }
 
-export async function PATCH(
+export const PATCH = withAdminErrorHandler(async (
   request: NextRequest,
   context: { params: Promise<{ slug: string }> },
-) {
+) => {
   await requirePlatformAdmin();
 
   const { slug } = await context.params;
@@ -182,12 +183,12 @@ export async function PATCH(
   }
 
   return NextResponse.json({ preset: shape(data as SiteThemePresetRow) });
-}
+});
 
-export async function DELETE(
+export const DELETE = withAdminErrorHandler(async (
   _request: NextRequest,
   context: { params: Promise<{ slug: string }> },
-) {
+) => {
   await requirePlatformAdmin();
 
   const { slug } = await context.params;
@@ -270,4 +271,4 @@ export async function DELETE(
   }
 
   return NextResponse.json({ archived: false, deleted: true });
-}
+});

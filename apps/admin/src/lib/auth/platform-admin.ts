@@ -9,6 +9,11 @@ import { z } from 'zod';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import {
+  AppError,
+  ForbiddenError,
+  UnauthorizedError,
+} from '@propertypro/shared/http';
 import { ADMIN_COOKIE_OPTIONS } from './cookie-config';
 
 const AdminRowSchema = z.object({ role: z.enum(['super_admin']) });
@@ -21,14 +26,22 @@ export interface PlatformAdminUser {
 
 /**
  * Extract Supabase session from cookies, verify platform_admin_users row.
- * Throws a Response with status 401/403 if not a platform admin.
+ *
+ * Throws a typed `AppError` (401 `UnauthorizedError` / 403 `ForbiddenError`)
+ * which `withAdminErrorHandler` turns into the correct HTTP status.
+ *
+ * NOTE: this previously did `throw new Response(...)`, a Remix idiom. The
+ * Next.js App Router does not unwrap a thrown Response from a route handler —
+ * it became an unhandled rejection and every auth denial surfaced as a generic
+ * 500. It still failed closed, but the status was never the one intended, so
+ * no test or client could assert on it.
  */
 export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Response('Server misconfiguration', { status: 500 });
+    throw new AppError('Server misconfiguration', 500, 'SERVER_MISCONFIGURED');
   }
 
   const cookieStore = await cookies();
@@ -44,7 +57,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    throw new Response('Unauthorized', { status: 401 });
+    throw new UnauthorizedError();
   }
 
   const adminDb = createAdminClient();
@@ -56,7 +69,7 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
 
   const adminRow = AdminRowSchema.safeParse(data);
   if (!adminRow.success) {
-    throw new Response('Forbidden', { status: 403 });
+    throw new ForbiddenError('Platform admin access required');
   }
 
   return {

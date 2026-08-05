@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface SiteLayoutMetadataRow {
   id: number;
@@ -30,7 +31,7 @@ interface SiteLayoutMetadataRow {
   updated_at: string;
 }
 
-export async function GET(_request: NextRequest) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest) => {
   await requirePlatformAdmin();
 
   const db = createAdminTypedClient();
@@ -65,4 +66,4 @@ export async function GET(_request: NextRequest) {
   }));
 
   return NextResponse.json({ layouts });
-}
+});

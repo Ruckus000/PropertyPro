@@ -6,8 +6,9 @@
 import { NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getPlatformDashboardStats } from '@/lib/server/dashboard';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
-export async function GET() {
+export const GET = withAdminErrorHandler(async () => {
   await requirePlatformAdmin();
 
   try {
@@ -17,4 +18,4 @@ export async function GET() {
     const message = error instanceof Error ? error.message : 'Failed to load dashboard stats';
     return NextResponse.json({ error: { message } }, { status: 500 });
   }
-}
+});

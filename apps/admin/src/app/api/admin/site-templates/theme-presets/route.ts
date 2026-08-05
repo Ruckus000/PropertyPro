@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface SiteThemePresetRow {
   id: number;
@@ -29,7 +30,7 @@ interface SiteThemePresetRow {
   updated_at: string;
 }
 
-export async function GET(_request: NextRequest) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest) => {
   await requirePlatformAdmin();
 
   const db = createAdminTypedClient();
@@ -63,7 +64,7 @@ export async function GET(_request: NextRequest) {
   }));
 
   return NextResponse.json({ presets });
-}
+});
 
 // ---------------------------------------------------------------------------
 // POST — create a new theme preset
@@ -102,7 +103,7 @@ function shape(row: SiteThemePresetRow) {
   };
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   let json: unknown;
@@ -168,4 +169,4 @@ export async function POST(request: NextRequest) {
     { preset: shape(data as SiteThemePresetRow) },
     { status: 201 },
   );
-}
+});

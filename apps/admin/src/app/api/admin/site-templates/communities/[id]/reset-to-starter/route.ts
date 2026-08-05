@@ -30,6 +30,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const bodySchema = z.object({
   starterPackSlug: z.string().min(1).max(120),
@@ -42,10 +43,10 @@ interface StarterPackBlock {
   content?: Record<string, unknown>;
 }
 
-export async function POST(
+export const POST = withAdminErrorHandler(async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-) {
+) => {
   const admin = await requirePlatformAdmin();
 
   const { id: rawId } = await context.params;
@@ -259,4 +260,4 @@ export async function POST(
     },
     { status: 201 },
   );
-}
+});

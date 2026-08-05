@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const {
   requirePlatformAdminMock,
@@ -187,12 +188,12 @@ describe('POST /api/admin/site-templates/theme-presets', () => {
     expect((await res.json()).error.message).toBe('boom');
   });
 
-  it('throws when requirePlatformAdmin rejects', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { POST } = await importHandler();
     await expect(
       POST(makeRequest(VALID_BODY) as unknown as Parameters<typeof POST>[0]),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
     expect(insertMock).not.toHaveBeenCalled();
   });
 });

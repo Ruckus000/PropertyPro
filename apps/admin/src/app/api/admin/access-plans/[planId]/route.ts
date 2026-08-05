@@ -6,12 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface RouteParams {
   params: Promise<{ planId: string }>;
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export const DELETE = withAdminErrorHandler(async (request: NextRequest, { params }: RouteParams) => {
   const admin = await requirePlatformAdmin();
   const { planId } = await params;
 
@@ -82,4 +83,4 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   }
 
   return NextResponse.json({ plan: data });
-}
+});

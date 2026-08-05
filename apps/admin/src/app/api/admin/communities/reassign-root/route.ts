@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 // AUTHZ: platform-admin-only reassignment (requirePlatformAdmin gate above); reassignRootOp performs the atomic cross-community root swap.
 import { reassignRootOp, RoleOpForbiddenError } from '@propertypro/db/unsafe';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const reassignSchema = z
   .object({
@@ -23,7 +24,7 @@ const reassignSchema = z
   })
   .strict();
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
   const parsed = reassignSchema.safeParse(await request.json());
@@ -53,4 +54,4 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ reassigned: true });
-}
+});

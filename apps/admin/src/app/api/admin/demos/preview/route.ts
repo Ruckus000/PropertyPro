@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 import { isDemoTemplateId } from '@propertypro/shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 const previewSchema = z.object({
   communityType: z.enum(['condo_718', 'hoa_720', 'apartment']),
@@ -18,7 +19,7 @@ const previewSchema = z.object({
   }).optional(),
 });
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const body = await request.json();
@@ -59,4 +60,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});

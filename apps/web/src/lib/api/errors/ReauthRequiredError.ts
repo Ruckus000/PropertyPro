@@ -1,13 +1,9 @@
-import { AppError } from './AppError';
-
 /**
- * 403 — authentication is valid but a fresh re-authentication is required
- * for this sensitive action. Client should prompt the user to re-enter
- * their password and retry.
+ * Re-export shim. The class now lives in `@propertypro/shared` so that
+ * apps/web and apps/admin share one definition — a second copy would make
+ * `instanceof AppError` silently false in one of them.
+ *
+ * This file is kept so the ~340 existing deep imports
+ * (`@/lib/api/errors/ReauthRequiredError`) keep resolving unchanged.
  */
-export class ReauthRequiredError extends AppError {
-  constructor(message = 'Please verify your identity to continue') {
-    super(message, 403, 'REAUTH_REQUIRED');
-    this.name = 'ReauthRequiredError';
-  }
-}
+export { ReauthRequiredError } from '@propertypro/shared/http';

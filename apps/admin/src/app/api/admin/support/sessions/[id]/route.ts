@@ -6,12 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function PATCH(_request: NextRequest, { params }: RouteParams) {
+export const PATCH = withAdminErrorHandler(async (_request: NextRequest, { params }: RouteParams) => {
   const admin = await requirePlatformAdmin();
   const { id } = await params;
 
@@ -54,4 +55,4 @@ export async function PATCH(_request: NextRequest, { params }: RouteParams) {
   });
 
   return NextResponse.json({ ok: true });
-}
+});

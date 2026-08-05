@@ -16,12 +16,13 @@ import {
   updateDemo,
   sanitizeDemoRow,
 } from '@/lib/db/demo-queries';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: Request, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -50,9 +51,9 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({ data: sanitizeDemoRow(data) });
-}
+});
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export const DELETE = withAdminErrorHandler(async (_request: Request, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -115,9 +116,9 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({ success: true });
-}
+});
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: Request, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -183,4 +184,4 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({ data: sanitizeDemoRow(data) });
-}
+});

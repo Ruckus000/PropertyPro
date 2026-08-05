@@ -35,8 +35,14 @@
   "apps/admin/src/app/demo/new/page.tsx": {
     "raw-hex": 3
   },
+  "apps/admin/src/app/error.tsx": {
+    "raw-palette": 7
+  },
   "apps/admin/src/app/layout.tsx": {
     "raw-palette": 2
+  },
+  "apps/admin/src/app/not-found.tsx": {
+    "raw-palette": 3
   },
   "apps/admin/src/app/site-templates/block-registry/page.tsx": {
     "raw-palette": 5
@@ -134,7 +140,7 @@
     "raw-palette": 37
   },
   "apps/admin/src/components/Sidebar.tsx": {
-    "raw-palette": 13
+    "raw-palette": 17
   },
   "apps/admin/src/components/site-templates/BlockRegistryView.tsx": {
     "raw-palette": 20

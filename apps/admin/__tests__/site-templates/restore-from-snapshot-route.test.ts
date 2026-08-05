@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const { requirePlatformAdminMock, createAdminTypedClientMock } = vi.hoisted(() => ({
   requirePlatformAdminMock: vi.fn(),
@@ -314,14 +315,14 @@ describe('POST /api/admin/site-templates/communities/[id]/restore-from-snapshot'
     expect((await res.json()).error.message).toMatch(/no snapshot/i);
   });
 
-  it('throws when requirePlatformAdmin rejects', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { POST } = await importHandler();
     await expect(
       POST(
         makeRequest(VALID_BODY) as unknown as Parameters<typeof POST>[0],
         { params: Promise.resolve({ id: '42' }) },
       ),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
   });
 });

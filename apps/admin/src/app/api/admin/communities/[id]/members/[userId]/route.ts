@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 interface RouteContext {
   params: Promise<{ id: string; userId: string }>;
@@ -24,7 +25,7 @@ const patchSchema = z.object({
   is_unit_owner: z.boolean().optional(),
 }).strict();
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id, userId } = await context.params;
@@ -94,9 +95,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ member: updated });
-}
+});
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export const DELETE = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id, userId } = await context.params;
@@ -126,4 +127,4 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ success: true });
-}
+});
