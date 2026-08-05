@@ -587,3 +587,59 @@ local pass rate in this note taken without that check — including the
 re-measurement in the third addendum — should be treated as unverified. The
 13-of-39 above was taken with the port verified clear, twice, with matching
 results.
+
+### Worker contention is real after all — the rejected hypothesis needs reopening
+
+This note rejected *"7 parallel workers overwhelm one dev server"* on the
+evidence `--workers=1` → 7 pass, unchanged. **That measurement could not have
+detected the effect**, because at the time the affected specs failed on stale
+logic first and fast — a contention effect has nothing left to change once a
+spec has already failed in 300 ms.
+
+Re-measured after repairing `phase1-roadmap-smoke` (see the seventh addendum),
+port verified clear, same stack, same seed:
+
+| Workers | passed | failed | skipped | never ran | wall clock |
+|---:|---:|---:|---:|---:|---|
+| 7 (default) | 7 | 13 | 1 | 8 | 3.2 min |
+| **1** | **11** | **9** | 2 | 7 | 4.6 min |
+
+**+4 blocks for one flag.** At 7 workers the failures are dominated by
+`Test timeout of 30000ms exceeded` and `page.goto: net::ERR_ABORTED; maybe
+frame was detached?`; at 1 worker the run contains **zero** timeouts and
+**zero** aborts — the remaining nine are genuine assertion failures. That is a
+qualitative change in failure *kind*, not just count, and it means any triage
+done at 7 workers is triaging the wrong thing.
+
+Do not read this as "set workers=1". Read it as: the dev server cannot serve 7
+concurrent browsers doing first-compile navigations, so **measure at
+`--workers=1` and triage the assertion failures that survive**.
+
+### Still open: `/dev/agent-login` intermittently 500s mid-suite
+
+Four blocks at `--workers=1` failed with `agent-login failed for
+role=board_president: 500` (`phase1-roadmap-smoke`, `support-access`, and two
+others), through the helper's existing 3× retry-on-5xx.
+
+Ruled out, each by direct test:
+- **Not a broken endpoint** — 12 consecutive `?as=board_president` calls all
+  returned 200.
+- **Not GoTrue's email rate limit** — the local stack sets
+  `[auth.rate_limit] email_sent = 2`, which looked damning, but the admin
+  `generateLink` path does not count against it (see the 12/12 above).
+- **Not `support-access` polluting state** — running that spec to completion
+  and then calling agent-login three times returned 200 each time.
+
+So it is sequence-dependent on something earlier in the run, and not yet
+identified. The route returns its cause in the response body, but
+`e2e/helpers/dev-login.ts` asserts on `response.ok()` and discards the body —
+**capturing that body is the first thing the next pass should do**, rather than
+re-deriving the above.
+
+### One more command-line trap
+
+`pnpm --filter … test:e2e -- --workers=1` passes `--workers=1` through as a
+POSITIONAL test-file filter, so Playwright matches nothing, prints
+`Error: No tests found`, and exits **1** — which reads as a failing suite
+rather than a malformed command. Use
+`pnpm exec playwright test -c playwright.config.ts --workers=1`.
