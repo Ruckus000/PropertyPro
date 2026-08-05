@@ -133,6 +133,44 @@ jobs:
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build project
+        # `vercel build` runs the ENTIRE monorepo build ON THIS RUNNER (4 vCPU /
+        # 16 GB) — NOT in Vercel's build container. apps/web/vercel.json's
+        # buildCommand ends in `pnpm build` -> `turbo run build`, which carries
+        # no filter, so a *web* deploy also compiles apps/admin: two concurrent
+        # `next build` processes. On 2026-08-05 this step began aborting with
+        # "FATAL ERROR: Reached heap limit Allocation failed" (exit 134) — a
+        # clean V8 abort at Node 20's default ~4 GB old-space cap — and blocked
+        # every deploy after 3fcc9939.
+        #
+        # This is NOT a product memory regression. CI's perf-check job runs the
+        # same `pnpm build` on the same tree on the same runner image and
+        # passes. Two things differ HERE: admin is built too, and `vercel pull`
+        # supplies SENTRY_AUTH_TOKEN (docs/DEPLOYMENT.md lists it "Build only"),
+        # which un-gates Sentry source-map generation + upload for BOTH apps —
+        # apps/web/next.config.ts and apps/admin/next.config.ts both key
+        # `sourcemaps.disable` off that token, and perf-check deliberately never
+        # sets it.
+        #
+        # 6144, deliberately NOT 8192: NODE_OPTIONS is inherited by every node
+        # process in the tree, and the two `next build`s run concurrently. Two
+        # processes at an 8 GB ceiling can exceed the runner's ~14 GB usable RAM
+        # and be SIGKILLed by the kernel, which surfaces as **exit 137 with no
+        # error text at all** — strictly worse to debug than the exit-134 abort
+        # this replaces. 2 x 6 GB = 12 GB stays under. So: if you ever see exit
+        # 137 on this step, this number is too HIGH, not too low.
+        #
+        # If 6144 stops being enough, do NOT just raise it. Fix the duplicated
+        # work — this production deploy has no reason to build apps/admin at
+        # all. The other lever is pinning turbo concurrency (`--concurrency=1`),
+        # which halves peak memory but serialises two Next builds; check this
+        # job's `timeout-minutes: 20` before reaching for it.
+        #
+        # Verified before merge: `NODE_OPTIONS` propagates pnpm -> turbo ->
+        # next build (a constrained run aborts with the turbo prefix
+        # `@propertypro/web:build:`), and a cold full build of both apps at 6144
+        # completes 8/8 tasks in 113s with zero OOM.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to production
