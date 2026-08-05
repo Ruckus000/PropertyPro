@@ -596,7 +596,8 @@ detected the effect**, because at the time the affected specs failed on stale
 logic first and fast — a contention effect has nothing left to change once a
 spec has already failed in 300 ms.
 
-Re-measured after repairing `phase1-roadmap-smoke` (see the seventh addendum),
+Re-measured after repairing `phase1-roadmap-smoke` (PR #898 — it was landing on
+an Essentials community where every surface it tests is plan-gated; 0/7 → 7/7),
 port verified clear, same stack, same seed:
 
 | Workers | passed | failed | skipped | never ran | wall clock |
