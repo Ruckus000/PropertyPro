@@ -198,33 +198,37 @@ let documentsBucketEnsured: Promise<void> | null = null;
  * a restrictive local bucket would fail in ways a real environment does not —
  * the failure mode worth engineering against is a local bucket that is *tighter*
  * than the real one.
+ *
+ * **Best-effort by design: this never throws.** `ensureSeededDocumentStorage`
+ * is not local-only — it is reached in production by `POST /api/admin/demos`
+ * (via `seedCommunity`, behind `requirePlatformAdmin`). There the bucket always
+ * exists, so this is a no-op; but a transient `listBuckets()` failure must not
+ * become a NEW way for that route to fail. The upload immediately after is the
+ * authority and already reports `Bucket not found` precisely. So this call can
+ * only ever help, never newly break.
  */
 export async function ensureDocumentsBucket(): Promise<void> {
+  // The never-throws guarantee lives in exactly one place — the boundary
+  // `.catch` — so a check added inside the body inherits it instead of having
+  // to remember its own swallow.
   documentsBucketEnsured ??= (async () => {
     const admin = createAdminClient();
 
-    const existing = await admin.storage.listBuckets();
-    if (existing.error) {
-      throw new Error(`Failed to list storage buckets: ${existing.error.message}`);
-    }
-    if ((existing.data ?? []).some((bucket) => bucket.name === SEED_DOCUMENTS_BUCKET)) {
-      return;
-    }
+    const { data, error } = await admin.storage.listBuckets();
+    if (error) throw error;
+    if (data?.some((bucket) => bucket.name === SEED_DOCUMENTS_BUCKET)) return;
 
-    const created = await admin.storage.createBucket(SEED_DOCUMENTS_BUCKET, { public: false });
-    if (created.error) {
-      // A concurrent seed can win the race; that is success, not failure.
-      if (/already exists|duplicate/i.test(created.error.message)) return;
-      throw new Error(
-        `Failed to create the "${SEED_DOCUMENTS_BUCKET}" storage bucket: ${created.error.message}`,
-      );
-    }
+    const { error: createError } = await admin.storage.createBucket(SEED_DOCUMENTS_BUCKET, {
+      public: false,
+    });
+    // "Already exists" means a concurrent seed won the race — that is success.
+    if (createError && !/already exists|duplicate/i.test(createError.message)) throw createError;
 
-    debugSeed(`created missing storage bucket "${SEED_DOCUMENTS_BUCKET}"`);
-  })().catch((error) => {
-    // Do not cache a failure — the next call should retry rather than inherit it.
-    documentsBucketEnsured = null;
-    throw error;
+    debugSeed(`ensured storage bucket "${SEED_DOCUMENTS_BUCKET}"`);
+  })().catch((error: unknown) => {
+    debugSeed(
+      `bucket check skipped, leaving it to the upload: ${error instanceof Error ? error.message : String(error)}`,
+    );
   });
 
   return documentsBucketEnsured;
@@ -242,7 +246,7 @@ export async function ensureSeededDocumentStorage(
   await retryStorageSeedOperation(
     `upload ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).upload(storagePath, pdfBytes, {
         contentType: 'application/pdf',
         upsert: true,
       });
@@ -258,8 +262,7 @@ export async function ensureSeededDocumentStorage(
   await retryStorageSeedOperation(
     `list ${storagePath}`,
     async () => {
-      const result = await admin.storage
-        .from('documents')
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET)
         .list(storageFolder, { limit: 100, search: storageFileName });
 
       const listed = (result.data ?? []).some((file) => file.name === storageFileName);
@@ -277,7 +280,7 @@ export async function ensureSeededDocumentStorage(
   await retryStorageSeedOperation(
     `download ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').download(storagePath);
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).download(storagePath);
       if (result.error || !result.data) {
         throw new Error(
           `Failed to verify seeded document PDF download: ${result.error?.message ?? 'No data returned'}`,

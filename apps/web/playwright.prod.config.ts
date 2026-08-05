@@ -40,14 +40,10 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     // `env` is MERGED OVER `process.env`, not a replacement for it — Playwright
-    // spawns the command with `{...process.env, ...env}`
-    // (playwright/lib/plugins/webServerPlugin.js). The 2026-08-03 audit recorded
-    // the opposite ("next start gets only PDFJS_TEST_ENABLED") and proposed
-    // spreading `...process.env` here; that change is a no-op. Measured at
-    // playwright 1.58.2 — do not "fix" this again without re-checking.
-    //
-    // The real precondition is the BUILD: `next start` serves whatever `.next`
-    // holds, so this config assumes `pnpm build` already ran.
+    // spawns `{...process.env, ...env}` (measured at 1.58.2). Adding
+    // `...process.env` here is a no-op; the 2026-08-03 audit proposed it on the
+    // opposite assumption. The real precondition is the BUILD: `next start`
+    // serves whatever `.next` holds.
     env: {
       PDFJS_TEST_ENABLED: '1',
     },

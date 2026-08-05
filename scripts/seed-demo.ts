@@ -25,6 +25,7 @@ import { and, eq, inArray, isNull, sql } from '@propertypro/db/filters';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
   ensureDocumentsBucket,
+  SEED_DOCUMENTS_BUCKET,
   ensureSeededDocumentStorage,
   ensureNotificationPreference,
   seedCommunity,
@@ -375,6 +376,13 @@ function isStripeCustomer(
 }
 
 /**
+ * Marks a `stripe_prices` row as locally-provisioned rather than a real Stripe
+ * id. Single source for the probe, the generated ids, and
+ * `isPlaceholderStripePriceId`.
+ */
+const PLACEHOLDER_STRIPE_PRICE_PREFIX = 'price_placeholder_';
+
+/**
  * Provisions placeholder `stripe_prices` rows for any (plan, community type,
  * interval) combination that has none.
  *
@@ -393,15 +401,22 @@ function isStripeCustomer(
  * 2. **`do nothing`, never `do update`.** A developer with real Stripe price
  *    ids must not have them silently replaced by placeholders.
  *
- * The `price_placeholder_` prefix is load-bearing: `isPlaceholderStripePriceId`
- * routes demo billing through the local path instead of calling Stripe.
+ * The prefix is load-bearing: `isPlaceholderStripePriceId` routes demo billing
+ * through the local path instead of calling Stripe. All three uses of it — the
+ * probe below, the generated ids, and that helper — derive from one constant,
+ * so changing it cannot leave the probe unable to recognise its own rows.
  */
 async function ensureSeedStripePrices(): Promise<void> {
   // If this environment already carries REAL price ids, leave the table alone
   // entirely. A half-placeholder table is the dangerous state: month resolves
   // to a real id, so the seed calls Stripe, while year is fake.
+  // Raw SQL because `notLike` is not exported from the guarded
+  // `@propertypro/db/filters` barrel, and widening that shared module is more
+  // blast radius than this probe is worth. The prefix is still a bound param.
   const realRows = await db.execute(sql`
-    select 1 from stripe_prices where stripe_price_id not like 'price_placeholder_%' limit 1
+    select 1 from stripe_prices
+    where stripe_price_id not like ${`${PLACEHOLDER_STRIPE_PRICE_PREFIX}%`}
+    limit 1
   `);
   if (realRows.length > 0) {
     debugSeed('stripe_prices already holds real Stripe price ids; leaving it untouched');
@@ -420,31 +435,27 @@ async function ensureSeedStripePrices(): Promise<void> {
           // quote; nothing reads it locally, but a wrong-by-12x number in a
           // table named "prices" is worth not writing.
           unitAmountCents: billingInterval === 'year' ? monthlyCents * 10 : monthlyCents,
-          stripePriceId: `price_placeholder_${planId}_${communityType}_${billingInterval}`,
+          stripePriceId: `${PLACEHOLDER_STRIPE_PRICE_PREFIX}${planId}_${communityType}_${billingInterval}`,
         };
       }),
     ),
   );
 
-  let inserted = 0;
-  for (const row of rows) {
-    const result = await db.execute(sql`
-      insert into stripe_prices (plan_id, community_type, billing_interval, stripe_price_id, unit_amount_cents)
-      values (
-        ${row.planId},
-        ${row.communityType},
-        ${row.billingInterval},
-        ${row.stripePriceId},
-        ${row.unitAmountCents}
-      )
-      on conflict (plan_id, community_type, billing_interval) do nothing
-      returning id
-    `);
-    if (result.length > 0) inserted += 1;
-  }
+  // One statement, not one per row: the rows are independent and the typed
+  // builder keeps the column names and the conflict target checked against
+  // `packages/db/src/schema/stripe-prices.ts` rather than restated as SQL text.
+  const inserted = await db
+    .insert(stripePrices)
+    .values(rows)
+    .onConflictDoNothing({
+      target: [stripePrices.planId, stripePrices.communityType, stripePrices.billingInterval],
+    })
+    .returning({ id: stripePrices.id });
 
-  if (inserted > 0) {
-    debugSeed(`provisioned ${inserted} placeholder stripe_prices row(s) of ${rows.length} legal combinations`);
+  if (inserted.length > 0) {
+    debugSeed(
+      `provisioned ${inserted.length} placeholder stripe_prices row(s) of ${rows.length} legal combinations`,
+    );
   }
 }
 
@@ -474,7 +485,7 @@ async function resolveSeedStripePriceId(
 }
 
 function isPlaceholderStripePriceId(priceId: string): boolean {
-  return priceId.startsWith('price_placeholder_');
+  return priceId.startsWith(PLACEHOLDER_STRIPE_PRICE_PREFIX);
 }
 
 function isRecoverableDemoBillingStripeError(error: unknown): boolean {
@@ -1485,7 +1496,7 @@ async function uploadSeedEsignSourceDocument(
   await retryStorageSeedOperation(
     `upload ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').upload(storagePath, pdfBytes, {
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).upload(storagePath, pdfBytes, {
         contentType: 'application/pdf',
         upsert: true,
       });
@@ -1501,8 +1512,7 @@ async function uploadSeedEsignSourceDocument(
   await retryStorageSeedOperation(
     `list ${storagePath}`,
     async () => {
-      const result = await admin.storage
-        .from('documents')
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET)
         .list(storageFolder, { limit: 100, search: storageFileName });
 
       const listed = (result.data ?? []).some((file) => file.name === storageFileName);
@@ -1520,7 +1530,7 @@ async function uploadSeedEsignSourceDocument(
   await retryStorageSeedOperation(
     `download ${storagePath}`,
     async () => {
-      const result = await admin.storage.from('documents').download(storagePath);
+      const result = await admin.storage.from(SEED_DOCUMENTS_BUCKET).download(storagePath);
       if (result.error || !result.data) {
         throw new Error(
           `Failed to verify seeded e-sign source PDF download: ${result.error?.message ?? 'No data returned'}`,
@@ -1689,10 +1699,8 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   debugSeed(`runDemoSeed start (syncAuthUsers=${String(syncAuthUsers)})`);
 
   // Prerequisites a fresh local stack does not have. Both used to abort the run
-  // partway through — "Bucket not found" on the first document, "Missing
-  // stripe_prices row" once communities were already written — leaving a
-  // half-seeded database. Provision them up front so the failure, if any, is
-  // loud and early. Both are no-ops when already present.
+  // partway through — leaving a half-seeded database — so provision them before
+  // anything is written. Both are no-ops when already present.
   await ensureDocumentsBucket();
   await ensureSeedStripePrices();
 
