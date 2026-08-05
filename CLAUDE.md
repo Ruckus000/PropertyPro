@@ -129,25 +129,26 @@ pnpm --filter @propertypro/web test:e2e:prod
 > guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
 > them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
 > `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite; as of the
-> **ninth addendum (2026-08-05)** the default suite is **23 passed / 3 failed /
-> 2 skipped / 1 never ran** in 5.9 min at `workers: 1`, up from 19/8/2. Before
+> **eleventh addendum (2026-08-05)** the default suite is **26 passed / 1 failed /
+> 2 skipped / 0 never ran** in 7.5 min at `workers: 1`, up from 19/8/2 — and
+> "never ran" is 0 for the first time, so every block now executes. Before
 > trusting a local number, confirm the port is clear AND
-> `ps -eo comm | grep -c vitest` is 0 — a parallel unit run in another worktree
-> drove one measurement to 24.9 min and failed both canaries. Blocks still "never
-> run" because five specs use `describe.configure({ mode: 'serial' })`, so one
-> early failure skips the rest. A CI job over the remainder would still be red on
-> day one. The remaining known failure is Stripe placeholder price ids
-> (`signup-trialing`). The onboarding-wizard
-> blocker is now two `test.fixme` blocks: the spec describes a 4-/5-step flow, but
-> **both** condo and apartment ship the same 2-step wizard.
+> `ps -eo comm | grep -c vitest` is 0; also compare the CANARY TIMINGS
+> (`activation-smoke` ~0.7-4s, `marketing-smoke` ~3s), because a canary that
+> passes but is 5x slower still means the environment moved. The 2 skipped are
+> the deliberate `onboarding-first-run` `test.fixme` blocks: that spec describes
+> a 4-/5-step wizard, but **both** condo and apartment ship the same 2-step one.
+> The single remaining failure is `signup-trialing` (placeholder Stripe price
+> ids — needs test-mode ids, not a code fix).
 >
 > **Never click straight after waiting for a heading — use `clickWhenHydrated`**
 > (`apps/web/e2e/helpers/hydration.ts`). Playwright actionability is a DOM check
 > and does NOT mean React attached a handler; a click on server-rendered markup is
 > **swallowed**, so no timeout can recover it. A heading is in the server HTML and
-> appears *before* hydration by definition. This one cause kept two specs red for
-> months behind 30s waits, misdiagnosed twice as first-render budgets and once as
-> a stale dev server. Measured hydration lag was only ~260–510ms.
+> appears *before* hydration by definition. This one cause hit THREE specs — two
+> red for months behind 30s waits (misdiagnosed twice as first-render budgets and
+> once as a stale dev server), and one silently patched with a retry-click.
+> Measured hydration lag was only ~260-510ms.
 >
 > **Support impersonation forwards ONE identity.** The web middleware's support
 > branch must move `x-user-id`, `x-user-full-name` and `x-user-email` together;

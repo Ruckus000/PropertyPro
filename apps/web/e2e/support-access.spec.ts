@@ -13,6 +13,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { loginAs, loginAsPlatformAdmin } from './helpers/dev-login';
+import { clickWhenHydrated } from './helpers/hydration';
 
 const SUNSET_CONDOS_SLUG = 'sunset-condos';
 // MUST stay on the same host as `loginAsPlatformAdmin` (localhost:3001). Supabase
@@ -70,12 +71,19 @@ async function openAdminSupportTab(page: Page): Promise<void> {
   await page.goto(ADMIN_CLIENT_URL, { waitUntil: 'domcontentloaded' });
   const supportTab = page.getByRole('button', { name: 'Support' });
   await expect(supportTab).toBeVisible();
-  await supportTab.click();
+  // The click-again-on-failure below was an empirical workaround for a click
+  // landing before hydration and being swallowed — the same root cause that kept
+  // `esign` and `meeting-create-spacebar` red. Waiting for React to own the tab
+  // addresses it at the cause instead of retrying past it.
+  await clickWhenHydrated(supportTab);
 
   const supportHeading = page.getByRole('heading', {
     name: /^Support Sessions$/i,
   });
 
+  // Retained as a safety net for a genuinely slow first render of the panel (not
+  // for a lost click, which the line above now prevents). Harmless here because
+  // the Support tab selects rather than toggles, so a second click is a no-op.
   try {
     await expect(supportHeading).toBeVisible({ timeout: 3_000 });
   } catch {

@@ -1353,3 +1353,61 @@ The cause was self-inflicted: back-to-back full suites on a shared machine. So
 same honesty as the seventh addendum's "the confirming run never happened". The
 per-spec results above are solid; the suite total for the combined state is not
 yet measured. Take it on a quiet machine before quoting one.
+
+---
+
+## Eleventh addendum — the confirming run, and two more sites of the same root cause
+
+Date: **2026-08-05**. The tenth addendum owed a clean full-suite measurement and
+said so. Here it is, taken on a settled machine (load ~5, `vitest` count 0):
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| eighth addendum | 22 | 4 | 2 | 1 | 6.0 min |
+| ninth addendum | 23 | 3 | 2 | 1 | 5.9 min |
+| **confirming run** | **26** | **1** | 2 | **0** | 7.5 min |
+
+**Canaries at baseline** — `activation-smoke` 700ms / 2.8s / 3.9s and
+`marketing-smoke` 2.8s, against the 3.0s reference. Per this note's own rule
+(and the tenth addendum's refinement that canary *timings* matter, not just
+pass/fail), this measurement is trustworthy.
+
+**"never ran" is 0 for the first time in this note's history.** Every block in the
+default suite now executes; the five `mode: 'serial'` files no longer lose their
+tails to an early failure. The 2 skipped are the deliberate `onboarding-first-run`
+`test.fixme` blocks.
+
+**The single remaining failure is `signup-trialing`** — `price_placeholder_…` ids
+that no Stripe account can resolve. That is the last of the three blockers the
+seventh addendum recorded, and it needs Stripe test-mode price ids, not a code fix.
+
+### Two more sites of the hydration bug, found by sweeping
+
+The tenth addendum fixed `esign` and `meeting-create-spacebar`. Sweeping the suite
+for the same shape found two more, neither of which was failing:
+
+1. **`add-community.spec.ts`** carried the identical latent bug *and the identical
+   incorrect comment* ("the dialog can open a beat late"). It passes on luck: as
+   the first authenticated route compiled, its 30s heading wait absorbs a large
+   cold compile, so hydration usually wins the race.
+2. **`support-access.spec.ts`** already contained an ad-hoc
+   `try { … } catch { click again }` workaround around the admin Support tab.
+   Someone hit this exact swallowed click empirically and patched the symptom
+   without ever naming the cause.
+
+That is **three specs independently bitten by one bug** — two red for months, one
+silently patched — which is what makes it systemic rather than two coincidences.
+Both now use `clickWhenHydrated`. On `support-access` the retry is retained as a
+safety net for a genuinely slow panel render, with a comment saying so; it is safe
+there because the Support tab selects rather than toggles, so a second click is a
+no-op. Verified: `add-community` 2/2, `support-access` 1/1.
+
+### Does this affect real users?
+
+Partly, and less than the dev-server numbers suggest. React only replays discrete
+events captured after `hydrateRoot` begins; a click landing before the bundle
+executes has no listener to capture and is lost for a real user too. That is
+inherent to server-side rendering rather than a defect in this app, and production
+bundles are far faster than a dev server's first compile. **No production
+measurement was taken, so no production number is claimed here.**

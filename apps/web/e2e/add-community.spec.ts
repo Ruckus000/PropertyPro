@@ -10,6 +10,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
+import { clickWhenHydrated } from './helpers/hydration';
 
 test.describe('PM Add Community Flow', () => {
   // Above Playwright's 30s default: this describe compiles the FIRST
@@ -33,10 +34,15 @@ test.describe('PM Add Community Flow', () => {
 
     const addButton = page.getByRole('button', { name: /add community/i });
     await expect(addButton).toBeVisible();
-    await addButton.click();
+    // This block PASSES today, but it had the same latent bug as the two specs
+    // that did not: a click before hydration is SWALLOWED, not delayed, so the
+    // 30s below could never rescue it. The old comment here ("the dialog can
+    // open a beat late") had exactly the wrong model. It survives on luck — as
+    // the first authenticated route compiled, its 30s heading wait absorbs a
+    // large cold compile, so hydration usually wins the race. See
+    // helpers/hydration.ts.
+    await clickWhenHydrated(addButton);
 
-    // Modal opens with title. A click only waits for actionability, not for
-    // React to have hydrated the handler, so the dialog can open a beat late.
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('heading', { name: /add a community/i })).toBeVisible();
 
