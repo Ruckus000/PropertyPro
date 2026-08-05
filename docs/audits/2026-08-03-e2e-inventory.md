@@ -540,3 +540,50 @@ same machine.
 **Not fixed.** There is nothing to fix in the config on this evidence, and the
 G1 recommendation's "the tenant config's 3.7-hour wall clock would have to be
 fixed first" should be read as no longer blocking.
+
+
+---
+
+## Sixth addendum — the rate-limiter lead is REFUTED, and a trap that invalidates local runs
+
+The fifth addendum ended by flagging an untested lead: the middleware rate
+limiter 429s well before real load and is exempted only when
+`PLAYWRIGHT_TENANT_E2E=1`, which `pnpm test:e2e` does not set — so the default
+suite runs rate-limited, and that might have explained the hard failures in one
+change rather than twelve investigations.
+
+**It does not.** `checkRateLimit` in
+`apps/web/src/lib/middleware/rate-limit-config.ts` is that flag's only runtime
+consumer, so setting it isolates the variable exactly. Two runs, one variable,
+port force-cleared between them:
+
+| Arm | passed | failed | skipped | never ran |
+|---|---:|---:|---:|---:|
+| rate limiting ON | 6 | 14 | 1 | 8 |
+| rate limiting BYPASSED | 6 | 14 | 1 | 8 |
+
+**The failure sets are byte-identical** — the same 14 tests, in the same specs,
+in both arms — and neither log contains a single `429` or `rate_limited`. The
+lead is closed. The hard failures need individual triage; there is no shortcut.
+
+### The trap that made the first attempt worthless
+
+`playwright.config.ts` sets **`reuseExistingServer: true`** on both webServers.
+A stale `next dev` left listening on :3000 from an earlier run is therefore
+silently adopted instead of starting `dev:e2e` — the run measures a server with
+stale compiled output and stale env, and reports nothing unusual. The first
+attempt at the experiment above returned **0 passed** on that basis, which would
+have read as "bypassing the rate limiter makes things much worse."
+
+**The canary is `activation-smoke` and `marketing-smoke`.** They need no auth and
+no database, and pass in CI in ~5.8 s against a production build with an
+UNREACHABLE database. If either fails locally, the environment is broken and the
+run means nothing — in the bogus run they failed with `#pricing` missing from the
+landing page, alongside `agent-login failed: 404`.
+
+**Kill the port and verify it is clear before counting or timing anything
+locally** (`lsof -ti :3000 | xargs -r kill -9`). This applies retroactively: any
+local pass rate in this note taken without that check — including the
+re-measurement in the third addendum — should be treated as unverified. The
+13-of-39 above was taken with the port verified clear, twice, with matching
+results.
