@@ -2,8 +2,20 @@
  * Sentry Instrumentation Presence Guard
  *
  * For every app under `apps/<name>/` whose `next.config.*` references
- * `@sentry/nextjs`, asserts that `apps/<name>/src/instrumentation.ts`
- * exists.
+ * `@sentry/nextjs`, asserts BOTH:
+ *
+ *   1. `apps/<name>/src/instrumentation.ts` exists (see below), and
+ *   2. every Sentry init config sets `initialScope: { tags: { app: '<name>' } }`.
+ *
+ * Check 2 exists because apps/web and apps/admin deliberately share ONE Sentry
+ * project (`property-pro`). That is only tenable while every event carries an
+ * `app` tag to separate them — an untagged app is indistinguishable noise in a
+ * shared issue stream. The decision was made on the basis that admin-only
+ * configuration in this repo rots silently (its Sentry org/project were unset
+ * for 133 days and its client DSN was never set at all, so admin uploaded zero
+ * source maps and captured zero browser errors, unnoticed). This guard is what
+ * stops the tag going the same way. If you ever split admin into its own Sentry
+ * project, this check becomes optional — not before.
  *
  * This catches the failure mode that produced a ~90-day Sentry blackout:
  * `instrumentation.ts` placed at `apps/<name>/` (project root) instead of
@@ -46,6 +58,55 @@ function findNextConfig(appPath: string): string | null {
 function referencesSentry(configPath: string): boolean {
   const src = readFileSync(configPath, 'utf-8');
   return /@sentry\/nextjs/.test(src);
+}
+
+/** Sentry init sites, relative to `apps/<name>/`. Missing files are skipped. */
+const SENTRY_INIT_FILES = [
+  'src/sentry.server.config.ts',
+  'src/sentry.edge.config.ts',
+  'src/instrumentation-client.ts',
+];
+
+/**
+ * Assert each Sentry init site tags its events with the owning app.
+ *
+ * Matches `tags: { app: '<name>' }` (the `initialScope` form) so the tag is
+ * attached from the first event, rather than a post-init `setTag` that races
+ * early errors.
+ */
+function checkAppTags(appPath: string, app: string, problems: Problem[]): void {
+  for (const rel of SENTRY_INIT_FILES) {
+    const filePath = join(appPath, rel);
+    if (!existsSync(filePath)) continue;
+
+    const src = readFileSync(filePath, 'utf-8');
+    if (!/Sentry\.init\(/.test(src)) continue;
+
+    const tagMatch = src.match(/tags:\s*\{\s*app:\s*['"]([^'"]+)['"]/);
+    if (!tagMatch) {
+      problems.push({
+        app,
+        message:
+          `${app}/${rel} calls Sentry.init() without an app tag. ` +
+          `Add \`initialScope: { tags: { app: '${app}' } }\` — apps/web and ` +
+          `apps/admin share one Sentry project, so an untagged app cannot be ` +
+          `separated from the other's events.`,
+      });
+      continue;
+    }
+
+    if (tagMatch[1] !== app) {
+      problems.push({
+        app,
+        message:
+          `${app}/${rel} tags events as app='${tagMatch[1]}' but lives in apps/${app}. ` +
+          `A mismatched tag is worse than none — it misattributes events to the other app.`,
+      });
+      continue;
+    }
+
+    console.log(`  ${app}: ✓ ${rel} tags app='${app}'`);
+  }
 }
 
 function main(): void {
@@ -92,6 +153,8 @@ function main(): void {
     } else {
       console.log(`  ${app}: ✓ src/instrumentation.ts present`);
     }
+
+    checkAppTags(appPath, app, problems);
   }
 
   if (checked === 0) {
@@ -111,7 +174,10 @@ function main(): void {
     process.exit(1);
   }
 
-  console.log(`\n✅ All ${checked} Sentry-instrumented app(s) have src/instrumentation.ts.`);
+  console.log(
+    `\n✅ All ${checked} Sentry-instrumented app(s) have src/instrumentation.ts ` +
+      "and tag their events with 'app'.",
+  );
   process.exit(0);
 }
 
