@@ -38,6 +38,9 @@
   "apps/admin/src/app/layout.tsx": {
     "raw-palette": 2
   },
+  "apps/admin/src/app/leads/page.tsx": {
+    "raw-palette": 2
+  },
   "apps/admin/src/app/site-templates/block-registry/page.tsx": {
     "raw-palette": 5
   },
@@ -126,6 +129,9 @@
     "arbitrary-font": 7,
     "raw-hex": 2,
     "arbitrary-color": 2
+  },
+  "apps/admin/src/components/leads/LeadsDashboard.tsx": {
+    "raw-palette": 34
   },
   "apps/admin/src/components/loading/AdminPageLoading.tsx": {
     "raw-palette": 2

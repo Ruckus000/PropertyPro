@@ -172,5 +172,3 @@ worth optimizing for at this stage. Scale is a Q1 problem.
 - **No mobile app.** Dropped as a differentiator (`01-RECONCILIATION.md` §2.1).
   If discovery reveals boards asking for it unprompted, that is a genuine signal
   worth reopening — but it is a post-revenue decision.
-</content>
-</invoke>

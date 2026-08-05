@@ -193,5 +193,3 @@ Stated so they're tracked, not assumed. All of these are currently **missing**:
 - **No content / SEO surface at all** — the marketing site has exactly four
   routes (home, transparency, two legal). No blog, no resources. This is the
   five-month-old deferred-SEO debt from `docs/09` and it compounds daily.
-</content>
-</invoke>

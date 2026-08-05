@@ -108,6 +108,8 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/access-requests/verify', method: 'POST' },
   // Public community discovery search (rate-limited, returns minimal metadata only)
   { path: '/api/v1/public/communities/search', method: 'GET' },
+  // Marketing lead capture from the public compliance checker (rate-limited, write-only)
+  { path: '/api/v1/public/leads', method: 'POST' },
 ];
 
 /** Public auth routes that should never trigger a redirect loop. */

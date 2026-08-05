@@ -144,5 +144,3 @@ build these before revenue.
 **Total engineering: roughly 3–4 days**, spread over the first month, alongside
 selling. That is the correct ratio for a solo founder at this stage — you are not
 blocked on building, and the plan should not let you retreat into building.
-</content>
-</invoke>

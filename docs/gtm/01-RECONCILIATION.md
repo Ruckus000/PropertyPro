@@ -185,5 +185,3 @@ Stated plainly so it is not mistaken for settled:
   included in-person door-knocking, which may not match how you actually want to
   work.
 - **No decision here on whether to charge a setup fee.** See `02-POSITIONING.md` §4.2.
-</content>
-</invoke>

@@ -27,5 +27,3 @@ wins**. See `01-RECONCILIATION.md` §4 for the specific conflicts.
 - **Stage:** pre-revenue, not launched
 - **Team:** solo founder
 - **Date:** 2026-08-05 — seven months into the Jan 1 regulatory window
-</content>
-</invoke>
