@@ -45,6 +45,7 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
   const pathname = usePathname();
   const [coolingCount, setCoolingCount] = useState(initialCoolingCount ?? 0);
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
 
   /**
    * Sign out client-side, matching apps/web's ProfileMenu.
@@ -56,23 +57,46 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
    * ADMIN_COOKIE_OPTIONS is required: the admin session cookie is named
    * `sb-admin-auth-token`, so a default browser client would clear the web
    * app's cookie name instead and leave the operator still signed in.
+   *
+   * We MUST inspect the returned `{ error }` rather than relying on a catch:
+   * supabase-js resolves rather than throws on a failed logout, and its
+   * `_signOut` returns early — *before* clearing the local session — for any
+   * GoTrue failure that is not a 401/403/404 (a network error, a 5xx, or a 429
+   * from the logout rate limit). Navigating away regardless would leave a live
+   * `sb-admin-auth-token` behind while telling the operator they were signed
+   * out; `/auth/login` is a public path, so middleware would not bounce them
+   * and the next person at a shared workstation would inherit a privileged
+   * console session. Retrying with `scope: 'local'` is not a fallback — that
+   * path issues the same network call first.
    */
   async function handleSignOut() {
     if (signingOut) return;
     setSigningOut(true);
+    setSignOutFailed(false);
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (url && key) {
-      try {
-        const supabase = createBrowserClient(url, key, {
-          cookieOptions: ADMIN_COOKIE_OPTIONS,
-        });
-        await supabase.auth.signOut();
-      } catch {
-        // Fall through to the redirect — middleware re-checks the session and
-        // will bounce an already-invalid one back to the login page anyway.
+
+    if (!url || !key) {
+      setSigningOut(false);
+      setSignOutFailed(true);
+      return;
+    }
+
+    try {
+      const supabase = createBrowserClient(url, key, {
+        cookieOptions: ADMIN_COOKIE_OPTIONS,
+      });
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setSigningOut(false);
+        setSignOutFailed(true);
+        return;
       }
+    } catch {
+      setSigningOut(false);
+      setSignOutFailed(true);
+      return;
     }
 
     // Hard navigation so middleware re-runs and the server sees the cleared cookie.
@@ -172,15 +196,25 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
           type="button"
           onClick={handleSignOut}
           disabled={signingOut}
-          title={collapsed ? 'Sign out' : undefined}
+          title={collapsed ? (signOutFailed ? 'Sign out failed — try again' : 'Sign out') : undefined}
           className={[
-            'flex w-full items-center rounded-md py-2 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors disabled:opacity-60',
+            'flex w-full items-center rounded-md py-2 text-sm font-medium transition-colors disabled:opacity-60',
+            signOutFailed
+              ? 'text-red-400 hover:bg-gray-800 hover:text-red-300'
+              : 'text-gray-400 hover:bg-gray-800 hover:text-white',
             collapsed ? 'justify-center px-2' : 'gap-2.5 px-3',
           ].join(' ')}
         >
           <LogOut size={16} className="shrink-0" aria-hidden="true" />
           {!collapsed && (signingOut ? 'Signing out…' : 'Sign out')}
         </button>
+        {/* Never navigate away on failure: the session is still live, and
+            silently landing on /auth/login would imply otherwise. */}
+        {signOutFailed && !collapsed && (
+          <p role="alert" className="mt-2 px-3 text-xs text-red-400">
+            Sign out failed — you are still signed in. Try again.
+          </p>
+        )}
       </div>
     </aside>
   );

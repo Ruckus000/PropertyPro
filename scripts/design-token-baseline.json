@@ -140,7 +140,7 @@
     "raw-palette": 37
   },
   "apps/admin/src/components/Sidebar.tsx": {
-    "raw-palette": 13
+    "raw-palette": 17
   },
   "apps/admin/src/components/site-templates/BlockRegistryView.tsx": {
     "raw-palette": 20
