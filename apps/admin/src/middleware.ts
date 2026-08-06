@@ -24,12 +24,27 @@ import {
 } from '@/lib/request/forwarded-headers';
 
 // ---------------------------------------------------------------------------
-// Simple sliding-window rate limiter (edge-compatible, in-memory)
+// Fixed-window rate limiter (edge-compatible, in-memory)
 //
-// NOTE: This in-memory store resets on each serverless cold start, so rate
-// limiting is best-effort in Vercel's ephemeral environment. This matches the
-// same pattern used in apps/web (see apps/web/src/lib/middleware/rate-limiter.ts).
-// For production hardening, swap to a centralized store (e.g. Upstash Redis).
+// ## What this does and does not cover
+//
+// Two buckets. `/auth/*` and `/dev/agent-login` get a tight one; everything
+// else gets the general API allowance. Both are keyed on client IP.
+//
+// **It cannot throttle admin sign-in.** `app/auth/login/page.tsx` calls
+// `supabase.auth.signInWithPassword` from a BROWSER client, so the credential
+// attempt goes straight to Supabase GoTrue and never reaches this middleware.
+// GoTrue's own per-IP limits are the real control there. What the auth bucket
+// below does buy is a cap on hammering the login PAGE and `/dev/agent-login`.
+// Throttling credentials app-side needs a server-side sign-in route — tracked
+// separately, deliberately not folded into a hardening pass.
+//
+// **It is per-instance and resets on cold start.** Vercel runs many concurrent
+// instances, each with its own Map, so the effective limit is (limit ×
+// instances) and a burst that lands on fresh instances is not counted at all.
+// This is best-effort by design; a real limit needs a centralized store
+// (Upstash Redis — `UPSTASH_REDIS_REST_URL` is already reserved in
+// .env.example). apps/web has the same property.
 // ---------------------------------------------------------------------------
 
 interface RateBucket {
@@ -38,24 +53,73 @@ interface RateBucket {
 }
 
 const RATE_STORE = new Map<string, RateBucket>();
-const RATE_LIMIT = 100;
 const RATE_WINDOW_MS = 60_000;
 
-function checkRateLimit(ip: string): { allowed: boolean } {
+/** General allowance, per IP per minute. */
+const RATE_LIMIT = 100;
+
+/**
+ * Auth-surface allowance, per IP per minute. Much tighter: a human signing in
+ * loads the page a handful of times, so anything above this is automation.
+ */
+const AUTH_RATE_LIMIT = 20;
+
+interface RateLimitResult {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  /** Unix seconds when the current window expires. */
+  resetAt: number;
+}
+
+function checkRateLimit(key: string, limit: number): RateLimitResult {
   const now = Date.now();
-  const bucket = RATE_STORE.get(ip);
+  const bucket = RATE_STORE.get(key);
 
   if (!bucket || now - bucket.windowStart > RATE_WINDOW_MS) {
-    RATE_STORE.set(ip, { count: 1, windowStart: now });
-    return { allowed: true };
+    RATE_STORE.set(key, { count: 1, windowStart: now });
+    return {
+      allowed: true,
+      limit,
+      remaining: limit - 1,
+      resetAt: Math.ceil((now + RATE_WINDOW_MS) / 1000),
+    };
   }
 
-  if (bucket.count >= RATE_LIMIT) {
-    return { allowed: false };
+  const resetAt = Math.ceil((bucket.windowStart + RATE_WINDOW_MS) / 1000);
+
+  if (bucket.count >= limit) {
+    return { allowed: false, limit, remaining: 0, resetAt };
   }
 
   bucket.count++;
-  return { allowed: true };
+  return { allowed: true, limit, remaining: limit - bucket.count, resetAt };
+}
+
+/**
+ * Client IP for rate-limit keying.
+ *
+ * Returns `null` rather than the string 'unknown' when no IP can be
+ * determined. A shared 'unknown' key put every such client into ONE bucket, so
+ * a single unattributable request stream could exhaust the allowance for all of
+ * them — a self-inflicted denial of service. Unkeyable requests are simply not
+ * counted; that is the safer failure direction for a console whose real gate is
+ * the platform_admin_users check below.
+ */
+function resolveClientIp(request: NextRequest): string | null {
+  const direct = (request as NextRequest & { ip?: string }).ip;
+  if (direct) return direct;
+
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  if (forwarded) return forwarded;
+
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  return realIp || null;
+}
+
+/** The auth surface, which is public and therefore reachable unauthenticated. */
+function isAuthSurface(pathname: string): boolean {
+  return pathname.startsWith('/auth/') || pathname === '/dev/agent-login';
 }
 
 // Evict old entries to avoid unbounded memory growth
@@ -153,28 +217,37 @@ async function handleRequest(request: NextRequest): Promise<Response> {
     user: middlewareUser,
   } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
 
-  // 4. Allow public paths through immediately (no admin check)
-  if (isPublicPath(pathname)) {
-    return buildForwardedResponse(response, cleanHeaders, requestId);
+  // 4. Rate-limit BEFORE the public-path short-circuit.
+  //
+  // This used to sit after it, and was additionally gated on `isApiRoute`, so
+  // the only throttled surface was `/api/admin/*` — endpoints that already
+  // require a platform_admin_users row. Every unauthenticated surface, which is
+  // the part an attacker can actually reach, was exempt twice over.
+  const authSurface = isAuthSurface(pathname);
+  if (authSurface || isApiRoute(pathname)) {
+    const ip = resolveClientIp(request);
+    if (ip) {
+      const limit = authSurface ? AUTH_RATE_LIMIT : RATE_LIMIT;
+      // Separate keyspaces: a burst of API calls must not consume the login
+      // allowance, and vice versa.
+      const rl = checkRateLimit(`${authSurface ? 'auth' : 'api'}:${ip}`, limit);
+      if (!rl.allowed) {
+        return new NextResponse('Too Many Requests', {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.max(1, rl.resetAt - Math.ceil(Date.now() / 1000))),
+            'X-RateLimit-Limit': String(rl.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(rl.resetAt),
+          },
+        });
+      }
+    }
   }
 
-  // 5. Rate-limit API routes
-  if (isApiRoute(pathname)) {
-    const ip =
-      (request as NextRequest & { ip?: string }).ip ??
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-      'unknown';
-    const rl = checkRateLimit(ip);
-    if (!rl.allowed) {
-      return new NextResponse('Too Many Requests', {
-        status: 429,
-        headers: {
-          'Retry-After': '60',
-          'X-RateLimit-Limit': String(RATE_LIMIT),
-          'X-RateLimit-Remaining': '0',
-        },
-      });
-    }
+  // 5. Allow public paths through (no admin check)
+  if (isPublicPath(pathname)) {
+    return buildForwardedResponse(response, cleanHeaders, requestId);
   }
 
   // 6. Verify Supabase user (JWT verified in createMiddlewareClient)

@@ -81,6 +81,20 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
     getCoolingDeletionRequestCount(),
   ]);
 
+  // These used to degrade to 0 / null on a failed query, which is
+  // indistinguishable from a genuinely empty community — an operator would
+  // read "0 members, 0 documents, no compliance score" as fact. Let the
+  // failure reach error.tsx instead.
+  if (membersResult.error) {
+    throw new Error(`Failed to count members: ${membersResult.error.message}`);
+  }
+  if (documentsResult.error) {
+    throw new Error(`Failed to count documents: ${documentsResult.error.message}`);
+  }
+  if (complianceResult.error) {
+    throw new Error(`Failed to load compliance items: ${complianceResult.error.message}`);
+  }
+
   const memberCount = membersResult.count ?? 0;
   const documentCount = documentsResult.count ?? 0;
 

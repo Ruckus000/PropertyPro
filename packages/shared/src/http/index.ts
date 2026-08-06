@@ -12,3 +12,4 @@
 export * from './errors';
 export * from './request-context';
 export * from './security-headers';
+export * from './support-cookie';

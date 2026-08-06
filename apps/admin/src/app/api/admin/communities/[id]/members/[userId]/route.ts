@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 import { parseJsonBody } from '@/lib/api/parse-body';
 
@@ -151,12 +152,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     .select('id, user_id, role, designation, display_title, is_unit_owner, created_at, updated_at')
     .single();
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update community member');
 
   await logAdminAction({
     admin,

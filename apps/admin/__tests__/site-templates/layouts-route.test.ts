@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenError } from '@propertypro/shared/http';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
 
-const { requirePlatformAdminMock, createAdminTypedClientMock, orderMock } =
+const { requirePlatformAdminMock, createAdminTypedClientMock, orderMock, limitMock } =
   vi.hoisted(() => ({
     requirePlatformAdminMock: vi.fn(),
     createAdminTypedClientMock: vi.fn(),
     orderMock: vi.fn(),
+    limitMock: vi.fn(),
   }));
 
 vi.mock('@/lib/auth/platform-admin', () => ({
@@ -19,22 +21,31 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 function buildClient(rows: unknown[] | { error: { message: string } }) {
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn(() => chain);
-  chain.order = orderMock.mockImplementation(() => {
-    if (orderMock.mock.calls.length >= 2) {
-      if ('error' in (rows as object)) {
-        return Promise.resolve({
-          data: null,
-          error: (rows as { error: { message: string } }).error,
-        });
-      }
-      return Promise.resolve({ data: rows, error: null });
+  // `.order()` is now followed by `.limit()`, which is what terminates the
+  // chain — the list query is capped (see lib/api/list-limits.ts).
+  chain.order = orderMock.mockImplementation(() => chain);
+  chain.limit = limitMock.mockImplementation(() => {
+    if ('error' in (rows as object)) {
+      return Promise.resolve({
+        data: null,
+        error: (rows as { error: { message: string } }).error,
+      });
     }
-    return chain;
+    return Promise.resolve({ data: rows, error: null });
   });
   return { from: vi.fn(() => chain) };
 }
 
 describe('GET /api/admin/site-templates/layouts', () => {
+  // Teaching the mock about .limit() without asserting it would hide whether
+  // the cap is really applied — the mock would pass either way.
+  it('caps the query rather than selecting the whole table', async () => {
+    createAdminTypedClientMock.mockReturnValue(buildClient([]));
+    const { GET } = await import('../../src/app/api/admin/site-templates/layouts/route');
+    await GET(new Request('http://localhost/api/admin/site-templates/layouts') as never);
+    expect(limitMock).toHaveBeenCalledWith(PLATFORM_LIST_LIMIT);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     requirePlatformAdminMock.mockResolvedValue({ id: 'admin-1', email: 'a@x.test' });
@@ -103,7 +114,7 @@ describe('GET /api/admin/site-templates/layouts', () => {
     expect(await res.json()).toEqual({ layouts: [] });
   });
 
-  it('returns 500 with the supabase error message when the read fails', async () => {
+  it('returns an opaque 500 when the read fails, without the supabase message', async () => {
     createAdminTypedClientMock.mockReturnValue(buildClient({ error: { message: 'boom' } }));
     const { GET } = await import(
       '../../src/app/api/admin/site-templates/layouts/route'
@@ -113,7 +124,10 @@ describe('GET /api/admin/site-templates/layouts', () => {
     );
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error.message).toBe('boom');
+    // The raw PostgREST message must NOT reach the client — it names tables,
+    // columns and constraints. It goes to the server log and Sentry instead.
+    expect(json.error.message).toBe('An unexpected error occurred');
+    expect(JSON.stringify(json)).not.toContain('boom');
   });
 
   it('returns 403 when requirePlatformAdmin rejects (handler aborts before DB read)', async () => {

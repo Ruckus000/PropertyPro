@@ -242,6 +242,12 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/app/api/v1/settings/support-access/route.ts'),
   // Support impersonation middleware — validates active support sessions with service-role access
   resolve(repoRoot, 'apps/web/src/lib/support/impersonation.ts'),
+  // AUTHZ: ending an impersonation session. The caller's signed support cookie
+  // IS the credential — it is verified before any write — and the service-role
+  // write is confined to CLOSING that one `support_sessions` row plus its
+  // access-log entry. `support_sessions` is not community-scoped (it spans the
+  // admin and the impersonated tenant), so a scoped client cannot reach it.
+  resolve(repoRoot, 'apps/web/src/app/api/v1/support/end-session/route.ts'),
   // Auth helper hydrates the effective support-session actor from the users table
   resolve(repoRoot, 'apps/web/src/lib/api/auth.ts'),
   // Billing groups are owner-scoped (PM-level), not community-scoped — no communityId available

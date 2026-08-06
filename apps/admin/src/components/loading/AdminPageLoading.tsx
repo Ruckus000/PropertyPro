@@ -12,7 +12,11 @@ export function AdminPageLoading({
   label = 'Loading admin page',
 }: AdminPageLoadingProps) {
   return (
-    <AdminLayout coolingCount={0}>
+    // No `coolingCount` — deliberately. Passing 0 here asserted "there are zero
+    // pending deletions" during every navigation, so the sidebar badge blinked
+    // off and back on. Omitting it lets Sidebar keep the count it already has
+    // (and fetch one if it has none).
+    <AdminLayout>
       <section aria-busy="true" aria-label={label} role="status" className="space-y-6 p-6">
         <div className="space-y-3">
           <AdminSkeleton className="h-4 w-24" />

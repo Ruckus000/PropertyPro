@@ -41,8 +41,8 @@ describe('StarterPacksTable', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ packs: PACKS }) });
     render(PACKS);
     await act(async () => { click('pack-archive-florida-condo-v1'); });
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/admin/site-templates/starter-packs/florida-condo-v1');
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toBe('/api/admin/site-templates/starter-packs/florida-condo-v1');
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1]).toMatchObject({ method: 'DELETE' });
   });
 
   it('Edit → Save PATCHes blocks', async () => {
@@ -52,7 +52,7 @@ describe('StarterPacksTable', () => {
     render(PACKS);
     click('pack-editbtn-florida-condo-v1');
     await act(async () => { click('pack-save-florida-condo-v1'); });
-    const call = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(call[0]).toBe('/api/admin/site-templates/starter-packs/florida-condo-v1');
     expect(call[1]).toMatchObject({ method: 'PATCH' });
   });
@@ -64,6 +64,6 @@ describe('StarterPacksTable', () => {
     render(PACKS);
     click('pack-editbtn-florida-condo-v1');
     await act(async () => { click('pack-newversion-florida-condo-v1'); });
-    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/admin/site-templates/starter-packs/florida-condo-v1/new-version');
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toBe('/api/admin/site-templates/starter-packs/florida-condo-v1/new-version');
   });
 });

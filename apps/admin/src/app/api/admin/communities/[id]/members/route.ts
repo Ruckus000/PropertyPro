@@ -7,6 +7,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { COMMUNITY_LIST_LIMIT } from '@/lib/api/list-limits';
+import { listAllAuthUsers } from '@/lib/auth/list-all-auth-users';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -57,14 +60,10 @@ export const GET = withAdminErrorHandler(async (_request: NextRequest, context: 
     .from('user_roles')
     .select('id, user_id, role, designation, display_title, is_unit_owner, created_at, updated_at')
     .eq('community_id', communityId)
-    .order('created_at');
+    .order('created_at')
+    .limit(COMMUNITY_LIST_LIMIT);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to list community members');
 
   const rows = (roles ?? []) as unknown as UserRoleRow[];
 
@@ -77,14 +76,14 @@ export const GET = withAdminErrorHandler(async (_request: NextRequest, context: 
   // Batch fetch profiles and auth users to avoid N+1 queries
   const [profileResult, authResult] = await Promise.all([
     db.from('users').select('id, full_name, email, phone').in('id', userIds),
-    db.auth.admin.listUsers(),
+    listAllAuthUsers(db),
   ]);
 
   const profilesById = new Map(
     (profileResult.data ?? []).map((p: { id: string; full_name: string | null; email: string | null; phone: string | null }) => [p.id, p]),
   );
   const authUsersById = new Map(
-    authResult.data.users.filter((u) => userIds.includes(u.id)).map((u) => [u.id, u]),
+    authResult.filter((u) => userIds.includes(u.id)).map((u) => [u.id, u]),
   );
 
   const members = rows.map((row) => {

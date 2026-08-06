@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 /**
@@ -91,12 +92,7 @@ export const DELETE = withAdminErrorHandler(async (
     .delete()
     .eq('user_id', userId);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to remove platform admin');
 
   await logAdminAction({
     admin: currentAdmin,

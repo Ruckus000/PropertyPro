@@ -206,10 +206,11 @@ export const POST = withAdminErrorHandler(async (
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Stripe checkout creation failed';
+    // Stripe errors name API versions, account ids and price ids. Already
+    // captured above; the response gets a fixed message.
     captureException(err, { extra: { context: '[convert/POST] Stripe error' } });
     return NextResponse.json(
-      { error: { code: 'STRIPE_ERROR', message } },
+      { error: { code: 'STRIPE_ERROR', message: 'Could not create the Stripe checkout session.' } },
       { status: 500 },
     );
   }

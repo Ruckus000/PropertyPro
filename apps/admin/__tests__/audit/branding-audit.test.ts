@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const requirePlatformAdmin = vi.fn();
-const logAdminAction = vi.fn(async () => {});
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 const brandingUpdate = vi.fn();
 
 vi.mock('@/lib/auth/platform-admin', () => ({
@@ -71,7 +73,7 @@ describe('community branding PATCH auditing', () => {
 
     expect(res.status).toBe(200);
     expect(logAdminAction).toHaveBeenCalledTimes(1);
-    expect(logAdminAction.mock.calls[0][0]).toMatchObject({
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'community_branding_changed',
       communityId: 7,
       oldValues: { primaryColor: '#000000' },

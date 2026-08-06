@@ -121,9 +121,10 @@ function checkAppTags(appPath: string, app: string, problems: Problem[]): number
         app,
         message:
           `${app}/${rel} calls Sentry.init() without an app tag. ` +
-          `Add \`initialScope: { tags: { app: '${app}' } }\` — apps/web and ` +
-          `apps/admin share one Sentry project, so an untagged app cannot be ` +
-          `separated from the other's events.`,
+          `Add \`initialScope: { tags: { app: '${app}' } }\` — the tag is what ` +
+          `separates the two apps' events, and it stays required even when ` +
+          `SENTRY_PROJECT_ADMIN routes admin's build to its own project: the ` +
+          `DSN, not the build config, decides where runtime events land.`,
       });
       continue;
     }

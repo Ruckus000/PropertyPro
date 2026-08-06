@@ -9,7 +9,12 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { signSupportToken } from '@/lib/support/jwt';
 import { CreateSessionSchema, SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
+import {
+  buildSupportSessionCookie,
+  resolveSupportCookieHostname,
+} from '@propertypro/shared/http';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 const DAILY_SESSION_LIMIT = 10;
 
@@ -43,9 +48,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     .is('revoked_at', null)
     .limit(1);
 
-  if (consentError) {
-    return NextResponse.json({ error: consentError.message }, { status: 500 });
-  }
+  assertNoDbError(consentError, 'Failed to check support consent');
 
   if (!consentRows || consentRows.length === 0) {
     return NextResponse.json(
@@ -65,9 +68,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     .eq('user_id', targetUserId)
     .maybeSingle();
 
-  if (adminLookupError) {
-    return NextResponse.json({ error: adminLookupError.message }, { status: 500 });
-  }
+  assertNoDbError(adminLookupError, 'Failed to check platform-admin status of impersonation target');
 
   if (adminRow) {
     return NextResponse.json(
@@ -86,9 +87,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     .eq('admin_user_id', admin.id)
     .gte('created_at', todayStart.toISOString());
 
-  if (countError) {
-    return NextResponse.json({ error: countError.message }, { status: 500 });
-  }
+  assertNoDbError(countError, 'Failed to count support sessions created today');
 
   if ((count ?? 0) >= DAILY_SESSION_LIMIT) {
     return NextResponse.json(
@@ -145,10 +144,10 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       target_email: targetUser?.email ?? null,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to sign token' },
-      { status: 500 },
-    );
+    // signSupportToken throws when SUPPORT_SESSION_JWT_SECRET is missing or
+    // too short. That message names the env var and its length rule — useful
+    // in Sentry, not in a response. Rethrow for the wrapper.
+    throw err;
   }
 
   // 6. Log to support_access_log
@@ -160,10 +159,25 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     metadata: { reason, target_user_id: targetUserId, ticket_id: ticketId },
   });
 
-  return NextResponse.json(
-    { sessionId: session.id, token, expiresAt: expiresAt.toISOString() },
+  // 7. Hand the token to the browser as an HttpOnly cookie — never in the body.
+  //
+  // The response body used to carry the raw JWT so the dialog could write it
+  // with `document.cookie`. A cookie written that way cannot be HttpOnly, and
+  // this one is scoped to the whole `.getpropertypro.com` tree, so any XSS on
+  // any tenant subdomain could read a live impersonation token. Setting it here
+  // keeps the token out of JavaScript entirely.
+  //
+  // Admin runs on a subdomain of the same root as the tenants, so it may set a
+  // `Domain=.<root>` cookie that `<slug>.<root>` will send back — the client can
+  // still just `window.open()` the tenant URL, unchanged.
+  const response = NextResponse.json(
+    { sessionId: session.id, expiresAt: expiresAt.toISOString() },
     { status: 201 },
   );
+  response.cookies.set(
+    buildSupportSessionCookie(resolveSupportCookieHostname(request), token),
+  );
+  return response;
 });
 
 export const GET = withAdminErrorHandler(async (request: NextRequest) => {
@@ -186,9 +200,7 @@ export const GET = withAdminErrorHandler(async (request: NextRequest) => {
 
   const { data, error } = await query;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to list support sessions');
 
   return NextResponse.json({ sessions: data ?? [] });
 });

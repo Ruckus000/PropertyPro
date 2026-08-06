@@ -5,6 +5,7 @@
  * Disabled entirely when DSN is not set (local development).
  */
 import { dispatchNavigationStart } from '@/lib/navigation/navigation-progress-event';
+import { scrubBrowserEvent } from '@propertypro/shared/observability';
 
 type SentryBrowserModule = typeof import('@sentry/nextjs');
 
@@ -38,6 +39,14 @@ async function initClientInstrumentation(): Promise<void> {
       // `property-pro` Sentry project. See sentry.server.config.ts for why one
       // project rather than two.
       initialScope: { tags: { app: 'web' } },
+
+
+      // Browser events carry secrets the SERVER hook cannot reach. Copying the
+      // server's header-deleting beforeSend here would be a no-op — browsers do
+      // not populate event.request.headers. What they do populate is the URL,
+      // the query string and every fetch/xhr breadcrumb URL, and admin's demo
+      // previews put an HMAC login token in exactly there.
+      beforeSend: (event) => scrubBrowserEvent(event),
 
       // Performance tracing
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,

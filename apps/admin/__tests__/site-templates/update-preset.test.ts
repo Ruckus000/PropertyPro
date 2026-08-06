@@ -32,7 +32,7 @@ describe('saveThemePreset', () => {
     const result = await saveThemePreset('bay-light', { displayName: 'Bay Light', isFeatured: true });
 
     expect(result).toEqual(PRESET);
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/admin/site-templates/theme-presets/bay-light');
     expect((init as RequestInit).method).toBe('PATCH');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({

@@ -1,8 +1,21 @@
 /**
- * P1-7: Cross-subdomain session tests.
+ * Admin middleware AUTHORIZATION — the platform_admin_users gate.
  *
- * Verifies that a session from .getpropertypro.com is accepted by admin
- * middleware, and that non-admin accounts are rejected even with valid sessions.
+ * Renamed from `cross-subdomain-session.test.ts` on 2026-08-05. Under that name
+ * it read as the regression test for the production cookie incident, and the
+ * audit (P2-12) flagged that it tested none of it: it mocks
+ * `createMiddlewareClient` wholesale, so cookie name, `domain` and `secure`
+ * never enter the picture.
+ *
+ * That finding is discharged by `cookie-config.test.ts`, which asserts the
+ * cookie options directly — including the exact production configuration the
+ * incident occurred in (`NODE_ENV=production` with `NEXT_PUBLIC_COOKIE_DOMAIN`
+ * empty). Look there for cookie behaviour.
+ *
+ * What THIS file covers, and covers well, is the authorization gate:
+ * a platform-admin row lets the request through, a missing row redirects with
+ * `access_denied`, and an unauthenticated request redirects to login WITHOUT
+ * making the service-role query at all.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';

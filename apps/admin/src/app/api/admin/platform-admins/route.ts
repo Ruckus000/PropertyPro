@@ -9,6 +9,9 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
+import { buildAuthUserMap, listAllAuthUsers } from '@/lib/auth/list-all-auth-users';
 import { parseAdminBody } from '@/lib/api/parse-body';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
@@ -32,20 +35,17 @@ export const GET = withAdminErrorHandler(async () => {
   const { data, error } = await db
     .from('platform_admin_users')
     .select('user_id, role, invited_by, created_at')
-    .order('created_at');
+    .order('created_at')
+    .limit(PLATFORM_LIST_LIMIT);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to list platform admins');
 
   const rows = (data ?? []) as unknown as PlatformAdminRow[];
 
-  // Batch fetch all auth users to avoid N+1 queries
-  const { data: { users: authUsers } } = await db.auth.admin.listUsers();
-  const authUserMap = new Map(authUsers.map((u) => [u.id, u]));
+  // Batch fetch all auth users to avoid N+1 queries. Must page: a bare
+  // listUsers() returns only the first 50, so admins past that rendered as
+  // 'unknown' with no error.
+  const authUserMap = await buildAuthUserMap(db);
 
   const admins = rows.map((row) => {
     const user = authUserMap.get(row.user_id);
@@ -70,8 +70,10 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const { email } = parsed;
   const db = createAdminClient();
 
-  // Look up the user by email in auth.users
-  const { data: { users } } = await db.auth.admin.listUsers();
+  // Look up the user by email in auth.users. Paging matters here too: an
+  // unpaged lookup silently misses an existing user past the first page and
+  // reports 'No account found' for someone who does have one.
+  const users = await listAllAuthUsers(db);
   const targetUser = users.find((u) => u.email === email);
 
   if (!targetUser) {
@@ -104,12 +106,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       invited_by: currentAdmin.id,
     } as never);
 
-  if (insertError) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: insertError.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(insertError, 'Failed to add platform admin');
 
   await logAdminAction({
     admin: currentAdmin,

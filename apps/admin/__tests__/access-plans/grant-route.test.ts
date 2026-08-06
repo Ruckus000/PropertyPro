@@ -40,7 +40,9 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 // (createAdminClient) rather than the one these tests stub. Mock the helper so
 // the route tests stay focused, and so the call itself can be asserted — the
 // helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
-const logAdminAction = vi.fn(async () => {});
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 vi.mock('@/lib/audit/log-admin-action', () => ({
   logAdminAction: (...args: unknown[]) => logAdminAction(...args),
   AdminAuditLogError: class AdminAuditLogError extends Error {},
@@ -92,7 +94,7 @@ describe('POST /api/admin/access-plans', () => {
     expect(new Date(updatePayload.free_access_expires_at).getTime()).toBeGreaterThan(Date.now());
     // Granting free access is a money decision; it must be attributable.
     expect(logAdminAction).toHaveBeenCalledTimes(1);
-    expect(logAdminAction.mock.calls[0][0]).toMatchObject({
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'access_plan_granted',
       resourceType: 'access_plan',
     });

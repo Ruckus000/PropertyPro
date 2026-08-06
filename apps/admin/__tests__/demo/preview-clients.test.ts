@@ -8,6 +8,10 @@ import {
 import { MobilePreviewClient } from '../../src/app/demo/[id]/mobile/MobilePreviewClient';
 import { DemoEditDrawer } from '../../src/components/demo/DemoEditDrawer';
 
+// `landingPageUrl` and `slug` were MISSING here. The file was outside
+// tsconfig's `include`, so nothing caught it: the component rendered with both
+// as `undefined` and the tests asserted against a prop shape the real page
+// (demo/[id]/preview/page.tsx) never passes.
 const defaultProps = {
   publicUrl: 'http://localhost:3000/demo-test',
   mobileUrl: 'http://localhost:3000/mobile?communityId=1&preview=true',
@@ -15,6 +19,8 @@ const defaultProps = {
   demoId: 1,
   communityId: 1,
   prospectName: 'Test Demo',
+  landingPageUrl: 'http://localhost:3000/demo-test',
+  slug: 'demo-test',
 };
 
 describe('demo preview clients', () => {

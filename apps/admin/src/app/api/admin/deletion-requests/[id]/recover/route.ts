@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 interface RouteParams {
@@ -39,9 +40,7 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
     .select()
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to mark deletion request recovered');
 
   if (!data) {
     return NextResponse.json({ error: { message: 'Request not found or not in soft_deleted status' } }, { status: 404 });
@@ -70,7 +69,7 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
         {
           error: {
             code: 'USER_RESTORE_FAILED',
-            message: `Request marked recovered but users.deleted_at clear failed: ${restoreError.message}`,
+            message: 'Request marked recovered, but clearing the user\u2019s deletion flag failed. Retry or clear it manually.',
           },
           request: data,
         },
@@ -88,7 +87,7 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
         {
           error: {
             code: 'COMMUNITY_RESTORE_FAILED',
-            message: `Request marked recovered but communities.deleted_at clear failed: ${restoreError.message}`,
+            message: 'Request marked recovered, but clearing the community\u2019s deletion flag failed. Retry or clear it manually.',
           },
           request: data,
         },

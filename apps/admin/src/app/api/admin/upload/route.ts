@@ -11,6 +11,7 @@ import { randomUUID } from 'crypto';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -143,12 +144,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       upsert: false,
     });
 
-  if (uploadError) {
-    return NextResponse.json(
-      { error: `Upload failed: ${uploadError.message}` },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(uploadError, 'Failed to upload asset to storage');
 
   // Generate public URL
   const { data: urlData } = admin.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);

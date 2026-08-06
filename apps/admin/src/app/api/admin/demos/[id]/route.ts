@@ -17,6 +17,7 @@ import {
   sanitizeDemoRow,
 } from '@/lib/db/demo-queries';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 interface RouteContext {
@@ -37,12 +38,7 @@ export const GET = withAdminErrorHandler(async (_request: Request, context: Rout
 
   const { data, error } = await getDemoById(id);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to read demo instance');
 
   if (!data) {
     return NextResponse.json(
@@ -109,12 +105,7 @@ export const DELETE = withAdminErrorHandler(async (_request: Request, context: R
 
   // 5. Delete the demo_instances row
   const { error: deleteError } = await deleteDemo(id);
-  if (deleteError) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: deleteError.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(deleteError, 'Failed to delete demo instance');
 
   // This is the one call site that cannot log against a live community: steps
   // 3-5 above destroy the auth users, the community and the demo row. The
@@ -195,12 +186,7 @@ export const PATCH = withAdminErrorHandler(async (request: Request, context: Rou
 
   const { data, error } = await updateDemo(id, parsed.data);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update demo instance');
 
   if (!data) {
     return NextResponse.json(

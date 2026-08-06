@@ -36,10 +36,10 @@ afterEach(() => vi.restoreAllMocks());
 describe('GET /api/admin/site-templates/starter-packs', () => {
   it('200s and returns the shaped pack list', async () => {
     fromMock.mockReturnValue({
-      select: () => ({ order: () => ({ order: () => Promise.resolve({
+      select: () => ({ order: () => ({ order: () => ({ limit: () => Promise.resolve({
         data: [{ id: 1, slug: 'florida-condo-v1', display_name: 'FL Condo', community_type: 'condo_718', description: null, blocks: [], version: 1, is_archived: false, created_at: 't', updated_at: 't' }],
         error: null,
-      }) }) }),
+      }) }) }) }),
     });
     const res = await GET(new Request('http://localhost/api/admin/site-templates/starter-packs') as any);
     expect(res.status).toBe(200);

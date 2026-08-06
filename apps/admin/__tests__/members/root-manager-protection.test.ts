@@ -17,7 +17,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const requirePlatformAdmin = vi.fn();
-const logAdminAction = vi.fn(async () => {});
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 const roleUpdate = vi.fn();
 const roleDelete = vi.fn();
 
@@ -142,7 +144,7 @@ describe('member route root-manager protection', () => {
     expect(res.status).toBe(200);
     expect(roleUpdate).toHaveBeenCalled();
     expect(logAdminAction).toHaveBeenCalledTimes(1);
-    expect(logAdminAction.mock.calls[0][0]).toMatchObject({
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'member_role_changed',
       communityId: 1,
       oldValues: { role: 'resident' },
@@ -154,7 +156,7 @@ describe('member route root-manager protection', () => {
 
     expect(res.status).toBe(200);
     expect(logAdminAction).toHaveBeenCalledTimes(1);
-    expect(logAdminAction.mock.calls[0][0]).toMatchObject({ action: 'member_removed' });
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({ action: 'member_removed' });
   });
 
   it('returns 400, not 500, for a malformed JSON body', async () => {

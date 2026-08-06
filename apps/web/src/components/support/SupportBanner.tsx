@@ -1,34 +1,47 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, X } from 'lucide-react';
-import {
-  getSupportCookieRootDomain,
-  SUPPORT_SESSION_COOKIE,
-} from '@propertypro/shared';
+import { useEndSupportSession } from '@/hooks/use-end-support-session';
 
-export function SupportBanner() {
-  const [visible, setVisible] = useState(false);
+interface SupportBannerProps {
+  /**
+   * Whether an impersonation session is active, resolved server-side from the
+   * `x-support-session` header that middleware stamps after verifying the
+   * signed cookie against a live `support_sessions` row.
+   *
+   * This used to be a `document.cookie` sniff in a `useEffect`. The cookie is
+   * now HttpOnly — deliberately, so an XSS on any tenant subdomain cannot read
+   * a live impersonation token — which makes it invisible to JavaScript. The
+   * header is also a better signal: the old check saw only that *a* cookie
+   * existed, so an expired or revoked session still rendered the banner.
+   */
+  active: boolean;
+}
+
+export function SupportBanner({ active }: SupportBannerProps) {
+  const [dismissed, setDismissed] = useState(false);
   const router = useRouter();
+  const endSession = useEndSupportSession();
 
-  useEffect(() => {
-    const hasCookie = document.cookie
-      .split(';')
-      .some((c) => c.trim().startsWith(`${SUPPORT_SESSION_COOKIE}=`));
-    setVisible(hasCookie);
-  }, []);
-
-  if (!visible) return null;
+  if (!active || dismissed) return null;
 
   const handleEndSession = () => {
-    // Clear the support session cookie
-    const hostname = window.location.hostname;
-    const rootDomain = getSupportCookieRootDomain(hostname);
-    const cookieDomain = rootDomain ? `; domain=.${rootDomain}` : '';
-    document.cookie = `${SUPPORT_SESSION_COOKIE}=; path=/; max-age=0; SameSite=Lax${cookieDomain}`;
-    setVisible(false);
-    router.push('/dashboard');
+    endSession.mutate(undefined, {
+      onSuccess: () => {
+        setDismissed(true);
+        // `router.refresh()`, not just `push` — the impersonated identity is
+        // applied in middleware, so the server components must re-render
+        // against a request that no longer carries the cookie. A client-side
+        // navigation alone would keep the impersonated shell.
+        router.push('/dashboard');
+        router.refresh();
+      },
+      // On failure the session is still live. Keep the banner, and its End
+      // Session control, on screen rather than implying the operator has left
+      // impersonation when they have not.
+    });
   };
 
   return (
@@ -44,10 +57,11 @@ export function SupportBanner() {
       <button
         type="button"
         onClick={handleEndSession}
-        className="flex items-center gap-1.5 rounded-md border border-status-warning-border px-3 py-1 text-xs font-semibold text-content-inverse hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-interactive"
+        disabled={endSession.isPending}
+        className="flex items-center gap-1.5 rounded-md border border-status-warning-border px-3 py-1 text-xs font-semibold text-content-inverse hover:opacity-80 disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-interactive"
       >
         <X size={12} aria-hidden="true" />
-        End Session
+        {endSession.isPending ? 'Ending…' : 'End Session'}
       </button>
     </div>
   );

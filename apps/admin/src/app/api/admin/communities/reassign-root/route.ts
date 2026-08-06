@@ -49,11 +49,10 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
         { status: 403 },
       );
     }
-    const message = err instanceof Error ? err.message : 'Reassignment failed';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 },
-    );
+    // RoleOpForbiddenError above is an intentional, user-facing outcome and
+    // keeps its message. Anything else is an internal failure: rethrow so the
+    // wrapper reports it and returns the opaque 500.
+    throw err;
   }
 
   return NextResponse.json({ reassigned: true });

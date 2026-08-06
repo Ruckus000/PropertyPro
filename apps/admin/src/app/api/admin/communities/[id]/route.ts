@@ -10,6 +10,7 @@ import { PLAN_IDS } from '@propertypro/shared';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { parseAdminBody } from '@/lib/api/parse-body';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
@@ -131,12 +132,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     .select('id, name, slug, community_type, timezone, address_line1, city, state, zip_code, subscription_plan, subscription_status, transparency_enabled, community_settings, created_at, updated_at')
     .single();
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update community');
 
   // Audit the legal-readiness gate with a dedicated settings_changed event.
   if (community_settings !== undefined) {

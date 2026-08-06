@@ -25,9 +25,9 @@ describe('describeBlockFields', () => {
     const fields = describeBlockFields(heroBlockSchema);
     const byName = Object.fromEntries(fields.map((f) => [f.name, f]));
     expect(byName.headline).toEqual({ name: 'headline', type: 'string', optional: false, nullable: false });
-    expect(byName.subtitle.optional).toBe(true);
+    expect(byName.subtitle!.optional).toBe(true);
     expect(byName.heroImagePath).toMatchObject({ type: 'string', optional: true });
-    expect(byName.heroImageAlt.optional).toBe(true);
+    expect(byName.heroImageAlt!.optional).toBe(true);
   });
 
   it('returns [] for a non-object schema input', () => {

@@ -8,6 +8,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 import { parseAdminBody } from '@/lib/api/parse-body';
 
@@ -56,9 +57,7 @@ export const DELETE = withAdminErrorHandler(async (request: NextRequest, { param
     .select()
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to revoke access plan');
 
   if (!data) {
     return NextResponse.json({ error: { message: 'Plan not found or already revoked/converted' } }, { status: 404 });

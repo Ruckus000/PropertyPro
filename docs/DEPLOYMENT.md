@@ -80,6 +80,8 @@ Set for **Production** and **Preview** environments unless noted.
 | `SENTRY_AUTH_TOKEN` | Build only | Source map upload token |
 | `SENTRY_ORG` | Build only | Sentry organization slug |
 | `SENTRY_PROJECT` | Build only | Sentry project slug |
+| `SENTRY_PROJECT_ADMIN` | Build only, **admin** | Sentry project slug for `apps/admin`. **Unset means admin's errors and source maps silently land in the WEB project** — `apps/admin/next.config.ts` falls back to `SENTRY_PROJECT`. Set on `property-pro-admin`. |
+| `WEB_APP_BASE_URL` | Server only, **admin** | Base URL the demo→paid conversion flow sends the customer back to after Stripe checkout (`apps/admin/.../demos/[id]/convert`). Production: `https://getpropertypro.com`. |
 | `UPSTASH_REDIS_REST_URL` | Server only | Upstash Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | Server only | Upstash Redis REST token |
 | `NEXT_PUBLIC_APP_URL` | All | Web: `https://getpropertypro.com` (prod). Admin app: your admin host, e.g. `https://admin.getpropertypro.com` |

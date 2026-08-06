@@ -31,7 +31,9 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 // (createAdminClient) rather than the one these tests stub. Mock the helper so
 // the route tests stay focused, and so the call itself can be asserted — the
 // helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
-const logAdminAction = vi.fn(async () => {});
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 vi.mock('@/lib/audit/log-admin-action', () => ({
   logAdminAction: (...args: unknown[]) => logAdminAction(...args),
   AdminAuditLogError: class AdminAuditLogError extends Error {},
@@ -59,7 +61,12 @@ async function callDelete(id: number) {
   // Import lazily so vi.mock factories take effect.
   const mod = await import('@/app/api/admin/demos/[id]/route');
   const ctx = { params: Promise.resolve({ id: String(id) }) };
-  return mod.DELETE(new Request('http://localhost/api/admin/demos/' + id, { method: 'DELETE' }), ctx);
+  // The handler only reads `request` through the Request surface here; the
+  // cast keeps the test honest about that rather than fabricating a NextRequest.
+  return mod.DELETE(
+    new Request('http://localhost/api/admin/demos/' + id, { method: 'DELETE' }) as never,
+    ctx,
+  );
 }
 
 describe('DELETE /api/admin/demos/[id]', () => {
@@ -114,7 +121,7 @@ describe('DELETE /api/admin/demos/[id]', () => {
     // community row itself is gone by this point, which is why the audit
     // table's community_id is nullable with ON DELETE SET NULL.
     expect(logAdminAction).toHaveBeenCalledTimes(1);
-    expect(logAdminAction.mock.calls[0][0]).toMatchObject({
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'demo_deleted',
       resourceType: 'demo_instance',
       resourceId: 42,

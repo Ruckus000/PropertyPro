@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { captureException } from '@sentry/nextjs';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
@@ -51,9 +52,11 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
 
     return NextResponse.json({ publicHtml, mobileHtml });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Template compilation failed';
+    // The compiler evaluates template source, so its errors quote file paths
+    // and internal stack frames. Code kept, message generic.
+    captureException(err, { extra: { context: '[demos/preview] template compilation failed' } });
     return NextResponse.json(
-      { error: { code: 'COMPILE_ERROR', message } },
+      { error: { code: 'COMPILE_ERROR', message: 'Template compilation failed.' } },
       { status: 500 },
     );
   }

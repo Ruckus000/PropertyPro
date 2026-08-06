@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - apps/web/src/**
+      # apps/admin was missing until 2026-08-05. The guard SCRIPT has always
+      # scanned it (APP_CONFIGS runs apps/admin/src in 'admin' mode), but this
+      # filter meant an admin-only PR never triggered the workflow — and admin
+      # is the app that uses the RLS-bypassing service-role client on nearly
+      # every page and route.
+      - apps/admin/src/**
       - packages/db/src/**
       - scripts/verify-scoped-db-access.ts
       - package.json
@@ -15,6 +21,12 @@ on:
     branches: [main]
     paths:
       - apps/web/src/**
+      # apps/admin was missing until 2026-08-05. The guard SCRIPT has always
+      # scanned it (APP_CONFIGS runs apps/admin/src in 'admin' mode), but this
+      # filter meant an admin-only PR never triggered the workflow — and admin
+      # is the app that uses the RLS-bypassing service-role client on nearly
+      # every page and route.
+      - apps/admin/src/**
       - packages/db/src/**
       - scripts/verify-scoped-db-access.ts
       - package.json

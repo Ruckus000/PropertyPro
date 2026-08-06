@@ -58,10 +58,19 @@ export default async function AuthenticatedLayout({
         <link key={href} rel="stylesheet" href={href} />
       ))}
       <div style={cssVars as React.CSSProperties}>
-        <SupportBanner />
         <AuthSessionSync />
         <IdleSessionManager role={role} />
         <AppQueryProvider>
+          {/* The support cookie is HttpOnly, so the banner cannot detect the
+              session itself. Middleware already stamps this header on every
+              request carrying a VALID, still-active support session — which is
+              a stricter signal than the old `document.cookie` presence check,
+              since that one also fired for an expired or revoked cookie.
+
+              Inside AppQueryProvider because ending a session now goes through
+              a TanStack mutation hook; a React Query hook outside its provider
+              throws at render. */}
+          <SupportBanner active={requestHeaders.get('x-support-session') === '1'} />
           <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
             {children}
           </AppShell>

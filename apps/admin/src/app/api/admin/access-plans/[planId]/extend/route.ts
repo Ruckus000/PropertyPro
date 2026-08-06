@@ -8,6 +8,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 import { parseAdminBody } from '@/lib/api/parse-body';
 
@@ -88,9 +89,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest, { params 
     .select()
     .single();
 
-  if (updateError) {
-    return NextResponse.json({ error: { message: updateError.message } }, { status: 500 });
-  }
+  assertNoDbError(updateError, 'Failed to extend access plan');
 
   // Refresh the denormalized free_access_expires_at on the community so
   // subscription-guard sees the new grace window. Best-effort follow-up
