@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { requirePlatformAdminMock, createAdminTypedClientMock, fromMock } = vi.hoisted(() => {
+const { requirePlatformAdminMock, createAdminTypedClientMock, fromMock, limitMock } = vi.hoisted(() => {
   const fromMock = vi.fn();
+  const limitMock = vi.fn();
   return {
     requirePlatformAdminMock: vi.fn(),
     createAdminTypedClientMock: vi.fn(() => ({ from: fromMock })),
     fromMock,
+    limitMock,
   };
 });
 
@@ -14,6 +16,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({ createAdminTypedClient: creat
 
 import { GET, POST } from '@/app/api/admin/site-templates/starter-packs/route';
 import { ForbiddenError } from '@propertypro/shared/http';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
 
 const HERO = { headline: 'Welcome', subtitle: 'A community.', ctaText: 'Resident Login', ctaTarget: '/auth/login' };
 const VALID_BLOCKS = [
@@ -35,16 +38,31 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('GET /api/admin/site-templates/starter-packs', () => {
   it('200s and returns the shaped pack list', async () => {
+    limitMock.mockResolvedValue({
+      data: [{ id: 1, slug: 'florida-condo-v1', display_name: 'FL Condo', community_type: 'condo_718', description: null, blocks: [], version: 1, is_archived: false, created_at: 't', updated_at: 't' }],
+      error: null,
+    });
     fromMock.mockReturnValue({
-      select: () => ({ order: () => ({ order: () => ({ limit: () => Promise.resolve({
-        data: [{ id: 1, slug: 'florida-condo-v1', display_name: 'FL Condo', community_type: 'condo_718', description: null, blocks: [], version: 1, is_archived: false, created_at: 't', updated_at: 't' }],
-        error: null,
-      }) }) }) }),
+      select: () => ({ order: () => ({ order: () => ({ limit: limitMock }) }) }),
     });
     const res = await GET(new Request('http://localhost/api/admin/site-templates/starter-packs') as any);
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.packs[0]).toMatchObject({ slug: 'florida-condo-v1', communityType: 'condo_718', displayName: 'FL Condo' });
+  });
+
+  // Teaching the mock about .limit() without asserting it would hide whether
+  // the cap is really applied — the mock would pass either way. Matches
+  // theme-presets-route.test.ts and layouts-route.test.ts.
+  it('caps the query rather than selecting the whole table', async () => {
+    limitMock.mockResolvedValue({ data: [], error: null });
+    fromMock.mockReturnValue({
+      select: () => ({ order: () => ({ order: () => ({ limit: limitMock }) }) }),
+    });
+
+    await GET(new Request('http://localhost/api/admin/site-templates/starter-packs') as any);
+
+    expect(limitMock).toHaveBeenCalledWith(PLATFORM_LIST_LIMIT);
   });
 });
 
