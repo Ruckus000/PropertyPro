@@ -38,7 +38,20 @@ export function useRovingTabs<T extends string>(
   const tabRefs = useRef(new Map<T, HTMLButtonElement | null>());
 
   const tabId = (tab: T) => `${idPrefix}-tab-${tab}`;
-  const panelId = (tab: T) => `${idPrefix}-panel-${tab}`;
+
+  /**
+   * ONE panel id, not one per tab.
+   *
+   * Both consumers render a single panel container whose content swaps, rather
+   * than one element per tab. A per-tab `aria-controls` therefore pointed every
+   * INACTIVE tab at an id that does not exist in the document — an ARIA
+   * violation that axe and the VoiceOver rotor both flag, in the hook whose
+   * whole purpose is to fix this component's accessibility.
+   *
+   * `aria-labelledby` on the panel stays dynamic: it is only ever emitted for
+   * the active tab, so it always resolves.
+   */
+  const panelId = `${idPrefix}-panel`;
 
   const focusTab = useCallback((tab: T) => {
     tabRefs.current.get(tab)?.focus();
@@ -77,7 +90,7 @@ export function useRovingTabs<T extends string>(
       role: 'tab' as const,
       type: 'button' as const,
       'aria-selected': active === tab,
-      'aria-controls': panelId(tab),
+      'aria-controls': panelId,
       tabIndex: active === tab ? 0 : -1,
       ref: (el: HTMLButtonElement | null) => {
         tabRefs.current.set(tab, el);
@@ -92,7 +105,7 @@ export function useRovingTabs<T extends string>(
      * when its first child is not focusable, per the ARIA practices note.
      */
     getPanelProps: (tab: T) => ({
-      id: panelId(tab),
+      id: panelId,
       role: 'tabpanel' as const,
       'aria-labelledby': tabId(tab),
       tabIndex: 0,

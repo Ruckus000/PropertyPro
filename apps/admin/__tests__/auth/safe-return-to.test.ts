@@ -9,7 +9,7 @@
  */
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { safeReturnTo } from '@/app/auth/login/page';
+import { safeReturnTo } from '@/lib/auth/safe-return-to';
 
 const FALLBACK = '/clients';
 
@@ -50,5 +50,49 @@ describe('safeReturnTo', () => {
   // returned value must be the RESOLVED path, not the raw one.
   it('normalises dot segments rather than passing them through', () => {
     expect(safeReturnTo('/a/../clients')).toBe('/clients');
+  });
+
+  // The trap that made an origin-check-only rewrite WORSE than the prefix rules
+  // it replaced. `new URL('/.//evil.com', origin).pathname` is `//evil.com`:
+  // normalisation moves `//` to the front, the origin check still passes
+  // (the input really did resolve here), and the RETURNED string is
+  // protocol-relative — which `router.push` re-resolves as an authority.
+  //
+  // The old code returned `/.//evil.com` verbatim and stayed on-origin, so
+  // this was a regression, not a leftover gap. Hence the output check.
+  it('rejects paths that normalisation turns protocol-relative', () => {
+    for (const value of [
+      '/.//evil.com',
+      '/..//evil.com',
+      '/a/..//evil.com',
+      '/./\\evil.com',
+      '/%2e//evil.com',
+      '/.///evil.com',
+      '/.//evil.com/p?a=b#c',
+      '/a/..//\\evil.com',
+    ]) {
+      expect(safeReturnTo(value), value).toBe(FALLBACK);
+    }
+  });
+
+  // Guards the guard: whatever comes back must be something `router.push`
+  // resolves to THIS origin. Asserting the return value alone would not have
+  // caught the case above.
+  it('only ever returns a path that stays on the current origin', () => {
+    const origin = window.location.origin;
+    const probes = [
+      '/clients',
+      '/.//evil.com',
+      '/a/..//evil.com',
+      '/%2F%2Fevil.com',
+      '/clients/42?tab=x#top',
+      '//evil.com',
+      '/\\evil.com',
+    ];
+
+    for (const probe of probes) {
+      const result = safeReturnTo(probe);
+      expect(new URL(result, `${origin}/auth/login`).origin, `${probe} -> ${result}`).toBe(origin);
+    }
   });
 });

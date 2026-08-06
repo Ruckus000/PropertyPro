@@ -80,7 +80,38 @@ describe('useRovingTabs', () => {
     expect(first!.getAttribute('aria-selected')).toBe('true');
     expect(second!.getAttribute('aria-selected')).toBe('false');
     expect(h.panel().getAttribute('aria-labelledby')).toBe(first!.id);
-    expect(first!.getAttribute('aria-controls')).toBe(h.panel().id);
+
+    await h.cleanup();
+  });
+
+  // Asserting only the ACTIVE tab's aria-controls hid a real bug: the panel id
+  // was per-tab while both consumers render ONE panel container, so every
+  // inactive tab referenced an id that is not in the document.
+  it('points every tab at a panel that actually exists', async () => {
+    const h = await mount();
+
+    for (const tab of h.tabs()) {
+      const target = tab.getAttribute('aria-controls');
+      expect(target, `${tab.textContent} aria-controls`).toBeTruthy();
+      expect(
+        h.container.querySelector(`#${target}`),
+        `${tab.textContent} -> #${target} must resolve`,
+      ).toBeTruthy();
+    }
+
+    await h.cleanup();
+  });
+
+  // The panel id must not move when the selection does, or the inactive tabs'
+  // references break again the moment a tab is clicked.
+  it('keeps the panel id stable across tab changes', async () => {
+    const h = await mount();
+    const before = h.panel().id;
+
+    await h.press('ArrowRight');
+
+    expect(h.panel().id).toBe(before);
+    expect(h.panel().getAttribute('aria-labelledby')).toBe(h.tabs()[1]!.id);
 
     await h.cleanup();
   });

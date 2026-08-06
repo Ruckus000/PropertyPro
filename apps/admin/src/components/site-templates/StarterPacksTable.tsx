@@ -22,15 +22,6 @@ async function readError(res: Response): Promise<string> {
   catch { return `Request failed (${res.status})`; }
 }
 
-/**
- * Muted text for the empty state.
- *
- * Hoisted so the exemption marker can share the line with the class — the
- * guard matches per line, so a comment above the JSX would not apply.
- */
-// eslint-disable-next-line max-len
-const EMPTY_CELL_CLASS = 'px-6 py-12 text-center text-sm text-gray-500'; // design-tokens:exempt — apps/admin has no semantic token layer (its Tailwind config defines coral/blue/gray only), so muted text can only be a raw ramp class; matches the LayoutsTable and ThemePresetsTable empty states
-
 export function StarterPacksTable({ packs: initial }: { packs: StarterPackRow[] }) {
   const [rows, setRows] = useState<StarterPackRow[]>(initial);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -102,7 +93,7 @@ export function StarterPacksTable({ packs: initial }: { packs: StarterPackRow[] 
               body — this covers that case too. */}
           {visible.length === 0 && (
             <tr>
-              <td colSpan={7} className={EMPTY_CELL_CLASS}>
+              <td colSpan={7} className={'px-6 py-12 text-center text-sm text-gray-500' /* design-tokens:exempt — apps/admin has no semantic token layer (coral/blue/gray only), so muted text can only be a raw ramp; matches LayoutsTable/ThemePresetsTable */}>
                 {typeFilter === 'all'
                   ? 'No starter packs configured yet.'
                   : `No starter packs for ${typeFilter}.`}

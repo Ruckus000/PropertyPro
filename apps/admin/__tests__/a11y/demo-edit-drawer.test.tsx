@@ -107,6 +107,81 @@ describe('DemoEditDrawer accessibility', () => {
     expect(panel.querySelector('[aria-label="Close edit demo drawer"]')).toBeTruthy();
   });
 
+  // Parents pass `onClose={() => setDrawerOpen(false)}` — a fresh closure on
+  // every render. Saving in the drawer calls `onSaved`, which in
+  // TabbedPreviewClient toggles a 600ms flash: two parent re-renders WHILE the
+  // drawer is open. With `onClose` in the effect's dependency array that tore
+  // the effect down and set it up again, which restored focus to the element
+  // from before the drawer opened and then force-focused the drawer's first
+  // field — stealing focus out from under someone mid-edit, right after Save.
+  it('does not steal focus when the parent re-renders with a new onClose', async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    const props = {
+      isOpen: true,
+      demoId: 1,
+      communityId: 1,
+      prospectName: 'Test Demo',
+      onSaved: () => {},
+      previewTab: 'public' as const,
+    };
+
+    await act(async () => {
+      root!.render(<DemoEditDrawer {...props} onClose={() => {}} />);
+    });
+
+    // Put focus somewhere specific inside the drawer, as a user mid-edit would.
+    const panel = container.querySelector('[role="dialog"]') as HTMLElement;
+    const fields = panel.querySelectorAll<HTMLElement>('input, textarea, select, button');
+    const target = fields[fields.length - 1]!;
+    target.focus();
+    expect(document.activeElement).toBe(target);
+
+    // Re-render with a DIFFERENT onClose identity — exactly what an inline
+    // arrow in the parent produces on any unrelated state change.
+    await act(async () => {
+      root!.render(<DemoEditDrawer {...props} onClose={() => { /* new identity */ }} />);
+    });
+
+    expect(document.activeElement).toBe(target);
+  });
+
+  // The effect must still see the LATEST onClose, or Escape would call a stale
+  // closure — the failure mode of naively dropping it from the deps.
+  it('calls the latest onClose on Escape after a re-render', async () => {
+    const stale = vi.fn();
+    const fresh = vi.fn();
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    const props = {
+      isOpen: true,
+      demoId: 1,
+      communityId: 1,
+      prospectName: 'Test Demo',
+      onSaved: () => {},
+      previewTab: 'public' as const,
+    };
+
+    await act(async () => {
+      root!.render(<DemoEditDrawer {...props} onClose={stale} />);
+    });
+    await act(async () => {
+      root!.render(<DemoEditDrawer {...props} onClose={fresh} />);
+    });
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+
+    expect(fresh).toHaveBeenCalledTimes(1);
+    expect(stale).not.toHaveBeenCalled();
+  });
+
   it('exposes its tabs as tabs, not bare buttons', async () => {
     const panel = await render(true);
 

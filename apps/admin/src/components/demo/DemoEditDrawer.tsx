@@ -102,6 +102,22 @@ export function DemoEditDrawer({
     { idPrefix: 'demo-edit-drawer', label: 'Demo settings sections' },
   );
 
+  // Latest `onClose`, read through a ref so it is NOT an effect dependency.
+  //
+  // Callers pass `onClose={() => setDrawerOpen(false)}` — a fresh closure on
+  // every parent render. With `onClose` in the dependency array the effect below
+  // tore down and re-ran on any unrelated parent state change, and its teardown
+  // restores focus. Saving in the drawer triggers exactly that: `onSaved` makes
+  // TabbedPreviewClient toggle a 600ms flash, two re-renders while the drawer is
+  // still open, so focus was yanked back to the Edit button and then forced to
+  // the drawer's first field — mid-edit, immediately after Save.
+  //
+  // A ref keeps the handler current without making identity load-bearing. The
+  // alternative — asking every caller to useCallback — puts the contract in the
+  // wrong place and breaks silently the first time someone forgets.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   // Escape closes, and focus returns where it came from.
   //
   // Neither existed: the drawer had no keyboard dismissal, and opening it left
@@ -118,7 +134,7 @@ export function DemoEditDrawer({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     }
     document.addEventListener('keydown', onKeyDown);
@@ -130,7 +146,8 @@ export function DemoEditDrawer({
       const previous = restoreFocusRef.current;
       if (previous && previous.isConnected) previous.focus();
     };
-  }, [isOpen, onClose]);
+    // `isOpen` ONLY — see onCloseRef above.
+  }, [isOpen]);
   const [branding, setBranding] = useState<BrandingInfo>({ ...DEFAULT_BRANDING, communityName: prospectName });
   const [drawerWidth, setDrawerWidth] = useState(DEFAULT_DRAWER_WIDTH);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);

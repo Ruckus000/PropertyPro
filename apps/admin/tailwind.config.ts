@@ -2,9 +2,18 @@ import type { Config } from 'tailwindcss';
 import colors from 'tailwindcss/colors';
 
 const config: Config = {
-  // No `darkMode` strategy: apps/admin has ZERO `dark:` classes, so declaring
-  // one only advertised a theming story the console does not have. apps/web
-  // does use `dark:`; this config is admin-only.
+  // KEEP. An earlier pass removed this on the grounds that "apps/admin has zero
+  // `dark:` classes" — true of apps/admin/src, and wrong overall: `content`
+  // below also globs packages/ui/src, which has 97 of them, and admin renders
+  // both `Card` and `Button` from there.
+  //
+  // Tailwind v3 defaults to `darkMode: 'media'`, so removing this recompiled
+  // those 97 rules from `:is(.dark *)` — which never matched, because admin
+  // sets no `.dark` class — into `@media (prefers-color-scheme: dark)`, which
+  // matches for any operator whose OS is in dark mode. Verified in the built
+  // CSS: dark card/border rules moved into a live media block. `'class'` is
+  // what actually neutralises them.
+  darkMode: 'class',
   content: [
     './src/**/*.{ts,tsx}',
     '../../packages/ui/src/**/*.{ts,tsx}',

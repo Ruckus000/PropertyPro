@@ -43,7 +43,7 @@ export default function RootLayout({
             a lost user is most likely to be on. */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:px-4 focus:py-2 focus:text-coral-700 focus:underline"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2 focus:text-coral-700 focus:underline"
         >
           Skip to main content
         </a>

@@ -144,6 +144,14 @@ describe('admin middleware rate limiting', () => {
     expect(lookalike.status).toBe(307);
   });
 
+  // The favicon must not sit behind the auth wall: the login page is the one
+  // screen guaranteed to be unauthenticated, so a redirected /icon.svg means
+  // it has no tab icon at all.
+  it('serves /icon.svg without an admin session', async () => {
+    const res = await middleware(request('/icon.svg', nextIp()));
+    expect(res.status).not.toBe(307);
+  });
+
   it('still throttles independently per IP', async () => {
     const busy = nextIp();
     await hammer('/auth/login', busy, 25);

@@ -10,7 +10,9 @@ interface MobilePreviewClientProps {
 
 export function MobilePreviewClient({ src, splitPreviewHref }: MobilePreviewClientProps) {
   return (
-    <div className="flex h-screen flex-col bg-gray-950">
+    // Skip-link target: this page does not render AdminLayout, which
+    // normally owns #main-content.
+    <div id="main-content" className="flex h-screen flex-col bg-gray-950">
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
         <Link href={splitPreviewHref} className="text-sm text-gray-500 hover:text-gray-700">
           ← Back to Split Preview

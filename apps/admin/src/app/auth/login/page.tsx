@@ -11,38 +11,8 @@ import { useState, useMemo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { safeReturnTo } from '@/lib/auth/safe-return-to';
 import { Suspense } from 'react';
-
-/**
- * Only same-origin, path-relative destinations survive.
- *
- * The previous version rejected `//evil.com` but not `/\evil.com`: browsers
- * normalise backslashes to forward slashes in the authority position, so that
- * is a protocol-relative URL and the post-login `router.push` would leave the
- * console for an attacker's host. `/%2F%2Fevil.com` was another shape it did
- * not cover.
- *
- * Resolving against the real origin and comparing is exhaustive where a list of
- * prefix rules is a guessing game — every encoding, backslash and dot-segment
- * trick collapses to "does it still point here?".
- */
-export function safeReturnTo(value: string | null): string {
-  const fallback = '/clients';
-  if (!value || !value.startsWith('/')) return fallback;
-
-  // During SSR of this client component there is no `window`; the throw lands
-  // in the catch and yields the fallback. Harmless — `returnTo` is only read
-  // inside the submit handler, never rendered, so there is no hydration
-  // mismatch and the resolved value is correct by the time it is used.
-  try {
-    const origin = window.location.origin;
-    const resolved = new URL(value, origin);
-    if (resolved.origin !== origin) return fallback;
-    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
-  } catch {
-    return fallback;
-  }
-}
 
 function LoginForm() {
   const router = useRouter();
@@ -119,7 +89,8 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-900 px-4">
+    // Skip-link target: the login page renders outside AdminLayout.
+    <div id="main-content" className="flex min-h-screen items-center justify-center bg-gray-900 px-4">
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="mb-8 text-center">
