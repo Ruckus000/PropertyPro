@@ -189,25 +189,23 @@ describe('Impersonation detection', () => {
 
   describe('impersonated-identity claims', () => {
     /**
-     * Signs with the same dev-secret path the verifier uses when
-     * SUPPORT_SESSION_JWT_SECRET is unset (stubbed to '' at the top of file).
+     * Signs with the CONFIGURED secret (stubbed to TEST_SECRET at the top of
+     * this file).
+     *
+     * These tests arrived on main in #905 signing with the retired
+     * `SUPPORT_SESSION_DEV_SECRET`, which the verifier used to fall back to
+     * whenever `SUPPORT_SESSION_JWT_SECRET` was unset. That constant is gone
+     * and there is no fallback, so signing that way now produces a zero-length
+     * key. Only the signing key changed — every assertion below is #905's.
      */
     async function signToken(claims: Record<string, unknown>): Promise<string> {
-      const { SignJWT } = await import('jose');
-      const { SUPPORT_SESSION_DEV_SECRET } = await import('@propertypro/shared');
-
-      return new SignJWT({
+      return signWith(TEST_SECRET, {
         act: { sub: 'admin-user-1' },
         community_id: 1,
         session_id: 123,
         scope: 'read_only',
         ...claims,
-      })
-        .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-        .setSubject('user-1')
-        .setIssuedAt()
-        .setExpirationTime('30m')
-        .sign(new TextEncoder().encode(SUPPORT_SESSION_DEV_SECRET));
+      });
     }
 
     it('round-trips the impersonated name and email', async () => {
