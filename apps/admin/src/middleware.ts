@@ -55,6 +55,21 @@ interface RateBucket {
 const RATE_STORE = new Map<string, RateBucket>();
 const RATE_WINDOW_MS = 60_000;
 
+/**
+ * Hard ceiling on distinct keys held at once.
+ *
+ * `maybeEvict()` only runs every 5 minutes and only drops entries older than
+ * two windows, so between sweeps nothing bounded the Map at all — a client
+ * varying its forwarded IP inserted one entry per request for up to five
+ * minutes. Widening the limiter to cover the auth surface increased the key
+ * volume, so the ceiling matters more than it did.
+ *
+ * At the cap the store is cleared outright rather than LRU-evicted: this is a
+ * best-effort limiter (see the note above), and a full reset is the same
+ * failure mode as a cold start, which it already tolerates by design.
+ */
+const RATE_STORE_MAX_KEYS = 10_000;
+
 /** General allowance, per IP per minute. */
 const RATE_LIMIT = 100;
 
@@ -77,6 +92,9 @@ function checkRateLimit(key: string, limit: number): RateLimitResult {
   const bucket = RATE_STORE.get(key);
 
   if (!bucket || now - bucket.windowStart > RATE_WINDOW_MS) {
+    if (!bucket && RATE_STORE.size >= RATE_STORE_MAX_KEYS) {
+      RATE_STORE.clear();
+    }
     RATE_STORE.set(key, { count: 1, windowStart: now });
     return {
       allowed: true,
@@ -107,14 +125,17 @@ function checkRateLimit(key: string, limit: number): RateLimitResult {
  * the platform_admin_users check below.
  */
 function resolveClientIp(request: NextRequest): string | null {
-  const direct = (request as NextRequest & { ip?: string }).ip;
-  if (direct) return direct;
-
+  // `NextRequest.ip` was removed in Next 15 — reading it here was dead code
+  // inherited from the original implementation, which made `x-forwarded-for`
+  // the real source while looking like a fallback.
+  //
+  // Only `x-forwarded-for` is consulted. Vercel overwrites it at the edge with
+  // the true client address, so on the deployed console it is trustworthy and
+  // the first entry is the client. `x-real-ip` was also read before; it is
+  // redundant there and strictly more forgeable anywhere else, so it is gone
+  // rather than left as a second way in.
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  if (forwarded) return forwarded;
-
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  return realIp || null;
+  return forwarded || null;
 }
 
 /** The auth surface, which is public and therefore reachable unauthenticated. */
@@ -138,9 +159,13 @@ function maybeEvict() {
 // ---------------------------------------------------------------------------
 // Header constants — strip inbound spoofed headers
 // ---------------------------------------------------------------------------
-// Routes that bypass admin auth check
-const PUBLIC_PATH_PREFIXES = ['/auth/', '/api/health'];
-const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login'];
+// Routes that bypass admin auth check.
+//
+// `/api/health` is an EXACT path, not a prefix. As a prefix it would silently
+// make any future `/api/healthz` or `/api/health-internal` route
+// unauthenticated on a console that holds the service-role key.
+const PUBLIC_PATH_PREFIXES = ['/auth/'];
+const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login', '/api/health'];
 
 function isPublicPath(pathname: string): boolean {
   return (

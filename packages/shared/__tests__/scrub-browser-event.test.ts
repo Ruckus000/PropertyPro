@@ -12,11 +12,32 @@ describe('scrubQueryString', () => {
     );
   });
 
+  // The anchored version of this rule matched `token` but not `access-token`,
+  // `demo_token` or `inviteToken` — while its docblock sold it as future-proofing.
+  it('redacts compound credential names, not just exact ones', () => {
+    for (const key of ['access-token', 'demo_token', 'inviteToken', 'csrf_token', 'reset_token']) {
+      expect(scrubQueryString(`${key}=abc123`), key).toBe(`${key}=[redacted]`);
+    }
+  });
+
+  // Short generic words are sensitive whole, but must not swallow compounds.
+  it('redacts bare `code` and `key` without eating zipcode or countryCode', () => {
+    expect(scrubQueryString('code=abc&key=xyz')).toBe('code=[redacted]&key=[redacted]');
+    expect(scrubQueryString('zipcode=33139&countryCode=US')).toBe('zipcode=33139&countryCode=US');
+  });
+
+  it('keeps innocuous names that merely contain a sensitive substring', () => {
+    expect(scrubQueryString('authorId=7&tokenCount=3')).toBe('authorId=7&tokenCount=3');
+  });
+
   it('redacts a credential-shaped value under an innocuous name', () => {
     // The parameter nobody thought to add to the name list.
     const jwt = 'eyJhbGciOi.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4';
     expect(scrubQueryString(`ref=${jwt}`)).toBe('ref=[redacted]');
     expect(scrubQueryString(`x=${'a1b2c3d4'.repeat(6)}`)).toBe('x=[redacted]');
+    // base64url, not hex. The value-shape rule claimed to cover both while
+    // matching hex only — and most real credentials are base64url.
+    expect(scrubQueryString(`ref2=${'aB3-_xYz'.repeat(6)}`)).toBe('ref2=[redacted]');
   });
 
   it('leaves ordinary params alone', () => {
@@ -94,6 +115,18 @@ describe('scrubBrowserEvent', () => {
     expect(event.request.headers.authorization).toBeUndefined();
     expect(event.request.headers.cookie).toBeUndefined();
     expect(event.request.headers.accept).toBe('*/*');
+  });
+
+  // HTTP header names are case-insensitive, and `Authorization` is how it is
+  // conventionally spelled. A literal-key delete missed exactly that.
+  it('drops sensitive headers regardless of case', () => {
+    const event = scrubBrowserEvent({
+      request: { headers: { Authorization: 'Bearer x', Cookie: 'sb=1', 'X-Api-Key': 'k' } },
+    });
+
+    expect(JSON.stringify(event)).not.toContain('Bearer x');
+    expect(JSON.stringify(event)).not.toContain('sb=1');
+    expect(JSON.stringify(event)).not.toContain('"k"');
   });
 
   it('passes through an event with nothing to scrub', () => {

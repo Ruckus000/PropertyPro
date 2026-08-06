@@ -48,9 +48,14 @@ function toRuntimeMessage(error: unknown): string {
   // Cross-realm errors are NOT `instanceof Error` here. Template code runs in a
   // vm context (see `runTemplateFactory`), so anything it throws — including the
   // timeout abort — is an instance of *that* context's Error constructor, and
-  // the prototype check fails. Without this branch every template runtime error
-  // collapsed to the generic string below and the editor's diagnostics panel
-  // showed nothing useful.
+  // the prototype check fails.
+  //
+  // No response body carries this today: both production callers replace it
+  // with a fixed message. It matters for the server log, the Sentry title, and
+  // `compileJsxToHtmlDetailed`'s own tests — a diagnostic that says
+  // "Template execution failed" for every distinct failure is useless for
+  // triage, which is what the generic fallback below produced for everything
+  // once evaluation moved into a vm.
   if (
     typeof error === 'object' &&
     error !== null &&

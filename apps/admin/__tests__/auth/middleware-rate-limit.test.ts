@@ -132,6 +132,18 @@ describe('admin middleware rate limiting', () => {
     expect(responses.every((r) => r.status !== 429)).toBe(true);
   });
 
+  // /api/health must stay reachable for the deploy smoke test and any uptime
+  // monitor. It is an EXACT public path — as a prefix it would have made a
+  // future /api/healthz unauthenticated on the service-role console.
+  it('leaves /api/health public and does not open /api/healthz', async () => {
+    const health = await middleware(request('/api/health', nextIp()));
+    expect(health.status).not.toBe(307);
+
+    // No platform_admin_users row is mocked, so a non-public path redirects.
+    const lookalike = await middleware(request('/api/healthz', nextIp()));
+    expect(lookalike.status).toBe(307);
+  });
+
   it('still throttles independently per IP', async () => {
     const busy = nextIp();
     await hammer('/auth/login', busy, 25);

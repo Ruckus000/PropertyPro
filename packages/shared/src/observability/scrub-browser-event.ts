@@ -11,11 +11,24 @@
  *
  * What browsers DO populate is the part that actually carries secrets here:
  *
- * - `event.request.url` and `event.request.query_string`. The admin console's
- *   demo previews are `…/auth/demo-login?token=<hmac>&preview=true`, so a page
- *   error inside a preview ships a live login token to Sentry.
+ * - `event.request.url` and `event.request.query_string` — on error events via
+ *   `beforeSend`, and on TRANSACTION events via `beforeSendTransaction`.
+ *   Transactions are sampled at 10% in production and were the larger hole:
+ *   `beforeSend` does not fire for them at all.
  * - Breadcrumb URLs, from the automatic `fetch` and `xhr` instrumentation —
- *   every request the page made, query strings included.
+ *   every request the page made, query strings included. This is where the
+ *   admin console's demo-login HMAC token actually shows up: the token-bearing
+ *   URL is a navigation the SDK records as a breadcrumb `from`/`to`, not a
+ *   document URL it ever reports (the demo-login route answers with a
+ *   client-side redirect, and by the time the SDK initialises on the
+ *   destination the token is gone from `location.href`).
+ *
+ * ## What it does NOT cover
+ *
+ * Session Replay envelopes do not pass through either hook. `apps/web` runs
+ * replay at 100% on error in production, and replay's own network
+ * instrumentation records request URLs. Scrubbing those needs replay's
+ * `beforeAddRecordingEvent` / network options, which is a separate change.
  *
  * ## Approach
  *
@@ -34,15 +47,46 @@
 
 const REDACTED = '[redacted]';
 
-/** Parameter names whose values are never safe to ship. */
+/**
+ * Parameter names whose values are never safe to ship.
+ *
+ * Deliberately a SUBSTRING match, not anchored. An anchored version missed
+ * every compound name — `access-token`, `demo_token`, `inviteToken`,
+ * `csrf_token`, `reset_token` — while the docblock above sold this rule as
+ * future-proofing. It is only future-proof if it matches the names a future
+ * author would actually write.
+ */
 const SENSITIVE_PARAM =
-  /^(token|access_token|refresh_token|id_token|secret|api[-_]?key|apikey|key|password|passwd|pwd|code|auth|authorization|session|sig|signature|jwt|state|nonce|otp|hash)$/i;
+  /(token|secret|api[-_]?key|apikey|password|passwd|pwd|auth|session|signature|jwt|credential)/i;
+
+/**
+ * Short, generic names that are sensitive as a WHOLE word only.
+ *
+ * `code` cannot go in the substring rule — it would swallow `zipcode`,
+ * `postcode` and `countryCode`, which are the sort of thing you want to still
+ * see when triaging. Same for `key`, `sig`, `state`, `hash`, `nonce`, `otp`.
+ */
+const SENSITIVE_PARAM_EXACT =
+  /^(code|key|sig|state|hash|nonce|otp|pin)$/i;
+
+/**
+ * Names that CONTAIN a sensitive substring but whose values are not secret.
+ * Checked first, so `tokenCount` and `authorId` stay legible in triage.
+ */
+const SENSITIVE_PARAM_EXCEPTIONS = /^(authorId|authorName|author|tokenCount|sessionCount)$/i;
 
 /** A JWT: three base64url segments. */
 const JWT_SHAPE = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/;
 
-/** A long hex or base64url blob — HMAC tokens, raw keys. */
-const OPAQUE_BLOB = /^[A-Fa-f0-9]{32,}$/;
+/**
+ * A long opaque blob — HMAC tokens, raw keys, Supabase tokens.
+ *
+ * Covers hex AND base64url. An earlier version was `/^[A-Fa-f0-9]{32,}$/`
+ * while its own comment claimed "hex or base64url", so every base64url
+ * credential — which is most of them — slipped through the value-shape rule
+ * that exists precisely to catch the parameter nobody named.
+ */
+const OPAQUE_BLOB = /^[A-Za-z0-9_-]{40,}$/;
 
 function isSensitiveValue(value: string): boolean {
   return JWT_SHAPE.test(value) || OPAQUE_BLOB.test(value);
@@ -74,7 +118,11 @@ export function scrubQueryString(queryString: string): string {
         /* keep the raw form */
       }
 
-      if (SENSITIVE_PARAM.test(key) || isSensitiveValue(decoded) || isSensitiveValue(rawValue)) {
+      const keyIsSensitive =
+        SENSITIVE_PARAM_EXACT.test(key) ||
+        (!SENSITIVE_PARAM_EXCEPTIONS.test(key) && SENSITIVE_PARAM.test(key));
+
+      if (keyIsSensitive || isSensitiveValue(decoded) || isSensitiveValue(rawValue)) {
         return `${key}=${REDACTED}`;
       }
       return pair;
@@ -123,8 +171,15 @@ export interface ScrubbableEvent {
   [key: string]: unknown;
 }
 
-/** Header names to drop if the SDK ever does populate them. */
-const SENSITIVE_HEADERS = ['authorization', 'cookie', 'x-api-key', 'x-csrf-token'];
+/**
+ * Header names to drop if the SDK ever does populate them.
+ *
+ * Compared case-INSENSITIVELY. HTTP header names are case-insensitive, so a
+ * literal `delete headers['authorization']` misses `Authorization` — which is
+ * how it is conventionally spelled. Defence in depth that only works against
+ * one spelling is not defence in depth.
+ */
+const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'x-api-key', 'x-csrf-token']);
 
 /**
  * Scrub a browser event in place and return it.
@@ -150,8 +205,10 @@ export function scrubBrowserEvent<T>(rawEvent: T): T {
         event.request.query_string = scrubQueryString(event.request.query_string);
       }
       if (event.request.headers) {
-        for (const header of SENSITIVE_HEADERS) {
-          delete event.request.headers[header];
+        for (const name of Object.keys(event.request.headers)) {
+          if (SENSITIVE_HEADERS.has(name.toLowerCase())) {
+            delete event.request.headers[name];
+          }
         }
       }
     }

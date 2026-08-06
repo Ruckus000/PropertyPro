@@ -89,8 +89,18 @@ function isResponseBodyLine(line: string, precedingLines: string[] = []): boolea
     return false;
   }
 
-  // Zod validation text is authored, not vendor-generated.
-  if (/\.issues\b/.test(trimmed) || /\bi\.message\b/.test(trimmed) || /\be\.message\b/.test(trimmed)) {
+  // Zod validation text is authored, not vendor-generated. Requires the Zod
+  // context ON THE LINE — an earlier version also allowed a bare `e.message`,
+  // which meant the single most idiomatic leak in the language walked straight
+  // through the guard whose entire job is to stop it:
+  //
+  //   } catch (e) {
+  //     return NextResponse.json({ error: { message: (e as Error).message } }, …);
+  //
+  // `i.message` keeps its allowance because it only ever appears inside
+  // `.issues.map((i) => ({ field, message: i.message }))`, which the `.issues`
+  // clause on the enclosing lines does not always reach.
+  if (/\.issues\b/.test(trimmed) || /\bi\.message\b/.test(trimmed)) {
     return false;
   }
 
@@ -148,6 +158,9 @@ function selfTest(): void {
     `      { error: { message: \`Snapshot failed: \${snapErr.message}\` } },`,
     // The cast form. Missed by the original identifier-anchored regex.
     `    return NextResponse.json({ error: { message: (error as Error).message } }, { status: 500 });`,
+    // `catch (e)` is idiomatic, and a blanket `e.message` allowance let it pass.
+    `    return NextResponse.json({ error: { message: (e as Error).message } }, { status: 500 });`,
+    `      { error: { code: 'INTERNAL_ERROR', message: e.message } },`,
   ];
   const shouldPass = [
     `    console.error('[admin] plan update failed:', updateError.message);`,

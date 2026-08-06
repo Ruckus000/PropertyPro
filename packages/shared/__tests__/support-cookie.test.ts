@@ -40,6 +40,23 @@ describe('buildSupportSessionCookie', () => {
     }
   });
 
+  // A cookie scoped to a public suffix is rejected by the browser, but the
+  // POST still returned 201, burned one of ten daily sessions, and wrote a
+  // `session_started` audit row — an audit trail of an impersonation that
+  // never happened.
+  it('falls back to a host-only cookie on public-suffix hosts', () => {
+    for (const hostname of [
+      'admin-abc123.vercel.app',
+      'propertypro.netlify.app',
+      'admin.example.co.uk',
+    ]) {
+      const cookie = buildSupportSessionCookie(hostname, 'jwt');
+      expect(cookie.domain, hostname).toBeUndefined();
+      // Still Secure — these are https hosts, just not cookie-scopable ones.
+      expect(cookie.secure, hostname).toBe(true);
+    }
+  });
+
   // The old client-side write hard-coded `max-age=3600`, inherited from a
   // one-hour TTL. The TTL later became 30 minutes and the cookie was not
   // updated, so the cookie outlived the JWT `exp` and the DB row by 30 minutes.

@@ -1116,7 +1116,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finalClear;
     }
 
-    // Block mutations for read_only sessions on API routes (except session management routes)
+    // Block mutations for read_only sessions on API routes (except session
+    // management routes).
+    //
+    // KNOWN GAP: gated on `isApi`, so it does not cover Server Actions, which
+    // POST to the *page* path. Harmless today — the only two `'use server'`
+    // modules are `lib/auth/actions.ts` and `lib/actions/checkout.ts`, both
+    // pre-tenant signup flows unreachable inside an impersonated session — but
+    // a new server action would be silently writable under a `read_only`
+    // session. Extend this check before adding one.
     if (
       supportSession.scope === 'read_only' &&
       isApi &&

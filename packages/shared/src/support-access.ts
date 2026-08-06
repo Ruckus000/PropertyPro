@@ -98,6 +98,38 @@ export function isLocalSupportHostname(hostname: string): boolean {
   );
 }
 
+/**
+ * Suffixes where the last two labels are a PUBLIC suffix, not a registrable
+ * domain — so a cookie scoped to them is rejected by every browser.
+ *
+ * Without this, a Vercel preview host (`admin-abc123.vercel.app`) produced
+ * `Domain=.vercel.app`. The browser silently discarded the cookie while the
+ * session POST still returned 201, still consumed one of the admin's ten
+ * daily sessions, and still wrote a `session_started` audit row — so the
+ * operator got an audit trail saying they impersonated someone and a preview
+ * that was not impersonating anyone.
+ *
+ * Not a full public-suffix list, deliberately: pulling one in for this would
+ * be a dependency and a data file to keep fresh. These are the hosts this
+ * product is actually served from or previewed on, plus the multi-part TLDs
+ * most likely to appear if it is ever sold outside the US.
+ */
+const PUBLIC_SUFFIXES = new Set([
+  'vercel.app',
+  'netlify.app',
+  'pages.dev',
+  'github.io',
+  'co.uk',
+  'com.au',
+  'co.nz',
+  'com.br',
+  'co.jp',
+]);
+
+/**
+ * The registrable root a support cookie should be scoped to, or `null` when
+ * there isn't one and a host-only cookie is correct.
+ */
 export function getSupportCookieRootDomain(hostname: string): string | null {
   if (isLocalSupportHostname(hostname)) {
     return null;
@@ -108,5 +140,15 @@ export function getSupportCookieRootDomain(hostname: string): string | null {
     return null;
   }
 
-  return parts.slice(-2).join('.');
+  const candidate = parts.slice(-2).join('.');
+
+  // A cookie the browser will drop is worse than no cookie: it fails silently.
+  // Returning null falls back to a host-only cookie, which at least behaves
+  // predictably (and on a preview deploy, where admin and tenant are separate
+  // hosts, correctly refuses to pretend the handoff can work).
+  if (PUBLIC_SUFFIXES.has(candidate)) {
+    return null;
+  }
+
+  return candidate;
 }

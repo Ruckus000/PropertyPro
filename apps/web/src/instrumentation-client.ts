@@ -48,6 +48,12 @@ async function initClientInstrumentation(): Promise<void> {
       // previews put an HMAC login token in exactly there.
       beforeSend: (event) => scrubBrowserEvent(event),
 
+      // `beforeSend` fires for ERROR events only. Transactions carry
+      // `request.url` too and are sampled at 10% in production, so without
+      // this a secret-bearing URL ships unscrubbed through the tracing
+      // pipeline while the error pipeline looks covered.
+      beforeSendTransaction: (event) => scrubBrowserEvent(event),
+
       // Performance tracing
       tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
