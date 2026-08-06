@@ -9,6 +9,26 @@ import { forwardRef } from 'react';
  * Outer frame:    ~430×932 CSS px (with bezel, notch, home bar)
  */
 
+/**
+ * Sandbox for previewing a tenant app in an iframe from another origin.
+ *
+ * `allow-same-origin` is required and safe HERE, unlike on the same-origin
+ * `srcDoc` previews where pairing it with `allow-scripts` lets framed script
+ * reach `parent.document` and remove its own sandbox. These frames load a
+ * different origin, so `allow-same-origin` preserves the frame's own origin —
+ * needed for its session cookie and storage — without granting any access to
+ * the embedding document.
+ *
+ * What is withheld: top-level navigation (except by user activation), popups,
+ * downloads, pointer lock, and orientation lock.
+ *
+ * Exported so the admin console's tabbed preview uses the same string; the two
+ * paths render the same pages and had drifted (one had the sandbox, the other
+ * the referrer policy).
+ */
+export const PREVIEW_IFRAME_SANDBOX =
+  'allow-same-origin allow-scripts allow-forms allow-top-navigation-by-user-activation';
+
 export interface PhoneFrameProps {
   /** URL to embed in the iframe */
   src: string;
@@ -71,7 +91,11 @@ export const PhoneFrame = forwardRef<HTMLIFrameElement, PhoneFrameProps>(
               border: 'none',
               display: 'block',
             }}
-            sandbox="allow-same-origin allow-scripts allow-forms allow-top-navigation-by-user-activation"
+            sandbox={PREVIEW_IFRAME_SANDBOX}
+            // The preview URLs carry a demo-login token in the query string.
+            // Without this the token rides along in the Referer of every
+            // outbound request the framed page makes.
+            referrerPolicy="no-referrer"
           />
         </div>
 

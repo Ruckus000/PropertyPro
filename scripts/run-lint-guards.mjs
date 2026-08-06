@@ -39,6 +39,7 @@ const GUARDS = [
   'guard:audit-log-trigger-overrides',
   'guard:sanitizer-deps',
   'guard:read-entitlement',
+  'guard:admin-error-leakage',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.

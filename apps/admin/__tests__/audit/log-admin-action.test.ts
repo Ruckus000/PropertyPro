@@ -47,7 +47,7 @@ describe('logAdminAction', () => {
     });
 
     expect(insertMock).toHaveBeenCalledTimes(1);
-    expect(insertMock.mock.calls[0][0]).toMatchObject({
+    expect(insertMock.mock.calls[0]![0]).toMatchObject({
       admin_user_id: 'admin-uuid',
       admin_email: 'admin@getpropertypro.com',
       action: 'platform_admin_added',
@@ -67,7 +67,7 @@ describe('logAdminAction', () => {
       resourceType: 'platform_admin_user',
     });
 
-    expect(insertMock.mock.calls[0][0]).toMatchObject({ community_id: null });
+    expect(insertMock.mock.calls[0]![0]).toMatchObject({ community_id: null });
   });
 
   it('coerces a numeric resource id to text', async () => {
@@ -81,7 +81,7 @@ describe('logAdminAction', () => {
       communityId: 7,
     });
 
-    expect(insertMock.mock.calls[0][0]).toMatchObject({
+    expect(insertMock.mock.calls[0]![0]).toMatchObject({
       resource_id: '42',
       community_id: 7,
     });
@@ -97,7 +97,7 @@ describe('logAdminAction', () => {
       resourceId: 0,
     });
 
-    expect(insertMock.mock.calls[0][0]).toMatchObject({ resource_id: '0' });
+    expect(insertMock.mock.calls[0]![0]).toMatchObject({ resource_id: '0' });
   });
 
   // --- Failure semantics ---------------------------------------------------
@@ -150,7 +150,7 @@ describe('logAdminAction', () => {
     ).resolves.toBeUndefined();
 
     expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException.mock.calls[0][1]).toMatchObject({ level: 'warning' });
+    expect(captureException.mock.calls[0]![1]).toMatchObject({ level: 'warning' });
   });
 
   it('does not report to Sentry on success', async () => {

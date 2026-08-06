@@ -209,6 +209,46 @@ describe('support impersonation — forwarded identity', () => {
     expect(forwarded(res, 'x-user-email')).toBe('owner@x.test');
   });
 
+  // The cookie is set by the admin console with `Domain=.getpropertypro.com`.
+  // `cookies.delete(name)` emits a bare `Max-Age=0` with NO Domain, which the
+  // browser treats as a different cookie — so the domain-scoped one survived
+  // every rejection here and the impersonation kept being re-offered on each
+  // request until it expired on its own.
+  it('clears an invalid support cookie with the domain it was set with', async () => {
+    resolveActiveSupportSessionMock.mockResolvedValue(null);
+
+    const res = await middleware(requestWithSupportCookie('/api/v1/documents'));
+    const setCookie = res.headers.get('set-cookie') ?? '';
+
+    expect(setCookie).toContain(`${SUPPORT_SESSION_COOKIE}=`);
+    expect(setCookie).toMatch(/Domain=\.getpropertypro\.com/i);
+    expect(setCookie).toMatch(/Path=\//i);
+    expect(setCookie).toMatch(/Max-Age=0/i);
+  });
+
+  // The banner's visibility now derives from x-support-session, because the
+  // cookie is HttpOnly and the client can no longer see it. That makes the
+  // header a trust signal, so an inbound copy must be dropped like every other
+  // header middleware owns — otherwise any user can render themselves a
+  // "Support Mode — Read-Only" banner by sending it.
+  it('strips inbound x-support-* headers when there is no support session', async () => {
+    resolveActiveSupportSessionMock.mockResolvedValue(null);
+
+    const req = new NextRequest(`https://app.${ROOT_DOMAIN}/api/v1/documents`, {
+      headers: {
+        host: `app.${ROOT_DOMAIN}`,
+        'x-support-session': '1',
+        'x-support-admin-id': 'attacker',
+        'x-support-session-id': '999',
+      },
+    });
+    const res = await middleware(req);
+
+    expect(forwarded(res, 'x-support-session')).toBeNull();
+    expect(forwarded(res, 'x-support-admin-id')).toBeNull();
+    expect(forwarded(res, 'x-support-session-id')).toBeNull();
+  });
+
   it('still marks the request as a support session', async () => {
     resolveActiveSupportSessionMock.mockResolvedValue(
       supportSession({ target_name: 'Olivia Owner', target_email: 'o@x.test' }),

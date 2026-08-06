@@ -20,6 +20,10 @@ import {
   resolveCommunityContext,
   SUPPORT_SESSION_COOKIE,
 } from '@propertypro/shared';
+import {
+  buildSupportSessionClearCookie,
+  resolveSupportCookieHostname,
+} from '@propertypro/shared/http';
 import { UNKNOWN_SUBDOMAIN_REASON } from './lib/middleware/unknown-subdomain-reason';
 import {
   resolveActiveSupportSession,
@@ -41,6 +45,9 @@ import {
   COMMUNITY_ID_HEADER,
   FORWARDED_AUTH_HEADERS,
   normalizeForwardedHeaderValue,
+  SUPPORT_ADMIN_ID_HEADER,
+  SUPPORT_SESSION_HEADER,
+  SUPPORT_SESSION_ID_HEADER,
   TENANT_SLUG_HEADER,
   TENANT_SOURCE_HEADER,
   USER_EMAIL_HEADER,
@@ -1100,11 +1107,24 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         isApi,
         isPreviewRequest,
       );
-      finalClear.cookies.delete(SUPPORT_SESSION_COOKIE);
+      // Must carry the SAME name/domain/path the admin console set, or this
+      // writes a second host-only cookie instead of removing the domain-scoped
+      // one — leaving the invalid cookie in place on every tenant subdomain.
+      finalClear.cookies.set(
+        buildSupportSessionClearCookie(resolveSupportCookieHostname(request)),
+      );
       return finalClear;
     }
 
-    // Block mutations for read_only sessions on API routes (except session management routes)
+    // Block mutations for read_only sessions on API routes (except session
+    // management routes).
+    //
+    // KNOWN GAP: gated on `isApi`, so it does not cover Server Actions, which
+    // POST to the *page* path. Harmless today — the only two `'use server'`
+    // modules are `lib/auth/actions.ts` and `lib/actions/checkout.ts`, both
+    // pre-tenant signup flows unreachable inside an impersonated session — but
+    // a new server action would be silently writable under a `read_only`
+    // session. Extend this check before adding one.
     if (
       supportSession.scope === 'read_only' &&
       isApi &&
@@ -1170,9 +1190,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // the admin's phone never reaches an impersonated request.
     forwardedHeaders.delete(USER_PHONE_HEADER);
 
-    forwardedHeaders.set('x-support-session', '1');
-    forwardedHeaders.set('x-support-admin-id', supportSession.act.sub);
-    forwardedHeaders.set('x-support-session-id', String(supportSession.session_id));
+    forwardedHeaders.set(SUPPORT_SESSION_HEADER, '1');
+    forwardedHeaders.set(SUPPORT_ADMIN_ID_HEADER, supportSession.act.sub);
+    forwardedHeaders.set(SUPPORT_SESSION_ID_HEADER, String(supportSession.session_id));
   }
 
   const nextResponse = NextResponse.next({

@@ -12,6 +12,7 @@ import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { validateStarterPackBlocks } from '@propertypro/shared';
 import { PACK_COLUMNS, StarterPackRow, baseSlug, shapePack, validationErrorResponse, zodErrorResponse } from '../../_shared';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 const bodySchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
@@ -35,7 +36,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest, context: 
   const { data: baseData, error: readErr } = await db.from('site_starter_packs').select(PACK_COLUMNS).eq('slug', slug).single();
   if (readErr) {
     if (readErr.code === 'PGRST116') return NextResponse.json({ error: { message: `Starter pack not found: ${slug}` } }, { status: 404 });
-    return NextResponse.json({ error: { message: readErr.message } }, { status: 500 });
+    assertNoDbError(readErr, 'Failed to read starter pack for new version');
   }
   const base = baseData as StarterPackRow;
 
@@ -58,7 +59,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest, context: 
     .single();
   if (error) {
     if (error.code === '23505') return NextResponse.json({ error: { message: `Version slug already exists: ${newSlug}` } }, { status: 409 });
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
+    assertNoDbError(error, 'Failed to create starter pack version');
   }
   return NextResponse.json({ pack: shapePack(data as StarterPackRow) }, { status: 201 });
 });

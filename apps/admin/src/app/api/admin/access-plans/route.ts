@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { COMMUNITY_LIST_LIMIT } from '@/lib/api/list-limits';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 import { parseAdminBody } from '@/lib/api/parse-body';
 
@@ -63,11 +65,10 @@ export const GET = withAdminErrorHandler(async (request: NextRequest) => {
     .from('access_plans'))
     .select('*')
     .eq('community_id', communityId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(COMMUNITY_LIST_LIMIT);
 
-  if (error) {
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to list access plans');
 
   const plans = (data ?? []).map((row: Record<string, unknown>) => ({
     id: row.id,
@@ -120,9 +121,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     .select()
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to create access plan');
 
   // Denormalize grace expiry onto the communities row so the
   // subscription-guard middleware (which reads communities.free_access_expires_at)

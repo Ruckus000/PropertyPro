@@ -21,6 +21,7 @@ import { insertDemo, sanitizeDemoRow } from '@/lib/db/demo-queries';
 import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 // Shared refinements — this route needs the fields REQUIRED, so it composes
 // HEX_COLOR/THEME_FONT rather than brandingSchema (whose fields are optional).
 import { HEX_COLOR, THEME_FONT } from '@/lib/validation/branding';
@@ -57,11 +58,8 @@ export const GET = withAdminErrorHandler(async () => {
     const data = await getDemoListData();
     return NextResponse.json({ data: data.map(sanitizeDemoRow) });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load demos';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 },
-    );
+    // See deletion-requests/route.ts — rethrow, same status and code, no leak.
+    throw error;
   }
 });
 
@@ -168,9 +166,11 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       ],
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to seed demo community';
+    // Keep the SEED_ERROR code (the create dialog distinguishes it) but not
+    // the message — seeding failures surface raw Postgres constraint text.
+    captureException(err, { extra: { context: '[demos/POST] seedCommunity failed' } });
     return NextResponse.json(
-      { error: { code: 'SEED_ERROR', message } },
+      { error: { code: 'SEED_ERROR', message: 'Failed to seed the demo community.' } },
       { status: 500 },
     );
   }
@@ -218,9 +218,10 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     prospect_notes: prospectNotes || undefined,
   });
 
-  if (insertError || !demoInstance) {
+  assertNoDbError(insertError, 'Failed to create demo instance');
+  if (!demoInstance) {
     return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: insertError?.message ?? 'Failed to create demo instance' } },
+      { error: { code: 'INTERNAL_ERROR', message: 'Failed to create demo instance' } },
       { status: 500 },
     );
   }

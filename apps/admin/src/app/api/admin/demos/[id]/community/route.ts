@@ -10,6 +10,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoCommunityId, markDemoCustomized } from '@/lib/db/demo-queries';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { parseAdminBody } from '@/lib/api/parse-body';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
@@ -119,12 +120,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     .select('id, name, address_line1, city, state, zip_code, community_type')
     .single();
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update demo community');
 
   // Mark demo as customized (no-op if already set)
   await markDemoCustomized(demoId);

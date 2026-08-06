@@ -22,6 +22,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 const patchBodySchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
@@ -139,10 +140,7 @@ export const PATCH = withAdminErrorHandler(async (
         { status: 404 },
       );
     }
-    return NextResponse.json(
-      { error: { message: error.message } },
-      { status: 500 },
-    );
+    assertNoDbError(error, 'Failed to update site layout');
   }
 
   return NextResponse.json({ layout: shape(data as SiteLayoutMetadataRow) });

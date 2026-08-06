@@ -84,6 +84,16 @@ const RUN_ROUTE_REGEX = /\brunRoute\s*\(/;
 // ---------------------------------------------------------------------------
 
 const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
+  // NOT grandfathered — added 2026-08-05, and for a specific reason worth
+  // recording: `runRoute`'s `buildResponse` always constructs a fresh
+  // `NextResponse.json(...)`, so a handler has no way to attach a `Set-Cookie`.
+  // This route's whole job is to close the support session AND expire the
+  // `pp-support-session` cookie in one response. `auth/demo-login/route.ts`
+  // below is on this list for the same reason.
+  //
+  // Drain this entry when the runner grows a way to return response headers
+  // (e.g. a `{ data, cookies }` result shape), not by dropping the cookie.
+  'apps/web/src/app/api/v1/support/end-session/route.ts',
   'apps/web/src/app/api/health/route.ts',
   'apps/web/src/app/api/v1/announcements/route.ts',
   'apps/web/src/app/api/v1/audit-trail/route.ts',

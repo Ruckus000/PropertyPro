@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const RESTORE_WINDOW_DAYS = 30;
@@ -156,12 +157,7 @@ export const POST = withAdminErrorHandler(async (
     .eq('community_id', communityId)
     .is('deleted_at', null)
     .select('id');
-  if (currentErr) {
-    return NextResponse.json(
-      { error: { message: `Failed to retire current rows: ${currentErr.message}` } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(currentErr, 'Failed to retire current site blocks');
 
   // 5. Un-soft-delete the snapshot rows
   const { data: restored, error: restoreErr } = await db
@@ -170,12 +166,7 @@ export const POST = withAdminErrorHandler(async (
     .in('id', snapshotBlockIds)
     .eq('community_id', communityId)
     .select('id');
-  if (restoreErr) {
-    return NextResponse.json(
-      { error: { message: `Failed to restore snapshot: ${restoreErr.message}` } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(restoreErr, 'Failed to restore site blocks from snapshot');
   const restoredIds = (restored ?? []).map((r: { id: number }) => r.id);
 
   // 6. Audit log entry mirroring the reset
@@ -195,12 +186,7 @@ export const POST = withAdminErrorHandler(async (
     })
     .select('id, created_at')
     .single();
-  if (auditErr) {
-    return NextResponse.json(
-      { error: { message: `Audit log failed: ${auditErr.message}` } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(auditErr, 'Failed to write restore audit entry');
 
   // compliance_audit_log stays as the statutory tenant record (and is the row
   // a future restore reads back). This is the parallel operator-side record.

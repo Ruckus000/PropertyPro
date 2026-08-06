@@ -178,7 +178,7 @@ describe('LayoutsTable editing', () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/admin/site-templates/layouts/tidewater');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ displayName: 'Tidewater Deluxe' });
     // Form closed; updated value reflected in the read-only row.

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -34,9 +35,7 @@ export const PATCH = withAdminErrorHandler(async (_request: NextRequest, { param
     .select('id, community_id')
     .single();
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
-  }
+  assertNoDbError(updateError, 'Failed to end support session');
 
   if (!session) {
     return NextResponse.json(

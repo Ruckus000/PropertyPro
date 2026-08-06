@@ -104,7 +104,13 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
   }
 
   useEffect(() => {
-    setCoolingCount(initialCoolingCount ?? 0);
+    // Only adopt a SUPPLIED count. Resetting to 0 when the prop is absent is
+    // what made the badge blink off on every navigation: the loading state
+    // renders the same shell, and a `?? 0` here overwrote a known-good count
+    // with a placeholder before the fetch below could refill it.
+    if (typeof initialCoolingCount === 'number') {
+      setCoolingCount(initialCoolingCount);
+    }
   }, [initialCoolingCount]);
 
   useEffect(() => {

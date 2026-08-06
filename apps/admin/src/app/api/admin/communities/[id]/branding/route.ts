@@ -10,6 +10,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 import { parseAdminBody } from '@/lib/api/parse-body';
 import { brandingSchema } from '@/lib/validation/branding';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
@@ -86,12 +87,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     .select('branding')
     .single();
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update community branding');
 
   await logAdminAction({
     admin,

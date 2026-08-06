@@ -35,7 +35,8 @@ export const GET = withAdminErrorHandler(async (request: NextRequest) => {
     const data = await getDeletionRequestsData({ status, type });
     return NextResponse.json(data);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load deletion requests';
-    return NextResponse.json({ error: { message } }, { status: 500 });
+    // Rethrow rather than stringify: withAdminErrorHandler produces the same
+    // 500 without the raw Postgres text, and reports it to Sentry.
+    throw error;
   }
 });

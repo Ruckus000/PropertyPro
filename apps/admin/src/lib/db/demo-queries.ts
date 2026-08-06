@@ -6,6 +6,7 @@
  * TypeScript definitions.
  */
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -59,7 +60,8 @@ export async function listDemos(): Promise<{
 }> {
   const { data, error } = await from('demo_instances')
     .select('*, communities:seeded_community_id(is_demo)')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(PLATFORM_LIST_LIMIT);
 
   if (error || !data) return { data: null, error };
 

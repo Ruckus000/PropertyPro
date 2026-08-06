@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const requirePlatformAdmin = vi.fn();
-const logAdminAction = vi.fn(async () => {});
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 const deleteAdmin = vi.fn();
 
 let adminCount: { count: number | null; error: unknown } = { count: 2, error: null };
@@ -72,7 +74,7 @@ describe('platform admin removal — last-admin floor', () => {
     expect(res.status).toBe(200);
     expect(deleteAdmin).toHaveBeenCalled();
     expect(logAdminAction).toHaveBeenCalledTimes(1);
-    expect(logAdminAction.mock.calls[0][0]).toMatchObject({
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'platform_admin_removed',
       resourceId: 'target',
     });

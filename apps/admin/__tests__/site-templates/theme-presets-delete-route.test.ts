@@ -131,7 +131,7 @@ describe('DELETE /api/admin/site-templates/theme-presets/[slug]', () => {
       layoutCount: 0,
     });
     expect(updateMock).toHaveBeenCalledTimes(1);
-    expect(updateMock.mock.calls[0][0]).toMatchObject({ is_archived: true });
+    expect(updateMock.mock.calls[0]![0]).toMatchObject({ is_archived: true });
     expect(deleteMock).not.toHaveBeenCalled();
   });
 

@@ -25,12 +25,21 @@ async function fetchAllComplianceRows(
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data } = await db
+    const { data, error } = await db
       .from('compliance_checklist_items')
       .select('community_id, document_id, is_applicable')
       .is('deleted_at', null)
       .in('community_id', communityIds)
       .range(from, from + COMPLIANCE_PAGE_SIZE - 1);
+
+    // `error` used to be discarded. A failed page yielded `rows.length === 0`,
+    // which ALSO satisfies the loop's exit condition — so a mid-pagination
+    // failure silently truncated the dataset and every community after that
+    // point was scored against missing checklist rows. A wrong compliance
+    // score shown as fact is worse than an error page.
+    if (error) {
+      throw new Error(`Failed to load compliance rows (offset ${from}): ${error.message}`);
+    }
 
     const rows = (data ?? []) as typeof allRows;
     allRows.push(...rows);
@@ -73,7 +82,19 @@ export default async function ClientsPage() {
     created_at: string;
   }
 
+  // A failed communities read used to render an empty portfolio — visually
+  // identical to a platform with no clients at all. Let it reach error.tsx.
+  if (communitiesResult.error) {
+    throw new Error(`Failed to load communities: ${communitiesResult.error.message}`);
+  }
   const communities = (communitiesResult.data ?? []) as unknown as CommunityRow[];
+
+  // Stale demos are a secondary panel, not the page's subject: degrading to an
+  // empty list here is a deliberate choice, not an oversight. Logged so the
+  // failure is still visible.
+  if (staleDemosResult.error) {
+    console.error('[admin/clients] stale demo lookup failed:', staleDemosResult.error.message);
+  }
   const staleDemos = staleDemosResult.error ? [] : (staleDemosResult.data ?? []);
 
   // Fetch compliance data scoped to real communities, paginated

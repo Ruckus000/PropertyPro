@@ -11,7 +11,13 @@
  * Scope matches vitest integration configs exactly:
  *   - apps/web/__tests__/**\/*integration.test.ts
  *   - packages/db/__tests__/**\/*.integration.test.ts
- *   - apps/admin/__tests__/**\/*integration.test.ts
+ *
+ * apps/admin is NOT scanned. It has no integration config and no integration
+ * tests: `apps/admin/vitest.integration.config.ts` was deleted on 2026-08-05
+ * because its `include` glob was written relative to the repo root inside an
+ * app-root config, so it could never match, and no script or workflow ever
+ * invoked it. If admin gains integration tests, add a working config and put
+ * the root back here.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -30,12 +36,10 @@ const repoRoot = resolve(scriptDir, '..');
  * Patterns mirror their respective vitest integration configs exactly:
  *   - web:   vitest.integration.config.ts includes `**\/*integration.test.ts` (any char before "integration")
  *   - db:    vitest.integration.config.ts includes `**\/*.integration.test.ts` (requires dot before "integration")
- *   - admin: vitest.integration.config.ts includes `**\/*.integration.test.ts` (requires dot before "integration")
  */
 const SCAN_ROOTS = [
   { dir: join(repoRoot, 'apps/web/__tests__'), pattern: /integration\.test\.ts$/ },
   { dir: join(repoRoot, 'packages/db/__tests__'), pattern: /\.integration\.test\.ts$/ },
-  { dir: join(repoRoot, 'apps/admin/__tests__'), pattern: /\.integration\.test\.ts$/ },
 ];
 
 /** Forbidden patterns in integration test files */
@@ -91,9 +95,6 @@ const LEGACY_ALLOWLIST = new Map<string, string>([
   // Billing integration test — lives outside __tests__/integration/ directory
   ['apps/web/__tests__/billing/subscription-guard-integration.test.ts',
     'LEGACY: mocks DB unsafe, admin client, auth — deep refactor needed'],
-  // Admin integration test
-  ['apps/admin/__tests__/integration/site-blocks-crud.integration.test.ts',
-    'LEGACY: mocks auth — migrate to test auth provider'],
   // Plan 1 billing group tests — mock auth, Stripe, and downstream services.
   // Billing group service exercises a real Postgres advisory lock but stubs
   // Stripe + notifications (those paths have their own unit coverage).

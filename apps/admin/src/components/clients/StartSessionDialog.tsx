@@ -2,11 +2,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import {
-  getSupportCookieRootDomain,
-  isLocalSupportHostname,
-  SUPPORT_SESSION_COOKIE,
-} from '@propertypro/shared';
+import { getSupportCookieRootDomain, isLocalSupportHostname } from '@propertypro/shared';
 
 interface Member {
   userId: string;
@@ -65,14 +61,14 @@ export function StartSessionDialog({
         return;
       }
 
-      const token: string = data.token;
+      // The session token is NOT in `data` — the route sets it as an HttpOnly
+      // cookie on this response, scoped to the shared root domain. Do not
+      // reintroduce a client-side cookie write: `document.cookie` cannot set
+      // HttpOnly, which is what made the old token XSS-readable on every
+      // tenant subdomain.
       const hostname = window.location.hostname;
       const rootDomain = getSupportCookieRootDomain(hostname);
       const isLocalHost = isLocalSupportHostname(hostname);
-      const cookieDomain = rootDomain ? `; domain=.${rootDomain}` : '';
-      const secureAttribute = isLocalHost ? '' : '; Secure';
-
-      document.cookie = `${SUPPORT_SESSION_COOKIE}=${token}; path=/; max-age=3600; SameSite=Lax${secureAttribute}${cookieDomain}`;
 
       const tenantUrl = isLocalHost || !rootDomain
         ? `http://${hostname}:3000/dashboard?communityId=${communityId}`
