@@ -459,6 +459,11 @@ export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
     reason:
       'Global billing webhook idempotency journal (event_id + timestamps only) — platform-level, not community-scoped. Same 0038 lockdown as users. The write grant mattered more than the read here: with INSERT/DELETE, idempotency could be defeated by deleting a row to permit replay, or pre-inserting an event_id so the genuine webhook is skipped as a duplicate.',
   },
+  {
+    tableName: 'marketing_leads',
+    reason:
+      'Inbound marketing/sales leads — no community_id, and that is the point: a lead has no community yet (the compliance checker and the /contact form are both unauthenticated, pre-signup surfaces), so tenant scoping does not apply. Holds prospect contact details (email, contact_name, association_name) plus a free-text message. Locked down by 0053 with the same posture as users/pending_signups/stripe_webhook_events: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated on both the table and its sequence, service_role retaining CRUD. The two legitimate writers are the public capture routes over the privileged Drizzle connection and the admin console over service_role, both of which hold rolbypassrls. The anon key ships in the browser bundle, so leaving the vestigial Supabase grants in place would have exposed the entire prospect list to an unauthenticated reader.',
+  },
   { tableName: 'platform_admin_users', reason: 'Platform-level admin authorization — service_role only (REVOKE ALL from anon/authenticated). No community_id column; not community-scoped.' },
   { tableName: 'access_plans', reason: 'Platform-level access management — not community-scoped. Managed by super_admin only.' },
   { tableName: 'account_deletion_requests', reason: 'Platform-level deletion workflow — not community-scoped. Cross-community visibility required for admin dashboard.' },
