@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 /** Row shape for platform_admin_users (not in generated Supabase types). */
 interface PlatformAdminRow {
@@ -62,16 +64,10 @@ export const GET = withAdminErrorHandler(async () => {
 export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const currentAdmin = await requirePlatformAdmin();
 
-  const body = await request.json();
-  const parsed = addAdminSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseAdminBody(request, addAdminSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
-  const { email } = parsed.data;
+  const { email } = parsed;
   const db = createAdminClient();
 
   // Look up the user by email in auth.users
@@ -114,6 +110,16 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       { status: 500 },
     );
   }
+
+  await logAdminAction({
+    admin: currentAdmin,
+    action: 'platform_admin_added',
+    resourceType: 'platform_admin_user',
+    resourceId: targetUser.id,
+    // Platform-level: no community.
+    newValues: { user_id: targetUser.id, role: 'super_admin', invited_by: currentAdmin.id },
+    metadata: { granted_to_email: email },
+  });
 
   return NextResponse.json({
     admin: {

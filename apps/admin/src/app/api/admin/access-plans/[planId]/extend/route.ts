@@ -6,14 +6,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
+import { parseAdminBody } from '@/lib/api/parse-body';
+
+/**
+ * `additionalMonths` previously had no integer check (1.5 silently truncated
+ * inside setMonth) and no upper bound, so a single call could extend a free
+ * grant effectively forever. Same money-decision reasoning as the grant route.
+ */
+const extendSchema = z.object({
+  additionalMonths: z.number().int().min(1).max(24),
+  notes: z.string().max(2000).nullish(),
+});
 
 interface RouteParams {
   params: Promise<{ planId: string }>;
 }
 
 export const POST = withAdminErrorHandler(async (request: NextRequest, { params }: RouteParams) => {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
   const { planId } = await params;
 
   const id = Number(planId);
@@ -21,15 +34,9 @@ export const POST = withAdminErrorHandler(async (request: NextRequest, { params 
     return NextResponse.json({ error: { message: 'Invalid plan ID' } }, { status: 400 });
   }
 
-  const body = await request.json();
-  const { additionalMonths, notes } = body as {
-    additionalMonths: number;
-    notes?: string | null;
-  };
-
-  if (!additionalMonths || additionalMonths < 1) {
-    return NextResponse.json({ error: { message: 'additionalMonths is required and must be >= 1' } }, { status: 400 });
-  }
+  const parsed = await parseAdminBody(request, extendSchema);
+  if (parsed instanceof NextResponse) return parsed;
+  const { additionalMonths, notes } = parsed;
 
   const db = createAdminTypedClient();
 
@@ -100,6 +107,25 @@ export const POST = withAdminErrorHandler(async (request: NextRequest, { params 
       communityUpdateError.message,
     );
   }
+
+  await logAdminAction({
+    admin,
+    action: 'access_plan_extended',
+    resourceType: 'access_plan',
+    resourceId: id,
+    communityId: updatedRow.community_id,
+    oldValues: {
+      expires_at: planRow.expires_at,
+      duration_months: planRow.duration_months,
+    },
+    newValues: {
+      expires_at: newExpires.toISOString(),
+      grace_ends_at: newGraceEnds.toISOString(),
+      duration_months: planRow.duration_months + additionalMonths,
+      additional_months: additionalMonths,
+      notes: notes ?? null,
+    },
+  });
 
   return NextResponse.json({ plan: updated });
 });

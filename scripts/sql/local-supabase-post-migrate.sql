@@ -74,3 +74,33 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- ---------------------------------------------------------------------------
+-- platform_admin_audit_log (migration 0052) — APPEND-ONLY, so it must NOT be
+-- added to the loop above.
+--
+-- That loop grants service_role full SELECT/INSERT/UPDATE/DELETE. Applying it
+-- to this table would hand back the UPDATE and DELETE privileges that 0052
+-- deliberately withholds, silently destroying the append-only property on the
+-- local/test database — i.e. the very property a test would be trying to
+-- verify here. The grant below is intentionally narrower.
+--
+-- (The BEFORE UPDATE OR DELETE trigger from 0052 still fires regardless, but
+-- the grant is the primary control and both should hold.)
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'platform_admin_audit_log'
+  ) THEN
+    -- service_role must be REVOKED before the narrow GRANT: Supabase's default
+    -- privileges hand it ALL at CREATE TABLE, and GRANT is additive. Without
+    -- this the append-only property silently does not exist.
+    REVOKE ALL ON TABLE public.platform_admin_audit_log FROM anon, authenticated, service_role;
+    GRANT SELECT, INSERT ON TABLE public.platform_admin_audit_log TO service_role;
+
+    REVOKE ALL ON SEQUENCE public.platform_admin_audit_log_id_seq FROM anon, authenticated, service_role;
+    GRANT USAGE, SELECT ON SEQUENCE public.platform_admin_audit_log_id_seq TO service_role;
+  END IF;
+END $$;

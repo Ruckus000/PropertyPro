@@ -131,7 +131,16 @@ export function PreviewPanel({
               {/* iframe — fills remaining height */}
               <iframe
                 srcDoc={publicHtml}
-                sandbox="allow-scripts allow-same-origin"
+                // `allow-same-origin` is deliberately ABSENT. Combined with
+                // `allow-scripts` on a same-origin srcDoc frame it is a no-op
+                // sandbox: framed script can reach `parent.document` and remove
+                // the sandbox attribute itself. The content is sanitize-html'd,
+                // but that strips <script> while still allowing <style> and
+                // inline style attributes, and it is built from the same
+                // operator-supplied strings the template compiler evaluates.
+                // Without allow-same-origin the frame gets an opaque origin and
+                // cannot reach the admin console.
+                sandbox="allow-scripts"
                 title="Public website preview"
                 className="flex-1"
                 style={{

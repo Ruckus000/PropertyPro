@@ -7,13 +7,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export const POST = withAdminErrorHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  await requirePlatformAdmin();
+  // The return value was previously discarded, so an un-deletion — arguably
+  // the single most consequential operation in this console — recorded neither
+  // who performed it nor that it happened at all.
+  const admin = await requirePlatformAdmin();
   const { id } = await params;
 
   const requestId = Number(id);
@@ -92,6 +96,24 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
       );
     }
   }
+
+  await logAdminAction({
+    admin,
+    action: 'deletion_request_recovered',
+    resourceType: 'account_deletion_request',
+    resourceId: requestId,
+    // Null for a user-type request: account_deletion_requests.community_id is
+    // only populated for community deletions. This is exactly why the audit
+    // table's community_id had to be nullable.
+    communityId: requestRow.community_id,
+    oldValues: { status: 'soft_deleted' },
+    newValues: {
+      status: 'recovered',
+      request_type: requestRow.request_type,
+      restored_user_id: requestRow.user_id,
+      restored_community_id: requestRow.community_id,
+    },
+  });
 
   return NextResponse.json({ request: data });
 });

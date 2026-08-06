@@ -86,12 +86,49 @@ Set for **Production** and **Preview** environments unless noted.
 | `NEXT_PUBLIC_WEB_APP_URL` | Admin only | Web apex for tenant URLs/copy, e.g. `https://getpropertypro.com` (omit on web app) |
 | `NEXT_PUBLIC_COOKIE_DOMAIN` | All | Production: `.getpropertypro.com` |
 | `ADMIN_ORIGIN` | Web | Optional; CSP framing for admin→web previews, e.g. `https://admin.getpropertypro.com` |
+| `SUPPORT_SESSION_JWT_SECRET` | **Both apps, server only** | **Required** — HMAC key for support-impersonation JWTs (min 32 chars). Admin signs, web verifies, so the **same value** must be set on `property-pro-admin` **and** `property-pro-web`. Generate with `openssl rand -hex 32`. See the note below. |
 | `NODE_ENV` | All | `production` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `READINESS_CHECK_SECRET` | Server only | Shared bearer secret for deployment readiness checks |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
 | `COUPON_SYNC_RETRY_CRON_SECRET` | Server only | Shared bearer secret |
 | `PROVISIONING_RETRY_SECRET` | Server only | Shared bearer secret |
+
+### 4.1 `SUPPORT_SESSION_JWT_SECRET` — required, no fallback
+
+Support access (admin impersonation of a tenant user) works by having
+`apps/admin` **sign** a short-lived HS256 JWT that `apps/web` **verifies**.
+Both sides read `SUPPORT_SESSION_JWT_SECRET`, so the two projects must carry
+the identical value.
+
+Until 2026-08-05 both sides fell back to a constant checked into the repo
+whenever `NODE_ENV !== 'production'`. Any deployment not explicitly running
+with `NODE_ENV=production` would therefore accept a `pp-support-session` cookie
+that anyone with a checkout could forge — impersonation of any user in any
+community, with no admin session. That fallback has been removed.
+
+The feature now **fails closed** when the secret is absent: the admin app
+returns `500 SERVER_MISCONFIGURED` when creating a session, and the web app
+rejects every support cookie. To configure it:
+
+```bash
+openssl rand -hex 32
+```
+
+Set that one value on both projects, for `production`, `preview` and
+`development`:
+
+```bash
+vercel env add SUPPORT_SESSION_JWT_SECRET production --no-sensitive \
+  --scope <team-id> --project property-pro-admin
+```
+
+Repeat for `property-pro-web` and for the `preview` / `development`
+environments. Use `--no-sensitive`: a Sensitive variable is written back by
+`vercel pull` as the literal string `[SENSITIVE]`, which the build then inlines.
+
+Also add it to the root `.env.local` — `apps/web/e2e/support-access.spec.ts`
+drives the real signer and verifier and cannot pass without it.
 
 ## 5. Domain & DNS Configuration
 

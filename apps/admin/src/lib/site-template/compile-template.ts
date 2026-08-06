@@ -48,6 +48,47 @@ function toRuntimeMessage(error: unknown): string {
 }
 
 /**
+ * Escape a value so it cannot break out of a single-quoted JavaScript string
+ * literal in generated template source.
+ *
+ * Every demo template builds its JSX by interpolating context values directly
+ * into `'...'` literals — e.g. `fontFamily: '${fontBody}'`,
+ * `React.createElement('h1', ..., '${communityName}')`. That source is then
+ * handed to `new Function()`, so a single apostrophe in any interpolated value
+ * terminates the literal early and everything after it is executed as code.
+ *
+ * This is applied ONCE here, at the only place context values enter
+ * `template.build()`, rather than at the several hundred interpolation sites
+ * across the twelve template files. Escaping at the boundary means a template
+ * added later is covered automatically; escaping at the call sites would mean
+ * every new template is a fresh opportunity to forget.
+ *
+ * Note this is the PRIMARY control, not the schema validation on the routes.
+ * `communityName` / `prospectName` are necessarily free text, so no allowlist
+ * can cover them — colors and fonts are separately allowlisted as defence in
+ * depth.
+ *
+ * `$` is escaped as well: harmless inside a single-quoted literal, but it
+ * neutralises `${...}` should any generated fragment ever land in a template
+ * literal. Angle brackets become unicode escapes so an interpolated value
+ * cannot close a `<\/script>` tag in the rendered output.
+ */
+export function escapeForJsStringLiteral(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/`/g, '\\`')
+    .replace(/\$/g, '\\$')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+    .replace(/</g, '\\u003C')
+    .replace(/>/g, '\\u003E');
+}
+
+/**
  * Compiles a JSX source string to sanitized static HTML.
  * Pipeline: sucrase transform -> Function constructor -> React.createElement ->
  * ReactDOMServer -> sanitize-html
@@ -187,9 +228,20 @@ export async function compileDemoTemplate(params: {
   }
 
   const template = getTemplateById(params.templateId)!;
+
+  // Escape BEFORE the template interpolates these into JS source. The branding
+  // fields are already allowlisted by the routes' Zod schemas, but
+  // communityName is free text and cannot be — and `build()` puts all of them
+  // inside single-quoted literals that `new Function()` then evaluates.
   const jsxSource = template.build({
-    communityName: params.communityName,
-    branding: params.branding,
+    communityName: escapeForJsStringLiteral(params.communityName),
+    branding: params.branding && {
+      primaryColor: escapeForJsStringLiteral(params.branding.primaryColor),
+      secondaryColor: escapeForJsStringLiteral(params.branding.secondaryColor),
+      accentColor: escapeForJsStringLiteral(params.branding.accentColor),
+      fontHeading: escapeForJsStringLiteral(params.branding.fontHeading),
+      fontBody: escapeForJsStringLiteral(params.branding.fontBody),
+    },
   });
 
   return compileJsxToHtml(jsxSource, {

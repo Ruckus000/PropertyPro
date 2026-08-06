@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { applySecurityHeaders } from '@/lib/middleware/security-headers';
 import {
   ADMIN_FORWARDED_HEADERS,
   ADMIN_ROLE_HEADER,
@@ -114,7 +115,17 @@ function buildForwardedResponse(
 // Middleware
 // ---------------------------------------------------------------------------
 
-export async function middleware(request: NextRequest): Promise<Response> {
+/**
+ * The middleware proper. Every `return` here flows through the
+ * `applySecurityHeaders` wrapper in the exported `middleware` below — do NOT
+ * add security headers to individual returns.
+ *
+ * This split exists deliberately. The handler has five exit points (public
+ * path, rate-limit 429, two auth redirects, and the authorized response), and
+ * stamping headers at each of them is the shape where one gets missed and the
+ * console silently serves an unprotected response.
+ */
+async function handleRequest(request: NextRequest): Promise<Response> {
   maybeEvict();
 
   const pathname = request.nextUrl.pathname;
@@ -197,6 +208,36 @@ export async function middleware(request: NextRequest): Promise<Response> {
   cleanHeaders.set(ADMIN_ROLE_HEADER, 'super_admin');
 
   return buildForwardedResponse(response, cleanHeaders, requestId);
+}
+
+/**
+ * Middleware entry point.
+ *
+ * The only job here is to guarantee that EVERY response leaving the admin app
+ * — including error paths, redirects and the 429 — carries the security header
+ * set. Keeping this as a wrapper rather than N call sites is what makes that
+ * structurally true instead of a convention someone has to remember.
+ */
+export async function middleware(request: NextRequest): Promise<Response> {
+  const isApi = isApiRoute(request.nextUrl.pathname);
+
+  let response: Response;
+  try {
+    response = await handleRequest(request);
+  } catch {
+    // handleRequest CAN throw — createAdminClient() throws on a missing
+    // SUPABASE_SERVICE_ROLE_KEY, createMiddlewareClient can throw on a
+    // malformed cookie, and reconstructing the NextRequest can throw on a
+    // stream body. Without this, Next's built-in middleware-error response is
+    // returned with no CSP and no X-Frame-Options — the one exit path the
+    // "every response" guarantee above would otherwise still miss.
+    //
+    // Deliberately opaque: the reason is already going to Sentry via the app's
+    // instrumentation, and this is the unauthenticated edge.
+    response = new NextResponse('Internal Server Error', { status: 500 });
+  }
+
+  return applySecurityHeaders(response, { isApi }) as Response;
 }
 
 export const config = {

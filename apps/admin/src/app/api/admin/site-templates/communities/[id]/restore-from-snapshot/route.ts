@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const RESTORE_WINDOW_DAYS = 30;
 
@@ -200,6 +201,21 @@ export const POST = withAdminErrorHandler(async (
       { status: 500 },
     );
   }
+
+  // compliance_audit_log stays as the statutory tenant record (and is the row
+  // a future restore reads back). This is the parallel operator-side record.
+  await logAdminAction({
+    admin,
+    action: 'site_template_restored',
+    resourceType: 'site_blocks',
+    resourceId: String(auditLogId),
+    communityId,
+    metadata: {
+      restoredFromAuditId: auditLogId,
+      restoredBlockIds: restoredIds,
+      complianceAuditLogId: (auditRow as { id?: number } | null)?.id ?? null,
+    },
+  });
 
   return NextResponse.json(
     {

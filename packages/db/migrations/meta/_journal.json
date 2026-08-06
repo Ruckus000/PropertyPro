@@ -351,6 +351,13 @@
       "when": 1785929283429,
       "tag": "0049_documents_storage_bucket",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1785974757821,
+      "tag": "0052_platform_admin_audit_log",
+      "breakpoints": true
     }
   ]
 }

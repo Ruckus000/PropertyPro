@@ -21,8 +21,10 @@ import { insertDemo, sanitizeDemoRow } from '@/lib/db/demo-queries';
 import { getDemoListData } from '@/lib/server/demos';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+// Shared refinements — this route needs the fields REQUIRED, so it composes
+// HEX_COLOR/THEME_FONT rather than brandingSchema (whose fields are optional).
+import { HEX_COLOR, THEME_FONT } from '@/lib/validation/branding';
 
-const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a hex color (#RRGGBB)' });
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEMO_TRIAL_DURATION_MS = 14 * DAY_MS;
 const DEMO_GRACE_DURATION_MS = 7 * DAY_MS;
@@ -34,12 +36,8 @@ const createDemoSchema = z.object({
     primaryColor: HEX_COLOR,
     secondaryColor: HEX_COLOR,
     accentColor: HEX_COLOR,
-    fontHeading: z.string().refine((f) => (ALLOWED_FONTS as readonly string[]).includes(f), {
-      message: 'Font not in allowed list',
-    }),
-    fontBody: z.string().refine((f) => (ALLOWED_FONTS as readonly string[]).includes(f), {
-      message: 'Font not in allowed list',
-    }),
+    fontHeading: THEME_FONT,
+    fontBody: THEME_FONT,
     logoPath: z.string().optional(),
   }),
   externalCrmUrl: z.string().url().optional().or(z.literal('')),

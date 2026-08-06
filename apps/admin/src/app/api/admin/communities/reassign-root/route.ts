@@ -16,6 +16,7 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 // AUTHZ: platform-admin-only reassignment (requirePlatformAdmin gate above); reassignRootOp performs the atomic cross-community root swap.
 import { reassignRootOp, RoleOpForbiddenError } from '@propertypro/db/unsafe';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseJsonBody } from '@/lib/api/parse-body';
 
 const reassignSchema = z
   .object({
@@ -27,7 +28,9 @@ const reassignSchema = z
 export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
-  const parsed = reassignSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body instanceof NextResponse) return body;
+  const parsed = reassignSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },

@@ -5,12 +5,16 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: 'Inter', system-ui, sans-serif;
+  /* `--font-sans` is supplied by next/font/google in app/layout.tsx, which sets
+     it on <html> via the `inter.variable` class. That class selector beats this
+     :root declaration, so the loaded font wins — this line remains only as the
+     fallback chain used before hydration and if the font fails to load. It
+     previously hard-assigned 'Inter' with nothing actually loading it. */
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-sans, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
