@@ -25,7 +25,7 @@ export default function Error({ error, reset }: ErrorProps) {
   }, [error]);
 
   return (
-    <main className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
+    <main id="main-content" className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
         Operator Console
       </p>

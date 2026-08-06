@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { getSupportCookieRootDomain, isLocalSupportHostname } from '@propertypro/shared';
 
@@ -30,6 +30,32 @@ export function StartSessionDialog({
   const [ticketId, setTicketId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  // Had `role="dialog"` and `aria-modal` but neither Escape nor focus
+  // management — the ARIA promised modal behaviour the dialog did not
+  // implement. This starts an impersonation session, so a keyboard user
+  // needing to back out should not have to hunt for the Cancel button.
+  useEffect(() => {
+    if (!open) return;
+
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+
+    function onKeyDown(event: KeyboardEvent) {
+      // Not while the POST is in flight: the session may already exist
+      // server-side, and closing would hide the error if it failed.
+      if (event.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      const previous = restoreFocusRef.current;
+      if (previous && previous.isConnected) previous.focus();
+    };
+  }, [open, submitting, onClose]);
 
   if (!open) return null;
 

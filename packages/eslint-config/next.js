@@ -24,7 +24,7 @@ export const nextConfig = [
       '**/playwright-report/**',
       '**/test-results/**',
       'next-env.d.ts',
-      // Static/vendored assets (pdf.js worker sync output, tailwind.min.js, …)
+      // Static/vendored assets (pdf.js worker sync output, …)
       'public/**',
     ],
   },

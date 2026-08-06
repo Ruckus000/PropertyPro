@@ -34,7 +34,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           color: '#f9fafb', // design-tokens:exempt — root layout (and globals.css) may not be loaded here
         }}
       >
-        <main style={{ textAlign: 'center', maxWidth: '36rem' }}>
+        <main id="main-content" style={{ textAlign: 'center', maxWidth: '36rem' }}>
           <p
             style={{
               fontSize: '0.75rem',

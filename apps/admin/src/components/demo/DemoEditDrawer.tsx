@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback, useRef, type PointerEvent as ReactPoi
 import { X } from 'lucide-react';
 import { BrandingEditSection } from './BrandingEditSection';
 import { ProspectEditSection } from './ProspectEditSection';
+import { useRovingTabs } from '@/components/a11y/use-roving-tabs';
 
 interface DemoEditDrawerProps {
   isOpen: boolean;
@@ -36,6 +37,12 @@ interface DemoEditDrawerProps {
 }
 
 type DrawerTab = 'branding' | 'info';
+
+const DRAWER_TABS = ['branding', 'info'] as const satisfies readonly DrawerTab[];
+const DRAWER_TAB_LABELS: Record<DrawerTab, string> = {
+  branding: 'Branding',
+  info: 'Info',
+};
 
 interface BrandingInfo {
   primaryColor: string;
@@ -85,6 +92,45 @@ export function DemoEditDrawer({
   previewTab: _previewTab = 'public',
 }: DemoEditDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>('branding');
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  const { tabListProps, getTabProps, getPanelProps } = useRovingTabs(
+    DRAWER_TABS,
+    activeTab,
+    setActiveTab,
+    { idPrefix: 'demo-edit-drawer', label: 'Demo settings sections' },
+  );
+
+  // Escape closes, and focus returns where it came from.
+  //
+  // Neither existed: the drawer had no keyboard dismissal, and opening it left
+  // focus behind on the page underneath, so a keyboard user had to tab forward
+  // through the whole page to reach the form they had just opened.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+
+    // Move focus into the drawer so the next Tab lands inside it.
+    panelRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea')?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      // Guard against restoring focus to a node that has since been removed —
+      // a detached element silently sends focus to <body> instead.
+      const previous = restoreFocusRef.current;
+      if (previous && previous.isConnected) previous.focus();
+    };
+  }, [isOpen, onClose]);
   const [branding, setBranding] = useState<BrandingInfo>({ ...DEFAULT_BRANDING, communityName: prospectName });
   const [drawerWidth, setDrawerWidth] = useState(DEFAULT_DRAWER_WIDTH);
   const dragStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -194,11 +240,23 @@ export function DemoEditDrawer({
         <div
           className="fixed inset-0 z-40 bg-black/20 transition-opacity"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
-      {/* Drawer panel — wider to accommodate code editor */}
+      {/* Drawer panel — wider to accommodate code editor.
+          `inert` when closed. The panel stays MOUNTED so the slide-out
+          transition can run, and without this its whole form — inputs, the
+          code editor, the save button — remained in the tab order off-screen:
+          a keyboard user tabbing through the demo list fell into a form they
+          could not see. `inert` removes the subtree from focus and from the
+          accessibility tree without unmounting it. */}
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-demo-title"
+        inert={!isOpen}
         className={`fixed right-0 top-0 z-50 flex h-full max-w-full flex-col border-l border-gray-200 bg-white shadow-xl transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
@@ -218,48 +276,42 @@ export function DemoEditDrawer({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">Edit Demo</h2>
+            <h2 id="edit-demo-title" className="text-sm font-semibold text-gray-900">Edit Demo</h2>
             <p className="text-xs text-gray-500">{prospectName}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close edit demo drawer"
             className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
-        {/* Tab navigation */}
+        {/* Tab navigation. Was a <nav> wrapping plain buttons — the wrong
+            element (this selects panels, it does not navigate) and no tab
+            semantics at all. */}
         <div className="border-b border-gray-200 px-5">
-          <nav className="-mb-px flex gap-4">
-            <button
-              type="button"
-              onClick={() => setActiveTab('branding')}
-              className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'branding'
-                  ? 'border-coral-600 text-coral-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Branding
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('info')}
-              className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === 'info'
-                  ? 'border-coral-600 text-coral-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Info
-            </button>
-          </nav>
+          <div className="-mb-px flex gap-4" {...tabListProps}>
+            {DRAWER_TABS.map((tab) => (
+              <button
+                key={tab}
+                {...getTabProps(tab)}
+                className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab
+                    ? 'border-coral-600 text-coral-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                {DRAWER_TAB_LABELS[tab]}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4" {...getPanelProps(activeTab)}>
           {activeTab === 'branding' && (
             <BrandingEditSection
               demoId={demoId}
