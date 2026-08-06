@@ -119,6 +119,19 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });
   }
 
+  // 4b. Resolve the impersonated user's identity ONCE, to embed in the token.
+  // The web middleware forwards identity headers to the page shell; carrying
+  // the name/email here is what lets it stamp the impersonated user instead of
+  // the admin, without adding a query to a per-request hot path. A failure to
+  // read is not fatal: the claims go out null and the verifier clears the
+  // identity headers, which degrades to an anonymous account menu rather than
+  // showing the wrong person.
+  const { data: targetUser } = await (db
+    .from('users'))
+    .select('full_name, email')
+    .eq('id', targetUserId)
+    .maybeSingle();
+
   // 5. Sign JWT with RFC 8693 act claim
   let token: string;
   try {
@@ -128,6 +141,8 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       community_id: communityId,
       session_id: session.id,
       scope: 'read_only',
+      target_name: targetUser?.full_name ?? null,
+      target_email: targetUser?.email ?? null,
     });
   } catch (err) {
     return NextResponse.json(

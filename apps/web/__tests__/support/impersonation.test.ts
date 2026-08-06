@@ -78,4 +78,67 @@ describe('Impersonation detection', () => {
     expect(isReadOnlyBlocked('HEAD')).toBe(false);
     expect(isReadOnlyBlocked('OPTIONS')).toBe(false);
   });
+
+  describe('impersonated-identity claims', () => {
+    /**
+     * Signs with the same dev-secret path the verifier uses when
+     * SUPPORT_SESSION_JWT_SECRET is unset (stubbed to '' at the top of file).
+     */
+    async function signToken(claims: Record<string, unknown>): Promise<string> {
+      const { SignJWT } = await import('jose');
+      const { SUPPORT_SESSION_DEV_SECRET } = await import('@propertypro/shared');
+
+      return new SignJWT({
+        act: { sub: 'admin-user-1' },
+        community_id: 1,
+        session_id: 123,
+        scope: 'read_only',
+        ...claims,
+      })
+        .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+        .setSubject('user-1')
+        .setIssuedAt()
+        .setExpirationTime('30m')
+        .sign(new TextEncoder().encode(SUPPORT_SESSION_DEV_SECRET));
+    }
+
+    it('round-trips the impersonated name and email', async () => {
+      const token = await signToken({
+        target_name: 'Olivia Owner',
+        target_email: 'owner.one@sunset.local',
+      });
+
+      const payload = await parseImpersonationCookie(token);
+
+      expect(payload?.target_name).toBe('Olivia Owner');
+      expect(payload?.target_email).toBe('owner.one@sunset.local');
+    });
+
+    it('yields null (not undefined) when a token predates the claims', async () => {
+      // Tokens signed before these claims existed stay valid until they expire.
+      // They must parse, and must report the identity as explicitly absent so
+      // middleware clears the headers instead of inheriting the admin's.
+      const token = await signToken({});
+
+      const payload = await parseImpersonationCookie(token);
+
+      expect(payload).not.toBeNull();
+      expect(payload?.sub).toBe('user-1');
+      expect(payload?.target_name).toBeNull();
+      expect(payload?.target_email).toBeNull();
+    });
+
+    it('discards non-string claims rather than trusting them', async () => {
+      // These values are rendered as the operator's "who am I acting as"
+      // signal, so a malformed claim must degrade to unknown, not to an object
+      // or number that some downstream string coercion would happily display.
+      const token = await signToken({ target_name: { evil: true }, target_email: 42 });
+
+      const payload = await parseImpersonationCookie(token);
+
+      expect(payload).not.toBeNull();
+      expect(payload?.target_name).toBeNull();
+      expect(payload?.target_email).toBeNull();
+    });
+  });
 });

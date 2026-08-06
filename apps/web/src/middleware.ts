@@ -1124,8 +1124,52 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Stamp support session headers for downstream route handlers
+    // Stamp support session headers for downstream route handlers.
+    //
+    // The identity headers must ALL move together. This block used to override
+    // only the id, leaving USER_EMAIL_HEADER / USER_FULL_NAME_HEADER set to the
+    // authenticating admin's values from earlier in this function. The page
+    // shell builds its user entirely from these three headers
+    // (lib/request/page-auth-context.ts), so the chrome showed the *admin's*
+    // name and email above the *impersonated user's* data — an operator could
+    // not tell from the account menu whose account they were in.
+    //
+    // Name and email come from the signed token (resolved once when the session
+    // was created), so correcting this costs no per-request lookup.
     forwardedHeaders.set(USER_ID_HEADER, supportSession.sub);
+
+    // Absent claim → CLEAR, never inherit. A token signed before these claims
+    // existed is still valid, and falling back to the admin's identity is the
+    // exact bug being fixed. An anonymous account menu is the safe degradation.
+    //
+    // These MUST go through `normalizeForwardedHeaderValue`, exactly as the
+    // non-impersonated path above does. The values originate in `users.full_name`
+    // / `users.email`, which are free text: a CR/LF (reachable via the CSV
+    // resident import) makes `Headers.set` THROW, and the throw is uncaught here,
+    // so every request carrying the support cookie would 500 until the session
+    // expired — the operator could not even navigate away to end it. The helper
+    // also maps whitespace-only to null, so a blank name clears rather than
+    // setting an empty header.
+    const impersonatedName = normalizeForwardedHeaderValue(supportSession.target_name);
+    if (impersonatedName) {
+      forwardedHeaders.set(USER_FULL_NAME_HEADER, impersonatedName);
+    } else {
+      forwardedHeaders.delete(USER_FULL_NAME_HEADER);
+    }
+
+    const impersonatedEmail = normalizeForwardedHeaderValue(supportSession.target_email);
+    if (impersonatedEmail) {
+      forwardedHeaders.set(USER_EMAIL_HEADER, impersonatedEmail);
+    } else {
+      forwardedHeaders.delete(USER_EMAIL_HEADER);
+    }
+
+    // Phone is forwarded too (line ~426) and has no counterpart claim: it is not
+    // shown in the chrome, and adding a phone number to a signed token that
+    // rides in a cookie is a worse trade than dropping it. Always cleared, so
+    // the admin's phone never reaches an impersonated request.
+    forwardedHeaders.delete(USER_PHONE_HEADER);
+
     forwardedHeaders.set('x-support-session', '1');
     forwardedHeaders.set('x-support-admin-id', supportSession.act.sub);
     forwardedHeaders.set('x-support-session-id', String(supportSession.session_id));

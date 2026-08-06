@@ -156,10 +156,26 @@ export async function loginAs(
   };
 }
 
+/**
+ * Sign in to the admin app as the dedicated dev/e2e platform admin.
+ *
+ * The admin `/dev/agent-login` route provisions the identity and its
+ * `platform_admin_users` row on demand (development only) — `pnpm seed:demo`
+ * deliberately does not seed platform admins. See
+ * `apps/admin/src/app/dev/agent-login/route.ts`.
+ */
 export async function loginAsPlatformAdmin(page: Page): Promise<void> {
-  await page.goto(`${ADMIN_BASE_URL}/dev/agent-login?as=pm_admin`, {
+  await page.goto(`${ADMIN_BASE_URL}/dev/agent-login?as=platform_admin`, {
     waitUntil: 'domcontentloaded',
   });
+
+  // Surface the common failure (no platform_admin_users row → middleware bounce)
+  // as a readable message instead of an opaque URL mismatch below.
+  await expect(
+    page,
+    'admin dev-login was rejected by middleware (access_denied) — the platform_admin_users grant did not take',
+  ).not.toHaveURL(/error=access_denied/);
+
   await page.goto(`${ADMIN_BASE_URL}/clients`, {
     waitUntil: 'domcontentloaded',
   });

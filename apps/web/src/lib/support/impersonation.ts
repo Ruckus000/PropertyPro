@@ -76,7 +76,19 @@ export async function parseImpersonationCookie(
       return null;
     }
 
-    return payload as unknown as SupportSessionJwtPayload;
+    // `target_name` / `target_email` are optional (tokens signed before the
+    // claims existed remain valid until they expire). Anything present but not
+    // a string is discarded rather than trusted — these values are rendered as
+    // the operator's "who am I acting as" signal, so a malformed claim must
+    // degrade to "unknown", never to something arbitrary.
+    const targetName = typeof payload.target_name === 'string' ? payload.target_name : null;
+    const targetEmail = typeof payload.target_email === 'string' ? payload.target_email : null;
+
+    return {
+      ...(payload as unknown as SupportSessionJwtPayload),
+      target_name: targetName,
+      target_email: targetEmail,
+    };
   } catch {
     return null;
   }

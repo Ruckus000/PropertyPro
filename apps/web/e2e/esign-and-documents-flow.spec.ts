@@ -9,8 +9,12 @@
  * Requires: NODE_ENV=development, Supabase from .env.local, `pnpm seed:demo`.
  * Not run in CI by default (see playwright.config.ts + root package.json).
  *
- * If the template dropdown never opens, a stale process on port 3000 may be serving
- * an old bundle; stop it so Playwright can start `pnpm dev:e2e` with current UI.
+ * If the template dropdown never opens, the first thing to suspect is a click
+ * dispatched BEFORE React hydrated the trigger — the event is swallowed and no
+ * timeout can recover it. That was the measured cause here; use
+ * `clickWhenHydrated` (helpers/hydration.ts). A stale process on port 3000
+ * serving an old bundle produces the same symptom and is worth ruling out
+ * second, but it was not the cause of this spec's long-standing failure.
  *
  * Library upload uses board_president: CAM is not in ELEVATED_ROLES for document
  * library upload (see packages/shared/src/access-policies.ts — isElevatedRole).
@@ -26,6 +30,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
+import { clickWhenHydrated } from './helpers/hydration';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PDF = path.join(__dirname, 'fixtures', 'sample.pdf');
@@ -122,7 +127,12 @@ test.describe('E-Sign send flow (CAM)', () => {
 
     const templateTrigger = page.getByTestId('esign-template-select-trigger');
     await templateTrigger.scrollIntoViewIfNeeded();
-    await templateTrigger.click();
+    // Measured: this trigger is not hydrated until ~260ms after the heading is
+    // visible, and a click before that is swallowed rather than delayed — which
+    // is why the 30s timeout below never helped. See helpers/hydration.ts. (The
+    // file header's "stale process on port 3000" theory was a misdiagnosis of
+    // this same symptom.)
+    await clickWhenHydrated(templateTrigger);
     await expect(page.getByPlaceholder('Search templates...')).toBeVisible({
       timeout: 30_000,
     });
@@ -174,7 +184,14 @@ test.describe('E-Sign send flow (CAM)', () => {
     await page.goto(`/sign/${externalId}/${slug}`, { waitUntil: 'domcontentloaded' });
 
     await assertPdfJsAssetsReachable(page);
-    await expect(page.getByText(/Signing as:/i)).toBeVisible();
+    // `/sign/[externalId]/[slug]` is a route this run has not compiled yet, and
+    // `domcontentloaded` returns before it has rendered. Measured: this assertion
+    // passes comfortably when the spec runs alone but fails DETERMINISTICALLY at
+    // the 5s default in a full-suite run, where the dev server has already
+    // compiled ~20 other routes — it is first-compile latency, not missing
+    // content. Neighbouring assertions in this file already allow 30-60s for the
+    // same reason. The assertion itself is unchanged.
+    await expect(page.getByText(/Signing as:/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/tenant\.one@sunset\.local/i)).toBeVisible();
     await expectPdfPreviewCanvas(page);
     await expect(page.getByText('PDF Document Preview')).toHaveCount(0);

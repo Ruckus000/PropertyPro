@@ -953,3 +953,461 @@ ps -eo comm | grep -c vitest    # expect 0
 
 A shared machine is a variable, and on this one it is the largest variable there
 is. The two canaries are what tell you it moved.
+
+---
+
+## Eighth addendum — both recorded blockers closed by decision, and the number is now 22
+
+Date: **2026-08-05**, same day as the seventh addendum and the same method: local
+Supabase stack on the 553xx ports, migrations + `pnpm seed:demo`, suite launched
+through `scripts/with-env-local-demo-db.sh` at `workers: 1`.
+
+**Environment was verified clean before the run, and the canaries agree after it:**
+`docker info` OK, `:3000`/`:3001` clear, `ps -eo comm | grep -c vitest` = 0. In the
+measured run `activation-smoke` (all 3 blocks) and `marketing-smoke` both passed,
+and the run contains **zero** `Test timeout`, **zero** `ERR_ABORTED`, **zero**
+`agent-login failed` and **zero** `access_denied`. Per this note's own rule, the
+number below is trustworthy.
+
+### Where the number stands
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| **this pass** | **22** | **4** | 2 | 1 | **6.0 min** |
+
+The 2 skipped are the two `onboarding-first-run` blocks, now `test.fixme` (below).
+The 1 "did not run" is the second `esign` block, skipped because that file is
+`describe.configure({ mode: 'serial' })` and block 1 failed — the same mechanism
+this note has recorded throughout.
+
+### Blocker 1 — the onboarding wizard: RECORDED AS `test.fixme`, and it is WORSE than recorded
+
+The seventh addendum recorded "an onboarding wizard the spec describes but that was
+never built". That is right, but it **understated the gap by half**: the note and
+its surrounding commentary framed this as a condo problem.
+
+Measured: **both** wizards ship a 2-step flow, "Community Profile" → "Compliance
+Preview" — `components/onboarding/condo-wizard.tsx:29` and
+`components/onboarding/apartment-wizard.tsx:32`. The app contains exactly two step
+components (`steps/profile-step.tsx`, `compliance-preview.tsx`), and both API
+contracts cap at `MAX_STEP_INDEX = 1`. The spec drives statutory-documents,
+branding, units, rules-upload and invite steps — **none of which exist for either
+community type** — and waits on `data-testid="condo-onboarding-wizard"` /
+`"apartment-onboarding-wizard"`, ids that `git log -S` finds only in the spec and
+the design doc. `data-hydrated` appears app-wide on one unrelated component
+(`components/help/article-feedback.tsx:92`).
+
+So "rewrite it against the shipped wizard" is authoring a new spec, not editing
+one. That is a product question — what should first-run onboarding guarantee? —
+and it was answered here as: **mark both blocks `test.fixme` naming the gap**, so
+the missing coverage stays visible in the suite rather than disappearing into a
+deleted file. The file header now carries the full evidence.
+
+**One recorded sub-question, answered: `/dev/reset-onboarding` is NOT stale.** It
+writes `onboarding_wizard_state` keyed `(community_id, wizard_type)` with
+`last_completed_step = NULL`, which is exactly what the shipped
+`GET /api/v1/onboarding/{condo,apartment}` reads. It needs no change under any
+option.
+
+### Blocker 2 — `platform_admin_users`: FIXED, and deliberately NOT by seeding
+
+The recorded blocker was "nothing seeds `platform_admin_users`". Seeding it was
+rejected: it would place platform-wide `super_admin` into shared demo data used for
+real demos.
+
+The reframe that resolved it: **the admin app's `/dev/agent-login` was already the
+privilege-granting surface, and it was half-broken.** It minted a session for
+`pm.admin@sunset.local` that `apps/admin/src/middleware.ts:178` then immediately
+rejected for want of a `platform_admin_users` row. It granted the session but not
+the grant that makes a session useful. Read that way this is a latent bug in an
+existing dev-only route, not a missing seed row.
+
+`apps/admin/src/app/dev/agent-login/route.ts` now creates-or-reuses a **dedicated**
+identity, `e2e.platform.admin@local`, and upserts its `platform_admin_users` row,
+in `development` only (the route already 404s otherwise). Consequences, all
+verified against the local stack:
+
+- `pnpm seed:demo` is untouched. `select count(*) from platform_admin_users` is
+  **0 rows** on a freshly seeded database — confirmed after seeding.
+- The privileged identity is **not a demo persona**. `pm.admin@sunset.local` never
+  receives platform privilege, so no demo can surface a super_admin.
+- No extra script for a future e2e job to forget.
+
+After the run, the table holds exactly one row: `e2e.platform.admin@local /
+super_admin`. `loginAsPlatformAdmin` uses `?as=platform_admin`; `pm_admin` is kept
+as an accepted alias.
+
+### `support-access` then surfaced TWO further spec defects, both fixed
+
+Unblocking the login did not make the spec pass — it made it *progress*, which
+exposed two genuine spec bugs that had never been reachable before:
+
+1. **Host mismatch — `localhost` vs `127.0.0.1`.** `loginAsPlatformAdmin`
+   authenticated on `http://localhost:3001`; `ADMIN_CLIENT_URL` was
+   `http://127.0.0.1:3001/clients/1`. Supabase auth cookies are **host-only**, and
+   these are different hosts despite the same address, so every request arrived
+   unauthenticated and the middleware bounced it to `/auth/login`. The visible
+   symptom was a missing "Support" tab — three redirects removed from the cause,
+   and easily misread as an admin-UI gap. Proven with one cookie jar: `/clients` on
+   `127.0.0.1` → 200 authenticated; `/clients/1` on `localhost` with the *same* jar
+   → `/auth/login`, zero occurrences of "Support".
+   This is the seventh addendum's `localhost` ≠ `127.0.0.1` trap resurfacing in a
+   second place. Fixed to `localhost`, which is the correct side: Next's dev server
+   normalises `request.url` to `localhost` regardless of `--hostname`, so the admin
+   app's own redirects land there (observed: a request to
+   `127.0.0.1:3001/dev/agent-login` 307s to `http://localhost:3001/clients`).
+2. **Stale greeting copy.** The spec asserted `Welcome back, Olivia`. The greeting
+   was renamed to `Welcome, {firstName}` in `ec8fb6c9`
+   (`components/dashboard/dashboard-welcome.tsx:10`); `Welcome back` exists nowhere
+   in `apps/web/src`. Because this spec had never authenticated, the assertion had
+   never once run. Updated to the shipped copy — still an `h1` naming the
+   impersonated user.
+
+With both fixed, `support-access` now clears admin login, the Support tab, session
+creation and impersonation, and the read-only banner assertion passes.
+
+### NEW app defect, unfixed: support impersonation forwards a MIXED identity
+
+`support-access` still fails, on one assertion —
+`getByRole('button', { name: /Olivia Owner/i })` — and **the spec is right; the app
+is wrong.**
+
+`apps/web/src/middleware.ts:1128` stamps only `USER_ID_HEADER` with the
+impersonated user. `USER_EMAIL_HEADER` and `USER_FULL_NAME_HEADER`, set earlier at
+lines 421/435, keep the **authenticating admin's** values. The page shell derives
+its user entirely from those forwarded headers
+(`lib/request/page-auth-context.ts:30-42`), so during a support session the chrome
+shows the *admin's* name and email while the page body shows the *impersonated
+user's* data. The dashboard greeting passes precisely because it comes from a
+DB query keyed on user id, not from the header.
+
+Why it matters beyond the test: an operator impersonating a resident cannot tell
+from the account menu whose account they are in. Here the admin has no full name,
+so `ProfileMenu` falls back to `aria-label="Account menu"` and the assertion finds
+nothing; in production, with a named admin, it would confidently display the
+**wrong** name.
+
+Not fixed here: the repair belongs in a security-sensitive middleware path and the
+obvious implementation (look the target user up per request) lands an extra query
+in the hot path this repo has an active performance programme around. The
+alternative — carrying name/email in the signed support JWT — changes the payload
+shape and the admin-side session creation. That is a real trade-off and a
+deliberate decision, not a drive-by.
+
+### The three unconfirmed fixes from #902 — now measured
+
+The seventh addendum's table left three entries "NOT yet observed passing" and
+asked for a full run before quoting a higher number. That run happened:
+
+| Fix | Seventh addendum | Measured this pass |
+|---|---|---|
+| `demo-flows` FIRST_RENDER_TIMEOUT 30s → 60s | NOT observed | **CONFIRMED** — all 9 `demo-flows` blocks pass |
+| owner-payment-portal budget | NOT observed | **CONFIRMED** — `phase1-roadmap-smoke:169` passes (13.7s) |
+| meetings-dialog budget | NOT observed | **INSUFFICIENT — the fix does not work.** `meeting-create-spacebar` still fails, now at the *raised* 30s timeout: `getByRole('dialog')` never appears at all. This was never a budget problem; the dialog does not open. |
+| `esign` → `Governing Documents` category | NOT observed | **STILL UNREACHED, and not for the recorded reason.** The spec now fails *earlier*, at line 126: after clicking the template trigger, `getByPlaceholder('Search templates...')` never appears within 30s. The category fix is neither confirmed nor refuted — execution does not get that far. |
+
+The last two share a shape worth naming: **an overlay that never opens after a
+click** (a Radix dialog and a combobox popover), each failing a 30s wait rather
+than a 5s one. Two independent specs failing the same way is a lead about the
+overlay layer, not two unrelated budget misses — and the earlier reading of them as
+timing/budget issues is now measurably wrong.
+
+### Remaining 4 failures, with causes
+
+| Spec | Cause | Kind |
+|---|---|---|
+| `esign-and-documents-flow:109` | template picker popover never opens (30s) | app / overlay — unresolved |
+| `meeting-create-spacebar:12` | Create Meeting dialog never opens (30s) | app / overlay — unresolved |
+| `signup-trialing:39` | `price_placeholder_…` ids no Stripe account can resolve | recorded blocker, unchanged |
+| `support-access:107` | mixed impersonation identity (above) | app — newly identified |
+
+`signup-trialing` remains the third recorded blocker from the seventh addendum and
+is untouched here.
+
+### Verification for this pass
+
+`tsc --noEmit` clean on **both** `@propertypro/web` and `@propertypro/admin`;
+`node scripts/run-lint-guards.mjs` **21/21**; unit **11,060 passed / 0 failed**
+(939 files) against a stub `DATABASE_URL`; integration **310 app + 121 RLS**, all
+passing, on the local runner.
+
+**One trap for the next person, and it cost a full unit run here:** a *fresh
+worktree* fails 269 unit test FILES at collection with `Failed to resolve entry for
+package "@propertypro/api-contract"` — the workspace packages have no `dist` until
+`pnpm --filter './packages/*' build` is run. `pnpm install` alone is not enough.
+The signature is unmistakable once you know it: hundreds of failed *files* but only
+a handful of failed *tests*, because the files never executed. Build the packages
+before believing any local unit number from a new worktree.
+
+---
+
+## Ninth addendum — the mixed impersonation identity is FIXED, and `support-access` passes
+
+Date: **2026-08-05**. Same environment and method as the eighth addendum.
+
+The eighth addendum recorded the mixed-identity defect and deliberately left it
+unfixed, naming the trade-off: a per-request lookup in a hot path, versus changing
+the signed token. **The token approach was chosen and implemented.**
+
+### The fix
+
+`SupportSessionJwtPayload` gains two optional claims, `target_name` and
+`target_email` (`packages/shared/src/support-access.ts`). They are resolved
+**once**, when the admin app creates the session and already makes several queries
+(`apps/admin/src/app/api/admin/support/sessions/route.ts`), and signed into the
+token. The web middleware then stamps the impersonated identity from claims it
+already has in hand — **zero added per-request queries**, which is what made this
+the right shape for a path the nav-performance programme cares about.
+
+`apps/web/src/middleware.ts` now moves all identity headers together instead of
+only the id.
+
+Three details that carry the safety of this change:
+
+1. **Absent claims CLEAR, they never inherit.** Tokens signed before these claims
+   existed stay valid until they expire (≤30 min). For those, middleware deletes
+   `USER_FULL_NAME_HEADER` / `USER_EMAIL_HEADER` rather than leaving the admin's
+   values — which is the precise bug being fixed. An anonymous account menu is the
+   safe degradation; a confidently wrong name is not.
+2. **Non-string claims are discarded, not coerced.** `parseImpersonationCookie`
+   accepts these values only when they are strings, because they are rendered as
+   the operator's "who am I acting as" signal.
+3. **`USER_PHONE_HEADER` is unconditionally dropped.** It was leaking the admin's
+   phone into impersonated requests for the same reason. It has no counterpart
+   claim on purpose — the header is not displayed in the chrome, and adding a phone
+   number to a signed token that rides in a cookie is a worse trade than dropping
+   it. This was **not** in the eighth addendum's description of the defect; it was
+   found while fixing it.
+
+### Verification, including the revert-check
+
+New coverage: `apps/web/__tests__/middleware/support-impersonation-identity.test.ts`
+(5 tests, driving the real `middleware()` export and asserting on
+`x-middleware-request-*`) and three claim round-trip tests appended to
+`__tests__/support/impersonation.test.ts`.
+
+**The revert-check named a production line.** With the middleware block reverted to
+its pre-fix form, the new tests fail reading
+`expected 'Ada Admin' to be 'Olivia Owner'` — the admin's name leaking through,
+which is the defect verbatim. The two control cases (non-impersonated request;
+support marker headers) keep passing under the revert, so the file is not merely
+globally broken.
+
+One trap recorded while writing it: the middleware test must drive
+**`/api/v1/documents`**, not `/dashboard`. A signed-in user with no community
+redirects to `/select-community` and never reaches the support branch, so every
+`forwarded()` assertion reads `null` and the negative assertions
+(`not.toBe(admin)`) **pass vacuously**. The mocked user also needs
+`emailVerified: true` or middleware diverts to `/auth/verify-email` first. Both
+failure modes look like a broken fix rather than a broken harness.
+
+### `support-access.spec.ts` passes — the first time it ever has
+
+It now runs the whole flow: admin dev-login → Support tab → session creation →
+impersonation showing the **impersonated** user's identity → read-only enforcement
+→ session end → revert to the board president's own session.
+
+Fixing the app surfaced one last stale assertion: a **second** `Welcome back`
+occurrence at line 204, missed on the first pass because only the first was
+corrected. It asserts the post-session state, where the popup falls back to the
+board president's own session (it shares a browser context with `boardPage`), so
+the expected name is `Sam President`. Both occurrences are now `Welcome, …`.
+
+### Where the number stands
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| eighth addendum | 22 | 4 | 2 | 1 | 6.0 min |
+| **this pass** | **23** | **3** | 2 | 1 | **5.9 min** |
+
+Both canaries green; zero timeouts, aborts or agent-login failures.
+
+The remaining three are unchanged and each has a named cause: the two overlays
+that never open (`esign` template picker, `meeting-create-spacebar` dialog — still
+failing a *30s* wait, still not budget problems) and `signup-trialing`'s
+placeholder Stripe price ids.
+
+Full verification for this pass: `tsc --noEmit` clean on web, admin **and**
+shared; 21/21 guards; unit **11,068 passed / 0 failed** (940 files, +8 new);
+integration unchanged at 310 app + 121 RLS. Nothing touched production.
+
+---
+
+## Tenth addendum — the two "overlays that never open" were ONE root cause: clicking before hydration
+
+Date: **2026-08-05**.
+
+The seventh and eighth addenda recorded `esign-and-documents-flow` and
+`meeting-create-spacebar` as failing on overlays that never open, and the eighth
+noted they shared a shape. They share a **cause**, and it is not what either
+spec's comments claimed.
+
+### Root cause, measured
+
+Playwright's actionability checks are DOM checks — visible, stable, enabled,
+receives events. **None of them mean React has attached a handler.** On a
+server-rendered page the button exists and is fully "actionable" before hydration
+runs, so a `.click()` in that window is dispatched into markup with no listener
+and is **silently swallowed**.
+
+Probing `__reactFiber$` / `__reactProps$` on the exact trigger nodes, at the
+moment each spec clicks them:
+
+| Spec | trigger hydrated when the spec clicks? | hydrated after |
+|---|---|---|
+| `meeting-create-spacebar` | **no** — `hasFiber: false` | 511 ms |
+| `esign-and-documents-flow` | **no** — `hasFiber: false` | 259 ms |
+
+In both cases a click issued *after* that point opens the overlay immediately
+(`anyDialogRole: 1`; esign's search box `visible: true`). There were **zero** page
+errors and no console errors on either page.
+
+**This is why raising the timeouts to 30s could never work: the timeout is on the
+wrong side of the lost event.** The click already happened; no further click is
+ever sent; the overlay will not appear no matter how long the assertion waits.
+The eighth addendum's reading — "not the budget misses they were recorded as" —
+was right that budgets were not the problem, but the mechanism is sharper than
+"the overlay layer": *the event never reached React*.
+
+Two pieces of folklore this retires:
+
+- Waiting for a heading is **not** a proxy for interactivity. The heading is in
+  the server HTML and appears before hydration by definition. Both specs gated on
+  a heading and then clicked.
+- The `esign` file header blamed "a stale process on port 3000 serving an old
+  bundle". That produces the same symptom and was worth ruling out, but it was not
+  the cause. The header has been corrected.
+
+### The fix
+
+`apps/web/e2e/helpers/hydration.ts` — `clickWhenHydrated(locator)`: waits until
+React has attached an `onClick` to that node, then clicks **once**.
+
+Deliberately not a retry-click loop. A retry is unsafe for anything that TOGGLES:
+esign's trigger is a popover, so a second click fired just after the first one
+finally opened it closes it again, converting a deterministic failure into a flaky
+one. One click to a live handler has no such race.
+
+The probe reads React's expando keys, which is an implementation detail. That is a
+deliberate, contained trade: it is test-only, and if React renames those keys the
+helper stops finding them and **times out loudly**. It cannot silently pass a click
+through unhydrated markup.
+
+### A real accessibility bug this uncovered
+
+With the meetings dialog finally opening, the next assertion failed:
+`dialog.getByRole('heading', { name: 'Create Meeting' })` found nothing.
+
+The dialog rendered its title as `<Dialog.Title asChild><CardTitle>`, and
+`CardTitle` renders a **`<div>`** — so the modal had **no heading at all**. The
+canonical `ui/dialog.tsx` `DialogTitle` renders the Radix primitive directly and
+therefore emits `<h2>`; `meeting-form.tsx` and `meeting-detail-modal.tsx` were the
+only two components in the app that hand-rolled it this way. The spec was right and
+the app was wrong.
+
+Both now render `Dialog.Title` directly with CardTitle's exact classes — semantics
+restored, no visual change (Tailwind preflight already zeroes heading margin and
+size). This was a genuine a11y defect on two user-facing modals, not a test-only
+fix.
+
+### A third finding: `esign` line 187 is order/load dependent
+
+Once the overlay fix landed, `esign` failed further along, at
+`getByText(/Signing as:/i)` on `/sign/[externalId]/[slug]`. Measured:
+
+- passes **3/3 in isolation**, including immediately after a full suite (so it is
+  not accumulated database state),
+- fails **deterministically** at the 5s default in a full-suite run.
+
+`/sign/[externalId]/[slug]` is a route the run has not compiled yet and
+`domcontentloaded` returns before it renders; in a full suite the dev server has
+already compiled ~20 other routes. Given 30s — matching the neighbouring
+assertions in the same file — **both esign blocks passed in a full suite for the
+first time**, including block 2, which this note has never previously observed
+running.
+
+### Measurement status — read this before quoting a number
+
+Confirmed and repeatable in isolation: `esign` 2/2, `meeting-create-spacebar` 1/1,
+`support-access` 1/1.
+
+The best full-suite numbers this pass, in order:
+
+| run | result | wall | note |
+|---|---|---:|---|
+| overlay fix, before the line-187 fix | 24 passed / 2 failed | 6.3 min | `meeting-create-spacebar` green in-suite; esign still failing at 187 |
+| + line-187 fix | both esign blocks green | 8.5 min | but `phase1-roadmap-smoke` failed; load average 14 |
+| repeat | 16 passed | 12.1 min | **discarded** |
+
+**The last run is discarded under this note's own rule.** `marketing-smoke` took
+**16.9s against a 3.0s baseline** (5.6×), `add-community` 49.1s against 11.6s, and
+the failures are bare `Test timeout of 120000ms exceeded` — with load average
+**15.95**. The canaries technically passed, which is a refinement worth recording:
+**a canary that passes but is 5× slower is still telling you the environment
+moved.** Treat canary *timings*, not just their pass/fail, as the signal.
+
+The cause was self-inflicted: back-to-back full suites on a shared machine. So
+**a clean confirming full-suite run of the combined state has not been taken** —
+same honesty as the seventh addendum's "the confirming run never happened". The
+per-spec results above are solid; the suite total for the combined state is not
+yet measured. Take it on a quiet machine before quoting one.
+
+---
+
+## Eleventh addendum — the confirming run, and two more sites of the same root cause
+
+Date: **2026-08-05**. The tenth addendum owed a clean full-suite measurement and
+said so. Here it is, taken on a settled machine (load ~5, `vitest` count 0):
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| eighth addendum | 22 | 4 | 2 | 1 | 6.0 min |
+| ninth addendum | 23 | 3 | 2 | 1 | 5.9 min |
+| **confirming run** | **26** | **1** | 2 | **0** | 7.5 min |
+
+**Canaries at baseline** — `activation-smoke` 700ms / 2.8s / 3.9s and
+`marketing-smoke` 2.8s, against the 3.0s reference. Per this note's own rule
+(and the tenth addendum's refinement that canary *timings* matter, not just
+pass/fail), this measurement is trustworthy.
+
+**"never ran" is 0 for the first time in this note's history.** Every block in the
+default suite now executes; the five `mode: 'serial'` files no longer lose their
+tails to an early failure. The 2 skipped are the deliberate `onboarding-first-run`
+`test.fixme` blocks.
+
+**The single remaining failure is `signup-trialing`** — `price_placeholder_…` ids
+that no Stripe account can resolve. That is the last of the three blockers the
+seventh addendum recorded, and it needs Stripe test-mode price ids, not a code fix.
+
+### Two more sites of the hydration bug, found by sweeping
+
+The tenth addendum fixed `esign` and `meeting-create-spacebar`. Sweeping the suite
+for the same shape found two more, neither of which was failing:
+
+1. **`add-community.spec.ts`** carried the identical latent bug *and the identical
+   incorrect comment* ("the dialog can open a beat late"). It passes on luck: as
+   the first authenticated route compiled, its 30s heading wait absorbs a large
+   cold compile, so hydration usually wins the race.
+2. **`support-access.spec.ts`** already contained an ad-hoc
+   `try { … } catch { click again }` workaround around the admin Support tab.
+   Someone hit this exact swallowed click empirically and patched the symptom
+   without ever naming the cause.
+
+That is **three specs independently bitten by one bug** — two red for months, one
+silently patched — which is what makes it systemic rather than two coincidences.
+Both now use `clickWhenHydrated`. On `support-access` the retry is retained as a
+safety net for a genuinely slow panel render, with a comment saying so; it is safe
+there because the Support tab selects rather than toggles, so a second click is a
+no-op. Verified: `add-community` 2/2, `support-access` 1/1.
+
+### Does this affect real users?
+
+Partly, and less than the dev-server numbers suggest. React only replays discrete
+events captured after `hydrateRoot` begins; a click landing before the bundle
+executes has no listener to capture and is lost for a real user too. That is
+inherent to server-side rendering rather than a defect in this app, and production
+bundles are far faster than a dev server's first compile. **No production
+measurement was taken, so no production number is claimed here.**
