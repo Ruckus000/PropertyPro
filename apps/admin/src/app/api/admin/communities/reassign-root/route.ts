@@ -15,6 +15,8 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 // AUTHZ: platform-admin-only reassignment (requirePlatformAdmin gate above); reassignRootOp performs the atomic cross-community root swap.
 import { reassignRootOp, RoleOpForbiddenError } from '@propertypro/db/unsafe';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseJsonBody } from '@/lib/api/parse-body';
 
 const reassignSchema = z
   .object({
@@ -23,10 +25,12 @@ const reassignSchema = z
   })
   .strict();
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
-  const parsed = reassignSchema.safeParse(await request.json());
+  const body = await parseJsonBody(request);
+  if (body instanceof NextResponse) return body;
+  const parsed = reassignSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
@@ -45,12 +49,11 @@ export async function POST(request: NextRequest) {
         { status: 403 },
       );
     }
-    const message = err instanceof Error ? err.message : 'Reassignment failed';
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message } },
-      { status: 500 },
-    );
+    // RoleOpForbiddenError above is an intentional, user-facing outcome and
+    // keeps its message. Anything else is an internal failure: rethrow so the
+    // wrapper reports it and returns the opaque 500.
+    throw err;
   }
 
   return NextResponse.json({ reassigned: true });
-}
+});

@@ -477,7 +477,16 @@ only. Neither is closed on "we could not be bothered": each has a measurement
 that contradicts the recorded symptom, and both measurements are stated so the
 next person starts from data rather than from this note's prose.
 
-### 3 — connection exhaustion: the app is not the source
+### ~~3 — connection exhaustion: the app is not the source~~ — **REFUTED 2026-08-05**
+
+> **This finding is wrong. See the seventh addendum.** The app *is* the source:
+> `next dev` re-evaluates `drizzle.ts` as it compiles routes, and each module
+> instance opened its own postgres-js pool. Measured across a real suite run the
+> app reached **78** connections and climbing, starving GoTrue out with
+> `SQLSTATE 53300` — which is the long-unexplained `/dev/agent-login` 500. The
+> probes below held at 1 because they exercised only two routes; the leak is per
+> module-graph instantiation, not per request. Left in place unedited, per this
+> note's append-don't-rewrite rule.
 
 Measured on a `next dev` server against the local stack, counting
 `pg_stat_activity` rows that are app client backends (excluding Supabase's own
@@ -540,3 +549,865 @@ same machine.
 **Not fixed.** There is nothing to fix in the config on this evidence, and the
 G1 recommendation's "the tenant config's 3.7-hour wall clock would have to be
 fixed first" should be read as no longer blocking.
+
+
+---
+
+## Sixth addendum — the rate-limiter lead is REFUTED, and a trap that invalidates local runs
+
+The fifth addendum ended by flagging an untested lead: the middleware rate
+limiter 429s well before real load and is exempted only when
+`PLAYWRIGHT_TENANT_E2E=1`, which `pnpm test:e2e` does not set — so the default
+suite runs rate-limited, and that might have explained the hard failures in one
+change rather than twelve investigations.
+
+**It does not.** `checkRateLimit` in
+`apps/web/src/lib/middleware/rate-limit-config.ts` is that flag's only runtime
+consumer, so setting it isolates the variable exactly. Two runs, one variable,
+port force-cleared between them:
+
+| Arm | passed | failed | skipped | never ran |
+|---|---:|---:|---:|---:|
+| rate limiting ON | 6 | 14 | 1 | 8 |
+| rate limiting BYPASSED | 6 | 14 | 1 | 8 |
+
+**The failure sets are byte-identical** — the same 14 tests, in the same specs,
+in both arms — and neither log contains a single `429` or `rate_limited`. The
+lead is closed. The hard failures need individual triage; there is no shortcut.
+
+### The trap that made the first attempt worthless
+
+`playwright.config.ts` sets **`reuseExistingServer: true`** on both webServers.
+A stale `next dev` left listening on :3000 from an earlier run is therefore
+silently adopted instead of starting `dev:e2e` — the run measures a server with
+stale compiled output and stale env, and reports nothing unusual. The first
+attempt at the experiment above returned **0 passed** on that basis, which would
+have read as "bypassing the rate limiter makes things much worse."
+
+**The canary is `activation-smoke` and `marketing-smoke`.** They need no auth and
+no database, and pass in CI in ~5.8 s against a production build with an
+UNREACHABLE database. If either fails locally, the environment is broken and the
+run means nothing — in the bogus run they failed with `#pricing` missing from the
+landing page, alongside `agent-login failed: 404`.
+
+**Kill the port and verify it is clear before counting or timing anything
+locally** (`lsof -ti :3000 | xargs -r kill -9`). This applies retroactively: any
+local pass rate in this note taken without that check — including the
+re-measurement in the third addendum — should be treated as unverified. The
+13-of-39 above was taken with the port verified clear, twice, with matching
+results.
+
+### Worker contention is real after all — the rejected hypothesis needs reopening
+
+This note rejected *"7 parallel workers overwhelm one dev server"* on the
+evidence `--workers=1` → 7 pass, unchanged. **That measurement could not have
+detected the effect**, because at the time the affected specs failed on stale
+logic first and fast — a contention effect has nothing left to change once a
+spec has already failed in 300 ms.
+
+Re-measured after repairing `phase1-roadmap-smoke` (PR #898 — it was landing on
+an Essentials community where every surface it tests is plan-gated; 0/7 → 7/7),
+port verified clear, same stack, same seed:
+
+| Workers | passed | failed | skipped | never ran | wall clock |
+|---:|---:|---:|---:|---:|---|
+| 7 (default) | 7 | 13 | 1 | 8 | 3.2 min |
+| **1** | **11** | **9** | 2 | 7 | 4.6 min |
+
+**+4 blocks for one flag.** At 7 workers the failures are dominated by
+`Test timeout of 30000ms exceeded` and `page.goto: net::ERR_ABORTED; maybe
+frame was detached?`; at 1 worker the run contains **zero** timeouts and
+**zero** aborts — the remaining nine are genuine assertion failures. That is a
+qualitative change in failure *kind*, not just count, and it means any triage
+done at 7 workers is triaging the wrong thing.
+
+Do not read this as "set workers=1". Read it as: the dev server cannot serve 7
+concurrent browsers doing first-compile navigations, so **measure at
+`--workers=1` and triage the assertion failures that survive**.
+
+### ~~Still open:~~ **RESOLVED 2026-08-05** — `/dev/agent-login` intermittently 500s mid-suite
+
+> Cause found and fixed; see the seventh addendum. It was Postgres connection
+> exhaustion starving GoTrue, caused by a pool leak in the app. Everything ruled
+> out below was correctly ruled out — all three hypotheses concerned the
+> endpoint, and the endpoint was never the problem. The instruction below
+> ("capture that body") is exactly what solved it.
+
+Four blocks at `--workers=1` failed with `agent-login failed for
+role=board_president: 500` (`phase1-roadmap-smoke`, `support-access`, and two
+others), through the helper's existing 3× retry-on-5xx.
+
+Ruled out, each by direct test:
+- **Not a broken endpoint** — 12 consecutive `?as=board_president` calls all
+  returned 200.
+- **Not GoTrue's email rate limit** — the local stack sets
+  `[auth.rate_limit] email_sent = 2`, which looked damning, but the admin
+  `generateLink` path does not count against it (see the 12/12 above).
+- **Not `support-access` polluting state** — running that spec to completion
+  and then calling agent-login three times returned 200 each time.
+
+So it is sequence-dependent on something earlier in the run, and not yet
+identified. The route returns its cause in the response body, but
+`e2e/helpers/dev-login.ts` asserts on `response.ok()` and discards the body —
+**capturing that body is the first thing the next pass should do**, rather than
+re-deriving the above.
+
+### One more command-line trap
+
+`pnpm --filter … test:e2e -- --workers=1` passes `--workers=1` through as a
+POSITIONAL test-file filter, so Playwright matches nothing, prints
+`Error: No tests found`, and exits **1** — which reads as a failing suite
+rather than a malformed command. Use
+`pnpm exec playwright test -c playwright.config.ts --workers=1`.
+
+---
+
+## Seventh addendum — the agent-login 500 was CONNECTION EXHAUSTION, and the app *was* the source
+
+Date: **2026-08-05**. Same method as the sixth addendum: local Supabase stack
+(`max_connections = 100`), `pnpm seed:demo`, port force-cleared before every
+measurement, `--workers=1`.
+
+### The 500 is identified and FIXED
+
+The sixth addendum's instruction — capture the response body before theorising
+again — was the whole investigation. `e2e/helpers/dev-login.ts` now reads the
+body and folds it into the assertion message. First run, first failure:
+
+```
+agent-login failed for role=board_president (?as=board_president): 500
+{"error":"Failed to generate login link","details":"Database error finding user",
+ "hint":"Ensure \"board.president@sunset.local\" exists in Supabase Auth ..."}
+```
+
+So the failing call was `generateLink`, not `verifyOtp`. GoTrue's own log gives
+the rest:
+
+```
+error finding user: failed to connect to host=supabase_db_… user=supabase_auth_admin:
+FATAL: remaining connection slots are reserved for roles with the
+SUPERUSER attribute (SQLSTATE 53300)
+```
+
+**Postgres was out of connection slots, so GoTrue could not open one.** That is
+why it "worked early in a run and broke later" — later is when the slots ran
+out. Every ruled-out hypothesis in the sixth addendum was correctly ruled out;
+all three were about the endpoint, and the endpoint was never the problem.
+
+### STRIKING the fifth addendum's finding "3 — connection exhaustion: the app is not the source"
+
+That heading is **wrong**, and so is its structural claim that
+
+> `packages/db/src/drizzle.ts` holds the **only** `postgres()` call in the
+> package — a module-scope singleton … dev-server recompilation does not leak
+> pools either.
+
+A module-scope `const` is one pool per **module instance**, not per process.
+`next dev` re-evaluates the module graph as it compiles routes on demand, so a
+long dev session accumulates several instances, each opening a fresh postgres-js
+pool (default `max: 10`) and never closing the previous one.
+
+Measured with `pg_stat_activity` grouped by `application_name` — the grouping
+the fifth addendum itself asked for:
+
+| | total conns | app (`postgres.js`) | GoTrue reachable |
+|---|---:|---:|---|
+| dev servers down (Supabase's own services only) | 26 | 0 | yes |
+| mid-run, before fix | **104** | **78**, climbing monotonically | **no — 53300** |
+| mid-run, after fix | 34 | **8**, flat | yes |
+
+The fifth addendum's probes (120 and 250 concurrent requests over two routes,
+8 forced recompiles) held app connections at 1 because they exercised **two
+routes**. The leak is per distinct module-graph instantiation, so it only shows
+up across a full suite touching dozens of routes over minutes — which is exactly
+the shape of the run where the symptom appeared.
+
+**The ORIGINAL note had this right.** Its "APP — the app returns an error page"
+section quoted the server log verbatim —
+`Failed query: select … from "user_roles" … [cause]: remaining connection slots
+are reserved` — and concluded "it is a real property of the app's connection
+handling and is the kind of thing an e2e suite exists to find." That was
+correct. The fifth addendum overturned it on a probe too narrow to reproduce it.
+The original observation stands; only its scale was underestimated.
+
+Raising `max_connections` 100 → 500 (tried in the original four-run matrix and
+recorded as "rejected as the cause") does not fix this either — an unbounded leak
+just takes longer to exhaust a bigger ceiling. That is why that experiment moved
+the pass rate so little.
+
+**Fixed** in `packages/db/src/drizzle.ts`: the client is cached on `globalThis`
+and `max` is set explicitly. `closeDb()` clears the cache so scripts that close
+and re-import still get a usable pool. After the fix, a full `--workers=1` run
+contains **zero** `agent-login failed` lines, down from four blocks.
+
+This also retires the fifth addendum's "remaining candidates … the audit
+session's own concurrent tooling". No seed, vitest or `tsx` was running during
+the measurements above; `psql` is counted separately and never exceeded 1.
+
+### A second, unrelated defect this surfaced: `127.0.0.1` vs `localhost`
+
+`playwright.config.ts` used `baseURL: 'http://127.0.0.1:3000'`. But `next dev`
+pins its own origin to `http://localhost:<port>` and builds middleware redirects
+from it **regardless of the request's Host header** — measured with
+`Host: 127.0.0.1:3000`, `Host: localhost:3000` and `Host: example.test:3000`,
+all three answering `location: http://localhost:3000/auth/login`.
+
+Browsers treat `localhost` and `127.0.0.1` as different hosts for cookies. So
+the session cookie was set on `127.0.0.1`, and any test that followed a
+middleware or server-side redirect crossed to `localhost`, arrived with no
+cookies, and was bounced to `/auth/login` — **a logged-in test failing as though
+it were logged out**. `add-community.spec.ts:40` (a redirect-only page) is the
+case that exposed it; it passes with `baseURL` and `ADMIN_BASE_URL` moved to
+`localhost`.
+
+### The e2e suite was never type-checked
+
+`apps/web/tsconfig.json` included `src/**` but not `e2e/**`, so no spec or helper
+was ever seen by `pnpm typecheck`. Adding `e2e/**/*.ts` produced **4** errors
+across the whole suite, all real:
+
+- `onboarding-first-run.spec.ts` passed `skipPortalNav: true`, an option
+  `LoginAsOptions` never declared — silently ignored at runtime, so the helper
+  kept navigating to the portal the spec was trying to skip. (Now implemented.)
+- `stripe-e2e.ts` compared a `let` against a value TS had narrowed away
+  (TS2367). Runtime behaviour was correct; the checker could not see the write
+  inside the poll callback.
+- `pdfjs-runtime.spec.ts` imported a browser-side runtime URL.
+
+`e2e/**/*.ts` is now in the typecheck gate, so this class cannot recur silently.
+
+### Also corrected
+
+`.claude/rules/agent-testing.md`'s role table claimed six roles land in Sunset
+Condos. Measured against `pnpm seed:demo`, **four of them do not** — `owner`,
+`board_president`, `cam` and `pm_admin` are all multi-community, and the bare
+default is `communities[0]` ordered by `communities.name`, i.e. **Palm Shores
+HOA** (Essentials, where most surfaces are plan-gated). The sixth addendum named
+only `board_president`. The table now states the ordering rule and documents
+pinning.
+
+The shared helper now **throws** when `communitySlug` does not match one of the
+user's communities, instead of silently falling back to that alphabetical
+default — the failure mode PR #898 spent a PR diagnosing.
+
+### Triage of the nine `--workers=1` failures
+
+Every one has a named cause. Six are fixed; three are recorded as blocked, with
+the blocker identified.
+
+| Block | Cause | Status |
+|---|---|---|
+| `phase1-roadmap-smoke:32` | agent-login 500 (connection exhaustion). Also raced the compatibility redirect into `/payments?tab=assessments` on a 5s budget. | **fixed** — pool leak + settle on the redirect target |
+| `add-community:40` | `baseURL` was `127.0.0.1`, the redirect target `localhost` → session cookie not sent → bounced to `/auth/login`. | **fixed** — baseURL/ADMIN_BASE_URL now `localhost` |
+| `demo-flows:30`, `demo-flows:87` | Comma-joined selector mixing the `text=` engine into a CSS list. Playwright threw `Unexpected token "="`; these assertions had never executed. `:87` additionally expected a `<table>` for what is now a card list. | **fixed** — `.or()`, plus a locator the list actually renders |
+| `demo-flows:126` | Navigated to `/pm/dashboard`, which has **no `page.tsx`** — the portfolio view moved to `/pm/dashboard/communities`. The 404 still satisfied the spec's `toContain('/pm/')`. | **fixed** — uses the portal agent-login returns |
+| `meeting-create-spacebar:8` | Two causes: bare login landed on Palm Shores (Essentials), and `waitUntil: 'networkidle'` never settled. Then the real one: **"Meetings & Calendar" is a `<div>`, not a heading**, so `getByRole('heading')` could never match — and the route rendered **no `<h1>` at all**, violating the page-title rule in `.claude/rules/design.md`. `guard:breadcrumbs` misses it because its glob only covers `[param]`/`new`/`edit` pages. | **fixed in the APP** — the page title is now an `<h1>` (classes unchanged, visual identical) |
+| `esign-and-documents-flow:212` | Two causes. All five navigations used `waitUntil: 'networkidle'` on pages that render PDF.js previews, which keep fetching indefinitely, so `page.goto` blew the 120s timeout before any assertion ran. Underneath that: the spec waited 60s for a category pill named **`Rules & Regulations`, which does not exist** — `document_categories` has `Rules` (0 docs) and `Governing Documents` (13), and the very next line opens "Sunset Condos Annual Budget", which is itself in `Governing Documents`. The assertion contradicted the line after it. | **fixed** — `domcontentloaded`, and the real category |
+| `phase1-roadmap-smoke:60` | The Stripe connection card is a client component that had not mounted (not even its skeleton) inside the 5s default. Accepted states unchanged. | **fixed** — realistic wait |
+| `signup-trialing:39` | **Environment, not a defect.** `seed:demo` inserts placeholder Stripe price ids (`price_placeholder_essentials_condo_718_month`); no Stripe key can resolve them. The app diagnoses this itself in the dev log. Needs real test-mode price ids. | **recorded** |
+| `onboarding-first-run:120` (and `:144`) | **The spec targets a wizard that was never built.** It waits for `data-testid="condo-onboarding-wizard"` with `data-hydrated="true"`; `git log -S` shows that identifier has only ever appeared in `specs/phase-2-multi-tenancy/39-condo-onboarding-wizard.md` and in this spec — never in `apps/web/src`. The shipped `/onboarding/condo` is a different, 2-step wizard. **This spec has never been capable of passing.** | **recorded — bigger than a selector fix** |
+| `support-access:97` | Two layers. (1) Local-stack artifact: the Supabase CLI now defaults `auto_expose_new_tables` OFF, so a migrations-only database grants the Data API roles nothing — **85 of 100 public tables** had no `service_role` SELECT, and the toggle's POST 500'd with `permission denied … (42501)`. Production is not like this (`local-supabase-post-migrate.sql` records the measured prod posture: service_role reads all). (2) After fixing that, the real blocker: **`platform_admin_users` is empty and nothing seeds it**, so the admin app answers `access_denied` and no admin-app spec can pass. | **(1) fixed in the local recipe; (2) recorded** |
+
+**Two things worth pulling out of that table.**
+
+`onboarding-first-run.spec.ts` is not stale — it is fiction. It was written from a
+design document, and both of its blocks assert against markup that has never
+existed. Rewriting it against the shipped 2-step wizard is a real piece of work
+with product questions attached (what should first-run onboarding guarantee?),
+not a selector swap, so it is recorded rather than guessed at.
+
+Seeding a platform admin is a one-row change, but it grants `super_admin` in
+shared demo data. That is a security-posture decision for whoever owns the demo
+seed, not something to slip into an e2e-repair pass. Until it lands, **the entire
+admin app is unreachable from e2e.**
+
+### The local-stack recipe has a new required line
+
+Add to `supabase/config.toml` under `[api]`:
+
+```toml
+auto_expose_new_tables = true
+```
+
+Without it the local stack is **stricter than production** and produces
+`permission denied for table …` failures that do not exist in the real app. On an
+already-created database, apply `scripts/sql/local-supabase-post-migrate.sql`
+after a blanket grant — that file is the repo's source of truth for which tables
+production deliberately keeps closed to `anon`/`authenticated`.
+
+### One more trap: `.env.local` does not override the shell
+
+`next dev` loads `.env.local`, whose `DATABASE_URL` is **production**. It is safe
+to run the e2e suite only because Next's env loader does **not** overwrite
+variables already present in `process.env` (verified directly against
+`@next/env` 15.5.12). So the suite must be launched through
+`scripts/with-env-local-demo-db.sh`, which exports loopback values first and
+asserts they are loopback. Running `pnpm test:e2e` bare, with a `.env.local`
+symlinked in, points the dev server at production.
+
+### Worker count: measured, then capped at 1
+
+The sixth addendum said "do not read this as *set workers=1*" and asked for a
+measurement. Here it is — otherwise-idle machine, same stack and seed, port
+force-cleared before each arm, `workers` the only variable:
+
+| workers | passed | failed | never ran | wall clock | `Test timeout` | `ERR_ABORTED` |
+|---:|---:|---:|---:|---|---:|---:|
+| **1** | **15** | 8 | 6 | **6.6 min** | 4 | **0** |
+| 2 | 10 | 11 | 8 | 6.2 min | 11 | 0 |
+| 3 | 7 | 14 | 8 | 5.8 min | 15 | 3 |
+
+**Parallelism buys 13% of wall clock and costs half the pass rate.** The extra
+failures are not defects — they are timeouts and detached frames, i.e. one
+`next dev` server failing to serve several browsers doing first-compile
+navigations at once. `workers: 1` is now set in `playwright.config.ts` with this
+table inline. 53 seconds is a cheap price for a result that means anything.
+
+The four remaining `Test timeout` lines at `workers=1` are not contention: they
+are the genuinely-failing blocks in the table above (`support-access`'s 120s cap,
+`signup-trialing`'s Stripe wait, and the onboarding wizard that does not exist).
+
+**Caveat on measuring on this machine:** an earlier attempt at this same matrix
+produced `workers=1 → 7 passed, 19 timeouts, 20.6 min`. That arm was worthless —
+a *different worktree* was running the 937-file unit suite across every core at
+the time. Check `ps -eo comm | grep -c vitest` and prefer an idle machine before
+recording any e2e timing, exactly as the port check is already required.
+
+---
+
+## Where the number stands after this pass
+
+| default suite, one worker | passed | failed | never ran | notes |
+|---|---:|---:|---:|---|
+| before (sixth addendum) | 11 | 9 | 7 | |
+| after the pool-leak fix alone | 12 | 10 | 7 | specs untouched |
+| after the spec/app fixes | **19** | 8 | 2 | **0 timeouts, 0 aborts, 0 agent-login 500s** |
+
+**19 passed / 8 failed / 2 never ran** is the number, taken on a quiet machine at
+`workers: 1`. Counting the whole suite the way the Headline table does — default
++ tenant (3) + pdfjs (4) — that is **26 of 39 blocks**, up from 13.
+
+The qualitative change matters more than the count: that run contained **zero**
+`Test timeout`, **zero** `ERR_ABORTED` and **zero** `agent-login failed` lines.
+Every remaining failure is a specific assertion with a named cause, which is the
+state the sixth addendum was trying to reach.
+
+### What is NOT in the 19, and what confirms each piece
+
+Fixes landed after that measurement. Some were confirmed by later partial runs
+before the environment failed; some were not. Stated individually so the next
+person does not have to guess which:
+
+| Fix | Status |
+|---|---|
+| `demo-flows` compliance + owner-documents first-render budgets | **confirmed passing** in a later run (10.2s / 17.0s) |
+| `add-community` — `domcontentloaded`, per-test budget above the assertion budget | **confirmed passing** in a later run |
+| `activation-smoke` per-test budget | **confirmed passing** (18.3s, having previously blown 30s) |
+| `webServer.timeout` 120s → 300s | **confirmed** — a run that previously aborted with `Timed out waiting 120000ms from config.webServer` got past startup |
+| `esign` → `Governing Documents` category | **NOT yet observed passing** |
+| meetings-dialog and owner-payment-portal budgets | **NOT yet observed passing** |
+| `demo-flows` FIRST_RENDER_TIMEOUT 30s → 60s | **NOT yet observed passing** |
+
+The three unconfirmed entries are each justified by the exact failure they were
+derived from — a category that provably does not exist in
+`document_categories`, and two assertions that died at the 5s default on
+client-rendered content — but **nobody has yet seen a full green run containing
+them.** Run one before quoting a number higher than 19.
+
+### The confirming run never happened: the environment died twice
+
+Two attempts, two infrastructure failures, neither related to the app:
+
+1. **Both canaries failed** at load average 358, with 13 `vitest` workers from
+   another worktree. Discarded per the rule above.
+2. **Docker exited**, taking the entire local Supabase stack with it. Every
+   authenticated block then failed fast, and `/dev/agent-login` returned
+   `"details":"fetch failed"` — GoTrue was simply gone. `psql` to :55322 gave
+   `Connection refused` and `docker ps` gave `Cannot connect to the Docker
+   daemon`.
+
+The second one is worth its own note, because the symptom mimics an app
+regression precisely: authenticated specs failing in 7–11 seconds while public
+ones pass. **Before triaging a sudden cliff like that, check the stack is alive**
+— `docker info`, then `psql -p 55322 -c 'select 1'`. It is one command and it
+would have saved this pass an entire diagnostic detour.
+
+### A measurement that had to be thrown away — and why you should throw yours away too
+
+The confirming run after those three fixes returned 12 passed / 9 failed in
+**24.9 minutes**, against 10.3 minutes for the same suite an hour earlier. It is
+worthless, and the note's own rule says so: **`marketing-smoke` failed, and with
+`activation-smoke` that is both canaries**. Two specs that need no auth, no
+database and no seed do not regress; the environment does.
+
+The cause was measurable and external — load average **358** and **13 `vitest`
+workers belonging to a different worktree**, which started a 937-file unit run
+partway through. An earlier arm of the worker matrix was lost the same way
+(`workers=1 → 7 passed, 19 timeouts, 20.6 min`).
+
+So, alongside the existing port check, add this to the local-run checklist:
+
+```bash
+ps -eo comm | grep -c vitest    # expect 0
+```
+
+A shared machine is a variable, and on this one it is the largest variable there
+is. The two canaries are what tell you it moved.
+
+---
+
+## Eighth addendum — both recorded blockers closed by decision, and the number is now 22
+
+Date: **2026-08-05**, same day as the seventh addendum and the same method: local
+Supabase stack on the 553xx ports, migrations + `pnpm seed:demo`, suite launched
+through `scripts/with-env-local-demo-db.sh` at `workers: 1`.
+
+**Environment was verified clean before the run, and the canaries agree after it:**
+`docker info` OK, `:3000`/`:3001` clear, `ps -eo comm | grep -c vitest` = 0. In the
+measured run `activation-smoke` (all 3 blocks) and `marketing-smoke` both passed,
+and the run contains **zero** `Test timeout`, **zero** `ERR_ABORTED`, **zero**
+`agent-login failed` and **zero** `access_denied`. Per this note's own rule, the
+number below is trustworthy.
+
+### Where the number stands
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| **this pass** | **22** | **4** | 2 | 1 | **6.0 min** |
+
+The 2 skipped are the two `onboarding-first-run` blocks, now `test.fixme` (below).
+The 1 "did not run" is the second `esign` block, skipped because that file is
+`describe.configure({ mode: 'serial' })` and block 1 failed — the same mechanism
+this note has recorded throughout.
+
+### Blocker 1 — the onboarding wizard: RECORDED AS `test.fixme`, and it is WORSE than recorded
+
+The seventh addendum recorded "an onboarding wizard the spec describes but that was
+never built". That is right, but it **understated the gap by half**: the note and
+its surrounding commentary framed this as a condo problem.
+
+Measured: **both** wizards ship a 2-step flow, "Community Profile" → "Compliance
+Preview" — `components/onboarding/condo-wizard.tsx:29` and
+`components/onboarding/apartment-wizard.tsx:32`. The app contains exactly two step
+components (`steps/profile-step.tsx`, `compliance-preview.tsx`), and both API
+contracts cap at `MAX_STEP_INDEX = 1`. The spec drives statutory-documents,
+branding, units, rules-upload and invite steps — **none of which exist for either
+community type** — and waits on `data-testid="condo-onboarding-wizard"` /
+`"apartment-onboarding-wizard"`, ids that `git log -S` finds only in the spec and
+the design doc. `data-hydrated` appears app-wide on one unrelated component
+(`components/help/article-feedback.tsx:92`).
+
+So "rewrite it against the shipped wizard" is authoring a new spec, not editing
+one. That is a product question — what should first-run onboarding guarantee? —
+and it was answered here as: **mark both blocks `test.fixme` naming the gap**, so
+the missing coverage stays visible in the suite rather than disappearing into a
+deleted file. The file header now carries the full evidence.
+
+**One recorded sub-question, answered: `/dev/reset-onboarding` is NOT stale.** It
+writes `onboarding_wizard_state` keyed `(community_id, wizard_type)` with
+`last_completed_step = NULL`, which is exactly what the shipped
+`GET /api/v1/onboarding/{condo,apartment}` reads. It needs no change under any
+option.
+
+### Blocker 2 — `platform_admin_users`: FIXED, and deliberately NOT by seeding
+
+The recorded blocker was "nothing seeds `platform_admin_users`". Seeding it was
+rejected: it would place platform-wide `super_admin` into shared demo data used for
+real demos.
+
+The reframe that resolved it: **the admin app's `/dev/agent-login` was already the
+privilege-granting surface, and it was half-broken.** It minted a session for
+`pm.admin@sunset.local` that `apps/admin/src/middleware.ts:178` then immediately
+rejected for want of a `platform_admin_users` row. It granted the session but not
+the grant that makes a session useful. Read that way this is a latent bug in an
+existing dev-only route, not a missing seed row.
+
+`apps/admin/src/app/dev/agent-login/route.ts` now creates-or-reuses a **dedicated**
+identity, `e2e.platform.admin@local`, and upserts its `platform_admin_users` row,
+in `development` only (the route already 404s otherwise). Consequences, all
+verified against the local stack:
+
+- `pnpm seed:demo` is untouched. `select count(*) from platform_admin_users` is
+  **0 rows** on a freshly seeded database — confirmed after seeding.
+- The privileged identity is **not a demo persona**. `pm.admin@sunset.local` never
+  receives platform privilege, so no demo can surface a super_admin.
+- No extra script for a future e2e job to forget.
+
+After the run, the table holds exactly one row: `e2e.platform.admin@local /
+super_admin`. `loginAsPlatformAdmin` uses `?as=platform_admin`; `pm_admin` is kept
+as an accepted alias.
+
+### `support-access` then surfaced TWO further spec defects, both fixed
+
+Unblocking the login did not make the spec pass — it made it *progress*, which
+exposed two genuine spec bugs that had never been reachable before:
+
+1. **Host mismatch — `localhost` vs `127.0.0.1`.** `loginAsPlatformAdmin`
+   authenticated on `http://localhost:3001`; `ADMIN_CLIENT_URL` was
+   `http://127.0.0.1:3001/clients/1`. Supabase auth cookies are **host-only**, and
+   these are different hosts despite the same address, so every request arrived
+   unauthenticated and the middleware bounced it to `/auth/login`. The visible
+   symptom was a missing "Support" tab — three redirects removed from the cause,
+   and easily misread as an admin-UI gap. Proven with one cookie jar: `/clients` on
+   `127.0.0.1` → 200 authenticated; `/clients/1` on `localhost` with the *same* jar
+   → `/auth/login`, zero occurrences of "Support".
+   This is the seventh addendum's `localhost` ≠ `127.0.0.1` trap resurfacing in a
+   second place. Fixed to `localhost`, which is the correct side: Next's dev server
+   normalises `request.url` to `localhost` regardless of `--hostname`, so the admin
+   app's own redirects land there (observed: a request to
+   `127.0.0.1:3001/dev/agent-login` 307s to `http://localhost:3001/clients`).
+2. **Stale greeting copy.** The spec asserted `Welcome back, Olivia`. The greeting
+   was renamed to `Welcome, {firstName}` in `ec8fb6c9`
+   (`components/dashboard/dashboard-welcome.tsx:10`); `Welcome back` exists nowhere
+   in `apps/web/src`. Because this spec had never authenticated, the assertion had
+   never once run. Updated to the shipped copy — still an `h1` naming the
+   impersonated user.
+
+With both fixed, `support-access` now clears admin login, the Support tab, session
+creation and impersonation, and the read-only banner assertion passes.
+
+### NEW app defect, unfixed: support impersonation forwards a MIXED identity
+
+`support-access` still fails, on one assertion —
+`getByRole('button', { name: /Olivia Owner/i })` — and **the spec is right; the app
+is wrong.**
+
+`apps/web/src/middleware.ts:1128` stamps only `USER_ID_HEADER` with the
+impersonated user. `USER_EMAIL_HEADER` and `USER_FULL_NAME_HEADER`, set earlier at
+lines 421/435, keep the **authenticating admin's** values. The page shell derives
+its user entirely from those forwarded headers
+(`lib/request/page-auth-context.ts:30-42`), so during a support session the chrome
+shows the *admin's* name and email while the page body shows the *impersonated
+user's* data. The dashboard greeting passes precisely because it comes from a
+DB query keyed on user id, not from the header.
+
+Why it matters beyond the test: an operator impersonating a resident cannot tell
+from the account menu whose account they are in. Here the admin has no full name,
+so `ProfileMenu` falls back to `aria-label="Account menu"` and the assertion finds
+nothing; in production, with a named admin, it would confidently display the
+**wrong** name.
+
+Not fixed here: the repair belongs in a security-sensitive middleware path and the
+obvious implementation (look the target user up per request) lands an extra query
+in the hot path this repo has an active performance programme around. The
+alternative — carrying name/email in the signed support JWT — changes the payload
+shape and the admin-side session creation. That is a real trade-off and a
+deliberate decision, not a drive-by.
+
+### The three unconfirmed fixes from #902 — now measured
+
+The seventh addendum's table left three entries "NOT yet observed passing" and
+asked for a full run before quoting a higher number. That run happened:
+
+| Fix | Seventh addendum | Measured this pass |
+|---|---|---|
+| `demo-flows` FIRST_RENDER_TIMEOUT 30s → 60s | NOT observed | **CONFIRMED** — all 9 `demo-flows` blocks pass |
+| owner-payment-portal budget | NOT observed | **CONFIRMED** — `phase1-roadmap-smoke:169` passes (13.7s) |
+| meetings-dialog budget | NOT observed | **INSUFFICIENT — the fix does not work.** `meeting-create-spacebar` still fails, now at the *raised* 30s timeout: `getByRole('dialog')` never appears at all. This was never a budget problem; the dialog does not open. |
+| `esign` → `Governing Documents` category | NOT observed | **STILL UNREACHED, and not for the recorded reason.** The spec now fails *earlier*, at line 126: after clicking the template trigger, `getByPlaceholder('Search templates...')` never appears within 30s. The category fix is neither confirmed nor refuted — execution does not get that far. |
+
+The last two share a shape worth naming: **an overlay that never opens after a
+click** (a Radix dialog and a combobox popover), each failing a 30s wait rather
+than a 5s one. Two independent specs failing the same way is a lead about the
+overlay layer, not two unrelated budget misses — and the earlier reading of them as
+timing/budget issues is now measurably wrong.
+
+### Remaining 4 failures, with causes
+
+| Spec | Cause | Kind |
+|---|---|---|
+| `esign-and-documents-flow:109` | template picker popover never opens (30s) | app / overlay — unresolved |
+| `meeting-create-spacebar:12` | Create Meeting dialog never opens (30s) | app / overlay — unresolved |
+| `signup-trialing:39` | `price_placeholder_…` ids no Stripe account can resolve | recorded blocker, unchanged |
+| `support-access:107` | mixed impersonation identity (above) | app — newly identified |
+
+`signup-trialing` remains the third recorded blocker from the seventh addendum and
+is untouched here.
+
+### Verification for this pass
+
+`tsc --noEmit` clean on **both** `@propertypro/web` and `@propertypro/admin`;
+`node scripts/run-lint-guards.mjs` **21/21**; unit **11,060 passed / 0 failed**
+(939 files) against a stub `DATABASE_URL`; integration **310 app + 121 RLS**, all
+passing, on the local runner.
+
+**One trap for the next person, and it cost a full unit run here:** a *fresh
+worktree* fails 269 unit test FILES at collection with `Failed to resolve entry for
+package "@propertypro/api-contract"` — the workspace packages have no `dist` until
+`pnpm --filter './packages/*' build` is run. `pnpm install` alone is not enough.
+The signature is unmistakable once you know it: hundreds of failed *files* but only
+a handful of failed *tests*, because the files never executed. Build the packages
+before believing any local unit number from a new worktree.
+
+---
+
+## Ninth addendum — the mixed impersonation identity is FIXED, and `support-access` passes
+
+Date: **2026-08-05**. Same environment and method as the eighth addendum.
+
+The eighth addendum recorded the mixed-identity defect and deliberately left it
+unfixed, naming the trade-off: a per-request lookup in a hot path, versus changing
+the signed token. **The token approach was chosen and implemented.**
+
+### The fix
+
+`SupportSessionJwtPayload` gains two optional claims, `target_name` and
+`target_email` (`packages/shared/src/support-access.ts`). They are resolved
+**once**, when the admin app creates the session and already makes several queries
+(`apps/admin/src/app/api/admin/support/sessions/route.ts`), and signed into the
+token. The web middleware then stamps the impersonated identity from claims it
+already has in hand — **zero added per-request queries**, which is what made this
+the right shape for a path the nav-performance programme cares about.
+
+`apps/web/src/middleware.ts` now moves all identity headers together instead of
+only the id.
+
+Three details that carry the safety of this change:
+
+1. **Absent claims CLEAR, they never inherit.** Tokens signed before these claims
+   existed stay valid until they expire (≤30 min). For those, middleware deletes
+   `USER_FULL_NAME_HEADER` / `USER_EMAIL_HEADER` rather than leaving the admin's
+   values — which is the precise bug being fixed. An anonymous account menu is the
+   safe degradation; a confidently wrong name is not.
+2. **Non-string claims are discarded, not coerced.** `parseImpersonationCookie`
+   accepts these values only when they are strings, because they are rendered as
+   the operator's "who am I acting as" signal.
+3. **`USER_PHONE_HEADER` is unconditionally dropped.** It was leaking the admin's
+   phone into impersonated requests for the same reason. It has no counterpart
+   claim on purpose — the header is not displayed in the chrome, and adding a phone
+   number to a signed token that rides in a cookie is a worse trade than dropping
+   it. This was **not** in the eighth addendum's description of the defect; it was
+   found while fixing it.
+
+### Verification, including the revert-check
+
+New coverage: `apps/web/__tests__/middleware/support-impersonation-identity.test.ts`
+(5 tests, driving the real `middleware()` export and asserting on
+`x-middleware-request-*`) and three claim round-trip tests appended to
+`__tests__/support/impersonation.test.ts`.
+
+**The revert-check named a production line.** With the middleware block reverted to
+its pre-fix form, the new tests fail reading
+`expected 'Ada Admin' to be 'Olivia Owner'` — the admin's name leaking through,
+which is the defect verbatim. The two control cases (non-impersonated request;
+support marker headers) keep passing under the revert, so the file is not merely
+globally broken.
+
+One trap recorded while writing it: the middleware test must drive
+**`/api/v1/documents`**, not `/dashboard`. A signed-in user with no community
+redirects to `/select-community` and never reaches the support branch, so every
+`forwarded()` assertion reads `null` and the negative assertions
+(`not.toBe(admin)`) **pass vacuously**. The mocked user also needs
+`emailVerified: true` or middleware diverts to `/auth/verify-email` first. Both
+failure modes look like a broken fix rather than a broken harness.
+
+### `support-access.spec.ts` passes — the first time it ever has
+
+It now runs the whole flow: admin dev-login → Support tab → session creation →
+impersonation showing the **impersonated** user's identity → read-only enforcement
+→ session end → revert to the board president's own session.
+
+Fixing the app surfaced one last stale assertion: a **second** `Welcome back`
+occurrence at line 204, missed on the first pass because only the first was
+corrected. It asserts the post-session state, where the popup falls back to the
+board president's own session (it shares a browser context with `boardPage`), so
+the expected name is `Sam President`. Both occurrences are now `Welcome, …`.
+
+### Where the number stands
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| eighth addendum | 22 | 4 | 2 | 1 | 6.0 min |
+| **this pass** | **23** | **3** | 2 | 1 | **5.9 min** |
+
+Both canaries green; zero timeouts, aborts or agent-login failures.
+
+The remaining three are unchanged and each has a named cause: the two overlays
+that never open (`esign` template picker, `meeting-create-spacebar` dialog — still
+failing a *30s* wait, still not budget problems) and `signup-trialing`'s
+placeholder Stripe price ids.
+
+Full verification for this pass: `tsc --noEmit` clean on web, admin **and**
+shared; 21/21 guards; unit **11,068 passed / 0 failed** (940 files, +8 new);
+integration unchanged at 310 app + 121 RLS. Nothing touched production.
+
+---
+
+## Tenth addendum — the two "overlays that never open" were ONE root cause: clicking before hydration
+
+Date: **2026-08-05**.
+
+The seventh and eighth addenda recorded `esign-and-documents-flow` and
+`meeting-create-spacebar` as failing on overlays that never open, and the eighth
+noted they shared a shape. They share a **cause**, and it is not what either
+spec's comments claimed.
+
+### Root cause, measured
+
+Playwright's actionability checks are DOM checks — visible, stable, enabled,
+receives events. **None of them mean React has attached a handler.** On a
+server-rendered page the button exists and is fully "actionable" before hydration
+runs, so a `.click()` in that window is dispatched into markup with no listener
+and is **silently swallowed**.
+
+Probing `__reactFiber$` / `__reactProps$` on the exact trigger nodes, at the
+moment each spec clicks them:
+
+| Spec | trigger hydrated when the spec clicks? | hydrated after |
+|---|---|---|
+| `meeting-create-spacebar` | **no** — `hasFiber: false` | 511 ms |
+| `esign-and-documents-flow` | **no** — `hasFiber: false` | 259 ms |
+
+In both cases a click issued *after* that point opens the overlay immediately
+(`anyDialogRole: 1`; esign's search box `visible: true`). There were **zero** page
+errors and no console errors on either page.
+
+**This is why raising the timeouts to 30s could never work: the timeout is on the
+wrong side of the lost event.** The click already happened; no further click is
+ever sent; the overlay will not appear no matter how long the assertion waits.
+The eighth addendum's reading — "not the budget misses they were recorded as" —
+was right that budgets were not the problem, but the mechanism is sharper than
+"the overlay layer": *the event never reached React*.
+
+Two pieces of folklore this retires:
+
+- Waiting for a heading is **not** a proxy for interactivity. The heading is in
+  the server HTML and appears before hydration by definition. Both specs gated on
+  a heading and then clicked.
+- The `esign` file header blamed "a stale process on port 3000 serving an old
+  bundle". That produces the same symptom and was worth ruling out, but it was not
+  the cause. The header has been corrected.
+
+### The fix
+
+`apps/web/e2e/helpers/hydration.ts` — `clickWhenHydrated(locator)`: waits until
+React has attached an `onClick` to that node, then clicks **once**.
+
+Deliberately not a retry-click loop. A retry is unsafe for anything that TOGGLES:
+esign's trigger is a popover, so a second click fired just after the first one
+finally opened it closes it again, converting a deterministic failure into a flaky
+one. One click to a live handler has no such race.
+
+The probe reads React's expando keys, which is an implementation detail. That is a
+deliberate, contained trade: it is test-only, and if React renames those keys the
+helper stops finding them and **times out loudly**. It cannot silently pass a click
+through unhydrated markup.
+
+### A real accessibility bug this uncovered
+
+With the meetings dialog finally opening, the next assertion failed:
+`dialog.getByRole('heading', { name: 'Create Meeting' })` found nothing.
+
+The dialog rendered its title as `<Dialog.Title asChild><CardTitle>`, and
+`CardTitle` renders a **`<div>`** — so the modal had **no heading at all**. The
+canonical `ui/dialog.tsx` `DialogTitle` renders the Radix primitive directly and
+therefore emits `<h2>`; `meeting-form.tsx` and `meeting-detail-modal.tsx` were the
+only two components in the app that hand-rolled it this way. The spec was right and
+the app was wrong.
+
+Both now render `Dialog.Title` directly with CardTitle's exact classes — semantics
+restored, no visual change (Tailwind preflight already zeroes heading margin and
+size). This was a genuine a11y defect on two user-facing modals, not a test-only
+fix.
+
+### A third finding: `esign` line 187 is order/load dependent
+
+Once the overlay fix landed, `esign` failed further along, at
+`getByText(/Signing as:/i)` on `/sign/[externalId]/[slug]`. Measured:
+
+- passes **3/3 in isolation**, including immediately after a full suite (so it is
+  not accumulated database state),
+- fails **deterministically** at the 5s default in a full-suite run.
+
+`/sign/[externalId]/[slug]` is a route the run has not compiled yet and
+`domcontentloaded` returns before it renders; in a full suite the dev server has
+already compiled ~20 other routes. Given 30s — matching the neighbouring
+assertions in the same file — **both esign blocks passed in a full suite for the
+first time**, including block 2, which this note has never previously observed
+running.
+
+### Measurement status — read this before quoting a number
+
+Confirmed and repeatable in isolation: `esign` 2/2, `meeting-create-spacebar` 1/1,
+`support-access` 1/1.
+
+The best full-suite numbers this pass, in order:
+
+| run | result | wall | note |
+|---|---|---:|---|
+| overlay fix, before the line-187 fix | 24 passed / 2 failed | 6.3 min | `meeting-create-spacebar` green in-suite; esign still failing at 187 |
+| + line-187 fix | both esign blocks green | 8.5 min | but `phase1-roadmap-smoke` failed; load average 14 |
+| repeat | 16 passed | 12.1 min | **discarded** |
+
+**The last run is discarded under this note's own rule.** `marketing-smoke` took
+**16.9s against a 3.0s baseline** (5.6×), `add-community` 49.1s against 11.6s, and
+the failures are bare `Test timeout of 120000ms exceeded` — with load average
+**15.95**. The canaries technically passed, which is a refinement worth recording:
+**a canary that passes but is 5× slower is still telling you the environment
+moved.** Treat canary *timings*, not just their pass/fail, as the signal.
+
+The cause was self-inflicted: back-to-back full suites on a shared machine. So
+**a clean confirming full-suite run of the combined state has not been taken** —
+same honesty as the seventh addendum's "the confirming run never happened". The
+per-spec results above are solid; the suite total for the combined state is not
+yet measured. Take it on a quiet machine before quoting one.
+
+---
+
+## Eleventh addendum — the confirming run, and two more sites of the same root cause
+
+Date: **2026-08-05**. The tenth addendum owed a clean full-suite measurement and
+said so. Here it is, taken on a settled machine (load ~5, `vitest` count 0):
+
+| default suite, one worker | passed | failed | skipped | never ran | wall |
+|---|---:|---:|---:|---:|---|
+| seventh addendum | 19 | 8 | 0 | 2 | — |
+| eighth addendum | 22 | 4 | 2 | 1 | 6.0 min |
+| ninth addendum | 23 | 3 | 2 | 1 | 5.9 min |
+| **confirming run** | **26** | **1** | 2 | **0** | 7.5 min |
+
+**Canaries at baseline** — `activation-smoke` 700ms / 2.8s / 3.9s and
+`marketing-smoke` 2.8s, against the 3.0s reference. Per this note's own rule
+(and the tenth addendum's refinement that canary *timings* matter, not just
+pass/fail), this measurement is trustworthy.
+
+**"never ran" is 0 for the first time in this note's history.** Every block in the
+default suite now executes; the five `mode: 'serial'` files no longer lose their
+tails to an early failure. The 2 skipped are the deliberate `onboarding-first-run`
+`test.fixme` blocks.
+
+**The single remaining failure is `signup-trialing`** — `price_placeholder_…` ids
+that no Stripe account can resolve. That is the last of the three blockers the
+seventh addendum recorded, and it needs Stripe test-mode price ids, not a code fix.
+
+### Two more sites of the hydration bug, found by sweeping
+
+The tenth addendum fixed `esign` and `meeting-create-spacebar`. Sweeping the suite
+for the same shape found two more, neither of which was failing:
+
+1. **`add-community.spec.ts`** carried the identical latent bug *and the identical
+   incorrect comment* ("the dialog can open a beat late"). It passes on luck: as
+   the first authenticated route compiled, its 30s heading wait absorbs a large
+   cold compile, so hydration usually wins the race.
+2. **`support-access.spec.ts`** already contained an ad-hoc
+   `try { … } catch { click again }` workaround around the admin Support tab.
+   Someone hit this exact swallowed click empirically and patched the symptom
+   without ever naming the cause.
+
+That is **three specs independently bitten by one bug** — two red for months, one
+silently patched — which is what makes it systemic rather than two coincidences.
+Both now use `clickWhenHydrated`. On `support-access` the retry is retained as a
+safety net for a genuinely slow panel render, with a comment saying so; it is safe
+there because the Support tab selects rather than toggles, so a second click is a
+no-op. Verified: `add-community` 2/2, `support-access` 1/1.
+
+### Does this affect real users?
+
+Partly, and less than the dev-server numbers suggest. React only replays discrete
+events captured after `hydrateRoot` begins; a click landing before the bundle
+executes has no listener to capture and is lost for a real user too. That is
+inherent to server-side rendering rather than a defect in this app, and production
+bundles are far faster than a dev server's first compile. **No production
+measurement was taken, so no production number is claimed here.**

@@ -12,6 +12,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -40,7 +42,7 @@ function computeStatus(item: ChecklistRow): 'met' | 'overdue' | 'pending' | 'not
   return 'pending';
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -82,12 +84,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     .order('category')
     .order('title');
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to load community compliance');
 
   const rows = (data ?? []) as unknown as ChecklistRow[];
   const items = rows.map((row) => ({
@@ -104,4 +101,4 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   };
 
   return NextResponse.json({ items, summary });
-}
+});

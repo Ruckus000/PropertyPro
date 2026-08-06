@@ -26,6 +26,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 const tokensSchema = z.object({
   primaryColor: z.string().min(1),
@@ -74,10 +76,10 @@ function shape(row: SiteThemePresetRow) {
   };
 }
 
-export async function PATCH(
+export const PATCH = withAdminErrorHandler(async (
   request: NextRequest,
   context: { params: Promise<{ slug: string }> },
-) {
+) => {
   await requirePlatformAdmin();
 
   const { slug } = await context.params;
@@ -132,10 +134,7 @@ export async function PATCH(
           { status: 404 },
         );
       }
-      return NextResponse.json(
-        { error: { message: readErr.message } },
-        { status: 500 },
-      );
+      assertNoDbError(readErr, 'Failed to read theme preset for versioning');
     }
     nextVersion = (existing as { version: number }).version + 1;
   }
@@ -175,19 +174,16 @@ export async function PATCH(
         { status: 404 },
       );
     }
-    return NextResponse.json(
-      { error: { message: error.message } },
-      { status: 500 },
-    );
+    assertNoDbError(error, 'Failed to update theme preset');
   }
 
   return NextResponse.json({ preset: shape(data as SiteThemePresetRow) });
-}
+});
 
-export async function DELETE(
+export const DELETE = withAdminErrorHandler(async (
   _request: NextRequest,
   context: { params: Promise<{ slug: string }> },
-) {
+) => {
   await requirePlatformAdmin();
 
   const { slug } = await context.params;
@@ -214,7 +210,7 @@ export async function DELETE(
         { status: 404 },
       );
     }
-    return NextResponse.json({ error: { message: readErr.message } }, { status: 500 });
+    assertNoDbError(readErr, 'Failed to read theme preset before delete');
   }
 
   // Usage check 1 — non-deleted communities referencing this preset via the
@@ -224,9 +220,7 @@ export async function DELETE(
     .select('id', { count: 'exact', head: true })
     .filter('branding->>themePresetSlug', 'eq', slug)
     .is('deleted_at', null);
-  if (cErr) {
-    return NextResponse.json({ error: { message: cErr.message } }, { status: 500 });
-  }
+  assertNoDbError(cErr, 'Failed to count communities using theme preset');
 
   // Usage check 2 — layouts that name this preset as their default. The FK
   // is onDelete:restrict, so a hard delete here would error at the DB anyway.
@@ -234,9 +228,7 @@ export async function DELETE(
     .from('site_layout_metadata')
     .select('slug', { count: 'exact', head: true })
     .eq('default_preset_slug', slug);
-  if (lErr) {
-    return NextResponse.json({ error: { message: lErr.message } }, { status: 500 });
-  }
+  assertNoDbError(lErr, 'Failed to count layouts using theme preset');
 
   const communities = communityCount ?? 0;
   const layouts = layoutCount ?? 0;
@@ -248,9 +240,7 @@ export async function DELETE(
         .from('site_theme_presets')
         .update({ is_archived: true, updated_at: new Date().toISOString() })
         .eq('slug', slug);
-      if (archiveErr) {
-        return NextResponse.json({ error: { message: archiveErr.message } }, { status: 500 });
-      }
+      assertNoDbError(archiveErr, 'Failed to archive theme preset');
     }
     return NextResponse.json({
       archived: true,
@@ -265,9 +255,7 @@ export async function DELETE(
     .from('site_theme_presets')
     .delete()
     .eq('slug', slug);
-  if (delErr) {
-    return NextResponse.json({ error: { message: delErr.message } }, { status: 500 });
-  }
+  assertNoDbError(delErr, 'Failed to delete theme preset');
 
   return NextResponse.json({ archived: false, deleted: true });
-}
+});

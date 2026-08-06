@@ -12,6 +12,8 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { validateStarterPackBlocks } from '@propertypro/shared';
 import { PACK_COLUMNS, StarterPackRow, shapePack, validationErrorResponse, zodErrorResponse } from '../_shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 const patchBodySchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
@@ -20,7 +22,7 @@ const patchBodySchema = z.object({
   isArchived: z.boolean().optional(),
 });
 
-export async function PATCH(request: NextRequest, context: { params: Promise<{ slug: string }> }) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: { params: Promise<{ slug: string }> }) => {
   await requirePlatformAdmin();
   const { slug } = await context.params;
   if (!slug || typeof slug !== 'string') {
@@ -48,12 +50,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
   const { data, error } = await db.from('site_starter_packs').update(update).eq('slug', slug).select(PACK_COLUMNS).single();
   if (error) {
     if (error.code === 'PGRST116') return NextResponse.json({ error: { message: `Starter pack not found: ${slug}` } }, { status: 404 });
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
+    assertNoDbError(error, 'Failed to update starter pack');
   }
   return NextResponse.json({ pack: shapePack(data as StarterPackRow) });
-}
+});
 
-export async function DELETE(_request: NextRequest, context: { params: Promise<{ slug: string }> }) {
+export const DELETE = withAdminErrorHandler(async (_request: NextRequest, context: { params: Promise<{ slug: string }> }) => {
   await requirePlatformAdmin();
   const { slug } = await context.params;
   if (!slug || typeof slug !== 'string') {
@@ -65,7 +67,7 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
     .from('site_starter_packs').select('id, community_type, is_archived').eq('slug', slug).single();
   if (readErr) {
     if (readErr.code === 'PGRST116') return NextResponse.json({ error: { message: `Starter pack not found: ${slug}` } }, { status: 404 });
-    return NextResponse.json({ error: { message: readErr.message } }, { status: 500 });
+    assertNoDbError(readErr, 'Failed to read starter pack');
   }
   const row = pack as { id: number; community_type: StarterPackRow['community_type']; is_archived: boolean };
 
@@ -78,7 +80,7 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
   const { count, error: cErr } = await db
     .from('site_starter_packs').select('id', { count: 'exact', head: true })
     .eq('community_type', row.community_type).eq('is_archived', false).neq('id', row.id);
-  if (cErr) return NextResponse.json({ error: { message: cErr.message } }, { status: 500 });
+  assertNoDbError(cErr, 'Failed to count sibling starter packs');
   if ((count ?? 0) === 0) {
     return NextResponse.json(
       { error: { message: `Cannot archive the only starter pack for ${row.community_type}; create or unarchive a replacement first.` } },
@@ -88,6 +90,6 @@ export async function DELETE(_request: NextRequest, context: { params: Promise<{
 
   const { error: archiveErr } = await db
     .from('site_starter_packs').update({ is_archived: true, updated_at: new Date().toISOString() }).eq('slug', slug);
-  if (archiveErr) return NextResponse.json({ error: { message: archiveErr.message } }, { status: 500 });
+  assertNoDbError(archiveErr, 'Failed to archive starter pack');
   return NextResponse.json({ archived: true, deleted: false });
-}
+});

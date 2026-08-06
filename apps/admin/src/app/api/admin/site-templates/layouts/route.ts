@@ -14,6 +14,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
 
 interface SiteLayoutMetadataRow {
   id: number;
@@ -30,7 +33,7 @@ interface SiteLayoutMetadataRow {
   updated_at: string;
 }
 
-export async function GET(_request: NextRequest) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest) => {
   await requirePlatformAdmin();
 
   const db = createAdminTypedClient();
@@ -40,14 +43,10 @@ export async function GET(_request: NextRequest) {
       'id, slug, display_name, tagline, description, tier, is_archived, is_featured, default_preset_slug, version, created_at, updated_at',
     )
     .order('is_featured', { ascending: false })
-    .order('display_name', { ascending: true });
+    .order('display_name', { ascending: true })
+    .limit(PLATFORM_LIST_LIMIT);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to read site layouts');
 
   const layouts = (data ?? []).map((row: SiteLayoutMetadataRow) => ({
     id: row.id,
@@ -65,4 +64,4 @@ export async function GET(_request: NextRequest) {
   }));
 
   return NextResponse.json({ layouts });
-}
+});

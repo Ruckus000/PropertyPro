@@ -1,15 +1,9 @@
-import { AppError } from './AppError';
-
 /**
- * 400 Bad Request — malformed or structurally invalid request (e.g. missing
- * required query parameters, non-parseable IDs).
+ * Re-export shim. The class now lives in `@propertypro/shared` so that
+ * apps/web and apps/admin share one definition — a second copy would make
+ * `instanceof AppError` silently false in one of them.
  *
- * Use UnprocessableEntityError (422) for semantically invalid but structurally valid
- * payloads (e.g. Zod field failures on a well-formed JSON body).
+ * This file is kept so the ~340 existing deep imports
+ * (`@/lib/api/errors/BadRequestError`) keep resolving unchanged.
  */
-export class BadRequestError extends AppError {
-  constructor(message: string, details?: Record<string, unknown>) {
-    super(message, 400, 'BAD_REQUEST', details);
-    this.name = 'BadRequestError';
-  }
-}
+export { BadRequestError } from '@propertypro/shared/http';

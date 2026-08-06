@@ -16,12 +16,15 @@ import {
   updateDemo,
   sanitizeDemoRow,
 } from '@/lib/db/demo-queries';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: Request, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -35,12 +38,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
   const { data, error } = await getDemoById(id);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to read demo instance');
 
   if (!data) {
     return NextResponse.json(
@@ -50,10 +48,10 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({ data: sanitizeDemoRow(data) });
-}
+});
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  await requirePlatformAdmin();
+export const DELETE = withAdminErrorHandler(async (_request: Request, context: RouteContext) => {
+  const admin = await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
   const id = Number(idRaw);
@@ -107,17 +105,37 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   // 5. Delete the demo_instances row
   const { error: deleteError } = await deleteDemo(id);
-  if (deleteError) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: deleteError.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(deleteError, 'Failed to delete demo instance');
+
+  // This is the one call site that cannot log against a live community: steps
+  // 3-5 above destroy the auth users, the community and the demo row. The
+  // details were captured from `demo` before any of that ran, and the audit
+  // table's community_id FK is ON DELETE SET NULL precisely so this entry
+  // survives the community it describes. Recording it with a CASCADE would
+  // mean deleting a tenant also deleted the evidence.
+
+  await logAdminAction({
+    admin,
+    action: 'demo_deleted',
+    resourceType: 'demo_instance',
+    resourceId: id,
+    communityId: demo.seeded_community_id ?? null,
+    oldValues: {
+      slug: demo.slug,
+      seeded_community_id: demo.seeded_community_id,
+      demo_resident_user_id: demo.demo_resident_user_id,
+      demo_board_user_id: demo.demo_board_user_id,
+    },
+    metadata: {
+      deleted_auth_user_count: userIds.length,
+      cascaded_community: Boolean(demo.seeded_community_id),
+    },
+  });
 
   return NextResponse.json({ success: true });
-}
+});
 
-export async function PATCH(request: Request, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: Request, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id: idRaw } = await context.params;
@@ -168,12 +186,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { data, error } = await updateDemo(id, parsed.data);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update demo instance');
 
   if (!data) {
     return NextResponse.json(
@@ -183,4 +196,4 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   return NextResponse.json({ data: sanitizeDemoRow(data) });
-}
+});

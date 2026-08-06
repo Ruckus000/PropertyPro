@@ -9,13 +9,14 @@ import { NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 // AUTHZ: platform-admin report — cross-community read, gated by the requirePlatformAdmin() session check immediately below before any data read.
 import { findRootlessCommunities } from '@propertypro/db/unsafe';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export const GET = withAdminErrorHandler(async () => {
   await requirePlatformAdmin();
 
   const communities = await findRootlessCommunities();
 
   return NextResponse.json({ communities });
-}
+});

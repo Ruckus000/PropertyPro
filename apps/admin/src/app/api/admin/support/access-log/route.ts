@@ -6,8 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const communityIdParam = request.nextUrl.searchParams.get('communityId');
@@ -28,9 +30,7 @@ export async function GET(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(100);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to load support access log');
 
   return NextResponse.json({ entries: data ?? [] });
-}
+});

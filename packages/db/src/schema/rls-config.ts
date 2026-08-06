@@ -431,6 +431,11 @@ export const RLS_TENANT_TABLES = [
 ] as const satisfies readonly RlsTenantTableConfig[];
 
 export const RLS_GLOBAL_TABLE_EXCLUSIONS = [
+  {
+    tableName: 'platform_admin_audit_log',
+    reason:
+      'Append-only audit trail for PLATFORM-level operator actions in apps/admin (0052). Deliberately NOT tenant-scoped: community_id is NULLABLE precisely because platform actions such as granting or revoking platform-admin access have no community at all — which is why neither compliance_audit_log nor support_access_log (both community_id NOT NULL) could hold them. Locked down on the platform-table pattern: RLS enabled and forced, zero policies (the deny-everyone default), REVOKE ALL from anon/authenticated, and service_role granted SELECT+INSERT ONLY — no UPDATE or DELETE, which is what makes it append-only. A BEFORE UPDATE OR DELETE trigger backstops the privileged Drizzle connection, which holds rolbypassrls and is not bound by the grant. Written exclusively by the service-role PostgREST client via apps/admin/src/lib/audit/log-admin-action.ts.',
+  },
   { tableName: 'communities', reason: 'Root tenant entity — isolation enforced on id column (not community_id) by ScopedClient special-case; RLS is enabled (pp_communities_* policies, 0026) but community_id FK-based scoping does not apply' },
   // The three entries below carried reasons that explained only why COMMUNITY
   // SCOPING does not apply to them — which was true, and which read for years as

@@ -14,6 +14,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
 
 interface SiteThemePresetRow {
   id: number;
@@ -29,7 +32,7 @@ interface SiteThemePresetRow {
   updated_at: string;
 }
 
-export async function GET(_request: NextRequest) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest) => {
   await requirePlatformAdmin();
 
   const db = createAdminTypedClient();
@@ -39,14 +42,10 @@ export async function GET(_request: NextRequest) {
       'id, slug, display_name, description, tokens, tier, is_archived, is_featured, version, created_at, updated_at',
     )
     .order('is_featured', { ascending: false })
-    .order('display_name', { ascending: true });
+    .order('display_name', { ascending: true })
+    .limit(PLATFORM_LIST_LIMIT);
 
-  if (error) {
-    return NextResponse.json(
-      { error: { message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to read theme presets');
 
   const presets = (data ?? []).map((row: SiteThemePresetRow) => ({
     id: row.id,
@@ -63,7 +62,7 @@ export async function GET(_request: NextRequest) {
   }));
 
   return NextResponse.json({ presets });
-}
+});
 
 // ---------------------------------------------------------------------------
 // POST — create a new theme preset
@@ -102,7 +101,7 @@ function shape(row: SiteThemePresetRow) {
   };
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   let json: unknown;
@@ -158,14 +157,11 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
-    return NextResponse.json(
-      { error: { message: error.message } },
-      { status: 500 },
-    );
+    assertNoDbError(error, 'Failed to create theme preset');
   }
 
   return NextResponse.json(
     { preset: shape(data as SiteThemePresetRow) },
     { status: 201 },
   );
-}
+});

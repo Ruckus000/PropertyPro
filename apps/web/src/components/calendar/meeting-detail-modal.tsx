@@ -6,7 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { Badge } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
@@ -111,8 +111,11 @@ export function MeetingDetailModal({
           <div className="flex w-full items-start justify-between gap-4">
             <div className="space-y-2">
               {meetingToken ? <Badge variant={meetingToken.badgeVariant}>{meetingToken.label}</Badge> : null}
-              <Dialog.Title asChild>
-                <CardTitle>{meeting?.title ?? 'Loading meeting…'}</CardTitle>
+              {/* Radix default <h2>; see meeting-form.tsx — `asChild` + CardTitle
+                  renders a <div> and removes the dialog's only heading. Classes
+                  are CardTitle's verbatim, so nothing moves visually. */}
+              <Dialog.Title className="font-semibold leading-none tracking-tight">
+                {meeting?.title ?? 'Loading meeting…'}
               </Dialog.Title>
             </div>
             <Dialog.Close asChild>

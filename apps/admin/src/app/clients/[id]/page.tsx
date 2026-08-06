@@ -11,6 +11,7 @@ import { AdminLayout } from '@/components/AdminLayout';
 import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
 import type { CommunitySettings } from '@/components/clients/community-settings';
 import { getCoolingDeletionRequestCount } from '@/lib/server/deletion-requests';
+import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,11 @@ const CommunityRowSchema = z.object({
 });
 
 export default async function ClientWorkspacePage({ params }: PageProps) {
+  // AUTHZ: platform-admin only. This page reads a single tenant's full record
+  // with the service-role client (RLS-bypassing), so it re-asserts the identity
+  // middleware already verified rather than trusting the matcher alone.
+  await requireAdminPageSession();
+
   const { id } = await params;
   const communityId = Number(id);
 
@@ -74,6 +80,20 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
       .is('deleted_at', null),
     getCoolingDeletionRequestCount(),
   ]);
+
+  // These used to degrade to 0 / null on a failed query, which is
+  // indistinguishable from a genuinely empty community — an operator would
+  // read "0 members, 0 documents, no compliance score" as fact. Let the
+  // failure reach error.tsx instead.
+  if (membersResult.error) {
+    throw new Error(`Failed to count members: ${membersResult.error.message}`);
+  }
+  if (documentsResult.error) {
+    throw new Error(`Failed to count documents: ${documentsResult.error.message}`);
+  }
+  if (complianceResult.error) {
+    throw new Error(`Failed to load compliance items: ${complianceResult.error.message}`);
+  }
 
   const memberCount = membersResult.count ?? 0;
   const documentCount = documentsResult.count ?? 0;

@@ -1,5 +1,6 @@
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import type { AccountDeletionRequestRow } from '@propertypro/db/supabase/admin-types';
+import { COMMUNITY_LIST_LIMIT } from '@/lib/api/list-limits';
 
 export type DeletionStatus = 'cooling' | 'soft_deleted' | 'purged' | 'cancelled' | 'recovered';
 export type RequestType = 'user' | 'community';
@@ -93,7 +94,8 @@ export async function getDeletionRequestsData(
 
   let query = (db.from('account_deletion_requests'))
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(COMMUNITY_LIST_LIMIT);
 
   if (filters.status && filters.status !== 'all') {
     query = query.eq('status', filters.status as AccountDeletionRequestRow['status']);

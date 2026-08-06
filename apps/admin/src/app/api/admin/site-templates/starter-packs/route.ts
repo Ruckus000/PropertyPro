@@ -17,8 +17,11 @@ import { validateStarterPackBlocks } from '@propertypro/shared';
 import {
   PACK_COLUMNS, StarterPackRow, communityTypeSchema, shapePack, validationErrorResponse, zodErrorResponse,
 } from './_shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { PLATFORM_LIST_LIMIT } from '@/lib/api/list-limits';
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
   const ct = new URL(request.url).searchParams.get('communityType');
   let communityType: z.infer<typeof communityTypeSchema> | null = null;
@@ -30,10 +33,13 @@ export async function GET(request: NextRequest) {
   const db = createAdminTypedClient();
   let query = db.from('site_starter_packs').select(PACK_COLUMNS);
   if (communityType) query = query.eq('community_type', communityType);
-  const { data, error } = await query.order('community_type', { ascending: true }).order('version', { ascending: false });
-  if (error) return NextResponse.json({ error: { message: error.message } }, { status: 500 });
+  const { data, error } = await query
+    .order('community_type', { ascending: true })
+    .order('version', { ascending: false })
+    .limit(PLATFORM_LIST_LIMIT);
+  assertNoDbError(error, 'Failed to list starter packs');
   return NextResponse.json({ packs: (data ?? []).map((r) => shapePack(r as StarterPackRow)) });
-}
+});
 
 const postBodySchema = z.object({
   slug: z.string().min(1).max(120).regex(/^[a-z0-9-]+$/, 'slug must be kebab-case ([a-z0-9-])'),
@@ -43,7 +49,7 @@ const postBodySchema = z.object({
   blocks: z.unknown(),
 });
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
   let json: unknown;
   try { json = await request.json(); } catch { return NextResponse.json({ error: { message: 'Body must be valid JSON' } }, { status: 400 }); }
@@ -62,7 +68,7 @@ export async function POST(request: NextRequest) {
     .select('id', { count: 'exact', head: true })
     .eq('community_type', body.communityType)
     .eq('is_archived', false);
-  if (countErr) return NextResponse.json({ error: { message: countErr.message } }, { status: 500 });
+  assertNoDbError(countErr, 'Failed to count active starter packs');
   if ((count ?? 0) > 0) {
     return NextResponse.json(
       { error: { message: `A starter pack already exists for ${body.communityType}; use "Save as new version" instead.` } },
@@ -80,7 +86,7 @@ export async function POST(request: NextRequest) {
     .single();
   if (error) {
     if (error.code === '23505') return NextResponse.json({ error: { message: `Starter pack slug already exists: ${body.slug}` } }, { status: 409 });
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
+    assertNoDbError(error, 'Failed to create starter pack');
   }
   return NextResponse.json({ pack: shapePack(data as StarterPackRow) }, { status: 201 });
-}
+});

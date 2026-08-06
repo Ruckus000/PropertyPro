@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pencil, X, ExternalLink, Minus, Plus } from 'lucide-react';
-import { PhoneFrame } from '@propertypro/ui';
+import { PhoneFrame, PREVIEW_IFRAME_SANDBOX } from '@propertypro/ui';
 import { DemoEditDrawer } from '@/components/demo/DemoEditDrawer';
 import { ConvertDemoDialog } from '@/components/demo/ConvertDemoDialog';
 
@@ -293,6 +293,22 @@ export function TabbedPreviewClient({
               className="absolute inset-0 h-full w-full"
               style={{ display: isActive ? 'block' : 'none' }}
               title={`${tab.label} preview`}
+              // These URLs carry a demo-login token in the query string;
+              // without this the token rides along in the Referer of every
+              // outbound request the framed page makes.
+              referrerPolicy="no-referrer"
+              // The framed pages are CROSS-ORIGIN (admin host -> the tenant's
+              // own subdomain, or :3001 -> :3000 locally), so `allow-scripts`
+              // with `allow-same-origin` is NOT the self-defeating pair it is
+              // on the srcDoc previews: `allow-same-origin` preserves the
+              // frame's OWN origin, and gives it no access to this document.
+              // Dropping it would break the demo session cookie and the
+              // preview would render logged-out.
+              //
+              // What the sandbox buys: the framed app cannot navigate the top
+              // window, open popups, or trigger downloads. Matches the string
+              // PhoneFrame already ships.
+              sandbox={PREVIEW_IFRAME_SANDBOX}
             />
           );
         })}

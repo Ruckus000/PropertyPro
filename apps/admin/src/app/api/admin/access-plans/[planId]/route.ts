@@ -6,12 +6,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { z } from 'zod';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
+import { parseAdminBody } from '@/lib/api/parse-body';
+
+/**
+ * `reason` was read as `(body as { reason?: string }).reason` with no runtime
+ * check, then interpolated into `notes`. A non-string (an object, an array)
+ * would stringify into the column; an unbounded string would be stored whole.
+ */
+const revokeSchema = z.object({
+  reason: z.string().max(1000).nullish(),
+});
 
 interface RouteParams {
   params: Promise<{ planId: string }>;
 }
 
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export const DELETE = withAdminErrorHandler(async (request: NextRequest, { params }: RouteParams) => {
   const admin = await requirePlatformAdmin();
   const { planId } = await params;
 
@@ -20,8 +34,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: { message: 'Invalid plan ID' } }, { status: 400 });
   }
 
-  const body = await request.json().catch(() => ({}));
-  const reason = (body as { reason?: string }).reason ?? null;
+  const parsed = await parseAdminBody(request, revokeSchema);
+  if (parsed instanceof NextResponse) return parsed;
+  const reason = parsed.reason ?? null;
 
   const db = createAdminTypedClient();
 
@@ -42,9 +57,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     .select()
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to revoke access plan');
 
   if (!data) {
     return NextResponse.json({ error: { message: 'Plan not found or already revoked/converted' } }, { status: 404 });
@@ -81,5 +94,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
   }
 
+  await logAdminAction({
+    admin,
+    action: 'access_plan_revoked',
+    resourceType: 'access_plan',
+    resourceId: id,
+    communityId: revokedRow.community_id,
+    newValues: { revoked_at: updatePayload.revoked_at, reason },
+  });
+
   return NextResponse.json({ plan: data });
-}
+});

@@ -1,37 +1,36 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { captureException } from '@sentry/nextjs';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 import { isDemoTemplateId } from '@propertypro/shared';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { brandingSchema } from '@/lib/validation/branding';
 
+/**
+ * `branding` previously accepted bare `z.string().optional()` for all five
+ * fields, while the sibling create route (demos/route.ts) enforced
+ * HEX_COLOR + ALLOWED_FONTS on the same values. Those strings are interpolated
+ * into JavaScript source that compile-template.ts evaluates with
+ * `new Function()`, so the two routes had materially different exposure to the
+ * same evaluator. They now share one schema.
+ */
 const previewSchema = z.object({
   communityType: z.enum(['condo_718', 'hoa_720', 'apartment']),
   publicTemplateId: z.string().refine(isDemoTemplateId, 'Invalid template ID'),
   mobileTemplateId: z.string().refine(isDemoTemplateId, 'Invalid template ID'),
   prospectName: z.string().min(1).max(100),
-  branding: z.object({
-    primaryColor: z.string().optional(),
-    secondaryColor: z.string().optional(),
-    accentColor: z.string().optional(),
-    fontHeading: z.string().optional(),
-    fontBody: z.string().optional(),
-  }).optional(),
+  branding: brandingSchema.optional(),
 });
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
-  const body = await request.json();
-  const parsed = previewSchema.safeParse(body);
+  const parsed = await parseAdminBody(request, previewSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
-
-  const { publicTemplateId, mobileTemplateId, prospectName, branding: rawBranding } = parsed.data;
+  const { publicTemplateId, mobileTemplateId, prospectName, branding: rawBranding } = parsed;
 
   // compileDemoTemplate requires all branding fields to be non-optional strings when branding is
   // provided. Resolve each field to a defined string or omit branding entirely.
@@ -53,10 +52,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ publicHtml, mobileHtml });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Template compilation failed';
+    // The compiler evaluates template source, so its errors quote file paths
+    // and internal stack frames. Code kept, message generic.
+    captureException(err, { extra: { context: '[demos/preview] template compilation failed' } });
     return NextResponse.json(
-      { error: { code: 'COMPILE_ERROR', message } },
+      { error: { code: 'COMPILE_ERROR', message: 'Template compilation failed.' } },
       { status: 500 },
     );
   }
-}
+});

@@ -30,6 +30,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const bodySchema = z.object({
   starterPackSlug: z.string().min(1).max(120),
@@ -42,10 +45,10 @@ interface StarterPackBlock {
   content?: Record<string, unknown>;
 }
 
-export async function POST(
+export const POST = withAdminErrorHandler(async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-) {
+) => {
   const admin = await requirePlatformAdmin();
 
   const { id: rawId } = await context.params;
@@ -149,12 +152,7 @@ export async function POST(
     .eq('is_draft', false)
     .is('deleted_at', null)
     .select('id');
-  if (snapErr) {
-    return NextResponse.json(
-      { error: { message: `Snapshot failed: ${snapErr.message}` } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(snapErr, 'Failed to snapshot site blocks before reset');
   const snapshotBlockIds = (snapshot ?? []).map((r: { id: number }) => r.id);
 
   // 4. Apply: insert new draft rows from the pack
@@ -181,12 +179,7 @@ export async function POST(
     .eq('is_home', true)
     .is('deleted_at', null)
     .maybeSingle();
-  if (homePageErr) {
-    return NextResponse.json(
-      { error: { message: `Home page lookup failed: ${homePageErr.message}` } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(homePageErr, 'Failed to look up home page for reset');
   const homePageId = (homePage as { id: number } | null)?.id ?? null;
   if (homePageId === null && packBlocks.length > 0) {
     return NextResponse.json(
@@ -211,12 +204,7 @@ export async function POST(
   }));
   if (insertRows.length > 0) {
     const { error: insErr } = await db.from('site_blocks').insert(insertRows);
-    if (insErr) {
-      return NextResponse.json(
-        { error: { message: `Apply failed: ${insErr.message}` } },
-        { status: 500 },
-      );
-    }
+    assertNoDbError(insErr, 'Failed to apply starter pack blocks');
   }
 
   // 5. Audit log entry (resource_id is the audit entry's own provenance:
@@ -238,12 +226,26 @@ export async function POST(
     })
     .select('id, created_at')
     .single();
-  if (auditErr) {
-    return NextResponse.json(
-      { error: { message: `Audit log failed: ${auditErr.message}` } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(auditErr, 'Failed to write reset audit entry');
+
+  // The compliance_audit_log write above is KEPT rather than replaced: it is
+  // the tenant-visible statutory record, and restore-from-snapshot reads that
+  // row back by id to find the blocks to un-delete. Removing it would be a
+  // functional regression, not just a logging change. This is the additional
+  // platform-operator record.
+  await logAdminAction({
+    admin,
+    action: 'site_template_reset',
+    resourceType: 'site_blocks',
+    resourceId: starterPackSlug,
+    communityId,
+    metadata: {
+      starterPackSlug,
+      snapshotBlockIds,
+      appliedBlockCount: insertRows.length,
+      complianceAuditLogId: (auditRow as { id?: number } | null)?.id ?? null,
+    },
+  });
 
   return NextResponse.json(
     {
@@ -259,4 +261,4 @@ export async function POST(
     },
     { status: 201 },
   );
-}
+});

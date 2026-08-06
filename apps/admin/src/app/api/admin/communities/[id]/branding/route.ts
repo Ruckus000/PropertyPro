@@ -9,29 +9,21 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { isValidHexColor } from '@propertypro/shared';
-import { ALLOWED_FONTS } from '@propertypro/theme';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { brandingSchema } from '@/lib/validation/branding';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
-const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a valid hex color (e.g. #2563EB)' });
-const FONT = z.string().refine(
-  (f) => (ALLOWED_FONTS as readonly string[]).includes(f),
-  { message: 'Font not in allowed list' },
-);
-
-const patchSchema = z.object({
-  primaryColor: HEX_COLOR.optional(),
-  secondaryColor: HEX_COLOR.optional(),
-  accentColor: HEX_COLOR.optional(),
-  fontHeading: FONT.optional(),
-  fontBody: FONT.optional(),
-  logoPath: z.string().max(500).optional(),
-}).strict();
+const patchSchema = brandingSchema
+  .extend({ logoPath: z.string().max(500).optional() })
+  .strict();
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -55,10 +47,10 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ branding: (data as Record<string, unknown>).branding ?? {} });
-}
+});
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
-  await requirePlatformAdmin();
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
+  const admin = await requirePlatformAdmin();
 
   const { id } = await context.params;
   const db = createAdminClient();
@@ -67,14 +59,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (result instanceof NextResponse) return result;
   const communityId = result;
 
-  const body = await request.json();
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseAdminBody(request, patchSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
   // Fetch current branding to merge
   const { data: current } = await db
@@ -88,7 +74,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   // Build merged branding
   const merged: Record<string, unknown> = { ...existingBranding };
 
-  for (const [key, value] of Object.entries(parsed.data)) {
+  for (const [key, value] of Object.entries(parsed)) {
     if (value !== undefined) {
       merged[key] = value;
     }
@@ -101,12 +87,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     .select('branding')
     .single();
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update community branding');
+
+  await logAdminAction({
+    admin,
+    action: 'community_branding_changed',
+    resourceType: 'community_branding',
+    resourceId: communityId,
+    communityId,
+    oldValues: existingBranding,
+    newValues: merged,
+  });
 
   return NextResponse.json({ branding: (updated as Record<string, unknown>).branding ?? {} });
-}
+});

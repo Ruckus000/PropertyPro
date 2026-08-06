@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const {
   requirePlatformAdminMock,
@@ -101,7 +102,7 @@ describe('PATCH /api/admin/site-templates/theme-presets/[slug]', () => {
     const json = await res.json();
     expect(json.preset).toMatchObject({ slug: 'bay-light', displayName: 'Bay Light 2' });
 
-    const updateArg = updateMock.mock.calls[0][0] as Record<string, unknown>;
+    const updateArg = updateMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(updateArg.display_name).toBe('Bay Light 2');
     expect(updateArg.description).toBe('desc');
     // version is NOT bumped when only metadata changes
@@ -126,7 +127,7 @@ describe('PATCH /api/admin/site-templates/theme-presets/[slug]', () => {
       { params: Promise.resolve({ slug: 'bay-light' }) },
     );
     expect(res.status).toBe(200);
-    const updateArg = updateMock.mock.calls[0][0] as Record<string, unknown>;
+    const updateArg = updateMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(updateArg.version).toBe(5);
     expect(updateArg.tokens).toEqual({
       primaryColor: '#111',
@@ -179,15 +180,15 @@ describe('PATCH /api/admin/site-templates/theme-presets/[slug]', () => {
     expect(res.status).toBe(404);
   });
 
-  it('throws when requirePlatformAdmin rejects', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { PATCH } = await importHandler();
     await expect(
       PATCH(
         makeRequest({ displayName: 'X' }) as unknown as Parameters<typeof PATCH>[0],
         { params: Promise.resolve({ slug: 'bay-light' }) },
       ),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
     expect(updateMock).not.toHaveBeenCalled();
   });
 });

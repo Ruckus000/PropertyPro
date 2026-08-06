@@ -6,13 +6,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function POST(_request: NextRequest, { params }: RouteParams) {
-  await requirePlatformAdmin();
+export const POST = withAdminErrorHandler(async (_request: NextRequest, { params }: RouteParams) => {
+  // The return value was previously discarded, so an un-deletion — arguably
+  // the single most consequential operation in this console — recorded neither
+  // who performed it nor that it happened at all.
+  const admin = await requirePlatformAdmin();
   const { id } = await params;
 
   const requestId = Number(id);
@@ -34,9 +40,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     .select()
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: { message: error.message } }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to mark deletion request recovered');
 
   if (!data) {
     return NextResponse.json({ error: { message: 'Request not found or not in soft_deleted status' } }, { status: 404 });
@@ -65,7 +69,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         {
           error: {
             code: 'USER_RESTORE_FAILED',
-            message: `Request marked recovered but users.deleted_at clear failed: ${restoreError.message}`,
+            message: 'Request marked recovered, but clearing the user\u2019s deletion flag failed. Retry or clear it manually.',
           },
           request: data,
         },
@@ -83,7 +87,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
         {
           error: {
             code: 'COMMUNITY_RESTORE_FAILED',
-            message: `Request marked recovered but communities.deleted_at clear failed: ${restoreError.message}`,
+            message: 'Request marked recovered, but clearing the community\u2019s deletion flag failed. Retry or clear it manually.',
           },
           request: data,
         },
@@ -92,5 +96,23 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     }
   }
 
+  await logAdminAction({
+    admin,
+    action: 'deletion_request_recovered',
+    resourceType: 'account_deletion_request',
+    resourceId: requestId,
+    // Null for a user-type request: account_deletion_requests.community_id is
+    // only populated for community deletions. This is exactly why the audit
+    // table's community_id had to be nullable.
+    communityId: requestRow.community_id,
+    oldValues: { status: 'soft_deleted' },
+    newValues: {
+      status: 'recovered',
+      request_type: requestRow.request_type,
+      restored_user_id: requestRow.user_id,
+      restored_community_id: requestRow.community_id,
+    },
+  });
+
   return NextResponse.json({ request: data });
-}
+});

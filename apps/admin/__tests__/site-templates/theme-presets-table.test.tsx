@@ -188,7 +188,7 @@ describe('ThemePresetsTable editing', () => {
     await submit();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/admin/site-templates/theme-presets/bay-light');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ displayName: 'Bay Light 2' });
     expect(container.innerHTML).toContain('Bay Light 2');
@@ -206,7 +206,7 @@ describe('ThemePresetsTable editing', () => {
     await submit();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
     expect(body.tokens).toEqual({
       primaryColor: '#0e3338',
       secondaryColor: '#f6f1e6',

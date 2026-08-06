@@ -521,4 +521,9 @@ export type NewConversionEvent = typeof conversionEvents.$inferInsert;
 export { supportSessions, type SupportSession, type NewSupportSession } from './support-sessions';
 export { supportConsentGrants, type SupportConsentGrant, type NewSupportConsentGrant } from './support-consent-grants';
 export { supportAccessLog, type SupportAccessLogEntry, type NewSupportAccessLogEntry } from './support-access-log';
+export {
+  platformAdminAuditLog,
+  type PlatformAdminAuditLogEntry,
+  type NewPlatformAdminAuditLogEntry,
+} from './platform-admin-audit-log';
 export { supportAccessLevelEnum } from './enums';

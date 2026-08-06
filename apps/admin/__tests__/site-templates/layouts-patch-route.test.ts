@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const {
   requirePlatformAdminMock,
@@ -9,13 +10,14 @@ const {
   selectMock,
   singleMock,
 } = vi.hoisted(() => {
-  const singleMock = vi.fn();
+  const singleMock = vi.fn((..._args: unknown[]) => undefined as unknown);
   const selectMock = vi.fn(() => ({ single: singleMock }));
   const eqMock = vi.fn(() => ({ select: selectMock }));
-  const updateMock = vi.fn(() => ({ eq: eqMock }));
+  // Rest parameter so the captured payload at `.mock.calls[0]![0]` is typed.
+  const updateMock = vi.fn((..._args: unknown[]) => ({ eq: eqMock }));
   const fromMock = vi.fn(() => ({ update: updateMock }));
   return {
-    requirePlatformAdminMock: vi.fn(),
+    requirePlatformAdminMock: vi.fn((..._args: unknown[]) => undefined as unknown),
     createAdminTypedClientMock: vi.fn(() => ({ from: fromMock })),
     fromMock,
     updateMock,
@@ -86,7 +88,7 @@ describe('PATCH /api/admin/site-templates/layouts/[slug]', () => {
     });
 
     // Verify the update payload only contained the provided fields + updated_at
-    const updateArg = updateMock.mock.calls[0][0] as Record<string, unknown>;
+    const updateArg = updateMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(updateArg.display_name).toBe('Tidewater 2');
     expect(updateArg.tagline).toBe('new tagline');
     expect(updateArg.tier).toBe('professional');
@@ -150,7 +152,7 @@ describe('PATCH /api/admin/site-templates/layouts/[slug]', () => {
     expect(json.error.message).toContain('Layout not found');
   });
 
-  it('500s on generic supabase error', async () => {
+  it('500s on a generic supabase error without leaking its message', async () => {
     singleMock.mockResolvedValueOnce({ data: null, error: { code: 'XX000', message: 'boom' } });
     const { PATCH } = await importHandler();
     const res = await PATCH(
@@ -159,18 +161,21 @@ describe('PATCH /api/admin/site-templates/layouts/[slug]', () => {
     );
     expect(res.status).toBe(500);
     const json = await res.json();
-    expect(json.error.message).toBe('boom');
+    // The raw PostgREST message must NOT reach the client — it names tables,
+    // columns and constraints. It goes to the server log and Sentry instead.
+    expect(json.error.message).toBe('An unexpected error occurred');
+    expect(JSON.stringify(json)).not.toContain('boom');
   });
 
-  it('throws when requirePlatformAdmin rejects (handler aborts before DB write)', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects (handler aborts before DB write)', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { PATCH } = await importHandler();
     await expect(
       PATCH(
         makeRequest({ displayName: 'X' }) as unknown as Parameters<typeof PATCH>[0],
         { params: Promise.resolve({ slug: 'tidewater' }) },
       ),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
     expect(updateMock).not.toHaveBeenCalled();
   });
 
@@ -181,7 +186,7 @@ describe('PATCH /api/admin/site-templates/layouts/[slug]', () => {
       { params: Promise.resolve({ slug: 'tidewater' }) },
     );
     expect(res.status).toBe(200);
-    const updateArg = updateMock.mock.calls[0][0] as Record<string, unknown>;
+    const updateArg = updateMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(updateArg.tagline).toBeNull();
     expect(updateArg.description).toBeNull();
   });

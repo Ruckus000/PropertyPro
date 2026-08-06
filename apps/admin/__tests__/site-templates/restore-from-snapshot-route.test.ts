@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const { requirePlatformAdminMock, createAdminTypedClientMock } = vi.hoisted(() => ({
   requirePlatformAdminMock: vi.fn(),
@@ -11,6 +12,19 @@ vi.mock('@/lib/auth/platform-admin', () => ({
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: createAdminTypedClientMock,
+}));
+
+
+// Audit writes go through logAdminAction, which uses its OWN supabase client
+// (createAdminClient) rather than the one these tests stub. Mock the helper so
+// the route tests stay focused, and so the call itself can be asserted — the
+// helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
+vi.mock('@/lib/audit/log-admin-action', () => ({
+  logAdminAction: (...args: unknown[]) => logAdminAction(...args),
+  AdminAuditLogError: class AdminAuditLogError extends Error {},
 }));
 
 interface ChainStubs {
@@ -314,14 +328,14 @@ describe('POST /api/admin/site-templates/communities/[id]/restore-from-snapshot'
     expect((await res.json()).error.message).toMatch(/no snapshot/i);
   });
 
-  it('throws when requirePlatformAdmin rejects', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { POST } = await importHandler();
     await expect(
       POST(
         makeRequest(VALID_BODY) as unknown as Parameters<typeof POST>[0],
         { params: Promise.resolve({ id: '42' }) },
       ),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
   });
 });

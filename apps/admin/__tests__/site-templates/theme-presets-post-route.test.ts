@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const {
   requirePlatformAdminMock,
@@ -9,11 +10,12 @@ const {
   singleMock,
   orderMock,
 } = vi.hoisted(() => {
-  const singleMock = vi.fn();
+  const singleMock = vi.fn((..._args: unknown[]) => undefined as unknown);
   const selectMock = vi.fn(() => ({ single: singleMock }));
-  const insertMock = vi.fn(() => ({ select: selectMock }));
+  // Rest parameter so the captured payload at `.mock.calls[0]![0]` is typed.
+  const insertMock = vi.fn((..._args: unknown[]) => ({ select: selectMock }));
   // The same .from(...) handler must serve both GET (.select.order.order) and POST (.insert.select.single).
-  const orderMock = vi.fn();
+  const orderMock = vi.fn((..._args: unknown[]) => undefined as unknown);
   const fromMock = vi.fn(() => {
     const fromChain: Record<string, unknown> = {};
     fromChain.insert = insertMock;
@@ -28,7 +30,7 @@ const {
     return fromChain;
   });
   return {
-    requirePlatformAdminMock: vi.fn(),
+    requirePlatformAdminMock: vi.fn((..._args: unknown[]) => undefined as unknown),
     createAdminTypedClientMock: vi.fn(() => ({ from: fromMock })),
     fromMock,
     insertMock,
@@ -114,7 +116,7 @@ describe('POST /api/admin/site-templates/theme-presets', () => {
       version: 1,
     });
 
-    const insertArg = insertMock.mock.calls[0][0] as Record<string, unknown>;
+    const insertArg = insertMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(insertArg.slug).toBe('new-preset');
     expect(insertArg.display_name).toBe('New Preset');
     expect(insertArg.tokens).toEqual(VALID_TOKENS);
@@ -126,7 +128,7 @@ describe('POST /api/admin/site-templates/theme-presets', () => {
     const { POST } = await importHandler();
     const { tier: _t, isFeatured: _f, ...rest } = VALID_BODY;
     await POST(makeRequest(rest) as unknown as Parameters<typeof POST>[0]);
-    const insertArg = insertMock.mock.calls[0][0] as Record<string, unknown>;
+    const insertArg = insertMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(insertArg.tier).toBe('essentials');
     expect(insertArg.is_featured).toBe(false);
   });
@@ -177,22 +179,26 @@ describe('POST /api/admin/site-templates/theme-presets', () => {
     expect(insertMock).not.toHaveBeenCalled();
   });
 
-  it('500s on generic supabase error', async () => {
+  it('500s on a generic supabase error without leaking its message', async () => {
     singleMock.mockResolvedValueOnce({ data: null, error: { code: 'XX000', message: 'boom' } });
     const { POST } = await importHandler();
     const res = await POST(
       makeRequest(VALID_BODY) as unknown as Parameters<typeof POST>[0],
     );
     expect(res.status).toBe(500);
-    expect((await res.json()).error.message).toBe('boom');
+    const json = await res.json();
+    // The raw PostgREST message must NOT reach the client — it names tables,
+    // columns and constraints. It goes to the server log and Sentry instead.
+    expect(json.error.message).toBe('An unexpected error occurred');
+    expect(JSON.stringify(json)).not.toContain('boom');
   });
 
-  it('throws when requirePlatformAdmin rejects', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     const { POST } = await importHandler();
     await expect(
       POST(makeRequest(VALID_BODY) as unknown as Parameters<typeof POST>[0]),
-    ).rejects.toThrow('not-admin');
+    ).resolves.toHaveProperty('status', 403);
     expect(insertMock).not.toHaveBeenCalled();
   });
 });

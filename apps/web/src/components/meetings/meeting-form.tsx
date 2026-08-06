@@ -5,7 +5,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardDescription, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useCreateMeeting, useMeeting, useUpdateMeeting } from '@/hooks/use-meetings';
 import {
@@ -248,8 +248,19 @@ export function MeetingForm({
         <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <Dialog.Title asChild>
-                <CardTitle>{isEditing ? 'Edit Meeting' : 'Create Meeting'}</CardTitle>
+              {/*
+                Renders Radix's default <h2>. It previously used
+                `asChild` + <CardTitle>, and CardTitle renders a <div> — which
+                silently downgraded the dialog title out of the heading tree, so
+                the modal had no heading at all. The canonical `ui/dialog.tsx`
+                DialogTitle renders the primitive directly for exactly this
+                reason; these hand-rolled Radix dialogs were the only two
+                exceptions in the app. Classes are CardTitle's verbatim, so this
+                is a semantics-only change with no visual difference (Tailwind
+                preflight already zeroes heading margin/size).
+              */}
+              <Dialog.Title className="font-semibold leading-none tracking-tight">
+                {isEditing ? 'Edit Meeting' : 'Create Meeting'}
               </Dialog.Title>
               <Dialog.Description asChild>
                 <CardDescription>

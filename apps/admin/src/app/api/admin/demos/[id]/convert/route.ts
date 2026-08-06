@@ -18,6 +18,7 @@ import { captureException, captureMessage } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getStripeClient } from '@/lib/stripe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 
 // ---------------------------------------------------------------------------
 // Plan validation (inlined — admin app does not import web app modules)
@@ -60,23 +61,14 @@ function getWebAppOrigin(): string {
 // Route handler
 // ---------------------------------------------------------------------------
 
-export async function POST(
+export const POST = withAdminErrorHandler(async (
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
-): Promise<NextResponse> {
-  // 0. Auth — requirePlatformAdmin throws Response(401/403) on failure
-  let admin;
-  try {
-    admin = await requirePlatformAdmin();
-  } catch (err) {
-    if (err instanceof Response) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: err.statusText || 'Unauthorized' } },
-        { status: err.status },
-      );
-    }
-    throw err;
-  }
+): Promise<NextResponse> => {
+  // 0. Auth — requirePlatformAdmin throws a typed AppError (401/403) that
+  // withAdminErrorHandler converts to the right status. The old hand-rolled
+  // `err instanceof Response` catch is gone with the Remix-style throw.
+  const admin = await requirePlatformAdmin();
 
   const { id: slug } = await context.params;
 
@@ -214,10 +206,11 @@ export async function POST(
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Stripe checkout creation failed';
+    // Stripe errors name API versions, account ids and price ids. Already
+    // captured above; the response gets a fixed message.
     captureException(err, { extra: { context: '[convert/POST] Stripe error' } });
     return NextResponse.json(
-      { error: { code: 'STRIPE_ERROR', message } },
+      { error: { code: 'STRIPE_ERROR', message: 'Could not create the Stripe checkout session.' } },
       { status: 500 },
     );
   }
@@ -247,4 +240,4 @@ export async function POST(
   }
 
   return NextResponse.json({ data: { checkoutUrl: session.url } });
-}
+});

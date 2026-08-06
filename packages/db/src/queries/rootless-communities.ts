@@ -19,8 +19,14 @@ export interface RootlessCommunityRow {
  * Until the claim-root flow (role-v3 Phase 2b) runs, every backfilled
  * community is rootless; this report is how platform admins track convergence.
  */
+/** Runaway guard for the rootless report; see the note inside the query. */
+export const ROOTLESS_REPORT_LIMIT = 500;
+
 export async function findRootlessCommunities(): Promise<RootlessCommunityRow[]> {
-  // No pagination: expected O(hundreds) of communities; an unbounded select is acceptable for this platform-admin report.
+  // Bounded rather than unbounded. "Expected O(hundreds)" was the reasoning for
+  // leaving this open, but an expectation is not a limit — the report converges
+  // toward zero rows as communities claim a root, so a result at the cap means
+  // the backfill has stalled, not that the cap is too low.
   return db
     .select({ id: communities.id, name: communities.name, slug: communities.slug })
     .from(communities)
@@ -40,7 +46,8 @@ export async function findRootlessCommunities(): Promise<RootlessCommunityRow[]>
         ),
       ),
     )
-    .orderBy(asc(communities.name));
+    .orderBy(asc(communities.name))
+    .limit(ROOTLESS_REPORT_LIMIT);
 }
 
 export interface MyRootlessCommunityRow {

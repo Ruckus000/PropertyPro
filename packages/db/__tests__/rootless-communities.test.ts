@@ -4,16 +4,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * Unit test for findRootlessCommunities.
  *
  * Mocks ../src/drizzle so it runs without DATABASE_URL. Verifies the query
- * builder is exercised (select → from(communities) → where → orderBy) and
- * that the resolved rows are returned as-is.
+ * builder is exercised (select → from(communities) → where → orderBy → limit)
+ * and that the resolved rows are returned as-is.
  */
 
-const { selectMock, fromMock, innerJoinMock, whereMock, orderByMock } = vi.hoisted(() => ({
+const { selectMock, fromMock, innerJoinMock, whereMock, orderByMock, limitMock } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   fromMock: vi.fn(),
   innerJoinMock: vi.fn(),
   whereMock: vi.fn(),
   orderByMock: vi.fn(),
+  limitMock: vi.fn(),
 }));
 
 vi.mock('../src/drizzle', () => ({
@@ -23,17 +24,19 @@ vi.mock('../src/drizzle', () => ({
 import {
   findMyRootlessCommunities,
   findRootlessCommunities,
+  ROOTLESS_REPORT_LIMIT,
 } from '../src/queries/rootless-communities';
 
 describe('findRootlessCommunities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // db.select(...).from(...).where(...).orderBy(...) → rows
+    // db.select(...).from(...).where(...).orderBy(...).limit(...) → rows
     // The inner notExists subquery also calls db.select(...).from(...).where(...),
     // so .where must be chainable both into .orderBy (outer) and resolve (inner).
     selectMock.mockReturnValue({ from: fromMock });
     fromMock.mockReturnValue({ where: whereMock });
     whereMock.mockReturnValue({ orderBy: orderByMock });
+    orderByMock.mockReturnValue({ limit: limitMock });
   });
 
   it('lists communities lacking a root_manager', async () => {
@@ -41,7 +44,7 @@ describe('findRootlessCommunities', () => {
       { id: 1, name: 'Alpha HOA', slug: 'alpha-hoa' },
       { id: 2, name: 'Beta Condos', slug: 'beta-condos' },
     ];
-    orderByMock.mockResolvedValue(rows);
+    limitMock.mockResolvedValue(rows);
 
     const result = await findRootlessCommunities();
 
@@ -49,10 +52,13 @@ describe('findRootlessCommunities', () => {
     expect(result).toEqual(rows);
     expect(selectMock).toHaveBeenCalled();
     expect(orderByMock).toHaveBeenCalled();
+    // Bounded, not unbounded — teaching the mock about .limit() without
+    // asserting it would hide whether the cap is actually applied.
+    expect(limitMock).toHaveBeenCalledWith(ROOTLESS_REPORT_LIMIT);
   });
 
   it('returns an empty array when every community has a root_manager', async () => {
-    orderByMock.mockResolvedValue([]);
+    limitMock.mockResolvedValue([]);
 
     const result = await findRootlessCommunities();
 

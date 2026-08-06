@@ -9,10 +9,16 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { signSupportToken } from '@/lib/support/jwt';
 import { CreateSessionSchema, SUPPORT_SESSION_MAX_TTL_HOURS } from '@propertypro/shared';
+import {
+  buildSupportSessionCookie,
+  resolveSupportCookieHostname,
+} from '@propertypro/shared/http';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
 
 const DAILY_SESSION_LIMIT = 10;
 
-export async function POST(request: NextRequest) {
+export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
   // Validate request body
@@ -42,9 +48,7 @@ export async function POST(request: NextRequest) {
     .is('revoked_at', null)
     .limit(1);
 
-  if (consentError) {
-    return NextResponse.json({ error: consentError.message }, { status: 500 });
-  }
+  assertNoDbError(consentError, 'Failed to check support consent');
 
   if (!consentRows || consentRows.length === 0) {
     return NextResponse.json(
@@ -64,9 +68,7 @@ export async function POST(request: NextRequest) {
     .eq('user_id', targetUserId)
     .maybeSingle();
 
-  if (adminLookupError) {
-    return NextResponse.json({ error: adminLookupError.message }, { status: 500 });
-  }
+  assertNoDbError(adminLookupError, 'Failed to check platform-admin status of impersonation target');
 
   if (adminRow) {
     return NextResponse.json(
@@ -85,9 +87,7 @@ export async function POST(request: NextRequest) {
     .eq('admin_user_id', admin.id)
     .gte('created_at', todayStart.toISOString());
 
-  if (countError) {
-    return NextResponse.json({ error: countError.message }, { status: 500 });
-  }
+  assertNoDbError(countError, 'Failed to count support sessions created today');
 
   if ((count ?? 0) >= DAILY_SESSION_LIMIT) {
     return NextResponse.json(
@@ -118,6 +118,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });
   }
 
+  // 4b. Resolve the impersonated user's identity ONCE, to embed in the token.
+  // The web middleware forwards identity headers to the page shell; carrying
+  // the name/email here is what lets it stamp the impersonated user instead of
+  // the admin, without adding a query to a per-request hot path. A failure to
+  // read is not fatal: the claims go out null and the verifier clears the
+  // identity headers, which degrades to an anonymous account menu rather than
+  // showing the wrong person.
+  const { data: targetUser } = await (db
+    .from('users'))
+    .select('full_name, email')
+    .eq('id', targetUserId)
+    .maybeSingle();
+
   // 5. Sign JWT with RFC 8693 act claim
   let token: string;
   try {
@@ -127,12 +140,14 @@ export async function POST(request: NextRequest) {
       community_id: communityId,
       session_id: session.id,
       scope: 'read_only',
+      target_name: targetUser?.full_name ?? null,
+      target_email: targetUser?.email ?? null,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to sign token' },
-      { status: 500 },
-    );
+    // signSupportToken throws when SUPPORT_SESSION_JWT_SECRET is missing or
+    // too short. That message names the env var and its length rule — useful
+    // in Sentry, not in a response. Rethrow for the wrapper.
+    throw err;
   }
 
   // 6. Log to support_access_log
@@ -144,13 +159,28 @@ export async function POST(request: NextRequest) {
     metadata: { reason, target_user_id: targetUserId, ticket_id: ticketId },
   });
 
-  return NextResponse.json(
-    { sessionId: session.id, token, expiresAt: expiresAt.toISOString() },
+  // 7. Hand the token to the browser as an HttpOnly cookie — never in the body.
+  //
+  // The response body used to carry the raw JWT so the dialog could write it
+  // with `document.cookie`. A cookie written that way cannot be HttpOnly, and
+  // this one is scoped to the whole `.getpropertypro.com` tree, so any XSS on
+  // any tenant subdomain could read a live impersonation token. Setting it here
+  // keeps the token out of JavaScript entirely.
+  //
+  // Admin runs on a subdomain of the same root as the tenants, so it may set a
+  // `Domain=.<root>` cookie that `<slug>.<root>` will send back — the client can
+  // still just `window.open()` the tenant URL, unchanged.
+  const response = NextResponse.json(
+    { sessionId: session.id, expiresAt: expiresAt.toISOString() },
     { status: 201 },
   );
-}
+  response.cookies.set(
+    buildSupportSessionCookie(resolveSupportCookieHostname(request), token),
+  );
+  return response;
+});
 
-export async function GET(request: NextRequest) {
+export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
   const communityIdParam = request.nextUrl.searchParams.get('communityId');
@@ -170,9 +200,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await query;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  assertNoDbError(error, 'Failed to list support sessions');
 
   return NextResponse.json({ sessions: data ?? [] });
-}
+});

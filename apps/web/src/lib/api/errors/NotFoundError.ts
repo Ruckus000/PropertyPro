@@ -1,11 +1,9 @@
-import { AppError } from './AppError';
-
 /**
- * 404 Not Found — requested resource does not exist.
+ * Re-export shim. The class now lives in `@propertypro/shared` so that
+ * apps/web and apps/admin share one definition — a second copy would make
+ * `instanceof AppError` silently false in one of them.
+ *
+ * This file is kept so the ~340 existing deep imports
+ * (`@/lib/api/errors/NotFoundError`) keep resolving unchanged.
  */
-export class NotFoundError extends AppError {
-  constructor(message = 'The requested resource was not found') {
-    super(message, 404, 'NOT_FOUND');
-    this.name = 'NotFoundError';
-  }
-}
+export { NotFoundError } from '@propertypro/shared/http';

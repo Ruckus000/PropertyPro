@@ -11,8 +11,20 @@ export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
 // --- Session Constraints ---
 export const SUPPORT_SESSION_MAX_TTL_HOURS = 0.5;
 export const SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY = 10;
-export const SUPPORT_SESSION_DEV_SECRET =
-  'propertypro-local-support-session-secret-2026';
+
+// NOTE: there is deliberately NO dev-secret constant here.
+//
+// Until 2026-08-05 this file exported `SUPPORT_SESSION_DEV_SECRET`, a literal
+// checked into the repo, which BOTH the admin signer and the web verifier fell
+// back to whenever `NODE_ENV !== 'production'`. Any deployment not explicitly
+// started with NODE_ENV=production (preview, staging, a misconfigured
+// container) would therefore ACCEPT a `pp-support-session` JWT that anyone
+// could forge for any `sub` / `community_id` — full impersonation of any user
+// in any community with no admin session at all.
+//
+// Both sides now require SUPPORT_SESSION_JWT_SECRET (min 32 chars)
+// unconditionally and fail closed without it. Do not reintroduce a fallback:
+// a hard-coded secret is a valid signing key everywhere it is compiled in.
 
 // --- Support Access Log Event Types ---
 export const SUPPORT_ACCESS_EVENTS = [
@@ -50,6 +62,24 @@ export interface SupportSessionJwtPayload {
   session_id: number;
   /** Access level */
   scope: SupportAccessLevel;
+  /**
+   * Display name of the impersonated user, captured at session creation.
+   *
+   * The web middleware forwards the page shell's identity headers, and before
+   * this claim existed it overrode only the user *id* during impersonation —
+   * leaving the authenticating admin's name and email in place, so the chrome
+   * showed the admin's identity over the impersonated user's data. Carrying the
+   * name here means middleware can stamp the correct identity with **no extra
+   * per-request query**: it is resolved once, when the session is signed.
+   *
+   * Optional because tokens issued before this claim existed are still valid
+   * until they expire (≤30 min). Middleware treats a missing value as
+   * "unknown" and CLEARS the identity headers rather than falling back to the
+   * admin's — absent is safe, wrong is not.
+   */
+  target_name?: string | null;
+  /** Email of the impersonated user. Same capture, same fallback rule. */
+  target_email?: string | null;
   /** Expiration (unix timestamp) */
   exp: number;
   /** Issued at */
@@ -68,6 +98,38 @@ export function isLocalSupportHostname(hostname: string): boolean {
   );
 }
 
+/**
+ * Suffixes where the last two labels are a PUBLIC suffix, not a registrable
+ * domain — so a cookie scoped to them is rejected by every browser.
+ *
+ * Without this, a Vercel preview host (`admin-abc123.vercel.app`) produced
+ * `Domain=.vercel.app`. The browser silently discarded the cookie while the
+ * session POST still returned 201, still consumed one of the admin's ten
+ * daily sessions, and still wrote a `session_started` audit row — so the
+ * operator got an audit trail saying they impersonated someone and a preview
+ * that was not impersonating anyone.
+ *
+ * Not a full public-suffix list, deliberately: pulling one in for this would
+ * be a dependency and a data file to keep fresh. These are the hosts this
+ * product is actually served from or previewed on, plus the multi-part TLDs
+ * most likely to appear if it is ever sold outside the US.
+ */
+const PUBLIC_SUFFIXES = new Set([
+  'vercel.app',
+  'netlify.app',
+  'pages.dev',
+  'github.io',
+  'co.uk',
+  'com.au',
+  'co.nz',
+  'com.br',
+  'co.jp',
+]);
+
+/**
+ * The registrable root a support cookie should be scoped to, or `null` when
+ * there isn't one and a host-only cookie is correct.
+ */
 export function getSupportCookieRootDomain(hostname: string): string | null {
   if (isLocalSupportHostname(hostname)) {
     return null;
@@ -78,5 +140,15 @@ export function getSupportCookieRootDomain(hostname: string): string | null {
     return null;
   }
 
-  return parts.slice(-2).join('.');
+  const candidate = parts.slice(-2).join('.');
+
+  // A cookie the browser will drop is worse than no cookie: it fails silently.
+  // Returning null falls back to a host-only cookie, which at least behaves
+  // predictably (and on a preview deploy, where admin and tenant are separate
+  // hosts, correctly refuses to pretend the handoff can work).
+  if (PUBLIC_SUFFIXES.has(candidate)) {
+    return null;
+  }
+
+  return candidate;
 }

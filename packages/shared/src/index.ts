@@ -148,3 +148,8 @@ export * from './site/portfolio-template-branding';
 // editor-local because publish-time validation has to run server-side too —
 // a gate that exists only in the client is a suggestion.
 export * from './site-diff/index';
+
+// NOTE: the HTTP error hierarchy and Sentry request-context helper are NOT
+// re-exported here. They live behind the `@propertypro/shared/http` subpath on
+// purpose — see packages/shared/src/http/index.ts for why putting them in this
+// barrel breaks 31 web test files that mock it with bare factories.

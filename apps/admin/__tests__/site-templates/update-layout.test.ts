@@ -28,7 +28,7 @@ describe('saveLayoutMetadata', () => {
     const result = await saveLayoutMetadata('boulevard', { tier: 'professional', isFeatured: true });
 
     expect(result).toEqual(LAYOUT);
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/admin/site-templates/layouts/boulevard');
     expect((init as RequestInit).method).toBe('PATCH');
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({
@@ -42,7 +42,7 @@ describe('saveLayoutMetadata', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue({ ok: true, json: async () => ({ layout: LAYOUT }) } as Response);
     await saveLayoutMetadata('a/b', { isArchived: true });
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/site-templates/layouts/a%2Fb');
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/admin/site-templates/layouts/a%2Fb');
   });
 
   it('throws the server error message on a non-OK response', async () => {

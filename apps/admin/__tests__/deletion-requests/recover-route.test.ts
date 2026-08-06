@@ -46,6 +46,19 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   }),
 }));
 
+
+// Audit writes go through logAdminAction, which uses its OWN supabase client
+// (createAdminClient) rather than the one these tests stub. Mock the helper so
+// the route tests stay focused, and so the call itself can be asserted — the
+// helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
+// Typed with a rest parameter so the `(...args) => logAdminAction(...args)`
+// forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
+const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
+vi.mock('@/lib/audit/log-admin-action', () => ({
+  logAdminAction: (...args: unknown[]) => logAdminAction(...args),
+  AdminAuditLogError: class AdminAuditLogError extends Error {},
+}));
+
 async function callRecover(id: string) {
   const mod = await import('@/app/api/admin/deletion-requests/[id]/recover/route');
   return mod.POST(new Request(`http://localhost/${id}`, { method: 'POST' }) as never, {

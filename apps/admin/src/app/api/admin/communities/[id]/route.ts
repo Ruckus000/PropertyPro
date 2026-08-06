@@ -9,6 +9,10 @@ import { z } from 'zod';
 import { PLAN_IDS } from '@propertypro/shared';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { assertNoDbError } from '@/lib/api/assert-no-db-error';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const writeLevel = z.enum(['all_members', 'admin_only']);
 
@@ -37,7 +41,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+export const GET = withAdminErrorHandler(async (_request: NextRequest, context: RouteContext) => {
   await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -73,9 +77,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ community: data });
-}
+});
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
   const admin = await requirePlatformAdmin();
 
   const { id } = await context.params;
@@ -87,14 +91,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  const body = await request.json();
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseAdminBody(request, patchSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
   const db = createAdminClient();
 
@@ -117,7 +115,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     updated_at: new Date().toISOString(),
   };
 
-  const { community_settings, ...rest } = parsed.data;
+  const { community_settings, ...rest } = parsed;
   for (const [key, value] of Object.entries(rest)) {
     if (value !== undefined) {
       updates[key] = value;
@@ -134,12 +132,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     .select('id, name, slug, community_type, timezone, address_line1, city, state, zip_code, subscription_plan, subscription_status, transparency_enabled, community_settings, created_at, updated_at')
     .single();
 
-  if (error) {
-    return NextResponse.json(
-      { error: { code: 'INTERNAL_ERROR', message: error.message } },
-      { status: 500 },
-    );
-  }
+  assertNoDbError(error, 'Failed to update community');
 
   // Audit the legal-readiness gate with a dedicated settings_changed event.
   if (community_settings !== undefined) {
@@ -147,12 +140,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const oldAttorneyReviewed = (oldSettings as Record<string, unknown>).electionsAttorneyReviewed === true;
     const nextAttorneyReviewed = community_settings.electionsAttorneyReviewed === true;
     if (oldAttorneyReviewed !== nextAttorneyReviewed) {
-      const { logAuditEvent } = await import('@propertypro/db');
-      await logAuditEvent({
-        userId: admin.id,
-        action: 'settings_changed',
+      // Was a DYNAMIC import of logAuditEvent from '@propertypro/db' — the
+      // only such import in apps/admin — done that way purely to defer
+      // drizzle.ts's module-load throw on a missing DATABASE_URL to request
+      // time. logAdminAction goes through the service-role PostgREST client
+      // that the rest of this app already uses, so the hazard is gone.
+      await logAdminAction({
+        admin,
+        action: 'community_settings_changed',
         resourceType: 'community_settings',
-        resourceId: String(communityId),
+        resourceId: communityId,
         communityId,
         oldValues: { electionsAttorneyReviewed: oldAttorneyReviewed },
         newValues: { electionsAttorneyReviewed: nextAttorneyReviewed },
@@ -166,4 +163,4 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   return NextResponse.json({ community: updated });
-}
+});

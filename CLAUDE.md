@@ -81,8 +81,11 @@ scripts/with-env-local.sh pnpm test:integration:preflight
 pnpm playwright:install         # Install browsers (once)
 pnpm test:e2e                   # dev server on :3000 (+ admin on :3001)
 pnpm test:e2e:tenant            # tenant-host specs; dev server on localtest.me:3002
-pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
-                                # production build on :3100; the only spec CI runs
+pnpm --filter @propertypro/web test:e2e:prod
+                                # production build on :3100; the only specs CI runs.
+                                # Takes NO spec paths — the list is PROD_SAFE_SPECS
+                                # in playwright.prod.config.ts. A CLI path list
+                                # overrides testMatch and silently diverges.
 
 > **E2E preconditions, and what CI does NOT cover.** These specs are not
 > self-contained: they need `NODE_ENV=development`, a live Supabase **Auth**
@@ -91,6 +94,30 @@ pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 > `pnpm seed:demo` for the demo users. `test:e2e:tenant` additionally needs
 > wildcard DNS for `*.localtest.me` → 127.0.0.1 (works unconfigured on macOS)
 > and starts its own server on :3002.
+>
+> **Two local-stack requirements that are easy to miss** (both cost a full
+> investigation on 2026-08-05 — see the seventh addendum of the audit note):
+> 1. Set **`auto_expose_new_tables = true`** under `[api]` in
+>    `supabase/config.toml`. The Supabase CLI now defaults this OFF, so tables
+>    created by our migrations get NO Data API grants and routes fail with
+>    `permission denied for table … (42501)` — 85 of 100 public tables. Prod is
+>    not like this. On an existing DB, apply
+>    `scripts/sql/local-supabase-post-migrate.sql` after a blanket grant.
+> 2. Launch the suite through **`scripts/with-env-local-demo-db.sh`**. `next dev`
+>    reads `.env.local`, whose `DATABASE_URL` is **production**; it is safe only
+>    because Next's loader does not overwrite vars already in `process.env`, so
+>    the wrapper's loopback exports must come first.
+>
+> The admin app (`:3001`) needs a row in `platform_admin_users`. **Nothing seeds
+> it, deliberately** — that would put platform-wide `super_admin` into shared demo
+> data. Instead `apps/admin/src/app/dev/agent-login/route.ts` provisions a
+> dedicated `e2e.platform.admin@local` identity and its grant on demand, in
+> `development` only. `pnpm seed:demo` still leaves the table at 0 rows, and the
+> demo persona `pm.admin@sunset.local` never holds platform privilege.
+> **Use `localhost:3001`, never `127.0.0.1:3001`,** for admin-app specs: Supabase
+> auth cookies are host-only and Next's dev server normalises `request.url` to
+> `localhost` regardless of `--hostname`, so mixing the two silently drops the
+> session (see the eighth addendum).
 >
 > **CI runs three specs — 8 of the suite's 39 test blocks** —
 > `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`, in one
@@ -101,10 +128,35 @@ pnpm --filter @propertypro/web test:e2e:prod -- e2e/pdfjs-runtime.spec.ts
 > **The other 31 blocks are unexercised by CI — do not assume a Playwright spec
 > guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
 > them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
-> `docs/audits/2026-08-03-e2e-inventory.md` measured the whole suite: **15 of 39
-> blocks pass locally, and 10 never execute at all** (five specs use
-> `describe.configure({ mode: 'serial' })`, so one early failure skips the rest).
-> A CI job over the remainder would be red on day one and stay red.
+> `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite; as of the
+> **eleventh addendum (2026-08-05)** the default suite is **26 passed / 1 failed /
+> 2 skipped / 0 never ran** in 7.5 min at `workers: 1`, up from 19/8/2 — and
+> "never ran" is 0 for the first time, so every block now executes. Before
+> trusting a local number, confirm the port is clear AND
+> `ps -eo comm | grep -c vitest` is 0; also compare the CANARY TIMINGS
+> (`activation-smoke` ~0.7-4s, `marketing-smoke` ~3s), because a canary that
+> passes but is 5x slower still means the environment moved. The 2 skipped are
+> the deliberate `onboarding-first-run` `test.fixme` blocks: that spec describes
+> a 4-/5-step wizard, but **both** condo and apartment ship the same 2-step one.
+> The single remaining failure is `signup-trialing` (placeholder Stripe price
+> ids — needs test-mode ids, not a code fix).
+>
+> **Never click straight after waiting for a heading — use `clickWhenHydrated`**
+> (`apps/web/e2e/helpers/hydration.ts`). Playwright actionability is a DOM check
+> and does NOT mean React attached a handler; a click on server-rendered markup is
+> **swallowed**, so no timeout can recover it. A heading is in the server HTML and
+> appears *before* hydration by definition. This one cause hit THREE specs — two
+> red for months behind 30s waits (misdiagnosed twice as first-render budgets and
+> once as a stale dev server), and one silently patched with a retry-click.
+> Measured hydration lag was only ~260-510ms.
+>
+> **Support impersonation forwards ONE identity.** The web middleware's support
+> branch must move `x-user-id`, `x-user-full-name` and `x-user-email` together;
+> name/email come from the `target_name`/`target_email` claims on the signed
+> support JWT (resolved once at session creation, so there is no per-request
+> query), and `x-user-phone` is always dropped. When a claim is absent the headers
+> are **cleared, never inherited** — overriding only the id is what previously
+> showed the admin's identity over the impersonated user's data.
 >
 > **Adding a spec to `perf-check` requires proving it passes against a
 > PRODUCTION build with an UNREACHABLE database.** Passing under `pnpm test:e2e`

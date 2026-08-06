@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ForbiddenError } from '@propertypro/shared/http';
 
 const { requirePlatformAdminMock, createAdminTypedClientMock } = vi.hoisted(() => ({
   requirePlatformAdminMock: vi.fn(),
@@ -130,7 +131,7 @@ describe('DELETE /api/admin/site-templates/theme-presets/[slug]', () => {
       layoutCount: 0,
     });
     expect(updateMock).toHaveBeenCalledTimes(1);
-    expect(updateMock.mock.calls[0][0]).toMatchObject({ is_archived: true });
+    expect(updateMock.mock.calls[0]![0]).toMatchObject({ is_archived: true });
     expect(deleteMock).not.toHaveBeenCalled();
   });
 
@@ -174,9 +175,9 @@ describe('DELETE /api/admin/site-templates/theme-presets/[slug]', () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it('throws when requirePlatformAdmin rejects', async () => {
-    requirePlatformAdminMock.mockRejectedValueOnce(new Error('not-admin'));
+  it('returns 403 when requirePlatformAdmin rejects', async () => {
+    requirePlatformAdminMock.mockRejectedValueOnce(new ForbiddenError('Platform admin access required'));
     createAdminTypedClientMock.mockImplementation(() => buildClient({}));
-    await expect(callDelete()).rejects.toThrow('not-admin');
+    await expect(callDelete()).resolves.toHaveProperty('status', 403);
   });
 });

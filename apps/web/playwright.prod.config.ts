@@ -14,6 +14,11 @@ import { defineConfig, devices } from '@playwright/test';
  * only way those specs authenticate) is a dev-only route that middleware 404s.
  * CI was saved from this only by passing three paths on the command line.
  *
+ * THIS ARRAY IS NOW THE SINGLE LIST. `.github/workflows/ci.yml` used to repeat
+ * the same three paths as CLI arguments, which override `testMatch` — so a spec
+ * added here would silently not have run in CI until someone also edited the
+ * workflow. Those arguments are gone; do not reintroduce them.
+ *
  * Adding a spec here requires proving it passes against a production build
  * with an UNREACHABLE database — see the E2E section of CLAUDE.md.
  */
