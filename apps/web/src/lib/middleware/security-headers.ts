@@ -1,8 +1,14 @@
 /**
- * Security headers for all HTTP responses.
+ * Security headers for all HTTP responses — apps/web adapter.
  *
  * P4-56: Provides CORS origin validation and security header builders
  * used by Next.js middleware to harden every response.
+ *
+ * The builders themselves live in `@propertypro/shared/http` so that
+ * `apps/admin` uses the identical implementation. This module is the web
+ * app's thin adapter: it supplies web's own hosts, env reads and the
+ * `isPreview` toggle, and keeps the exported signatures that web's middleware,
+ * the demo-login route and the existing test suite already call.
  *
  * CORS strategy:
  * - Requests with no Origin header are same-origin or server-to-server — allowed.
@@ -16,8 +22,24 @@
  * - 'unsafe-inline' for scripts is required by Next.js App Router hydration.
  * - Nonces or hash-based CSP are the recommended upgrade path when strict mode is needed.
  */
+import {
+  buildCorsHeaders as buildCorsHeadersShared,
+  buildCspHeader as buildCspHeaderShared,
+  buildSecurityHeaders as buildSecurityHeadersShared,
+  isAllowedOrigin as isAllowedOriginShared,
+  isAllowedReferer as isAllowedRefererShared,
+  type OriginAllowlistOptions,
+} from '@propertypro/shared/http';
 
 const PRODUCTION_DOMAIN = 'getpropertypro.com';
+
+/** Web's origin allowlist. Read lazily so tests can stub NEXT_PUBLIC_APP_URL. */
+function allowlist(): OriginAllowlistOptions {
+  return {
+    productionDomain: PRODUCTION_DOMAIN,
+    appUrl: process.env.NEXT_PUBLIC_APP_URL,
+  };
+}
 
 /**
  * Returns space-separated admin origin(s) for CSP frame-ancestors in preview mode.
@@ -40,30 +62,7 @@ function getAdminOrigins(): string {
  * Returns false for origins not on the allowlist.
  */
 export function isAllowedOrigin(origin: string): boolean {
-  let hostname: string;
-  try {
-    hostname = new URL(origin).hostname;
-  } catch {
-    return false;
-  }
-
-  // Local development
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
-
-  // Production domain and subdomains
-  if (hostname === PRODUCTION_DOMAIN || hostname.endsWith(`.${PRODUCTION_DOMAIN}`)) return true;
-
-  // Configured app URL (e.g., Vercel preview deployments)
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (appUrl) {
-    try {
-      if (hostname === new URL(appUrl).hostname) return true;
-    } catch {
-      // Invalid NEXT_PUBLIC_APP_URL — ignore
-    }
-  }
-
-  return false;
+  return isAllowedOriginShared(origin, allowlist());
 }
 
 /**
@@ -71,12 +70,7 @@ export function isAllowedOrigin(origin: string): boolean {
  * Falls back to false for malformed URLs.
  */
 export function isAllowedReferer(referer: string): boolean {
-  try {
-    const url = new URL(referer);
-    return isAllowedOrigin(url.origin);
-  } catch {
-    return false;
-  }
+  return isAllowedRefererShared(referer, allowlist());
 }
 
 /**
@@ -85,16 +79,7 @@ export function isAllowedReferer(referer: string): boolean {
  * callers can safely spread the result without leaking permissive CORS.
  */
 export function buildCorsHeaders(origin: string | null): Record<string, string> {
-  if (!origin || !isAllowedOrigin(origin)) return {};
-
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
+  return buildCorsHeadersShared(origin, allowlist());
 }
 
 /**
@@ -107,19 +92,12 @@ export function buildCorsHeaders(origin: string | null): Record<string, string> 
  * Call buildCspHeader() separately and add it to page responses.
  */
 export function buildSecurityHeaders(options?: { isPreview?: boolean }): Record<string, string> {
-  const headers: Record<string, string> = {
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'X-DNS-Prefetch-Control': 'off',
-  };
   // In preview mode, CSP frame-ancestors is the authoritative framing policy.
   // X-Frame-Options is omitted because SAMEORIGIN would block the cross-origin
   // admin→web iframe while CSP correctly allows the admin origin.
-  if (!options?.isPreview) {
-    headers['X-Frame-Options'] = 'DENY';
-  }
-  return headers;
+  return buildSecurityHeadersShared({
+    frameOptions: options?.isPreview ? 'omit' : 'DENY',
+  });
 }
 
 /**
@@ -129,48 +107,12 @@ export function buildSecurityHeaders(options?: { isPreview?: boolean }): Record<
  * until nonce-based CSP is implemented (tracked as a future hardening item).
  */
 export function buildCspHeader(options?: { isPreview?: boolean }): string {
-  // Keep the configured URL's SCHEME rather than assuming https. A hosted
-  // Supabase project is https, so this is a no-op there — but a local stack is
-  // `http://127.0.0.1:<port>`, and hardcoding https silently blocked the browser
-  // from reaching Supabase Auth at all (`Failed to fetch` on /auth/v1/user),
-  // which broke client-side auth in every local e2e run.
-  //
-  // This does not widen anything: the host is already trusted by these
-  // directives; only the scheme naming it is corrected.
-  let supabaseOrigin: string;
-  let supabaseHost: string;
-  let supabaseWsScheme: 'ws' | 'wss';
-  try {
-    const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const url = raw ? new URL(raw) : null;
-    supabaseHost = url ? url.host : '*.supabase.co';
-    supabaseOrigin = url ? url.origin : 'https://*.supabase.co';
-    supabaseWsScheme = url?.protocol === 'http:' ? 'ws' : 'wss';
-  } catch {
-    console.error('Invalid NEXT_PUBLIC_SUPABASE_URL for CSP, falling back to wildcard.');
-    supabaseHost = '*.supabase.co';
-    supabaseOrigin = 'https://*.supabase.co';
-    supabaseWsScheme = 'wss';
-  }
-
-  const directives = [
-    "default-src 'self'",
-    // 'unsafe-inline' is required for Next.js inline scripts; 'unsafe-eval' for dev HMR
-    "script-src 'self' 'unsafe-inline' https://js.stripe.com" +
-      (process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''),
-    "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${supabaseOrigin}`,
-    `connect-src 'self' ${supabaseOrigin} ${supabaseWsScheme}://${supabaseHost} https://*.ingest.sentry.io https://api.stripe.com`,
-    `frame-src 'self' ${supabaseOrigin} https://js.stripe.com https://hooks.stripe.com`,
-    "font-src 'self' data:",
-    "worker-src 'self'",
-    options?.isPreview
-      ? `frame-ancestors 'self' ${getAdminOrigins()}`
-      : "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "object-src 'none'",
-  ];
-
-  return directives.join('; ');
+  return buildCspHeaderShared({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    frameAncestors: options?.isPreview ? `'self' ${getAdminOrigins()}` : "'none'",
+    scriptSrc: ['https://js.stripe.com'],
+    connectSrc: ['https://*.ingest.sentry.io', 'https://api.stripe.com'],
+    frameSrc: ['https://js.stripe.com', 'https://hooks.stripe.com'],
+    allowUnsafeEval: process.env.NODE_ENV === 'development',
+  });
 }

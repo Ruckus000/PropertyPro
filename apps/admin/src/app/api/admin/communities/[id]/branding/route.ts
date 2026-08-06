@@ -9,24 +9,14 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { resolveAndVerifyCommunity } from '@/lib/api/resolve-community';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
-import { isValidHexColor } from '@propertypro/shared';
-import { ALLOWED_FONTS } from '@propertypro/theme';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { brandingSchema } from '@/lib/validation/branding';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
-const HEX_COLOR = z.string().refine(isValidHexColor, { message: 'Must be a valid hex color (e.g. #2563EB)' });
-const FONT = z.string().refine(
-  (f) => (ALLOWED_FONTS as readonly string[]).includes(f),
-  { message: 'Font not in allowed list' },
-);
-
-const patchSchema = z.object({
-  primaryColor: HEX_COLOR.optional(),
-  secondaryColor: HEX_COLOR.optional(),
-  accentColor: HEX_COLOR.optional(),
-  fontHeading: FONT.optional(),
-  fontBody: FONT.optional(),
-  logoPath: z.string().max(500).optional(),
-}).strict();
+const patchSchema = brandingSchema
+  .extend({ logoPath: z.string().max(500).optional() })
+  .strict();
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -59,7 +49,7 @@ export const GET = withAdminErrorHandler(async (_request: NextRequest, context: 
 });
 
 export const PATCH = withAdminErrorHandler(async (request: NextRequest, context: RouteContext) => {
-  await requirePlatformAdmin();
+  const admin = await requirePlatformAdmin();
 
   const { id } = await context.params;
   const db = createAdminClient();
@@ -68,14 +58,8 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
   if (result instanceof NextResponse) return result;
   const communityId = result;
 
-  const body = await request.json();
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseAdminBody(request, patchSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
   // Fetch current branding to merge
   const { data: current } = await db
@@ -89,7 +73,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
   // Build merged branding
   const merged: Record<string, unknown> = { ...existingBranding };
 
-  for (const [key, value] of Object.entries(parsed.data)) {
+  for (const [key, value] of Object.entries(parsed)) {
     if (value !== undefined) {
       merged[key] = value;
     }
@@ -108,6 +92,16 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
       { status: 500 },
     );
   }
+
+  await logAdminAction({
+    admin,
+    action: 'community_branding_changed',
+    resourceType: 'community_branding',
+    resourceId: communityId,
+    communityId,
+    oldValues: existingBranding,
+    newValues: merged,
+  });
 
   return NextResponse.json({ branding: (updated as Record<string, unknown>).branding ?? {} });
 });

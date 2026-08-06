@@ -6,11 +6,12 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { captureException } from '@sentry/nextjs';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { getDemoCommunityId, markDemoCustomized } from '@/lib/db/demo-queries';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -82,14 +83,8 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     );
   }
 
-  const body = await request.json();
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseAdminBody(request, patchSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
   const db = createAdminClient();
 
@@ -111,7 +106,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
-  for (const [key, value] of Object.entries(parsed.data)) {
+  for (const [key, value] of Object.entries(parsed)) {
     if (value !== undefined) {
       updates[key] = value;
     }
@@ -134,23 +129,16 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
   // Mark demo as customized (no-op if already set)
   await markDemoCustomized(demoId);
 
-  // Fire-and-forget audit log
-  db.from('compliance_audit_log')
-    .insert({
-      user_id: admin.id,
-      community_id: communityId,
-      action: 'demo_community_changed',
-      resource_type: 'community',
-      resource_id: String(communityId),
-      old_values: existing as Record<string, unknown>,
-      new_values: parsed.data as Record<string, unknown>,
-      metadata: { source: 'admin_platform', admin_email: admin.email, demo_id: demoId },
-    } as never)
-    .then(({ error: auditError }) => {
-      if (auditError) {
-        captureException(auditError, { extra: { context: '[audit] Failed to log demo community change', demo_id: demoId } });
-      }
-    });
+  await logAdminAction({
+    admin,
+    action: 'demo_community_changed',
+    resourceType: 'community',
+    resourceId: communityId,
+    communityId,
+    oldValues: existing as Record<string, unknown>,
+    newValues: parsed as Record<string, unknown>,
+    metadata: { source: 'admin_platform', demo_id: demoId },
+  });
 
   return NextResponse.json({ community: updated });
 });

@@ -6,7 +6,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
+import { parseAdminBody } from '@/lib/api/parse-body';
+
+/**
+ * `reason` was read as `(body as { reason?: string }).reason` with no runtime
+ * check, then interpolated into `notes`. A non-string (an object, an array)
+ * would stringify into the column; an unbounded string would be stored whole.
+ */
+const revokeSchema = z.object({
+  reason: z.string().max(1000).nullish(),
+});
 
 interface RouteParams {
   params: Promise<{ planId: string }>;
@@ -21,8 +33,9 @@ export const DELETE = withAdminErrorHandler(async (request: NextRequest, { param
     return NextResponse.json({ error: { message: 'Invalid plan ID' } }, { status: 400 });
   }
 
-  const body = await request.json().catch(() => ({}));
-  const reason = (body as { reason?: string }).reason ?? null;
+  const parsed = await parseAdminBody(request, revokeSchema);
+  if (parsed instanceof NextResponse) return parsed;
+  const reason = parsed.reason ?? null;
 
   const db = createAdminTypedClient();
 
@@ -81,6 +94,15 @@ export const DELETE = withAdminErrorHandler(async (request: NextRequest, { param
       );
     }
   }
+
+  await logAdminAction({
+    admin,
+    action: 'access_plan_revoked',
+    resourceType: 'access_plan',
+    resourceId: id,
+    communityId: revokedRow.community_id,
+    newValues: { revoked_at: updatePayload.revoked_at, reason },
+  });
 
   return NextResponse.json({ plan: data });
 });

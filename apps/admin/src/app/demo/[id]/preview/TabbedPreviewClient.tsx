@@ -287,6 +287,10 @@ export function TabbedPreviewClient({
 
           return (
             <iframe
+            // These URLs carry a demo-login token in the query string; without
+            // this the token rides along in the Referer of every outbound
+            // request the framed page makes.
+            referrerPolicy="no-referrer"
               key={tab.key}
               ref={(el) => setIframeRef(tab.key, el)}
               src={tab.url}

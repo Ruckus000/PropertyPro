@@ -11,8 +11,20 @@ export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
 // --- Session Constraints ---
 export const SUPPORT_SESSION_MAX_TTL_HOURS = 0.5;
 export const SUPPORT_SESSION_MAX_PER_ADMIN_PER_DAY = 10;
-export const SUPPORT_SESSION_DEV_SECRET =
-  'propertypro-local-support-session-secret-2026';
+
+// NOTE: there is deliberately NO dev-secret constant here.
+//
+// Until 2026-08-05 this file exported `SUPPORT_SESSION_DEV_SECRET`, a literal
+// checked into the repo, which BOTH the admin signer and the web verifier fell
+// back to whenever `NODE_ENV !== 'production'`. Any deployment not explicitly
+// started with NODE_ENV=production (preview, staging, a misconfigured
+// container) would therefore ACCEPT a `pp-support-session` JWT that anyone
+// could forge for any `sub` / `community_id` — full impersonation of any user
+// in any community with no admin session at all.
+//
+// Both sides now require SUPPORT_SESSION_JWT_SECRET (min 32 chars)
+// unconditionally and fail closed without it. Do not reintroduce a fallback:
+// a hard-coded secret is a valid signing key everywhere it is compiled in.
 
 // --- Support Access Log Event Types ---
 export const SUPPORT_ACCESS_EVENTS = [

@@ -10,6 +10,8 @@ import { PLAN_IDS } from '@propertypro/shared';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const writeLevel = z.enum(['all_members', 'admin_only']);
 
@@ -88,14 +90,8 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     );
   }
 
-  const body = await request.json();
-  const parsed = patchSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
+  const parsed = await parseAdminBody(request, patchSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
   const db = createAdminClient();
 
@@ -118,7 +114,7 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     updated_at: new Date().toISOString(),
   };
 
-  const { community_settings, ...rest } = parsed.data;
+  const { community_settings, ...rest } = parsed;
   for (const [key, value] of Object.entries(rest)) {
     if (value !== undefined) {
       updates[key] = value;
@@ -148,12 +144,16 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
     const oldAttorneyReviewed = (oldSettings as Record<string, unknown>).electionsAttorneyReviewed === true;
     const nextAttorneyReviewed = community_settings.electionsAttorneyReviewed === true;
     if (oldAttorneyReviewed !== nextAttorneyReviewed) {
-      const { logAuditEvent } = await import('@propertypro/db');
-      await logAuditEvent({
-        userId: admin.id,
-        action: 'settings_changed',
+      // Was a DYNAMIC import of logAuditEvent from '@propertypro/db' — the
+      // only such import in apps/admin — done that way purely to defer
+      // drizzle.ts's module-load throw on a missing DATABASE_URL to request
+      // time. logAdminAction goes through the service-role PostgREST client
+      // that the rest of this app already uses, so the hazard is gone.
+      await logAdminAction({
+        admin,
+        action: 'community_settings_changed',
         resourceType: 'community_settings',
-        resourceId: String(communityId),
+        resourceId: communityId,
         communityId,
         oldValues: { electionsAttorneyReviewed: oldAttorneyReviewed },
         newValues: { electionsAttorneyReviewed: nextAttorneyReviewed },

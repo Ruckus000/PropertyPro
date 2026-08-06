@@ -1,7 +1,6 @@
 import { jwtVerify } from 'jose';
 import {
   type SupportAccessLevel,
-  SUPPORT_SESSION_DEV_SECRET,
   type SupportSessionJwtPayload,
 } from '@propertypro/shared';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -47,20 +46,19 @@ export async function parseImpersonationCookie(
 ): Promise<SupportSessionJwtPayload | null> {
   if (!cookieValue) return null;
 
+  // SUPPORT_SESSION_JWT_SECRET is REQUIRED in every environment — there is no
+  // development fallback. A previous version fell back to a constant checked
+  // into the repo whenever NODE_ENV !== 'production', which meant any such
+  // environment would verify a token that anyone could forge for any `sub` /
+  // `community_id`. Without a configured secret we cannot distinguish a real
+  // token from a forged one, so we treat every cookie as unverifiable.
   const secret = process.env.SUPPORT_SESSION_JWT_SECRET;
-  const effectiveSecret =
-    secret && secret.length >= 32
-      ? secret
-      : process.env.NODE_ENV !== 'production'
-        ? SUPPORT_SESSION_DEV_SECRET
-        : null;
-
-  if (!effectiveSecret) return null;
+  if (!secret || secret.length < 32) return null;
 
   try {
     const { payload } = await jwtVerify(
       cookieValue,
-      new TextEncoder().encode(effectiveSecret),
+      new TextEncoder().encode(secret),
       { algorithms: ['HS256'] },
     );
 

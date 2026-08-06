@@ -4,35 +4,32 @@ import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { compileDemoTemplate } from '@/lib/site-template/compile-template';
 import { isDemoTemplateId } from '@propertypro/shared';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { parseAdminBody } from '@/lib/api/parse-body';
+import { brandingSchema } from '@/lib/validation/branding';
 
+/**
+ * `branding` previously accepted bare `z.string().optional()` for all five
+ * fields, while the sibling create route (demos/route.ts) enforced
+ * HEX_COLOR + ALLOWED_FONTS on the same values. Those strings are interpolated
+ * into JavaScript source that compile-template.ts evaluates with
+ * `new Function()`, so the two routes had materially different exposure to the
+ * same evaluator. They now share one schema.
+ */
 const previewSchema = z.object({
   communityType: z.enum(['condo_718', 'hoa_720', 'apartment']),
   publicTemplateId: z.string().refine(isDemoTemplateId, 'Invalid template ID'),
   mobileTemplateId: z.string().refine(isDemoTemplateId, 'Invalid template ID'),
   prospectName: z.string().min(1).max(100),
-  branding: z.object({
-    primaryColor: z.string().optional(),
-    secondaryColor: z.string().optional(),
-    accentColor: z.string().optional(),
-    fontHeading: z.string().optional(),
-    fontBody: z.string().optional(),
-  }).optional(),
+  branding: brandingSchema.optional(),
 });
 
 export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
-  const body = await request.json();
-  const parsed = previewSchema.safeParse(body);
+  const parsed = await parseAdminBody(request, previewSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' } },
-      { status: 400 },
-    );
-  }
-
-  const { publicTemplateId, mobileTemplateId, prospectName, branding: rawBranding } = parsed.data;
+  const { publicTemplateId, mobileTemplateId, prospectName, branding: rawBranding } = parsed;
 
   // compileDemoTemplate requires all branding fields to be non-optional strings when branding is
   // provided. Resolve each field to a defined string or omit branding entirely.

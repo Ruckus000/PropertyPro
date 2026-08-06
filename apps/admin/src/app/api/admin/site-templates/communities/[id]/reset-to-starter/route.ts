@@ -31,6 +31,7 @@ import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 const bodySchema = z.object({
   starterPackSlug: z.string().min(1).max(120),
@@ -245,6 +246,25 @@ export const POST = withAdminErrorHandler(async (
       { status: 500 },
     );
   }
+
+  // The compliance_audit_log write above is KEPT rather than replaced: it is
+  // the tenant-visible statutory record, and restore-from-snapshot reads that
+  // row back by id to find the blocks to un-delete. Removing it would be a
+  // functional regression, not just a logging change. This is the additional
+  // platform-operator record.
+  await logAdminAction({
+    admin,
+    action: 'site_template_reset',
+    resourceType: 'site_blocks',
+    resourceId: starterPackSlug,
+    communityId,
+    metadata: {
+      starterPackSlug,
+      snapshotBlockIds,
+      appliedBlockCount: insertRows.length,
+      complianceAuditLogId: (auditRow as { id?: number } | null)?.id ?? null,
+    },
+  });
 
   return NextResponse.json(
     {

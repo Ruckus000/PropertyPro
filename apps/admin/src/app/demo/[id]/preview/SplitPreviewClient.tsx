@@ -60,6 +60,10 @@ export function SplitPreviewClient({ boardUrl, residentUrl }: SplitPreviewClient
         </div>
         {boardUrl ? (
           <iframe
+            // These URLs carry a demo-login token in the query string; without
+            // this the token rides along in the Referer of every outbound
+            // request the framed page makes.
+            referrerPolicy="no-referrer"
             src={boardUrl}
             className="h-full w-full flex-1"
             title="Board member dashboard preview"

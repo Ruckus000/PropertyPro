@@ -5,9 +5,29 @@
  * POST /api/admin/access-plans — grant free access to a community
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
+import { logAdminAction } from '@/lib/audit/log-admin-action';
+import { parseAdminBody } from '@/lib/api/parse-body';
+
+/**
+ * Granting free access is a MONEY decision, so the duration bounds are real
+ * limits rather than sanity checks.
+ *
+ * `durationMonths` and `gracePeriodDays` were previously unbounded numbers fed
+ * straight into `setMonth()` / `setDate()`. A large value produced an
+ * effectively permanent free grant (and a big enough one produces an Invalid
+ * Date, which lands in the DB as garbage). 24 months and 365 days are well
+ * beyond any legitimate trial while still being finite.
+ */
+const grantSchema = z.object({
+  communityId: z.number().int().positive(),
+  durationMonths: z.number().int().min(1).max(24),
+  gracePeriodDays: z.number().int().min(0).max(365).optional().default(30),
+  notes: z.string().max(2000).nullish(),
+});
 
 function computeStatus(row: {
   revoked_at: string | null;
@@ -26,9 +46,15 @@ function computeStatus(row: {
 export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   await requirePlatformAdmin();
 
-  const communityId = request.nextUrl.searchParams.get('communityId');
-  if (!communityId || !Number.isInteger(Number(communityId))) {
-    return NextResponse.json({ error: { message: 'communityId is required' } }, { status: 400 });
+  // `Number.isInteger(Number(x))` alone accepted "0", "-5" and " " (all of
+  // which Number() maps to a valid integer), so parse to a positive integer.
+  const rawCommunityId = request.nextUrl.searchParams.get('communityId');
+  const communityId = Number(rawCommunityId);
+  if (!rawCommunityId || !Number.isInteger(communityId) || communityId <= 0) {
+    return NextResponse.json(
+      { error: { message: 'communityId is required and must be a positive integer' } },
+      { status: 400 },
+    );
   }
 
   const db = createAdminTypedClient();
@@ -36,7 +62,7 @@ export const GET = withAdminErrorHandler(async (request: NextRequest) => {
   const { data, error } = await (db
     .from('access_plans'))
     .select('*')
-    .eq('community_id', Number(communityId))
+    .eq('community_id', communityId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -66,17 +92,10 @@ export const GET = withAdminErrorHandler(async (request: NextRequest) => {
 export const POST = withAdminErrorHandler(async (request: NextRequest) => {
   const admin = await requirePlatformAdmin();
 
-  const body = await request.json();
-  const { communityId, durationMonths, gracePeriodDays = 30, notes } = body as {
-    communityId: number;
-    durationMonths: number;
-    gracePeriodDays?: number;
-    notes?: string | null;
-  };
+  const parsed = await parseAdminBody(request, grantSchema);
+  if (parsed instanceof NextResponse) return parsed;
 
-  if (!communityId || !durationMonths || durationMonths < 1) {
-    return NextResponse.json({ error: { message: 'communityId and durationMonths are required' } }, { status: 400 });
-  }
+  const { communityId, durationMonths, gracePeriodDays, notes } = parsed;
 
   const now = new Date();
   const expiresAt = new Date(now);
@@ -120,6 +139,22 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       communityUpdateError.message,
     );
   }
+
+  await logAdminAction({
+    admin,
+    action: 'access_plan_granted',
+    resourceType: 'access_plan',
+    resourceId: (data as { id?: number } | null)?.id,
+    communityId,
+    newValues: {
+      duration_months: durationMonths,
+      grace_period_days: gracePeriodDays,
+      expires_at: expiresAt.toISOString(),
+      grace_ends_at: graceEndsAt.toISOString(),
+      notes: notes ?? null,
+    },
+    metadata: { community_update_failed: Boolean(communityUpdateError) },
+  });
 
   return NextResponse.json({ plan: data }, { status: 201 });
 });

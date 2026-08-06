@@ -26,6 +26,17 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   }),
 }));
 
+
+// Audit writes go through logAdminAction, which uses its OWN supabase client
+// (createAdminClient) rather than the one these tests stub. Mock the helper so
+// the route tests stay focused, and so the call itself can be asserted — the
+// helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
+const logAdminAction = vi.fn(async () => {});
+vi.mock('@/lib/audit/log-admin-action', () => ({
+  logAdminAction: (...args: unknown[]) => logAdminAction(...args),
+  AdminAuditLogError: class AdminAuditLogError extends Error {},
+}));
+
 const baseDemo = {
   id: 42,
   template_type: 'condo_718',
@@ -53,6 +64,7 @@ async function callDelete(id: number) {
 
 describe('DELETE /api/admin/demos/[id]', () => {
   beforeEach(() => {
+    logAdminAction.mockReset();
     requirePlatformAdmin.mockReset();
     getDemoByIdWithConversionState.mockReset();
     deleteDemo.mockReset();
@@ -97,6 +109,31 @@ describe('DELETE /api/admin/demos/[id]', () => {
     expect(deleteUser).toHaveBeenCalledWith('board-uuid');
     expect(deleteCommunity).toHaveBeenCalledWith(99);
     expect(deleteDemo).toHaveBeenCalledWith(42);
+
+    // Hard-deleting a tenant must leave a record naming who did it. The
+    // community row itself is gone by this point, which is why the audit
+    // table's community_id is nullable with ON DELETE SET NULL.
+    expect(logAdminAction).toHaveBeenCalledTimes(1);
+    expect(logAdminAction.mock.calls[0][0]).toMatchObject({
+      action: 'demo_deleted',
+      resourceType: 'demo_instance',
+      resourceId: 42,
+      communityId: 99,
+    });
+  });
+
+  it('does not write an audit entry when the demo is already converted', async () => {
+    getDemoByIdWithConversionState.mockResolvedValue({
+      data: { ...baseDemo, is_converted: true },
+      error: null,
+    });
+
+    const response = await callDelete(42);
+
+    expect(response.status).toBe(409);
+    expect(deleteCommunity).not.toHaveBeenCalled();
+    // Nothing happened, so nothing should be recorded as having happened.
+    expect(logAdminAction).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the demo is not found', async () => {

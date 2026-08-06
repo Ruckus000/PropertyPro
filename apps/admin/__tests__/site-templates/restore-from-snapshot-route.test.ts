@@ -14,6 +14,17 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: createAdminTypedClientMock,
 }));
 
+
+// Audit writes go through logAdminAction, which uses its OWN supabase client
+// (createAdminClient) rather than the one these tests stub. Mock the helper so
+// the route tests stay focused, and so the call itself can be asserted — the
+// helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
+const logAdminAction = vi.fn(async () => {});
+vi.mock('@/lib/audit/log-admin-action', () => ({
+  logAdminAction: (...args: unknown[]) => logAdminAction(...args),
+  AdminAuditLogError: class AdminAuditLogError extends Error {},
+}));
+
 interface ChainStubs {
   community?: { data: unknown; error: unknown };
   prior?: { data: unknown; error: unknown };
