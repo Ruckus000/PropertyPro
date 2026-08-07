@@ -1,32 +1,55 @@
+/**
+ * Unit coverage for the marketing lead capture service.
+ *
+ * SCOPE, deliberately narrow: this file asserts what is decided in TypeScript —
+ * the values handed to the INSERT, and the SHAPE of the write. The merge
+ * precedence now lives in the ON CONFLICT clause and is therefore SQL, which a
+ * mocked client cannot evaluate; those rules, and the concurrency property that
+ * motivated them, are covered against a real database in
+ * `__tests__/integration/marketing-leads-upsert.integration.test.ts`.
+ *
+ * Do not "improve" this file by asserting on the generated SQL string. That
+ * pins drizzle's formatting, not our behaviour, and would pass just as happily
+ * against a clause that merged the wrong way round.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const selectLimitMock = vi.fn();
-const updateWhereMock = vi.fn();
-const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
-const insertValuesMock = vi.fn();
+const onConflictDoUpdateMock = vi.fn();
+const insertValuesMock = vi.fn(() => ({ onConflictDoUpdate: onConflictDoUpdateMock }));
 
 const dbMock = {
-  select: vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({ limit: selectLimitMock })),
-    })),
-  })),
-  update: vi.fn(() => ({ set: updateSetMock })),
   insert: vi.fn(() => ({ values: insertValuesMock })),
+  // Present so the test can prove they are NOT used — see the read-then-write
+  // regression guard below.
+  select: vi.fn(),
+  update: vi.fn(),
 };
 
 vi.mock('@propertypro/db', () => ({
   marketingLeads: {
     id: 'marketing_leads.id',
     emailNormalized: 'marketing_leads.email_normalized',
-    source: 'marketing_leads.source',
+    associationName: 'marketing_leads.association_name',
+    contactName: 'marketing_leads.contact_name',
+    associationType: 'marketing_leads.association_type',
+    unitCount: 'marketing_leads.unit_count',
+    communityCount: 'marketing_leads.community_count',
     message: 'marketing_leads.message',
+    obligationRequired: 'marketing_leads.obligation_required',
+    source: 'marketing_leads.source',
   },
 }));
 
-vi.mock('@propertypro/db/filters', () => ({
-  eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
-}));
+vi.mock('@propertypro/db/filters', () => {
+  // Minimal stand-in for drizzle's tagged template: enough to build the clause
+  // without pretending to evaluate it.
+  const sql = (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    __sql: strings.raw.join('?'),
+    values,
+  });
+  sql.join = (chunks: unknown[], sep: unknown) => ({ __join: chunks, sep });
+  return { sql, eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }) };
+});
 
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => dbMock,
@@ -39,7 +62,6 @@ const { captureMarketingLead } = await import(
 describe('captureMarketingLead', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    selectLimitMock.mockResolvedValue([]);
   });
 
   it('inserts a new lead with a normalized email', async () => {
@@ -51,8 +73,7 @@ describe('captureMarketingLead', () => {
     });
 
     expect(dbMock.insert).toHaveBeenCalledTimes(1);
-    const values = insertValuesMock.mock.calls[0]?.[0];
-    expect(values).toMatchObject({
+    expect(insertValuesMock.mock.calls[0]?.[0]).toMatchObject({
       email: 'President@Association.ORG',
       emailNormalized: 'president@association.org',
       associationType: 'condo',
@@ -83,99 +104,49 @@ describe('captureMarketingLead', () => {
     });
   });
 
-  it('updates instead of inserting when the email is already known', async () => {
-    selectLimitMock.mockResolvedValue([{ id: 42, source: 'compliance_checker', message: null }]);
+  it('omits absent optional fields so the conflict clause can keep stored values', async () => {
+    await captureMarketingLead({ email: 'sparse@association.org' });
 
-    await captureMarketingLead({
-      email: 'president@association.org',
-      associationName: 'Sunset Condos',
-    });
-
-    expect(dbMock.insert).not.toHaveBeenCalled();
-    expect(dbMock.update).toHaveBeenCalledTimes(1);
-    expect(updateWhereMock).toHaveBeenCalledWith({
-      __eq: { col: 'marketing_leads.id', val: 42 },
-    });
+    const values = insertValuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    // Each must be `undefined`, not null: drizzle drops undefined from the
+    // INSERT, which is what makes `coalesce(excluded.x, x)` fall through to the
+    // stored value instead of overwriting it with NULL.
+    for (const field of [
+      'associationName',
+      'contactName',
+      'associationType',
+      'unitCount',
+      'communityCount',
+      'message',
+      'obligationRequired',
+    ]) {
+      expect(values[field]).toBeUndefined();
+    }
   });
 
-  it('never resets sales-owned triage fields on a repeat submission', async () => {
-    selectLimitMock.mockResolvedValue([{ id: 7, source: 'compliance_checker', message: null }]);
-
+  it('writes through a single upsert keyed on the normalized email', async () => {
     await captureMarketingLead({ email: 'president@association.org' });
 
-    const patch = updateSetMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(patch).not.toHaveProperty('status');
-    expect(patch).not.toHaveProperty('notes');
+    expect(dbMock.insert).toHaveBeenCalledTimes(1);
+    expect(onConflictDoUpdateMock).toHaveBeenCalledTimes(1);
+
+    const config = onConflictDoUpdateMock.mock.calls[0]?.[0];
+    expect(config.target).toBe('marketing_leads.email_normalized');
+    // status and notes are sales-owned. Both capture endpoints are
+    // unauthenticated and key on email alone, so anything listed here can be
+    // written by anyone who knows a prospect's address.
+    expect(Object.keys(config.set)).not.toContain('status');
+    expect(Object.keys(config.set)).not.toContain('notes');
   });
 
-  it('leaves already-known fields untouched when a later submission omits them', async () => {
-    selectLimitMock.mockResolvedValue([{ id: 7, source: 'compliance_checker', message: null }]);
-
+  it('never reads before writing', async () => {
+    // The regression guard for the original defect. A SELECT-then-INSERT dedupe
+    // passes every other test in this file — with one caller at a time it is
+    // indistinguishable from an upsert — and loses rows only under concurrency.
+    // If this fails, the race is back.
     await captureMarketingLead({ email: 'president@association.org' });
 
-    // drizzle omits `undefined` keys, so a bare re-submission must not clobber
-    // a richer earlier capture.
-    const patch = updateSetMock.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(patch.associationName).toBeUndefined();
-    expect(patch.unitCount).toBeUndefined();
-    expect(patch.obligationRequired).toBeUndefined();
-  });
-
-  describe('source precedence', () => {
-    it('promotes a known checker lead when they submit the portfolio form', async () => {
-      // The most valuable inbound we can get. Without this it would stay
-      // labelled `compliance_checker` and never surface under the PM filter.
-      selectLimitMock.mockResolvedValue([
-        { id: 7, source: 'compliance_checker', message: null },
-      ]);
-
-      await captureMarketingLead({
-        email: 'ops@managementco.com',
-        source: 'pm_inquiry',
-      });
-
-      const patch = updateSetMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(patch.source).toBe('pm_inquiry');
-    });
-
-    it('never downgrades a portfolio lead who later re-runs the checker', async () => {
-      selectLimitMock.mockResolvedValue([{ id: 7, source: 'pm_inquiry', message: null }]);
-
-      await captureMarketingLead({
-        email: 'ops@managementco.com',
-        source: 'compliance_checker',
-      });
-
-      // `undefined` is omitted by drizzle, so the stored source survives.
-      const patch = updateSetMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(patch.source).toBeUndefined();
-    });
-  });
-
-  describe('message handling', () => {
-    it('fills an empty message', async () => {
-      selectLimitMock.mockResolvedValue([{ id: 7, source: 'pm_inquiry', message: null }]);
-
-      await captureMarketingLead({ email: 'ops@managementco.com', message: 'Hello.' });
-
-      const patch = updateSetMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(patch.message).toBe('Hello.');
-    });
-
-    it('never overwrites a message a human may already have read', async () => {
-      // The endpoint is unauthenticated and keys on email alone, so blind
-      // replacement would let anyone knowing the address erase the prose.
-      selectLimitMock.mockResolvedValue([
-        { id: 7, source: 'pm_inquiry', message: 'The original inquiry.' },
-      ]);
-
-      await captureMarketingLead({
-        email: 'ops@managementco.com',
-        message: 'Overwrite attempt.',
-      });
-
-      const patch = updateSetMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(patch.message).toBeUndefined();
-    });
+    expect(dbMock.select).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
   });
 });
