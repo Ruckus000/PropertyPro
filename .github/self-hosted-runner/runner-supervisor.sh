@@ -111,8 +111,29 @@ while true; do
 
   log 'runner online, waiting for a job'
   # Runs until it has completed exactly one job, then exits.
+  #
+  # PER-RUNNER $HOME IS LOAD-BEARING, NOT TIDINESS.
+  #
+  # Both runners execute as the SAME user inside the one VM, so without this
+  # they share a single home directory. `pnpm/action-setup@v4` self-installs
+  # into `~/setup-pnpm`, and two concurrent jobs then race on that one
+  # directory — one wipes and repopulates it while the other is reading, and
+  # the loser dies with:
+  #
+  #   ENOENT: no such file or directory, open '~/setup-pnpm/package.json'
+  #
+  # Observed on PR #913 (run 31137648296). An earlier concurrent run had
+  # survived the same race on timing luck, which is exactly why the shadow
+  # phase runs for a week rather than once.
+  #
+  # The caches that are meant to be shared do not live under $HOME — they are
+  # pinned by absolute path in /etc/environment (RUNNER_TOOL_CACHE,
+  # PLAYWRIGHT_BROWSERS_PATH) — so splitting $HOME costs only a per-runner pnpm
+  # store, a few GB against a 150GB disk.
   limactl shell "$VM" -- bash -lc \
-    "cd '${RUNNER_DIR}' && ./run.sh --jitconfig '${JIT}'" || \
+    "mkdir -p '${RUNNER_DIR}/home' \
+     && export HOME='${RUNNER_DIR}/home' PNPM_HOME='${RUNNER_DIR}/home/.pnpm' \
+     && cd '${RUNNER_DIR}' && ./run.sh --jitconfig '${JIT}'" || \
     log 'runner exited non-zero (job failure is normal here)'
 
   log 'job finished; recycling'

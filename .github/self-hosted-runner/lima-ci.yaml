@@ -168,8 +168,14 @@ provision:
       RUNNER_TOOL_CACHE=/opt/ci-cache/tool-cache
       AGENT_TOOLSDIRECTORY=/opt/ci-cache/tool-cache
       PLAYWRIGHT_BROWSERS_PATH=/opt/ci-cache/ms-playwright
-      PNPM_HOME=/opt/ci-cache/pnpm-store
       EOF
+      # NOTE: PNPM_HOME is deliberately NOT set here.
+      #
+      # It used to point at a single shared /opt/ci-cache/pnpm-store, which was
+      # wrong twice over: PNPM_HOME is where the pnpm CLI installs itself, not
+      # the content-addressed store, and pointing two CONCURRENT runners at one
+      # writable directory is a race. The supervisor now sets a per-runner
+      # PNPM_HOME alongside a per-runner HOME. See runner-supervisor.sh.
 
   # ---------------------------------------------------------------------------
   # 3. Egress firewall — applied LAST, because everything above needs network.
