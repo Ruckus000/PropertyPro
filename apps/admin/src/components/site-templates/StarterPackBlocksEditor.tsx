@@ -42,13 +42,13 @@ export function StarterPackBlocksEditor({ value, onChange }: Props) {
   return (
     <div className="space-y-3" data-testid="blocks-editor">
       {value.map((b, i) => (
-        <div key={b.blockOrder} className="rounded border border-gray-200 p-3" data-testid={`block-row-${i}`}>
+        <div key={b.blockOrder} className="rounded border border-edge p-3" data-testid={`block-row-${i}`}>
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs text-gray-500">#{b.blockOrder}</span>
+            <span className="text-xs text-content-tertiary">#{b.blockOrder}</span>
             <select
               aria-label={`Block ${i + 1} type`}
               data-testid={`block-type-${i}`}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="rounded border border-edge-strong px-2 py-1 text-sm"
               value={b.blockType}
               onChange={(e) => setBlock(i, { blockType: e.target.value })}
             >
@@ -56,17 +56,17 @@ export function StarterPackBlocksEditor({ value, onChange }: Props) {
             </select>
             <div className="ml-auto flex gap-1">
               <button type="button" aria-label={`Move block ${i + 1} up`} disabled={i === 0}
-                className="rounded border border-gray-300 px-2 py-1 text-xs disabled:opacity-40" onClick={() => move(i, -1)}>↑</button>
+                className="rounded border border-edge-strong px-2 py-1 text-xs disabled:opacity-40" onClick={() => move(i, -1)}>↑</button>
               <button type="button" aria-label={`Move block ${i + 1} down`} disabled={i === value.length - 1}
-                className="rounded border border-gray-300 px-2 py-1 text-xs disabled:opacity-40" onClick={() => move(i, 1)}>↓</button>
+                className="rounded border border-edge-strong px-2 py-1 text-xs disabled:opacity-40" onClick={() => move(i, 1)}>↓</button>
               <button type="button" aria-label={`Remove block ${i + 1}`}
-                className="rounded border border-red-300 px-2 py-1 text-xs text-red-700" onClick={() => remove(i)}>Remove</button>
+                className="rounded border border-status-danger-border px-2 py-1 text-xs text-status-danger" onClick={() => remove(i)}>Remove</button>
             </div>
           </div>
           <BlockContentFields type={b.blockType} content={b.content} onChange={(c) => setBlock(i, { content: c })} index={i} />
         </div>
       ))}
-      <button type="button" data-testid="add-block" className="rounded border border-gray-300 px-3 py-1.5 text-sm" onClick={add}>+ Add block</button>
+      <button type="button" data-testid="add-block" className="rounded border border-edge-strong px-3 py-1.5 text-sm" onClick={add}>+ Add block</button>
     </div>
   );
 }
@@ -92,19 +92,19 @@ function BlockContentFields({ type, content, onChange, index }: { type: string; 
     }
   };
   const numField = (k: string, label: string) => (
-    <label className="block text-xs text-gray-600">{label}
-      <input type="number" data-testid={`field-${index}-${k}`} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+    <label className="block text-xs text-content-secondary">{label}
+      <input type="number" data-testid={`field-${index}-${k}`} className="mt-0.5 w-full rounded border border-edge-strong px-2 py-1 text-sm"
         value={num(k)} onChange={(e) => set(k, e.target.value === '' ? undefined : Number(e.target.value))} />
     </label>
   );
   const textField = (k: string, label: string) => (
-    <label className="block text-xs text-gray-600">{label}
-      <input type="text" data-testid={`field-${index}-${k}`} className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm"
+    <label className="block text-xs text-content-secondary">{label}
+      <input type="text" data-testid={`field-${index}-${k}`} className="mt-0.5 w-full rounded border border-edge-strong px-2 py-1 text-sm"
         value={str(k)} onChange={(e) => set(k, e.target.value === '' ? undefined : e.target.value)} />
     </label>
   );
   const boolField = (k: string, label: string) => (
-    <label className="flex items-center gap-2 text-xs text-gray-600">
+    <label className="flex items-center gap-2 text-xs text-content-secondary">
       <input type="checkbox" data-testid={`field-${index}-${k}`} checked={bool(k)} onChange={(e) => set(k, e.target.checked)} />{label}
     </label>
   );
@@ -130,7 +130,7 @@ function BlockContentFields({ type, content, onChange, index }: { type: string; 
       return <div className="grid grid-cols-2 gap-2">{numField('limit', 'Limit')}{numField('timeWindowDays', 'Time window (days)')}</div>;
     case 'documents':
       return <div className="grid grid-cols-2 gap-2">{numField('limit', 'Limit')}
-        <fieldset className="block text-xs text-gray-600">
+        <fieldset className="block text-xs text-content-secondary">
           <legend>Categories</legend>
           <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-1">
             {DOCUMENT_CATEGORIES.map((cat) => (
@@ -158,12 +158,12 @@ function JsonField({ content, onChange, index }: { content: Record<string, unkno
   const [err, setErr] = useState<string | null>(null);
   return (
     <div>
-      <textarea data-testid={`field-${index}-json`} className="w-full rounded border border-gray-300 px-2 py-1 font-mono text-xs" rows={6}
+      <textarea data-testid={`field-${index}-json`} className="w-full rounded border border-edge-strong px-2 py-1 font-mono text-xs" rows={6}
         value={raw} onChange={(e) => {
           setRaw(e.target.value);
           try { onChange(JSON.parse(e.target.value)); setErr(null); } catch { setErr('Invalid JSON'); }
         }} />
-      {err && <p role="alert" className="text-xs text-red-600">{err}</p>}
+      {err && <p role="alert" className="text-xs text-status-danger">{err}</p>}
     </div>
   );
 }

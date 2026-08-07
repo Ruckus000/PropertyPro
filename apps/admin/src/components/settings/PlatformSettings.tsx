@@ -83,33 +83,40 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
     }
   }
 
+  // Icons are uniformly secondary rather than one accent hue per card. Two
+  // reasons, both from the design system rather than from token availability:
+  // web's canonical KpiCard renders its icon `text-content-secondary` on a
+  // muted chip, and DESIGN.md's Accent Scarcity rule reserves brand coral for
+  // primary actions, focus rings and active nav — so the coral card was off-rule
+  // too, not just the violet and emerald ones. The label already distinguishes
+  // these cards; colour was carrying no information.
   const statCards = [
-    { label: 'Communities', value: stats.communityCount, icon: Building2, color: 'text-coral-700' },
-    { label: 'Demo Instances', value: stats.demoCount, icon: MonitorPlay, color: 'text-violet-600' },
-    { label: 'Platform Admins', value: admins.length, icon: Shield, color: 'text-emerald-600' },
+    { label: 'Communities', value: stats.communityCount, icon: Building2 },
+    { label: 'Demo Instances', value: stats.demoCount, icon: MonitorPlay },
+    { label: 'Platform Admins', value: admins.length, icon: Shield },
   ];
 
   return (
     <div className="p-6 space-y-8">
-      <h1 className="text-xl font-semibold text-gray-900">Platform Settings</h1>
+      <h1 className="text-xl font-semibold text-content">Platform Settings</h1>
 
       {/* Stats */}
       <section>
-        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+        <h2 className="text-sm font-medium text-content-tertiary uppercase tracking-wide mb-3">
           Platform Overview
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {statCards.map(({ label, value, icon: Icon, color }) => (
+          {statCards.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
-              className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-e1"
+              className="flex items-center gap-4 rounded-lg border border-edge bg-surface-card p-5 shadow-e1"
             >
-              <div className={`rounded-lg bg-gray-50 p-2.5 ${color}`}>
+              <div className="rounded-lg bg-surface-muted p-2.5 text-content-secondary">
                 <Icon size={20} />
               </div>
               <div>
-                <p className="text-2xl font-semibold text-gray-900">{value}</p>
-                <p className="text-sm text-gray-500">{label}</p>
+                <p className="text-2xl font-semibold text-content">{value}</p>
+                <p className="text-sm text-content-tertiary">{label}</p>
               </div>
             </div>
           ))}
@@ -119,7 +126,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
       {/* Admin Management */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+          <h2 className="text-sm font-medium text-content-tertiary uppercase tracking-wide">
             Platform Administrators
           </h2>
           {!showAddForm && (
@@ -143,10 +150,10 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
                 value={addEmail}
                 onChange={(e) => setAddEmail(e.target.value)}
                 required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+                className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
               />
               {addError && (
-                <p className="mt-1 text-xs text-red-600">{addError}</p>
+                <p className="mt-1 text-xs text-status-danger">{addError}</p>
               )}
             </div>
             <button
@@ -160,7 +167,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
             <button
               type="button"
               onClick={() => { setShowAddForm(false); setAddError(''); setAddEmail(''); }}
-              className="rounded-md p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              className="rounded-md p-2 text-content-disabled hover:bg-surface-muted hover:text-content-secondary transition-colors"
             >
               <X size={16} />
             </button>
@@ -168,44 +175,44 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
         )}
 
         {/* Admin table */}
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-e1">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
+          <table className="min-w-full divide-y divide-edge">
+            <thead className="bg-surface-page">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
                   Email
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
                   Role
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
                   Added
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-content-tertiary">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-edge">
               {admins.map((admin) => {
                 const isSelf = admin.userId === currentAdmin.id;
                 return (
                   <tr
                     key={admin.userId}
-                    className={isSelf ? 'bg-coral-50/50' : 'hover:bg-gray-50'}
+                    className={isSelf ? 'bg-coral-50/50' : 'hover:bg-surface-page'}
                   >
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content">
                       {admin.email}
                       {isSelf && (
-                        <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                        <span className="ml-2 rounded bg-status-info-subtle px-1.5 py-0.5 text-xs font-medium text-status-info">
                           you
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500 capitalize">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-tertiary capitalize">
                       {admin.role.replace('_', ' ')}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-content-tertiary">
                       {new Date(admin.createdAt).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -214,20 +221,20 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       {isSelf ? (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-content-disabled">—</span>
                       ) : removeId === admin.userId ? (
                         <div className="inline-flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Remove?</span>
+                          <span className="text-xs text-content-tertiary">Remove?</span>
                           <button
                             onClick={() => handleRemove(admin.userId)}
                             disabled={removeLoading}
-                            className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                            className="text-xs font-medium text-status-danger hover:text-status-danger disabled:opacity-50"
                           >
                             {removeLoading ? 'Removing…' : 'Yes'}
                           </button>
                           <button
                             onClick={() => setRemoveId(null)}
-                            className="text-xs font-medium text-gray-500 hover:text-gray-700"
+                            className="text-xs font-medium text-content-tertiary hover:text-content-secondary"
                           >
                             No
                           </button>
@@ -235,7 +242,7 @@ export function PlatformSettings({ currentAdmin, admins: initialAdmins, stats }:
                       ) : (
                         <button
                           onClick={() => setRemoveId(admin.userId)}
-                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-content-disabled hover:bg-status-danger-bg hover:text-status-danger transition-colors"
                         >
                           <Trash2 size={12} />
                           Remove

@@ -29,20 +29,20 @@ interface LeadsDashboardProps {
  * its. Naming them both drains the baseline and stops the next column addition
  * from being blocked on cosmetics.
  */
-const MUTED = 'text-gray-500';
-const FAINT = 'text-gray-400';
-const BODY = 'text-gray-900';
+const MUTED = 'text-content-tertiary';
+const FAINT = 'text-content-disabled';
+const BODY = 'text-content';
 const CELL = 'px-4 py-3';
-const INPUT = 'rounded-md border border-gray-300';
+const INPUT = 'rounded-md border border-edge-strong';
 
 const STATUS_STYLES: Record<
   LeadStatus,
   { className: string; icon: typeof Clock; label: string }
 > = {
   new: { className: 'bg-coral-100 text-coral-700', icon: Star, label: 'New' },
-  contacted: { className: 'bg-blue-100 text-blue-700', icon: Mail, label: 'Contacted' },
-  qualified: { className: 'bg-green-100 text-green-700', icon: CheckCircle, label: 'Qualified' },
-  disqualified: { className: 'bg-gray-100 text-gray-600', icon: XCircle, label: 'Disqualified' },
+  contacted: { className: 'bg-status-info-subtle text-status-info', icon: Mail, label: 'Contacted' },
+  qualified: { className: 'bg-status-success-subtle text-status-success', icon: CheckCircle, label: 'Qualified' },
+  disqualified: { className: 'bg-surface-muted text-content-secondary', icon: XCircle, label: 'Disqualified' },
 };
 
 const STATUS_ORDER: LeadStatus[] = ['new', 'contacted', 'qualified', 'disqualified'];
@@ -171,14 +171,14 @@ export function LeadsDashboard({
       </div>
 
       {error ? (
-        <div role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div role="alert" className="rounded-md bg-status-danger-bg px-4 py-3 text-sm text-status-danger">
           {error}
         </div>
       ) : null}
 
       {/* Table */}
       {leads.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 px-6 py-12 text-center">
+        <div className="rounded-lg border border-dashed border-edge-strong px-6 py-12 text-center">
           <Mail className={`mx-auto h-8 w-8 ${FAINT}`} aria-hidden="true" />
           <h2 className={`mt-3 text-sm font-medium ${BODY}`}>No leads yet</h2>
           <p className={`mt-1 text-sm ${MUTED}`}>
@@ -187,9 +187,9 @@ export function LeadsDashboard({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
+        <div className="overflow-x-auto rounded-lg border border-edge">
+          <table className="min-w-full divide-y divide-edge text-sm">
+            <thead className="bg-surface-page">
               <tr>
                 <Th>Contact</Th>
                 <Th>Association / company</Th>
@@ -200,7 +200,7 @@ export function LeadsDashboard({
                 <Th>Status</Th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
+            <tbody className="divide-y divide-edge bg-surface-card">
               {leads.map((lead) => {
                 const style = STATUS_STYLES[lead.status];
                 const StatusIcon = style.icon;
@@ -315,7 +315,7 @@ export function LeadsDashboard({
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+    <div className="rounded-lg border border-edge bg-surface-card px-4 py-3">
       <div className={`text-xs ${MUTED}`}>{label}</div>
       <div className={`mt-1 text-2xl font-semibold ${BODY}`}>{value}</div>
     </div>

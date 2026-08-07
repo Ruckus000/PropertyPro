@@ -17,8 +17,8 @@ export default async function LeadsPage() {
   return (
     <AdminLayout>
       <div className="p-6">
-        <h1 className="mb-1 text-xl font-semibold text-gray-900">Leads</h1>
-        <p className="mb-6 text-sm text-gray-500">
+        <h1 className="mb-1 text-xl font-semibold text-content">Leads</h1>
+        <p className="mb-6 text-sm text-content-tertiary">
           Inbound from the §718 compliance checker on the marketing site.
         </p>
         <LeadsDashboard

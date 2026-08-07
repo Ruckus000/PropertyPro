@@ -2,38 +2,8 @@
   "apps/admin/src/app/api/admin/demos/preview/route.ts": {
     "raw-hex": 3
   },
-  "apps/admin/src/app/communities/rootless/page.tsx": {
-    "raw-palette": 28
-  },
-  "apps/admin/src/app/demo/[id]/mobile/MobilePreviewClient.tsx": {
-    "raw-palette": 7
-  },
-  "apps/admin/src/app/demo/[id]/preview/page.tsx": {
-    "raw-palette": 10
-  },
-  "apps/admin/src/app/demo/[id]/preview/TabbedPreviewClient.tsx": {
-    "raw-palette": 26
-  },
   "apps/admin/src/app/demo/new/page.tsx": {
     "raw-hex": 3
-  },
-  "apps/admin/src/app/leads/page.tsx": {
-    "raw-palette": 2
-  },
-  "apps/admin/src/app/site-templates/block-registry/page.tsx": {
-    "raw-palette": 5
-  },
-  "apps/admin/src/app/site-templates/documentation/page.tsx": {
-    "raw-palette": 5
-  },
-  "apps/admin/src/app/site-templates/page.tsx": {
-    "raw-palette": 14
-  },
-  "apps/admin/src/app/site-templates/starter-packs/page.tsx": {
-    "raw-palette": 2
-  },
-  "apps/admin/src/app/site-templates/theme-presets/page.tsx": {
-    "raw-palette": 2
   },
   "apps/admin/src/components/clients/AccessLogTable.tsx": {
     "raw-palette": 19
@@ -66,15 +36,8 @@
   "apps/admin/src/components/clients/SupportAccessTab.tsx": {
     "raw-palette": 33
   },
-  "apps/admin/src/components/demo/CommunityEditSection.tsx": {
-    "raw-palette": 17
-  },
   "apps/admin/src/components/demo/DemoEditDrawer.tsx": {
-    "raw-hex": 3,
-    "raw-palette": 11
-  },
-  "apps/admin/src/components/demo/DemoListClient.tsx": {
-    "raw-palette": 52
+    "raw-hex": 3
   },
   "apps/admin/src/components/demo/PillStepper.tsx": {
     "arbitrary-font": 2,
@@ -89,40 +52,13 @@
     "arbitrary-font": 2,
     "raw-hex": 3
   },
-  "apps/admin/src/components/demo/ProspectEditSection.tsx": {
-    "raw-palette": 17
-  },
   "apps/admin/src/components/demo/ReviewStep.tsx": {
     "arbitrary-font": 7,
     "raw-hex": 2,
     "arbitrary-color": 2
   },
-  "apps/admin/src/components/leads/LeadsDashboard.tsx": {
-    "raw-palette": 18
-  },
-  "apps/admin/src/components/settings/PlatformSettings.tsx": {
-    "raw-palette": 37
-  },
   "apps/admin/src/components/Sidebar.tsx": {
     "raw-palette": 15
-  },
-  "apps/admin/src/components/site-templates/BlockRegistryView.tsx": {
-    "raw-palette": 20
-  },
-  "apps/admin/src/components/site-templates/DocumentationHubs.tsx": {
-    "raw-palette": 4
-  },
-  "apps/admin/src/components/site-templates/LayoutsTable.tsx": {
-    "raw-palette": 57
-  },
-  "apps/admin/src/components/site-templates/StarterPackBlocksEditor.tsx": {
-    "raw-palette": 16
-  },
-  "apps/admin/src/components/site-templates/StarterPacksTable.tsx": {
-    "raw-palette": 14
-  },
-  "apps/admin/src/components/site-templates/ThemePresetsTable.tsx": {
-    "raw-palette": 58
   },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
     "raw-palette": 6

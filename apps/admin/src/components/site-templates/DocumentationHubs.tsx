@@ -48,13 +48,13 @@ export function DocumentationHubs({ hubs = DOC_HUBS }: { hubs?: DocHub[] }) {
           target="_blank"
           rel="noopener noreferrer"
           data-testid="doc-hub-card"
-          className="group flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:border-coral-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-coral-500"
+          className="group flex flex-col rounded-lg border border-edge bg-surface-card p-5 shadow-sm transition hover:border-coral-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-coral-500"
         >
-          <h2 className="text-base font-semibold text-gray-900 group-hover:text-coral-700">
+          <h2 className="text-base font-semibold text-content group-hover:text-coral-700">
             {hub.title}
           </h2>
-          <p className="mt-1 flex-1 text-sm text-gray-600">{hub.description}</p>
-          <code className="mt-3 truncate text-xs text-gray-400" title={hub.pathLabel}>
+          <p className="mt-1 flex-1 text-sm text-content-secondary">{hub.description}</p>
+          <code className="mt-3 truncate text-xs text-content-disabled" title={hub.pathLabel}>
             {hub.pathLabel}
           </code>
         </a>

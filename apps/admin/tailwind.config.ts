@@ -123,11 +123,12 @@ const config: Config = {
       // blank out ~1,088 class usages at once. They come out only once the
       // drain is complete.
       //
-      // NOTE: these are bare `var(--x)` with no `<alpha-value>` channel, so
-      // slash-opacity (`bg-interactive/10`) compiles to ZERO CSS and renders as
-      // nothing. `guard:design-tokens`'s `slash-opacity-semantic` rule becomes
-      // applicable to admin the moment this block exists — reach for a solid
-      // `-subtle`/`-bg`/`-hover` token instead.
+      // NOTE: each entry below is a bare custom-property reference with no
+      // `<alpha-value>` channel, so slash-opacity (`bg-interactive/10`) compiles
+      // to ZERO CSS and renders as nothing. `guard:design-tokens`'s
+      // `slash-opacity-semantic` rule becomes applicable to admin the moment
+      // this block exists — reach for a solid `-subtle`/`-bg`/`-hover` token, or
+      // built-in `white`/`black` alpha for genuine translucency.
       // ─────────────────────────────────────────────────────────────────────
 
       // Text — usage: text-content, text-content-secondary, …

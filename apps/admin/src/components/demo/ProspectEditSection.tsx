@@ -103,7 +103,7 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-5 w-5 animate-spin text-coral-700 mr-2" />
-        <span className="text-sm text-gray-500">Loading…</span>
+        <span className="text-sm text-content-tertiary">Loading…</span>
       </div>
     );
   }
@@ -111,48 +111,48 @@ export function ProspectEditSection({ demoId, onSaved }: ProspectEditSectionProp
   return (
     <div className="space-y-5">
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
-          Prospect Name <span className="text-red-500">*</span>
+        <label className="block text-xs font-medium text-content-secondary mb-1">
+          Prospect Name <span className="text-status-danger">*</span>
         </label>
         <input
           type="text"
           value={form.prospect_name}
           onChange={(e) => handleChange('prospect_name', e.target.value)}
           placeholder="e.g. Sunset Condos HOA"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content placeholder-content-placeholder focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-content-secondary mb-1">
           CRM Link
-          <span className="ml-1 text-gray-400 font-normal">(optional)</span>
+          <span className="ml-1 text-content-disabled font-normal">(optional)</span>
         </label>
         <input
           type="url"
           value={form.external_crm_url}
           onChange={(e) => handleChange('external_crm_url', e.target.value)}
           placeholder="https://crm.example.com/deal/123"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content placeholder-content-placeholder focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">
+        <label className="block text-xs font-medium text-content-secondary mb-1">
           Notes
-          <span className="ml-1 text-gray-400 font-normal">(optional)</span>
+          <span className="ml-1 text-content-disabled font-normal">(optional)</span>
         </label>
         <textarea
           value={form.prospect_notes}
           onChange={(e) => handleChange('prospect_notes', e.target.value)}
           placeholder="Add any notes about this prospect…"
           rows={4}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500 resize-none"
+          className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm text-content placeholder-content-placeholder focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500 resize-none"
         />
       </div>
 
       {errorMessage && (
-        <p className="text-xs text-red-600">{errorMessage}</p>
+        <p className="text-xs text-status-danger">{errorMessage}</p>
       )}
 
       <button

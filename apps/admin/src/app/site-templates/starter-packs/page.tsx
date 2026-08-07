@@ -37,8 +37,8 @@ export default async function StarterPacksPage() {
     <AdminLayout>
       <div className="p-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold text-gray-900">Starter Packs</h1>
-          <p className="mt-1 text-sm text-gray-500">Platform-level block bundles applied to new community sites. Edit in place, or &quot;Save as new version&quot; to publish a new lineage version. Archived packs are retired from new-community seeding.</p>
+          <h1 className="text-xl font-semibold text-content">Starter Packs</h1>
+          <p className="mt-1 text-sm text-content-tertiary">Platform-level block bundles applied to new community sites. Edit in place, or &quot;Save as new version&quot; to publish a new lineage version. Archived packs are retired from new-community seeding.</p>
         </div>
         <StarterPacksTable packs={packs} />
       </div>

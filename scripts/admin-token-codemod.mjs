@@ -130,7 +130,16 @@ for (const file of files) {
   for (const key of keys) {
     // Match the class as a whole token, allowing Tailwind variant prefixes
     // (hover:, focus:, sm:, dark:, group-hover: …) to carry through untouched.
-    const re = new RegExp(`(?<![\\w-])${key.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(?![\\w-])`, 'g');
+    //
+    // The `/` in the lookahead is load-bearing, not tidiness. A slash-opacity
+    // class like `bg-white/30` must NOT be rewritten: Tailwind's built-in
+    // palette is defined with rgb channels so the modifier compiles, but the
+    // semantic tokens are bare `var(--x)` with no <alpha-value>, so
+    // `bg-surface-card/30` emits ZERO CSS and the element renders with no
+    // background at all. Without this guard the codemod silently broke 27
+    // translucent placeholder bars in TemplateThumbnail.tsx — caught only
+    // because `guard:design-tokens` flags `slash-opacity-semantic`.
+    const re = new RegExp(`(?<![\\w-])${key.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(?![\\w-/])`, 'g');
     src = src.replace(re, MAP[key]);
   }
 

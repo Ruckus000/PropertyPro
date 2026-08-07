@@ -12,14 +12,14 @@ export function MobilePreviewClient({ src, splitPreviewHref }: MobilePreviewClie
   return (
     // Skip-link target: this page does not render AdminLayout, which
     // normally owns #main-content.
-    <div id="main-content" className="flex h-screen flex-col bg-gray-950">
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
-        <Link href={splitPreviewHref} className="text-sm text-gray-500 hover:text-gray-700">
+    <div id="main-content" className="flex h-screen flex-col bg-surface-inverse">
+      <div className="flex items-center justify-between border-b border-edge bg-surface-card px-4 py-2">
+        <Link href={splitPreviewHref} className="text-sm text-content-tertiary hover:text-content-secondary">
           ← Back to Split Preview
         </Link>
         <Link
           href={splitPreviewHref}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary hover:bg-surface-page"
         >
           Switch to split-screen
         </Link>

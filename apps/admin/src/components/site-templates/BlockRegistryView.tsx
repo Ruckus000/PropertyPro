@@ -10,9 +10,12 @@ interface Props {
 }
 
 function tierClasses(tier: BlockRegistryEntry['tier']): string {
+  // design-tokens:exempt — categorical TIER chips (professional vs essentials).
+  // These name a plan tier, not a status; mapping them onto status-success /
+  // status-owner would read as "healthy" and "unit owner" respectively.
   return tier === 'professional'
-    ? 'bg-violet-50 text-violet-700 ring-violet-600/20'
-    : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20';
+    ? 'bg-violet-50 text-violet-700 ring-violet-600/20' // design-tokens:exempt
+    : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'; // design-tokens:exempt
 }
 
 export function BlockRegistryView({ entries }: Props) {
@@ -22,13 +25,13 @@ export function BlockRegistryView({ entries }: Props) {
         <section
           key={entry.type}
           data-testid={`block-registry-${entry.type}`}
-          className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+          className="rounded-lg border border-edge bg-surface-card p-5 shadow-sm"
         >
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-gray-900">{entry.label}</h2>
-                <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                <h2 className="text-base font-semibold text-content">{entry.label}</h2>
+                <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs text-content-secondary">
                   {entry.type}
                 </code>
                 <span
@@ -37,7 +40,7 @@ export function BlockRegistryView({ entries }: Props) {
                   {entry.tier}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-gray-600">{entry.summary}</p>
+              <p className="mt-1 text-sm text-content-secondary">{entry.summary}</p>
             </div>
             <a
               href={`https://github.com/Ruckus000/PropertyPro/blob/main/${entry.docHref}`}
@@ -51,34 +54,34 @@ export function BlockRegistryView({ entries }: Props) {
 
           <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
             <div className="flex gap-2">
-              <dt className="font-medium text-gray-500">Renderer</dt>
-              <dd className="truncate font-mono text-gray-700" title={entry.rendererPath}>
+              <dt className="font-medium text-content-tertiary">Renderer</dt>
+              <dd className="truncate font-mono text-content-secondary" title={entry.rendererPath}>
                 {entry.rendererPath}
               </dd>
             </div>
           </dl>
 
           <div className="mt-3">
-            <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-content-tertiary">
               Content schema
             </h3>
             {entry.fields.length === 0 ? (
-              <p className="mt-1 text-xs text-gray-400">No fields.</p>
+              <p className="mt-1 text-xs text-content-disabled">No fields.</p>
             ) : (
-              <ul className="mt-1 divide-y divide-gray-100 rounded-md border border-gray-100">
+              <ul className="mt-1 divide-y divide-edge-subtle rounded-md border border-edge-subtle">
                 {entry.fields.map((field) => (
                   <li
                     key={field.name}
                     data-testid={`block-field-${entry.type}-${field.name}`}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm"
                   >
-                    <span className="font-mono text-gray-900">{field.name}</span>
+                    <span className="font-mono text-content">{field.name}</span>
                     {!field.optional && (
-                      <span className="text-xs font-semibold text-rose-600" aria-label="required">
+                      <span className="text-xs font-semibold text-status-danger" aria-label="required">
                         *
                       </span>
                     )}
-                    <span className="ml-auto font-mono text-xs text-gray-500">
+                    <span className="ml-auto font-mono text-xs text-content-tertiary">
                       {field.type}
                       {field.nullable ? ' | null' : ''}
                       {field.optional ? '?' : ''}

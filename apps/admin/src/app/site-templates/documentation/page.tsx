@@ -21,15 +21,15 @@ export default async function SiteTemplatesDocumentationPage() {
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Documentation</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-xl font-semibold text-content">Documentation</h1>
+            <p className="mt-1 text-sm text-content-tertiary">
               Reference hubs for the public-site templates system — design system, layout
               authoring, and the PM-facing help center.
             </p>
           </div>
           <Link
             href="/site-templates"
-            className="shrink-0 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="shrink-0 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content-secondary hover:bg-surface-page"
           >
             ← Site Templates
           </Link>
