@@ -136,8 +136,8 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Client Portfolio</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="text-xl font-semibold text-content">Client Portfolio</h1>
+        <p className="mt-0.5 text-sm text-content-tertiary">
           {isFiltered
             ? `${filtered.length} of ${communities.length} communities`
             : `${communities.length} communities`}
@@ -148,13 +148,13 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
       <div className="flex flex-wrap gap-3">
         {/* Search */}
         <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-disabled" />
           <input
             type="search"
             placeholder="Search by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-md border border-gray-300 py-1.5 pl-8 pr-3 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong py-1.5 pl-8 pr-3 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
@@ -163,14 +163,14 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           >
             <option value="all">All types</option>
             <option value="condo_718">Condo §718</option>
             <option value="hoa_720">HOA §720</option>
             <option value="apartment">Apartment</option>
           </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-content-disabled" />
         </div>
 
         {/* Compliance filter */}
@@ -178,13 +178,13 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <select
             value={complianceFilter}
             onChange={(e) => setComplianceFilter(e.target.value as 'all' | 'at-risk' | 'healthy')}
-            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           >
             <option value="all">All compliance</option>
             <option value="at-risk">At risk (&lt;70%)</option>
             <option value="healthy">Healthy (≥70%)</option>
           </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-content-disabled" />
         </div>
 
         {/* Sort */}
@@ -192,7 +192,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
-            className="appearance-none rounded-md border border-gray-300 py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="appearance-none rounded-md border border-edge-strong py-1.5 pl-3 pr-8 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           >
             <option value="name-asc">Name (A–Z)</option>
             <option value="name-desc">Name (Z–A)</option>
@@ -201,14 +201,14 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
             <option value="compliance-asc">Compliance (worst first)</option>
             <option value="compliance-desc">Compliance (best first)</option>
           </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-content-disabled" />
         </div>
       </div>
 
       {/* Community grid */}
       {filtered.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white py-16 text-center">
-          <p className="text-sm text-gray-500">No communities match your filters.</p>
+        <div className="rounded-lg border border-edge bg-surface-card py-16 text-center">
+          <p className="text-sm text-content-tertiary">No communities match your filters.</p>
         </div>
       ) : (
         <>
@@ -220,13 +220,13 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                 <Link
                   key={c.id}
                   href={`/clients/${c.id}`}
-                  className="flex flex-col rounded-lg border border-gray-200 bg-white p-5 shadow-e1 transition-shadow hover:shadow-e2"
+                  className="flex flex-col rounded-lg border border-edge bg-surface-card p-5 shadow-e1 transition-shadow hover:shadow-e2"
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-gray-900" title={c.name}>{c.name}</p>
+                      <p className="truncate font-medium text-content" title={c.name}>{c.name}</p>
                       {(c.city || c.state) && (
-                        <p className="mt-0.5 text-xs text-gray-500">
+                        <p className="mt-0.5 text-xs text-content-tertiary">
                           {[c.city, c.state].filter(Boolean).join(', ')}
                         </p>
                       )}
@@ -236,20 +236,20 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                     </span>
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div className="mt-auto flex items-center justify-between pt-3 border-t border-edge-subtle">
                     <div className="flex items-center gap-2">
                       {status ? (
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
                           {status.label}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-content-disabled">—</span>
                       )}
                       {c.complianceScore !== null && (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                           c.complianceScore >= 70
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
+                            ? 'bg-status-success-subtle text-status-success'
+                            : 'bg-status-danger-subtle text-status-danger'
                         }`}>
                           {c.complianceScore < 70
                             ? <AlertTriangle size={10} />
@@ -259,7 +259,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-content-disabled">
                       {format(new Date(c.created_at), 'MMM d, yyyy')}
                     </span>
                   </div>
@@ -274,18 +274,18 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                 type="button"
                 onClick={() => setPage((currentPage) => currentPage - 1)}
                 disabled={page === 1}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary transition-colors hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Previous
               </button>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-content-tertiary">
                 Page {page} of {totalPages}
               </span>
               <button
                 type="button"
                 onClick={() => setPage((currentPage) => currentPage + 1)}
                 disabled={page === totalPages}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary transition-colors hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>
@@ -296,15 +296,15 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
 
       {/* Stale Demos card */}
       {currentStaleDemos.length > 0 && (
-        <div className="rounded-lg border border-yellow-200 bg-white p-5 shadow-e1">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">
+        <div className="rounded-lg border border-status-warning-border bg-surface-card p-5 shadow-e1">
+          <h2 className="mb-3 text-sm font-semibold text-content">
             Stale Demos
-            <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+            <span className="ml-2 rounded-full bg-status-warning-subtle px-2 py-0.5 text-xs font-medium text-status-warning">
               {currentStaleDemos.length}
             </span>
           </h2>
           {staleDemoDeleteError && (
-            <p className="mb-3 text-xs font-medium text-red-600">{staleDemoDeleteError}</p>
+            <p className="mb-3 text-xs font-medium text-status-danger">{staleDemoDeleteError}</p>
           )}
           <div className="space-y-2">
             {currentStaleDemos.map((demo) => {
@@ -314,11 +314,11 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
               return (
                 <div
                   key={demo.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-page px-3 py-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <span className="truncate text-sm font-medium text-gray-900">{demo.prospect_name}</span>
-                    <span className="ml-2 text-xs text-gray-500">{typeLabel}</span>
+                    <span className="truncate text-sm font-medium text-content">{demo.prospect_name}</span>
+                    <span className="ml-2 text-xs text-content-tertiary">{typeLabel}</span>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>
                     {badge.label}
@@ -326,7 +326,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                   <button
                     type="button"
                     aria-label={`Delete demo for ${demo.prospect_name}`}
-                    className="shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="shrink-0 rounded p-1 text-content-disabled transition-colors hover:bg-status-danger-bg hover:text-status-danger disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={isDeleting}
                     onClick={() => setConfirmDeleteDemo(demo)}
                   >
@@ -342,25 +342,25 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
       {/* Delete confirmation dialog */}
       {confirmDeleteDemo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-e3">
+          <div className="w-full max-w-md rounded-lg bg-surface-card p-6 shadow-e3">
             <div className="flex items-start justify-between mb-3">
-              <h3 className="text-base font-semibold text-gray-900">Delete Demo</h3>
+              <h3 className="text-base font-semibold text-content">Delete Demo</h3>
               <button
                 type="button"
                 onClick={() => setConfirmDeleteDemo(null)}
-                className="rounded p-1 text-gray-400 hover:text-gray-600"
+                className="rounded p-1 text-content-disabled hover:text-content-secondary"
               >
                 <X size={16} />
               </button>
             </div>
-            <p className="text-sm text-gray-600 mb-5">
+            <p className="text-sm text-content-secondary mb-5">
               Delete the demo for <strong>{confirmDeleteDemo.prospect_name}</strong>? This action cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmDeleteDemo(null)}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
               >
                 Cancel
               </button>
@@ -370,7 +370,7 @@ export function ClientPortfolio({ communities, staleDemos }: ClientPortfolioProp
                   void executeDeleteDemo(confirmDeleteDemo);
                   setConfirmDeleteDemo(null);
                 }}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                className="rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 transition-colors"
               >
                 Delete
               </button>

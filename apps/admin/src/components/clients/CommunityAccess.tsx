@@ -42,11 +42,11 @@ interface CommunityAccessProps {
 /* ---------- status styling ---------- */
 
 const STATUS_STYLES: Record<PlanStatus, { className: string; icon: typeof CheckCircle; label: string }> = {
-  active: { className: 'bg-green-100 text-green-700', icon: CheckCircle, label: 'Active' },
-  in_grace: { className: 'bg-yellow-100 text-yellow-700', icon: Clock, label: 'Grace Period' },
-  expired: { className: 'bg-gray-100 text-gray-600', icon: XCircle, label: 'Expired' },
-  revoked: { className: 'bg-red-100 text-red-700', icon: XCircle, label: 'Revoked' },
-  converted: { className: 'bg-blue-100 text-blue-700', icon: CheckCircle, label: 'Converted' },
+  active: { className: 'bg-status-success-subtle text-status-success', icon: CheckCircle, label: 'Active' },
+  in_grace: { className: 'bg-status-warning-subtle text-status-warning', icon: Clock, label: 'Grace Period' },
+  expired: { className: 'bg-surface-muted text-content-secondary', icon: XCircle, label: 'Expired' },
+  revoked: { className: 'bg-status-danger-subtle text-status-danger', icon: XCircle, label: 'Revoked' },
+  converted: { className: 'bg-status-info-subtle text-status-info', icon: CheckCircle, label: 'Converted' },
 };
 
 /* ---------- component ---------- */
@@ -85,14 +85,14 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 size={20} className="animate-spin text-gray-400" />
+        <Loader2 size={20} className="animate-spin text-content-disabled" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger" role="alert">
         {error}
       </div>
     );
@@ -105,15 +105,15 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
 
       {/* History */}
       <div className="space-y-4">
-        <div className="flex items-center gap-2 text-gray-700">
+        <div className="flex items-center gap-2 text-content-secondary">
           <ShieldCheck size={16} aria-hidden="true" />
           <h2 className="text-sm font-semibold">Access Plan History</h2>
         </div>
 
         {plans.length === 0 ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
-            <ShieldCheck size={24} className="mx-auto mb-2 text-gray-300" aria-hidden="true" />
-            <p className="text-sm text-gray-500">No access plans have been granted yet.</p>
+          <div className="rounded-lg border border-edge bg-surface-card p-8 text-center">
+            <ShieldCheck size={24} className="mx-auto mb-2 text-content-disabled" aria-hidden="true" />
+            <p className="text-sm text-content-tertiary">No access plans have been granted yet.</p>
             <button
               type="button"
               onClick={() => setShowGrant(true)}
@@ -124,49 +124,49 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
             </button>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-e1">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
+            <table className="min-w-full divide-y divide-edge">
+              <thead className="bg-surface-page">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Duration</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Expires</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Grace Ends</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Granted</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Notes</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Duration</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Expires</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Grace Ends</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Granted</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Notes</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-content-tertiary">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-edge-subtle">
                 {plans.map((plan) => {
                   const style = STATUS_STYLES[plan.status];
                   const StatusIcon = style.icon;
                   return (
-                    <tr key={plan.id} className="hover:bg-gray-50">
+                    <tr key={plan.id} className="hover:bg-surface-page">
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${style.className}`}>
                           <StatusIcon size={12} aria-hidden="true" />
                           {style.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
+                      <td className="px-4 py-3 text-sm text-content">
                         {plan.durationMonths} {plan.durationMonths === 1 ? 'month' : 'months'}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
+                      <td className="px-4 py-3 text-xs text-content-tertiary">
                         {format(new Date(plan.expiresAt), 'MMM d, yyyy')}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
+                      <td className="px-4 py-3 text-xs text-content-tertiary">
                         {format(new Date(plan.graceEndsAt), 'MMM d, yyyy')}
                       </td>
                       <td className="px-4 py-3">
                         <div>
-                          <p className="text-xs text-gray-500">{format(new Date(plan.createdAt), 'MMM d, yyyy')}</p>
+                          <p className="text-xs text-content-tertiary">{format(new Date(plan.createdAt), 'MMM d, yyyy')}</p>
                           {plan.grantedByEmail && (
-                            <p className="text-xs text-gray-400">{plan.grantedByEmail}</p>
+                            <p className="text-xs text-content-disabled">{plan.grantedByEmail}</p>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate">
+                      <td className="px-4 py-3 text-xs text-content-tertiary max-w-[200px] truncate">
                         {plan.notes || '—'}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -175,7 +175,7 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
                             <button
                               type="button"
                               onClick={() => setShowExtend(plan.id)}
-                              className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                              className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary hover:bg-surface-page transition-colors"
                               title="Extend plan"
                             >
                               <CalendarPlus size={12} className="inline mr-1" aria-hidden="true" />
@@ -184,7 +184,7 @@ export function CommunityAccess({ communityId }: CommunityAccessProps) {
                             <button
                               type="button"
                               onClick={() => setShowRevoke(plan.id)}
-                              className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 transition-colors"
+                              className="rounded border border-status-danger-border px-2 py-1 text-xs text-status-danger hover:bg-status-danger-bg transition-colors"
                               title="Revoke plan"
                             >
                               <XCircle size={12} className="inline mr-1" aria-hidden="true" />
@@ -239,15 +239,15 @@ function AccessStatusCard({
 }) {
   if (!plan) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
+      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">
-              <ShieldCheck size={20} className="text-gray-400" aria-hidden="true" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-muted">
+              <ShieldCheck size={20} className="text-content-disabled" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">No Active Access Plan</p>
-              <p className="text-xs text-gray-500">This community does not have a free access plan.</p>
+              <p className="text-sm font-medium text-content">No Active Access Plan</p>
+              <p className="text-xs text-content-tertiary">This community does not have a free access plan.</p>
             </div>
           </div>
           <button
@@ -267,22 +267,22 @@ function AccessStatusCard({
   const StatusIcon = style.icon;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
+    <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${plan.status === 'active' ? 'bg-green-100' : 'bg-yellow-100'}`}>
-            <StatusIcon size={20} className={plan.status === 'active' ? 'text-green-600' : 'text-yellow-600'} aria-hidden="true" />
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${plan.status === 'active' ? 'bg-status-success-subtle' : 'bg-status-warning-subtle'}`}>
+            <StatusIcon size={20} className={plan.status === 'active' ? 'text-status-success' : 'text-status-warning'} aria-hidden="true" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-content">
                 {plan.status === 'active' ? 'Active Free Access' : 'Grace Period'}
               </p>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${style.className}`}>
                 {style.label}
               </span>
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-content-tertiary">
               Expires {format(new Date(plan.expiresAt), 'MMM d, yyyy')}
               {plan.status === 'in_grace' && (
                 <> · Grace ends {format(new Date(plan.graceEndsAt), 'MMM d, yyyy')}</>
@@ -291,9 +291,9 @@ function AccessStatusCard({
           </div>
         </div>
         {plan.status === 'in_grace' && (
-          <div className="flex items-center gap-1.5 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-1.5">
-            <AlertTriangle size={14} className="text-yellow-600" aria-hidden="true" />
-            <span className="text-xs font-medium text-yellow-700">Grace period active</span>
+          <div className="flex items-center gap-1.5 rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-1.5">
+            <AlertTriangle size={14} className="text-status-warning" aria-hidden="true" />
+            <span className="text-xs font-medium text-status-warning">Grace period active</span>
           </div>
         )}
       </div>
@@ -353,11 +353,11 @@ function GrantAccessDialog({
   return (
     <DialogOverlay onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Grant Free Access</h3>
+        <h3 className="text-lg font-semibold text-content">Grant Free Access</h3>
 
         <div>
-          <label htmlFor="grant-duration" className="block text-sm font-medium text-gray-700 mb-1">
-            Duration (months) <span className="text-red-500">*</span>
+          <label htmlFor="grant-duration" className="block text-sm font-medium text-content-secondary mb-1">
+            Duration (months) <span className="text-status-danger">*</span>
           </label>
           <input
             id="grant-duration"
@@ -367,12 +367,12 @@ function GrantAccessDialog({
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
         <div>
-          <label htmlFor="grant-grace" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="grant-grace" className="block text-sm font-medium text-content-secondary mb-1">
             Grace period (days)
           </label>
           <input
@@ -382,12 +382,12 @@ function GrantAccessDialog({
             max="90"
             value={graceDays}
             onChange={(e) => setGraceDays(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
         <div>
-          <label htmlFor="grant-notes" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="grant-notes" className="block text-sm font-medium text-content-secondary mb-1">
             Notes
           </label>
           <textarea
@@ -396,12 +396,12 @@ function GrantAccessDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes about this access grant..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
             {error}
           </div>
         )}
@@ -410,7 +410,7 @@ function GrantAccessDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
           >
             Cancel
           </button>
@@ -473,13 +473,13 @@ function RevokeAccessDialog({
   return (
     <DialogOverlay onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Revoke Access Plan</h3>
-        <p className="text-sm text-gray-500">
+        <h3 className="text-lg font-semibold text-content">Revoke Access Plan</h3>
+        <p className="text-sm text-content-tertiary">
           This will immediately end the community&apos;s free access. This cannot be undone.
         </p>
 
         <div>
-          <label htmlFor="revoke-reason" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="revoke-reason" className="block text-sm font-medium text-content-secondary mb-1">
             Reason
           </label>
           <textarea
@@ -488,12 +488,12 @@ function RevokeAccessDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Optional reason for revoking access..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
             {error}
           </div>
         )}
@@ -502,14 +502,14 @@ function RevokeAccessDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-md bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:opacity-90 disabled:opacity-50 transition-colors"
           >
             {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
             Revoke Access
@@ -569,11 +569,11 @@ function ExtendAccessDialog({
   return (
     <DialogOverlay onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Extend Access Plan</h3>
+        <h3 className="text-lg font-semibold text-content">Extend Access Plan</h3>
 
         <div>
-          <label htmlFor="extend-months" className="block text-sm font-medium text-gray-700 mb-1">
-            Additional months <span className="text-red-500">*</span>
+          <label htmlFor="extend-months" className="block text-sm font-medium text-content-secondary mb-1">
+            Additional months <span className="text-status-danger">*</span>
           </label>
           <input
             id="extend-months"
@@ -583,12 +583,12 @@ function ExtendAccessDialog({
             value={months}
             onChange={(e) => setMonths(e.target.value)}
             required
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
         <div>
-          <label htmlFor="extend-notes" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="extend-notes" className="block text-sm font-medium text-content-secondary mb-1">
             Notes
           </label>
           <textarea
@@ -597,12 +597,12 @@ function ExtendAccessDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes about this extension..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
 
         {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+          <div className="rounded-md border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
             {error}
           </div>
         )}
@@ -611,7 +611,7 @@ function ExtendAccessDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page transition-colors"
           >
             Cancel
           </button>
@@ -647,11 +647,11 @@ function DialogOverlay({
         aria-hidden="true"
       />
       {/* Dialog */}
-      <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+      <div className="relative w-full max-w-md rounded-lg bg-surface-card p-6 shadow-xl">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+          className="absolute right-3 top-3 text-content-disabled hover:text-content-secondary"
           aria-label="Close dialog"
         >
           <X size={16} />

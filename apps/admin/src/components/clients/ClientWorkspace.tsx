@@ -67,7 +67,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   const statusEntry = SUBSCRIPTION_STATUS_LABELS[community.subscription_status ?? ''];
-  const statusClass = statusEntry?.className ?? 'bg-gray-100 text-gray-600';
+  const statusClass = statusEntry?.className ?? 'bg-surface-muted text-content-secondary';
   const domainInfo = getWebsiteDomainInfo({
     slug: community.slug,
     customDomain: community.custom_domain,
@@ -100,25 +100,25 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Breadcrumb + header */}
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
+      <div className="border-b border-edge bg-surface-card px-6 py-4">
         <Link
           href="/clients"
-          className="mb-3 inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+          className="mb-3 inline-flex items-center gap-1.5 text-xs text-content-tertiary hover:text-content-secondary"
         >
           <ArrowLeft size={12} />
           Client Portfolio
         </Link>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">{community.name}</h1>
+            <h1 className="text-xl font-semibold text-content">{community.name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-content-tertiary">
                 {COMMUNITY_TYPE_LABELS[community.community_type]?.label ?? community.community_type}
               </span>
               {address && (
                 <>
-                  <span className="text-gray-300">·</span>
-                  <span className="text-sm text-gray-500">{address}</span>
+                  <span className="text-content-disabled">·</span>
+                  <span className="text-sm text-content-tertiary">{address}</span>
                 </>
               )}
             </div>
@@ -133,21 +133,21 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
               className={[
                 'shrink-0 rounded-full px-3 py-1 text-sm font-medium',
                 siteLiveStatus.isLive
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-amber-100 text-amber-800',
+                  ? 'bg-status-success-subtle text-status-success'
+                  : 'bg-status-warning-subtle text-status-warning',
               ].join(' ')}
             >
               {siteLiveStatus.isLive ? 'Site Live' : 'Site Not Live'}
             </span>
             {publishedLabel && (
-              <span className="text-xs text-gray-500">Published {publishedLabel}</span>
+              <span className="text-xs text-content-tertiary">Published {publishedLabel}</span>
             )}
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 bg-white px-6">
+      <div className="border-b border-edge bg-surface-card px-6">
         <div className="flex gap-1" {...tabListProps}>
           {tabs.map((tab) => (
             <button
@@ -157,7 +157,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
                 'px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors',
                 activeTab === tab
                   ? 'border-coral-600 text-coral-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700',
+                  : 'border-transparent text-content-tertiary hover:text-content-secondary',
               ].join(' ')}
             >
               {TAB_LABELS[tab]}
@@ -172,92 +172,92 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
           <div className="space-y-6">
             {/* Stats grid */}
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
+              <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+                <div className="flex items-center gap-2 text-content-tertiary mb-1">
                   <Users size={16} />
                   <span className="text-xs font-medium uppercase tracking-wide">Members</span>
                 </div>
-                <p className="text-2xl font-semibold text-gray-900">{community.memberCount}</p>
+                <p className="text-2xl font-semibold text-content">{community.memberCount}</p>
               </div>
 
-              <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
+              <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+                <div className="flex items-center gap-2 text-content-tertiary mb-1">
                   <FileText size={16} />
                   <span className="text-xs font-medium uppercase tracking-wide">Documents</span>
                 </div>
-                <p className="text-2xl font-semibold text-gray-900">{community.documentCount}</p>
+                <p className="text-2xl font-semibold text-content">{community.documentCount}</p>
               </div>
 
-              <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
+              <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+                <div className="flex items-center gap-2 text-content-tertiary mb-1">
                   <CheckCircle size={16} />
                   <span className="text-xs font-medium uppercase tracking-wide">Compliance</span>
                 </div>
                 {community.complianceScore !== null ? (
                   <div className="flex items-end gap-1.5">
-                    <p className="text-2xl font-semibold text-gray-900">{community.complianceScore}%</p>
+                    <p className="text-2xl font-semibold text-content">{community.complianceScore}%</p>
                     {community.complianceScore === 100 && (
-                      <BadgeCheck size={20} className="mb-0.5 text-green-500" />
+                      <BadgeCheck size={20} className="mb-0.5 text-status-success" />
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">No data</p>
+                  <p className="text-sm text-content-disabled">No data</p>
                 )}
               </div>
             </div>
 
             {/* Details */}
-            <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-              <h2 className="mb-4 text-sm font-semibold text-gray-700">Community Details</h2>
+            <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+              <h2 className="mb-4 text-sm font-semibold text-content-secondary">Community Details</h2>
               <dl className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs text-gray-500">Name</dt>
-                  <dd className="mt-0.5 text-sm text-gray-900">{community.name}</dd>
+                  <dt className="text-xs text-content-tertiary">Name</dt>
+                  <dd className="mt-0.5 text-sm text-content">{community.name}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500">Slug</dt>
-                  <dd className="mt-0.5 font-mono text-sm text-gray-900">{community.slug}</dd>
+                  <dt className="text-xs text-content-tertiary">Slug</dt>
+                  <dd className="mt-0.5 font-mono text-sm text-content">{community.slug}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500">Type</dt>
-                  <dd className="mt-0.5 text-sm text-gray-900">
+                  <dt className="text-xs text-content-tertiary">Type</dt>
+                  <dd className="mt-0.5 text-sm text-content">
                     {COMMUNITY_TYPE_LABELS[community.community_type]?.label ?? community.community_type}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500">Plan</dt>
-                  <dd className="mt-0.5 text-sm text-gray-900 capitalize">
+                  <dt className="text-xs text-content-tertiary">Plan</dt>
+                  <dd className="mt-0.5 text-sm text-content capitalize">
                     {community.subscription_plan ?? '—'}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500">Website URL</dt>
-                  <dd className="mt-0.5 text-sm text-gray-900 font-mono">{domainInfo.displayUrl}</dd>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <dt className="text-xs text-content-tertiary">Website URL</dt>
+                  <dd className="mt-0.5 text-sm text-content font-mono">{domainInfo.displayUrl}</dd>
+                  <p className="mt-0.5 text-xs text-content-tertiary">
                     {domainInfo.urlSource === 'custom_domain' ? 'Custom domain' : 'Default subdomain'}
                   </p>
                 </div>
                 {address && (
                   <div className="sm:col-span-2">
-                    <dt className="text-xs text-gray-500">Address</dt>
-                    <dd className="mt-0.5 text-sm text-gray-900">{address}</dd>
+                    <dt className="text-xs text-content-tertiary">Address</dt>
+                    <dd className="mt-0.5 text-sm text-content">{address}</dd>
                   </div>
                 )}
                 <div className="sm:col-span-2">
-                  <dt className="text-xs text-gray-500">Site Status</dt>
-                  <dd className="mt-0.5 text-sm text-gray-900">
+                  <dt className="text-xs text-content-tertiary">Site Status</dt>
+                  <dd className="mt-0.5 text-sm text-content">
                     {siteLiveStatus.isLive ? 'Live' : 'Not live'}
                   </dd>
                   {publishedLabel && (
-                    <p className="mt-0.5 text-xs text-gray-500">Published {publishedLabel}</p>
+                    <p className="mt-0.5 text-xs text-content-tertiary">Published {publishedLabel}</p>
                   )}
                   {!siteLiveStatus.isLive && siteNotLiveMessage && (
-                    <p className="mt-0.5 text-xs text-gray-500">{siteNotLiveMessage}</p>
+                    <p className="mt-0.5 text-xs text-content-tertiary">{siteNotLiveMessage}</p>
                   )}
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500">Created</dt>
-                  <dd className="mt-0.5 text-sm text-gray-900">
+                  <dt className="text-xs text-content-tertiary">Created</dt>
+                  <dd className="mt-0.5 text-sm text-content">
                     {format(new Date(community.created_at), 'MMM d, yyyy')}
                   </dd>
                 </div>

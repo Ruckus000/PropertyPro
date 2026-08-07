@@ -45,14 +45,14 @@ export function AccessLogTable({ communityId }: AccessLogTableProps) {
   if (loading) {
     return (
       <div className="flex h-24 items-center justify-center">
-        <Loader2 size={18} className="animate-spin text-gray-400" />
+        <Loader2 size={18} className="animate-spin text-content-disabled" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-3 text-sm text-status-danger" role="alert">
         {error}
       </div>
     );
@@ -60,41 +60,41 @@ export function AccessLogTable({ communityId }: AccessLogTableProps) {
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-center">
-        <p className="text-sm text-gray-500">No access log entries yet.</p>
+      <div className="rounded-lg border border-edge bg-surface-card p-6 text-center">
+        <p className="text-sm text-content-tertiary">No access log entries yet.</p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-hidden rounded-lg border border-edge bg-surface-card">
       <table className="w-full text-sm">
-        <thead className="border-b border-gray-200 bg-gray-50">
+        <thead className="border-b border-edge bg-surface-page">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
               Event
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
               Admin
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
               Details
             </th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
               Time
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-edge-subtle">
           {entries.map((entry) => (
-            <tr key={entry.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-mono text-xs text-gray-700">{entry.event}</td>
-              <td className="px-4 py-3 font-mono text-xs text-gray-500">
+            <tr key={entry.id} className="hover:bg-surface-page">
+              <td className="px-4 py-3 font-mono text-xs text-content-secondary">{entry.event}</td>
+              <td className="px-4 py-3 font-mono text-xs text-content-tertiary">
                 {entry.admin_user_id
                   ? `${entry.admin_user_id.slice(0, 8)}…`
                   : '—'}
               </td>
-              <td className="max-w-xs px-4 py-3 text-xs text-gray-500">
+              <td className="max-w-xs px-4 py-3 text-xs text-content-tertiary">
                 {entry.metadata ? (
                   <span className="truncate block max-w-[200px]">
                     {JSON.stringify(entry.metadata)}
@@ -103,7 +103,7 @@ export function AccessLogTable({ communityId }: AccessLogTableProps) {
                   '—'
                 )}
               </td>
-              <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
+              <td className="whitespace-nowrap px-4 py-3 text-xs text-content-tertiary">
                 {format(new Date(entry.created_at), 'MMM d, yyyy HH:mm')}
               </td>
             </tr>

@@ -205,6 +205,21 @@ const config: Config = {
         'neutral-border': 'var(--status-neutral-border)',
         'neutral-subtle': 'var(--status-neutral-subtle)',
 
+        // `owner` and `board` are NOT in apps/web's config, but the tokens are
+        // defined in tokens.css and admin uses `owner` for the root-manager
+        // role chip. Omitting them is silent: an undeclared family emits no CSS
+        // at all, so the chip renders with no background and inherited text —
+        // no error, no guard failure, just a chip that quietly disappears.
+        owner: 'var(--status-owner)',
+        'owner-bg': 'var(--status-owner-bg)',
+        'owner-border': 'var(--status-owner-border)',
+        'owner-subtle': 'var(--status-owner-subtle)',
+
+        board: 'var(--status-board)',
+        'board-bg': 'var(--status-board-bg)',
+        'board-border': 'var(--status-board-border)',
+        'board-subtle': 'var(--status-board-subtle)',
+
         brand: 'var(--status-brand)',
         'brand-bg': 'var(--status-brand-bg)',
         'brand-border': 'var(--status-brand-border)',

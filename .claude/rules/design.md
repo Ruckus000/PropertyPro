@@ -85,10 +85,22 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > below about "informational blue status badges … intentionally kept blue" is
   > superseded for every migrated file.
   >
-  > Migrated: global chrome, auth, error/not-found, lib constants,
-  > deletion-requests, settings, leads, communities, demo, site-templates.
-  > **Still frozen: `components/clients/` (482 violations) and the dark
-  > `Sidebar.tsx` internals.** The sidebar is a genuine gap, not leftover work —
+  > **Raw-palette drain is COMPLETE except the dark `Sidebar.tsx` internals
+  > (15).** Admin went 1,088 → 15 raw-palette violations; the 33 that remain in
+  > the baseline are `raw-hex`/`arbitrary-font`/`arbitrary-color` in the
+  > demo-preview mockups, which render user-supplied branding and are
+  > legitimately literal.
+  >
+  > **After any batch, and after ANY edit to `apps/admin/tailwind.config.ts`,
+  > run `node scripts/verify-admin-semantic-css.cjs`** (needs a build first). It
+  > asserts every semantic class referenced in admin source actually emits CSS —
+  > a failure mode `guard:design-tokens` cannot see, because it only checks that
+  > raw classes are gone, not that the replacement resolves. An unrecognised
+  > class emits no rule and renders as no style, silently. It caught exactly
+  > that twice: `bg-status-owner-subtle` (admin's config mirrored web's status
+  > family, which omits `owner`/`board`) and `bg-surface-card/30`.
+  >
+  > The sidebar is a genuine gap, not leftover work —
   > the token layer is single-theme light and its whole dark vocabulary is
   > `surface-inverse{,-subtle}` + `text-inverse`, with no dark border or
   > muted-text token. Giving admin a dark-chrome vocabulary is a decision for

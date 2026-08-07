@@ -5,37 +5,6 @@
   "apps/admin/src/app/demo/new/page.tsx": {
     "raw-hex": 3
   },
-  "apps/admin/src/components/clients/AccessLogTable.tsx": {
-    "raw-palette": 19
-  },
-  "apps/admin/src/components/clients/ClientPortfolio.tsx": {
-    "raw-palette": 50
-  },
-  "apps/admin/src/components/clients/ClientWorkspace.tsx": {
-    "raw-palette": 49
-  },
-  "apps/admin/src/components/clients/CommunityAccess.tsx": {
-    "raw-palette": 98
-  },
-  "apps/admin/src/components/clients/CommunityCompliance.tsx": {
-    "raw-palette": 51
-  },
-  "apps/admin/src/components/clients/CommunityMembers.tsx": {
-    "raw-palette": 58
-  },
-  "apps/admin/src/components/clients/CommunitySettingsEditor.tsx": {
-    "raw-palette": 48
-  },
-  "apps/admin/src/components/clients/CommunityWebsiteEditor.tsx": {
-    "raw-palette": 43,
-    "raw-hex": 1
-  },
-  "apps/admin/src/components/clients/StartSessionDialog.tsx": {
-    "raw-palette": 18
-  },
-  "apps/admin/src/components/clients/SupportAccessTab.tsx": {
-    "raw-palette": 33
-  },
   "apps/admin/src/components/demo/DemoEditDrawer.tsx": {
     "raw-hex": 3
   },
