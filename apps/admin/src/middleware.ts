@@ -165,7 +165,11 @@ function maybeEvict() {
 // make any future `/api/healthz` or `/api/health-internal` route
 // unauthenticated on a console that holds the service-role key.
 const PUBLIC_PATH_PREFIXES = ['/auth/'];
-const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login', '/api/health'];
+// `/icon.svg` is the App Router favicon. Without it here every request for
+// the tab icon 307s to the login page — so the LOGIN page, the one screen
+// guaranteed to be unauthenticated, has no favicon — and every
+// authenticated request for it costs a platform_admin_users lookup.
+const PUBLIC_EXACT_PATHS = ['/auth/login', '/dev/agent-login', '/api/health', '/icon.svg'];
 
 function isPublicPath(pathname: string): boolean {
   return (

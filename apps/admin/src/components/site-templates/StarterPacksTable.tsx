@@ -87,6 +87,19 @@ export function StarterPacksTable({ packs: initial }: { packs: StarterPackRow[] 
       <table className="w-full text-sm">
         <thead><tr className="text-left text-xs text-gray-500"><th className="py-2">Name</th><th>Slug</th><th>Type</th><th>Version</th><th>Blocks</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
+          {/* Guards `visible`, not `rows`. The sibling tables guard the
+              unfiltered set at the top of render, so filtering to a type with
+              no packs still leaves them with a headers-only table and a blank
+              body — this covers that case too. */}
+          {visible.length === 0 && (
+            <tr>
+              <td colSpan={7} className={'px-6 py-12 text-center text-sm text-gray-500' /* design-tokens:exempt — apps/admin has no semantic token layer (coral/blue/gray only), so muted text can only be a raw ramp; matches LayoutsTable/ThemePresetsTable */}>
+                {typeFilter === 'all'
+                  ? 'No starter packs configured yet.'
+                  : `No starter packs for ${typeFilter}.`}
+              </td>
+            </tr>
+          )}
           {visible.map((row) => (
             <tr key={row.id} className="border-t border-gray-100 align-top" data-testid={`pack-row-${row.slug}`}>
               <td className="py-2">{row.displayName}</td>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { getSupportCookieRootDomain, isLocalSupportHostname } from '@propertypro/shared';
 
@@ -30,6 +30,43 @@ export function StartSessionDialog({
   const [ticketId, setTicketId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  /**
+   * Whether the dialog is still open, readable from an in-flight handler.
+   *
+   * Closing cannot cancel the POST — by the time it resolves the route may
+   * already have created the session and set the impersonation cookie. What it
+   * must not do is act on that response: opening a tenant tab from a dialog the
+   * operator dismissed is an impersonation window appearing out of nowhere.
+   */
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  // Had `role="dialog"` and `aria-modal` but neither Escape nor focus
+  // management — the ARIA promised modal behaviour the dialog did not
+  // implement. This starts an impersonation session, so a keyboard user
+  // needing to back out should not have to hunt for the Cancel button.
+  useEffect(() => {
+    if (!open) return;
+
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+
+    function onKeyDown(event: KeyboardEvent) {
+      // Not while the POST is in flight: the session may already exist
+      // server-side, and closing would hide the error if it failed.
+      if (event.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      const previous = restoreFocusRef.current;
+      if (previous && previous.isConnected) previous.focus();
+    };
+  }, [open, submitting, onClose]);
 
   if (!open) return null;
 
@@ -74,6 +111,11 @@ export function StartSessionDialog({
         ? `http://${hostname}:3000/dashboard?communityId=${communityId}`
         : `https://${communitySlug}.${rootDomain}/dashboard`;
 
+      // The dialog was dismissed while this was in flight. The session exists
+      // — that is what the support access log is for — but do not surprise the
+      // operator with a tab they did not ask for.
+      if (!openRef.current) return;
+
       window.open(tenantUrl, '_blank');
       onClose();
     } catch {
@@ -99,7 +141,11 @@ export function StartSessionDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:text-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-coral-600"
+            // Same rule as Cancel below. Without it this button bypassed the
+            // Escape handler's `!submitting` guard entirely — one click
+            // mid-POST and the session is still created server-side.
+            disabled={submitting}
+            className="rounded p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-coral-600"
             aria-label="Close dialog"
           >
             <X size={18} aria-hidden="true" />

@@ -11,14 +11,8 @@ import { useState, useMemo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { safeReturnTo } from '@/lib/auth/safe-return-to';
 import { Suspense } from 'react';
-
-function safeReturnTo(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) {
-    return '/clients';
-  }
-  return value;
-}
 
 function LoginForm() {
   const router = useRouter();
@@ -95,7 +89,8 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-900 px-4">
+    // Skip-link target: the login page renders outside AdminLayout.
+    <div id="main-content" className="flex min-h-screen items-center justify-center bg-gray-900 px-4">
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="mb-8 text-center">

@@ -154,16 +154,23 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
           </div>
         )}
         <button
+          type="button"
           onClick={onToggle}
+          // `title` alone is not an accessible name — it is advisory, and
+          // several screen readers do not announce it at all.
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
           className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+          {collapsed
+            ? <ChevronsRight size={16} aria-hidden="true" />
+            : <ChevronsLeft size={16} aria-hidden="true" />}
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+      <nav aria-label="Operator console" className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
         {NAV_ITEMS.map(({ href, label, icon: Icon, badge }) => {
           const active = pathname === href || pathname.startsWith(href + '/');
           const showBadge = badge && coolingCount > 0;
@@ -172,6 +179,13 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
             <Link
               key={href}
               href={href}
+              // The active item was distinguished by colour ALONE. `aria-current`
+              // is what conveys it to a screen reader, and to anyone who cannot
+              // separate the two greys.
+              aria-current={active ? 'page' : undefined}
+              // When collapsed the label text is removed, leaving an icon-only
+              // link — `title` is advisory, so it needs a real accessible name.
+              aria-label={collapsed ? label : undefined}
               title={collapsed ? label : undefined}
               className={[
                 'flex items-center rounded-md py-2 text-sm font-medium transition-colors',
@@ -181,7 +195,7 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
                   : 'text-gray-400 hover:bg-gray-800 hover:text-white',
               ].join(' ')}
             >
-              <Icon size={16} className="shrink-0" />
+              <Icon size={16} className="shrink-0" aria-hidden="true" />
               {!collapsed && (
                 <span className="flex-1">{label}</span>
               )}
@@ -190,7 +204,11 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
                   'rounded-full bg-yellow-500 text-xs font-bold text-gray-900',
                   collapsed ? 'absolute ml-3 -mt-3 h-4 min-w-4 flex items-center justify-center px-1' : 'px-1.5 py-0.5',
                 ].join(' ')}>
-                  {coolingCount}
+                  {/* A bare number announces as "3" with no idea what of. */}
+                  <span aria-hidden="true">{coolingCount}</span>
+                  <span className="sr-only">
+                    {coolingCount} pending deletion {coolingCount === 1 ? 'request' : 'requests'}
+                  </span>
                 </span>
               )}
             </Link>

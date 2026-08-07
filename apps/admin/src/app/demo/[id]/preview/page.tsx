@@ -75,7 +75,9 @@ export default async function DemoPreviewPage({ params }: PageProps) {
     COMMUNITY_TYPE_DISPLAY_NAMES[demo.template_type as CommunityType] ?? demo.template_type;
 
   return (
-    <div className="flex h-screen flex-col">
+    // The skip link in the root layout targets #main-content, and this page
+    // does not render AdminLayout (which normally owns it).
+    <div id="main-content" className="flex h-screen flex-col">
       {/* Header bar */}
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
         <div className="flex items-center gap-3">

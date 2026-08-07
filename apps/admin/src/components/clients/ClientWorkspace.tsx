@@ -23,6 +23,7 @@ import {
   getWebsiteDomainInfo,
 } from '@/lib/clients/website';
 import type { CommunitySettings } from './community-settings';
+import { useRovingTabs } from '@/components/a11y/use-roving-tabs';
 
 interface Community {
   id: number;
@@ -89,6 +90,13 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
     ? ['overview', 'members', 'access', 'website', 'support', 'settings']
     : ['overview', 'members', 'compliance', 'access', 'website', 'support', 'settings'];
 
+  const { tabListProps, getTabProps, getPanelProps } = useRovingTabs(
+    tabs,
+    activeTab,
+    setActiveTab,
+    { idPrefix: 'client-workspace', label: 'Community sections' },
+  );
+
   return (
     <div className="flex flex-col h-full">
       {/* Breadcrumb + header */}
@@ -140,12 +148,11 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
 
       {/* Tabs */}
       <div className="border-b border-gray-200 bg-white px-6">
-        <div className="flex gap-1">
+        <div className="flex gap-1" {...tabListProps}>
           {tabs.map((tab) => (
             <button
               key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
+              {...getTabProps(tab)}
               className={[
                 'px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors',
                 activeTab === tab
@@ -160,7 +167,7 @@ export function ClientWorkspace({ community }: ClientWorkspaceProps) {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6" {...getPanelProps(activeTab)}>
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Stats grid */}

@@ -36,6 +36,17 @@ export default function RootLayout({
     <html lang="en" className={inter.variable}>
       <body className="bg-gray-50 text-gray-900">
         <NavigationProgress />
+        {/* Mirrors apps/web/src/app/layout.tsx. The target `#main-content` is
+            on <main> in AdminLayout, and on the <main> that error.tsx and
+            not-found.tsx render — those sit OUTSIDE the shell, so without
+            their own id the link would be a dead anchor on exactly the pages
+            a lost user is most likely to be on. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2 focus:text-coral-700 focus:underline"
+        >
+          Skip to main content
+        </a>
         {children}
       </body>
     </html>
