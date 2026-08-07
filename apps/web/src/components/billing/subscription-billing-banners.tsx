@@ -41,7 +41,7 @@ function GraceBanner({
         status="warning"
         variant="filled"
         title="Your community's subscription was canceled."
-        description={`Access continues until ${untilDate}. Contact your community administrator to restore it.`}
+        description={`Access continues until ${untilDate}. Contact your community's root manager to restore it.`}
       />
     );
   }
@@ -76,7 +76,7 @@ function SoftLockBanner({
         status="danger"
         variant="filled"
         title="Access paused."
-        description="Contact your community administrator to restore access."
+        description="Contact your community's root manager to restore access."
       />
     );
   }

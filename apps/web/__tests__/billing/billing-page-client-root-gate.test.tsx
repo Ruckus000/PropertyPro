@@ -98,10 +98,10 @@ describe('BillingPageClient — R3-03 root gate', () => {
     expect(screen.queryByRole('link', { name: /claim root manager/i })).not.toBeInTheDocument();
   });
 
-  it('shows residents the contact-administrator copy and never queries rootless', () => {
+  it('shows residents the contact-root-manager copy and never queries rootless', () => {
     render(<BillingPageClient {...baseProps} canView={false} canManage={false} />);
 
-    expect(screen.getByText(/contact your community administrator/i)).toBeInTheDocument();
+    expect(screen.getByText(/contact your community's root manager/i)).toBeInTheDocument();
     // A resident's rootless list is always empty — skip the request entirely.
     expect(useMyRootlessMock).toHaveBeenCalledWith(false);
   });

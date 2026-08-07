@@ -239,15 +239,15 @@ describe('SubscriptionBillingBanners rendering (A4 UTC date + A7 role copy)', ()
     expect(screen.getByRole('link', { name: /update payment/i })).toBeInTheDocument();
   });
 
-  it('gives residents contact-admin copy and no billing link on grace (A7)', () => {
+  it('gives residents contact-root-manager copy and no billing link on grace (A7)', () => {
     render(<SubscriptionBillingBanners role="resident" {...graceProps} />);
     expect(screen.queryByRole('link', { name: /update payment/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/administrator/i)).toBeInTheDocument();
+    expect(screen.getByText(/root manager/i)).toBeInTheDocument();
     // Still shows the accurate UTC end date.
     expect(screen.getByText(new RegExp(expectedGraceDate))).toBeInTheDocument();
   });
 
-  it('gives residents contact-admin copy and no reactivate link on soft-lock (A7)', () => {
+  it('gives residents contact-root-manager copy and no reactivate link on soft-lock (A7)', () => {
     render(
       <SubscriptionBillingBanners
         role="resident"
@@ -261,6 +261,6 @@ describe('SubscriptionBillingBanners rendering (A4 UTC date + A7 role copy)', ()
       />,
     );
     expect(screen.queryByRole('link', { name: /reactivate/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/administrator/i)).toBeInTheDocument();
+    expect(screen.getByText(/root manager/i)).toBeInTheDocument();
   });
 });

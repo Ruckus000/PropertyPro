@@ -105,8 +105,11 @@ function BillingReadOnlyNotice({
   canView: boolean;
   bounced: boolean;
 }) {
-  // Only the management tier can hold a rootless property_manager membership;
-  // a resident's list is always empty, so skip the request entirely.
+  // `canView` gates the QUERY, not the copy: only the management tier can hold a
+  // rootless property_manager membership, so a resident's list is always empty
+  // and the request is skipped entirely. With the query disabled
+  // `isRootlessHere` is false, so residents fall through to the
+  // contact-your-root-manager branch without needing a separate arm.
   const { data: rootless } = useMyRootless(canView);
   const isRootlessHere = (rootless ?? []).some((c) => c.id === communityId);
 
@@ -116,23 +119,19 @@ function BillingReadOnlyNotice({
         'rounded-[10px] border p-4',
         bounced
           ? 'border-status-info-border bg-status-info-subtle'
-          : 'border-edge bg-surface-secondary',
+          : 'border-edge bg-surface-muted',
       )}
       // Announce only when this explains a bounce the user just experienced;
       // as ambient page content it is not an alert.
       {...(bounced ? { role: 'status' as const } : {})}
     >
       {bounced && (
-        <p className="mb-1 text-sm font-medium text-content-primary">
+        <p className="mb-1 text-sm font-medium text-content">
           Only the root manager can change billing for this community.
         </p>
       )}
 
-      {!canView ? (
-        <p className="text-sm text-content-secondary">
-          Contact your community administrator to make changes to the billing plan.
-        </p>
-      ) : isRootlessHere ? (
+      {isRootlessHere ? (
         <>
           <p className="text-sm text-content-secondary">
             This community doesn&apos;t have a root manager yet, so nobody can
