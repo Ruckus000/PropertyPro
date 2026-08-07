@@ -1,0 +1,241 @@
+# Lima VM that hosts the self-hosted GitHub Actions runners for the two heavy
+# CI jobs (`Unit Tests` and `perf-check` in ci.yml).
+#
+# WHY A VM AND NOT A NATIVE macOS RUNNER
+#
+# Two reasons, both load-bearing:
+#
+# 1. ISOLATION. The runner runs under the laptop owner's own account, so a
+#    native runner would execute PR code with full read access to
+#    ~/Documents/Coding/PropertyPro/.env.local — which holds the PRODUCTION
+#    DATABASE_URL and Supabase service-role key. `mounts: []` below is the
+#    boundary that makes "runs as my user" safe: the guest cannot see the Mac's
+#    filesystem at all.
+#
+# 2. `runner.os` STAYS `Linux`. That keeps `playwright install --with-deps`
+#    (apt-based), every `run:` block, and the existing `nextjs-${{ runner.os }}-`
+#    cache keys working unchanged. A macOS runner would have forced edits to all
+#    three.
+#
+# SIZING: 8 vCPU of 14. vitest's default forks pool is
+# `availableParallelism() - 1`, so this yields 7 concurrent forks (vs 3 on a
+# 4-core ubuntu-latest runner) while leaving 6 cores for interactive use — the
+# host is a laptop someone is still working on. Lima allocates memory
+# STATICALLY, so the 16GiB leaves the Mac for as long as the VM is up.
+#
+# NOTE ON IN-GUEST PRIVILEGE: the runner user keeps passwordless sudo. That is
+# deliberate, not an oversight — `playwright install --with-deps` shells out to
+# `sudo apt-get`, and the VM boundary (not in-guest uid separation) is what
+# actually contains a compromised dependency here.
+#
+# Start with:  limactl start --name=ci .github/self-hosted-runner/lima-ci.yaml
+
+vmType: vz
+arch: aarch64
+
+images:
+  - location: 'https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img'
+    arch: aarch64
+
+cpus: 8
+memory: '16GiB'
+# Sparse-allocated, so this costs only what is used — but Lima disk images NEVER
+# SHRINK. Self-hosted disk exhaustion is the classic killer of these setups:
+# every job leaves node_modules (~2GB), two .next trees, and Playwright
+# browsers behind. 150GiB plus the supervisor's `_work` wipe is the budget.
+disk: '150GiB'
+
+# THE ISOLATION BOUNDARY. Do not add mounts "just for convenience" — this single
+# empty list is the entire reason CI code cannot read the Mac's prod
+# credentials. Verified empirically after boot: `ls /Users` must fail in-guest.
+mounts: []
+
+ssh:
+  # The guest has no business trusting the Mac's personal SSH keys.
+  loadDotSSHPubKeys: false
+
+# Lima enables containerd by default. Nothing here needs it — `integration-tests`
+# (the only job with a `services:` block) deliberately stays on `ubuntu-latest`,
+# so this VM runs no containers at all. Off, to stop paying for it in RAM.
+containerd:
+  system: false
+  user: false
+
+# Lima forwards guest listening ports to the Mac's localhost BY DEFAULT. Left
+# on, a CI job's `next start` on 3100 would appear on the Mac's own localhost —
+# colliding with the developer's dev server and exposing a CI-controlled service
+# to every process on the machine. This catch-all ignore rule turns that off.
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true
+
+# User-mode networking (the default) already means the guest is NOT reachable
+# from the LAN. Do NOT add a vmnet/bridged interface. The remaining direction —
+# guest reaching OUT to the Mac and the LAN — is closed by the nftables rules
+# installed in the provisioning step below.
+
+env:
+  # ubuntu-latest runners are UTC / C.UTF-8. Nothing in the repo pins TZ, and
+  # ~82 files under apps/web/src use Intl/toLocale*, so an unpinned guest
+  # timezone is a whole class of confusing date-assertion failures.
+  TZ: UTC
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
+provision:
+  # ---------------------------------------------------------------------------
+  # 1. Base packages, Node, Playwright system deps, runner tarball.
+  #    Runs BEFORE the egress firewall, because all of it needs the network.
+  # ---------------------------------------------------------------------------
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      # `limactl start` re-runs provisioning on every boot; make it a no-op.
+      if [ -f /var/lib/propertypro-ci-provisioned ]; then exit 0; fi
+
+      export DEBIAN_FRONTEND=noninteractive
+      timedatectl set-timezone UTC
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        ca-certificates curl git jq unzip xz-utils nftables \
+        build-essential python3 locales
+      locale-gen C.UTF-8 || true
+
+      # Node 20 — matches `actions/setup-node@v4 with: node-version: 20`.
+      # setup-node still populates the tool cache per job; this system Node is
+      # the bootstrap that lets us pre-bake Playwright's apt deps below.
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      apt-get install -y nodejs
+
+      # Pre-bake Playwright's system libraries so the workflow's
+      # `playwright install --with-deps chromium` becomes a fast no-op instead
+      # of an apt transaction on every single job. Version pinned to the repo's
+      # @playwright/test (package.json) — bump both together.
+      npx -y playwright@1.58.2 install-deps chromium
+
+      # GitHub Actions runner, linux-arm64.
+      # Leave runner auto-update ON: GitHub stops dispatching to runners more
+      # than ~30 days stale, so a pinned-and-forgotten version silently goes
+      # dark. This is only the bootstrap version.
+      RUNNER_VERSION=2.336.0
+      mkdir -p /opt/actions-runner
+      cd /opt/actions-runner
+      curl -fsSL -o runner.tar.gz \
+        "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz"
+      tar xzf runner.tar.gz && rm runner.tar.gz
+      ./bin/installdependencies.sh
+      # Deriving the runner user is fiddlier than it looks, and two obvious
+      # approaches are both WRONG here:
+      #
+      #   * `ls /home | head -1` picks `jphilistin.guest` OR the
+      #     `jphilistin.linux` symlink Lima also creates — alphabetical order
+      #     decides, and the symlink name is not a valid chown target.
+      #   * the standard `uid >= 1000` filter matches NOTHING: Lima maps the
+      #     macOS uid straight through, so the user here is uid 501.
+      #
+      # Owner-of-a-non-root-home-directory is agnostic to both.
+      CI_USER="$(find /home -maxdepth 1 -mindepth 1 ! -user root -printf '%u\n' | head -1)"
+      test -n "${CI_USER}"
+      chown -R "${CI_USER}:${CI_USER}" /opt/actions-runner
+
+      touch /var/lib/propertypro-ci-provisioned
+
+  # ---------------------------------------------------------------------------
+  # 2. Persistent caches, OUTSIDE _work.
+  #
+  #    The supervisor wipes _work between every ephemeral job. Everything worth
+  #    caching therefore has to live somewhere else, or each job re-downloads
+  #    it. RUNNER_TOOL_CACHE is the sharp edge: leave it under _work and
+  #    setup-node re-fetches the arm64 Node 20 tarball every single job — a
+  #    silent ~30s tax that is easy to misread as "the VM is slow".
+  # ---------------------------------------------------------------------------
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      # See the note on this lookup in the previous provisioning step.
+      CI_USER="$(find /home -maxdepth 1 -mindepth 1 ! -user root -printf '%u\n' | head -1)"
+      test -n "${CI_USER}"
+      install -d -o "${CI_USER}" -g "${CI_USER}" \
+        /opt/ci-cache/tool-cache \
+        /opt/ci-cache/pnpm-store \
+        /opt/ci-cache/ms-playwright
+      cat > /etc/environment <<'EOF'
+      TZ=UTC
+      LANG=C.UTF-8
+      LC_ALL=C.UTF-8
+      RUNNER_TOOL_CACHE=/opt/ci-cache/tool-cache
+      AGENT_TOOLSDIRECTORY=/opt/ci-cache/tool-cache
+      PLAYWRIGHT_BROWSERS_PATH=/opt/ci-cache/ms-playwright
+      PNPM_HOME=/opt/ci-cache/pnpm-store
+      EOF
+
+  # ---------------------------------------------------------------------------
+  # 3. Egress firewall — applied LAST, because everything above needs network.
+  #
+  #    User-mode networking already stops the LAN reaching IN. This stops the
+  #    guest reaching OUT to the Mac (reachable at the 192.168.5.2 gateway) and
+  #    to the LAN, which is what contains a compromised npm postinstall.
+  #
+  #    THREE THINGS HERE ARE LOAD-BEARING. The first two were found by breaking
+  #    the VM with them missing, so do not "simplify" them back out:
+  #
+  #      * NO `flush ruleset`. Lima installs its OWN `table ip nat` containing a
+  #        LIMADNS chain. A global flush — which is what Ubuntu's stock
+  #        /etc/nftables.conf does, and the obvious thing to copy — deletes it
+  #        and takes name resolution with it.
+  #
+  #      * PORT-53 ACCEPT IS NOT ADDRESS-SCOPED. An earlier version carved out
+  #        192.168.5.3, on the documented assumption that Lima's resolver lives
+  #        there. On this host `resolvectl` reports the resolver as
+  #        192.168.5.2 — the gateway — so the carve-out missed, 192.168.0.0/16
+  #        swallowed DNS, and provisioning hung for 40s and failed. Matching on
+  #        the port instead of a guessed address removes the assumption
+  #        entirely and survives Lima changing its network layout.
+  #
+  #      * `ct state established,related accept` — without it, replies to the
+  #        host's inbound SSH are dropped (their destination is 192.168.5.2)
+  #        and `limactl shell` hangs forever.
+  # ---------------------------------------------------------------------------
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      cat > /etc/nftables.conf <<'EOF'
+      #!/usr/sbin/nft -f
+
+      # Idempotent replace of ONLY our own table. `add`-then-`delete` is the
+      # idiom that makes the delete safe on a first run where it does not exist.
+      table inet ci_egress
+      delete table inet ci_egress
+
+      table inet ci_egress {
+        chain output {
+          type filter hook output priority filter; policy accept;
+
+          oif "lo" accept
+          ct state established,related accept
+
+          # DNS by PORT, not by resolver address. MUST precede the drops.
+          udp dport 53 accept
+          tcp dport 53 accept
+
+          # No new outbound connections to the host or any private network.
+          # This is what contains a compromised npm postinstall: it cannot
+          # reach the Mac's services or anything else on the LAN.
+          ip daddr 10.0.0.0/8      drop
+          ip daddr 172.16.0.0/12   drop
+          ip daddr 192.168.0.0/16  drop
+          ip daddr 169.254.0.0/16  drop
+          ip daddr 100.64.0.0/10   drop
+        }
+      }
+      EOF
+      systemctl enable nftables
+      systemctl restart nftables
+      # Fail provisioning LOUDLY if the firewall broke egress or DNS, rather
+      # than leaving a VM that only fails later, inside a CI job.
+      getent hosts github.com
+      curl -fsS -o /dev/null --max-time 20 https://api.github.com
+      echo 'egress firewall active; DNS and internet verified'
