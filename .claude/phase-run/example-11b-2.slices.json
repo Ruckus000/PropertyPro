@@ -1,0 +1,186 @@
+{
+  "_comment": [
+    "Worked example: the REAL slice spec for website-editor v3 Phase 11b-2, which shipped as",
+    "PR #883. Kept as documentation and as the fixture the wave deriver is checked against.",
+    "",
+    "On the live run the wave grouping was done BY HAND (S1+S2+S3+S9 / S4, then S5+S6 / S7+S8)",
+    "and one agent still had to break file discipline. Feeding this spec to deriveWaves()",
+    "reproduces that grouping mechanically from ownedFiles alone — which is the point: the",
+    "grouping stops being a judgement call.",
+    "",
+    "Note S7 declares public-community-reader.ts even though S4 owns it too. They are at",
+    "different dependency levels, so S7's edit lands after S4's merge. The skill's validation",
+    "step flags same-file-across-levels; here it is deliberate and append-only, and it is the",
+    "one case worth a human's eye before running."
+  ],
+
+  "phaseName": "11b-2",
+  "planPath": "/Users/jphilistin/.claude/plans/continue-the-propertypro-website-editor-glimmering-fiddle.md",
+  "integrationBranch": "claude/site-editor-v3-phase-11b-2-public-multipage",
+  "prTitle": "feat(site-editor-v3): public multi-page site [11b-2]",
+  "prBody": "See the plan. Middleware slug preservation, slug→page resolution with 308s, nav, per-page metadata, plus three pre-existing metadata-route bugs.",
+  "migration": null,
+
+  "slices": [
+    {
+      "id": "S1",
+      "slug": "middleware",
+      "title": "single-source the protected/reserved segment lists",
+      "blast": "RESIDENT-APP",
+      "dependsOn": [],
+      "ownedFiles": [
+        "apps/web/src/middleware.ts",
+        "apps/web/src/lib/middleware/public-host-routes.ts",
+        "apps/web/__tests__/middleware/public-host-routes.test.ts"
+      ],
+      "scope": "Move PROTECTED_PATH_PREFIXES into public-host-routes.ts and derive PROTECTED_FIRST_SEGMENTS from it. The two hand lists had already diverged (/welcome was protected but not reserved), and this branch runs above isProtectedPath, so a page slugged `welcome` would hijack a resident route.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/middleware/public-host-routes.test.ts"
+      ]
+    },
+    {
+      "id": "S2",
+      "slug": "metadata-passthrough",
+      "title": "metadata + public-suffix passthrough on custom domains",
+      "blast": "SEO",
+      "dependsOn": [],
+      "ownedFiles": [
+        "apps/web/src/middleware.ts",
+        "apps/web/src/lib/middleware/public-host-routes.ts",
+        "apps/web/__tests__/middleware/host-precedence.test.ts"
+      ],
+      "scope": "isPublicSitePath('/sitemap.xml') is true, so the host-precedence block rewrites sitemap/robots to /public-site/… → 404. Add METADATA_FIRST_SEGMENTS; set headers and fall through instead.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/middleware/host-precedence.test.ts"
+      ]
+    },
+    {
+      "id": "S3",
+      "slug": "subdomain-rewrite",
+      "title": "subdomain path-preserving public rewrite",
+      "blast": "RESIDENT-APP",
+      "dependsOn": [],
+      "ownedFiles": [
+        "apps/web/src/middleware.ts",
+        "apps/web/__tests__/middleware/host-precedence.test.ts"
+      ],
+      "scope": "The subdomain branch only runs for pathname === '/' and discards the path. Add a branch above isProtectedPath guarded by isReservedPublicSlug. Never read the DB to route.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/middleware"
+      ]
+    },
+    {
+      "id": "S9",
+      "slug": "stale-artefacts",
+      "title": "stale comments and a dangling reference",
+      "blast": "INTERNAL",
+      "dependsOn": [],
+      "ownedFiles": [
+        "apps/web/src/middleware.ts",
+        "apps/web/src/lib/middleware/public-host-routes.ts"
+      ],
+      "scope": "Delete the doc reference to isCommunityPublicOnlyHost (never written) and fix the comment claiming authenticated users are redirected to /dashboard (removed in 11b-0).",
+      "doneCriteria": ["rg 'isCommunityPublicOnlyHost' apps/web/src"]
+    },
+    {
+      "id": "S4",
+      "slug": "reader",
+      "title": "public reader: slug, redirect, nav",
+      "blast": "INTERNAL",
+      "dependsOn": [],
+      "ownedFiles": [
+        "apps/web/src/lib/db/public-community-reader.ts",
+        "apps/web/__tests__/lib/db/public-community-reader.test.ts"
+      ],
+      "scope": "Add getPageBySlug, resolveRedirect, listNavPages to the anon-safe reader. No delete_staged_at filter (D8). Never reach site-pages-service.ts — listSitePages locks and can INSERT.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/lib/db/public-community-reader.test.ts",
+        "pnpm --filter @propertypro/web exec tsc --noEmit"
+      ]
+    },
+    {
+      "id": "S5",
+      "slug": "renderer",
+      "title": "slug resolution, 308, 404, preview, per-page metadata",
+      "blast": "PUBLIC-URL",
+      "dependsOn": ["S4"],
+      "ownedFiles": [
+        "apps/web/src/app/public-site/[[...slug]]/page.tsx",
+        "apps/web/__tests__/app/public-site/site-page.test.tsx"
+      ],
+      "scope": "Replace notFound() on any slug with resolution + 308 redirects. generateMetadata gains params. Home must stay byte-identical.",
+      "doneCriteria": [
+        "DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/propertypro_stub\" pnpm --filter @propertypro/web exec vitest run __tests__/app/public-site/site-page.test.tsx"
+      ]
+    },
+    {
+      "id": "S6",
+      "slug": "nav",
+      "title": "nav in the header and all four render sites",
+      "blast": "RENDER",
+      "dependsOn": ["S4"],
+      "ownedFiles": [
+        "apps/web/src/app/public-site/[[...slug]]/page.tsx",
+        "apps/web/src/components/public-site/PublicSiteHeader.tsx",
+        "apps/web/src/components/public-site/layouts/types.ts",
+        "apps/web/src/components/public-site/layouts/Tidewater.tsx",
+        "apps/web/src/components/public-site/layouts/Boulevard.tsx",
+        "apps/web/src/components/public-site/layouts/Sable.tsx",
+        "apps/web/__tests__/components/public-site"
+      ],
+      "scope": "Optional nav prop following the footer? precedent. Suppress below 2 pages. No client island — the route is at 635 of a 700 KiB budget.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/components/public-site"
+      ]
+    },
+    {
+      "id": "S7",
+      "slug": "sitemap",
+      "title": "sitemap.ts rootDomain + custom_domain + per-page entries",
+      "blast": "SEO",
+      "dependsOn": ["S4"],
+      "ownedFiles": [
+        "apps/web/src/app/sitemap.ts",
+        "apps/web/__tests__/app/sitemap.test.ts",
+        "apps/web/src/lib/db/public-community-reader.ts"
+      ],
+      "scope": "resolveCommunityContext is called without rootDomain, which makes source:'custom_domain' unreachable. The test mocks it wholesale, so a case MUST assert the argument or the fix is untested by construction.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/app/sitemap.test.ts"
+      ]
+    },
+    {
+      "id": "S8",
+      "slug": "robots",
+      "title": "robots.ts rootDomain + custom_domain + allow /",
+      "blast": "SEO",
+      "dependsOn": ["S4"],
+      "ownedFiles": [
+        "apps/web/src/app/robots.ts",
+        "apps/web/__tests__/app/robots.test.ts"
+      ],
+      "scope": "Same rootDomain fix. Replace the fixed four-path allow-list with allow '/'. Do NOT add a Disallow for the indexing opt-out — a Disallow prevents the crawler ever reading noindex.",
+      "doneCriteria": [
+        "pnpm --filter @propertypro/web exec vitest run __tests__/app/robots.test.ts"
+      ]
+    }
+  ],
+
+  "verifyCommands": [
+    { "command": "pnpm exec tsx scripts/verify-migration-ordering.ts", "expect": "valid, 0 errors" },
+    { "command": "node scripts/run-lint-guards.mjs", "expect": "all guards passed" },
+    { "command": "pnpm --filter @propertypro/web exec tsc --noEmit", "expect": "exit 0, no diagnostics" },
+    { "command": "DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/propertypro_stub\" pnpm test", "expect": "0 failed; the DB-gated files actually execute" },
+    { "command": "pnpm test:integration:local", "expect": "app suite + RLS suite green" },
+    { "command": "pnpm --filter @propertypro/web build", "expect": "exit 0; no node:* in a client bundle" },
+    { "command": "pnpm perf:check", "expect": "under the 700 KiB budget" }
+  ],
+
+  "spotChecks": [
+    { "command": "rg \"PROTECTED_PATH_PREFIXES\" apps/web/src", "expect": "exactly ONE definition site (S1)" },
+    { "command": "rg \"isCommunityPublicOnlyHost\" apps/web/src", "expect": "zero matches (S9)" },
+    { "command": "rg \"'use client'\" apps/web/src/components/public-site", "expect": "no new client island (S6)" },
+    { "command": "git grep -n toHaveBeenCalledWith apps/web/__tests__/app/sitemap.test.ts apps/web/__tests__/app/robots.test.ts", "expect": "a rootDomain argument assertion in EACH (S7/S8)" },
+    { "command": "rg \"delete_staged_at|deleteStagedAt\" apps/web/src/lib/db/public-community-reader.ts", "expect": "present as a column only, never as a filter (D8)" }
+  ]
+}
