@@ -1,10 +1,4 @@
 {
-  "apps/admin/src/app/api/admin/communities/[id]/branding/route.ts": {
-    "raw-hex": 1
-  },
-  "apps/admin/src/app/api/admin/demos/[id]/community/branding/route.ts": {
-    "raw-hex": 1
-  },
   "apps/admin/src/app/api/admin/demos/preview/route.ts": {
     "raw-hex": 3
   },
@@ -35,9 +29,6 @@
   "apps/admin/src/app/error.tsx": {
     "raw-palette": 7
   },
-  "apps/admin/src/app/layout.tsx": {
-    "raw-palette": 2
-  },
   "apps/admin/src/app/leads/page.tsx": {
     "raw-palette": 2
   },
@@ -58,9 +49,6 @@
   },
   "apps/admin/src/app/site-templates/theme-presets/page.tsx": {
     "raw-palette": 2
-  },
-  "apps/admin/src/components/AdminLayout.tsx": {
-    "raw-palette": 1
   },
   "apps/admin/src/components/clients/AccessLogTable.tsx": {
     "raw-palette": 19
@@ -96,9 +84,6 @@
   "apps/admin/src/components/communities/ReassignRootControl.tsx": {
     "raw-palette": 4
   },
-  "apps/admin/src/components/dashboard/PlatformDashboard.tsx": {
-    "raw-palette": 40
-  },
   "apps/admin/src/components/deletion-requests/DeletionRequestsDashboard.tsx": {
     "raw-palette": 78
   },
@@ -107,7 +92,7 @@
   },
   "apps/admin/src/components/demo/DemoEditDrawer.tsx": {
     "raw-hex": 3,
-    "raw-palette": 14
+    "raw-palette": 11
   },
   "apps/admin/src/components/demo/DemoListClient.tsx": {
     "raw-palette": 52
@@ -136,14 +121,11 @@
   "apps/admin/src/components/leads/LeadsDashboard.tsx": {
     "raw-palette": 18
   },
-  "apps/admin/src/components/loading/AdminPageLoading.tsx": {
-    "raw-palette": 2
-  },
   "apps/admin/src/components/settings/PlatformSettings.tsx": {
     "raw-palette": 37
   },
   "apps/admin/src/components/Sidebar.tsx": {
-    "raw-palette": 17
+    "raw-palette": 15
   },
   "apps/admin/src/components/site-templates/BlockRegistryView.tsx": {
     "raw-palette": 20

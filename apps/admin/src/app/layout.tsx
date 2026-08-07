@@ -34,7 +34,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="bg-gray-50 text-gray-900">
+      <body className="bg-surface-page text-content">
         <NavigationProgress />
         {/* Mirrors apps/web/src/app/layout.tsx. The target `#main-content` is
             on <main> in AdminLayout, and on the <main> that error.tsx and

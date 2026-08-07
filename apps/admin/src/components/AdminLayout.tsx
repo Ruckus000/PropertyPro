@@ -29,7 +29,7 @@ export function AdminLayout({ children, coolingCount }: AdminLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar collapsed={collapsed} onToggle={handleToggle} coolingCount={coolingCount} />
-      <main id="main-content" className="flex-1 overflow-y-auto bg-gray-50 transition-all duration-200">
+      <main id="main-content" className="flex-1 overflow-y-auto bg-surface-page transition-all duration-200">
         {children}
       </main>
     </div>

@@ -5,7 +5,7 @@ interface AdminPageLoadingProps {
 }
 
 function AdminSkeleton({ className }: { className: string }) {
-  return <div className={`animate-pulse rounded-md bg-gray-200 ${className}`} />;
+  return <div className={`animate-pulse rounded-md bg-surface-muted ${className}`} />;
 }
 
 export function AdminPageLoading({
@@ -30,7 +30,7 @@ export function AdminPageLoading({
           <AdminSkeleton className="h-28 rounded-2xl" />
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
           <div className="space-y-4">
             <AdminSkeleton className="h-6 w-40" />
             <AdminSkeleton className="h-12 w-full rounded-xl" />
