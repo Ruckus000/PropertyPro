@@ -13,8 +13,32 @@ import { logAdminAction } from '@/lib/audit/log-admin-action';
 /**
  * The platform must never be left with zero admins — nobody could then grant
  * admin back, because granting requires an admin session.
+ *
+ * NOT AUTHORITATIVE. The real floor is the `pp_enforce_platform_admin_floor`
+ * BEFORE DELETE trigger (migration 0056), which is the only place that can
+ * enforce it atomically. This constant is a UX fast-path: it produces a useful
+ * message without a failed write. Raising it here does NOT raise the floor —
+ * change the trigger too, or the UI will refuse at a threshold the database
+ * still permits.
  */
 const MIN_PLATFORM_ADMINS = 1;
+
+/** Raised by the 0056 floor trigger. */
+const FLOOR_TRIGGER_ERRCODE = '23514'; // check_violation
+
+/** The one 409 both the pre-check and the floor trigger return. */
+function lastAdminResponse() {
+  return NextResponse.json(
+    {
+      error: {
+        code: 'LAST_ADMIN',
+        message:
+          'Cannot remove the last platform admin. Grant admin to another account first.',
+      },
+    },
+    { status: 409 },
+  );
+}
 
 export const DELETE = withAdminErrorHandler(async (
   _request: NextRequest,
@@ -75,22 +99,22 @@ export const DELETE = withAdminErrorHandler(async (
 
   // Fail closed on an absent count rather than assuming the floor is satisfied.
   if (count === null || count - 1 < MIN_PLATFORM_ADMINS) {
-    return NextResponse.json(
-      {
-        error: {
-          code: 'LAST_ADMIN',
-          message:
-            'Cannot remove the last platform admin. Grant admin to another account first.',
-        },
-      },
-      { status: 409 },
-    );
+    return lastAdminResponse();
   }
 
   const { error } = await db
     .from('platform_admin_users')
     .delete()
     .eq('user_id', userId);
+
+  // The floor trigger fired, so this delete lost a race with a concurrent one
+  // that the count above could not see. Same answer as the check, deliberately:
+  // to the caller a caught race and a lost race are the same outcome, and
+  // routing it through assertNoDbError instead would return an opaque 500 and
+  // page someone for a correctly-refused request.
+  if (error?.code === FLOOR_TRIGGER_ERRCODE) {
+    return lastAdminResponse();
+  }
 
   assertNoDbError(error, 'Failed to remove platform admin');
 

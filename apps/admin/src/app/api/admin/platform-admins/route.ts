@@ -23,6 +23,17 @@ interface PlatformAdminRow {
   created_at: string;
 }
 
+/** Postgres unique_violation — the platform_admin_users primary key. */
+const DUPLICATE_KEY_ERRCODE = '23505';
+
+/** The one 409 both the pre-check and the primary key return. */
+function alreadyAdminResponse() {
+  return NextResponse.json(
+    { error: { code: 'ALREADY_ADMIN', message: 'This user is already a platform admin.' } },
+    { status: 409 },
+  );
+}
+
 const addAdminSchema = z.object({
   email: z.string().email(),
 });
@@ -91,10 +102,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
     .maybeSingle();
 
   if (existing) {
-    return NextResponse.json(
-      { error: { code: 'ALREADY_ADMIN', message: 'This user is already a platform admin.' } },
-      { status: 409 },
-    );
+    return alreadyAdminResponse();
   }
 
   // Insert as platform admin — use rpc or raw insert since table is not in generated types
@@ -105,6 +113,14 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
       role: 'super_admin',
       invited_by: currentAdmin.id,
     } as never);
+
+  // A concurrent grant of the same user won the race between the check above
+  // and this insert. The primary key already prevented the duplicate, so
+  // nothing is at risk — this only stops a correctly-refused request from
+  // surfacing as an opaque 500 and paging someone.
+  if (insertError?.code === DUPLICATE_KEY_ERRCODE) {
+    return alreadyAdminResponse();
+  }
 
   assertNoDbError(insertError, 'Failed to add platform admin');
 
