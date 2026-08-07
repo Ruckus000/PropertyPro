@@ -41,9 +41,9 @@ const TIERS: ThemePresetRow['tier'][] = ['essentials', 'professional', 'pm'];
 
 function TierBadge({ tier }: { tier: ThemePresetRow['tier'] }) {
   const palette: Record<ThemePresetRow['tier'], string> = {
-    essentials: 'bg-blue-100 text-blue-800',
-    professional: 'bg-purple-100 text-purple-800',
-    pm: 'bg-amber-100 text-amber-800',
+    essentials: 'bg-status-info-subtle text-status-info',
+    professional: 'bg-purple-100 text-purple-800', // design-tokens:exempt — categorical PLAN chip, not a status; design.md keeps plan chips on their own scale
+    pm: 'bg-status-warning-subtle text-status-warning',
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${palette[tier]}`}>
@@ -58,7 +58,7 @@ function Swatch({ color, label }: { color?: string; label: string }) {
     <span
       aria-label={`${label} ${color}`}
       title={`${label}: ${color}`}
-      className="inline-block h-4 w-4 rounded border border-gray-200"
+      className="inline-block h-4 w-4 rounded border border-edge"
       style={{ backgroundColor: color }}
     />
   );
@@ -152,30 +152,30 @@ function PresetEditForm({
   return (
     <form
       data-testid={`preset-edit-form-${row.slug}`}
-      className="space-y-3 bg-gray-50 px-4 py-4"
+      className="space-y-3 bg-surface-page px-4 py-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (!nameEmpty) onSave(draft);
       }}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block text-xs font-medium text-gray-600">
+        <label className="block text-xs font-medium text-content-secondary">
           Display name
           <input
             data-testid={`preset-edit-displayName-${row.slug}`}
             type="text"
             value={draft.displayName}
             onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm text-content"
           />
         </label>
-        <label className="block text-xs font-medium text-gray-600">
+        <label className="block text-xs font-medium text-content-secondary">
           Tier
           <select
             data-testid={`preset-edit-tier-${row.slug}`}
             value={draft.tier}
             onChange={(e) => setDraft({ ...draft, tier: e.target.value as ThemePresetRow['tier'] })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm capitalize text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm capitalize text-content"
           >
             {TIERS.map((t) => (
               <option key={t} value={t}>
@@ -184,25 +184,25 @@ function PresetEditForm({
             ))}
           </select>
         </label>
-        <label className="block text-xs font-medium text-gray-600 sm:col-span-2">
+        <label className="block text-xs font-medium text-content-secondary sm:col-span-2">
           Description
           <textarea
             data-testid={`preset-edit-description-${row.slug}`}
             rows={2}
             value={draft.description}
             onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm text-content"
           />
         </label>
       </div>
 
-      <fieldset className="rounded-md border border-gray-200 p-3">
-        <legend className="px-1 text-xs font-medium text-gray-600">
-          Tokens <span className="text-gray-400">(editing bumps the version)</span>
+      <fieldset className="rounded-md border border-edge p-3">
+        <legend className="px-1 text-xs font-medium text-content-secondary">
+          Tokens <span className="text-content-disabled">(editing bumps the version)</span>
         </legend>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {TOKEN_FIELDS.map((f) => (
-            <label key={f.key} className="block text-xs font-medium text-gray-600">
+            <label key={f.key} className="block text-xs font-medium text-content-secondary">
               {f.label}
               <div className="mt-1 flex items-center gap-2">
                 {f.kind === 'color' && (
@@ -215,7 +215,7 @@ function PresetEditForm({
                   onChange={(e) =>
                     setDraft({ ...draft, tokens: { ...draft.tokens, [f.key]: e.target.value } })
                   }
-                  className="block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+                  className="block w-full rounded-md border border-edge-strong px-2 py-1 text-sm text-content"
                 />
               </div>
             </label>
@@ -224,7 +224,7 @@ function PresetEditForm({
       </fieldset>
 
       <div className="flex flex-wrap items-center gap-4">
-        <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+        <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
           <input
             data-testid={`preset-edit-featured-${row.slug}`}
             type="checkbox"
@@ -233,7 +233,7 @@ function PresetEditForm({
           />
           Featured
         </label>
-        <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+        <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
           <input
             data-testid={`preset-edit-archived-${row.slug}`}
             type="checkbox"
@@ -244,7 +244,7 @@ function PresetEditForm({
         </label>
         <div className="ml-auto flex items-center gap-2">
           {error && (
-            <span role="alert" className="text-xs text-rose-600">
+            <span role="alert" className="text-xs text-status-danger">
               {error}
             </span>
           )}
@@ -252,7 +252,7 @@ function PresetEditForm({
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-edge-strong bg-surface-card px-3 py-1 text-xs font-medium text-content-secondary hover:bg-surface-page disabled:opacity-50"
           >
             Cancel
           </button>
@@ -301,8 +301,8 @@ export function ThemePresetsTable({ presets }: Props) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
-        <p className="text-sm text-gray-500">No theme presets configured.</p>
+      <div className="rounded-md border border-dashed border-edge-strong bg-surface-page px-6 py-12 text-center">
+        <p className="text-sm text-content-tertiary">No theme presets configured.</p>
       </div>
     );
   }
@@ -310,33 +310,36 @@ export function ThemePresetsTable({ presets }: Props) {
   const editingRow = editingSlug ? rows.find((r) => r.slug === editingSlug) : undefined;
 
   return (
-    <div className="overflow-hidden rounded-md border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+      <table className="min-w-full divide-y divide-edge">
+        <thead className="bg-surface-page">
           <tr>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Preset</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Slug</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Tokens</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Tier</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Status</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">v</th>
-            <th scope="col" className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Preset</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Slug</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Tokens</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Tier</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Status</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">v</th>
+            <th scope="col" className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-tertiary">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-edge">
           {rows.map((preset) => (
             <tr key={preset.id} data-testid={`theme-preset-row-${preset.slug}`}>
               <td className="px-4 py-3 align-top">
                 <div className="flex items-center gap-2">
                   {preset.isFeatured && (
-                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" aria-label="Featured" />
+                    <Star
+                      className="h-3.5 w-3.5 fill-amber-400 text-amber-400" // design-tokens:exempt — featured-star gold; status-premium is gold-800, a dark bronze that reads as a DISABLED star
+                      aria-label="Featured"
+                    />
                   )}
-                  <span className="text-sm font-medium text-gray-900">{preset.displayName}</span>
+                  <span className="text-sm font-medium text-content">{preset.displayName}</span>
                 </div>
-                {preset.description && <p className="mt-1 max-w-md text-xs text-gray-500">{preset.description}</p>}
+                {preset.description && <p className="mt-1 max-w-md text-xs text-content-tertiary">{preset.description}</p>}
               </td>
               <td className="px-4 py-3 align-top">
-                <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{preset.slug}</code>
+                <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs text-content-secondary">{preset.slug}</code>
               </td>
               <td className="px-4 py-3 align-top">
                 <div className="flex items-center gap-1.5">
@@ -345,7 +348,7 @@ export function ThemePresetsTable({ presets }: Props) {
                   <Swatch color={preset.tokens?.accentColor} label="Accent" />
                 </div>
                 {(preset.tokens?.headingFont || preset.tokens?.bodyFont) && (
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-content-tertiary">
                     {preset.tokens?.headingFont}
                     {preset.tokens?.headingFont && preset.tokens?.bodyFont ? ' / ' : ''}
                     {preset.tokens?.bodyFont}
@@ -357,18 +360,18 @@ export function ThemePresetsTable({ presets }: Props) {
               </td>
               <td className="px-4 py-3 align-top">
                 {preset.isArchived ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                  <span className="inline-flex items-center gap-1 text-xs text-content-tertiary">
                     <Archive className="h-3 w-3" aria-hidden="true" />
                     Archived
                   </span>
                 ) : (
-                  <span className="text-xs text-green-700">Active</span>
+                  <span className="text-xs text-status-success">Active</span>
                 )}
               </td>
-              <td className="px-4 py-3 align-top text-xs text-gray-600">{preset.version}</td>
+              <td className="px-4 py-3 align-top text-xs text-content-secondary">{preset.version}</td>
               <td className="px-4 py-3 align-top text-right">
                 {savedSlug === preset.slug && editingSlug !== preset.slug && (
-                  <span className="mr-2 text-xs text-green-700">Saved</span>
+                  <span className="mr-2 text-xs text-status-success">Saved</span>
                 )}
                 <button
                   type="button"
@@ -377,7 +380,7 @@ export function ThemePresetsTable({ presets }: Props) {
                     setError(null);
                     setEditingSlug((cur) => (cur === preset.slug ? null : preset.slug));
                   }}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-edge-strong bg-surface-card px-2.5 py-1 text-xs font-medium text-content-secondary hover:bg-surface-page"
                 >
                   {editingSlug === preset.slug ? 'Close' : 'Edit'}
                 </button>
@@ -388,7 +391,7 @@ export function ThemePresetsTable({ presets }: Props) {
       </table>
 
       {editingRow && (
-        <div className="border-t border-gray-200">
+        <div className="border-t border-edge">
           <PresetEditForm
             key={editingRow.slug}
             row={editingRow}

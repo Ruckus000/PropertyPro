@@ -8,25 +8,38 @@ import { describe, it, expect } from 'vitest';
 import { staleBadge } from '@/lib/utils/stale-badge';
 
 describe('stale demo badge', () => {
-  it('returns yellow badge for 10-19 day old demo', () => {
-    const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
-    const badge = staleBadge(fifteenDaysAgo);
+  // Asserted on the SEMANTIC role, not the colour name: after the P3-6 token
+  // migration the palette is an implementation detail (yellow became
+  // status-warning/amber, red became status-danger), and a test that pins hues
+  // breaks on every re-theme while proving nothing about the escalation.
+  const days = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+
+  it('returns a warning badge for a 10-19 day old demo', () => {
+    const badge = staleBadge(days(15));
     expect(badge.label).toBe('10+ days');
-    expect(badge.className).toContain('yellow');
+    expect(badge.className).toContain('status-warning');
   });
 
-  it('returns orange badge for 20-29 day old demo', () => {
-    const twentyFiveDaysAgo = new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString();
-    const badge = staleBadge(twentyFiveDaysAgo);
+  it('returns the middle escalation badge for a 20-29 day old demo', () => {
+    const badge = staleBadge(days(25));
     expect(badge.label).toBe('20+ days');
+    // Still raw orange: the token layer has no tier BETWEEN warning and danger.
+    // See the design-tokens:exempt note in stale-badge.ts.
     expect(badge.className).toContain('orange');
   });
 
-  it('returns red badge for 30+ day old demo', () => {
-    const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString();
-    const badge = staleBadge(thirtyFiveDaysAgo);
+  it('returns a danger badge for a 30+ day old demo', () => {
+    const badge = staleBadge(days(35));
     expect(badge.label).toBe('30+ days');
-    expect(badge.className).toContain('red');
+    expect(badge.className).toContain('status-danger');
+  });
+
+  it('keeps all three escalation tiers visually distinct', () => {
+    // The point of the exemption in stale-badge.ts. Collapsing the middle tier
+    // onto `status-warning` would make 10+ and 20+ render identically, which no
+    // per-tier assertion above would catch on its own.
+    const tiers = [days(15), days(25), days(35)].map((d) => staleBadge(d).className);
+    expect(new Set(tiers).size).toBe(3);
   });
 });
 

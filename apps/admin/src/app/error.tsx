@@ -26,18 +26,18 @@ export default function Error({ error, reset }: ErrorProps) {
 
   return (
     <main id="main-content" className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+      <p className="text-xs font-semibold uppercase tracking-wide text-content-tertiary">
         Operator Console
       </p>
-      <h1 className="mt-3 text-2xl font-semibold text-gray-900">
+      <h1 className="mt-3 text-2xl font-semibold text-content">
         Something went wrong
       </h1>
-      <p className="mt-3 max-w-md text-sm text-gray-600">
+      <p className="mt-3 max-w-md text-sm text-content-secondary">
         We couldn&apos;t load this page. Try again, and if it keeps happening
         include the reference below when reporting it.
       </p>
       {error.digest && (
-        <p className="mt-3 font-mono text-xs text-gray-400">
+        <p className="mt-3 font-mono text-xs text-content-disabled">
           Reference: {error.digest}
         </p>
       )}
@@ -51,7 +51,7 @@ export default function Error({ error, reset }: ErrorProps) {
         </button>
         <a
           href="/dashboard"
-          className="inline-flex rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-coral-500 focus:ring-offset-2"
+          className="inline-flex rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-page focus:outline-none focus:ring-2 focus:ring-coral-500 focus:ring-offset-2"
         >
           Go to dashboard
         </a>

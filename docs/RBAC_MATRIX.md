@@ -29,6 +29,35 @@ Per [ADR-006](./adr/ADR-006-root-manager-role-model.md), a community membership 
 - `platform_admin` is system-scoped — not stored in `user_roles`.
 - Apartments have no designations and no `isUnitOwner=true` residents.
 
+### Root-exclusive powers — NOT matrix cells
+
+ADR-006 §2 names exactly four powers that only `root_manager` holds. **None of
+them is expressible in the permission matrix below**, and none ever will be: the
+matrix has a single `manager` row that `property_manager` and `root_manager`
+both resolve to, so a matrix cell structurally cannot tell them apart. Reading
+`settings write` as "can do billing" is the specific mistake this section exists
+to prevent — it is true for property managers, and billing is not.
+
+| Power | Enforced at |
+|---|---|
+| Role assignment | `api/v1/communities/role-assignments/route.ts`, `api/v1/communities/designations/route.ts` |
+| Root transfer | `api/v1/communities/transfer-root/route.ts` |
+| Billing / subscription | `api/v1/subscribe/route.ts`, `api/v1/subscribe/change-plan/route.ts`, `(authenticated)/billing/portal/route.ts` |
+| Community deletion | `api/v1/communities/delete/route.ts` (POST + DELETE) |
+
+All of them gate on `requireRootManager` (`apps/web/src/lib/api/role-guard.ts`),
+except `/billing/portal`, which must **redirect** rather than throw and so uses
+`hasRole(membership, ['root_manager'])`. `canManageBilling`
+(`packages/shared/src/billing/permissions.ts`) is the matching client-side
+predicate; `canViewBilling` is the broader read-only tier.
+`apps/web/__tests__/api/root-exclusive-routes.test.ts` fails the build if any of
+these reverts to `settings:write`.
+
+Deliberately **outside** the set: `POST /api/v1/account/delete` (account, not
+community, deletion), `POST /api/v1/communities/[id]/cancel` (billing-group
+ownership — a separate authority axis), and `/api/v1/stripe/connect/*` (the
+community's inbound dues collection, not PropertyPro's subscription).
+
 ## Permission resolution & the underlying matrix
 
 `checkPermissionV2()` routes the v3 role to the policy table below, which is **still keyed on the legacy role names** during the bilingual transition (collapsed to three columns in the Phase 4 cleanup):
@@ -36,7 +65,9 @@ Per [ADR-006](./adr/ADR-006-root-manager-role-model.md), a community membership 
 - `resident` → `owner` or `tenant` column (by `isUnitOwner`).
 - `property_manager` / `root_manager` / `pm_admin` → `property_manager_admin` column (the uniform full-operational policy). *(Transitional exception: a `property_manager` row that still carries a per-membership `permissions` JSONB resolves from that JSONB until the product-signed-off uniform-permissions step ships with the Phase 4 migration.)*
 
-**Deferred:** making `property_manager` permissions uniform in `checkPermissionV2` (a widening for the minority of rows with restricted preset-derived permissions); moving billing / community-deletion to root-only (Phase 3.4, gated on claim-root adoption). See ADR-006 → Transition status.
+**Deferred:** making `property_manager` permissions uniform in `checkPermissionV2` (a widening for the minority of rows with restricted preset-derived permissions). See ADR-006 → Transition status.
+
+**Shipped 2026-08-07 (R3-03):** billing and community deletion are now root-only — see *Root-exclusive powers* above. They are enforced outside the matrix, so nothing in the table below changed.
 
 ---
 

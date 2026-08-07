@@ -10,7 +10,15 @@ All API routes live under `apps/web/src/app/api/v1/`. Tenant scoping is handled 
 
 Every API route handler must:
 1. Wrap in `withErrorHandler` for consistent error responses
-2. Call `requirePermission(resource, action)` for authorization
+2. Call `requirePermission(resource, action)` for authorization —
+   **except the four root-exclusive powers** (role assignment, billing/
+   subscription, community deletion, root transfer), which MUST use
+   `requireRootManager` from `@/lib/api/role-guard`. `requirePermission(...,
+   'settings', 'write')` cannot express root-exclusivity: the RBAC matrix
+   collapses `property_manager` and `root_manager` onto one `manager` row, so
+   it silently admits every property manager. See ADR-006 §2 and
+   `apps/web/__tests__/api/root-exclusive-routes.test.ts`, which fails the
+   build if one of those routes reverts to `settings:write`.
 3. Validate request bodies with Zod schemas
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail

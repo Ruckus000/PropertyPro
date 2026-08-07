@@ -46,7 +46,7 @@ export function ReassignRootControl({ communityId }: ReassignRootControlProps) {
   }
 
   if (status === 'done') {
-    return <span className="text-sm text-green-700">{message}</span>;
+    return <span className="text-sm text-status-success">{message}</span>;
   }
 
   return (
@@ -57,19 +57,19 @@ export function ReassignRootControl({ communityId }: ReassignRootControlProps) {
           value={newUserId}
           onChange={(e) => setNewUserId(e.target.value)}
           placeholder="property_manager user id"
-          className="w-72 rounded-md border border-gray-300 px-2 py-1 text-sm"
+          className="w-72 rounded-md border border-edge-strong px-2 py-1 text-sm"
         />
         <button
           type="button"
           onClick={submit}
           disabled={status === 'saving'}
-          className="rounded-md bg-gray-900 px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-interactive px-3 py-1 text-sm font-medium text-content-inverse disabled:opacity-50"
         >
           {status === 'saving' ? 'Reassigning…' : 'Reassign root'}
         </button>
       </div>
       {message && status === 'error' && (
-        <span className="text-sm text-red-600">{message}</span>
+        <span className="text-sm text-status-danger">{message}</span>
       )}
     </div>
   );

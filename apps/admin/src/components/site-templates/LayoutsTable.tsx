@@ -36,9 +36,9 @@ const TIERS: LayoutRow['tier'][] = ['essentials', 'professional', 'pm'];
 
 function TierBadge({ tier }: { tier: LayoutRow['tier'] }) {
   const palette: Record<LayoutRow['tier'], string> = {
-    essentials: 'bg-blue-100 text-blue-800',
-    professional: 'bg-purple-100 text-purple-800',
-    pm: 'bg-amber-100 text-amber-800',
+    essentials: 'bg-status-info-subtle text-status-info',
+    professional: 'bg-purple-100 text-purple-800', // design-tokens:exempt — categorical PLAN chip, not a status; design.md keeps plan chips on their own scale
+    pm: 'bg-status-warning-subtle text-status-warning',
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${palette[tier]}`}>
@@ -79,30 +79,30 @@ function LayoutEditForm({
   return (
     <form
       data-testid={`layout-edit-form-${row.slug}`}
-      className="space-y-3 bg-gray-50 px-4 py-4"
+      className="space-y-3 bg-surface-page px-4 py-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (!nameEmpty) onSave(draft);
       }}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block text-xs font-medium text-gray-600">
+        <label className="block text-xs font-medium text-content-secondary">
           Display name
           <input
             data-testid={`layout-edit-displayName-${row.slug}`}
             type="text"
             value={draft.displayName}
             onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm text-content"
           />
         </label>
-        <label className="block text-xs font-medium text-gray-600">
+        <label className="block text-xs font-medium text-content-secondary">
           Tier
           <select
             data-testid={`layout-edit-tier-${row.slug}`}
             value={draft.tier}
             onChange={(e) => setDraft({ ...draft, tier: e.target.value as LayoutRow['tier'] })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm capitalize text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm capitalize text-content"
           >
             {TIERS.map((t) => (
               <option key={t} value={t}>
@@ -111,29 +111,29 @@ function LayoutEditForm({
             ))}
           </select>
         </label>
-        <label className="block text-xs font-medium text-gray-600 sm:col-span-2">
+        <label className="block text-xs font-medium text-content-secondary sm:col-span-2">
           Tagline
           <input
             data-testid={`layout-edit-tagline-${row.slug}`}
             type="text"
             value={draft.tagline ?? ''}
             onChange={(e) => setDraft({ ...draft, tagline: e.target.value })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm text-content"
           />
         </label>
-        <label className="block text-xs font-medium text-gray-600 sm:col-span-2">
+        <label className="block text-xs font-medium text-content-secondary sm:col-span-2">
           Description
           <textarea
             data-testid={`layout-edit-description-${row.slug}`}
             rows={2}
             value={draft.description ?? ''}
             onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900"
+            className="mt-1 block w-full rounded-md border border-edge-strong px-2 py-1 text-sm text-content"
           />
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-4">
-        <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+        <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
           <input
             data-testid={`layout-edit-featured-${row.slug}`}
             type="checkbox"
@@ -142,7 +142,7 @@ function LayoutEditForm({
           />
           Featured
         </label>
-        <label className="inline-flex items-center gap-2 text-xs text-gray-700">
+        <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
           <input
             data-testid={`layout-edit-archived-${row.slug}`}
             type="checkbox"
@@ -153,7 +153,7 @@ function LayoutEditForm({
         </label>
         <div className="ml-auto flex items-center gap-2">
           {error && (
-            <span role="alert" className="text-xs text-rose-600">
+            <span role="alert" className="text-xs text-status-danger">
               {error}
             </span>
           )}
@@ -161,7 +161,7 @@ function LayoutEditForm({
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-md border border-edge-strong bg-surface-card px-3 py-1 text-xs font-medium text-content-secondary hover:bg-surface-page disabled:opacity-50"
           >
             Cancel
           </button>
@@ -211,8 +211,8 @@ export function LayoutsTable({ layouts }: Props) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-6 py-12 text-center">
-        <p className="text-sm text-gray-500">No layouts configured.</p>
+      <div className="rounded-md border border-dashed border-edge-strong bg-surface-page px-6 py-12 text-center">
+        <p className="text-sm text-content-tertiary">No layouts configured.</p>
       </div>
     );
   }
@@ -220,40 +220,43 @@ export function LayoutsTable({ layouts }: Props) {
   const editingRow = editingSlug ? rows.find((r) => r.slug === editingSlug) : undefined;
 
   return (
-    <div className="overflow-hidden rounded-md border border-gray-200 bg-white">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+      <table className="min-w-full divide-y divide-edge">
+        <thead className="bg-surface-page">
           <tr>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Layout</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Slug</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Default Preset</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Tier</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Status</th>
-            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Version</th>
-            <th scope="col" className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Layout</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Slug</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Default Preset</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Tier</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Status</th>
+            <th scope="col" className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Version</th>
+            <th scope="col" className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-tertiary">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200">
+        <tbody className="divide-y divide-edge">
           {rows.map((layout) => (
             <tr key={layout.id} data-testid={`layout-row-${layout.slug}`}>
               <td className="px-4 py-3 align-top">
                 <div className="flex items-center gap-2">
                   {layout.isFeatured && (
-                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" aria-label="Featured" />
+                    <Star
+                      className="h-3.5 w-3.5 fill-amber-400 text-amber-400" // design-tokens:exempt — featured-star gold; status-premium is gold-800, a dark bronze that reads as a DISABLED star
+                      aria-label="Featured"
+                    />
                   )}
-                  <span className="text-sm font-medium text-gray-900">{layout.displayName}</span>
+                  <span className="text-sm font-medium text-content">{layout.displayName}</span>
                 </div>
-                {layout.tagline && <p className="mt-0.5 text-xs italic text-gray-600">{layout.tagline}</p>}
-                {layout.description && <p className="mt-1 max-w-md text-xs text-gray-500">{layout.description}</p>}
+                {layout.tagline && <p className="mt-0.5 text-xs italic text-content-secondary">{layout.tagline}</p>}
+                {layout.description && <p className="mt-1 max-w-md text-xs text-content-tertiary">{layout.description}</p>}
               </td>
               <td className="px-4 py-3 align-top">
-                <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{layout.slug}</code>
+                <code className="rounded bg-surface-muted px-1.5 py-0.5 text-xs text-content-secondary">{layout.slug}</code>
               </td>
-              <td className="px-4 py-3 align-top text-xs text-gray-700">
+              <td className="px-4 py-3 align-top text-xs text-content-secondary">
                 {layout.defaultPresetSlug ? (
-                  <code className="rounded bg-gray-100 px-1.5 py-0.5">{layout.defaultPresetSlug}</code>
+                  <code className="rounded bg-surface-muted px-1.5 py-0.5">{layout.defaultPresetSlug}</code>
                 ) : (
-                  <span className="text-gray-400">—</span>
+                  <span className="text-content-disabled">—</span>
                 )}
               </td>
               <td className="px-4 py-3 align-top">
@@ -261,18 +264,18 @@ export function LayoutsTable({ layouts }: Props) {
               </td>
               <td className="px-4 py-3 align-top">
                 {layout.isArchived ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                  <span className="inline-flex items-center gap-1 text-xs text-content-tertiary">
                     <Archive className="h-3 w-3" aria-hidden="true" />
                     Archived
                   </span>
                 ) : (
-                  <span className="text-xs text-green-700">Active</span>
+                  <span className="text-xs text-status-success">Active</span>
                 )}
               </td>
-              <td className="px-4 py-3 align-top text-xs text-gray-600">{layout.version}</td>
+              <td className="px-4 py-3 align-top text-xs text-content-secondary">{layout.version}</td>
               <td className="px-4 py-3 align-top text-right">
                 {savedSlug === layout.slug && editingSlug !== layout.slug && (
-                  <span className="mr-2 text-xs text-green-700">Saved</span>
+                  <span className="mr-2 text-xs text-status-success">Saved</span>
                 )}
                 <button
                   type="button"
@@ -281,7 +284,7 @@ export function LayoutsTable({ layouts }: Props) {
                     setError(null);
                     setEditingSlug((cur) => (cur === layout.slug ? null : layout.slug));
                   }}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-edge-strong bg-surface-card px-2.5 py-1 text-xs font-medium text-content-secondary hover:bg-surface-page"
                 >
                   {editingSlug === layout.slug ? 'Close' : 'Edit'}
                 </button>
@@ -292,7 +295,7 @@ export function LayoutsTable({ layouts }: Props) {
       </table>
 
       {editingRow && (
-        <div className="border-t border-gray-200">
+        <div className="border-t border-edge">
           <LayoutEditForm
             key={editingRow.slug}
             row={editingRow}

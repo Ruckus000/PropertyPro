@@ -132,10 +132,10 @@ export function StartSessionDialog({
       aria-modal="true"
       aria-labelledby="start-session-title"
     >
-      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+      <div className="w-full max-w-md rounded-lg bg-surface-card shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 id="start-session-title" className="text-base font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-edge px-6 py-4">
+          <h2 id="start-session-title" className="text-base font-semibold text-content">
             Start Support Session
           </h2>
           <button
@@ -145,7 +145,7 @@ export function StartSessionDialog({
             // Escape handler's `!submitting` guard entirely — one click
             // mid-POST and the session is still created server-side.
             disabled={submitting}
-            className="rounded p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-coral-600"
+            className="rounded p-1 text-content-disabled hover:text-content-secondary disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-coral-600"
             aria-label="Close dialog"
           >
             <X size={18} aria-hidden="true" />
@@ -153,7 +153,7 @@ export function StartSessionDialog({
         </div>
 
         {/* Warning banner */}
-        <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg bg-status-warning-bg p-3 text-sm text-status-warning">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
           <p>
             <strong>Read-only mode.</strong> All actions are logged and visible to the community
@@ -166,7 +166,7 @@ export function StartSessionDialog({
           <div>
             <label
               htmlFor="target-user"
-              className="mb-1 block text-sm font-medium text-gray-700"
+              className="mb-1 block text-sm font-medium text-content-secondary"
             >
               Impersonate user <span aria-hidden="true">*</span>
             </label>
@@ -175,7 +175,7 @@ export function StartSessionDialog({
               required
               value={targetUserId}
               onChange={(e) => setTargetUserId(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+              className="w-full rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             >
               <option value="">Select a member…</option>
               {members.map((m) => (
@@ -190,7 +190,7 @@ export function StartSessionDialog({
           <div>
             <label
               htmlFor="session-reason"
-              className="mb-1 block text-sm font-medium text-gray-700"
+              className="mb-1 block text-sm font-medium text-content-secondary"
             >
               Reason <span aria-hidden="true">*</span>
             </label>
@@ -202,7 +202,7 @@ export function StartSessionDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Describe why support access is needed…"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             />
           </div>
 
@@ -210,9 +210,9 @@ export function StartSessionDialog({
           <div>
             <label
               htmlFor="ticket-id"
-              className="mb-1 block text-sm font-medium text-gray-700"
+              className="mb-1 block text-sm font-medium text-content-secondary"
             >
-              Ticket ID <span className="text-gray-400">(optional)</span>
+              Ticket ID <span className="text-content-disabled">(optional)</span>
             </label>
             <input
               id="ticket-id"
@@ -220,12 +220,12 @@ export function StartSessionDialog({
               value={ticketId}
               onChange={(e) => setTicketId(e.target.value)}
               placeholder="e.g. SUPPORT-1234"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
             />
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            <div className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger" role="alert">
               {error}
             </div>
           )}
@@ -236,7 +236,7 @@ export function StartSessionDialog({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page disabled:opacity-50"
             >
               Cancel
             </button>

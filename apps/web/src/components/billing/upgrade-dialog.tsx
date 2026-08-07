@@ -11,7 +11,7 @@
  * Three role-aware footers:
  *   - upgrade  → "Upgrade now" → navigates to /settings/billing/change-plan
  *                (which owns the Stripe handoff via /api/v1/subscribe[/change-plan])
- *   - request  → "Notify your board" → POST /api/v1/billing/upgrade-requests
+ *   - request  → "Request upgrade" → POST /api/v1/billing/upgrade-requests
  *   - hidden   → never opens for tenants in normal flow; renders a no-CTA
  *                fallback if it ever does.
  */
@@ -295,7 +295,7 @@ function DialogFooterActions({
           >
             <Check size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span>
-              Request sent. Your board president and CAM have been notified.
+              Request sent. Your community&rsquo;s root manager has been notified.
             </span>
           </div>
           <div className="flex justify-end">
@@ -309,14 +309,14 @@ function DialogFooterActions({
     return (
       <div className="space-y-2">
         <p className="text-xs text-content-tertiary">
-          We&rsquo;ll send a notification to your board president and CAM.
+          We&rsquo;ll send a notification to your community&rsquo;s root manager.
         </p>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             Maybe later
           </Button>
           <Button onClick={onNotify} loading={pending}>
-            Notify your board
+            Request upgrade
           </Button>
         </div>
       </div>

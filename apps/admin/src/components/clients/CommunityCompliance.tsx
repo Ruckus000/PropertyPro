@@ -44,26 +44,26 @@ const STATUS_CONFIG: Record<ComplianceStatus, { label: string; icon: typeof Chec
   met: {
     label: 'Met',
     icon: CheckCircle,
-    className: 'text-green-600',
-    badgeClass: 'bg-green-100 text-green-700',
+    className: 'text-status-success',
+    badgeClass: 'bg-status-success-subtle text-status-success',
   },
   overdue: {
     label: 'Overdue',
     icon: AlertTriangle,
-    className: 'text-red-600',
-    badgeClass: 'bg-red-100 text-red-700',
+    className: 'text-status-danger',
+    badgeClass: 'bg-status-danger-subtle text-status-danger',
   },
   pending: {
     label: 'Pending',
     icon: Clock,
-    className: 'text-yellow-600',
-    badgeClass: 'bg-yellow-100 text-yellow-700',
+    className: 'text-status-warning',
+    badgeClass: 'bg-status-warning-subtle text-status-warning',
   },
   not_applicable: {
     label: 'N/A',
     icon: MinusCircle,
-    className: 'text-gray-400',
-    badgeClass: 'bg-gray-100 text-gray-500',
+    className: 'text-content-disabled',
+    badgeClass: 'bg-surface-muted text-content-tertiary',
   },
 };
 
@@ -106,14 +106,14 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 size={20} className="animate-spin text-gray-400" />
+        <Loader2 size={20} className="animate-spin text-content-disabled" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger">
         {error}
       </div>
     );
@@ -121,8 +121,8 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
 
   if (!summary || summary.total === 0) {
     return (
-      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white">
-        <p className="text-sm text-gray-400">No compliance checklist items</p>
+      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-edge-strong bg-surface-card">
+        <p className="text-sm text-content-disabled">No compliance checklist items</p>
       </div>
     );
   }
@@ -141,9 +141,9 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid gap-3 sm:grid-cols-5">
-        <div className="rounded-lg border border-gray-200 bg-white p-4 text-center shadow-e1">
-          <p className="text-2xl font-semibold text-gray-900">{scorePercent}%</p>
-          <p className="text-xs text-gray-500">Score</p>
+        <div className="rounded-lg border border-edge bg-surface-card p-4 text-center shadow-e1">
+          <p className="text-2xl font-semibold text-content">{scorePercent}%</p>
+          <p className="text-xs text-content-tertiary">Score</p>
         </div>
         {(['met', 'overdue', 'pending', 'not_applicable'] as ComplianceStatus[]).map((status) => {
           const config = STATUS_CONFIG[status];
@@ -158,14 +158,14 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
               type="button"
               onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
               className={`rounded-lg border p-4 text-center transition-colors ${
-                statusFilter === status ? 'border-coral-300 bg-coral-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                statusFilter === status ? 'border-coral-300 bg-coral-50' : 'border-edge bg-surface-card hover:bg-surface-page'
               } shadow-e1`}
             >
               <div className="flex items-center justify-center gap-1.5">
                 <Icon size={14} className={config.className} />
-                <p className="text-2xl font-semibold text-gray-900">{count}</p>
+                <p className="text-2xl font-semibold text-content">{count}</p>
               </div>
-              <p className="text-xs text-gray-500">{config.label}</p>
+              <p className="text-xs text-content-tertiary">{config.label}</p>
             </button>
           );
         })}
@@ -173,11 +173,11 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <Filter size={14} className="text-gray-400" />
+        <Filter size={14} className="text-content-disabled" />
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+          className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary"
         >
           <option value="all">All Categories</option>
           {categories.map((cat) => (
@@ -195,30 +195,30 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
             Clear filters
           </button>
         )}
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-content-disabled">
           {filteredItems.length} of {items.length} items
         </span>
       </div>
 
       {/* Checklist Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-e1">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
+        <table className="min-w-full divide-y divide-edge">
+          <thead className="bg-surface-page">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Requirement</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Category</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Statute</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Deadline</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Document</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Requirement</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Category</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Statute</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Deadline</th>
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">Document</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-edge-subtle">
             {filteredItems.map((item) => {
               const config = STATUS_CONFIG[item.status];
               const Icon = config.icon;
               return (
-                <tr key={item.id} className="hover:bg-gray-50">
+                <tr key={item.id} className="hover:bg-surface-page">
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${config.badgeClass}`}>
                       <Icon size={12} />
@@ -226,31 +226,31 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                    <p className="text-sm font-medium text-content">{item.title}</p>
                     {item.description && (
-                      <p className="mt-0.5 text-xs text-gray-400 line-clamp-2">{item.description}</p>
+                      <p className="mt-0.5 text-xs text-content-disabled line-clamp-2">{item.description}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
+                  <td className="px-4 py-3 text-xs text-content-tertiary">
                     {CATEGORY_LABELS[item.category] ?? item.category.replace(/_/g, ' ')}
                   </td>
-                  <td className="px-4 py-3 text-xs font-mono text-gray-500">
+                  <td className="px-4 py-3 text-xs font-mono text-content-tertiary">
                     {item.statute_reference ?? '—'}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
+                  <td className="px-4 py-3 text-xs text-content-tertiary">
                     {item.deadline ? (
-                      <span className={item.status === 'overdue' ? 'font-medium text-red-600' : ''}>
+                      <span className={item.status === 'overdue' ? 'font-medium text-status-danger' : ''}>
                         {format(new Date(item.deadline), 'MMM d, yyyy')}
                       </span>
                     ) : (
-                      <span className="text-gray-300">None</span>
+                      <span className="text-content-disabled">None</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
+                  <td className="px-4 py-3 text-xs text-content-tertiary">
                     {item.document_id ? (
-                      <span className="text-green-600">Linked</span>
+                      <span className="text-status-success">Linked</span>
                     ) : (
-                      <span className="text-gray-300">Missing</span>
+                      <span className="text-content-disabled">Missing</span>
                     )}
                   </td>
                 </tr>
@@ -258,7 +258,7 @@ export function CommunityCompliance({ communityId }: CommunityComplianceProps) {
             })}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-content-disabled">
                   No items match the current filters
                 </td>
               </tr>

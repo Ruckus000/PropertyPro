@@ -105,6 +105,140 @@ const config: Config = {
       // packages/ui only.
       sky: colors.sky,
       pink: colors.pink,
+
+      // ─────────────────────────────────────────────────────────────────────
+      // Semantic token families (P3-6, admin semantic-token migration).
+      //
+      // Mirrors apps/web/tailwind.config.ts. `src/styles/globals.css` already
+      // imports packages/ui/src/styles/tokens.css, so every var() below already
+      // resolves at runtime — admin simply never mapped them into Tailwind
+      // class names. That is the whole gap this bridge closes.
+      //
+      // These live INSIDE the closed `theme.colors` object, not `extend`, so
+      // the palette stays finite (the point of the hardening Phase 4 lockdown).
+      //
+      // coral/blue/gray stay alongside for the duration of the drain: the
+      // namespaces are disjoint (`gray-*` vs `content-*`), so raw and semantic
+      // coexist cleanly. Removing them before the files are migrated would
+      // blank out ~1,088 class usages at once. They come out only once the
+      // drain is complete.
+      //
+      // NOTE: each entry below is a bare custom-property reference with no
+      // `<alpha-value>` channel, so slash-opacity (`bg-interactive/10`) compiles
+      // to ZERO CSS and renders as nothing. `guard:design-tokens`'s
+      // `slash-opacity-semantic` rule becomes applicable to admin the moment
+      // this block exists — reach for a solid `-subtle`/`-bg`/`-hover` token, or
+      // built-in `white`/`black` alpha for genuine translucency.
+      // ─────────────────────────────────────────────────────────────────────
+
+      // Text — usage: text-content, text-content-secondary, …
+      content: {
+        DEFAULT: 'var(--text-primary)',
+        secondary: 'var(--text-secondary)',
+        tertiary: 'var(--text-tertiary)',
+        disabled: 'var(--text-disabled)',
+        placeholder: 'var(--text-placeholder)',
+        inverse: 'var(--text-inverse)',
+        brand: 'var(--text-brand)',
+        link: 'var(--text-link)',
+        'link-hover': 'var(--text-link-hover)',
+      },
+
+      // Backgrounds — usage: bg-surface-page, bg-surface-card, …
+      surface: {
+        page: 'var(--surface-page)',
+        card: 'var(--surface-card)',
+        subtle: 'var(--surface-subtle)',
+        muted: 'var(--surface-muted)',
+        elevated: 'var(--surface-elevated)',
+        sunken: 'var(--surface-sunken)',
+        hover: 'var(--surface-hover)',
+        inverse: 'var(--surface-inverse)',
+        'inverse-subtle': 'var(--surface-inverse-subtle)',
+      },
+
+      // Borders — usage: border-edge, border-edge-strong, …
+      edge: {
+        DEFAULT: 'var(--border-default)',
+        subtle: 'var(--border-subtle)',
+        strong: 'var(--border-strong)',
+        muted: 'var(--border-muted)',
+        focus: 'var(--border-focus)',
+        error: 'var(--border-error)',
+      },
+
+      // Interactive — usage: bg-interactive, hover:bg-interactive-hover, …
+      interactive: {
+        DEFAULT: 'var(--interactive-primary)',
+        hover: 'var(--interactive-primary-hover)',
+        active: 'var(--interactive-primary-active)',
+        disabled: 'var(--interactive-disabled)',
+        subtle: 'var(--interactive-subtle)',
+        'subtle-hover': 'var(--interactive-subtle-hover)',
+        muted: 'var(--interactive-muted)',
+      },
+
+      // Status — usage: text-status-success, bg-status-danger-subtle, …
+      status: {
+        success: 'var(--status-success)',
+        'success-bg': 'var(--status-success-bg)',
+        'success-border': 'var(--status-success-border)',
+        'success-subtle': 'var(--status-success-subtle)',
+
+        warning: 'var(--status-warning)',
+        'warning-bg': 'var(--status-warning-bg)',
+        'warning-border': 'var(--status-warning-border)',
+        'warning-subtle': 'var(--status-warning-subtle)',
+
+        danger: 'var(--status-danger)',
+        'danger-bg': 'var(--status-danger-bg)',
+        'danger-border': 'var(--status-danger-border)',
+        'danger-subtle': 'var(--status-danger-subtle)',
+
+        info: 'var(--status-info)',
+        'info-bg': 'var(--status-info-bg)',
+        'info-border': 'var(--status-info-border)',
+        'info-subtle': 'var(--status-info-subtle)',
+
+        neutral: 'var(--status-neutral)',
+        'neutral-bg': 'var(--status-neutral-bg)',
+        'neutral-border': 'var(--status-neutral-border)',
+        'neutral-subtle': 'var(--status-neutral-subtle)',
+
+        // `owner` and `board` are NOT in apps/web's config, but the tokens are
+        // defined in tokens.css and admin uses `owner` for the root-manager
+        // role chip. Omitting them is silent: an undeclared family emits no CSS
+        // at all, so the chip renders with no background and inherited text —
+        // no error, no guard failure, just a chip that quietly disappears.
+        owner: 'var(--status-owner)',
+        'owner-bg': 'var(--status-owner-bg)',
+        'owner-border': 'var(--status-owner-border)',
+        'owner-subtle': 'var(--status-owner-subtle)',
+
+        board: 'var(--status-board)',
+        'board-bg': 'var(--status-board-bg)',
+        'board-border': 'var(--status-board-border)',
+        'board-subtle': 'var(--status-board-subtle)',
+
+        brand: 'var(--status-brand)',
+        'brand-bg': 'var(--status-brand-bg)',
+        'brand-border': 'var(--status-brand-border)',
+        'brand-subtle': 'var(--status-brand-subtle)',
+
+        premium: 'var(--status-premium)',
+        'premium-bg': 'var(--status-premium-bg)',
+        'premium-border': 'var(--status-premium-border)',
+        'premium-subtle': 'var(--status-premium-subtle)',
+      },
+
+      // Navigation
+      nav: {
+        'text-active': 'var(--nav-text-active)',
+        'text-inactive': 'var(--nav-text-inactive)',
+        'text-muted': 'var(--nav-text-muted)',
+        'bg-active': 'var(--nav-bg-active)',
+        'bg-hover': 'var(--nav-bg-hover)',
+      },
     },
     extend: {
       fontFamily: {
@@ -144,6 +278,13 @@ const config: Config = {
         xl: '20px',
         '2xl': '24px',
       },
+      // Focus-ring utilities (`ring-focus`, `ring-error`), matching web.
+      // Drains need these — never suppress :focus-visible to avoid a raw ring color.
+      ringColor: {
+        focus: 'var(--border-focus)',
+        error: 'var(--border-error)',
+      },
+
       boxShadow: {
         e0: 'none',
         e1: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',

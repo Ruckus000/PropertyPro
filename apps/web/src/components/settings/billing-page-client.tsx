@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useReauth } from '@/hooks/use-reauth';
+import { useMyRootless } from '@/hooks/use-claim-root';
 import { ReauthModal } from '@/components/auth/reauth-modal';
 
 import { PLAN_FEATURES, LEGACY_PLAN_ALIASES } from '@propertypro/shared';
@@ -78,6 +79,82 @@ const VARIANT_CLASSES: Record<string, { text: string; bg: string; border: string
   neutral: { text: 'text-content-secondary', bg: 'bg-surface-secondary', border: 'border-edge' },
 };
 
+// ── Read-only notice (R3-03) ──
+
+/**
+ * Explains to a member who cannot manage billing why, and — critically — what
+ * to do about it.
+ *
+ * The property-manager case is the one that matters. After R3-03 a PM in a
+ * community whose root seat is VACANT can no longer purchase, and nobody else
+ * can either: the community is stuck until someone claims root. That is a
+ * recoverable state, and this notice is what makes it recoverable in the place
+ * the user actually hit the wall.
+ *
+ * Deliberately NOT `ClaimRootBanner`: that component is dismissible and writes
+ * a SHARED `claim-root-dismissed` sessionStorage key, so dismissing it once on
+ * the dashboard would silently suppress it here too — on a surface where being
+ * suppressed means staying locked out.
+ */
+function BillingReadOnlyNotice({
+  communityId,
+  canView,
+  bounced,
+}: {
+  communityId: number;
+  canView: boolean;
+  bounced: boolean;
+}) {
+  // `canView` gates the QUERY, not the copy: only the management tier can hold a
+  // rootless property_manager membership, so a resident's list is always empty
+  // and the request is skipped entirely. With the query disabled
+  // `isRootlessHere` is false, so residents fall through to the
+  // contact-your-root-manager branch without needing a separate arm.
+  const { data: rootless } = useMyRootless(canView);
+  const isRootlessHere = (rootless ?? []).some((c) => c.id === communityId);
+
+  return (
+    <div
+      className={cn(
+        'rounded-[10px] border p-4',
+        bounced
+          ? 'border-status-info-border bg-status-info-subtle'
+          : 'border-edge bg-surface-muted',
+      )}
+      // Announce only when this explains a bounce the user just experienced;
+      // as ambient page content it is not an alert.
+      {...(bounced ? { role: 'status' as const } : {})}
+    >
+      {bounced && (
+        <p className="mb-1 text-sm font-medium text-content">
+          Only the root manager can change billing for this community.
+        </p>
+      )}
+
+      {isRootlessHere ? (
+        <>
+          <p className="text-sm text-content-secondary">
+            This community doesn&apos;t have a root manager yet, so nobody can
+            change billing. As a property manager, you can claim it.
+          </p>
+          <Link
+            href="/dashboard/claim-root"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-[10px] bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-opacity hover:opacity-90"
+          >
+            Claim root manager
+            <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
+        </>
+      ) : (
+        <p className="text-sm text-content-secondary">
+          Contact your community&apos;s root manager to make changes to the
+          billing plan.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Props ──
 
 interface BillingPageClientProps {
@@ -89,7 +166,16 @@ interface BillingPageClientProps {
   subscriptionInterval: 'month' | 'year' | null;
   stripeCustomerId: string | null;
   paymentFailedAt: string | null;
-  isAdmin: boolean;
+  /**
+   * Management tier — sees plan, status and interval. R3-03: a property
+   * manager keeps this after losing the actions, because hiding billing from
+   * them would make the capability loss invisible.
+   */
+  canView: boolean;
+  /** Root-only — gates every action. Mirrors `requireRootManager` on the routes. */
+  canManage: boolean;
+  /** True when /billing/portal or change-plan bounced a non-root back here. */
+  bouncedFromRootGate?: boolean;
 }
 
 // ── Component ──
@@ -102,7 +188,9 @@ export function BillingPageClient({
   subscriptionInterval,
   stripeCustomerId,
   paymentFailedAt,
-  isAdmin,
+  canView,
+  canManage,
+  bouncedFromRootGate = false,
 }: BillingPageClientProps) {
   const plan = subscriptionPlan ? PLAN_DISPLAY[subscriptionPlan] : null;
   const status = getStatusDisplay(subscriptionStatus);
@@ -166,7 +254,7 @@ export function BillingPageClient({
             <p className="mt-1 text-sm text-content-secondary">
               Please update your payment method to avoid service interruption.
             </p>
-            {hasStripe && isAdmin && (
+            {hasStripe && canManage && (
               <button
                 type="button"
                 onClick={openPortal}
@@ -211,7 +299,7 @@ export function BillingPageClient({
               </span>
             </div>
 
-            {isAdmin && (
+            {canManage && (
               <div className="flex flex-wrap gap-2">
                 <Link
                   href={changePlanUrl}
@@ -242,11 +330,11 @@ export function BillingPageClient({
              way to come back. */
           <div className="py-4 text-center">
             <p className="text-sm text-content-secondary">
-              {isAdmin
+              {canManage
                 ? "This community doesn't have an active subscription yet."
                 : 'No subscription plan found for this community.'}
             </p>
-            {isAdmin && (
+            {canManage && (
               <>
                 <p className="mt-1 text-sm text-content-secondary">
                   Pick a plan to unlock the full platform for {communityName}.
@@ -264,8 +352,8 @@ export function BillingPageClient({
         )}
       </div>
 
-      {/* Quick Links — only for admins with Stripe connected */}
-      {hasStripe && isAdmin && (
+      {/* Quick Links — only for the root manager, with Stripe connected */}
+      {hasStripe && canManage && (
         <div className="rounded-[10px] border border-edge bg-surface-card p-5">
           <h2 className="mb-4 text-base font-semibold">Billing Actions</h2>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -294,13 +382,17 @@ export function BillingPageClient({
         </div>
       )}
 
-      {/* Non-admin notice */}
-      {!isAdmin && hasStripe && (
-        <div className="rounded-[10px] border border-edge bg-surface-secondary p-4">
-          <p className="text-sm text-content-secondary">
-            Contact your community administrator to make changes to the billing plan.
-          </p>
-        </div>
+      {/* Read-only notice — everyone who can see billing but not act on it.
+          Deliberately NOT gated on `hasStripe`: a community with no Stripe
+          customer is exactly the case where someone needs to be told who can
+          set billing up. Gating on it left a page with no actions and no
+          explanation — the worst of both. */}
+      {!canManage && (
+        <BillingReadOnlyNotice
+          communityId={communityId}
+          canView={canView}
+          bounced={bouncedFromRootGate}
+        />
       )}
       <ReauthModal isOpen={reauthOpen} onCancel={reauthCancel} verify={reauthVerify} />
     </div>

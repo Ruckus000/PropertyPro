@@ -72,10 +72,52 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Intentionally-literal files kept frozen in the baseline (do not drain):
   `apps/web/src/app/(marketing)/marketing-theme.css` (marketing palette),
   `apps/web/src/lib/documents/render-authored-html.ts` (authored-doc export styling),
-  `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/` + `apps/admin/`
-  (out of standardization scope until their own migration programs — admin still
-  uses its own Tailwind `blue`/`gray`/`coral` ramps + raw palette classes, not the
-  semantic tokens). **Exception:** admin's *brand* hue was migrated tech-blue →
+  `apps/web/src/styles/mobile.css` + `components/mobile/` + `app/mobile/`
+  (out of standardization scope until their own migration programs).
+
+  > **`apps/admin` is NO LONGER frozen — its migration (audit item P3-6) is
+  > under way and is roughly half done.** Admin's Tailwind config now maps the
+  > full semantic families (`content` / `surface` / `edge` / `interactive` /
+  > `status` / `nav`) to the token custom properties, so new admin code MUST use
+  > semantic classes. Admin **adopts Florida Modern**: surfaces and borders
+  > resolve through the warm `sand` ramp (page `#FBF7F1`, cards `#FFFEFC`,
+  > borders `#EFE7DC`) and status-info is teal, not blue — so the older note
+  > below about "informational blue status badges … intentionally kept blue" is
+  > superseded for every migrated file.
+  >
+  > **Raw-palette drain is COMPLETE except the dark `Sidebar.tsx` internals
+  > (15).** Admin went 1,088 → 15 raw-palette violations; the 33 that remain in
+  > the baseline are `raw-hex`/`arbitrary-font`/`arbitrary-color` in the
+  > demo-preview mockups, which render user-supplied branding and are
+  > legitimately literal.
+  >
+  > **After any batch, and after ANY edit to `apps/admin/tailwind.config.ts`,
+  > run `node scripts/verify-admin-semantic-css.cjs`** (needs a build first). It
+  > asserts every semantic class referenced in admin source actually emits CSS —
+  > a failure mode `guard:design-tokens` cannot see, because it only checks that
+  > raw classes are gone, not that the replacement resolves. An unrecognised
+  > class emits no rule and renders as no style, silently. It caught exactly
+  > that twice: `bg-status-owner-subtle` (admin's config mirrored web's status
+  > family, which omits `owner`/`board`) and `bg-surface-card/30`.
+  >
+  > The sidebar is a genuine gap, not leftover work —
+  > the token layer is single-theme light and its whole dark vocabulary is
+  > `surface-inverse{,-subtle}` + `text-inverse`, with no dark border or
+  > muted-text token. Giving admin a dark-chrome vocabulary is a decision for
+  > packages/tokens.
+  >
+  > Known limitation, same class: the token layer ships a semantic **status**
+  > scale but no **categorical** palette. Community-type chips, plan/block
+  > tiers, the featured star and the three-step staleness escalation stay on raw
+  > ramps behind `design-tokens:exempt`, because the nearest tokens match by
+  > colour and lie about meaning (`status-owner` is violet and means unit
+  > ownership). A categorical palette in packages/tokens would close these.
+  >
+  > Use `node scripts/admin-token-codemod.mjs [--dry] <path...>` for the
+  > remaining files — it encodes the mapping table and reports what it declines
+  > to map rather than approximating.
+
+  **Historical note:** admin's *brand* hue was migrated tech-blue →
   "Florida Modern" coral for cross-surface brand consistency (`coral-*` classes,
   which the guard does not count; informational blue status badges — Trial,
   Cancelled, Converted, community-type/plan chips — intentionally kept blue), and

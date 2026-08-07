@@ -59,8 +59,8 @@ export default async function RootlessCommunitiesPage() {
       <div className="space-y-10 p-6">
         <section>
           <div className="mb-6">
-            <h1 className="text-xl font-semibold text-gray-900">Open Root-Claim Disputes</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-xl font-semibold text-content">Open Root-Claim Disputes</h1>
+            <p className="mt-1 text-sm text-content-tertiary">
               {openDisputes.length === 0
                 ? 'No open disputes.'
                 : `${openDisputes.length} open ${openDisputes.length === 1 ? 'dispute' : 'disputes'}. Reassign root to an existing property manager to resolve.`}
@@ -68,26 +68,26 @@ export default async function RootlessCommunitiesPage() {
           </div>
 
           {openDisputes.length === 0 ? (
-            <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+            <div className="rounded-md border border-edge bg-surface-card p-8 text-center text-sm text-content-tertiary">
               No open root-claim disputes.
             </div>
           ) : (
-            <div className="overflow-hidden rounded-md border border-gray-200 bg-white">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
+            <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+              <table className="min-w-full divide-y divide-edge text-sm">
+                <thead className="bg-surface-page">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Community</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Claimed by</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Disputed by</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Reassign root</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Community</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Claimed by</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Disputed by</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Reassign root</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-edge-subtle">
                   {openDisputes.map((dispute) => (
                     <tr key={dispute.id}>
-                      <td className="px-4 py-3 text-gray-900">{dispute.communityName}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600">{dispute.claimed_user_id}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-600">{dispute.disputed_by_user_id}</td>
+                      <td className="px-4 py-3 text-content">{dispute.communityName}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-content-secondary">{dispute.claimed_user_id}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-content-secondary">{dispute.disputed_by_user_id}</td>
                       <td className="px-4 py-3">
                         <ReassignRootControl communityId={dispute.community_id} />
                       </td>
@@ -101,8 +101,8 @@ export default async function RootlessCommunitiesPage() {
 
         <section>
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Rootless Communities</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-xl font-semibold text-content">Rootless Communities</h2>
+            <p className="mt-1 text-sm text-content-tertiary">
               {communities.length === 0
                 ? 'Every community has a root manager.'
                 : `${communities.length} ${communities.length === 1 ? 'community has' : 'communities have'} no root manager.`}
@@ -110,24 +110,24 @@ export default async function RootlessCommunitiesPage() {
           </div>
 
           {communities.length === 0 ? (
-            <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+            <div className="rounded-md border border-edge bg-surface-card p-8 text-center text-sm text-content-tertiary">
               No rootless communities.
             </div>
           ) : (
-            <div className="overflow-hidden rounded-md border border-gray-200 bg-white">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
+            <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
+              <table className="min-w-full divide-y divide-edge text-sm">
+                <thead className="bg-surface-page">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Name</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Slug</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-500">Reassign root</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Name</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Slug</th>
+                    <th className="px-4 py-3 text-left font-medium text-content-tertiary">Reassign root</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-edge-subtle">
                   {communities.map((community) => (
                     <tr key={community.id}>
-                      <td className="px-4 py-3 text-gray-900">{community.name}</td>
-                      <td className="px-4 py-3 font-mono text-gray-600">{community.slug}</td>
+                      <td className="px-4 py-3 text-content">{community.name}</td>
+                      <td className="px-4 py-3 font-mono text-content-secondary">{community.slug}</td>
                       <td className="px-4 py-3">
                         <ReassignRootControl communityId={community.id} />
                       </td>

@@ -1,7 +1,7 @@
 /**
  * Unit tests for UpgradeDialog (B5 drain).
  *
- * Post-B5: the dialog's "Notify your board" action is drained into the
+ * Post-B5: the dialog's "Request upgrade" action is drained into the
  * `useUpgradeRequest` mutation hook. These tests mock that hook and assert
  * the dialog's request-behavior footer wiring, pending/disabled state, the
  * success status, and the error alert (incl. the exact curly-apostrophe
@@ -42,7 +42,7 @@ describe('UpgradeDialog (request behavior)', () => {
     mutateAsyncMock.mockResolvedValue({ ok: true, notified: 1 });
     renderDialog();
     expect(
-      screen.getByRole('button', { name: /Notify your board/ }),
+      screen.getByRole('button', { name: /Request upgrade/ }),
     ).toBeDefined();
     expect(screen.getByRole('button', { name: /Maybe later/ })).toBeDefined();
   });
@@ -51,7 +51,7 @@ describe('UpgradeDialog (request behavior)', () => {
     mutateAsyncMock.mockResolvedValue({ ok: true, notified: 2 });
     renderDialog();
     await userEvent.click(
-      screen.getByRole('button', { name: /Notify your board/ }),
+      screen.getByRole('button', { name: /Request upgrade/ }),
     );
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalledTimes(1));
     const arg = mutateAsyncMock.mock.calls[0][0];
@@ -65,12 +65,12 @@ describe('UpgradeDialog (request behavior)', () => {
     mutateAsyncMock.mockResolvedValue({ ok: true, notified: 1 });
     renderDialog();
     await userEvent.click(
-      screen.getByRole('button', { name: /Notify your board/ }),
+      screen.getByRole('button', { name: /Request upgrade/ }),
     );
     await waitFor(() =>
       expect(
         screen.getByText(
-          /Request sent\. Your board president and CAM have been notified\./,
+          /Request sent\. Your community.s root manager has been notified\./,
         ),
       ).toBeDefined(),
     );
@@ -82,7 +82,7 @@ describe('UpgradeDialog (request behavior)', () => {
     );
     renderDialog();
     await userEvent.click(
-      screen.getByRole('button', { name: /Notify your board/ }),
+      screen.getByRole('button', { name: /Request upgrade/ }),
     );
     await waitFor(() => {
       const alert = screen.getByRole('alert');
@@ -96,7 +96,7 @@ describe('UpgradeDialog (request behavior)', () => {
     );
     renderDialog();
     await userEvent.click(
-      screen.getByRole('button', { name: /Notify your board/ }),
+      screen.getByRole('button', { name: /Request upgrade/ }),
     );
     await waitFor(() => {
       const alert = screen.getByRole('alert');
@@ -110,7 +110,7 @@ describe('UpgradeDialog (request behavior)', () => {
     mutateAsyncMock.mockRejectedValue('not-an-error');
     renderDialog();
     await userEvent.click(
-      screen.getByRole('button', { name: /Notify your board/ }),
+      screen.getByRole('button', { name: /Request upgrade/ }),
     );
     await waitFor(() => {
       const alert = screen.getByRole('alert');

@@ -33,7 +33,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { requirePermission } from '@/lib/db/access-control';
+import { requireRootManager } from '@/lib/api/role-guard';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { AppError, ValidationError } from '@/lib/api/errors';
 import { resolveStripePrice, getStripeClient } from '@/lib/services/stripe-service';
@@ -48,7 +48,13 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
     const membership = await requireCommunityMembership(communityId, userId);
-    requirePermission(membership, 'settings', 'write');
+    // R3-03: billing is root-exclusive (ADR-006 §2). NOT `settings:write` —
+    // that resolves through the single `manager` matrix row and would admit
+    // every property manager.
+    requireRootManager(
+      membership,
+      'Only the root manager can purchase a plan for this community. If this community has no root manager, a property manager can claim it from the dashboard.',
+    );
 
     const { planId, billingInterval } = body;
 

@@ -137,7 +137,20 @@ export function Sidebar({ collapsed, onToggle, coolingCount: initialCoolingCount
   return (
     <aside
       className={[
-        'flex h-screen flex-col border-r border-gray-200 bg-gray-900 transition-all duration-200',
+        // Only the outer shell migrates to tokens: `bg-surface-inverse-subtle`
+        // resolves to exactly the gray this used, and the right border divides
+        // the sidebar from the light content area, so `border-edge` is correct.
+        //
+        // The dark INTERNALS below (the section dividers, the muted nav labels,
+        // the hover and active pills, the count badge) deliberately stay on raw
+        // ramp classes. The semantic layer is single-theme LIGHT: its entire
+        // dark vocabulary is the two inverse surfaces plus inverse text, with no
+        // dark border or muted-text token, so every mapping for them would be an
+        // approximation. The muted label class in particular means "disabled" on
+        // a light card but "primary nav label" here — same value, opposite
+        // intent. Giving admin a dark-chrome vocabulary is a design-system
+        // decision for packages/tokens, not something to improvise in a drain.
+        'flex h-screen flex-col border-r border-edge bg-surface-inverse-subtle transition-all duration-200',
         collapsed ? 'w-16' : 'w-56',
       ].join(' ')}
     >

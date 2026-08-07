@@ -134,8 +134,8 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 size={16} className="animate-spin text-gray-400" />
-        <span className="ml-2 text-xs text-gray-500">Loading community info...</span>
+        <Loader2 size={16} className="animate-spin text-content-disabled" />
+        <span className="ml-2 text-xs text-content-tertiary">Loading community info...</span>
       </div>
     );
   }
@@ -144,58 +144,58 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
     <form onSubmit={handleSave} className="space-y-3">
       {/* Name */}
       <div>
-        <label className="block text-xs text-gray-500 mb-1">Community Name</label>
+        <label className="block text-xs text-content-tertiary mb-1">Community Name</label>
         <input
           type="text"
           value={form.name}
           onChange={(e) => handleChange('name', e.target.value)}
           maxLength={200}
-          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+          className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
       {/* Address */}
       <div>
-        <label className="block text-xs text-gray-500 mb-1">Address</label>
+        <label className="block text-xs text-content-tertiary mb-1">Address</label>
         <input
           type="text"
           value={form.address_line1}
           onChange={(e) => handleChange('address_line1', e.target.value)}
           maxLength={500}
           placeholder="Street address"
-          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+          className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
         />
       </div>
 
       <div className="grid grid-cols-5 gap-2">
         <div className="col-span-2">
-          <label className="block text-xs text-gray-500 mb-1">City</label>
+          <label className="block text-xs text-content-tertiary mb-1">City</label>
           <input
             type="text"
             value={form.city}
             onChange={(e) => handleChange('city', e.target.value)}
             maxLength={100}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">State</label>
+          <label className="block text-xs text-content-tertiary mb-1">State</label>
           <input
             type="text"
             value={form.state}
             onChange={(e) => handleChange('state', e.target.value.toUpperCase())}
             maxLength={2}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm uppercase focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm uppercase focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
         <div className="col-span-2">
-          <label className="block text-xs text-gray-500 mb-1">ZIP</label>
+          <label className="block text-xs text-content-tertiary mb-1">ZIP</label>
           <input
             type="text"
             value={form.zip_code}
             onChange={(e) => handleChange('zip_code', e.target.value)}
             maxLength={10}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded border border-edge-strong px-2 py-1.5 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
         </div>
       </div>
@@ -213,13 +213,13 @@ export function CommunityEditSection({ demoId, onSaved }: CommunityEditSectionPr
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary hover:bg-surface-page"
         >
           <RotateCcw size={12} />
           Reset
         </button>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        {success && <p className="text-xs text-green-600">Saved</p>}
+        {error && <p className="text-xs text-status-danger">{error}</p>}
+        {success && <p className="text-xs text-status-success">Saved</p>}
       </div>
     </form>
   );

@@ -65,7 +65,9 @@ export async function FeatureGate({
   });
   if (lifecycle === 'lapsed' && isAdminRole(membership.role)) {
     // No tenant redirect branch here: `isAdminRole` is the management tier,
-    // for which getLockedFeatureBehavior is 'upgrade', never 'hidden'.
+    // for which getLockedFeatureBehavior is never 'hidden'. (Since R3-03 it is
+    // 'upgrade' for the root manager and 'request' for a property manager —
+    // the split does not matter here, only that neither is 'hidden'.)
     return (
       <LapsedFeatureScreen
         featureKey={feature}

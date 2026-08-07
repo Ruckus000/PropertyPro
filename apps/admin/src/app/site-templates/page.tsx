@@ -68,8 +68,8 @@ export default async function SiteTemplatesIndexPage() {
       <div className="p-6">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Site Templates</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-xl font-semibold text-content">Site Templates</h1>
+            <p className="mt-1 text-sm text-content-tertiary">
               Code-shipped layouts available to communities. The layout React components
               ship via PR; this catalog edits the public-facing metadata (display name,
               tagline, tier, featured / archived state). Metadata edit lands in a later
@@ -79,25 +79,25 @@ export default async function SiteTemplatesIndexPage() {
           <div className="flex shrink-0 items-center gap-2">
             <Link
               href="/site-templates/block-registry"
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content-secondary hover:bg-surface-page"
             >
               Block Registry →
             </Link>
             <Link
               href="/site-templates/documentation"
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content-secondary hover:bg-surface-page"
             >
               Documentation →
             </Link>
             <Link
               href="/site-templates/theme-presets"
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content-secondary hover:bg-surface-page"
             >
               Theme Presets →
             </Link>
             <Link
               href="/site-templates/starter-packs"
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-sm font-medium text-content-secondary hover:bg-surface-page"
             >
               Starter Packs →
             </Link>

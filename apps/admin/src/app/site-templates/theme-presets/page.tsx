@@ -66,8 +66,8 @@ export default async function ThemePresetsPage() {
     <AdminLayout>
       <div className="p-6">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold text-gray-900">Theme Presets</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl font-semibold text-content">Theme Presets</h1>
+          <p className="mt-1 text-sm text-content-tertiary">
             Platform-level token bundles applied to community sites. Read-only in this
             release; create / edit / archive land in subsequent updates.
           </p>

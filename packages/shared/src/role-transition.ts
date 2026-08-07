@@ -22,6 +22,29 @@ export const PM_SCOPE_DB_ROLES = ['property_manager', 'root_manager'] as const;
 export const MANAGER_TIER_DB_ROLES = ['property_manager', 'root_manager'] as const;
 
 /**
+ * The root-exclusive tier (ADR-006 §2, role-v3 R3-03).
+ *
+ * ADR-006 names exactly four root-exclusive powers: role assignment, billing /
+ * subscription, community deletion, and root transfer. They are a CLOSED SET of
+ * named powers, not a permission dimension — the RBAC matrix deliberately
+ * collapses `property_manager` and `root_manager` onto one `manager` row
+ * (rbac-matrix.ts MATRIX_ROLES), so root-exclusivity cannot be, and should not
+ * be, expressed as a matrix cell. Enforce it with `isRootManager` here (pure
+ * predicate, safe for client components) or `requireRootManager` in
+ * apps/web/src/lib/api/role-guard.ts (the throwing route guard).
+ */
+export const ROOT_ONLY_DB_ROLES = ['root_manager'] as const;
+
+/**
+ * Canonical root-manager predicate. Accepts `unknown`-ish input so it is safe to
+ * call on a nullable membership role. NEVER reads `designation` — ADR-006 §2:
+ * general permissions never key on board designation.
+ */
+export function isRootManager(role: CommunityRole | string | null | undefined): boolean {
+  return role === 'root_manager';
+}
+
+/**
  * Expand a role-filter value to the matching enum rows. Returns [] for
  * unknown input — callers MUST short-circuit (drizzle forbids inArray(col, [])).
  * Legacy 7-role NAMES (cam, board_member, …) are not valid inputs here — those filters belong to the legacy-name path.

@@ -7,7 +7,6 @@ import { NextRequest } from 'next/server';
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  requirePermissionMock,
   resolveEffectiveCommunityIdMock,
   resolveStripePriceMock,
   emitConversionEventMock,
@@ -18,7 +17,6 @@ const {
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
-  requirePermissionMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
   resolveStripePriceMock: vi.fn(),
   emitConversionEventMock: vi.fn(),
@@ -33,9 +31,6 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
-}));
-vi.mock('@/lib/db/access-control', () => ({
-  requirePermission: requirePermissionMock,
 }));
 vi.mock('@/lib/api/reauth-guard', () => ({
   requireFreshReauth: requireFreshReauthMock,
@@ -83,8 +78,14 @@ describe('POST /api/v1/subscribe', () => {
     process.env.STRIPE_SECRET_KEY = 'sk_test';
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
-    requireCommunityMembershipMock.mockResolvedValue({ isAdmin: true });
-    requirePermissionMock.mockReturnValue(undefined);
+    // R3-03: purchasing a plan is root-exclusive. The role guard is pure, so
+    // these tests run the REAL `requireRootManager` off this fixture rather
+    // than stubbing authorization out.
+    requireCommunityMembershipMock.mockResolvedValue({
+      isAdmin: true,
+      role: 'root_manager',
+      communityId: 1,
+    });
     getCommunityForCheckoutMock.mockResolvedValue({
       id: 1,
       communityType: 'condo_718',
@@ -145,6 +146,24 @@ describe('POST /api/v1/subscribe', () => {
     expect(res.status).toBe(400);
     expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
   });
+
+  // R3-03 role matrix. `property_manager` is the regression that matters: it
+  // passed this route via `settings:write` until the narrowing.
+  it.each(['property_manager', 'resident'])(
+    'returns 403 for %s and never opens a checkout session',
+    async (role) => {
+      requireCommunityMembershipMock.mockResolvedValue({
+        isAdmin: role === 'property_manager',
+        role,
+        communityId: 1,
+      });
+
+      const res = await POST(buildRequest({ planId: 'essentials' }));
+
+      expect(res.status).toBe(403);
+      expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns 400 when plan is unavailable for community type', async () => {
     getCommunityForCheckoutMock.mockResolvedValue({

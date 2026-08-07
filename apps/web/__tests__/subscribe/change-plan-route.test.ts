@@ -7,7 +7,6 @@ import { NextRequest } from 'next/server';
 const {
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
-  requirePermissionMock,
   requireFreshReauthMock,
   resolveEffectiveCommunityIdMock,
   resolveStripePriceMock,
@@ -18,7 +17,6 @@ const {
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
-  requirePermissionMock: vi.fn(),
   requireFreshReauthMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
   resolveStripePriceMock: vi.fn(),
@@ -33,9 +31,6 @@ vi.mock('@/lib/api/auth', () => ({
 }));
 vi.mock('@/lib/api/community-membership', () => ({
   requireCommunityMembership: requireCommunityMembershipMock,
-}));
-vi.mock('@/lib/db/access-control', () => ({
-  requirePermission: requirePermissionMock,
 }));
 vi.mock('@/lib/api/tenant-context', () => ({
   resolveEffectiveCommunityId: resolveEffectiveCommunityIdMock,
@@ -83,11 +78,14 @@ describe('POST /api/v1/subscribe/change-plan', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
+    // R3-03: changing the plan is root-exclusive. The role guard is pure, so
+    // these tests run the REAL `requireRootManager` off this fixture.
     requireCommunityMembershipMock.mockResolvedValue({
       isAdmin: true,
       communityName: 'Sunset Condos',
+      role: 'root_manager',
+      communityId: 1,
     });
-    requirePermissionMock.mockReturnValue(undefined);
     requireFreshReauthMock.mockResolvedValue(undefined);
     getCommunityForChangePlanMock.mockResolvedValue({
       id: 1,
@@ -177,6 +175,40 @@ describe('POST /api/v1/subscribe/change-plan', () => {
       POST(buildRequest({ planId: 'operations_plus', billingInterval: 'month' })),
     ).rejects.toMatchObject({ name: 'ValidationError' });
     expect(changeSubscriptionPlanMock).not.toHaveBeenCalled();
+  });
+
+  // R3-03 role matrix. `property_manager` passed via `settings:write` before.
+  it.each(['property_manager', 'resident'])(
+    'rejects %s and never touches the Stripe subscription',
+    async (role) => {
+      requireCommunityMembershipMock.mockResolvedValue({
+        isAdmin: role === 'property_manager',
+        communityName: 'Sunset Condos',
+        role,
+        communityId: 1,
+      });
+
+      await expect(
+        POST(buildRequest({ planId: 'professional', billingInterval: 'month' })),
+      ).rejects.toMatchObject({ name: 'ForbiddenError' });
+      expect(changeSubscriptionPlanMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('checks root identity BEFORE the reauth prompt', async () => {
+    // Ordering matters for UX: a property manager who can never complete this
+    // action should not first be made to re-enter their password.
+    requireCommunityMembershipMock.mockResolvedValue({
+      isAdmin: true,
+      communityName: 'Sunset Condos',
+      role: 'property_manager',
+      communityId: 1,
+    });
+
+    await expect(
+      POST(buildRequest({ planId: 'professional', billingInterval: 'month' })),
+    ).rejects.toMatchObject({ name: 'ForbiddenError' });
+    expect(requireFreshReauthMock).not.toHaveBeenCalled();
   });
 
   it('propagates ReauthRequired when the cookie is missing', async () => {

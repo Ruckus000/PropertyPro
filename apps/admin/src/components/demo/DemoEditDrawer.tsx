@@ -274,7 +274,7 @@ export function DemoEditDrawer({
         aria-modal="true"
         aria-labelledby="edit-demo-title"
         inert={!isOpen}
-        className={`fixed right-0 top-0 z-50 flex h-full max-w-full flex-col border-l border-gray-200 bg-white shadow-xl transition-transform duration-300 ${
+        className={`fixed right-0 top-0 z-50 flex h-full max-w-full flex-col border-l border-edge bg-surface-card shadow-xl transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
         style={{ width: drawerWidth }}
@@ -291,16 +291,16 @@ export function DemoEditDrawer({
           <div className="ml-auto h-full w-px bg-transparent transition-colors hover:bg-coral-300" />
         </div>
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+        <div className="flex items-center justify-between border-b border-edge px-5 py-3">
           <div>
-            <h2 id="edit-demo-title" className="text-sm font-semibold text-gray-900">Edit Demo</h2>
-            <p className="text-xs text-gray-500">{prospectName}</p>
+            <h2 id="edit-demo-title" className="text-sm font-semibold text-content">Edit Demo</h2>
+            <p className="text-xs text-content-tertiary">{prospectName}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close edit demo drawer"
-            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-md p-1.5 text-content-disabled transition-colors hover:bg-surface-muted hover:text-content-secondary"
           >
             <X size={18} aria-hidden="true" />
           </button>
@@ -309,7 +309,7 @@ export function DemoEditDrawer({
         {/* Tab navigation. Was a <nav> wrapping plain buttons — the wrong
             element (this selects panels, it does not navigate) and no tab
             semantics at all. */}
-        <div className="border-b border-gray-200 px-5">
+        <div className="border-b border-edge px-5">
           <div className="-mb-px flex gap-4" {...tabListProps}>
             {DRAWER_TABS.map((tab) => (
               <button
@@ -318,7 +318,7 @@ export function DemoEditDrawer({
                 className={`pb-2 pt-3 px-1 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab
                     ? 'border-coral-600 text-coral-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-content-tertiary hover:text-content-secondary hover:border-edge-strong'
                 }`}
               >
                 {DRAWER_TAB_LABELS[tab]}

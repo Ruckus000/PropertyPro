@@ -149,7 +149,7 @@ export function TabbedPreviewClient({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Tab bar */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4">
+      <div className="flex items-center justify-between border-b border-edge bg-surface-card px-4">
         <div className="flex">
           {tabs.map((tab) => {
             const isActive = tab.key === activeTab;
@@ -164,8 +164,8 @@ export function TabbedPreviewClient({
                   isActive
                     ? 'text-coral-700'
                     : isDisabled
-                      ? 'cursor-not-allowed text-gray-300'
-                      : 'text-gray-500 hover:text-gray-700'
+                      ? 'cursor-not-allowed text-content-disabled'
+                      : 'text-content-tertiary hover:text-content-secondary'
                 }`}
               >
                 {tab.label}
@@ -183,7 +183,7 @@ export function TabbedPreviewClient({
               void handleCopyOnboardingLink();
             }}
             disabled={!landingPageUrl}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-50"
             title={landingPageUrl}
           >
             {copyOnboardingState === 'copied'
@@ -198,7 +198,7 @@ export function TabbedPreviewClient({
               void handleCopyTabPreviewUrl();
             }}
             disabled={!activeTabDef.url}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-50"
             title="URL loaded in the preview iframe (may include short-lived tokens)"
           >
             {copyTabState === 'copied'
@@ -210,7 +210,7 @@ export function TabbedPreviewClient({
           <button
             type="button"
             onClick={() => setConvertOpen(true)}
-            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+            className="rounded-md bg-status-success px-3 py-1.5 text-xs font-medium text-content-inverse hover:opacity-90"
           >
             Convert to Customer
           </button>
@@ -218,7 +218,7 @@ export function TabbedPreviewClient({
       </div>
 
       {/* Tab panels — kept mounted to avoid iframe reloads */}
-      <div className={`relative flex-1 transition-all duration-200 ${refreshFlash ? 'ring-2 ring-green-400 ring-inset' : ''}`}>
+      <div className={`relative flex-1 transition-all duration-200 ${refreshFlash ? 'ring-2 ring-status-success ring-inset' : ''}`}>
         {tabs.map((tab) => {
           const isActive = tab.key === activeTab;
 
@@ -227,7 +227,7 @@ export function TabbedPreviewClient({
               return (
                 <div
                   key={tab.key}
-                  className="absolute inset-0 flex items-center justify-center text-sm text-gray-400"
+                  className="absolute inset-0 flex items-center justify-center text-sm text-content-disabled"
                 >
                   {tab.label} not available
                 </div>
@@ -240,7 +240,7 @@ export function TabbedPreviewClient({
             return (
               <div
                 key={tab.key}
-                className="absolute inset-0 flex items-center justify-center overflow-auto bg-gray-100 p-4"
+                className="absolute inset-0 flex items-center justify-center overflow-auto bg-surface-muted p-4"
                 style={{ display: isActive ? 'flex' : 'none' }}
               >
                 <div className="flex flex-col items-center gap-4">
@@ -252,29 +252,29 @@ export function TabbedPreviewClient({
                       type="button"
                       onClick={handleScaleDown}
                       disabled={phoneScale <= 0.6}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-edge-strong bg-surface-card text-content-secondary shadow-sm hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-40"
                       title="Zoom out"
                     >
                       <Minus size={12} />
                     </button>
-                    <span className="min-w-[3.5rem] text-center text-xs font-medium text-gray-500">
+                    <span className="min-w-[3.5rem] text-center text-xs font-medium text-content-tertiary">
                       {Math.round(phoneScale * 100)}%
                     </span>
                     <button
                       type="button"
                       onClick={handleScaleUp}
                       disabled={phoneScale >= 1.4}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-edge-strong bg-surface-card text-content-secondary shadow-sm hover:bg-surface-page disabled:cursor-not-allowed disabled:opacity-40"
                       title="Zoom in"
                     >
                       <Plus size={12} />
                     </button>
-                    <span className="mx-1 text-gray-300">|</span>
+                    <span className="mx-1 text-content-disabled">|</span>
                     <a
                       href={tab.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-edge-strong bg-surface-card px-3 py-1.5 text-xs font-medium text-content-secondary shadow-sm hover:bg-surface-page"
                     >
                       <ExternalLink size={12} />
                       Open in new tab

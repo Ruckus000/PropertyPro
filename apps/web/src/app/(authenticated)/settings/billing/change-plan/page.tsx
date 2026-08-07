@@ -16,6 +16,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getActiveSubscriptionInterval } from '@/lib/services/stripe-service';
 import { getSignupPlansForCommunityType } from '@/lib/auth/signup-schema';
+import { canManageBilling } from '@propertypro/shared';
 import { PageHeader } from '@/components/shared/page-header';
 import { ChangePlanForm } from '@/components/settings/change-plan-form';
 
@@ -58,8 +59,13 @@ export default async function ChangePlanPage({
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
 
-  if (!membership.isAdmin) {
-    redirect('/settings/billing');
+  // R3-03: changing the plan is root-exclusive, matching `requireRootManager`
+  // on POST /api/v1/subscribe/change-plan. `forbidden=root` lets the billing
+  // page explain the bounce rather than silently re-rendering.
+  if (!canManageBilling(membership.role)) {
+    redirect(
+      `/settings/billing?communityId=${context.communityId}&forbidden=root`,
+    );
   }
 
   const scoped = createScopedClient(context.communityId);

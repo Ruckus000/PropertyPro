@@ -79,21 +79,21 @@ export default async function DemoPreviewPage({ params }: PageProps) {
     // does not render AdminLayout (which normally owns it).
     <div id="main-content" className="flex h-screen flex-col">
       {/* Header bar */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
+      <div className="flex items-center justify-between border-b border-edge bg-surface-card px-4 py-2">
         <div className="flex items-center gap-3">
-          <Link href="/demo" className="text-sm text-gray-500 hover:text-gray-700">
+          <Link href="/demo" className="text-sm text-content-tertiary hover:text-content-secondary">
             &larr; Demos
           </Link>
-          <span className="text-gray-300">|</span>
-          <span className="text-sm font-semibold text-gray-900">{demo.prospect_name}</span>
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+          <span className="text-content-disabled">|</span>
+          <span className="text-sm font-semibold text-content">{demo.prospect_name}</span>
+          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
             {typeLabel}
           </span>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href={`/demo/${demo.id}/mobile`}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-edge-strong px-3 py-1.5 text-xs font-medium text-content-secondary hover:bg-surface-page"
           >
             Full-Screen Mobile
           </Link>

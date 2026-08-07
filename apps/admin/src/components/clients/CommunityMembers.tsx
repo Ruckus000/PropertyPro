@@ -32,9 +32,9 @@ const ROLE_OPTIONS = [
 ] as const;
 
 const ROLE_BADGES: Record<string, string> = {
-  resident: 'bg-gray-100 text-gray-600',
-  property_manager: 'bg-blue-100 text-blue-700',
-  root_manager: 'bg-purple-100 text-purple-700',
+  resident: 'bg-surface-muted text-content-secondary',
+  property_manager: 'bg-status-info-subtle text-status-info',
+  root_manager: 'bg-status-owner-subtle text-status-owner',
 };
 
 export function displayRole(member: Member): string {
@@ -212,14 +212,14 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
-        <Loader2 size={20} className="animate-spin text-gray-400" />
+        <Loader2 size={20} className="animate-spin text-content-disabled" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger">
         {error}
       </div>
     );
@@ -228,13 +228,13 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 text-gray-700 shrink-0">
+        <div className="flex items-center gap-2 text-content-secondary shrink-0">
           <Users size={16} />
           <h2 className="text-sm font-semibold">{members.length} Members</h2>
         </div>
 
         <div className="relative flex-1 max-w-sm" ref={dropdownRef}>
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-disabled" />
           <input
             type="text"
             placeholder="Search members…"
@@ -242,38 +242,38 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
             onChange={(e) => { setSearch(e.target.value); setDropdownOpen(true); }}
             onFocus={() => { if (search.trim()) setDropdownOpen(true); }}
             onKeyDown={(e) => { if (e.key === 'Escape') setDropdownOpen(false); }}
-            className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-8 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+            className="w-full rounded-md border border-edge-strong bg-surface-card py-1.5 pl-8 pr-8 text-sm shadow-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
           />
           {search ? (
             <button
               type="button"
               onClick={() => { setSearch(''); setDropdownOpen(false); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-content-disabled hover:text-content-secondary"
             >
               <X size={14} />
             </button>
           ) : (
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-content-disabled pointer-events-none" />
           )}
 
           {dropdownOpen && search.trim() && (
-            <div className="absolute left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+            <div className="absolute left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-edge bg-surface-card py-1 shadow-lg">
               {displayedMembers.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-gray-400">No members found</p>
+                <p className="px-3 py-6 text-center text-sm text-content-disabled">No members found</p>
               ) : (
                 <>
                   {displayedMembers.map((m) => (
-                    <div key={m.userId} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50">
+                    <div key={m.userId} className="flex items-center justify-between px-3 py-2 hover:bg-surface-page">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-gray-900">{m.fullName || 'No name'}</p>
-                        <p className="truncate text-xs text-gray-500">{m.email}</p>
+                        <p className="truncate text-sm font-medium text-content">{m.fullName || 'No name'}</p>
+                        <p className="truncate text-xs text-content-tertiary">{m.email}</p>
                       </div>
-                      <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGES[m.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGES[m.role] ?? 'bg-surface-muted text-content-secondary'}`}>
                         {displayRole(m)}
                       </span>
                     </div>
                   ))}
-                  <div className="border-t border-gray-100 px-3 py-1.5 text-xs text-gray-400">
+                  <div className="border-t border-edge-subtle px-3 py-1.5 text-xs text-content-disabled">
                     {displayedMembers.length} of {members.length} members
                   </div>
                 </>
@@ -283,19 +283,19 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-e1">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-edge bg-surface-card shadow-e1">
+        <table className="min-w-full divide-y divide-edge">
+          <thead className="bg-surface-page">
             <tr>
               {([['Name / Email', 'name'], ['Role', 'role'], ['Last Sign In', 'lastSignIn'], ['Joined', 'joined']] as const).map(([label, column]) => {
                 const isActive = sort.startsWith(`${column}-`);
                 const isAsc = sort === `${column}-asc`;
                 return (
-                  <th key={column} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                  <th key={column} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-tertiary">
                     <button
                       type="button"
                       onClick={() => toggleSort(column)}
-                      className="inline-flex items-center gap-1 hover:text-gray-700"
+                      className="inline-flex items-center gap-1 hover:text-content-secondary"
                     >
                       {label}
                       {isActive && (isAsc ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
@@ -303,19 +303,19 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                   </th>
                 );
               })}
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-content-tertiary">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-edge-subtle">
             {displayedMembers.map((member) => (
-              <tr key={member.userId} className="hover:bg-gray-50">
+              <tr key={member.userId} className="hover:bg-surface-page">
                 <td className="px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-content">
                       {member.fullName || 'No name'}
                     </p>
-                    <p className="text-xs text-gray-500">{member.email}</p>
-                    {member.phone && <p className="text-xs text-gray-400">{member.phone}</p>}
+                    <p className="text-xs text-content-tertiary">{member.email}</p>
+                    {member.phone && <p className="text-xs text-content-disabled">{member.phone}</p>}
                   </div>
                 </td>
                 <td className="px-4 py-3">
@@ -324,24 +324,24 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                       <select
                         value={editForm.role}
                         onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value }))}
-                        className="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                        className="w-full rounded border border-edge-strong px-2 py-1 text-xs"
                       >
                         {ROLE_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
                       {editForm.role === 'resident' && (
-                        <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                        <label className="flex items-center gap-1.5 text-xs text-content-secondary">
                           <input
                             type="checkbox"
                             checked={editForm.is_unit_owner}
                             onChange={(e) => setEditForm((f) => ({ ...f, is_unit_owner: e.target.checked }))}
-                            className="rounded border-gray-300"
+                            className="rounded border-edge-strong"
                           />
                           Unit Owner
                         </label>
                       )}
-                      {editError && <p className="text-xs text-red-600">{editError}</p>}
+                      {editError && <p className="text-xs text-status-danger">{editError}</p>}
                       <div className="flex gap-1">
                         <button
                           type="button"
@@ -354,7 +354,7 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                         <button
                           type="button"
                           onClick={() => setEditingId(null)}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                          className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary hover:bg-surface-page"
                         >
                           Cancel
                         </button>
@@ -366,20 +366,20 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                       onClick={() => startEdit(member)}
                       className="group inline-flex items-center gap-1"
                     >
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROLE_BADGES[member.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${ROLE_BADGES[member.role] ?? 'bg-surface-muted text-content-secondary'}`}>
                         {displayRole(member)}
                       </span>
-                      <ChevronDown size={12} className="text-gray-300 group-hover:text-gray-500" />
+                      <ChevronDown size={12} className="text-content-disabled group-hover:text-content-tertiary" />
                     </button>
                   )}
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-500">
+                <td className="px-4 py-3 text-xs text-content-tertiary">
                   {member.lastSignInAt
                     ? format(new Date(member.lastSignInAt), 'MMM d, yyyy')
-                    : <span className="text-gray-300">Never</span>
+                    : <span className="text-content-disabled">Never</span>
                   }
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-500">
+                <td className="px-4 py-3 text-xs text-content-tertiary">
                   {format(new Date(member.createdAt), 'MMM d, yyyy')}
                 </td>
                 <td className="px-4 py-3 text-right">
@@ -388,14 +388,14 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                       <button
                         type="button"
                         onClick={() => handleRemove(member.userId)}
-                        className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
+                        className="rounded bg-status-danger px-2 py-1 text-xs text-content-inverse hover:opacity-90"
                       >
                         Confirm
                       </button>
                       <button
                         type="button"
                         onClick={() => setRemoveConfirm(null)}
-                        className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                        className="rounded border border-edge-strong px-2 py-1 text-xs text-content-secondary hover:bg-surface-page"
                       >
                         Cancel
                       </button>
@@ -404,7 +404,7 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
                     <button
                       type="button"
                       onClick={() => setRemoveConfirm(member.userId)}
-                      className="text-gray-400 hover:text-red-600"
+                      className="text-content-disabled hover:text-status-danger"
                       title="Remove member"
                     >
                       <Trash2 size={14} />
@@ -415,7 +415,7 @@ export function CommunityMembers({ communityId }: CommunityMembersProps) {
             ))}
             {displayedMembers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-content-disabled">
                   {search.trim() ? 'No members match your search' : 'No members found'}
                 </td>
               </tr>

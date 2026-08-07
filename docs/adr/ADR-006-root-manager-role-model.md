@@ -55,6 +55,80 @@ Authorization is enforced at the route/query layer via `requirePermission()` →
 
 ## Transition status (as of this ADR)
 
+> **Addendum (2026-08-07): Phase 3.4 root-only billing/deletion has SHIPPED.**
+> R3-03 was the last deferred item; role-v3 now has no open work.
+>
+> **Why the claim-root adoption gate no longer applies.** The gate existed to
+> prevent locking out every admin in communities with no claimed root. Measured
+> against prod on 2026-08-06, all 7 live communities are non-customers — ids 1–3
+> are `pnpm seed:demo` fixtures that leaked into prod, 133/134/135/147 are demo
+> conversions, and there are **zero paying customers**. 3 of 7 hold a root; the
+> 4 rootless ones **each have ≥1 `property_manager`**, so every one is
+> self-claimable, and none has zero managers. There is no real admin to lock
+> out, and the lockout is recoverable everywhere it could occur. The window only
+> narrows as customers arrive, which is why this shipped now rather than later.
+> Re-verify before any similar change:
+>
+> ```sql
+> select c.id, c.slug, c.subscription_status,
+>        count(*) filter (where r.role='root_manager')     as roots,
+>        count(*) filter (where r.role='property_manager') as pms
+> from communities c left join user_roles r on r.community_id = c.id
+> where c.deleted_at is null group by c.id, c.slug, c.subscription_status;
+> ```
+>
+> **How it is enforced.** `requireRootManager`
+> (`apps/web/src/lib/api/role-guard.ts`) on `POST /api/v1/subscribe`,
+> `POST /api/v1/subscribe/change-plan`, and `POST|DELETE
+> /api/v1/communities/delete`; a root-only `hasRole` **redirect** (never a
+> throw — that handler has no `withErrorHandler`) on
+> `/billing/portal`. `canManageBilling` (`packages/shared`) is the matching
+> client-side predicate. `settings:write` is NOT usable for this: the RBAC
+> matrix collapses `property_manager` and `root_manager` onto a single `manager`
+> row and structurally cannot tell them apart — that is the bug this closes.
+> `apps/web/__tests__/api/root-exclusive-routes.test.ts` is the fence against
+> re-widening.
+>
+> **Explicitly NOT narrowed**, with reasons, so this is not "finished" later by
+> mistake:
+> - `POST /api/v1/account/delete` — *account*, not *community*, deletion.
+>   Self-scoped and legally required to stay self-service (erasure requests);
+>   residents must be able to use it. The real adjacent gap runs the other way:
+>   a root can still delete their own account and orphan a community
+>   (`lib/account-lifecycle/root-offboarding.ts` only flags it). Tracked
+>   separately as **R3-03b**.
+> - `POST /api/v1/communities/[id]/cancel` — gates on **billing-group
+>   ownership**, a portfolio-level financial identity orthogonal to community
+>   role. The owner may not be a member of the child community at all, so a root
+>   check would break the legitimate multi-community PM cancel flow.
+> - `/api/v1/stripe/connect/*` — the community's *inbound* dues collection, not
+>   PropertyPro's subscription. Root-gating would block routine PM operations.
+>
+> **PM experience after the narrowing.** Read-only, never hidden — hiding would
+> make the capability loss invisible. A property manager keeps `canViewBilling`
+> (plan, status, interval) and the past-due/trialing banners *without* their
+> action links, and `getLockedFeatureBehavior` routes them to the "request"
+> CTA instead of a purchase button that would dead-end in a 403.
+>
+> **Rootless recovery.** `/settings/billing` renders a non-dismissible notice
+> for a PM in a rootless community linking `/dashboard/claim-root`. It is
+> deliberately NOT `ClaimRootBanner`, which is dismissible and writes a shared
+> `claim-root-dismissed` sessionStorage key — dismissing it on the dashboard
+> would suppress it here too, on a surface where suppression means staying
+> locked out.
+>
+> **Zero-PM break-glass** (no such community exists today). `reassignRootOp`
+> requires the target to already be a `property_manager`, so it is two steps:
+> a platform admin promotes someone to `property_manager` via the admin app,
+> then calls `POST /api/admin/communities/reassign-root`.
+>
+> **Seed fix landed with it.** `pnpm seed:demo` previously minted a root only
+> for palm-shores, which is why prod's seeded sunset-condos and sunset-ridge are
+> rootless. It now mints one per community (`ROOT_MANAGER_BY_SLUG` in
+> `scripts/seed-demo.ts`). The leaked prod fixtures were left alone — backfilling
+> a root there is an ownership assertion, not a data fix, and belongs to a
+> separate human-approved cleanup.
+
 > **Addendum (2026-07-20):** role-v3 is now **fully landed.** Since the 07-18 note
 > below, the 7-role `RBAC_MATRIX` collapse (R3-01) + v1 `checkPermission` deletion
 > (R3-07), the bridge drain (R3-02) + billing-admin fix (R3-04), the management-tier
@@ -81,7 +155,7 @@ The model is delivered in phases (1 → 4) behind a compatibility shim and a `gu
 
 - **Live:** the `designation` column + statutory gate (`requireBoardDesignation`), the root claim/transfer/dispute flow, creator-is-root, resident-tier minting lockdown, and the board-targeting + vocabulary drains.
 - **Deferred to a product-signed-off step (with the Phase 4 migration):** making `property_manager` permissions **uniform** in `checkPermissionV2` (a real widening for the minority of rows that still carry restricted preset-derived permissions). Until then, `checkPermissionV2` still reads the per-row JSONB.
-- **Deferred to Phase 3.4 (gated on claim-root adoption):** moving billing / community-deletion to root-only. Shipping it before communities have a claimed root would lock out every admin.
+- ~~**Deferred to Phase 3.4 (gated on claim-root adoption):** moving billing / community-deletion to root-only. Shipping it before communities have a claimed root would lock out every admin.~~ **SHIPPED 2026-08-07** — see the addendum at the top of this section for the prod evidence that retired the gate, the enforcement points, and the explicit non-scope.
 
 ## Consequences
 
@@ -90,7 +164,7 @@ The model is delivered in phases (1 → 4) behind a compatibility shim and a `gu
 | Positive | One small role vocabulary across storage and the derived layer; far less code to reason about. |
 | Positive | Board membership is a clean statutory marker decoupled from operational permissions. |
 | Tradeoff | No per-manager permission overrides post-cleanup (granularity loss — accepted). |
-| Tradeoff | Rootless communities lose billing/deletion until claimed (accepted; visible via the admin rootless report). |
+| Tradeoff | Rootless communities lose billing/deletion until claimed (accepted; visible via the admin rootless report, and `/settings/billing` links a rootless PM straight to claim-root). **Realised 2026-08-07** with R3-03. |
 
 ## Rejected alternatives
 

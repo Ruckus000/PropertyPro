@@ -55,7 +55,7 @@ export function LockedFeatureScreen({
   const behavior = getLockedFeatureBehavior(role, isUnitOwner);
 
   const ctaLabel =
-    behavior === 'upgrade' ? 'Upgrade now' : 'Notify your board';
+    behavior === 'upgrade' ? 'Upgrade now' : 'Request upgrade';
 
   return (
     <div className="rounded-md border border-edge bg-surface-card p-6 sm:p-8">

@@ -267,8 +267,8 @@ export function CommunityWebsiteEditor({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 size={20} className="animate-spin text-gray-400" />
-        <span className="ml-2 text-sm text-gray-500">Loading branding...</span>
+        <Loader2 size={20} className="animate-spin text-content-disabled" />
+        <span className="ml-2 text-sm text-content-tertiary">Loading branding...</span>
       </div>
     );
   }
@@ -276,23 +276,23 @@ export function CommunityWebsiteEditor({
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {/* Theme Presets */}
-      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-        <h2 className="mb-1 text-sm font-semibold text-gray-700">Theme Presets</h2>
-        <p className="mb-4 text-xs text-gray-400">Quick-start with a curated palette, then customize.</p>
+      <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+        <h2 className="mb-1 text-sm font-semibold text-content-secondary">Theme Presets</h2>
+        <p className="mb-4 text-xs text-content-disabled">Quick-start with a curated palette, then customize.</p>
         <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {THEME_PRESETS.map((preset) => (
             <button
               key={preset.id}
               type="button"
               onClick={() => handlePresetClick(preset.id)}
-              className="group rounded-md border border-gray-200 p-2.5 text-left transition-colors hover:border-coral-400 hover:bg-coral-50/40"
+              className="group rounded-md border border-edge p-2.5 text-left transition-colors hover:border-coral-400 hover:bg-coral-50/40"
             >
               <div className="mb-1.5 flex gap-1">
                 <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.primaryColor }} />
                 <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.secondaryColor }} />
                 <div className="h-4 w-4 rounded" style={{ backgroundColor: preset.accentColor }} />
               </div>
-              <p className="text-xs font-medium text-gray-700">{preset.name}</p>
+              <p className="text-xs font-medium text-content-secondary">{preset.name}</p>
             </button>
           ))}
         </div>
@@ -303,8 +303,8 @@ export function CommunityWebsiteEditor({
         {/* Left: Form */}
         <div className="space-y-6">
           {/* Colors */}
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-            <h2 className="mb-4 text-sm font-semibold text-gray-700">Brand Colors</h2>
+          <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+            <h2 className="mb-4 text-sm font-semibold text-content-secondary">Brand Colors</h2>
             <div className="space-y-4">
               {([
                 ['primaryColor', 'Primary'] as const,
@@ -316,17 +316,17 @@ export function CommunityWebsiteEditor({
                     type="color"
                     value={form[key]}
                     onChange={(e) => handleChange(key, e.target.value)}
-                    className="h-9 w-9 cursor-pointer rounded border border-gray-200 p-0.5"
+                    className="h-9 w-9 cursor-pointer rounded border border-edge p-0.5"
                   />
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                    <label className="block text-xs font-medium text-content-tertiary mb-1">{label}</label>
                     <input
                       type="text"
                       value={form[key]}
                       onChange={(e) => handleChange(key, e.target.value)}
                       pattern="^#[0-9a-fA-F]{6}$"
                       maxLength={7}
-                      className="w-full rounded-md border border-gray-300 px-3 py-1.5 font-mono text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+                      className="w-full rounded-md border border-edge-strong px-3 py-1.5 font-mono text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
                     />
                   </div>
                 </div>
@@ -335,19 +335,19 @@ export function CommunityWebsiteEditor({
           </div>
 
           {/* Fonts */}
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-            <h2 className="mb-4 text-sm font-semibold text-gray-700">Typography</h2>
+          <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+            <h2 className="mb-4 text-sm font-semibold text-content-secondary">Typography</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               {([
                 ['fontHeading', 'Heading Font'] as const,
                 ['fontBody', 'Body Font'] as const,
               ]).map(([key, label]) => (
                 <div key={key}>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                  <label className="block text-xs font-medium text-content-tertiary mb-1">{label}</label>
                   <select
                     value={form[key]}
                     onChange={(e) => handleChange(key, e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
+                    className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-coral-500 focus:outline-none focus:ring-1 focus:ring-coral-500"
                   >
                     {ALLOWED_FONTS.map((font) => (
                       <option key={font} value={font}>{font}</option>
@@ -359,29 +359,29 @@ export function CommunityWebsiteEditor({
           </div>
 
           {/* Logo */}
-          <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-e1">
-            <h2 className="mb-4 text-sm font-semibold text-gray-700">Logo</h2>
+          <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
+            <h2 className="mb-4 text-sm font-semibold text-content-secondary">Logo</h2>
             {currentLogoSrc ? (
               <div className="flex items-center gap-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={currentLogoSrc} alt="Logo" className="h-16 w-16 rounded-lg border border-gray-200 object-cover" />
+                <img src={currentLogoSrc} alt="Logo" className="h-16 w-16 rounded-lg border border-edge object-cover" />
                 <div className="flex flex-col gap-1">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-content-tertiary">
                     {uploading ? 'Uploading...' : 'Logo uploaded'}
                   </p>
                   <button
                     type="button"
                     onClick={handleRemoveLogo}
-                    className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
+                    className="inline-flex items-center gap-1 text-xs text-status-danger hover:text-status-danger"
                   >
                     <X size={12} /> Remove
                   </button>
                 </div>
               </div>
             ) : (
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 transition-colors hover:border-coral-400 hover:bg-coral-50/30">
-                <Upload size={20} className="text-gray-400" />
-                <span className="text-xs text-gray-500">
+              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-edge-strong p-6 transition-colors hover:border-coral-400 hover:bg-coral-50/30">
+                <Upload size={20} className="text-content-disabled" />
+                <span className="text-xs text-content-tertiary">
                   PNG, JPEG, or WebP &middot; max 5 MB
                 </span>
                 <input
@@ -397,13 +397,13 @@ export function CommunityWebsiteEditor({
 
         {/* Right: Live Preview */}
         <div className="space-y-4">
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <div className="rounded-lg border border-edge bg-surface-page p-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-content-tertiary">
               Landing Page Preview
             </p>
 
             {/* Miniature landing page mockup */}
-            <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-e1">
+            <div className="overflow-hidden rounded-md border border-edge bg-surface-card shadow-e1">
               {/* Header */}
               <div
                 className="flex items-center gap-2 px-4 py-3"
@@ -453,7 +453,7 @@ export function CommunityWebsiteEditor({
               {/* Feature cards */}
               <div className="grid grid-cols-3 gap-2 p-4">
                 {['Documents', 'Meetings', 'Notices'].map((label) => (
-                  <div key={label} className="rounded border border-gray-100 p-2 text-center">
+                  <div key={label} className="rounded border border-edge-subtle p-2 text-center">
                     <div
                       className="mx-auto mb-1 h-6 w-6 rounded"
                       style={{ backgroundColor: form.accentColor }}
@@ -470,8 +470,8 @@ export function CommunityWebsiteEditor({
 
               {/* Footer */}
               <div
-                className="border-t border-gray-100 px-4 py-2 text-center"
-                style={{ backgroundColor: darkenHex(form.primaryColor, 70), color: '#ffffff' }}
+                className="border-t border-edge-subtle px-4 py-2 text-center"
+                style={{ backgroundColor: darkenHex(form.primaryColor, 70), color: '#ffffff' }} // design-tokens:exempt — live preview of a per-community BRAND colour; the pair is computed from user input, so no semantic token applies
               >
                 <p className="text-xs opacity-70" style={{ fontFamily: form.fontBody }}>
                   Powered by PropertyPro
@@ -487,24 +487,24 @@ export function CommunityWebsiteEditor({
                 [form.accentColor, 'Accent'],
               ].map(([color, label]) => (
                 <div key={label} className="flex items-center gap-1.5">
-                  <div className="h-4 w-4 rounded border border-gray-200" style={{ backgroundColor: color }} />
-                  <span className="text-xs text-gray-600">{label}</span>
+                  <div className="h-4 w-4 rounded border border-edge" style={{ backgroundColor: color }} />
+                  <span className="text-xs text-content-secondary">{label}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Public URL info */}
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-e1">
-            <p className="text-xs font-medium text-gray-500">Website URL</p>
-            <p className="mt-1 font-mono text-sm text-gray-700">
+          <div className="rounded-lg border border-edge bg-surface-card p-4 shadow-e1">
+            <p className="text-xs font-medium text-content-tertiary">Website URL</p>
+            <p className="mt-1 font-mono text-sm text-content-secondary">
               {domainInfo.displayUrl}
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-content-tertiary">
               {domainInfo.urlSource === 'custom_domain' ? 'Custom domain' : 'Default subdomain'}
             </p>
             {domainInfo.ignoredInvalidCustomDomain && (
-              <p className="mt-1 text-xs text-amber-700">
+              <p className="mt-1 text-xs text-status-warning">
                 Saved custom domain is invalid and is ignored for display.
               </p>
             )}
@@ -525,13 +525,13 @@ export function CommunityWebsiteEditor({
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex items-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-page"
         >
           <RotateCcw size={14} />
           Reset
         </button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {success && <p className="text-sm text-green-600">Branding saved</p>}
+        {error && <p className="text-sm text-status-danger">{error}</p>}
+        {success && <p className="text-sm text-status-success">Branding saved</p>}
       </div>
     </form>
   );
