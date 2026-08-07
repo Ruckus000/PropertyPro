@@ -1,0 +1,165 @@
+# SHADOW run of the two heavy CI jobs on the self-hosted runner.
+#
+# This workflow is NOT a required check and must never become one. It exists to
+# run the same job bodies as ci.yml's `test` and `perf-check` on the self-hosted
+# label, alongside the real hosted jobs, with zero blast radius.
+#
+# WHAT IT IS LOOKING FOR
+#
+# Not "does it pass once" — the Phase 2 measurement gate already established
+# that by hand. This is looking for the things only real load surfaces:
+#
+#   * CONCURRENCY SHAKEOUT. vitest's forks pool is `availableParallelism() - 1`,
+#     so it goes from 3 workers on a 4-core hosted runner to 7 here. Tests that
+#     pass today only because parallelism is low — shared temp paths, shared
+#     ports, order dependence — start failing. Playwright likewise moves from 2
+#     workers to 4 unless pinned (it is now pinned to 2 in
+#     playwright.prod.config.ts, precisely so this variable is held constant).
+#   * RETRY MASKING. `retries: 2` can turn a new flake into slow-but-green.
+#     Compare retry counts against the hosted jobs, not just pass/fail.
+#   * DISK GROWTH. Lima images never shrink. Watch the trend across runs.
+#
+# Retire this workflow once ci.yml has cut over and stayed green.
+
+name: self-hosted-shadow
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-hosted-shadow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shadow-unit-tests:
+    name: shadow / Unit Tests
+    # Hard-coded to the self-hosted label rather than going through
+    # `vars.CI_RUNNER_LABEL`: if the runner is down, this SHOULD sit queued and
+    # be visibly useless, not quietly fall back to a hosted runner and report a
+    # green that says nothing about the self-hosted path.
+    runs-on: propertypro-mac
+    # Not required, so a hang must not tie up a runner slot for long.
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
+      TZ: UTC
+      LANG: C.UTF-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify seed/reset resolve under their real invocation
+        env:
+          PROPERTYPRO_SEED_RESOLVE_ONLY: '1'
+        run: |
+          pnpm reset:demo
+          pnpm seed:demo
+
+      - name: Build workspace packages
+        run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
+
+      - name: Run unit tests with coverage
+        working-directory: apps/web
+        run: pnpm exec vitest run --coverage
+
+      - name: Run package unit tests
+        run: pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' --filter '@propertypro/api-contract' --filter '@propertypro/tokens' test
+
+      - name: Run admin unit tests
+        run: pnpm --filter '@propertypro/admin' test
+
+      - name: Report runner environment and disk
+        if: always()
+        run: |
+          {
+            echo "## Shadow / Unit Tests"
+            echo '```'
+            echo "cores:   $(nproc)"
+            echo "vitest forks expected: $(( $(nproc) - 1 ))"
+            echo "TZ:      $(date +%Z)  LANG=${LANG}"
+            echo "arch:    $(uname -m)"
+            df -h / | tail -1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  shadow-perf-check:
+    name: shadow / perf-check
+    runs-on: propertypro-mac
+    timeout-minutes: 20
+    env:
+      TZ: UTC
+      LANG: C.UTF-8
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        # Ubuntu 24.04 arm64 ships Chromium for Playwright, and the VM image
+        # pre-bakes the apt deps, so `--with-deps` should be a fast no-op here.
+        run: pnpm exec playwright install --with-deps chromium
+
+      # NO Next.js build-cache restore here, unlike the real perf-check — and
+      # that is not an oversight to be tidied up.
+      #
+      # Since #911 the cache key carries `runner.arch`, and the SAVE step in the
+      # real job only fires on `push: main`, which is permanently hosted (x64).
+      # So no arm64 cache entry is ever written, and a restore on this runner
+      # could only ever miss. Including the step would add a permanently-missing
+      # cache to every shadow run and invite someone to debug a non-problem.
+      #
+      # The consequence is worth carrying into the cutover decision: perf-check
+      # on the self-hosted runner always builds COLD, where today's hosted PRs
+      # restore a warm cache from main. The shadow timing already reflects that
+      # — 5.2 min cold on the VM vs 6m42s-8m01s warm on a hosted runner — so it
+      # is a real cost that the core-count win still absorbs, not a hidden one.
+      - name: Build
+        run: pnpm build
+
+      - name: Run production smoke tests (public pages + PDF.js)
+        env:
+          PDFJS_TEST_ENABLED: '1'
+        run: pnpm --filter @propertypro/web test:e2e:prod
+
+      - name: Run performance budget check
+        # The load-bearing comparison of the whole shadow phase: this builds
+        # with @next/swc-linux-arm64-gnu instead of -x64-gnu, and the bundle
+        # budgets sit at ~10% headroom. Byte counts must match the hosted
+        # perf-check job on the same commit.
+        run: pnpm perf:check
