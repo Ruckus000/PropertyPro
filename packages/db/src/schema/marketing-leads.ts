@@ -21,6 +21,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -29,7 +30,17 @@ export const marketingLeads = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     email: text('email').notNull(),
-    /** Lowercased/trimmed email. Dedup key — see `marketing_leads_email_idx`. */
+    /**
+     * Lowercased/trimmed email. The dedup key, and UNIQUE — see
+     * `marketing_leads_email_normalized_key`.
+     *
+     * The uniqueness is load-bearing, not decorative. Both capture endpoints are
+     * unauthenticated and the service upserts on this column, so without a unique
+     * index the "one row per prospect" guarantee is only as good as the gap
+     * between a SELECT and its INSERT. It also gives `ON CONFLICT` an inference
+     * target — Postgres refuses `ON CONFLICT (email_normalized)` unless a unique
+     * index on exactly that column exists.
+     */
     emailNormalized: text('email_normalized').notNull(),
     associationName: text('association_name'),
     contactName: text('contact_name'),
@@ -73,7 +84,7 @@ export const marketingLeads = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index('marketing_leads_email_idx').on(table.emailNormalized),
+    uniqueIndex('marketing_leads_email_normalized_key').on(table.emailNormalized),
     index('marketing_leads_created_idx').on(table.createdAt),
     index('marketing_leads_status_idx').on(table.status, table.createdAt),
     check(
