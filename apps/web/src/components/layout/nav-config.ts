@@ -538,6 +538,18 @@ export function getVisibleItemsWithPlanGate(
   communityType: CommunityType | null,
   planId: PlanId | null,
   isUnitOwner?: boolean,
+  /**
+   * True when the grace window has expired AND the viewer is an admin —
+   * i.e. the caller has already combined lapsed state with `isAdminRole`,
+   * matching `requireEntitledForAdminRead`'s own actor check. Pass raw lapsed
+   * state here and a resident's nav would be wrongly emptied.
+   *
+   * Needed as an explicit flag rather than inferred from `features`, because
+   * the type-gate above reads RAW type features and the plan-lock branch below
+   * is skipped entirely when `planId` is null — which cancellation makes it.
+   * Without it the sidebar keeps advertising surfaces the API now refuses.
+   */
+  lapsedAdmin?: boolean,
 ): NavItemWithGateStatus[] {
   // Raw type-level features (before plan intersection)
   const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
@@ -556,6 +568,21 @@ export function getVisibleItemsWithPlanGate(
         const anyTypeEnabled = item.featureKeys.some((key) => typeFeatures[key]);
         if (!anyTypeEnabled) return false;
       }
+      // Lapse gate. `requireEntitledForAdminRead` gates ~109 admin GET routes
+      // for a lapsed community, and its only permanent carve-out
+      // (REACTIVATION_CRITICAL in scripts/verify-read-entitlement-coverage.ts)
+      // is notifications, onboarding, fee-policy, Stripe Connect status and
+      // users/names — none of which backs a nav section. So for a lapsed admin
+      // every community section 403s, and the honest nav is the dashboard
+      // alone, where SoftLockBanner offers the reactivate CTA.
+      //
+      // Note the caller passes `lapsedAdmin`, not raw lapsed state: the guard
+      // short-circuits on `!membership.isAdmin`, so a resident — including a
+      // board president, whose designation does NOT make them an admin — keeps
+      // full read access and must see an unchanged nav.
+      //
+      // No locked pill: there is no upgrade to sell. They had it, it's paused.
+      if (lapsedAdmin && item.id !== 'dashboard') return false;
       return true;
     })
     .map((item) => {

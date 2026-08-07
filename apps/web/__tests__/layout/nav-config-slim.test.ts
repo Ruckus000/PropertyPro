@@ -106,3 +106,78 @@ describe('buildSlimNavSections', () => {
     expect(visible.map((item) => item.id)).toContain('operations');
   });
 });
+
+describe('getVisibleItemsWithPlanGate — lapsed communities', () => {
+  // Found by live verification, not by the unit suite: the sidebar kept
+  // advertising Operations/Insurance/Reserves for a lapsed community even
+  // though the API refused them. The type-gate filter reads RAW type features,
+  // and the plan-lock branch no-ops when planId is null — which is exactly
+  // what cancellation makes it.
+  // The flag is `lapsedAdmin`, already combined with the role by the caller —
+  // `requireEntitledForAdminRead` gates on the ACTOR, not the surface.
+  const idsFor = (lapsedAdmin: boolean) =>
+    getVisibleItemsWithPlanGate(
+      NAV_ITEMS,
+      'property_manager',
+      getEffectiveFeatures('condo_718', null),
+      'condo_718',
+      null, // cancellation nulls the plan
+      false,
+      lapsedAdmin,
+    ).map((item) => item.id);
+
+  it('hides every community surface for a lapsed admin', () => {
+    // requireEntitledForAdminRead gates ~109 admin GET routes, and its only
+    // permanent carve-out (REACTIVATION_CRITICAL) is notifications, onboarding,
+    // fee-policy, Stripe Connect status and users/names — none of which backs a
+    // nav section. So nothing here is reachable.
+    const lapsed = idsFor(true);
+    const notLapsed = idsFor(false);
+
+    for (const id of ['violations-inbox', 'arc-requests', 'esign', 'payments']) {
+      expect(notLapsed).toContain(id);
+      expect(lapsed).not.toContain(id);
+    }
+  });
+
+  it('hides documents, meetings and compliance too', () => {
+    // Explicitly pinned because the opposite is intuitive and was in fact the
+    // original design of this feature: statutory obligations do not pause with
+    // billing. The product decision on main (#835/#837) is that they are gated
+    // for ADMINS anyway — residents, who are never gated, are how an
+    // association retains access to its own records.
+    const lapsed = idsFor(true);
+    for (const id of ['documents', 'meetings', 'compliance']) {
+      expect(lapsed).not.toContain(id);
+    }
+  });
+
+  it('keeps the dashboard, where the reactivate CTA lives', () => {
+    expect(idsFor(true)).toEqual(['dashboard']);
+  });
+
+  it('never marks a lapsed item as merely plan-locked', () => {
+    // There is no upgrade to sell — they had it and it's paused — so a "PRO"
+    // pill would be the wrong affordance.
+    const items = getVisibleItemsWithPlanGate(
+      NAV_ITEMS,
+      'property_manager',
+      getEffectiveFeatures('condo_718', null),
+      'condo_718',
+      null,
+      false,
+      true,
+    );
+    expect(items.every((item) => !item.planLocked)).toBe(true);
+  });
+
+  it('leaves a non-lapsed community untouched', () => {
+    const before = getVisibleItemsWithPlanGate(
+      NAV_ITEMS, 'property_manager', CONDO_PROFESSIONAL_FEATURES, 'condo_718', 'professional', false,
+    ).map((i) => i.id);
+    const after = getVisibleItemsWithPlanGate(
+      NAV_ITEMS, 'property_manager', CONDO_PROFESSIONAL_FEATURES, 'condo_718', 'professional', false, false,
+    ).map((i) => i.id);
+    expect(after).toEqual(before);
+  });
+});

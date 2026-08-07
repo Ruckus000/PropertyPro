@@ -18,6 +18,7 @@ import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@prop
 import {
   toInitials,
   resolvePlanId,
+  isAdminRole,
   PLAN_FEATURES,
   type CommunityRole,
   type CommunityFeatures,
@@ -62,6 +63,16 @@ interface AppSidebarProps {
   /** Board designation (BoardDesignation value); null when not on the board. */
   designation?: string | null;
   features: CommunityFeatures | null;
+  /**
+   * Grace window expired (canceled AND past the 7-day paid grace).
+   *
+   * On its own this does NOT determine what the nav should hide, because
+   * `requireEntitledForAdminRead` gates on the *actor*, not the surface: the
+   * same documents route returns 200 for a resident and 403 for a manager on
+   * the same lapsed community. The sidebar therefore combines this with the
+   * role — see `lapsedAdmin` below.
+   */
+  isLapsed?: boolean;
   userName: string | null;
   plan: string | null;
   collapsible?: boolean;
@@ -80,6 +91,7 @@ export function AppSidebar({
   isUnitOwner = false,
   designation = null,
   features,
+  isLapsed = false,
   userName,
   plan,
   collapsible = true,
@@ -114,6 +126,18 @@ export function AppSidebar({
   // all — render them as buttons that open the picker and keep the destination.
   const needsCommunityPicker = !isPmContext && communityId === null;
 
+  // A lapsed community locks ADMIN reads only. `requireEntitledForAdminRead`
+  // short-circuits on `!membership.isAdmin`, where isAdmin is exactly
+  // ADMIN_TIER_DB_ROLES (property_manager / root_manager) — board designation
+  // does NOT count, so a board president who is a `resident` keeps full read
+  // access on a lapsed community.
+  //
+  // Deriving this from the same predicate the guard uses (`isAdminRole`) rather
+  // than restating the role list is the point: the nav advertising a surface the
+  // API then refuses is the exact bug this flag exists to prevent, and it can
+  // only recur if these two definitions drift apart.
+  const lapsedAdmin = isLapsed && role !== null && isAdminRole(role);
+
   const allVisible: NavItemWithGateStatus[] = isPmContext
     ? PM_NAV_ITEMS.map((i) => ({
         ...i,
@@ -129,6 +153,7 @@ export function AppSidebar({
         communityType,
         resolvedPlanId,
         isUnitOwner,
+        lapsedAdmin,
       )
         // Without a community there is no role, so itemVisibleForRole lets every
         // role-gated item through. Harmless when they were inert links to

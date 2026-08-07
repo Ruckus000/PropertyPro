@@ -29,6 +29,9 @@ vi.mock('@/lib/request/page-community-context', () => ({
 vi.mock('@/components/billing/locked-feature-screen', () => ({
   LockedFeatureScreen: () => null,
 }));
+vi.mock('@/components/billing/lapsed-feature-screen', () => ({
+  LapsedFeatureScreen: () => null,
+}));
 
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { FeatureGateAnyOf } from '@/components/billing/feature-gate-any-of';
@@ -41,6 +44,9 @@ function membership(overrides: Record<string, unknown> = {}) {
     role: 'root_manager',
     isUnitOwner: false,
     subscriptionPlan: null,
+    subscriptionStatus: null,
+    subscriptionCanceledAt: null,
+    freeAccessExpiresAt: null,
     isAdmin: true,
     ...overrides,
   };
@@ -152,5 +158,78 @@ describe('FeatureGateAnyOf', () => {
       children,
     });
     expect(renderedChildren(result)).toBe(false);
+  });
+});
+
+
+describe('FeatureGate — lapsed communities', () => {
+  const DAY = 86_400_000;
+  const lapsed = () =>
+    membership({
+      subscriptionPlan: null, // cancellation nulls it
+      subscriptionStatus: 'canceled',
+      subscriptionCanceledAt: new Date(Date.now() - 30 * DAY),
+    });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each(['hasViolations', 'hasFinance', 'hasEsign'] as const)(
+    'withholds the operational surface %s from an admin',
+    async (feature) => {
+      // Without the lapse check this would fail OPEN: the plan is null, which
+      // is indistinguishable from "never provisioned" by plan alone.
+      requirePageCommunityMembershipMock.mockResolvedValue(lapsed());
+      const result = await FeatureGate({ feature, children });
+      expect(renderedChildren(result)).toBe(false);
+    },
+  );
+
+  it.each(['hasCompliance', 'hasStatutoryCategories', 'hasMeetings'] as const)(
+    'withholds the statutory surface %s from an admin too',
+    async (feature) => {
+      // Pinned explicitly because the opposite is the intuitive reading, and
+      // was this feature's original design: §718.111(12)(g) obligations don't
+      // pause with billing. The shipped decision (#835/#837) gates them for
+      // ADMINS regardless — `requireEntitledForAdminRead` covers
+      // documents/meetings/compliance — and this page must agree with the API
+      // rather than offer a surface that 403s.
+      requirePageCommunityMembershipMock.mockResolvedValue(lapsed());
+      const result = await FeatureGate({ feature, children });
+      expect(renderedChildren(result)).toBe(false);
+    },
+  );
+
+  it.each(['hasCompliance', 'hasViolations'] as const)(
+    'never blocks a resident on %s — they are not gated at all',
+    async (feature) => {
+      // The guard short-circuits on `!membership.isAdmin`, so a resident keeps
+      // full read access. Blocking here would contradict the API AND strip an
+      // association of its own records, which is the outcome the statutory
+      // argument exists to prevent.
+      requirePageCommunityMembershipMock.mockResolvedValue(
+        membership({
+          subscriptionPlan: null,
+          subscriptionStatus: 'canceled',
+          subscriptionCanceledAt: new Date(Date.now() - 30 * DAY),
+          role: 'resident',
+          isUnitOwner: true,
+          isAdmin: false,
+        }),
+      );
+      const result = await FeatureGate({ feature, children });
+      expect(renderedChildren(result)).toBe(true);
+    },
+  );
+
+  it('still allows everything inside the grace window', async () => {
+    requirePageCommunityMembershipMock.mockResolvedValue(
+      membership({
+        subscriptionPlan: null,
+        subscriptionStatus: 'canceled',
+        subscriptionCanceledAt: new Date(Date.now() - 1 * DAY),
+      }),
+    );
+    const result = await FeatureGate({ feature: 'hasFinance', children });
+    expect(renderedChildren(result)).toBe(true);
   });
 });

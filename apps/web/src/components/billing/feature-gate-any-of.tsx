@@ -10,12 +10,15 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
+  isAdminRole,
   PLAN_FEATURES,
+  resolveLifecycleState,
   resolvePlanId,
   type CommunityFeatures,
 } from '@propertypro/shared';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { LockedFeatureScreen } from './locked-feature-screen';
+import { LapsedFeatureScreen } from './lapsed-feature-screen';
 
 export interface FeatureGateAnyOfProps {
   features: ReadonlyArray<keyof CommunityFeatures>;
@@ -34,6 +37,29 @@ export async function FeatureGateAnyOf({
   }
 
   const membership = await requirePageCommunityMembership(communityIdOverride);
+  // A lapsed community locks ADMIN reads — mirrors the API's
+  // `requireEntitledForAdminRead`, which short-circuits on
+  // `!membership.isAdmin`. Residents (board designation included) are never
+  // blocked. Checked before the plan rules below: cancellation nulls
+  // `subscriptionPlan`, so a churned community is indistinguishable from an
+  // unprovisioned one by plan alone — and the unprovisioned rule is fail-OPEN.
+  const lifecycle = resolveLifecycleState({
+    subscriptionStatus: membership.subscriptionStatus,
+    subscriptionCanceledAt: membership.subscriptionCanceledAt,
+    freeAccessExpiresAt: membership.freeAccessExpiresAt,
+  });
+  if (lifecycle === 'lapsed' && isAdminRole(membership.role)) {
+    // No tenant redirect branch: isAdminRole is the management tier, for which
+    // getLockedFeatureBehavior is 'upgrade', never 'hidden'.
+    return (
+      <LapsedFeatureScreen
+        featureKey={features[0]!}
+        role={membership.role}
+        communityId={membership.communityId}
+      />
+    );
+  }
+
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
 
   // Plan-only, with the same null-plan fail-open rule as FeatureGate — see the
