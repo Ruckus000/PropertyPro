@@ -34,7 +34,13 @@ REPO="${PROPERTYPRO_CI_REPO:-Ruckus000/PropertyPro}"
 VM="${PROPERTYPRO_CI_VM:-ci}"
 LABEL="${PROPERTYPRO_CI_LABEL:-propertypro-mac}"
 IDX="${1:?usage: runner-supervisor.sh <runner-index>}"
+# Numeric-only, because IDX is interpolated into remote shell commands below.
+case "$IDX" in
+  '' | *[!0-9]*) echo "runner index must be a positive integer, got: $IDX" >&2; exit 1 ;;
+esac
 RUNNER_DIR="/opt/runners/${IDX}"
+# Set when a JIT config is minted, so the EXIT trap can deregister it.
+RUNNER_NAME=""
 
 log() { printf '%s [runner-%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$IDX" "$*"; }
 
@@ -80,13 +86,114 @@ wipe_work() {
   limactl shell "$VM" -- sudo rm -rf "${RUNNER_DIR}/_work" || true
 }
 
+# --- kill this index's runner INSIDE the vm --------------------------------
+#
+# THE BUG THIS EXISTS FOR
+#
+# This supervisor runs on the Mac and starts the runner in the VM through
+# `limactl shell`. Killing the supervisor — `launchctl unload`, a crash, a
+# reboot of the agent — kills the Mac-side client but NOT the processes it
+# started in the guest. `run.sh`'s Runner.Listener child simply reparents to
+# init and keeps running: still registered with GitHub, still accepting jobs.
+#
+# Observed 2026-08-07 right after the CI cutover — four runners registered
+# where there should have been two:
+#
+#   pid 145112 ppid=1 age=1396s /opt/runners/1/bin/Runner.Listener  <- orphan
+#   pid 168692 ppid=1 age=1265s /opt/runners/2/bin/Runner.Listener  <- orphan
+#
+# That is not untidiness. Those orphans predated the per-runner $HOME fix, so
+# they still shared one home directory, AND they occupied the same
+# /opt/runners/N directory as the live runners — two listeners checking out
+# into one _work tree is arbitrary corruption, on what are now REQUIRED checks.
+# It is also invisible: `launchctl list` shows the expected two agents.
+#
+# WHY THE SCRIPT COMES IN ON STDIN (`bash -s`) AND NOT AS `bash -c '...'`
+#
+# `pgrep -f` matches against every process's argv. With `bash -c` the pattern
+# would appear in OUR OWN argv, so the sweep would find and kill its own shell.
+# Passing the script on stdin keeps the remote argv down to `bash -s -- <idx>`,
+# where the pattern never appears. pgrep already excludes itself.
+kill_vm_runner() {
+  limactl shell "$VM" -- sudo bash -s -- "$IDX" <<'REMOTE' || true
+set -u
+idx="$1"
+pat="/opt/runners/${idx}/bin/"
+pids="$(pgrep -f "$pat" || true)"
+[ -z "$pids" ] && exit 0
+kill -TERM $pids 2>/dev/null || true
+# A listener mid-job ignores TERM for a while; escalate rather than leak.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  sleep 1
+  pgrep -f "$pat" >/dev/null 2>&1 || exit 0
+done
+kill -KILL $(pgrep -f "$pat") 2>/dev/null || true
+exit 0
+REMOTE
+}
+
+# Remove the GitHub-side registration, so a killed runner does not linger as a
+# phantom entry that the watchdog then counts as an available runner.
+deregister_runner() {
+  [ -n "$RUNNER_NAME" ] || return 0
+  local id
+  id="$(api "repos/${REPO}/actions/runners" \
+        --jq ".runners[] | select(.name==\"${RUNNER_NAME}\") | .id" 2>/dev/null || true)"
+  if [ -n "$id" ]; then
+    api -X DELETE "repos/${REPO}/actions/runners/${id}" >/dev/null 2>&1 \
+      && log "deregistered ${RUNNER_NAME}" || true
+  fi
+  RUNNER_NAME=""
+  return 0
+}
+
+# Killing a runner's PROCESS does not remove its GitHub-side registration, and
+# a registration outlives the process it described — briefly still reporting
+# `online`. That phantom is not cosmetic: runner-watchdog.yml decides whether
+# to fail CI back to hosted runners by COUNTING online runners, so a stale
+# entry can convince it that a dead machine is available.
+#
+# Anything still registered for this index after the sweep is by definition
+# stale, because the sweep just killed every process that could be serving it.
+#
+# `busy == false` ALONE IS NOT ENOUGH, and that is not obvious: a runner killed
+# while a job was assigned to it stays `busy: true` indefinitely, because
+# nothing ever reports the job finished. Filtering on `busy == false` therefore
+# skips exactly the registrations most worth removing — the ones left by a hard
+# kill. Accepting `status == "offline"` as well is what actually clears them,
+# and it is safe: an offline runner is not serving anything, GitHub re-queues
+# whatever it was assigned.
+deregister_stale_for_index() {
+  local ids
+  ids="$(api "repos/${REPO}/actions/runners" \
+        --jq ".runners[] | select(.name | startswith(\"${LABEL}-${IDX}-\")) | select(.busy==false or .status==\"offline\") | .id" \
+        2>/dev/null || true)"
+  for id in $ids; do
+    api -X DELETE "repos/${REPO}/actions/runners/${id}" >/dev/null 2>&1 \
+      && log "deregistered stale runner id=${id}" || true
+  done
+  return 0
+}
+
 cleanup() {
-  log 'supervisor exiting; wiping work tree'
+  log 'supervisor exiting; killing in-VM runner, deregistering, wiping work tree'
+  kill_vm_runner
+  deregister_runner
   wipe_work
 }
-trap cleanup EXIT
+# EXIT alone is not enough: launchd stops an agent with SIGTERM, and without
+# these two the trap never runs and the guest-side runner is orphaned again.
+trap cleanup EXIT INT TERM
 
 ensure_runner_dir
+
+# A previous supervisor may have died without running its trap (SIGKILL, a VM
+# restart, or any version of this script from before the trap existed). Sweep
+# before claiming the index, so we never end up with two listeners in one
+# runner directory.
+log 'sweeping any pre-existing runner for this index'
+kill_vm_runner
+deregister_stale_for_index
 
 while true; do
   wipe_work
@@ -94,9 +201,10 @@ while true; do
   # Single-use JIT config. A fresh one is minted per job; there is nothing
   # persistent to steal from inside the VM.
   log 'requesting JIT config'
+  RUNNER_NAME="${LABEL}-${IDX}-$(date -u +%s)"
   JIT="$(
     api -X POST "repos/${REPO}/actions/runners/generate-jitconfig" \
-      -f "name=${LABEL}-${IDX}-$(date -u +%s)" \
+      -f "name=${RUNNER_NAME}" \
       -F runner_group_id=1 \
       -f "labels[]=${LABEL}" \
       -f work_folder=_work \
@@ -135,6 +243,12 @@ while true; do
      && export HOME='${RUNNER_DIR}/home' PNPM_HOME='${RUNNER_DIR}/home/.pnpm' \
      && cd '${RUNNER_DIR}' && ./run.sh --jitconfig '${JIT}'" || \
     log 'runner exited non-zero (job failure is normal here)'
+
+  # An ephemeral runner deregisters ITSELF once it finishes a job, so the name
+  # no longer refers to anything. Clear it, or a later cleanup would chase a
+  # registration that is already gone. While a job is in flight this stays set,
+  # which is exactly when the trap needs it.
+  RUNNER_NAME=""
 
   log 'job finished; recycling'
   sleep 2
