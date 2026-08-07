@@ -3,8 +3,62 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # Inert paths — a commit touching ONLY these cannot change build or test
+    # output, so running the full 31-billed-minute suite on it is pure spend.
+    # Measured over the last 60 commits on main: 4 (7%) qualify.
+    #
+    # `paths-ignore`, deliberately, NOT `paths`. An allowlist silently stops
+    # covering anything added later; a denylist fails safe — an unlisted path
+    # still runs CI.
+    #
+    # Deploy interaction: `deploy.yml` fires on `workflow_run: [CI]` for main,
+    # so a skipped CI here also means no production deploy for that commit.
+    # That is correct — these paths produce no deployable change — but it is
+    # why the list must stay strictly inert. Anything that can reach a build
+    # artefact does NOT belong here.
+    #
+    # Markdown is matched at the ROOT only (`*.md`) — deliberately NOT
+    # `**/*.md`. apps/web/src/content/legal/{privacy,terms}.md are read at
+    # build time by getLegalDoc() to render the public legal pages, and
+    # apps/web/src/content/help/**/*.mdx is build input as well. A recursive
+    # markdown rule would skip CI on a legal-text-only commit, and a skipped
+    # CI on main means deploy.yml never fires — the updated privacy policy or
+    # ToS would silently never reach production.
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.claude/**'
+      - '.vscode/**'
+      - 'LICENSE'
   push:
     branches: [main]
+    # Inert paths — a commit touching ONLY these cannot change build or test
+    # output, so running the full 31-billed-minute suite on it is pure spend.
+    # Measured over the last 60 commits on main: 4 (7%) qualify.
+    #
+    # `paths-ignore`, deliberately, NOT `paths`. An allowlist silently stops
+    # covering anything added later; a denylist fails safe — an unlisted path
+    # still runs CI.
+    #
+    # Deploy interaction: `deploy.yml` fires on `workflow_run: [CI]` for main,
+    # so a skipped CI here also means no production deploy for that commit.
+    # That is correct — these paths produce no deployable change — but it is
+    # why the list must stay strictly inert. Anything that can reach a build
+    # artefact does NOT belong here.
+    #
+    # Markdown is matched at the ROOT only (`*.md`) — deliberately NOT
+    # `**/*.md`. apps/web/src/content/legal/{privacy,terms}.md are read at
+    # build time by getLegalDoc() to render the public legal pages, and
+    # apps/web/src/content/help/**/*.mdx is build input as well. A recursive
+    # markdown rule would skip CI on a legal-text-only commit, and a skipped
+    # CI on main means deploy.yml never fires — the updated privacy policy or
+    # ToS would silently never reach production.
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.claude/**'
+      - '.vscode/**'
+      - 'LICENSE'
 
 permissions:
   contents: read
