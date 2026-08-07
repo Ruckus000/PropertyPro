@@ -2,17 +2,8 @@
   "apps/admin/src/app/api/admin/demos/preview/route.ts": {
     "raw-hex": 3
   },
-  "apps/admin/src/app/auth/login/page.tsx": {
-    "raw-palette": 20
-  },
   "apps/admin/src/app/communities/rootless/page.tsx": {
     "raw-palette": 28
-  },
-  "apps/admin/src/app/dashboard/page.tsx": {
-    "raw-palette": 1
-  },
-  "apps/admin/src/app/deletion-requests/page.tsx": {
-    "raw-palette": 1
   },
   "apps/admin/src/app/demo/[id]/mobile/MobilePreviewClient.tsx": {
     "raw-palette": 7
@@ -26,14 +17,8 @@
   "apps/admin/src/app/demo/new/page.tsx": {
     "raw-hex": 3
   },
-  "apps/admin/src/app/error.tsx": {
-    "raw-palette": 7
-  },
   "apps/admin/src/app/leads/page.tsx": {
     "raw-palette": 2
-  },
-  "apps/admin/src/app/not-found.tsx": {
-    "raw-palette": 3
   },
   "apps/admin/src/app/site-templates/block-registry/page.tsx": {
     "raw-palette": 5
@@ -80,12 +65,6 @@
   },
   "apps/admin/src/components/clients/SupportAccessTab.tsx": {
     "raw-palette": 33
-  },
-  "apps/admin/src/components/communities/ReassignRootControl.tsx": {
-    "raw-palette": 4
-  },
-  "apps/admin/src/components/deletion-requests/DeletionRequestsDashboard.tsx": {
-    "raw-palette": 78
   },
   "apps/admin/src/components/demo/CommunityEditSection.tsx": {
     "raw-palette": 17
@@ -144,12 +123,6 @@
   },
   "apps/admin/src/components/site-templates/ThemePresetsTable.tsx": {
     "raw-palette": 58
-  },
-  "apps/admin/src/lib/constants/community-labels.ts": {
-    "raw-palette": 14
-  },
-  "apps/admin/src/lib/utils/stale-badge.ts": {
-    "raw-palette": 6
   },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
     "raw-palette": 6

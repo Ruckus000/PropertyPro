@@ -16,7 +16,7 @@ export default async function DeletionRequestsPage() {
   return (
     <AdminLayout coolingCount={coolingCount}>
       <div className="p-6">
-        <h1 className="mb-6 text-xl font-semibold text-gray-900">Deletion Requests</h1>
+        <h1 className="mb-6 text-xl font-semibold text-content">Deletion Requests</h1>
         <DeletionRequestsDashboard
           initialRequests={requests}
           initialStatusFilter="all"

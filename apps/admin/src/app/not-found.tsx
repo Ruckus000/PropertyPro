@@ -12,13 +12,13 @@ export const dynamic = 'force-dynamic';
 export default function NotFound() {
   return (
     <main id="main-content" className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+      <p className="text-xs font-semibold uppercase tracking-wide text-content-tertiary">
         Operator Console
       </p>
-      <h1 className="mt-3 text-2xl font-semibold text-gray-900">
+      <h1 className="mt-3 text-2xl font-semibold text-content">
         Page not found
       </h1>
-      <p className="mt-3 max-w-md text-sm text-gray-600">
+      <p className="mt-3 max-w-md text-sm text-content-secondary">
         This record doesn&apos;t exist, or it may have been deleted.
       </p>
       <Link

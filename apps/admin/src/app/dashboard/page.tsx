@@ -18,7 +18,7 @@ export default async function DashboardPage() {
   return (
     <AdminLayout coolingCount={stats.lifecycle.pendingDeletions}>
       <div className="p-6">
-        <h1 className="mb-6 text-xl font-semibold text-gray-900">Dashboard</h1>
+        <h1 className="mb-6 text-xl font-semibold text-content">Dashboard</h1>
         <PlatformDashboard stats={stats} />
       </div>
     </AdminLayout>
