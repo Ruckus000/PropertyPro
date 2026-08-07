@@ -21,11 +21,17 @@ export function HeroSection() {
             <br />
             compliant <span className="mk-swash">by default.</span>
           </h1>
+          {/*
+            Was "requires every association you manage". Overbroad, and it
+            contradicted the checker further down the same page, which correctly
+            tells condos under 25 units and HOAs under 100 parcels they are
+            exempt. State the thresholds rather than implying universal coverage.
+          */}
           <p className="mk-lede mk-muted">
-            Florida law requires every association you manage to post records,
-            notices, and budgets online. PropertyPro keeps your entire book of
-            business compliant by default — from one dashboard, across every
-            community.
+            Florida law puts most of the associations you manage online — condos
+            at 25+ units, HOAs at 100+ parcels. PropertyPro keeps your entire
+            book of business compliant by default — from one dashboard, across
+            every community.
           </p>
           <div className="mk-hero-cta">
             <a href="/signup" className="mk-pill mk-pill-primary">

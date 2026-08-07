@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: '/#how', label: 'How it works' },
   { href: '/#managers', label: 'For managers' },
   { href: '/#pricing', label: 'Pricing' },
+  { href: '/resources', label: 'Resources' },
 ];
 
 /** Sticky marketing nav with in-page smooth-scroll anchors and a mobile menu. */

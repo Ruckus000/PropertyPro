@@ -264,6 +264,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Public community search: discovery endpoint intentionally queries across all communities,
   // returns only minimal non-sensitive metadata (name, city, state, type, rounded member count)
   resolve(repoRoot, 'apps/web/src/lib/services/community-search-service.ts'),
+  // Marketing lead capture: platform-level table with no community_id — a lead by
+  // definition has no community yet, so no scoped client can address it. Write-only
+  // from the public compliance checker; caller rate-limits per IP. RLS-locked to
+  // service_role in migration 0050.
+  resolve(repoRoot, 'apps/web/src/lib/services/marketing-leads-service.ts'),
   // Authenticated user's own join requests (own-user scoped, no community context yet)
   // Admin approve/deny endpoints: cross-community service dispatched after permission check
   // Revenue snapshot cron + health — platform-wide metrics, not tenant-scoped

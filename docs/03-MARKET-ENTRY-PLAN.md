@@ -1,3 +1,10 @@
+> **⚠ SUPERSEDED (2026-08-05) — see [`docs/gtm/`](./gtm/README.md).**
+> Written pre-launch in February for a regulatory window that opened Jan 1 and
+> was never acted on. Two premises below are now known to be wrong: the **native
+> mobile app** named as the primary differentiator does not exist, and the
+> **two-channel** approach is not executable by a solo founder. See
+> [`gtm/01-RECONCILIATION.md`](./gtm/01-RECONCILIATION.md).
+
 **MARKET ENTRY PLAN**
 
 Condo Association Web & Mobile App Platform

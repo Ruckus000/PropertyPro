@@ -1,5 +1,11 @@
 # PropertyPro Florida — Competitive Analysis & Strategic Roadmap
 
+> **⚠ SUPERSEDED (2026-08-05) — see [`docs/gtm/`](./gtm/README.md).**
+> The competitive landscape tables below remain accurate and useful. The
+> **gap analysis is stale**: violations, ARC, payments, assessments, e-voting,
+> e-sign and finance have all since shipped. See
+> [`gtm/01-RECONCILIATION.md`](./gtm/01-RECONCILIATION.md) §2.
+
 **Date:** March 7, 2026
 **Scope:** HOA/Condo association management software market (Florida focus)
 

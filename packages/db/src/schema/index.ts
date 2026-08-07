@@ -22,6 +22,7 @@ export * from './notification-preferences';
 export * from './notifications';
 export * from './pending-signups';
 export * from './platform-admin-users';
+export * from './marketing-leads';
 export * from './stripe-webhook-events';
 export * from './assessments';
 export * from './assessment-line-items';
@@ -145,6 +146,7 @@ import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
 import type { onboardingWizardState } from './onboarding-wizard-state';
 import type { platformAdminUsers } from './platform-admin-users';
+import type { marketingLeads } from './marketing-leads';
 import type { siteBlocks } from './site-blocks';
 import type { sitePages, sitePageRedirects } from './site-pages';
 import type { siteThemePresets } from './site-theme-presets';
@@ -203,6 +205,10 @@ export type NewNotification = typeof notifications.$inferInsert;
 // Pending Signups
 export type PendingSignup = typeof pendingSignups.$inferSelect;
 export type NewPendingSignup = typeof pendingSignups.$inferInsert;
+
+// Marketing leads (platform-level; see docs/gtm/03-LAUNCH-READINESS.md B1)
+export type MarketingLead = typeof marketingLeads.$inferSelect;
+export type NewMarketingLead = typeof marketingLeads.$inferInsert;
 
 // Stripe Webhook Events
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;

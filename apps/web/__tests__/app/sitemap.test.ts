@@ -157,8 +157,44 @@ describe('sitemap.ts', () => {
       communityId: null,
     });
     const result = await sitemap();
-    expect(result.some((e) => e.url.endsWith('/pricing'))).toBe(true);
     expect(result.some((e) => e.url.endsWith('/signup'))).toBe(true);
+    expect(result.some((e) => e.url.endsWith('/resources'))).toBe(true);
+    expect(result.some((e) => e.url.endsWith('/transparency'))).toBe(true);
+    expect(result.some((e) => e.url.endsWith('/contact'))).toBe(true);
+  });
+
+  it('does not advertise /pricing, which is a fragment and not a route', async () => {
+    // It was listed here for months. There is no `(marketing)/pricing` page —
+    // pricing is the `#pricing` anchor on `/` — so the URL resolved to a 308
+    // into a community subdomain that does not exist.
+    headersMock.mockResolvedValueOnce(new Headers({ host: 'getpropertypro.com' }));
+    resolveCommunityContextMock.mockReturnValueOnce({
+      source: 'none',
+      tenantSlug: null,
+      isReservedSubdomain: false,
+      communityId: null,
+    });
+    const result = await sitemap();
+    expect(result.some((e) => e.url.endsWith('/pricing'))).toBe(false);
+  });
+
+  it('stamps each resource article with its own updatedAt, not the crawl time', async () => {
+    headersMock.mockResolvedValueOnce(new Headers({ host: 'getpropertypro.com' }));
+    resolveCommunityContextMock.mockReturnValueOnce({
+      source: 'none',
+      tenantSlug: null,
+      isReservedSubdomain: false,
+      communityId: null,
+    });
+    const result = await sitemap();
+    const articles = result.filter((e) => /\/resources\/.+/.test(e.url));
+    expect(articles.length).toBeGreaterThan(0);
+    // All-identical `now` timestamps would tell crawlers the whole corpus
+    // changes on every fetch.
+    const home = result.find((e) => e.url.endsWith('getpropertypro.com/'));
+    for (const article of articles) {
+      expect(article.lastModified).not.toEqual(home?.lastModified);
+    }
   });
 
   it('does NOT include /api/* or /pm/* in either branch', async () => {

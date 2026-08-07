@@ -358,6 +358,20 @@
       "when": 1785974757821,
       "tag": "0052_platform_admin_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1786058862000,
+      "tag": "0053_marketing_leads",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1786058922000,
+      "tag": "0054_marketing_leads_inquiry_fields",
+      "breakpoints": true
     }
   ]
 }

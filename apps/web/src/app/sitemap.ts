@@ -24,6 +24,7 @@ import { resolveCommunityContext } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { isSearchIndexingEnabled } from '@/lib/site-editor/site-settings';
+import { getAllResources } from '@/lib/services/resource-article-service';
 
 export const revalidate = 3600;
 
@@ -141,7 +142,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = host ? `https://${host}` : 'https://getpropertypro.com';
   return [
     { url: `${base}/`, lastModified: now, changeFrequency: 'weekly', priority: 1.0 },
-    { url: `${base}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    // `/pricing` is deliberately absent: pricing is the `#pricing` fragment on
+    // `/`, never a route. It was advertised here for months and resolved to a
+    // 308 into a community subdomain that does not exist — a dead URL fed to
+    // crawlers. Fragments do not belong in a sitemap.
+    { url: `${base}/resources`, lastModified: now, changeFrequency: 'weekly', priority: 0.8 },
+    ...getAllResources().map((article) => ({
+      url: `${base}/resources/${article.slug}`,
+      // The article's own updatedAt, not `now` — stamping every entry with the
+      // current time tells crawlers the whole corpus changes hourly and burns
+      // crawl budget on pages that did not move.
+      lastModified: new Date(`${article.updatedAt.slice(0, 10)}T00:00:00Z`),
+      changeFrequency: 'monthly' as const,
+      priority: 0.7,
+    })),
+    { url: `${base}/transparency`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${base}/contact`, lastModified: now, changeFrequency: 'yearly', priority: 0.5 },
     { url: `${base}/signup`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${base}/legal/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },
     { url: `${base}/legal/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.3 },

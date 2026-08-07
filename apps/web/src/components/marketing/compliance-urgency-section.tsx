@@ -21,8 +21,13 @@ const LAWS = [
 
 /**
  * "The law changed. We handle it." Reframes §718/§720 obligations as autopilot,
- * with the interactive checker. Statute facts ($50/day, 30 days, Jan 1 2026)
- * preserved — general information, not legal advice.
+ * with the interactive checker. Statute facts (30 days, 14 days, 48 hours,
+ * Jan 1 2026) preserved — general information, not legal advice.
+ *
+ * Deliberately makes no claim about fines or penalties. The "$50/day" that used
+ * to appear here is records-request damages under §718.111(12)(c), not a website
+ * penalty; see the note in compliance-checker.tsx before adding a money figure
+ * to any marketing surface.
  */
 export function ComplianceUrgencySection() {
   return (
@@ -34,8 +39,8 @@ export function ComplianceUrgencySection() {
           <p className="mk-muted">
             §718.111(12)(g) and §720.303 spell out exactly what must be online,
             and when. PropertyPro tracks every deadline across your whole
-            portfolio and surfaces the one thing to do next — so a $50/day
-            penalty never sneaks up on any community you manage.
+            portfolio and surfaces the one thing to do next — so a missed posting
+            deadline never sneaks up on any community you manage.
           </p>
         </div>
         <div className="mk-relief">

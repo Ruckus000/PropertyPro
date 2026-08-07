@@ -302,6 +302,40 @@ export type SiteLayoutMetadataRow = {
   updated_at: string;
 };
 
+// ─── Marketing ───
+
+/**
+ * Platform-level inbound lead from the marketing site.
+ * See migrations 0050 (table) and 0051 (inquiry fields).
+ */
+export type MarketingLeadRow = {
+  id: number;
+  email: string;
+  email_normalized: string;
+  association_name: string | null;
+  contact_name: string | null;
+  association_type: string | null;
+  unit_count: number | null;
+  /** Portfolio size for a PM inquiry. Never conflate with `unit_count`. */
+  community_count: number | null;
+  /** Prospect's own words. Distinct from `notes`, which is sales-owned. */
+  message: string | null;
+  obligation_required: string | null;
+  source: string;
+  status: 'new' | 'contacted' | 'qualified' | 'disqualified';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Deliberately excludes `message`: it is the prospect's text, not the admin's.
+ * `notes` is where triage commentary belongs.
+ */
+export type MarketingLeadUpdate = Partial<
+  Pick<MarketingLeadRow, 'status' | 'notes' | 'updated_at'>
+>;
+
 export type AdminDatabase = {
   public: {
     Tables: {
@@ -327,6 +361,11 @@ export type AdminDatabase = {
         Partial<AccessPlanRow>
       >;
       account_deletion_requests: AdminTable<AccountDeletionRequestRow>;
+      marketing_leads: AdminTable<
+        MarketingLeadRow,
+        MarketingLeadRow,
+        MarketingLeadUpdate
+      >;
       users: AdminTable<AdminUserRow>;
       communities: AdminTable<AdminCommunityRow>;
       site_theme_presets: AdminTable<

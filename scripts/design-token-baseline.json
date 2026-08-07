@@ -41,6 +41,9 @@
   "apps/admin/src/app/layout.tsx": {
     "raw-palette": 2
   },
+  "apps/admin/src/app/leads/page.tsx": {
+    "raw-palette": 2
+  },
   "apps/admin/src/app/not-found.tsx": {
     "raw-palette": 3
   },
@@ -132,6 +135,9 @@
     "arbitrary-font": 7,
     "raw-hex": 2,
     "arbitrary-color": 2
+  },
+  "apps/admin/src/components/leads/LeadsDashboard.tsx": {
+    "raw-palette": 18
   },
   "apps/admin/src/components/loading/AdminPageLoading.tsx": {
     "raw-palette": 2
