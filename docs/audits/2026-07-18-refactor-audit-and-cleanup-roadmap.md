@@ -160,14 +160,21 @@ line 888).
 
 Phase 4.1 (contract migration 0020 + uniform `checkPermissionV2`) has **already
 shipped** — the surveyed "deferred" list was stale. What genuinely remains:
-the matrix collapse, the Phase 4.4 bridge drain, and the deliberately-gated
-Phase 3.4 root-only cutover. Guard: 73 dead literals / 20 files, zero slack.
+the matrix collapse and the Phase 4.4 bridge drain. Guard: 73 dead literals /
+20 files, zero slack.
+
+> **Update 2026-08-07:** R3-03 (Phase 3.4 root-only billing/deletion) has
+> **shipped**. Its claim-root adoption gate was retired on prod evidence: all 7
+> live communities are non-customers (seed-fixture leaks + demo conversions,
+> zero paying customers), and every rootless one has a `property_manager` who
+> can self-claim — so there was no admin to lock out. See the ADR-006 addendum
+> (2026-08-07) for the evidence, enforcement points and explicit non-scope.
 
 | ID | Finding | Files | Impact | Effort | Risk |
 |---|---|---|---|---|---|
 | R3-01 | Collapse RBAC_MATRIX 7-role keying to v3 — 4 columns unreachable at the choke point; new features still author legacy rows | packages/shared/src/rbac-matrix.ts, access-policies.ts, access-control.ts | high | L | medium |
 | R3-02 | Phase 4.4 bridge drain: delete `inferCanonicalRoleFromMembership` + 6 display/config call-site files (39 refs) | billing/permissions.ts, nav-config.ts, feature-registry.ts, role-guard.ts, esign-constants.ts, compliance-command-center.tsx, invitations-service.ts | medium | M | low |
-| R3-03 | Phase 3.4 deferred (by design): billing + community deletion gate on settings:write, not root-only — gated on claim-root adoption | subscribe/route.ts, communities/delete/route.ts | medium | M | medium |
+| R3-03 | ✅ **SHIPPED 2026-08-07** — billing + community deletion now gate on `requireRootManager`, not settings:write (gate retired on prod evidence) | subscribe/route.ts, communities/delete/route.ts | medium | M | medium |
 | R3-04 | Billing shim reads designation as a permission input (PM + board_member designation *loses* billing-admin) — ADR-006 §2 violation (corrected: causal branch) | billing/permissions.ts:36–48 | medium | S | low |
 | R3-05 | ADR-006 + migration-safety.md stale: Phase 4.1 shipped; "next free migration 0026" is wrong (0026–0028 exist; next free 0029) | docs/adr/ADR-006, .claude/rules/migration-safety.md | low | S | low |
 | R3-06 | Dead 7-role pg enum `userRoleEnum` still declared in Drizzle schema (0 column uses) | packages/db/src/schema/enums.ts:31–38 | low | S | low |
@@ -366,7 +373,7 @@ fixes ship first because nothing depends on them and one (AZ-01) is a live gap.
 | Contract allowlist restructure (33 permanent / 4 drainable) + drain drafts-publish | CON-01 | S / low | — | **drain-loop + drain-one-batch workflows** |
 | tenantScope program: ratchet in guard:tenant-scope, seed 121 routes, batch via drain-loop | CON-02 | L / low | CON-01 restructure | drain-loop; run-route wrappers already implemented |
 | Role-v3 Phase 4.4 bridge drain (non-billing 5 files first, shim last) | R3-02, R3-04 | M / low | R3-03 for the billing tail | guard:legacy-roles per-file ratchet |
-| Role-v3 Phase 3.4 root-only billing/deletion — measure claim-root adoption first; do not ship early | R3-03 | M / medium | adoption metric (ADR-006 gate) | rootless-communities report, existing root-only pattern |
+| ~~Role-v3 Phase 3.4 root-only billing/deletion~~ ✅ **SHIPPED 2026-08-07** — gate retired on prod evidence (zero paying customers; every rootless community self-claimable) | R3-03 | M / medium | ~~adoption metric (ADR-006 gate)~~ met | root-exclusive-routes invariant test, claim-root CTA on /settings/billing |
 | B3 tail: leases split+paginate; reservations resident path → SQL offset; amend doc for payments/history + esign/submissions then implement; update tracker per PAG-05 | PAG-01…05, (PAG-06 deferred) | M / medium | — | **b3-hard-tier design doc**; paginate() envelope |
 | CRUD conversions: meetings + maintenance-requests (discriminatedUnion contracts) | CON-03 | M / medium | — | drain-one-batch MULTI_METHOD recipe, B4 harness spec |
 | Announcements conversion: settle runRoute+withAuditLog composition once, then convert (GET service stays opaque — no keyset redesign here) | CON-04 (+PAG cross-ref) | L / medium | composition decision | listVisibleAnnouncements already encapsulates cursor |
@@ -420,7 +427,7 @@ graph TD
   P0[Phase 0: AZ-01 gate, DBB-01 bypass, docs truth, small deletes]
   CON1[CON-01 allowlist restructure] --> CON2[CON-02 tenantScope drain ×121]
   R3_2[R3-02 bridge drain] --> R3_1[R3-01 matrix collapse + R3-07]
-  R3_3[R3-03 root-only billing<br/>gated: claim-root adoption] --> R3_2
+  R3_3[R3-03 root-only billing<br/>SHIPPED 2026-08-07] --> R3_2
   R3_1 --> AZ2[AZ-02/03 authz unification]
   R3_1 --> INF2b[INF-02 phase 2: role arrays]
   PAG[B3 tail: leases, payments/history,<br/>esign/submissions, reservations]

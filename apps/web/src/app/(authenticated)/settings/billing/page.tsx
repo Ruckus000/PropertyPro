@@ -7,6 +7,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getActiveSubscriptionInterval } from '@/lib/services/stripe-service';
+import { canManageBilling, canViewBilling } from '@propertypro/shared';
 import { BillingPageClient } from '@/components/settings/billing-page-client';
 
 /**
@@ -71,7 +72,16 @@ export default async function BillingPage({
     paymentFailedAt: community?.['paymentFailedAt']
       ? new Date(community['paymentFailedAt'] as string).toISOString()
       : null,
-    isAdmin: membership.isAdmin,
+    // R3-03 splits VIEW from MANAGE. `canView` is the whole management tier —
+    // a property manager keeps sight of plan/status/interval. `canManage` is
+    // root-only and gates every action, matching `requireRootManager` on the
+    // routes behind them. Deriving both from the shared predicates keeps the
+    // UI and the API from drifting apart.
+    canView: canViewBilling(membership.role),
+    canManage: canManageBilling(membership.role),
+    // Set by /billing/portal and change-plan when they bounce a non-root back
+    // here, so the page can explain the bounce instead of silently rendering.
+    bouncedFromRootGate: resolvedSearchParams['forbidden'] === 'root',
   };
 
   return <BillingPageClient {...billingData} />;

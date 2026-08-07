@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { hasRole, requireRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
+import {
+  hasRole,
+  requireRole,
+  requireRootManager,
+  PM_MANAGER_ROLES,
+} from '@/lib/api/role-guard';
 import { ForbiddenError } from '@/lib/api/errors';
 
 // v3 (ADR-006): stored roles are `resident` / `property_manager` / `root_manager`.
@@ -34,6 +39,38 @@ describe('requireRole', () => {
     expect(() =>
       requireRole(membership('resident'), PM_MANAGER_ROLES, 'Only property managers may do this'),
     ).toThrow('Only property managers may do this');
+  });
+});
+
+// ADR-006 §2 / role-v3 R3-03: the four root-exclusive powers (role assignment,
+// billing/subscription, community deletion, root transfer) gate on this guard.
+// `settings:write` CANNOT express it — the RBAC matrix collapses
+// property_manager and root_manager onto one `manager` row.
+describe('requireRootManager', () => {
+  const membership = (role: string) => ({ role, communityId: 42 });
+
+  it('admits root_manager', () => {
+    expect(() => requireRootManager(membership('root_manager'))).not.toThrow();
+  });
+
+  it('rejects property_manager — the whole point of the narrowing', () => {
+    expect(() => requireRootManager(membership('property_manager'))).toThrow(ForbiddenError);
+  });
+
+  it('rejects residents', () => {
+    expect(() => requireRootManager(membership('resident'))).toThrow(ForbiddenError);
+  });
+
+  it('names the claim-root recovery path in the default message', () => {
+    // A property manager in a root-vacant community is the legitimate way to hit
+    // this; a bare 403 would leave them with no way forward.
+    expect(() => requireRootManager(membership('property_manager'))).toThrow(/claim it from the dashboard/);
+  });
+
+  it('surfaces a caller-supplied message', () => {
+    expect(() =>
+      requireRootManager(membership('property_manager'), 'Only the root manager can manage roles.'),
+    ).toThrow('Only the root manager can manage roles.');
   });
 });
 

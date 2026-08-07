@@ -8,9 +8,9 @@
  */
 import { runRoute } from '@/lib/api/run-route';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requireRootManager } from '@/lib/api/role-guard';
 import { transferRoot } from '@/lib/services/root-dispute-service';
 import { transferRootContract } from './contract';
 
@@ -20,9 +20,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, callerId);
 
     // Only the community's current root_manager may transfer root.
-    if (membership.role !== 'root_manager') {
-      throw new ForbiddenError('Only the current root manager can transfer root.');
-    }
+    requireRootManager(membership, 'Only the current root manager can transfer root.');
 
     await transferRoot(communityId, callerId, body.toUserId);
     return { transferred: true };

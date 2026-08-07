@@ -87,13 +87,36 @@ describe('GET /billing/portal — authorization', () => {
     // Denied via redirect, not a raw throw — this handler has no
     // withErrorHandler, so a ForbiddenError would surface as an opaque 500.
     await expect(GET(req())).rejects.toThrow('NEXT_REDIRECT');
-    expect(redirectMock).toHaveBeenCalledWith('/settings/billing?communityId=42');
+    expect(redirectMock).toHaveBeenCalledWith(
+      '/settings/billing?communityId=42&forbidden=root',
+    );
     // The security guarantee: no Stripe session is ever minted for them.
     expect(createBillingPortalSessionMock).not.toHaveBeenCalled();
   });
 
-  it.each(['property_manager', 'root_manager'])('allows %s', async (role) => {
-    requireCommunityMembershipMock.mockResolvedValue(membership(role));
+  // R3-03: the Stripe Customer Portal lets the visitor CANCEL the subscription,
+  // so it is root-exclusive. Before the narrowing a property_manager reached
+  // Stripe here via `settings:write`.
+  it('rejects a property_manager and never mints a Stripe session', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(membership('property_manager'));
+
+    await expect(GET(req())).rejects.toThrow('NEXT_REDIRECT');
+    expect(createBillingPortalSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('tells a bounced property_manager why, via forbidden=root', async () => {
+    // Without the param a PM clicking a dunning-email link lands on an
+    // unchanged billing page with no account of what happened.
+    requireCommunityMembershipMock.mockResolvedValue(membership('property_manager'));
+
+    await expect(GET(req())).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirectMock).toHaveBeenCalledWith(
+      '/settings/billing?communityId=42&forbidden=root',
+    );
+  });
+
+  it('allows root_manager', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(membership('root_manager'));
 
     // The handler ends in redirect(), which our mock throws to unwind.
     await expect(GET(req())).rejects.toThrow('NEXT_REDIRECT');

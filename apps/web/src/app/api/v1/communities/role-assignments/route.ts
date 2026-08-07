@@ -8,9 +8,9 @@
  */
 import { runRoute } from '@/lib/api/run-route';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
+import { requireRootManager } from '@/lib/api/role-guard';
 import {
   assignPropertyManager,
   revokePropertyManager,
@@ -20,9 +20,7 @@ import { assignRoleContract, revokeRoleContract } from './contract';
 async function requireRoot(communityId: number): Promise<string> {
   const callerId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(communityId, callerId);
-  if (membership.role !== 'root_manager') {
-    throw new ForbiddenError('Only the root manager can manage roles.');
-  }
+  requireRootManager(membership, 'Only the root manager can manage roles.');
   return callerId;
 }
 

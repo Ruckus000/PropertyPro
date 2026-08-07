@@ -115,7 +115,26 @@ describe('resolveSubscriptionBillingBannerState', () => {
     expect(state.showSoftLock).toBe(true);
   });
 
-  it('shows past_due banner for billing admins', () => {
+  it('shows past_due banner for the root manager, with the action', () => {
+    const state = resolveSubscriptionBillingBannerState({
+      role: 'root_manager',
+      communityId: 2,
+      subscriptionStatus: 'past_due',
+      subscriptionCanceledAt: null,
+      subscriptionCurrentPeriodEndAt: null,
+      freeAccessExpiresAt: null,
+      isDemo: false,
+      now,
+    });
+
+    expect(state.showPastDue).toBe(true);
+    expect(state.isBillingAdmin).toBe(true);
+  });
+
+  // R3-03 separates AWARENESS from ACTION. A property manager can no longer
+  // pay, but must still learn the community is lapsing — suppressing the banner
+  // would make the capability loss invisible at the worst possible moment.
+  it('shows past_due banner to a property manager WITHOUT the action (R3-03)', () => {
     const state = resolveSubscriptionBillingBannerState({
       role: 'property_manager',
       communityId: 2,
@@ -128,6 +147,38 @@ describe('resolveSubscriptionBillingBannerState', () => {
     });
 
     expect(state.showPastDue).toBe(true);
+    expect(state.isBillingAdmin).toBe(false);
+  });
+
+  it('shows the trialing banner to a property manager without the action (R3-03)', () => {
+    const state = resolveSubscriptionBillingBannerState({
+      role: 'property_manager',
+      communityId: 2,
+      subscriptionStatus: 'trialing',
+      subscriptionCanceledAt: null,
+      subscriptionCurrentPeriodEndAt: new Date('2026-08-20T12:00:00.000Z'),
+      freeAccessExpiresAt: null,
+      isDemo: false,
+      now,
+    });
+
+    expect(state.showTrialing).toBe(true);
+    expect(state.isBillingAdmin).toBe(false);
+  });
+
+  it('still hides the past_due banner from residents', () => {
+    const state = resolveSubscriptionBillingBannerState({
+      role: 'resident',
+      communityId: 2,
+      subscriptionStatus: 'past_due',
+      subscriptionCanceledAt: null,
+      subscriptionCurrentPeriodEndAt: null,
+      freeAccessExpiresAt: null,
+      isDemo: false,
+      now,
+    });
+
+    expect(state.showPastDue).toBe(false);
   });
 
   it('exposes isBillingAdmin=false for residents (A7)', () => {

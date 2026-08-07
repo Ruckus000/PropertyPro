@@ -127,7 +127,28 @@ const GLOBAL_PREF_USER_EMAILS = [
   'pm.admin@sunset.local',
   'founding.admin@palm.local',
   'site.manager@sunsetridge.local',
+  'root.manager@sunset.local',
+  'root.manager@sunsetridge.local',
 ] as const;
+
+/**
+ * The root_manager for each seeded community (role-v3 R3-03 / ADR-006).
+ *
+ * Every community must have exactly one. The real signup paths already do this
+ * (creator-is-root in `lib/pm/create-community.ts`, and provisioning-service
+ * for founding signups) — the seed did not, minting a root only for
+ * palm-shores. That gap is visible in prod today: seeded `sunset-condos` and
+ * `sunset-ridge-apartments` have zero roots, so after R3-03 nobody in them can
+ * manage billing until a property manager claims root.
+ *
+ * The one-root partial unique index on `user_roles` enforces the ≤1 invariant;
+ * these upserts are idempotent against it.
+ */
+const ROOT_MANAGER_BY_SLUG: Record<DemoCommunitySlug, string> = {
+  'sunset-condos': 'root.manager@sunset.local',
+  'palm-shores-hoa': 'founding.admin@palm.local',
+  'sunset-ridge-apartments': 'root.manager@sunsetridge.local',
+};
 
 const demoUsersByEmail = new Map<string, (typeof DEMO_USERS)[number]>(
   DEMO_USERS.map((user) => [user.email, user]),
@@ -1750,39 +1771,44 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
     await seedRoles(assignments);
   }
 
-  const foundingAdminId = await ensureDemoUserRecord(
-    'founding.admin@palm.local',
-    userIdsByEmail['founding.admin@palm.local'],
-  );
-  userIdsByEmail['founding.admin@palm.local'] = foundingAdminId;
-  await db.execute(sql`
-    insert into user_roles (
-      user_id,
-      community_id,
-      role,
-      unit_id,
-      is_unit_owner,
-      designation,
-      display_title
-    )
-    values (
-      ${foundingAdminId},
-      ${palmCommunityId},
-      'root_manager',
-      NULL,
-      false,
-      NULL,
-      'Root Manager'
-    )
-    on conflict (user_id, community_id) do update
-    set role = excluded.role,
-        unit_id = excluded.unit_id,
-        is_unit_owner = excluded.is_unit_owner,
-        designation = excluded.designation,
-        display_title = excluded.display_title,
-        updated_at = now()
-  `);
-  await ensureNotificationPreference(palmCommunityId, foundingAdminId);
+  // Mint the root_manager for EVERY seeded community, not just palm-shores.
+  // See ROOT_MANAGER_BY_SLUG for why this generalisation matters.
+  for (const [slug, rootEmail] of Object.entries(ROOT_MANAGER_BY_SLUG) as Array<
+    [DemoCommunitySlug, string]
+  >) {
+    const rootCommunityId = communityIdsBySlug[slug]!;
+    const rootUserId = await ensureDemoUserRecord(rootEmail, userIdsByEmail[rootEmail]);
+    userIdsByEmail[rootEmail] = rootUserId;
+
+    await db.execute(sql`
+      insert into user_roles (
+        user_id,
+        community_id,
+        role,
+        unit_id,
+        is_unit_owner,
+        designation,
+        display_title
+      )
+      values (
+        ${rootUserId},
+        ${rootCommunityId},
+        'root_manager',
+        NULL,
+        false,
+        NULL,
+        'Root Manager'
+      )
+      on conflict (user_id, community_id) do update
+      set role = excluded.role,
+          unit_id = excluded.unit_id,
+          is_unit_owner = excluded.is_unit_owner,
+          designation = excluded.designation,
+          display_title = excluded.display_title,
+          updated_at = now()
+    `);
+    await ensureNotificationPreference(rootCommunityId, rootUserId);
+  }
 
   const crossAssignments = CROSS_COMMUNITY_ASSIGNMENTS.map((assignment) => ({
     communityId: communityIdsBySlug[assignment.slug]!,

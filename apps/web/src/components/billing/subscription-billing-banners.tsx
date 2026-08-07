@@ -5,6 +5,7 @@ import type { CommunityRole } from '@propertypro/shared';
 import {
   billingDaysRemainingUTC,
   canManageBilling,
+  canViewBilling,
   formatBillingDateUTC,
   paidGraceEndsAt,
   resolveLifecycleState,
@@ -163,19 +164,33 @@ export function resolveSubscriptionBillingBannerState(
   const billingSettingsHref = props.communityId
     ? `/settings/billing?communityId=${props.communityId}`
     : '/settings/billing';
-  // props.role is the v3 runtime role; canManageBilling reads it directly.
+  // props.role is the v3 runtime role; the billing predicates read it directly.
+  //
+  // R3-03 splits AWARENESS from ACTION, and the split matters here: billing
+  // narrowed to the root manager, but a property manager must still SEE that
+  // the community is past due or trialing. Gating the banners themselves on
+  // `canManageBilling` would leave PMs blind to the community lapsing —
+  // precisely the failure the read-only posture exists to prevent.
+  //
+  //   canViewBilling  → whether the banner renders at all (management tier)
+  //   isBillingAdmin  → whether it carries an ACTION link (root only)
+  //
+  // The banner components already accept `isBillingAdmin` to render
+  // contact-your-admin copy instead of a link (that is how residents are
+  // handled), so PMs reuse that existing path rather than needing a new one.
+  const canSeeBilling = canViewBilling(props.role);
   const isBillingAdmin = canManageBilling(props.role);
   const showTrialing =
     !props.isDemo &&
     props.subscriptionStatus === 'trialing' &&
-    isBillingAdmin &&
+    canSeeBilling &&
     props.subscriptionCurrentPeriodEndAt instanceof Date;
 
   return {
     showTrialing,
     showGrace: isInGrace && props.subscriptionCanceledAt !== null,
     showSoftLock: isSoftLocked,
-    showPastDue: props.subscriptionStatus === 'past_due' && isBillingAdmin,
+    showPastDue: props.subscriptionStatus === 'past_due' && canSeeBilling,
     isInGrace,
     isSoftLocked,
     isBillingAdmin,

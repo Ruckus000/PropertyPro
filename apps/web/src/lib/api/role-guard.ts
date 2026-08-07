@@ -50,3 +50,28 @@ export function requireRole(
     throw new ForbiddenError(errorMessage);
   }
 }
+
+/**
+ * Root-exclusive guard (ADR-006 §2, role-v3 R3-03).
+ *
+ * The four root-exclusive powers — role assignment, billing/subscription,
+ * community deletion, root transfer — gate on THIS, never on
+ * `requirePermission(membership, 'settings', 'write')`. The RBAC matrix
+ * collapses `property_manager` and `root_manager` onto a single `manager` row,
+ * so `settings:write` cannot distinguish them; using it for a root-exclusive
+ * power silently admits every property manager.
+ *
+ * Note `ROLE_ALIASES` maps `property_manager -> [property_manager, root_manager]`
+ * but `root_manager -> [root_manager]`, so this admits roots only — the
+ * aliasing is deliberately one-way.
+ *
+ * The default message names the recovery path, because the legitimate way to
+ * hit this is being a property manager in a community whose root seat is
+ * vacant: claim-root is the fix, and a bare 403 would not say so.
+ */
+export function requireRootManager(
+  membership: Membership,
+  errorMessage = 'Only the root manager can perform this action. If this community has no root manager, a property manager can claim it from the dashboard.',
+): void {
+  requireRole(membership, ['root_manager'], errorMessage);
+}

@@ -13,7 +13,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { requirePermission } from '@/lib/db/access-control';
+import { requireRootManager } from '@/lib/api/role-guard';
 import { AppError } from '@/lib/api/errors/AppError';
 import {
   findCoolingCommunityDeletionRequest,
@@ -30,7 +30,11 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
     const membership = await requireCommunityMembership(communityId, userId);
-    requirePermission(membership, 'settings', 'write');
+    // R3-03: community deletion is root-exclusive (ADR-006 §2).
+    requireRootManager(
+      membership,
+      'Only the root manager can request deletion of this community. If this community has no root manager, a property manager can claim it from the dashboard.',
+    );
 
     return requestCommunityDeletion(communityId, userId);
   }),
@@ -41,7 +45,19 @@ export const DELETE = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
     const membership = await requireCommunityMembership(communityId, userId);
-    requirePermission(membership, 'settings', 'write');
+    // R3-03: root-exclusive, same as the POST.
+    //
+    // Considered and rejected: leaving CANCEL open to the management tier on
+    // the "undo should never be harder than do" principle. It would let a
+    // property manager overturn the root's deliberate decision, which is the
+    // authority inversion this whole item exists to close. The safety valve is
+    // instead platform-admin intervention (`interveneCommunityDeletion`, admin
+    // app) during the cooling-off window — a break-glass that leaves an audit
+    // trail, rather than a standing permission.
+    requireRootManager(
+      membership,
+      'Only the root manager can cancel the deletion request for this community. If this community has no root manager, a property manager can claim it from the dashboard.',
+    );
 
     const activeRequestId = await findCoolingCommunityDeletionRequest(communityId);
     if (activeRequestId === null) {

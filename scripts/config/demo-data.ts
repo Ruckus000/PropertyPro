@@ -43,6 +43,15 @@ export const DEMO_USERS = [
   { email: 'pm.admin@sunset.local', fullName: 'Pat PM', phone: '305-555-0106' },
   { email: 'founding.admin@palm.local', fullName: 'Fran Founding', phone: '954-555-0100' },
   { email: 'site.manager@sunsetridge.local', fullName: 'Sierra Site', phone: '813-555-0107' },
+  // Dedicated root managers (role-v3 R3-03). Every seeded community needs one:
+  // the real signup path mints creator-is-root, but the seed used to mint a
+  // root ONLY for palm-shores, which is why prod's seeded sunset-condos and
+  // sunset-ridge are rootless. These are NEW personas rather than promotions of
+  // cam.one / site.manager, because those emails back the `?as=cam` and
+  // `?as=site_manager` dev-login personas and must stay property_manager for
+  // role-distinction tests to mean anything.
+  { email: 'root.manager@sunset.local', fullName: 'Robin Root', phone: '305-555-0108' },
+  { email: 'root.manager@sunsetridge.local', fullName: 'Rowan Root', phone: '813-555-0109' },
   { email: 'tenant.apt101@sunsetridge.local', fullName: 'Alex Tenant', phone: '813-555-0201' },
   { email: 'tenant.apt102@sunsetridge.local', fullName: 'Blake Resident', phone: '813-555-0202' },
   { email: 'tenant.apt201@sunsetridge.local', fullName: 'Casey Dweller', phone: '813-555-0203' },

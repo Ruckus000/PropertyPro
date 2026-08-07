@@ -32,6 +32,12 @@ const ROLE_EMAIL_MAP: Record<string, string> = {
   pm_admin: 'pm.admin@sunset.local',
   founding_admin: 'founding.admin@palm.local',
   site_manager: 'site.manager@sunsetridge.local',
+  // Root managers for the two communities that previously had none. Needed to
+  // exercise root-exclusive surfaces (billing, community deletion, role
+  // assignment) in Sunset Condos and Sunset Ridge — `founding_admin` only
+  // covers Palm Shores.
+  root_sunset: 'root.manager@sunset.local',
+  root_sunsetridge: 'root.manager@sunsetridge.local',
 };
 
 const ADMIN_ROLES = new Set([
@@ -40,6 +46,16 @@ const ADMIN_ROLES = new Set([
   'cam',
   'site_manager',
   'pm_admin',
+]);
+
+/**
+ * Personas that hold `root_manager` in exactly ONE community. They land on the
+ * community dashboard rather than the PM portfolio.
+ */
+const COMMUNITY_ROOT_PERSONAS = new Set([
+  'founding_admin',
+  'root_sunset',
+  'root_sunsetridge',
 ]);
 
 export async function GET(request: Request) {
@@ -154,15 +170,20 @@ export async function GET(request: Request) {
   const isAdmin = ADMIN_ROLES.has(role);
   // PM-tier users (property_manager / root_manager) land on the PM portfolio
   // dashboard. The `?as=pm_admin` alias resolves to a property_manager demo row.
-  // Founding admin (`root_manager` on Essentials) stays on the community dashboard.
+  // The single-community root personas stay on the community dashboard — a
+  // portfolio view is meaningless for them, and the root-exclusive surfaces
+  // they exist to exercise (billing, deletion, role assignment) all live there.
+  const isCommunityRootPersona = COMMUNITY_ROOT_PERSONAS.has(role);
   const isPmTier =
-    role !== 'founding_admin'
+    !isCommunityRootPersona
     && (
       role === 'pm_admin'
       || primary?.role === 'property_manager'
       || primary?.role === 'root_manager'
     );
-  let portal = isPmTier ? '/pm/dashboard/communities' : (isAdmin || role === 'founding_admin') ? '/dashboard' : '/mobile';
+  let portal = isPmTier
+    ? '/pm/dashboard/communities'
+    : (isAdmin || isCommunityRootPersona) ? '/dashboard' : '/mobile';
   if (primary && !isPmTier) {
     portal += `?communityId=${primary.communityId}`;
   }

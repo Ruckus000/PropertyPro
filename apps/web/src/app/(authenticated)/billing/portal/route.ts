@@ -22,7 +22,7 @@ import { ReauthRequiredError } from '@/lib/api/errors';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { requirePermission } from '@/lib/db/access-control';
+import { hasRole } from '@/lib/api/role-guard';
 import { headers } from 'next/headers';
 
 export const GET = async (req: NextRequest): Promise<never> => {
@@ -56,21 +56,28 @@ export const GET = async (req: NextRequest): Promise<never> => {
   // Membership alone is not enough: the Stripe Customer Portal exposes
   // invoices and payment methods and lets the visitor CANCEL the subscription.
   // Without this check any member who could pass the reauth prompt — including
-  // a tenant — could cancel the community's subscription. Billing is
-  // management-tier only (`settings.write` is true solely on the `manager`
-  // matrix row), matching /api/v1/subscribe and /api/v1/subscribe/change-plan.
+  // a tenant — could cancel the community's subscription.
+  //
+  // R3-03: this is ROOT-ONLY, not management-tier. `settings:write` cannot
+  // express it — the RBAC matrix collapses property_manager and root_manager
+  // onto a single `manager` row, so gating on it would keep handing every
+  // property manager the ability to cancel the subscription.
+  //
+  // `hasRole` rather than `requireRootManager` because this handler must
+  // REDIRECT, not throw: it is a plain App Router handler, not an /api/v1
+  // route, so there is no `withErrorHandler` and no error boundary — a raw
+  // ForbiddenError surfaces as an opaque 500 plus a Sentry event. The grace and
+  // soft-lock banners render for non-admins too, and the dunning emails go to
+  // all admin recipients, so a property manager or unit owner following one of
+  // those links lands here legitimately and deserves the billing page. Every
+  // other rejection path in this handler redirects the same way.
+  //
+  // `forbidden=root` tells the billing page to explain WHY it bounced —
+  // without it, a PM clicking a dunning-email link just lands on an unchanged
+  // page with no account of what happened.
   const membership = await requireCommunityMembership(context.communityId, userId);
-  try {
-    requirePermission(membership, 'settings', 'write');
-  } catch {
-    // Redirect rather than throw: this is a plain App Router handler, not an
-    // /api/v1 route, so there is no `withErrorHandler` and no error boundary —
-    // a raw ForbiddenError surfaces as an opaque 500 plus a Sentry event. The
-    // grace and soft-lock banners render for non-admins too, and the dunning
-    // emails go to all admin recipients, so a unit owner following one of
-    // those links lands here legitimately and deserves the billing page.
-    // Every other rejection path in this handler redirects the same way.
-    redirect(`/settings/billing?communityId=${context.communityId}`);
+  if (!hasRole(membership, ['root_manager'])) {
+    redirect(`/settings/billing?communityId=${context.communityId}&forbidden=root`);
   }
 
   // 4. Look up the Stripe customer ID

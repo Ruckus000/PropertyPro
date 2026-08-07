@@ -18,7 +18,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
-import { requirePermission } from '@/lib/db/access-control';
+import { requireRootManager } from '@/lib/api/role-guard';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { AppError, ValidationError } from '@/lib/api/errors';
 import {
@@ -36,7 +36,12 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
     const membership = await requireCommunityMembership(communityId, userId);
-    requirePermission(membership, 'settings', 'write');
+    // R3-03: billing is root-exclusive (ADR-006 §2). Reauth still applies on
+    // top — root identity and recent-authentication are independent gates.
+    requireRootManager(
+      membership,
+      'Only the root manager can change the plan for this community. If this community has no root manager, a property manager can claim it from the dashboard.',
+    );
     await requireFreshReauth(userId);
 
     const { planId, billingInterval } = body;
