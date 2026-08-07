@@ -102,9 +102,14 @@ interface AppShellProps {
 }
 
 function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
-  // `features` arrives already narrowed for a lapsed community; the sidebar
-  // additionally needs to know WHY, because its type-gate filter reads raw
-  // type features and its plan-lock branch no-ops on a null plan.
+  // `features` is NOT narrowed for a lapsed community — it is the full
+  // type-and-plan set, same as any other state. The sidebar therefore cannot
+  // infer the lapse from it and needs this flag: its type-gate filter reads raw
+  // type features, and its plan-lock branch no-ops entirely when the plan is
+  // null, which cancellation makes it.
+  //
+  // Raw lapse state, deliberately — AppSidebar combines it with the role,
+  // because the API gates on the actor (see `lapsedAdmin` there).
   const isLapsed =
     resolveLifecycleState({
       subscriptionStatus: subscriptionStatus ?? null,

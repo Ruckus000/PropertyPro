@@ -37,6 +37,7 @@ vi.mock('@propertypro/email', () => ({
   PaymentFailedEmail: vi.fn(),
   SubscriptionCanceledEmail: vi.fn(),
   SubscriptionExpiryWarningEmail: vi.fn(),
+  SubscriptionLapsedEmail: vi.fn(),
   sendEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -54,6 +55,7 @@ import { createElement } from 'react';
 import {
   PaymentFailedEmail,
   SubscriptionExpiryWarningEmail,
+  SubscriptionLapsedEmail,
   SubscriptionCanceledEmail,
   sendEmail,
 } from '@propertypro/email';
@@ -330,8 +332,15 @@ describe('processPaymentReminders', () => {
     expect(summary.errors).toBe(1);
   });
 
-  it('sends SubscriptionExpiryWarningEmail (not PaymentFailedEmail) when BOTH paymentFailedAt AND subscriptionCanceledAt are set', async () => {
+  it('sends the cancellation track (not PaymentFailedEmail) when BOTH paymentFailedAt AND subscriptionCanceledAt are set', async () => {
     // subscriptionCanceledAt is checked first in processCommunityReminder — it takes priority.
+    //
+    // daysAgo(23) is well past PAID_GRACE_DAYS (7), so this community is LAPSED
+    // and takes the lapse branch, not the warning branch. That distinction was
+    // invisible while both branches rendered SubscriptionExpiryWarningEmail:
+    // this assertion passed for the wrong reason, and a community canceled 23
+    // days ago was being emailed "access will be locked in 2 days, on <a date
+    // three weeks past>".
     const community = {
       id: 7,
       name: 'Dual-Flag Community',
@@ -350,9 +359,14 @@ describe('processPaymentReminders', () => {
     expect(summary.emailsSent).toBe(1);
     expect(summary.errors).toBe(0);
 
-    // SubscriptionExpiryWarningEmail must be used
+    // The LAPSED template, because grace expired 16 days ago — not the
+    // future-tense warning, which would name a deadline already gone.
     const createElementMock = createElement as ReturnType<typeof vi.fn>;
-    expect(createElementMock).toHaveBeenCalledWith(SubscriptionExpiryWarningEmail, expect.any(Object));
+    expect(createElementMock).toHaveBeenCalledWith(SubscriptionLapsedEmail, expect.any(Object));
+    expect(createElementMock).not.toHaveBeenCalledWith(
+      SubscriptionExpiryWarningEmail,
+      expect.any(Object),
+    );
 
     // PaymentFailedEmail must NOT be used
     const paymentFailedCalls = createElementMock.mock.calls.filter(
@@ -575,7 +589,7 @@ describe('processPaymentReminders — send-failure retry (A5)', () => {
 
     expect(summary.emailsSent).toBe(1);
     expect(sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: 'Lapsed Towers: subscription ended' }),
+      expect.objectContaining({ subject: 'Lapsed Towers: admin access paused' }),
     );
     // Terminal — no further reminders for a lapsed community.
     expect(mockDbSet).toHaveBeenCalledWith(expect.objectContaining({ nextReminderAt: null }));

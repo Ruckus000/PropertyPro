@@ -70,7 +70,7 @@ export function LapsedFeatureScreen({
               <Link href={billingHref}>Reactivate subscription</Link>
             </Button>
             <p className="text-xs text-content-tertiary">
-              Everything is restored as soon as your subscription is active again.
+              Residents keep their access throughout.
             </p>
           </div>
         ) : (

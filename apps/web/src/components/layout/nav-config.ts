@@ -549,7 +549,7 @@ export function getVisibleItemsWithPlanGate(
    * is skipped entirely when `planId` is null — which cancellation makes it.
    * Without it the sidebar keeps advertising surfaces the API now refuses.
    */
-  isLapsed?: boolean,
+  lapsedAdmin?: boolean,
 ): NavItemWithGateStatus[] {
   // Raw type-level features (before plan intersection)
   const typeFeatures = communityType ? getFeaturesForCommunity(communityType) : null;
@@ -582,7 +582,7 @@ export function getVisibleItemsWithPlanGate(
       // full read access and must see an unchanged nav.
       //
       // No locked pill: there is no upgrade to sell. They had it, it's paused.
-      if (isLapsed && item.id !== 'dashboard') return false;
+      if (lapsedAdmin && item.id !== 'dashboard') return false;
       return true;
     })
     .map((item) => {

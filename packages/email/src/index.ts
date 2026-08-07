@@ -63,6 +63,9 @@ export type { SubscriptionCanceledEmailProps } from "./templates/subscription-ca
 export { SubscriptionExpiryWarningEmail } from "./templates/subscription-expiry-warning";
 export type { SubscriptionExpiryWarningEmailProps } from "./templates/subscription-expiry-warning";
 
+export { SubscriptionLapsedEmail } from "./templates/subscription-lapsed";
+export type { SubscriptionLapsedEmailProps } from "./templates/subscription-lapsed";
+
 export { WelcomeEmail } from "./templates/welcome-email";
 export type { WelcomeEmailProps } from "./templates/welcome-email";
 

@@ -23,6 +23,7 @@ import {
   PaymentFailedEmail,
   SubscriptionCanceledEmail,
   SubscriptionExpiryWarningEmail,
+  SubscriptionLapsedEmail,
   sendEmail,
 } from '@propertypro/email';
 import {
@@ -298,12 +299,18 @@ async function processCommunityReminder(
     if (!isWithinPaidGrace(canceledAt, now)) {
       const lapsedResult = await sendToAll(
         recipients,
-        `${community.name}: subscription ended`,
+        `${community.name}: admin access paused`,
         (r) =>
-          createElement(SubscriptionExpiryWarningEmail, {
+          // NOT SubscriptionExpiryWarningEmail: that template is future-tense
+          // throughout ("will be locked in N days, on {date}", "update payment
+          // before {date}"), and by this point {date} has passed and access is
+          // already suspended — it would urge a churned customer to beat a
+          // deadline that is gone. `expiryDate` is the same value, restated as
+          // a past fact.
+          createElement(SubscriptionLapsedEmail, {
             branding: { communityName: community.name },
             recipientName: r.fullName,
-            expiryDate: formatDate(expiryDate),
+            lockedSinceDate: formatDate(expiryDate),
             billingPortalUrl,
           }),
       );
