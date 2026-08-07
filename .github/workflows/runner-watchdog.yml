@@ -1,0 +1,113 @@
+# Fails CI back to GitHub-hosted runners when the self-hosted one goes away.
+#
+# THE FAILURE MODE THIS EXISTS FOR
+#
+# `Unit Tests` and `perf-check` run on a Lima VM hosted on a MacBook Pro. A
+# laptop gets closed. A job with no available runner does NOT fail — it QUEUES,
+# for roughly 24 hours, and then fails. In the meantime the required checks sit
+# *pending*: `gh pr checks` shows everything else green, nothing red, and the PR
+# is simply unmergeable. That is the same invisible-block shape that the
+# `timeout-minutes` note in ci.yml documents from the 2026-08-05 incident, where
+# a cancelled job read as a flake for long enough to waste a day.
+#
+# So this converts "laptop closed -> stuck PR" into "laptop closed -> slower PR".
+#
+# It runs on ubuntu-latest and takes seconds, so it is a rounding error against
+# the ~25 minutes/run this whole arrangement is saving.
+
+name: runner-watchdog
+
+on:
+  schedule:
+    # Every 10 minutes. Worst case a run queues for ~10 min before falling back,
+    # which is still far better than the ~18 min the job used to take anyway.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runner-watchdog
+  cancel-in-progress: true
+
+jobs:
+  watchdog:
+    name: watchdog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reconcile CI_RUNNER_LABEL with actual runner availability
+        env:
+          # Needs a fine-grained PAT scoped to this repo with:
+          #   Administration: read   (to list self-hosted runners)
+          #   Variables:      write  (to flip CI_RUNNER_LABEL)
+          #   Actions:        write  (to re-dispatch queued runs)
+          # The default GITHUB_TOKEN cannot do any of these.
+          GH_TOKEN: ${{ secrets.RUNNER_WATCHDOG_TOKEN }}
+          REPO: ${{ github.repository }}
+          SELF_HOSTED_LABEL: propertypro-mac
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::RUNNER_WATCHDOG_TOKEN is not set; watchdog is inert."
+            echo "Set it, or fall back manually with: gh variable set CI_RUNNER_LABEL --body ubuntu-latest"
+            exit 0
+          fi
+
+          # TWO VARIABLES, DELIBERATELY.
+          #
+          #   CI_RUNNER_DESIRED_LABEL — operator intent. Only a human sets this.
+          #   CI_RUNNER_LABEL         — the effective value ci.yml reads.
+          #
+          # The watchdog may only move CI_RUNNER_LABEL *between* those two
+          # states. It must never invent intent. An earlier draft restored
+          # CI_RUNNER_LABEL to the self-hosted label whenever a runner appeared
+          # online — which would have silently cut CI over the first time a
+          # runner came up during the shadow phase, ending that phase without
+          # anyone deciding to.
+          desired="$(gh variable get CI_RUNNER_DESIRED_LABEL --repo "${REPO}" 2>/dev/null || echo '')"
+          if [ "${desired}" != "${SELF_HOSTED_LABEL}" ]; then
+            echo "CI_RUNNER_DESIRED_LABEL is '${desired:-<unset>}', not '${SELF_HOSTED_LABEL}'."
+            echo "Nobody has opted into self-hosted CI; watchdog has nothing to manage."
+            exit 0
+          fi
+
+          # A runner counts as usable only if it is online AND idle-or-busy —
+          # i.e. present at all. `status` is online/offline.
+          online="$(
+            gh api "repos/${REPO}/actions/runners" \
+              --jq "[.runners[] | select(.status == \"online\")
+                     | select(any(.labels[]; .name == \"${SELF_HOSTED_LABEL}\"))] | length"
+          )"
+
+          current="$(gh variable get CI_RUNNER_LABEL --repo "${REPO}" 2>/dev/null || echo '')"
+          echo "online self-hosted runners: ${online}; CI_RUNNER_LABEL=${current:-<unset>}"
+
+          if [ "${online}" -eq 0 ]; then
+            if [ "${current}" != "ubuntu-latest" ]; then
+              echo "::warning::No self-hosted runner online — failing CI back to ubuntu-latest."
+              gh variable set CI_RUNNER_LABEL --repo "${REPO}" --body 'ubuntu-latest'
+            fi
+
+            # Flipping the variable does NOT re-dispatch runs that are already
+            # queued — they were assigned their `runs-on` at queue time. Without
+            # this re-run they would sit pending until GitHub expires them,
+            # which is the exact problem this workflow exists to prevent.
+            for run_id in $(
+              gh run list --repo "${REPO}" --workflow CI --status queued \
+                --limit 20 --json databaseId --jq '.[].databaseId'
+            ); do
+              echo "re-running queued run ${run_id} against the hosted fallback"
+              gh run rerun "${run_id}" --repo "${REPO}" --failed 2>/dev/null \
+                || gh run rerun "${run_id}" --repo "${REPO}" 2>/dev/null \
+                || echo "  (could not re-run ${run_id}; leaving it queued)"
+            done
+          else
+            # Restore only up to the operator's declared intent, never past it.
+            if [ "${current}" != "${desired}" ]; then
+              echo "Self-hosted runner is back — restoring CI_RUNNER_LABEL to '${desired}'."
+              gh variable set CI_RUNNER_LABEL --repo "${REPO}" --body "${desired}"
+            fi
+          fi

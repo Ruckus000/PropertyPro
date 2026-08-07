@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd AGENT (not a daemon) for one ephemeral CI runner.
+
+  Agent, deliberately: it runs inside the user's login session, which is what
+  lets `gh` read its token from the login keychain. A daemon would run before
+  login with no keychain access and would need a PAT written to disk instead.
+
+  Install one copy per runner index — see README.md. Replace __IDX__ and
+  __REPO_DIR__ before copying into ~/Library/LaunchAgents/.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.propertypro.ci-runner.__IDX__</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO_DIR__/.github/self-hosted-runner/runner-supervisor.sh</string>
+        <string>__IDX__</string>
+    </array>
+
+    <!-- The supervisor loops forever by design; if it dies, bring it back. -->
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Don't hammer the API if something is persistently broken. -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/propertypro-ci-runner.__IDX__.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/propertypro-ci-runner.__IDX__.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Homebrew (limactl, gh) is not on launchd's default PATH. -->
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>

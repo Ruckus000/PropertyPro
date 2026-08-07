@@ -69,12 +69,39 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: ubuntu-latest
+    # SELF-HOSTED ON PULL REQUESTS, GitHub-hosted on pushes to main.
+    #
+    # The runner is a Lima VM on a MacBook Pro (see
+    # .github/self-hosted-runner/README.md). Measured: the identical
+    # `vitest run --coverage` over 9,028 tests takes 57s on that host's 14 cores
+    # and 974s on a 4-core `ubuntu-latest` runner.
+    #
+    # `push: main` deliberately stays hosted. A laptop gets closed, and a job
+    # with no available runner does not fail — it QUEUES, leaving required
+    # checks pending and the PR unmergeable with nothing red. That is the same
+    # invisible-block failure mode described in the timeout note below, so
+    # merges to main must never depend on the laptop being awake.
+    #
+    # `vars.CI_RUNNER_LABEL` is the escape hatch: set it to `ubuntu-latest` to
+    # fall back instantly. runner-watchdog.yml flips it automatically when the
+    # self-hosted runner goes offline. Note that flipping it does NOT
+    # re-dispatch already-queued runs — the watchdog re-runs them too.
+    runs-on: ${{ github.event_name == 'pull_request' && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
     # 25, not the 15 every other job uses, because this is the ONLY job whose
-    # runtime is anywhere near a ceiling. Measured over the last 8 runs:
-    # Unit Tests avg 8.5 / max 12.3 min; the next longest, perf-check, peaks at
-    # 6.3. At 15 that was ~1.7x headroom, and a slow-runner window on
-    # 2026-08-05 pushed three consecutive runs to 15.2-15.3 min.
+    # runtime is anywhere near a ceiling.
+    #
+    # Measured 2026-08-06 over the last 4 green runs, via
+    # `gh api repos/Ruckus000/PropertyPro/actions/runs/<id>/jobs`:
+    # 18m17s / 18m38s / 18m17s / 13m42s. That is ~1.35x headroom, NOT the ~1.7x
+    # implied by the earlier note here (which recorded avg 8.5 / max 12.3 min —
+    # accurate when written, badly stale now; the suite has roughly doubled).
+    # perf-check, the next longest, is 6m42s-8m01s.
+    #
+    # Do not raise this again to buy room. On the self-hosted runner this job
+    # is expected to land well under 6 min, at which point the value should be
+    # RATCHETED DOWN to roughly 2x measured p95 — a 25-minute ceiling on a job
+    # that takes 4 means a hang burns 25 minutes of someone's laptop and then
+    # reports as cancelled, i.e. invisibly.
     #
     # The failure mode is worth knowing: a job that exceeds `timeout-minutes`
     # is reported as **cancelled**, not failed. `gh pr checks` then shows
@@ -82,17 +109,20 @@ jobs:
     # — so it reads as a flake rather than a block. It hit a docs-only PR,
     # so nothing about the changed code protects you from it.
     #
-    # This does not paper over a slow suite: the suite itself is unchanged at
-    # ~8 min. It stops an infrastructure-speed window from cancelling
-    # unrelated PRs. If the AVERAGE moves above ~12, fix the suite instead of
-    # raising this again — see apps/web/vitest.shared.ts for the node/jsdom
-    # split that got this job down from 17 min in the first place.
+    # See apps/web/vitest.shared.ts for the node/jsdom split that got this job
+    # down from 17 min in the first place.
     timeout-minutes: 25
     env:
       # Stub URL so @propertypro/db can load at import time. Unit tests never
       # actually connect — they either mock createScopedClient or call pure
       # functions. Real DB access is covered by the integration-tests job.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
+      # `ubuntu-latest` is UTC / C.UTF-8 and nothing in the repo pins either.
+      # ~82 files under apps/web/src use Intl/toLocale*, so an inherited runner
+      # timezone silently rewrites date assertions. Set here as well as in the
+      # VM image so the guarantee survives a runner rebuild.
+      TZ: UTC
+      LANG: C.UTF-8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -216,10 +246,18 @@ jobs:
   # read the emitted build output from disk, so they must share a job with it.
   perf-check:
     name: perf-check
-    runs-on: ubuntu-latest
+    # Self-hosted on PRs, hosted on pushes to main — same rationale as the
+    # `test` job above. Cut over AFTER `test`: this job is the most
+    # environment-sensitive of the two (it is the only production build, and
+    # the required `Build` status check hangs off its result), so it carries
+    # the largest blast radius.
+    runs-on: ${{ github.event_name == 'pull_request' && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
     timeout-minutes: 15
 
     env:
+      # See the `test` job — same reason, same guarantee.
+      TZ: UTC
+      LANG: C.UTF-8
       # Build-time env stubs — no live DB needed for bundle size checks.
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/propertypro_stub
@@ -273,11 +311,18 @@ jobs:
           path: |
             apps/web/.next/cache
             apps/admin/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          # `runner.arch` is NOT decorative. `runner.os` is `Linux` on both a
+          # GitHub-hosted x64 runner and the self-hosted arm64 VM, so without it
+          # the restore-keys prefix would hand an X64 cache — built by
+          # @next/swc-linux-x64-gnu — to an ARM64 build. Expect a low hit rate
+          # on self-hosted regardless: webpack caches absolute paths, and the
+          # workspace path differs from /home/runner/work. That is not a VM
+          # fault, so do not go debugging it as one.
+          key: nextjs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           # Lockfile-scoped only. A bare `nextjs-${{ runner.os }}-` fallback would
           # happily restore a cache built against different dependency versions.
           restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            nextjs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Build
         run: pnpm build
@@ -290,7 +335,7 @@ jobs:
           path: |
             apps/web/.next/cache
             apps/admin/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          key: nextjs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
 
       # The only e2e that runs on a PR, and the list is deliberately short.
       #
