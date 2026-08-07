@@ -12,6 +12,11 @@
  * community and must never see it — that carve-out is how an association
  * retains access to its own records.
  *
+ * Since R3-03 the admins who reach it are split: only the `root_manager` can
+ * reactivate (billing is root-exclusive, ADR-006 §2), while a `property_manager`
+ * gets the read-only arm below. Both are admins, so neither may be told to
+ * "contact your administrator".
+ *
  * The copy therefore promises nothing about which surfaces remain readable: for
  * the admin looking at it, none do. It says only that nothing is deleted, which
  * is true, and points at reactivation.
@@ -74,9 +79,22 @@ export function LapsedFeatureScreen({
             </p>
           </div>
         ) : (
-          <p className="text-sm text-content-secondary">
-            Contact your community administrator to reactivate the subscription.
-          </p>
+          // R3-03: this branch used to be unreachable. `requireEntitledForAdminRead`
+          // admits only admins, and `canManageBilling` was true for the whole
+          // management tier — so every viewer got the reactivate action above.
+          // Now that billing is root-only, PROPERTY MANAGERS land here, and
+          // telling an admin to "contact your community administrator" is a
+          // dead end: they are the administrator. Name the role that can
+          // actually reactivate, and send them to the billing page, which
+          // carries the claim-root CTA when the root seat is vacant.
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm text-content-secondary">
+              Only the root manager can reactivate the subscription.
+            </p>
+            <Button asChild variant="outline" size="lg">
+              <Link href={billingHref}>View billing</Link>
+            </Button>
+          </div>
         )}
       </div>
     </div>
