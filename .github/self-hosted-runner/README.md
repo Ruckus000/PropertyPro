@@ -85,33 +85,44 @@ sed -e "s|__IDX__|1|g" -e "s|__REPO_DIR__|$PWD|g" \
 launchctl load ~/Library/LaunchAgents/com.propertypro.ci-runner.1.plist
 ```
 
-### The shadow phase
+### The shadow phase — COMPLETE, workflow retired
 
-Before cutting over, run the two job bodies on the self-hosted label alongside
-the real hosted jobs for ~1 week / ~20 PR runs, as a NON-REQUIRED workflow.
+`self-hosted-shadow.yml` ran the two job bodies on the self-hosted label
+alongside the real hosted jobs as a NON-REQUIRED workflow (#913). It was
+**deleted once CI cut over**, because from that point it stopped shadowing
+anything and merely competed with the real jobs for the same VM — which is the
+precise failure it had been built to detect.
 
-That workflow is **not in this branch on purpose**. Merged early it would sit
-permanently pending on every PR — no runner carries the label yet — and a
-forever-pending check reads as a flake rather than a block, which is a failure
-mode this repo has already paid for once. It lives on
-`claude/self-hosted-shadow-workflow` and should land at the same time the
-runners are registered, not before.
+**What it found, which is the reason the phase existed.** The very first real
+shadow run failed two tests with `Test timed out in 5000ms` —
+`contracts-route.test.ts:191` and `esign-route.test.ts:189` — neither of which
+asserts anything about timing, while the hosted job was green on the same
+commit. vitest's fork pool defaults to `availableParallelism() - 1`: 3 on a
+4-core hosted runner, 7 on this 8-vCPU VM, and two jobs sharing the VM put up to
+14 forks on 8 vCPUs. The earlier `demo-token` failure (#912) was the same cause,
+which means fixing tests one at a time was closing instances, not the category.
 
-What the shadow phase is actually looking for — not "does it pass once", which
-the Phase 2 gate already settled:
+Fixed in #916 and carried into `ci.yml` when the shadow workflow was retired:
+`VITEST_MAX_FORKS=4` plus `--testTimeout=15000`, applied only when
+`runner.environment == 'self-hosted'`. **If that guard is ever lost, the
+timeouts come back** — it is the only thing keeping the real Unit Tests job from
+running in the exact configuration that failed.
 
-- **Concurrency shakeout.** vitest goes from 3 workers to 7. Tests that pass
-  today only because parallelism is low (shared temp paths, shared ports, order
-  dependence) start failing.
+A sequential gate cannot find any of this. Replaying steps one at a time never
+produces contention.
+
+Still worth watching now that the phase is over:
+
 - **Retry masking.** `retries: 2` can turn a new flake into slow-but-green.
-  Compare retry counts against the hosted jobs, not just pass/fail.
+  Compare retry counts, not just pass/fail.
 - **Disk growth.** Lima images never shrink. Watch the trend across runs.
 
 ### Cutting over
 
-Finally — **only after the shadow phase**, not at install time — point CI at it.
-Two variables, because the watchdog must be able to fail CI back without ever
-inventing the decision to cut over in the first place:
+Done on 2026-08-07. Recorded here because these are the two levers to reach for
+when the arrangement misbehaves — and **only after the shadow phase**, never at
+install time. Two variables, because the watchdog must be able to fail CI back
+without ever inventing the decision to cut over in the first place:
 
 ```bash
 gh variable set CI_RUNNER_DESIRED_LABEL --body propertypro-mac  # operator intent
@@ -120,8 +131,11 @@ gh variable set CI_RUNNER_LABEL         --body propertypro-mac  # what ci.yml re
 
 `runner-watchdog.yml` moves `CI_RUNNER_LABEL` between `ubuntu-latest` and
 `CI_RUNNER_DESIRED_LABEL` as the runner goes offline and comes back. With
-`CI_RUNNER_DESIRED_LABEL` unset it does nothing at all, which is what keeps the
-shadow phase from ending itself the first time a runner comes online.
+`CI_RUNNER_DESIRED_LABEL` unset it does nothing at all — which is what kept the
+shadow phase from ending itself the first time a runner came online, and is now
+the way to hold CI on hosted runners: clearing that variable is what makes a
+manual `CI_RUNNER_LABEL=ubuntu-latest` stick instead of being reconciled back
+within 10 minutes.
 
 The supervisor needs no separate PAT: a `gh` login carrying the classic `repo`
 scope is enough to call `generate-jitconfig` (verified 2026-08-06). Set `GH_TOKEN`

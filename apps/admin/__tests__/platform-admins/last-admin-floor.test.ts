@@ -14,6 +14,7 @@ const requirePlatformAdmin = vi.fn();
 // forwarder below type-checks and `.mock.calls[0]![0]` is indexable.
 const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 const deleteAdmin = vi.fn();
+const insertAdmin = vi.fn();
 
 let adminCount: { count: number | null; error: unknown } = { count: 2, error: null };
 let existingRow: { user_id: string } | null = { user_id: 'target' };
@@ -43,9 +44,16 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
           };
         },
         delete: () => ({ eq: async () => deleteAdmin() }),
+        insert: async () => insertAdmin(),
       };
     },
   }),
+}));
+
+// Only the POST/grant tests reach this; the DELETE route never imports it.
+vi.mock('@/lib/auth/list-all-auth-users', () => ({
+  listAllAuthUsers: async () => [{ id: 'new-user', email: 'new@example.com' }],
+  buildAuthUserMap: async () => new Map(),
 }));
 
 async function callDelete(userId = 'target') {
@@ -125,6 +133,75 @@ describe('platform admin removal — last-admin floor', () => {
     const res = await callDelete();
 
     expect(res.status).toBe(404);
+    expect(logAdminAction).not.toHaveBeenCalled();
+  });
+
+  // The count above cannot see a concurrent delete, so the 0056 trigger is what
+  // actually holds the floor. When it fires, this route must return the same
+  // 409 the pre-check returns — not the opaque 500 assertNoDbError would give.
+  it('returns LAST_ADMIN, not a 500, when the floor trigger fires', async () => {
+    deleteAdmin.mockResolvedValue({
+      error: {
+        code: '23514',
+        message:
+          'platform_admin_users must retain at least one row; refusing to remove the last platform admin',
+      },
+    });
+
+    const res = await callDelete();
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('LAST_ADMIN');
+    // The delete did not happen, so there is nothing to audit.
+    expect(logAdminAction).not.toHaveBeenCalled();
+  });
+
+  it('still surfaces an unrelated delete failure as a 500', async () => {
+    // Guards the mapping above from widening into "any delete error is a 409".
+    deleteAdmin.mockResolvedValue({ error: { code: '08006', message: 'connection failure' } });
+
+    const res = await callDelete();
+
+    expect(res.status).toBe(500);
+    expect((await res.json()).error.code).toBe('INTERNAL_ERROR');
+  });
+});
+
+describe('platform admin grant — duplicate key', () => {
+  beforeEach(() => {
+    requirePlatformAdmin.mockResolvedValue({ id: 'acting-admin', email: 'a@b.com' });
+    logAdminAction.mockClear();
+    insertAdmin.mockReset();
+    existingRow = null; // the pre-check passes; the race happens after it
+  });
+
+  afterEach(() => vi.resetModules());
+
+  async function callPost(email = 'new@example.com') {
+    const mod = await import('@/app/api/admin/platform-admins/route');
+    const req = new Request('http://localhost/api/admin/platform-admins', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return mod.POST(req as never);
+  }
+
+  // Cosmetic by design: the primary key already prevents the duplicate, so
+  // nothing is at risk. This only stops a correctly-refused request from
+  // arriving as a 500 with a Sentry event.
+  it('returns ALREADY_ADMIN when the primary key rejects a concurrent grant', async () => {
+    insertAdmin.mockResolvedValue({
+      error: {
+        code: '23505',
+        message: 'duplicate key value violates unique constraint "platform_admin_users_pkey"',
+      },
+    });
+
+    const res = await callPost();
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('ALREADY_ADMIN');
     expect(logAdminAction).not.toHaveBeenCalled();
   });
 });

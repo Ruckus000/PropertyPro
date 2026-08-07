@@ -24,12 +24,15 @@
 import { redirect } from 'next/navigation';
 import {
   getLockedFeatureBehavior,
+  isAdminRole,
   PLAN_FEATURES,
+  resolveLifecycleState,
   resolvePlanId,
   type CommunityFeatures,
 } from '@propertypro/shared';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { LockedFeatureScreen } from './locked-feature-screen';
+import { LapsedFeatureScreen } from './lapsed-feature-screen';
 
 export interface FeatureGateProps {
   feature: keyof CommunityFeatures;
@@ -46,6 +49,32 @@ export async function FeatureGate({
   // requirePageCommunityMembership reads tenant context from forwarded
   // request headers (set by middleware) when no communityId is passed.
   const membership = await requirePageCommunityMembership(communityIdOverride);
+  // A lapsed community locks ADMIN reads. Mirrors the API's
+  // `requireEntitledForAdminRead`, which short-circuits on
+  // `!membership.isAdmin` — so a resident (including a board president, whose
+  // designation does NOT make them an admin) is never blocked here, and this
+  // page must not claim otherwise.
+  //
+  // Checked before the plan rules below: cancellation nulls `subscriptionPlan`,
+  // so a churned community is indistinguishable from an unprovisioned one by
+  // plan alone — and the unprovisioned rule is fail-OPEN.
+  const lifecycle = resolveLifecycleState({
+    subscriptionStatus: membership.subscriptionStatus,
+    subscriptionCanceledAt: membership.subscriptionCanceledAt,
+    freeAccessExpiresAt: membership.freeAccessExpiresAt,
+  });
+  if (lifecycle === 'lapsed' && isAdminRole(membership.role)) {
+    // No tenant redirect branch here: `isAdminRole` is the management tier,
+    // for which getLockedFeatureBehavior is 'upgrade', never 'hidden'.
+    return (
+      <LapsedFeatureScreen
+        featureKey={feature}
+        role={membership.role}
+        communityId={membership.communityId}
+      />
+    );
+  }
+
   const planId = resolvePlanId(membership.subscriptionPlan ?? null);
 
   // PLAN gating only — community-TYPE gating stays out of this gate by design

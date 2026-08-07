@@ -23,14 +23,17 @@ import {
   PaymentFailedEmail,
   SubscriptionCanceledEmail,
   SubscriptionExpiryWarningEmail,
+  SubscriptionLapsedEmail,
   sendEmail,
 } from '@propertypro/email';
 import {
   ADMIN_TIER_DB_ROLES,
   formatBillingDateUTC,
   GRACE_EXPIRY_WARNING_OFFSET_DAYS,
+  isWithinPaidGrace,
   MANAGER_TIER_DB_ROLES,
   PAID_GRACE_DAYS,
+  paidGraceEndsAt,
   type CommunityRole,
 } from '@propertypro/shared';
 import { getBaseUrl } from '@/lib/utils/url';
@@ -288,9 +291,41 @@ async function processCommunityReminder(
     result.sent > 0 || recipients.length === 0;
 
   if (community.subscriptionCanceledAt != null) {
-    // Post-cancellation: send the Day 5, two-day lock warning.
     const canceledAt = community.subscriptionCanceledAt;
     const expiryDate = addDays(canceledAt, PAID_GRACE_DAYS);
+
+    // Grace has already run out: this is the lapse notice, not the warning.
+    // Scheduled by setting next_reminder_at to the grace end at cancellation.
+    if (!isWithinPaidGrace(canceledAt, now)) {
+      const lapsedResult = await sendToAll(
+        recipients,
+        `${community.name}: admin access paused`,
+        (r) =>
+          // NOT SubscriptionExpiryWarningEmail: that template is future-tense
+          // throughout ("will be locked in N days, on {date}", "update payment
+          // before {date}"), and by this point {date} has passed and access is
+          // already suspended — it would urge a churned customer to beat a
+          // deadline that is gone. `expiryDate` is the same value, restated as
+          // a past fact.
+          createElement(SubscriptionLapsedEmail, {
+            branding: { communityName: community.name },
+            recipientName: r.fullName,
+            lockedSinceDate: formatDate(expiryDate),
+            billingPortalUrl,
+          }),
+      );
+
+      if (shouldPersistSchedule(lapsedResult)) {
+        // Terminal — nothing further is scheduled for a lapsed community.
+        await db
+          .update(communities)
+          .set({ nextReminderAt: null, updatedAt: now })
+          .where(eq(communities.id, community.id));
+      }
+      return lapsedResult;
+    }
+
+    // Still inside the window: the Day 5, two-day lock warning.
 
     const result = await sendToAll(
       recipients,
@@ -305,10 +340,11 @@ async function processCommunityReminder(
     );
 
     if (shouldPersistSchedule(result)) {
-      // Clear reminder — no further scheduled reminders after the final warning.
+      // Arm the lapse notice for the moment grace actually ends, rather than
+      // clearing. The branch above then fires once and clears for good.
       await db
         .update(communities)
-        .set({ nextReminderAt: null, updatedAt: now })
+        .set({ nextReminderAt: paidGraceEndsAt(canceledAt), updatedAt: now })
         .where(eq(communities.id, community.id));
     }
     return result;

@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
+import { resolveLifecycleState } from '@propertypro/shared';
 import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
@@ -101,6 +102,20 @@ interface AppShellProps {
 }
 
 function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+  // `features` is NOT narrowed for a lapsed community — it is the full
+  // type-and-plan set, same as any other state. The sidebar therefore cannot
+  // infer the lapse from it and needs this flag: its type-gate filter reads raw
+  // type features, and its plan-lock branch no-ops entirely when the plan is
+  // null, which cancellation makes it.
+  //
+  // Raw lapse state, deliberately — AppSidebar combines it with the role,
+  // because the API gates on the actor (see `lapsedAdmin` there).
+  const isLapsed =
+    resolveLifecycleState({
+      subscriptionStatus: subscriptionStatus ?? null,
+      subscriptionCanceledAt: subscriptionCanceledAt ?? null,
+      freeAccessExpiresAt: freeAccessExpiresAt ?? null,
+    }) === 'lapsed';
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -175,6 +190,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           isUnitOwner={isUnitOwner ?? false}
           designation={designation ?? null}
           features={features}
+          isLapsed={isLapsed}
           userName={user?.fullName ?? null}
           plan={community?.plan ?? null}
         />
@@ -199,6 +215,7 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
               isUnitOwner={isUnitOwner ?? false}
               designation={designation ?? null}
               features={features}
+              isLapsed={isLapsed}
               userName={user?.fullName ?? null}
               plan={community?.plan ?? null}
             />

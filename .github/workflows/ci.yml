@@ -210,9 +210,39 @@ jobs:
       - name: Build workspace packages
         run: pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
 
+      # Size the vitest fork pool to the machine this job actually landed on.
+      #
+      # vitest defaults to `availableParallelism() - 1`: 3 forks on a 4-core
+      # hosted runner, 7 on the 8-vCPU Lima VM. The VM can be running more than
+      # one heavy job at a time, so the default over-subscribes it and tests
+      # start failing on the 5s default timeout without ever asserting anything
+      # about timing. That is exactly what the shadow phase caught — demo-token
+      # (#912), then contracts-route:191 and esign-route:189 (#916), three
+      # symptoms of one cause.
+      #
+      # Keyed on `runner.environment` rather than `vars.CI_RUNNER_LABEL` on
+      # purpose: this follows where the job REALLY ran, so it cannot drift from
+      # the `runs-on` expression and stays correct if runner-watchdog flips the
+      # label between queue time and run time. Hosted runs set nothing at all
+      # and keep vitest's stock defaults.
+      #
+      # `runner` context is not available in a job-level `env:` block, only at
+      # step level — hence exporting through $GITHUB_ENV here instead.
+      - name: Size the vitest fork pool to the runner
+        run: |
+          if [ "${{ runner.environment }}" = "self-hosted" ]; then
+            echo "VITEST_MAX_FORKS=4" >> "$GITHUB_ENV"
+            echo "VITEST_EXTRA_ARGS=--testTimeout=15000" >> "$GITHUB_ENV"
+            echo "self-hosted: forks pinned to 4, testTimeout 15000ms"
+          else
+            echo "github-hosted: vitest defaults (forks $(( $(nproc) - 1 )), testTimeout 5000ms)"
+          fi
+
       - name: Run unit tests with coverage
         working-directory: apps/web
-        run: pnpm exec vitest run --coverage
+        # $VITEST_EXTRA_ARGS is deliberately unquoted: empty on hosted runners,
+        # where it must expand to no argument at all rather than an empty one.
+        run: pnpm exec vitest run --coverage $VITEST_EXTRA_ARGS
 
       - name: Run package unit tests
         run: pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' --filter '@propertypro/api-contract' --filter '@propertypro/tokens' test
