@@ -10,7 +10,7 @@
 > |---|---|
 > | B1 crons 401ing | **Fixed** — all 15 verified 200 via GET on a local stack; root cause was 4 stacked faults, not 1 |
 > | B2 GitHub cron workflows | **Fixed** — consolidated onto Vercel Cron; 5 workflows deleted |
-> | B3 Supabase free plan / no backups | **OPEN — yours.** Upgrade to Pro + PITR before onboarding a real association |
+> | B3 Supabase free plan / no backups | **Fixed 2026-08-09** — org on `pro` and PITR verified live (`archive_mode=on`, WAL-G `archive_command`, `archive_timeout=120`) |
 > | B4 monitoring | **Partly fixed** — readiness now reports missing secrets; Sentry environment separated. Uptime monitor is yours |
 > | B5 rate limiter | **Fixed** — pages no longer IP-throttled, auth tier on Redis, HTML 429 |
 > | B6 prod test data | **Fixed** — 1,623 orphan users removed (backed up), 4 junk communities soft-deleted |
@@ -434,8 +434,10 @@ Recorded because each one would have produced a fix that looked done and wasn't.
 
 ## Still yours to do
 
-1. **Supabase Pro + PITR** — the only remaining hard launch blocker. There is no
-   recovery path today. Do this before the first real association.
+1. ~~**Supabase Pro + PITR**~~ — **DONE 2026-08-09.** Verified from `pg_settings`, not
+   from the plan name: `archive_mode=on`, `archive_command` is Supabase's WAL-G
+   `wal-push`, `archive_timeout=120` (~2 min RPO). Check it that way — the org `plan`
+   field reads `pro` even when PITR, a separate add-on, is off.
 2. **Redeploy** so the new env vars take effect, then confirm a **200** in the
    Vercel runtime logs at the next cron tick. Registration is not evidence —
    `vercel crons ls` listed all 10 as healthy the entire time they were 401ing.
@@ -447,3 +449,32 @@ Recorded because each one would have produced a fix that looked done and wasn't.
    503 unhealthy), plus `/api/health` on both apps for liveness.
 7. Optionally delete the 6 now-unused cron GitHub repo secrets, and
    `_backup_orphan_users_20260807` once PITR is on.
+
+---
+
+## Addendum — 2026-08-09
+
+**B3 closed.** Supabase is on `pro` with PITR live (evidence above).
+
+**A defect this remediation introduced, and fixed.** The rollback table created before the
+production data cleanup was made as `public._backup_orphan_users_20260807`. On Supabase, a
+table created in `public` inherits default privileges — it came out with `SELECT` granted
+to **anon** and full read/write to **authenticated**, exposing 1,623 rows of names and
+emails through the Data API. It produced this project's first ERROR-level advisor lint
+(`rls_disabled_in_public`), on a database that previously had none, and it is the same
+shape as the earlier `public.users` exposure.
+
+Fixed by moving it to a non-exposed `backup` schema and revoking `anon`/`authenticated`
+(verified: only `postgres` and `service_role` retain grants; advisors back to zero
+ERROR-level lints). The lesson is general: **never create ad-hoc/scratch tables in
+`public` on Supabase, and re-run `get_advisors` after any manual DDL** — nobody writes the
+offending GRANT, the platform adds it.
+
+**`backup._backup_orphan_users_20260807` must be retained for now.** PITR's recovery window
+begins when PITR is *enabled*, so it cannot reach the 2026-08-07 deletion that predates it;
+that table remains the only rollback path for those rows. Drop it whenever you're satisfied
+the data is not wanted — every row was synthetic (`@example.com`, `.local`, `.invalid`,
+`demo-delete-*`) with 0 roles and 0 documents.
+
+**Remaining manual items:** the `_dmarc` DNS record, confirming Stripe keys are LIVE, and
+an uptime monitor on `/api/v1/internal/readiness`.
