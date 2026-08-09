@@ -94,9 +94,21 @@ Authorization is enforced at the route/query layer via `requirePermission()` →
 > - `POST /api/v1/account/delete` — *account*, not *community*, deletion.
 >   Self-scoped and legally required to stay self-service (erasure requests);
 >   residents must be able to use it. The real adjacent gap runs the other way:
->   a root can still delete their own account and orphan a community
->   (`lib/account-lifecycle/root-offboarding.ts` only flags it). Tracked
->   separately as **R3-03b**.
+>   a root can still delete their own account and orphan a community —
+>   `requestUserDeletion` only logs a warning plus a `root_pending_deletion`
+>   audit event, and does so inside a `try/catch` that swallows failures, so
+>   even the flag is best-effort. Tracked separately as **R3-03b**,
+>   [issue #924](https://github.com/Ruckus000/PropertyPro/issues/924).
+>
+>   Two things changed after this addendum was first written. The deferral's
+>   own precondition is now met — `root-offboarding.ts` says "Phase 3 will
+>   block once the claim/transfer UX (2b) exists", and 2b has shipped
+>   (claim-root and transfer-root are both live). And **R3-03 raised the
+>   stakes**: with billing now root-exclusive, a community whose root deletes
+>   their account has nobody who can pay it until someone claims root, so what
+>   was a governance annoyance is now a possible lapse-to-suspension path. The
+>   zero-property-manager case has no self-service recovery at all and needs an
+>   explicit answer (see the break-glass runbook below).
 > - `POST /api/v1/communities/[id]/cancel` — gates on **billing-group
 >   ownership**, a portfolio-level financial identity orthogonal to community
 >   role. The owner may not be a member of the child community at all, so a root
