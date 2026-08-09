@@ -23,6 +23,128 @@ Every API route handler must:
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail
 
+## Route Contracts (`runRoute()` from `@propertypro/api-contract`)
+
+Plan A1 lane. **233 routes contracted; 40 grandfathered files remain** on the
+allowlist, drainable opportunistically (measured via `pnpm guard:contracts`,
+2026-08-09 — re-run it rather than trusting this number).
+
+### Canonical contract + route shape
+
+`./contract.ts` next to the route file:
+```ts
+import { defineRoute, z } from '@propertypro/api-contract';
+
+export const myResourceContract = defineRoute({
+  method: 'GET',
+  path: '/api/v1/my-resource',
+  request: {
+    params: z.object({ id: z.coerce.number().int().positive() }).optional(),
+    query: z.object({ communityId: z.coerce.number().int().positive() }).optional(),
+    body: z.object({ /* ... */ }).optional(),
+  },
+  response: z.object({ /* ... */ }),
+  permission: { resource: 'documents', action: 'read' }, // metadata only; runner does NOT enforce
+});
+```
+
+`./route.ts`:
+```ts
+import { runRoute } from '@propertypro/api-contract';
+import { withErrorHandler } from '@/lib/api/error-handler';
+import { myResourceContract } from './contract';
+
+export const GET = withErrorHandler(
+  runRoute(myResourceContract, async ({ params, query, body, req }) => {
+    // auth + business logic
+    return /* the inner payload, NOT { data: payload } — runner wraps */;
+  }),
+);
+```
+
+> **Import source depends on `tenantScope`.** The bare import above is correct
+> only for routes that do NOT declare `tenantScope`. If you declare a
+> `query`/`body` scope, import `runRoute` from `@/lib/api/run-route` instead —
+> see the next section. `guard:tenant-scope` enforces it.
+
+The runner:
+- Parses + validates `params`/`query`/`body` against the contract's schemas before the handler runs (throws `ContractValidationError` → 400 `VALIDATION_ERROR` envelope).
+- Validates the handler's return against the response schema (throws → 500 `INTERNAL_ERROR` + Sentry tag `contract_violation: response`).
+- Wraps the result: non-paginated → `{ data: payload }`, paginated → `{ data: { data: items, pagination } }`.
+- Pre-`NextResponse.json` `safeParse` — so `Date` values must be converted in the handler (`.toISOString()`) if the response schema is `z.string()`.
+
+### Known constraints (avoid when contracting)
+
+The runner cannot handle these without changes — leave on allowlist or wait for runner extension:
+- **201/202/204 responses** — runner hardcodes 200 (POST handlers returning 201 are blocked).
+- **Non-canonical envelopes** — flat `{ ok: true }` or top-level `meta` field next to `data` (e.g. `{ data: [...], meta: {...} }`) won't round-trip through the runner's single-wrap.
+- **Non-JSON content-type** — CSV, binary, redirects.
+- **`/internal/*` routes** — token-authenticated bypass not yet integrated.
+- **Stripe webhook routes** — body signature verification needs raw body, not Zod-parsed.
+
+### Established shape conventions
+
+Historical precedent from the drained corpus **as of 2026-05-23**, when 16
+drains existed. The drain numbers are of their time; the shapes are what
+matters, and later drains have followed them.
+
+| Shape | Precedent | Notes |
+|---|---|---|
+| No-input session-anchored | drain #1 `me/communities`, #6 `billing-groups/mine`, #8 `overview` | `request: {}` |
+| Query-only tenant-scoped | drain #2 `users/names`, #5 `notifications/unread-count` | Use `resolveEffectiveCommunityId(req, query.communityId)` |
+| Params + query | drain #3 `ledger/balance/[unitId]`, #11 `polls/[id]/my-vote`, #14 `polls/[id]/results` | Runner awaits Next.js 15's `Promise<params>` shape |
+| Body PATCH with audit log | drain #4 `community/contact`, #13 `payments/fee-policy` | Two contracts in one file; preserve audit log payload byte-identical |
+| Body with discriminated union | drain #7 `notifications/read` | Use `z.union(...)` not `z.discriminatedUnion(...)` when branches don't share a literal-typed discriminator key |
+| Body session-anchored with side effect | drain #9 `account/profile` | Date→ISO in handler, not schema |
+| Query rich-filter + PM-only | drain #12 `pm/dashboard/summary` | `// AUTHZ:` comment on `@propertypro/db/unsafe` imports |
+| Cross-community single-wrap with hand-rolled cursor | drain #15 `notifications/all` | `paginated: false` (NOT `paginated: true` — that's for `paginate()` helper) |
+| Feature-gated GET+PATCH with conditional business rules | drain #16 `transparency/settings` | `.strict()` body, audit log with `vi.useFakeTimers()` to lock ISO conversion |
+
+### Response schema modeling: tight vs loose
+
+- **Tight `z.object({...})` per-field**: use when the service returns a strict TypeScript type with no projection in the route AND no `Date` fields AND no `[key: string]: unknown` index signature. The runner's response validation acts as a canary — schema breakage fires a 500 with Sentry tag `contract_violation: response`. Examples: drain #11 `PollMyVote` (2 keys), drain #4/#13 (3-key contact + 1-key policy).
+- **Loose `z.unknown()` / `z.array(z.unknown())`**: use for cross-community aggregates with consumer-side type discipline, OR when the service returns rows with `Date` fields / open index signatures. Tightening risks 500s on additive DB column additions or `safeParse` failures on Date values (runner validates BEFORE `NextResponse.json` serializes). Examples: drain #8 `overview`, drain #12 `pm/dashboard/summary`, drain #14 `polls/results`. ALWAYS document the tradeoff in the contract docblock.
+
+### Header-mismatch behavior change — verify before claiming
+
+`resolveEffectiveCommunityId(req, query.communityId)` throws `NotFoundError` → 404 when `x-community-id` header disagrees with the query/body value. BUT: many pre-migration routes already used this (directly or via `parseCommunityIdFromQuery`, which itself delegates). To claim a "400→404 migration delta" in docblocks, verify the pre-migration code actually ignored the header. Drain #10 lesson — `parseCommunityIdFromQuery` at `apps/web/src/lib/finance/request.ts:17` already delegates. Only drain #13 (`payments/fee-policy`) actually introduced a real 404 behavior change in the corpus (pre-migration used `parseResult.data.communityId` directly).
+
+### Auth-chain ordering for PATCH with `assertNotDemoGrace`
+
+Convention: `requireAuthenticatedUserId → resolveEffectiveCommunityId → assertNotDemoGrace → requireCommunityMembership → ...`. The demo-grace check fires BEFORE the membership check; test via `requireCommunityMembership.not.toHaveBeenCalled()` in the demo-grace test case (drain #4/#13/#16 precedent).
+
+### Permission field
+
+`permission: { resource, action }` is **metadata only** — runner does not enforce. Real RBAC gating happens via route-level `requirePermission(membership, resource, action)` calls. Use a real `RBAC_RESOURCES` member if one fits (`packages/shared/src/rbac-matrix.ts`); otherwise pick the closest semantic placeholder and document.
+
+### Test file conventions
+
+- Place at `apps/web/__tests__/<domain>/<route-leaf>-route.test.ts` (sibling-folder/domain convention — dominant across drains #2-#16). Drain #1 used nested `__tests__/api/...` and is the outlier.
+- Mock the runner-touching imports plus all auth gates + service calls. Use `vi.hoisted(() => ({...Mock: vi.fn()}))` for top-level mock factories.
+- For routes that stamp `new Date()` into an audit-log payload, use `vi.useFakeTimers() + vi.setSystemTime(fakeNow)` to assert the exact ISO conversion in `oldValues`/`newValues` — drain #16 pattern.
+- When extending an existing test file, preserve every pre-existing test case verbatim — don't reorganize.
+- Cover at minimum: happy path with call-arg assertions, 401, every 403 gate, every 400 validation path, 404 header/query mismatch (when applicable).
+
+### Allowlist drain workflow
+
+1. Pick a route from `KNOWN_UNCONTRACTED_ROUTES` in `scripts/verify-contracts.ts` that fits the "Known constraints" guidance above.
+2. Create `./contract.ts` next to the route, rewrite the route through `runRoute(contract, handler)`.
+3. Write/extend a unit test.
+4. Delete the route's entry from `KNOWN_UNCONTRACTED_ROUTES`.
+5. Verify: `pnpm typecheck && pnpm lint && pnpm guard:contracts` (Contracted count increments; allowlist decrements).
+
+**For batches, use `/drain-loop`** (`.claude/skills/drain-loop.md`, driving
+`drain-loop.workflow.js` → `drain-one-batch.workflow.js`) rather than
+hand-driving it. That tooling automates what this rule used to describe as a
+manual seven-step choreography — pick 3 routes with disjoint hooks and services,
+worktree each, implement in parallel, dual review, then **sequential** PR
+creation and merge with a rebase between each. Two constraints survive from that
+manual era and still bite: `gh pr create` writes local git state, so concurrent
+calls race; and batched routes must have **disjoint file sets**, or the rebases
+conflict.
+
+**Hook migrations are out of scope** for an allowlist drain — keep consumer hooks byte-identical. The runner produces `{ data: payload }` exactly as the pre-migration handler did; consumers using `requestJson<T>` keep working.
+
 ## Tenant scoping — `tenantScope` (Plan B2)
 
 `communityId` is resolved from the middleware `x-community-id` header
