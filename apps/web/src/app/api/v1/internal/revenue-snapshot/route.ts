@@ -22,9 +22,9 @@ import {
 } from '@/lib/services/revenue-snapshot-data-service';
 
 // DO NOT use withErrorHandler — we want explicit control over responses here.
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
   try {
-    requireCronSecret(req, process.env.REVENUE_SNAPSHOT_CRON_SECRET);
+    requireCronSecret(req, process.env.REVENUE_SNAPSHOT_CRON_SECRET, process.env.CRON_SECRET);
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -140,3 +140,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     communities_skipped: computation.communitiesSkipped,
   });
 }
+
+// Vercel Cron issues GET; the GitHub-Actions era of this job issued POST.
+// One handler serves both so the scheduler's verb can never be the thing that
+// breaks the job. Neither verb reads a body or query params, so they are
+// genuinely interchangeable.
+export const GET = handleRevenueSnapshot;
+export const POST = handleRevenueSnapshot;

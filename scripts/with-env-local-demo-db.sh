@@ -69,6 +69,9 @@ Optional overrides:
   PROPERTYPRO_LOCAL_SUPABASE_ANON_KEY         default: unset (fails closed)
   PROPERTYPRO_LOCAL_SUPABASE_SERVICE_ROLE_KEY default: unset (fails closed)
 
+Also UNSET, with no override: UPSTASH_REDIS_REST_URL / _TOKEN. The rate limiter
+degrades to its in-memory implementation locally; there is no local Upstash.
+
 Safety:
   Every resolved URL must resolve to a loopback host. If one does not, the
   script exits 78 without running your command. There is deliberately no
@@ -147,6 +150,21 @@ if [[ -n "${PROPERTYPRO_LOCAL_SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
 else
   unset SUPABASE_SERVICE_ROLE_KEY || true
 fi
+
+# --- Upstash Redis follows Postgres to local ---------------------------------
+#
+# Same invariant as Supabase above, for the same reason. The middleware rate
+# limiter consults Upstash for the `auth` and `esign-sign` tiers, and
+# `.env.local` names the PRODUCTION Upstash instance. Sourced verbatim, a
+# "local" run writes rate-limit counters into production and pays a real
+# network round-trip for every login attempt — which is exactly how it was
+# first noticed: the e2e suite went from 41s to 52 MINUTES.
+#
+# Unset rather than redirected: the limiter degrades to its in-memory
+# implementation when these are absent, which is the correct local behaviour.
+# There is no local Upstash to point at.
+unset UPSTASH_REDIS_REST_URL || true
+unset UPSTASH_REDIS_REST_TOKEN || true
 
 # --- The guard --------------------------------------------------------------
 #

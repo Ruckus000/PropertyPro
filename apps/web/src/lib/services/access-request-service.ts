@@ -36,8 +36,23 @@ import { getBaseUrl } from '@/lib/utils/url';
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * HMAC an access-request OTP for storage.
+ *
+ * Fails closed when `OTP_HMAC_SECRET` is unset — this used to fall back to the
+ * literal `'dev-secret'`. OTPs are six digits, so the keyspace is only 10⁶ and
+ * the secret is the ONLY thing standing between a leaked hash column and an
+ * instantly-precomputed rainbow table. A constant that ships in the repo (and
+ * was live in production) provides none of that.
+ *
+ * Mirrors `getTokenEncryptionKeyFromEnv()` in packages/db: throwing at the call
+ * site is loud and fixable; a silent weak default is neither.
+ */
 function hashOtp(otp: string): string {
-  const secret = process.env.OTP_HMAC_SECRET ?? 'dev-secret';
+  const secret = process.env.OTP_HMAC_SECRET;
+  if (!secret) {
+    throw new Error('OTP_HMAC_SECRET is required');
+  }
   return crypto.createHmac('sha256', secret).update(otp).digest('hex');
 }
 

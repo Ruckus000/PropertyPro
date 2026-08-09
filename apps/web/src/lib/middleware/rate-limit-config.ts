@@ -12,6 +12,7 @@
 
 import type { NextRequest } from 'next/server';
 import { type RateLimitResult, getRateLimiter } from './rate-limiter';
+import { checkDistributedRateLimit, isDistributedLimiterConfigured } from './distributed-rate-limiter';
 
 /** Rate limit tier defining requests per window. */
 export interface RateLimitTier {
@@ -27,6 +28,7 @@ export type RouteCategory =
   | 'write'
   | 'read'
   | 'public'
+  | 'page'
   | 'esign-sign'
   | 'site-uploads'
   | 'webhook';
@@ -42,8 +44,27 @@ const RATE_LIMIT_TIERS: Record<RouteCategory, RateLimitTier> = {
   /** Read routes (GET): 100 req/min per user */
   read: { limit: 100, windowMs: 60_000 },
 
-  /** Public routes (no auth): 60 req/min per IP */
+  /** Public UNAUTHENTICATED API endpoints: 60 req/min per IP */
   public: { limit: 60, windowMs: 60_000 },
+
+  /**
+   * HTML page navigations: EXEMPT (see `checkRateLimit`).
+   *
+   * These used to fall into `public` and be throttled at 60/min **per IP**.
+   * That was the wrong control on the wrong key. Page requests are already
+   * behind session auth and RLS, so the tier protected nothing an attacker
+   * could reach; meanwhile every user in a management office shares one NAT
+   * address, and Next.js link prefetching spends that budget quickly. It
+   * throttled the customer, not the threat — the app's own E2E suite tripped
+   * it. A 429 also arrived as raw JSON in the browser, because middleware has
+   * no page to render.
+   *
+   * Abuse of authenticated pages is bounded by the `read`/`write` API tiers,
+   * which are keyed by user id and are where the actual data access happens.
+   * The tier is kept in the table (rather than deleted) so `classifyRoute`
+   * stays total and the exemption is a visible decision, not an omission.
+   */
+  page: { limit: 0, windowMs: 0 },
 
   /**
    * E-sign unauthenticated signing routes: 10 req/min per IP.
@@ -152,8 +173,11 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
     return 'write';
   }
 
-  // Everything else is a public route
-  return 'public';
+  // Everything else is an HTML page navigation. Kept DISTINCT from `public`:
+  // `public` means "unauthenticated API endpoint" (the four enumerated above)
+  // and stays IP-throttled; `page` is exempt. Collapsing the two is what put
+  // every authenticated page view into a 60/min per-IP bucket.
+  return 'page';
 }
 
 /**
@@ -211,17 +235,27 @@ export interface RateLimitCheckResult extends RateLimitResult {
   category: RouteCategory;
 }
 
+/** Tiers backed by Redis so the limit holds across Edge isolates. */
+const DISTRIBUTED_CATEGORIES: ReadonlySet<RouteCategory> = new Set<RouteCategory>([
+  'auth',
+  'esign-sign',
+]);
+
 /**
  * Check rate limit for a request.
+ *
+ * Async because the security-critical tiers (`auth`, `esign-sign`) consult
+ * Redis — a per-isolate counter cannot bound an attacker who just keeps
+ * retrying. Every other tier resolves in-memory without awaiting I/O.
  *
  * @param request - The incoming Next.js request
  * @param userId - The authenticated user ID, or null for unauthenticated requests
  * @returns Rate limit check result, or null if the route is exempt
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   request: NextRequest,
   userId: string | null,
-): RateLimitCheckResult | null {
+): Promise<RateLimitCheckResult | null> {
   // Tenant subdomain Playwright polls the webServer URL aggressively; exempt that
   // dev-only server so readiness checks are not rate-limited into 429 timeouts.
   if (process.env.PLAYWRIGHT_TENANT_E2E === '1') {
@@ -232,14 +266,25 @@ export function checkRateLimit(
   const method = request.method;
   const category = classifyRoute(pathname, method);
 
-  // Webhook routes are exempt
-  if (category === 'webhook') {
+  // Webhook routes are exempt (Stripe retries must succeed).
+  // HTML page navigations are exempt — see the `page` tier comment above.
+  if (category === 'webhook' || category === 'page') {
     return null;
   }
 
   const tier = getTier(category);
   const ip = extractClientIp(request);
   const key = buildRateLimitKey(category, ip, userId);
+
+  if (DISTRIBUTED_CATEGORIES.has(category)) {
+    const distributed = await checkDistributedRateLimit(key, tier.limit, tier.windowMs);
+    // null => Redis unconfigured or unreachable. Fall through to the in-memory
+    // limiter rather than allowing the request: degrade, don't fail open.
+    if (distributed) {
+      return { ...distributed, category };
+    }
+  }
+
   const limiter = getRateLimiter();
   const result = limiter.check(key, tier.limit, tier.windowMs);
 
@@ -247,12 +292,64 @@ export function checkRateLimit(
 }
 
 /**
- * Build a 429 Too Many Requests JSON response.
+ * Minimal 429 document for browser navigations.
+ *
+ * Deliberately a self-contained string with NO interpolated request data — a
+ * middleware error page is the last place to introduce a reflected-XSS sink.
+ *
+ * Colours are CSS **system colours** rather than design tokens. Middleware
+ * returns this as a standalone document with no stylesheet, so a semantic
+ * custom property would resolve to nothing and render invisible text; raw hex
+ * in a `.ts` file under `apps/web/src` would fail `guard:design-tokens`.
+ * `Canvas`/`CanvasText` need neither, and honour the reader's light/dark
+ * preference for free.
+ */
+const RATE_LIMITED_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Too many requests</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:Canvas; color:CanvasText;
+         font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.5; }
+  main { max-width:32rem; padding:2rem; text-align:center; }
+  h1 { font-size:1.5rem; margin:0 0 .5rem; }
+  p { margin:0 0 1.5rem; }
+</style></head>
+<body><main>
+  <h1>Too many requests</h1>
+  <p>You&rsquo;ve made a lot of requests in a short time. Please wait a moment and try again.</p>
+  <p><a href="/dashboard">Back to your dashboard</a></p>
+</main></body></html>`;
+
+/**
+ * Build a 429 Too Many Requests response.
+ *
+ * Content-negotiated: browsers navigating to a page get HTML, everything else
+ * gets the JSON envelope. Before this, a throttled navigation rendered a raw
+ * `{"error":{"code":"rate_limited"}}` blob in the address bar.
  */
 export function rateLimitedResponse(
   result: RateLimitCheckResult,
   requestId: string,
+  request?: NextRequest,
 ): Response {
+  const headers: Record<string, string> = {
+    'Retry-After': String(result.retryAfter),
+    'X-RateLimit-Limit': String(result.limit),
+    'X-RateLimit-Remaining': '0',
+    'X-Request-ID': requestId,
+  };
+
+  if (wantsHtml(request)) {
+    return new Response(RATE_LIMITED_HTML, {
+      status: 429,
+      headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
+    });
+  }
+
   return new Response(
     JSON.stringify({
       error: {
@@ -263,13 +360,24 @@ export function rateLimitedResponse(
     }),
     {
       status: 429,
-      headers: {
-        'Content-Type': 'application/json',
-        'Retry-After': String(result.retryAfter),
-        'X-RateLimit-Limit': String(result.limit),
-        'X-RateLimit-Remaining': '0',
-        'X-Request-ID': requestId,
-      },
+      headers: { ...headers, 'Content-Type': 'application/json' },
     },
   );
+}
+
+/**
+ * True for a top-level browser navigation.
+ *
+ * Checks `Sec-Fetch-Mode: navigate` first — it is unambiguous and unspoofable
+ * by page script. Falls back to an `Accept` sniff for clients that omit it,
+ * requiring `text/html` to outrank `application/json` so an XHR sending
+ * `Accept: * / *` still receives JSON.
+ */
+function wantsHtml(request?: NextRequest): boolean {
+  if (!request) return false;
+  if (request.headers.get('sec-fetch-mode') === 'navigate') return true;
+
+  const accept = request.headers.get('accept') ?? '';
+  if (!accept.includes('text/html')) return false;
+  return !accept.includes('application/json');
 }

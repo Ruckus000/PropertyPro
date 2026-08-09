@@ -50,17 +50,63 @@ describe('coupon-sync-retry cron route', () => {
     expect(await res.json()).toEqual({ processed: 0, results: [] });
   });
 
-  it('rejects the fallback token when the coupon-specific secret is set', async () => {
+  it('accepts EITHER the route secret or the platform CRON_SECRET', async () => {
+    // This test previously asserted the opposite — that CRON_SECRET is REJECTED
+    // once the route-specific secret is set (the `??` fallback: reach the
+    // fallback only when the specific one is unset).
+    //
+    // That semantic is what kept the scheduled jobs dead. Vercel Cron sends one
+    // platform-wide `Authorization: Bearer $CRON_SECRET` to every job. Under
+    // `??`, every route that HAD its dedicated secret configured — payment
+    // reminders, assessments, compliance, and the rest — compared the platform
+    // token against a different value and 401'd. Setting CRON_SECRET would have
+    // fixed only the handful nobody had configured, and the outage would have
+    // looked half-fixed for reasons nobody could see.
+    //
+    // Both tokens are operator-level credentials with identical blast radius,
+    // so accepting either costs nothing and makes the platform scheduler work.
     process.env.COUPON_SYNC_RETRY_CRON_SECRET = 'coupon-secret';
     process.env.CRON_SECRET = 'fallback-secret';
 
-    const req = new NextRequest(URL, {
-      method: 'POST',
-      headers: { authorization: 'Bearer fallback-secret' },
-    });
+    for (const token of ['coupon-secret', 'fallback-secret']) {
+      const res = await POST(
+        new NextRequest(URL, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}` },
+        }),
+      );
+      expect(res.status).toBe(200);
+    }
+  });
 
-    const res = await POST(req);
+  it('still rejects a token matching neither secret', async () => {
+    process.env.COUPON_SYNC_RETRY_CRON_SECRET = 'coupon-secret';
+    process.env.CRON_SECRET = 'fallback-secret';
 
+    const res = await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: { authorization: 'Bearer not-either-of-them' },
+      }),
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  it('fails closed when no secret is configured at all', async () => {
+    delete process.env.COUPON_SYNC_RETRY_CRON_SECRET;
+    delete process.env.CRON_SECRET;
+
+    const res = await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: { authorization: 'Bearer anything' },
+      }),
+    );
+
+    // Middleware waves every /api/v1/internal/* GET|POST past the session gate,
+    // so this is the ONLY thing standing between an unconfigured deploy and a
+    // publicly-runnable job.
     expect(res.status).toBe(401);
   });
 });

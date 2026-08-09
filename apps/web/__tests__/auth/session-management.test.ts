@@ -163,14 +163,44 @@ describe('p1-22 session middleware', () => {
     expect(response.status).toBe(200);
   });
 
-  it('keeps unauthenticated GET /api/v1/internal/notification-digests/process protected', async () => {
+  it('allows unauthenticated GET /api/v1/internal/* through to the route', async () => {
+    // This used to assert 401 — middleware's allowlist was method-specific and
+    // only listed POST. That is precisely what broke every scheduled job in
+    // production: Vercel Cron issues GET, so middleware rejected it before the
+    // route ran (a 401, not the 405 the missing handler would suggest).
+    //
+    // Middleware deliberately no longer gates these. The gate is
+    // requireCronSecret() inside each route, which fails closed and is enforced
+    // for EVERY internal route by `guard:internal-cron-auth`. See the
+    // companion test below for the session-bypass boundary.
     const response = await middleware(
       request('http://localhost:3000/api/v1/internal/notification-digests/process', {}, 'GET'),
     );
-    const json = (await response.json()) as { error: string };
+
+    expect(response.status).toBe(200);
+  });
+
+  it('does not extend the internal bypass to other /api/v1 paths', async () => {
+    // The bypass is a prefix rule, so this is the boundary that matters: a path
+    // that merely *contains* "internal" elsewhere, or any other API route, must
+    // still hit the session gate.
+    for (const url of [
+      'http://localhost:3000/api/v1/documents',
+      'http://localhost:3000/api/v1/communities/internal',
+    ]) {
+      const response = await middleware(request(url, {}, 'GET'));
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it('does not extend the internal bypass to unexpected methods', async () => {
+    // Only GET and POST are waved through; a DELETE against an internal path
+    // should still be stopped by the session gate.
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/internal/notification-digests/process', {}, 'DELETE'),
+    );
 
     expect(response.status).toBe(401);
-    expect(json.error).toBe('Unauthorized');
   });
 
   it('skips tenant resolution for reserved subdomains and falls through to auth', async () => {
