@@ -232,7 +232,7 @@ Domain-specific rules are in `.claude/rules/` and load automatically when releva
 - `tenant-isolation.md` — Scoped DB access, schema conventions, CI guard
 - `migration-safety.md` — Migration numbering, journal drift, creation checklist
 - `florida-compliance.md` — Statutes, timing rules, compliance engine
-- `api-patterns.md` — Route structure, required patterns, middleware, route catalog
+- `api-patterns.md` — Route structure, required patterns, route contracts (`runRoute`), tenant scoping, pagination, middleware, route catalog
 - `agent-testing.md` — How to authenticate as demo users for testing
 - `design.md` — UI/UX design system rules, component patterns, accessibility, quality gate
 
