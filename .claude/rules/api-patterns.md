@@ -23,6 +23,13 @@ Every API route handler must:
 4. Use `createScopedClient(communityId)` for all DB access
 5. Log mutations via `logAuditEvent()` for compliance trail
 
+**New routes should ALSO be written through `runRoute()` from
+`@propertypro/api-contract`** — see "Route Contracts" below. The
+`pnpm guard:contracts` CI ratchet enforces this for new files (existing files
+are grandfathered in `KNOWN_UNCONTRACTED_ROUTES` at
+`scripts/verify-contracts.ts`). `pnpm new:resource <plural>` scaffolds the
+canonical shape.
+
 ## Route Contracts (`runRoute()` from `@propertypro/api-contract`)
 
 Plan A1 lane. **233 routes contracted; 40 grandfathered files remain** on the
