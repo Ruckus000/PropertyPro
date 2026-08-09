@@ -56,6 +56,7 @@
     "guard:sanitizer-deps": "tsx scripts/verify-sanitizer-deps.ts",
     "guard:read-entitlement": "tsx scripts/verify-read-entitlement-coverage.ts",
     "guard:admin-error-leakage": "tsx scripts/verify-admin-error-leakage.ts",
+    "guard:internal-cron-auth": "tsx scripts/verify-internal-cron-auth.ts",
     "help:capture": "tsx scripts/help-capture/capture.ts",
     "help:preview": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-preview.ts",
     "help:gaps-report": "tsx --tsconfig apps/web/tsconfig.json scripts/help-content-gaps-report.ts",

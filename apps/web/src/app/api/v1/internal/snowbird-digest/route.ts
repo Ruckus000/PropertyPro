@@ -11,8 +11,15 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { processSnowbirdDigests } from '@/lib/services/snowbird-digest-processor';
 import { NextResponse } from 'next/server';
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  requireCronSecret(req, process.env.SNOWBIRD_DIGEST_CRON_SECRET);
+const handler = withErrorHandler(async (req: NextRequest) => {
+  requireCronSecret(req, process.env.SNOWBIRD_DIGEST_CRON_SECRET, process.env.CRON_SECRET);
   const result = await processSnowbirdDigests();
   return NextResponse.json({ data: result });
 });
+
+// Vercel Cron issues GET; the GitHub-Actions era of this job issued POST.
+// One handler serves both so the scheduler's verb can never be the thing that
+// breaks the job. Neither verb reads a body or query params, so they are
+// genuinely interchangeable.
+export const GET = handler;
+export const POST = handler;

@@ -25,7 +25,7 @@ const bodySchema = z.object({
 });
 
 export const POST = withErrorHandler(async (req: NextRequest) => {
-  requireCronSecret(req, process.env.PROVISIONING_RETRY_SECRET);
+  requireCronSecret(req, process.env.PROVISIONING_RETRY_SECRET, process.env.CRON_SECRET);
 
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) {

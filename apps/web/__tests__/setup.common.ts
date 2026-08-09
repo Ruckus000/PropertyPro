@@ -6,6 +6,13 @@
 // vitest.config.ts. DOM-only setup belongs in setup.jsdom.ts.
 import { vi } from 'vitest';
 
+// `hashOtp` in access-request-service now THROWS when OTP_HMAC_SECRET is unset
+// (it used to fall back to a hardcoded 'dev-secret', which shipped to
+// production and made the 10^6 OTP keyspace trivially precomputable). Tests
+// need a real value; this one is deliberately not the old literal, so a test
+// that still assumes the fallback fails loudly instead of passing by accident.
+process.env.OTP_HMAC_SECRET ??= 'test-otp-hmac-secret-not-a-real-secret';
+
 // PdfViewer uses a runtime-only `import('/pdfjs/pdf.mjs')` from a same-origin
 // public asset path. Vite cannot statically resolve that path during test
 // transform, which breaks any test that transitively imports DocumentViewer.

@@ -8,10 +8,7 @@ import {
 } from '@/lib/services/provisioning-service';
 
 function requireProvisioningWatchdogSecret(req: NextRequest): void {
-  requireCronSecret(
-    req,
-    process.env.PROVISIONING_RETRY_SECRET ?? process.env.CRON_SECRET,
-  );
+  requireCronSecret(req, process.env.PROVISIONING_RETRY_SECRET, process.env.CRON_SECRET);
 }
 
 async function handleWatchdog(req: NextRequest): Promise<NextResponse> {

@@ -12,10 +12,22 @@ import { scrubBrowserEvent } from '@propertypro/shared/observability';
 type SentryBrowserModule = typeof import('@sentry/nextjs');
 
 const clientDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+/**
+ * Deployment environment, mirroring the server/edge configs.
+ *
+ * `NEXT_PUBLIC_VERCEL_ENV` is injected by the platform and is the only one of
+ * the pair that survives into the browser bundle. Without it every client event
+ * landed unlabelled in the production project alongside developer-laptop noise.
+ */
+const clientEnvironment =
+  process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.NODE_ENV ?? 'development';
 let sentryClientPromise: Promise<SentryBrowserModule> | null = null;
 
 function loadSentryClient(): Promise<SentryBrowserModule> | null {
-  if (!clientDsn) {
+  // Local dev inherits the DSN from .env.local; skip entirely so laptop
+  // errors never reach the production project (and the SDK chunk is not
+  // even fetched).
+  if (!clientDsn || clientEnvironment === 'development') {
     return null;
   }
 
@@ -35,6 +47,7 @@ async function initClientInstrumentation(): Promise<void> {
   try {
     Sentry.init({
       dsn: clientDsn,
+      environment: clientEnvironment,
       enabled: true,
 
       // Keeps browser events separable from apps/web inside the shared

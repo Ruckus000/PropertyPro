@@ -40,6 +40,7 @@ const GUARDS = [
   'guard:sanitizer-deps',
   'guard:read-entitlement',
   'guard:admin-error-leakage',
+  'guard:internal-cron-auth',
 ];
 
 // Cap concurrency so 16 cold tsx processes don't thrash a small CI runner.

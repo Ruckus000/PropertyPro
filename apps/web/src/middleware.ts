@@ -72,29 +72,14 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/invitations', method: 'PATCH' },
   { path: '/api/v1/auth/signup', method: 'GET' },
   { path: '/api/v1/auth/signup', method: 'POST' },
-  { path: '/api/v1/internal/notification-digests/process', method: 'POST' },
-  { path: '/api/v1/internal/calendar-event-reminders', method: 'POST' },
-  // Snowbird digest cron: Bearer-token-authenticated, called by the scheduled job
-  { path: '/api/v1/internal/snowbird-digest', method: 'POST' },
   // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
   { path: '/api/v1/snowbird-digest/unsubscribe', method: 'GET' },
-  // Insurance alerts cron: Bearer-token-authenticated, called by the scheduled job
-  { path: '/api/v1/internal/insurance-alerts', method: 'POST' },
   // Insurance alerts unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM);
   // GET backs the human-clicked link, POST is the RFC 8058 one-click target.
   { path: '/api/v1/insurance-alerts/unsubscribe', method: 'GET' },
   { path: '/api/v1/insurance-alerts/unsubscribe', method: 'POST' },
   // Stripe webhook: signature-verified by handler, no session required [P2-34]
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
-  // Payment reminders cron: Bearer-token-authenticated, called by Vercel Cron [P2-34a]
-  { path: '/api/v1/internal/payment-reminders', method: 'POST' },
-  // Provisioning watchdog: recovers paid signups whose provisioning stayed non-terminal
-  { path: '/api/v1/internal/provisioning-watchdog', method: 'GET' },
-  { path: '/api/v1/internal/provisioning-watchdog', method: 'POST' },
-  // Assessment crons: Bearer-token-authenticated, called by Vercel Cron [Phase 1A]
-  { path: '/api/v1/internal/assessment-overdue', method: 'POST' },
-  { path: '/api/v1/internal/late-fee-processor', method: 'POST' },
-  { path: '/api/v1/internal/generate-assessments', method: 'POST' },
   // Demo auto-auth: HMAC-token-validated, no session required [Task 2.4-2.6]
   { path: '/api/v1/auth/demo-login', method: 'GET' },
   // Public transparency page data endpoint (community opt-in gated)
@@ -107,9 +92,6 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   { path: '/api/v1/auth/resend-verification', method: 'POST' },
   // Provisioning status polling: no session yet, signupRequestId-authenticated [Provisioning Screen]
   { path: '/api/v1/auth/provisioning-status', method: 'GET' },
-  { path: '/api/v1/internal/expire-demos', method: 'POST' },
-  // Readiness check: Bearer-token-authenticated, deployment validation [Demo Conversion]
-  { path: '/api/v1/internal/readiness', method: 'GET' },
   // Self-service resident signup: public submit + OTP verify (no session required)
   { path: '/api/v1/access-requests', method: 'POST' },
   { path: '/api/v1/access-requests/verify', method: 'POST' },
@@ -175,6 +157,24 @@ export function shouldHideDevSurfaceInProduction(
 }
 
 function isTokenAuthenticatedApiRoute(request: NextRequest): boolean {
+  // Internal scheduled-job routes: ONE prefix rule rather than a per-route
+  // entry below.
+  //
+  // The per-route list is what broke every cron in production. Vercel Cron
+  // issues GET; nine routes had a POST-only entry here, so middleware 401'd
+  // before the route ever ran (a 401, not the 405 you would expect), and four
+  // routes had no entry at all. Every one of those was a separate line someone
+  // had to remember to add, and the failure is silent.
+  //
+  // Safe as a blanket rule because it bypasses only the SESSION gate, never a
+  // route's own auth: every route under this prefix calls requireCronSecret(),
+  // which fails closed on a missing/short/wrong Bearer token
+  // (lib/api/cron-auth.ts). `guard:internal-cron-auth` enforces that invariant
+  // in CI, so a future route added here cannot silently become unauthenticated.
+  if (request.nextUrl.pathname.startsWith('/api/v1/internal/')) {
+    const method = request.method.toUpperCase();
+    return method === 'GET' || method === 'POST';
+  }
   // E-sign signing routes use dynamic segments (e.g. /api/v1/esign/sign/:token)
   // so they can't use exact-path matching via TOKEN_AUTH_ROUTES.
   if (request.nextUrl.pathname.startsWith('/api/v1/esign/sign/')) {
@@ -540,15 +540,34 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const canPreviewDrafts = isPreviewRequest && middlewareUser != null;
 
   // --- Rate limiting (Phase 1: unauthenticated routes) [P2-42] ---
-  // For auth and public routes, check rate limit by IP before doing heavier work.
+  // IP-keyed tiers, checked before doing heavier work.
+  //
+  // `esign-sign` is included deliberately: it was in the category table and the
+  // key builder but in NEITHER call site, so the unauthenticated signing
+  // endpoint — the one its own tier comment calls "a high-value abuse target" —
+  // was not throttled at all.
+  //
+  // `page` is deliberately ABSENT: authenticated HTML navigations are no longer
+  // IP-throttled (see the `page` tier in rate-limit-config.ts).
   const routeCategory = classifyRoute(pathname, request.method);
-  if (routeCategory === 'auth' || routeCategory === 'public') {
-    const rateLimitResult = checkRateLimit(request, null);
+  if (
+    routeCategory === 'auth' ||
+    routeCategory === 'public' ||
+    routeCategory === 'esign-sign'
+  ) {
+    const rateLimitResult = await checkRateLimit(request, null);
     if (rateLimitResult && !rateLimitResult.allowed) {
       console.warn(
         `[rate-limit] 429 for ${routeCategory} route ${pathname} from IP (key omitted)`,
       );
-      return rateLimitedResponse(rateLimitResult, requestId) as unknown as NextResponse;
+      return finaliseResponse(
+        response as unknown as NextResponse,
+        rateLimitedResponse(rateLimitResult, requestId, request) as unknown as NextResponse,
+        requestId,
+        origin,
+        isApi,
+        isPreviewRequest,
+      );
     }
   }
 
@@ -845,12 +864,19 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       isApiPath(pathname) &&
       (routeCategory === 'read' || routeCategory === 'write')
     ) {
-      const rateLimitResult = checkRateLimit(request, user?.id ?? null);
+      const rateLimitResult = await checkRateLimit(request, user?.id ?? null);
       if (rateLimitResult && !rateLimitResult.allowed) {
         console.warn(
           `[rate-limit] 429 for ${routeCategory} route ${pathname} (user: ${user?.id ?? 'anonymous'})`,
         );
-        return rateLimitedResponse(rateLimitResult, requestId) as unknown as NextResponse;
+        return finaliseResponse(
+          response as unknown as NextResponse,
+          rateLimitedResponse(rateLimitResult, requestId, request) as unknown as NextResponse,
+          requestId,
+          origin,
+          isApi,
+          isPreviewRequest,
+        );
       }
     }
 

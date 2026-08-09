@@ -87,8 +87,11 @@ import {
 const COMMUNITY_ID = 42;
 const COMMUNITY_SLUG = 'sunset-condos';
 const TEST_OTP = '123456';
+// No `?? 'dev-secret'` fallback: the service now throws without the env var, so
+// mirroring a fallback here would silently diverge from production behaviour.
+// setup.common.ts guarantees the value is set.
 const TEST_OTP_HASH = crypto
-  .createHmac('sha256', process.env.OTP_HMAC_SECRET ?? 'dev-secret')
+  .createHmac('sha256', process.env.OTP_HMAC_SECRET as string)
   .update(TEST_OTP)
   .digest('hex');
 

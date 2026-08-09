@@ -72,6 +72,13 @@ describe('readiness route', () => {
     vi.clearAllMocks();
     process.env.READINESS_CHECK_SECRET = 'test-secret';
     process.env.REAUTH_JWT_SECRET = 'test-reauth-secret-min-32-chars-xyzabc';
+    // Readiness now also reports on the secrets whose absence fails silently in
+    // production (the cron outage was invisible precisely because nothing
+    // checked CRON_SECRET). Set them so the baseline is 'healthy'; the
+    // missing-secret behaviour has its own test below.
+    process.env.CRON_SECRET = 'test-cron-secret-long-enough';
+    process.env.OTP_HMAC_SECRET = 'test-otp-secret-long-enough';
+    process.env.TOKEN_ENCRYPTION_KEY = 'a'.repeat(64);
     limitMock.mockResolvedValue([{ id: 1 }]);
     listUsersMock.mockResolvedValue({ data: { users: [] }, error: null });
   });
@@ -119,5 +126,46 @@ describe('readiness route', () => {
     ));
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it('reports degraded when CRON_SECRET is missing', async () => {
+    // The regression this locks down: CRON_SECRET was unset in production for
+    // months, every Vercel cron 401'd, and NOTHING surfaced it — the platform
+    // still listed all 10 jobs as registered and firing. Readiness is now the
+    // signal that would have caught it on day one.
+    delete process.env.CRON_SECRET;
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { cron_secret: { status: string; error?: string } };
+    };
+
+    // 200, not 503: the app is serving traffic fine. It is the scheduled work
+    // that is silently dead, which is 'degraded'.
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('degraded');
+    expect(body.checks.cron_secret.status).toBe('fail');
+    expect(body.checks.cron_secret.error).toContain('CRON_SECRET is not set');
+  });
+
+  it('reports degraded when a load-bearing secret is too short to be real', async () => {
+    process.env.OTP_HMAC_SECRET = 'short';
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { otp_hmac_secret: { status: string; error?: string } };
+    };
+
+    expect(body.status).toBe('degraded');
+    expect(body.checks.otp_hmac_secret.status).toBe('fail');
+    expect(body.checks.otp_hmac_secret.error).toContain('too short');
   });
 });

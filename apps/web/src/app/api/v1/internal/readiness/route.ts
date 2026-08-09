@@ -18,7 +18,7 @@ import {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    requireCronSecret(req, process.env.READINESS_CHECK_SECRET);
+    requireCronSecret(req, process.env.READINESS_CHECK_SECRET, process.env.CRON_SECRET);
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -57,15 +57,56 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // 6. Load-bearing secrets whose absence fails SILENTLY in production.
+  //
+  // Each of these was actually unset in production and nothing surfaced it:
+  //   - CRON_SECRET: Vercel Cron only sends `Authorization: Bearer $CRON_SECRET`
+  //     when the var exists. Unset, it sends no header, every scheduled job
+  //     401s, and the platform still reports the cron as registered and firing.
+  //     All 10 jobs were dead for months with a green dashboard.
+  //   - OTP_HMAC_SECRET: access-request OTPs are 6 digits, so the HMAC secret is
+  //     the only barrier to precomputing the whole space.
+  //   - TOKEN_ENCRYPTION_KEY: calendar sync and accounting connectors throw
+  //     without it, so those features 500 rather than degrade.
+  //
+  // This is the check that would have caught the cron outage on day one. It
+  // deliberately makes "a secret is missing" a monitorable signal instead of
+  // silence.
+  for (const [name, minLength] of [
+    ['CRON_SECRET', 16],
+    ['OTP_HMAC_SECRET', 16],
+    ['TOKEN_ENCRYPTION_KEY', 64],
+  ] as const) {
+    const value = process.env[name];
+    const key = name.toLowerCase();
+    if (!value) {
+      checks[key] = { status: 'fail', error: `${name} is not set` };
+    } else if (value.length < minLength) {
+      checks[key] = {
+        status: 'fail',
+        error: `${name} is too short (${value.length} chars; min ${minLength})`,
+      };
+    } else {
+      checks[key] = { status: 'pass' };
+    }
+  }
+
   // Determine overall status
   const dbOk = checks.database?.status === 'pass';
   const authOk = checks.supabase_auth?.status === 'pass';
   const pricesOk = checks.stripe_prices?.status === 'pass';
   const schemaOk = checks.schema_compatibility?.status === 'pass';
   const reauthOk = checks.reauth_jwt_secret?.status === 'pass';
+  // Grouped with the other secret checks rather than the connectivity ones: a
+  // missing secret is a real fault, but the process is still serving traffic,
+  // so it must not read as 'healthy' while stopping short of 'unhealthy'.
+  const secretsOk =
+    checks.cron_secret?.status === 'pass' &&
+    checks.otp_hmac_secret?.status === 'pass' &&
+    checks.token_encryption_key?.status === 'pass';
 
   let status: 'healthy' | 'degraded' | 'unhealthy';
-  if (dbOk && authOk && schemaOk && pricesOk && reauthOk) {
+  if (dbOk && authOk && schemaOk && pricesOk && reauthOk && secretsOk) {
     status = 'healthy';
   } else if (dbOk && authOk && schemaOk && reauthOk) {
     status = 'degraded';

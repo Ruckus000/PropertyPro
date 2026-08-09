@@ -10,8 +10,8 @@ import {
   softDeleteExpiredDemo,
 } from '@/lib/services/demo-conversion';
 
-export const POST = withErrorHandler(async (req: NextRequest) => {
-  requireCronSecret(req, process.env.DEMO_EXPIRY_CRON_SECRET);
+const handler = withErrorHandler(async (req: NextRequest) => {
+  requireCronSecret(req, process.env.DEMO_EXPIRY_CRON_SECRET, process.env.CRON_SECRET);
 
   const now = new Date();
 
@@ -87,3 +87,10 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     },
   });
 });
+
+// Vercel Cron issues GET; the GitHub-Actions era of this job issued POST.
+// One handler serves both so the scheduler's verb can never be the thing that
+// breaks the job. Neither verb reads a body or query params, so they are
+// genuinely interchangeable.
+export const GET = handler;
+export const POST = handler;

@@ -69,7 +69,12 @@ async function setSupportAccessEnabled(
 
 async function openAdminSupportTab(page: Page): Promise<void> {
   await page.goto(ADMIN_CLIENT_URL, { waitUntil: 'domcontentloaded' });
-  const supportTab = page.getByRole('button', { name: 'Support' });
+  // role 'tab', NOT 'button'. ClientWorkspace renders `<button role="tab">`, and
+  // an explicit role overrides the implicit one — so `getByRole('button')` could
+  // never match and this spec failed 100% of the time, warm or cold. It went
+  // unnoticed because CI runs 3 of the suite's 31 specs and this is not one of
+  // them; the feature itself was fine the whole time.
+  const supportTab = page.getByRole('tab', { name: 'Support' });
   await expect(supportTab).toBeVisible();
   // The click-again-on-failure below was an empirical workaround for a click
   // landing before hydration and being swallowed — the same root cause that kept

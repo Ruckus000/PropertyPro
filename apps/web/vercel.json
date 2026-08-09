@@ -73,6 +73,26 @@
     {
       "path": "/api/v1/internal/revenue-snapshot",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/v1/internal/calendar-event-reminders",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/notification-digests/process",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/snowbird-digest",
+      "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/visitor-auto-checkout",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/insurance-alerts",
+      "schedule": "10 13 * * *"
     }
   ]
 }
