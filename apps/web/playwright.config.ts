@@ -101,12 +101,29 @@ export default defineConfig({
       reuseExistingServer: true,
       timeout: 300_000,
     },
-    {
-      command: 'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
-      url: 'http://127.0.0.1:3001',
-      reuseExistingServer: true,
-      timeout: 300_000,
-    },
+    // The admin app, unless `PLAYWRIGHT_SKIP_ADMIN_SERVER` says otherwise.
+    //
+    // Opt-OUT, so every existing invocation is unchanged and a spec that needs
+    // admin keeps getting it by default. The escape hatch exists for runs that
+    // provably never touch :3001 — the Stripe signup specs, which the
+    // stripe-e2e workflow runs on their own. Starting admin there costs a
+    // second cold Next build and a second env surface, and its `/` 500s if any
+    // of that env is missing, which Playwright reports as a webServer timeout
+    // rather than as the missing variable it is.
+    //
+    // Do NOT set this for the default suite: `reuseExistingServer` means the
+    // omission is silent, and admin specs would fail looking like app bugs.
+    ...(process.env.PLAYWRIGHT_SKIP_ADMIN_SERVER
+      ? []
+      : [
+          {
+            command:
+              'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
+            url: 'http://127.0.0.1:3001',
+            reuseExistingServer: true,
+            timeout: 300_000,
+          },
+        ]),
   ],
   projects: [
     {
