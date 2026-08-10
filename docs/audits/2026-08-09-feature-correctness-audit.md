@@ -532,3 +532,60 @@ pnpm typecheck                                   15/15 tasks successful
 node scripts/run-lint-guards.mjs                 23/23 guards passed
 DATABASE_URL=<stub> pnpm test                    11,480 passed | 26 skipped | 7 todo
 ```
+
+### D11 — The D10 fix armed a cross-tenant takeover; both ship together (High, security)
+
+The security review of D10 did not come back clean, and the finding is the more
+important half of this addendum: **fixing D10 in isolation would have converted a
+latent nuisance into account takeover.**
+
+Three pre-existing facts compose:
+
+1. `users` has **no `community_id` column**, so `createScopedClient` applies no
+   tenant filter to it — `hasTenantIsolation`
+   (`packages/db/src/scoped-client.ts`) returns false and the only predicate is
+   `deleted_at IS NULL`. `scoped.query(users)` returns **every user on the
+   platform**.
+2. `createOnboardingResident` (`onboarding-service.ts:82-90`) therefore matches
+   an invitee by email against that global set and **reuses the found row's id**.
+3. `POST /api/v1/residents/invite` **returned the live invitation token in its
+   response body**, gated only on `residents:write` in the caller's *own*
+   community.
+
+So a manager of **any** community could name another community's resident by
+email address and be handed a working credential for them.
+
+| | Before D10's fix | After D10's fix, without D11 |
+|---|---|---|
+| Attacker gets | a role-less account | **the victim's identity** |
+| Victim gets | their email permanently claimed in auth, blocking their real acceptance (a denial of service) | same |
+| Inherited | nothing | every `user_roles` row the victim holds, in **every** community, including `designation` (`board_president` / `board_member`) |
+
+The limiting gate is GoTrue's duplicate-email check, so exposure is exactly the
+users who have a `users` row and **no `auth.users` row** — every
+invited-but-not-yet-accepted resident and every bulk-imported one. That set is
+normally populated, and such a user can already carry a board designation.
+
+**Fix.** The token is no longer returned to the caller. Emailing it is what binds
+acceptance to control of the mailbox; returning it bypassed that. Nothing in the
+UI ever read the field — only `invitationFailed` — and the contract types the
+response `z.unknown()`, so nothing breaks. The happy-path test asserted
+`token: 'tok'`, i.e. it **pinned the leak in place**; it now asserts the token is
+absent from the entire response.
+
+Also corrected: a docstring on `getUserForInvitation` claiming the scoped client
+"applies the community-membership join under the hood for tenant isolation". No
+such join exists. That sentence is precisely the reasoning that makes this whole
+class of bug look safe, so it was load-bearing in the wrong direction.
+
+**Residual, not fixed here:** `users` lookups remain unscoped platform-wide
+(`getUserForInvitation`, `getResidentUserByEmail`, `getResidentUserById`), so a
+manager can still add an arbitrary known-email user to *their own* community.
+That grants the victim access to the attacker's community rather than the
+reverse, so it is a consent/nuisance problem rather than takeover — tracked
+separately.
+
+**Lesson worth keeping.** A correct fix to a real bug can still be the wrong
+thing to ship alone. D10 was found by running the flow; D11 was found only
+because the fix went through security review before merging, and it was invisible
+from the two changed lines.
