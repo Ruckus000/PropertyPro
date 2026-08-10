@@ -115,6 +115,19 @@ Authorization is enforced at the route/query layer via `requirePermission()` →
 >   check would break the legitimate multi-community PM cancel flow.
 > - `/api/v1/stripe/connect/*` — the community's *inbound* dues collection, not
 >   PropertyPro's subscription. Root-gating would block routine PM operations.
+> - `POST /api/v1/settings/support-access` and `PATCH /api/v1/transparency/settings`
+>   — **reviewed 2026-08-09 and deliberately left on `settings:write`.** A
+>   pre-ship planning note listed these alongside the three billing/deletion
+>   routes as places where "`settings:write` undercovers it", and that note
+>   outlived its context. Neither is one of the four root-exclusive powers:
+>   support-access grants or revokes consent for PropertyPro support staff to
+>   access the community, and transparency/settings is §718 public-transparency
+>   configuration — routine compliance work a CAM performs. Making either
+>   root-only would EXTEND the closed set (an amendment to this ADR, not a
+>   completion of R3-03) and would block property managers from ordinary
+>   operations. If support-access should later be reserved to the root on
+>   trust grounds, that is a new product decision and belongs in its own ADR
+>   entry, not in the R3-03 tail.
 >
 > **PM experience after the narrowing.** Read-only, never hidden — hiding would
 > make the capability loss invisible. A property manager keeps `canViewBilling`
