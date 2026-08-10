@@ -469,6 +469,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       // First select (idempotency check) → empty; subsequent selects handled per query
       const selectCallResults: unknown[][] = [
         [], // idempotency check: no existing event
+        [{ signupRequestId: 'req-abc' }], // pending signup exists (FK parent for provisioning_jobs)
         [{ id: 123 }], // provisioning job lookup
       ];
       let selectCallCount = 0;
@@ -542,6 +543,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
       let selectCallCount = 0;
       const selectCallResults: unknown[][] = [
         [], // idempotency check: no existing event
+        [{ signupRequestId: 'req-failure' }], // pending signup exists (FK parent for provisioning_jobs)
         [{ id: 456 }], // provisioning job lookup
       ];
       const selectMock = vi.fn(() => ({
@@ -629,6 +631,47 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(res.status).toBe(200);
       // retrieveCheckoutSession should not be called when metadata lacks signupRequestId
       expect(retrieveCheckoutSessionMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 200 and provisions NOTHING when the signupRequestId has no pending_signups row', async () => {
+      // Regression: prod saw six checkout sessions whose signups were never
+      // written to this database. `provisioning_jobs.signup_request_id` is a FK
+      // onto `pending_signups`, so the fence insert died on the constraint, the
+      // handler 500'd, and Stripe retried an event that could never succeed.
+      const session = {
+        id: 'cs_live_orphan',
+        status: 'complete',
+        metadata: { signupRequestId: 'req-orphan' },
+      };
+      const event = makeEvent('checkout.session.completed', session, 'evt_cs_orphan');
+      constructEventMock.mockReturnValue(event);
+      retrieveCheckoutSessionMock.mockResolvedValue({ ...session, status: 'complete' });
+
+      // Every select resolves empty: no prior event, and NO pending signup.
+      const { updateMock, insertMock } = setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+
+      // 200, not 500 — this is unprocessable, not transient. A retry can never
+      // succeed, so Stripe must not be asked to make one.
+      expect(res.status).toBe(200);
+
+      // Only the idempotency fence insert; the provisioning_jobs insert that
+      // would have violated the FK never runs.
+      expect(insertMock).toHaveBeenCalledTimes(1);
+      const provisioningInsert = (insertMock.mock.calls as [unknown][]).find(
+        ([table]) => table === provisioningJobsTable,
+      );
+      expect(provisioningInsert).toBeUndefined();
+
+      // The pendingSignups UPDATE is skipped too. It would have matched zero
+      // rows in silence, which is why the miss went undetected before.
+      const pendingSignupUpdate = (updateMock.mock.calls as [unknown][]).find(
+        ([table]) => table === pendingSignupsTable,
+      );
+      expect(pendingSignupUpdate).toBeUndefined();
+
+      expect(runProvisioningMock).not.toHaveBeenCalled();
     });
 
     it('persists Stripe IDs for self-serve subscribe events with accessPlanId + communityId metadata', async () => {

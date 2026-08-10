@@ -150,6 +150,32 @@ export async function persistSelfServeCommunityStripeIds(input: {
 }
 
 /**
+ * Does a `pending_signups` row exist for this signup request?
+ *
+ * `provisioning_jobs.signup_request_id` is a FK onto this column, so an event
+ * carrying an unknown id cannot be provisioned — the insert dies on the
+ * constraint. Callers check this FIRST so an unprocessable event is dropped
+ * deliberately instead of surfacing as a raw Postgres error.
+ *
+ * Note the two adjacent writes are NOT protective on their own:
+ * `markPendingSignupPaymentCompleted` is an UPDATE, which matches zero rows in
+ * silence, and `insertProvisioningJobFence`'s `onConflictDoNothing` covers a
+ * duplicate KEY, never a missing PARENT.
+ *
+ * AUTHZ: Caller MUST verify the event belongs to Stripe.
+ */
+export async function pendingSignupExists(signupRequestId: string): Promise<boolean> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ signupRequestId: pendingSignups.signupRequestId })
+    .from(pendingSignups)
+    .where(eq(pendingSignups.signupRequestId, signupRequestId))
+    .limit(1);
+
+  return rows.length > 0;
+}
+
+/**
  * AUTHZ: Caller MUST verify the checkout.session.completed event belongs to Stripe.
  */
 export async function markPendingSignupPaymentCompleted(input: {
