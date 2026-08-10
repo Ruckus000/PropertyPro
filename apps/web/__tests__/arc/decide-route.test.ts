@@ -162,9 +162,38 @@ describe('POST /api/v1/arc/[id]/decide', () => {
     );
   });
 
-  it('records a denied decision without reviewNotes (?? null coercion)', async () => {
+  // BEHAVIOUR CHANGE (2026-08-09 feature-correctness audit). This case
+  // previously asserted that a denial with no reviewNotes returned 200 and
+  // persisted `reviewNotes: null`. HB 1203 requires an ARC/ACC denial to state
+  // the specific reason and cite the rule or covenant relied on, so an
+  // unexplained denial must not be representable through this endpoint.
+  it('rejects a denial that carries no written reason (HB 1203)', async () => {
     const res = await POST(
       jsonPost(7, { communityId: 42, decision: 'denied' }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: { code: 'VALIDATION_ERROR' },
+    });
+    expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a denial whose written reason is only whitespace', async () => {
+    const res = await POST(
+      jsonPost(7, { communityId: 42, decision: 'denied', reviewNotes: '   \n  ' }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('records a denial that carries a written reason', async () => {
+    const reason = 'Denied under Declaration Art. VII §3 — fence exceeds the 4ft height limit.';
+    const res = await POST(
+      jsonPost(7, { communityId: 42, decision: 'denied', reviewNotes: reason }),
       routeCtx('7'),
     );
 
@@ -175,6 +204,25 @@ describe('POST /api/v1/arc/[id]/decide', () => {
       'user-admin-1',
       {
         decision: 'denied',
+        reviewNotes: reason,
+      },
+      null,
+    );
+  });
+
+  it('still allows an approval with no reviewNotes', async () => {
+    const res = await POST(
+      jsonPost(7, { communityId: 42, decision: 'approved' }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(200);
+    expect(decideArcSubmissionForCommunityMock).toHaveBeenCalledWith(
+      42,
+      7,
+      'user-admin-1',
+      {
+        decision: 'approved',
         reviewNotes: null,
       },
       null,

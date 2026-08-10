@@ -136,6 +136,16 @@ describe('notification-service', () => {
       expect(recipients[0]?.email).toBe('owner@example.com');
     });
 
+    it('returns only non-owner residents for filter "tenants_only"', async () => {
+      // `tenants_only` had no branch here at all, and the announcements route
+      // silently downgraded it to `all` — so a renters-only announcement put
+      // its title AND body into the notification feed of every owner, board
+      // member and manager in the community.
+      setupMock();
+      const recipients = await resolveRecipients(COMMUNITY_ID, 'tenants_only', 'announcement');
+      expect(recipients.map((r) => r.email)).toEqual(['tenant@example.com']);
+    });
+
     it('returns board members and president for filter "board_only"', async () => {
       setupMock();
       const recipients = await resolveRecipients(COMMUNITY_ID, 'board_only', 'meeting');

@@ -174,6 +174,47 @@ describe('transparency service', () => {
     expect(result.minutesAvailability.months).toHaveLength(12);
   });
 
+  it('does not round a short notice up into compliance', async () => {
+    // 47h31m of notice on a board meeting. Math.round() reported this as 48
+    // hours and published `metRequirement: true` on the association's public
+    // transparency page — a false statutory-compliance claim, for anything up
+    // to 30 minutes short of the §718.112(2)(c) 48-hour minimum.
+    queryMock.mockImplementation(async (table: unknown) => {
+      if (table === communitiesTable) {
+        return [{ id: 1, timezone: 'America/New_York', city: 'Miami', state: 'FL', logoPath: null }];
+      }
+      if (table === checklistTable) return checklistRows;
+      if (table === meetingsTable) {
+        return [{
+          id: 45,
+          title: 'Board Meeting',
+          meetingType: 'board',
+          startsAt: new Date('2026-02-20T18:00:00.000Z'),
+          noticePostedAt: new Date('2026-02-18T18:29:00.000Z'),
+        }];
+      }
+      return [];
+    });
+
+    const result = await getTransparencyPageData({
+      id: 1,
+      slug: 'sunset-condos',
+      name: 'Sunset Condos',
+      communityType: 'condo_718',
+      timezone: 'America/New_York',
+      addressLine1: null,
+      addressLine2: null,
+      city: 'Miami',
+      state: 'FL',
+      zipCode: null,
+    });
+
+    const notice = result.meetingNotices.meetings[0];
+    expect(notice?.requiredLeadTimeHours).toBe(48);
+    expect(notice?.leadTimeHours).toBe(47);
+    expect(notice?.metRequirement).toBe(false);
+  });
+
   it('initializes checklist rows when none exist yet', async () => {
     checklistRows = [];
     getComplianceTemplateMock.mockReturnValueOnce([

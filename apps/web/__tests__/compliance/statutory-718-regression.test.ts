@@ -262,21 +262,25 @@ describe('30-day posting deadline enforcement', () => {
     expect(status).toBe('overdue');
   });
 
-  it('weekend deadline rolls to Monday', () => {
-    // 2026-02-07 is a Saturday
+  // BEHAVIOUR CHANGE (2026-08-09 feature-correctness audit). These two cases
+  // asserted that a weekend landing rolled FORWARD to Monday. §718.111(12)(g)
+  // states 30 days as a maximum and grants no weekend exception, so rolling
+  // forward advertised 31-32 days and let a posting made after the statutory
+  // date read as "satisfied". The deadline is now exactly the statute.
+  it('does not extend a Saturday deadline into the following week', () => {
+    // 2026-01-08 + 30 days = Saturday 2026-02-07.
     const sourceDate = new Date('2026-01-08T12:00:00Z');
     const deadline = calculatePostingDeadline(sourceDate, 30);
-    const day = deadline.getUTCDay();
-    // Should be Monday (1), not Saturday (6) or Sunday (0)
-    expect(day).toBe(1);
+    expect(deadline.getUTCDay()).toBe(6);
+    expect(deadline.getTime() - sourceDate.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
   });
 
-  it('Sunday deadline also rolls to Monday', () => {
-    // 2026-03-08 is Sunday
+  it('does not extend a Sunday deadline into the following week', () => {
+    // 2026-02-06 + 30 days = Sunday 2026-03-08.
     const sourceDate = new Date('2026-02-06T12:00:00Z');
     const deadline = calculatePostingDeadline(sourceDate, 30);
-    const day = deadline.getUTCDay();
-    expect(day).toBe(1);
+    expect(deadline.getUTCDay()).toBe(0);
+    expect(deadline.getTime() - sourceDate.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
   });
 });
 

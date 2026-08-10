@@ -376,7 +376,9 @@ describe('createOnboardingInvitation', () => {
       }),
     );
 
-    // Should log audit event
+    // Should log audit event — keyed on the invitee, NOT on the invitation
+    // token. compliance_audit_log is board-readable via /api/v1/audit-trail and
+    // append-only, so a token logged here is a permanent, shared credential.
     expect(mockLogAuditEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: ACTOR_USER_ID,
@@ -385,6 +387,12 @@ describe('createOnboardingInvitation', () => {
         communityId: COMMUNITY_ID,
       }),
     );
+
+    const auditPayload = JSON.stringify(mockLogAuditEvent.mock.calls);
+    for (const call of mockLogAuditEvent.mock.calls) {
+      expect((call[0] as { resourceId?: string }).resourceId).not.toMatch(/^[0-9a-f]{64}$/);
+    }
+    expect(auditPayload).not.toMatch(/[0-9a-f]{64}/);
   });
 
   it('throws NotFoundError when community does not exist', async () => {

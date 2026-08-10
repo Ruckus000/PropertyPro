@@ -48,12 +48,18 @@ describe('p1-09 compliance calculator', () => {
     expect(status).toBe('overdue');
   });
 
+  // BEHAVIOUR CHANGE (2026-08-09 feature-correctness audit): the offset is now
+  // exact elapsed time and no weekend adjustment is applied to a statutory
+  // MAXIMUM. This previously expected 2026-03-23 — a Monday roll-forward that
+  // advertised 15 days against a 14-day rule, and that lost an hour to
+  // spring-forward on the way there.
   it('handles DST spring-forward deadline calculations without invalid timestamps', () => {
     const source = new Date('2026-03-08T01:30:00-05:00');
     const deadline = calculatePostingDeadline(source, 14);
 
     expect(Number.isNaN(deadline.getTime())).toBe(false);
-    expect(deadline.toISOString().startsWith('2026-03-23')).toBe(true);
+    expect(deadline.toISOString().startsWith('2026-03-22')).toBe(true);
+    expect(deadline.getTime() - source.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
   });
 
   it('handles DST fall-back deadlines without duplicate/missing-hour errors', () => {
@@ -68,14 +74,21 @@ describe('p1-09 compliance calculator', () => {
     const leap = calculatePostingDeadline(new Date('2024-01-30T12:00:00.000Z'), 30);
     const nonLeap = calculatePostingDeadline(new Date('2025-01-30T12:00:00.000Z'), 30);
 
+    // Both are now exactly 30 elapsed days. The non-leap case previously read
+    // 2025-03-03: Saturday Mar 1 rolled forward to Monday, i.e. 32 days.
     expect(leap.toISOString().startsWith('2024-02-29')).toBe(true);
-    expect(nonLeap.toISOString().startsWith('2025-03-03')).toBe(true);
+    expect(nonLeap.toISOString().startsWith('2025-03-01')).toBe(true);
   });
 
-  it('applies weekend rollover policy to next Monday', () => {
-    const deadline = calculatePostingDeadline(new Date('2026-01-08T12:00:00.000Z'), 30);
+  it('does NOT roll a weekend landing forward past the statutory maximum', () => {
+    // Jan 8 + 30 days is Saturday Feb 7. Rolling that forward to Monday Feb 9
+    // advertised 32 days against a 30-day rule and let a late posting read as
+    // satisfied. §718.111(12)(g) grants no weekend exception.
+    const source = new Date('2026-01-08T12:00:00.000Z');
+    const deadline = calculatePostingDeadline(source, 30);
 
-    expect(deadline.toISOString().startsWith('2026-02-09')).toBe(true);
+    expect(deadline.toISOString().startsWith('2026-02-07')).toBe(true);
+    expect(deadline.getTime() - source.getTime()).toBe(30 * 24 * 60 * 60 * 1000);
   });
 
   it('reflects Florida timezone split as one-hour UTC difference', () => {

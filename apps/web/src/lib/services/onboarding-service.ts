@@ -209,12 +209,16 @@ export async function createOnboardingInvitation(params: {
     }),
   });
 
-  // Audit log
+  // Audit log — resourceId is the INVITED USER, never the token. See the same
+  // note in app/api/v1/invitations/route.ts: compliance_audit_log is readable
+  // by board members and managers via GET /api/v1/audit-trail, a live token
+  // completes the accept flow (which sets the invitee's password), and the
+  // table is append-only by trigger.
   await logAuditEvent({
     userId: actorUserId,
     action: 'user_invited',
     resourceType: 'invitation',
-    resourceId: token,
+    resourceId: userId,
     communityId,
     newValues: { userId, expiresAt: expiresAt.toISOString() },
   });

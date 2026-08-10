@@ -1,12 +1,4 @@
-import {
-  addDays,
-  addMonths,
-  isAfter,
-  isBefore,
-  isWeekend,
-  nextMonday,
-  startOfDay,
-} from 'date-fns';
+import { addMonths, isAfter, isBefore } from 'date-fns';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 
 export type ComplianceStatus = 'satisfied' | 'unsatisfied' | 'overdue' | 'not_applicable';
@@ -32,26 +24,23 @@ export interface ComplianceStatusInput {
   now?: Date;
 }
 
-/**
- * Business rule: deadlines that land on weekends roll forward to Monday.
- */
-function adjustWeekendDeadline(deadline: Date): Date {
-  const dayStart = startOfDay(deadline);
-  if (!isWeekend(dayStart)) {
-    return deadline;
-  }
-
-  const monday = nextMonday(dayStart);
-  return monday;
-}
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Calculate posting deadline from a source date (default 30 days),
- * with weekend rollover handling.
+ * Calculate the posting deadline from a source date (default 30 days).
+ *
+ * §718.111(12)(g) states 30 days as a MAXIMUM, and grants no weekend
+ * exception. Until the 2026-08-09 feature-correctness audit this rolled a
+ * weekend landing forward to Monday, which told managers they had 31 or 32 days
+ * and let a posting made after the statutory date read as "satisfied". A
+ * weekend rule has no direction it can move a maximum without misstating it, so
+ * it is not applied here at all — the deadline is exactly the statute.
+ *
+ * The offset is exact elapsed time, not `date-fns` `addDays`: a local-calendar
+ * shift returns a 719-hour "30 days" across DST spring-forward.
  */
 export function calculatePostingDeadline(sourceDate: Date, days: number = 30): Date {
-  const raw = addDays(sourceDate, days);
-  return adjustWeekendDeadline(raw);
+  return new Date(sourceDate.getTime() + days * DAY_MS);
 }
 
 /**
