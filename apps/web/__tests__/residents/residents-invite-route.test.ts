@@ -127,11 +127,28 @@ describe('POST /api/v1/residents/invite', () => {
       userId: 'user-new',
       isNewUser: true,
       invitationFailed: false,
-      token: 'tok',
       expiresAt: '2026-06-01T00:00:00.000Z',
     });
     expect(createOnboardingResidentMock).toHaveBeenCalled();
     expect(createOnboardingInvitationMock).toHaveBeenCalled();
+  });
+
+  it('NEVER returns the invitation token to the caller', async () => {
+    // A live token completes the accept flow and sets that user's password.
+    // `users` carries no `community_id`, so the scoped client does not isolate
+    // it and `createOnboardingResident` matches an invitee by email across the
+    // WHOLE platform, reusing that row's id. Returning the token therefore
+    // handed any community's manager a working credential for a resident of
+    // another community who had not yet accepted. Emailing it is what binds
+    // acceptance to control of the mailbox.
+    //
+    // This assertion previously read `token: 'tok'` — it pinned the leak in
+    // place. Nothing in the UI ever consumed the field.
+    const res = await POST(inviteRequest(BASE_BODY));
+
+    const json = await res.json();
+    expect(json.data).not.toHaveProperty('token');
+    expect(JSON.stringify(json)).not.toContain('tok');
   });
 
   it('returns invitationFailed when email send fails', async () => {

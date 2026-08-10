@@ -54,8 +54,16 @@ export interface InvitedUser {
  * One-row user lookup for the invitation flow (email + display name).
  * Returns `null` when no row matches OR email is missing/wrong-typed.
  *
- * `users` is a global table; the scoped client still applies the
- * community-membership join under the hood for tenant isolation.
+ * ⚠️ `users` is a global table and the scoped client does **NOT** isolate it.
+ * There is no `community_id` column, so `hasTenantIsolation`
+ * (packages/db/src/scoped-client.ts) returns false and the only predicate
+ * applied is `deleted_at IS NULL`. This lookup will therefore resolve ANY user
+ * on the platform, member of `communityId` or not.
+ *
+ * The previous version of this comment claimed the scoped client "applies the
+ * community-membership join under the hood for tenant isolation". No such join
+ * exists. Callers must not treat a successful lookup here as proof of
+ * membership — check it explicitly.
  */
 export async function getUserForInvitation(
   communityId: number,
