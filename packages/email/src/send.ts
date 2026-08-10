@@ -25,12 +25,62 @@ export interface TestMessage {
   idempotencyKey?: string;
 }
 
-/** Collected emails when running in test mode (no RESEND_API_KEY). */
+/** Collected emails when not delivering for real. */
 export const testInbox: TestMessage[] = [];
 
 /** Clear the test inbox. Useful in test beforeEach. */
 export function clearTestInbox(): void {
   testInbox.length = 0;
+}
+
+/**
+ * How this process delivers mail.
+ *
+ * - `live` — a real Resend call.
+ * - `dry-run` — EMAIL_DRY_RUN is set. Nothing is transmitted; each message is
+ *   collected in `testInbox` AND logged, so an operator can see exactly who
+ *   would have been mailed.
+ * - `unconfigured` — no RESEND_API_KEY (tests, local dev). Collected silently,
+ *   which is the long-standing behaviour.
+ *
+ * `dry-run` deliberately outranks a configured key: it exists so that running an
+ * ops script against the PRODUCTION database cannot mail real people by
+ * accident. `scripts/with-env-local.sh` turns it on by default for exactly that
+ * reason, and requires an explicit opt-out to deliver.
+ */
+export type DeliveryMode = 'live' | 'dry-run' | 'unconfigured';
+
+function isTruthy(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized !== '' && normalized !== '0' && normalized !== 'false' && normalized !== 'no';
+}
+
+export function resolveDeliveryMode(): DeliveryMode {
+  if (isTruthy(process.env.EMAIL_DRY_RUN)) return 'dry-run';
+  return process.env.RESEND_API_KEY ? 'live' : 'unconfigured';
+}
+
+/**
+ * Report a suppressed message.
+ *
+ * Envelope only — recipient, subject, category, sender. The rendered body is
+ * never logged: templates carry invitation tokens, password-reset links and
+ * signed unsubscribe URLs, and this output routinely lands in a terminal
+ * scrollback or a CI log.
+ */
+function logSuppressed(message: {
+  to: string | string[];
+  subject: string;
+  category: string;
+  from: string;
+}): void {
+  const recipients = Array.isArray(message.to) ? message.to.join(', ') : message.to;
+  // eslint-disable-next-line no-console
+  console.info(
+    `[email:dry-run] NOT SENT → to=${recipients} | subject=${JSON.stringify(message.subject)} `
+    + `| category=${message.category} | from=${message.from}`,
+  );
 }
 
 function getResendClient(): Resend | null {
@@ -66,9 +116,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   const headers = buildHeaders(options);
   const from = resolveFromAddress(options.from);
 
-  const resend = getResendClient();
+  const mode = resolveDeliveryMode();
 
-  if (!resend) {
+  if (mode !== 'live') {
     testInbox.push({
       from,
       to: options.to,
@@ -78,7 +128,18 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       idempotencyKey: options.idempotencyKey,
     });
 
+    if (mode === 'dry-run') {
+      logSuppressed({ to: options.to, subject: options.subject, category: options.category, from });
+      return { id: `dryrun_${testInbox.length}` };
+    }
+
     return { id: `test_${testInbox.length}` };
+  }
+
+  const resend = getResendClient();
+  // `mode === 'live'` already established RESEND_API_KEY is present.
+  if (!resend) {
+    throw new Error('Resend client unavailable despite live delivery mode');
   }
 
   const payload = {
@@ -112,13 +173,13 @@ export async function sendBulkEmail(requests: SendEmailOptions[]): Promise<SendB
     throw new Error('sendBulkEmail does not support per-message idempotency keys; use sendEmail instead');
   }
 
-  const resend = getResendClient();
+  const mode = resolveDeliveryMode();
 
   const results: SendBulkEmailResult['results'] = [];
   let successCount = 0;
   let failureCount = 0;
 
-  if (!resend) {
+  if (mode !== 'live') {
     for (const options of requests) {
       const from = resolveFromAddress(options.from);
       testInbox.push({
@@ -128,11 +189,25 @@ export async function sendBulkEmail(requests: SendEmailOptions[]): Promise<SendB
         react: options.react,
         headers: buildHeaders(options),
       });
-      const id = `test_${testInbox.length}`;
+      if (mode === 'dry-run') {
+        logSuppressed({ to: options.to, subject: options.subject, category: options.category, from });
+      }
+      const id = `${mode === 'dry-run' ? 'dryrun' : 'test'}_${testInbox.length}`;
       results.push({ success: true, id });
       successCount++;
     }
+    if (mode === 'dry-run' && requests.length > 0) {
+      // eslint-disable-next-line no-console
+      console.info(
+        `[email:dry-run] suppressed ${requests.length} bulk message(s); nothing was transmitted`,
+      );
+    }
     return { results, successCount, failureCount };
+  }
+
+  const resend = getResendClient();
+  if (!resend) {
+    throw new Error('Resend client unavailable despite live delivery mode');
   }
 
   // Helper to chunk arrays
