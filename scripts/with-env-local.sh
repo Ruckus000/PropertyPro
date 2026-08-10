@@ -136,6 +136,16 @@ esac
 # this wrapper (db:migrate, seed:verify, integration suites) send no mail at all,
 # so the safe default costs nothing, and the one case that does want delivery is
 # rare enough to be explicit.
+#
+# KNOWN EXCEPTION — this covers Resend, which is every template the app renders,
+# but NOT mail that Supabase sends from its own SMTP. In practice that is
+# `supabase.auth.resetPasswordForEmail` (apps/web/src/lib/auth/password-reset.ts,
+# components/mobile/MobileSecurityContent.tsx); every other Supabase auth call
+# here is `generateLink`, which returns a URL and sends nothing. This wrapper
+# leaves Supabase pointed at production, so a password-reset trigger still
+# delivers for real. Gating that needs Supabase-side configuration, not an env
+# var. The sibling with-env-local-demo-db.sh is unaffected — it redirects
+# Supabase to loopback, so nothing escapes there.
 if [[ "${PROPERTYPRO_ALLOW_OUTBOUND_MAIL:-}" == "1" ]]; then
   unset EMAIL_DRY_RUN || true
   if [[ -n "${RESEND_API_KEY:-}" ]]; then

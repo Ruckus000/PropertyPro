@@ -28,7 +28,7 @@ import {
   sendBulkEmail,
   sendEmail,
   testInbox,
-} from '../send';
+} from '../src/send';
 
 const body = () => createElement('div', null, 'hello');
 
@@ -138,6 +138,10 @@ describe('sendEmail', () => {
       message({ react: createElement('a', { href: 'https://x/accept?token=SUPERSECRETTOKEN' }, 'Accept') }),
     );
 
+    // Assert a line was emitted BEFORE asserting what it omits — otherwise
+    // deleting logSuppressed entirely would satisfy the negative assertions
+    // against an empty string and this test would pass while proving nothing.
+    expect(infoSpy).toHaveBeenCalled();
     const logged = infoSpy.mock.calls.flat().map(String).join(' ');
     expect(logged).not.toContain('SUPERSECRETTOKEN');
     expect(logged).not.toContain('accept?token');
