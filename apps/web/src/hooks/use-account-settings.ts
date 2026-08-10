@@ -94,19 +94,56 @@ export function useDeletionStatus() {
 
 // ── Request deletion (POST /api/v1/account/delete) ──────────
 
+/** A community the deleting user is root of (R3-03b / issue #924). */
+export interface RootOffboardingCommunity {
+  communityId: number;
+  name: string;
+  /** False when no property manager remains who could claim root. */
+  hasSuccessor: boolean;
+}
+
+/**
+ * Thrown on the 409 the server returns when the user is root somewhere and has
+ * not acknowledged it. A distinct error type (not a message string) so the UI
+ * can branch on it and render the affected communities instead of surfacing a
+ * generic failure.
+ */
+export class RootOffboardingAckRequired extends Error {
+  constructor(public readonly communities: RootOffboardingCommunity[]) {
+    super('Root-offboarding acknowledgement required.');
+    this.name = 'RootOffboardingAckRequired';
+  }
+}
+
 export function useRequestAccountDeletion() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: async () => {
+  // Explicit generics: with a defaulted parameter TanStack infers TVariables as
+  // `void`, which then rejects `mutate(true)` at the call site.
+  return useMutation<unknown, Error, boolean | void>({
+    mutationFn: async (acknowledgeRootOffboarding) => {
       const res = await fetch('/api/v1/account/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acknowledgeRootOffboarding: acknowledgeRootOffboarding === true }),
       });
       if (!res.ok) {
         const json = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
+          error?: {
+            message?: string;
+            code?: string;
+            details?: { communities?: RootOffboardingCommunity[] };
+          };
         } | null;
+        // 409 is a confirmable state, not a failure: re-submit with the ack.
+        if (
+          res.status === 409 &&
+          json?.error?.code === 'ROOT_OFFBOARDING_ACK_REQUIRED'
+        ) {
+          throw new RootOffboardingAckRequired(
+            json.error.details?.communities ?? [],
+          );
+        }
         throw new Error(
           json?.error?.message ?? 'Failed to request account deletion.',
         );

@@ -24,7 +24,16 @@ export const accountDeleteGetContract = defineRoute({
 export const accountDeletePostContract = defineRoute({
   method: 'POST',
   path: '/api/v1/account/delete',
-  request: {},
+  request: {
+    // R3-03b: when the caller holds `root_manager` anywhere, the first attempt
+    // returns 409 ROOT_OFFBOARDING_ACK_REQUIRED listing the affected
+    // communities; the client re-submits with this flag set. Optional so the
+    // overwhelmingly common case (user holds no root) sends no body at all —
+    // `.optional()` on the object keeps existing bodyless callers valid.
+    body: z
+      .object({ acknowledgeRootOffboarding: z.boolean().optional() })
+      .optional(),
+  },
   response: z.unknown(),
   permission: { resource: 'settings', action: 'write' },
 });

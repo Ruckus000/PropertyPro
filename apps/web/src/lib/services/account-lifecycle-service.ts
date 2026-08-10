@@ -33,7 +33,10 @@ import type { AccessPlan } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
-import { findCommunitiesUserIsRootOf } from '@/lib/account-lifecycle/root-offboarding';
+import {
+  findRootOffboardingImpact,
+  type RootOffboardingCommunity,
+} from '@/lib/account-lifecycle/root-offboarding';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -504,10 +507,45 @@ export async function extendFreeAccess(
 // Deletion — User
 // ---------------------------------------------------------------------------
 
-/** Creates a deletion request with a 30-day cooling period. */
-export async function requestUserDeletion(userId: string) {
+/**
+ * Thrown when the requester holds `root_manager` somewhere and has not yet
+ * acknowledged that deleting their account leaves those communities without a
+ * root. Carries the impacted communities so the caller can name them.
+ *
+ * Deliberately an ACK, not a refusal (R3-03b / issue #924): account deletion is
+ * self-scoped and must stay self-service for erasure requests, so the user is
+ * informed and consents rather than being blocked. Mirrors the
+ * `NonOwnerAckRequiredError` precedent in role-management-service.
+ */
+export class RootOffboardingAckRequiredError extends Error {
+  constructor(public readonly communities: RootOffboardingCommunity[]) {
+    super('Root-offboarding acknowledgement required.');
+    this.name = 'RootOffboardingAckRequiredError';
+  }
+}
+
+/**
+ * Creates a deletion request with a 30-day cooling period.
+ *
+ * Throws `RootOffboardingAckRequiredError` when the user is root of any
+ * community and `acknowledgeRootOffboarding` is false. NOTHING is written in
+ * that case — the check runs before the insert, so a user who bails at the
+ * confirmation prompt does not leave a stray cooling request behind.
+ */
+export async function requestUserDeletion(
+  userId: string,
+  acknowledgeRootOffboarding = false,
+) {
   const now = new Date();
   const coolingEndsAt = addDays(now, 30);
+
+  // Ack gate BEFORE any write. Unlike the flagging below, a failure here must
+  // propagate: if we cannot determine the impact we must not silently proceed
+  // to delete a root's account as though there were none.
+  const rootImpact = await findRootOffboardingImpact(userId);
+  if (rootImpact.length > 0 && !acknowledgeRootOffboarding) {
+    throw new RootOffboardingAckRequiredError(rootImpact);
+  }
 
   const db = createUnscopedClient();
   const [request] = await db
@@ -522,33 +560,44 @@ export async function requestUserDeletion(userId: string) {
 
   if (!request) throw new Error(`Failed to create deletion request for user ${userId}`);
 
-  // Role-offboarding flag (role-v3 Phase 2a): if this user holds root_manager
-  // in any community, flag those communities as pending-rootless so the
-  // platform-admin surface (rootless-communities report) and audit trail have
-  // visibility. We do NOT hard-block here — Phase 3 will, once the
-  // claim/transfer UX (2b) exists.
+  // Role-offboarding flag: record which communities this leaves rootless so the
+  // platform-admin surface (rootless-communities report) and the audit trail
+  // have visibility. Reuses the impact computed for the ack gate above — no
+  // second query, and the audit cannot disagree with what the user consented to.
+  //
+  // Communities with NO successor get a distinct action. Those have no
+  // self-service recovery at all (`reassignRootOp` requires the target to
+  // already be a property_manager), so they need a two-step platform-admin
+  // break-glass and must not be buried among the recoverable ones.
   try {
-    const rootCommunityIds = await findCommunitiesUserIsRootOf(userId);
-    for (const communityId of rootCommunityIds) {
+    for (const { communityId, name, hasSuccessor } of rootImpact) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[root-offboarding] user ${userId} (deletion request ${request.id}) is root_manager of community ${communityId}; community will be rootless after purge`,
+        `[root-offboarding] user ${userId} (deletion request ${request.id}) is root_manager of community ${communityId} (${name}); community will be rootless after purge${
+          hasSuccessor ? '' : ' with NO property_manager able to claim it'
+        }`,
       );
       await logAuditEvent({
         userId,
-        action: 'root_pending_deletion',
+        action: hasSuccessor
+          ? 'root_pending_deletion'
+          : 'root_pending_deletion_no_successor',
         resourceType: 'account_deletion_request',
         resourceId: String(request.id),
         communityId,
         metadata: {
           reason: 'root_manager_requested_account_deletion',
           coolingEndsAt: coolingEndsAt.toISOString(),
+          communityName: name,
+          hasSuccessor,
         },
       });
     }
   } catch (err) {
-    // Flagging is best-effort and must never block the deletion request the
-    // user explicitly asked for. Surface the failure in logs only.
+    // Still best-effort: the request is already committed and the user has
+    // explicitly consented, so a logging failure must not surface as an error
+    // to them. The ack gate above is the part that must not be swallowed, and
+    // it runs before this block precisely so it cannot be.
     // eslint-disable-next-line no-console
     console.error('[root-offboarding] failed to flag rootless-on-deletion', err);
   }

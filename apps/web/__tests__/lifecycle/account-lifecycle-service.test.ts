@@ -31,6 +31,7 @@ const {
   purgeCommunitySiteAssetsMock,
   logAuditEventMock,
   findCommunitiesUserIsRootOfMock,
+  findRootOffboardingImpactMock,
   eqMock,
   andMock,
   isNullMock,
@@ -47,6 +48,7 @@ const {
     purgeCommunitySiteAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     logAuditEventMock: vi.fn().mockResolvedValue(undefined),
     findCommunitiesUserIsRootOfMock: vi.fn().mockResolvedValue([]),
+    findRootOffboardingImpactMock: vi.fn().mockResolvedValue([]),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
@@ -130,6 +132,7 @@ vi.mock('@/lib/site-assets/cleanup', () => ({
 
 vi.mock('@/lib/account-lifecycle/root-offboarding', () => ({
   findCommunitiesUserIsRootOf: findCommunitiesUserIsRootOfMock,
+  findRootOffboardingImpact: findRootOffboardingImpactMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -139,6 +142,7 @@ import {
   revokeFreeAccess,
   extendFreeAccess,
   requestUserDeletion,
+  RootOffboardingAckRequiredError,
   cancelUserDeletion,
   executeUserSoftDelete,
   recoverUser,
@@ -508,10 +512,16 @@ describe('extendFreeAccess', () => {
 // ---------------------------------------------------------------------------
 
 describe('requestUserDeletion', () => {
+  const impact = (communityId: number, name: string, hasSuccessor = true) => ({
+    communityId,
+    name,
+    hasSuccessor,
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: user is root of no community (clearAllMocks wiped the resolved value).
-    findCommunitiesUserIsRootOfMock.mockResolvedValue([]);
+    findRootOffboardingImpactMock.mockResolvedValue([]);
   });
 
   it('creates a deletion request with 30-day cooling period', async () => {
@@ -536,24 +546,68 @@ describe('requestUserDeletion', () => {
   it('does not emit a root_pending_deletion audit event when the user is root of no community', async () => {
     const fakeRequest = { id: 5, requestType: 'user', userId: 'user-uuid-002', status: 'cooling', coolingEndsAt: new Date() };
     createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
-    findCommunitiesUserIsRootOfMock.mockResolvedValue([]);
+    findRootOffboardingImpactMock.mockResolvedValue([]);
 
     await requestUserDeletion('user-uuid-002');
 
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
-  it('flags each community the deleting user is root_manager of (audit event per community)', async () => {
+  // R3-03b: the ack gate. A root deleting their account orphans the community,
+  // so they must confirm — but it is an ACK, not a refusal, because account
+  // deletion has to stay self-service for erasure requests.
+  it('throws RootOffboardingAckRequiredError when root and not acknowledged', async () => {
+    const dbMock = buildDbMock({ insertReturning: [[{ id: 7 }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    findRootOffboardingImpactMock.mockResolvedValue([impact(42, 'Sunset Condos')]);
+
+    await expect(requestUserDeletion('root-user')).rejects.toBeInstanceOf(
+      RootOffboardingAckRequiredError,
+    );
+  });
+
+  it('writes NOTHING when the ack is required — no stray cooling request', async () => {
+    // The gate runs before the insert on purpose: a user who bails at the
+    // confirmation prompt must not leave a pending deletion behind.
+    const dbMock = buildDbMock({ insertReturning: [[{ id: 7 }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    findRootOffboardingImpactMock.mockResolvedValue([impact(42, 'Sunset Condos')]);
+
+    await expect(requestUserDeletion('root-user')).rejects.toThrow();
+
+    expect(dbMock._calls.find((c) => c.op === 'insert')).toBeUndefined();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('carries the affected communities on the error so the prompt can name them', async () => {
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[{ id: 7 }]] }));
+    findRootOffboardingImpactMock.mockResolvedValue([
+      impact(42, 'Sunset Condos'),
+      impact(99, 'Palm Shores HOA', false),
+    ]);
+
+    await requestUserDeletion('root-user').catch((err: unknown) => {
+      expect(err).toBeInstanceOf(RootOffboardingAckRequiredError);
+      expect((err as RootOffboardingAckRequiredError).communities).toEqual([
+        { communityId: 42, name: 'Sunset Condos', hasSuccessor: true },
+        { communityId: 99, name: 'Palm Shores HOA', hasSuccessor: false },
+      ]);
+    });
+    expect.assertions(2);
+  });
+
+  it('proceeds and flags each community once acknowledged', async () => {
     const fakeRequest = { id: 9, requestType: 'user', userId: 'root-user', status: 'cooling', coolingEndsAt: new Date() };
     createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
-    findCommunitiesUserIsRootOfMock.mockResolvedValue([42, 99]);
+    findRootOffboardingImpactMock.mockResolvedValue([
+      impact(42, 'Sunset Condos'),
+      impact(99, 'Palm Shores HOA'),
+    ]);
 
-    const result = await requestUserDeletion('root-user');
+    const result = await requestUserDeletion('root-user', true);
 
-    // The deletion request is still created (no hard-block in Phase 2a).
     expect(result).toEqual(fakeRequest);
-    expect(findCommunitiesUserIsRootOfMock).toHaveBeenCalledWith('root-user');
-    // One audit flag per affected community.
+    expect(findRootOffboardingImpactMock).toHaveBeenCalledWith('root-user');
     expect(logAuditEventMock).toHaveBeenCalledTimes(2);
     const calls = logAuditEventMock.mock.calls.map((c) => c[0]);
     expect(calls.every((p: Record<string, unknown>) => p.action === 'root_pending_deletion')).toBe(true);
@@ -561,15 +615,53 @@ describe('requestUserDeletion', () => {
     expect(calls.every((p: Record<string, unknown>) => p.resourceId === '9')).toBe(true);
   });
 
-  it('still returns the deletion request when flagging fails (best-effort)', async () => {
-    const fakeRequest = { id: 11, requestType: 'user', userId: 'root-user-2', status: 'cooling', coolingEndsAt: new Date() };
+  // The zero-successor case gets its OWN action, not a metadata flag, so the
+  // admin rootless report can filter for the communities that need the
+  // two-step break-glass.
+  it('uses root_pending_deletion_no_successor when no property_manager can claim root', async () => {
+    const fakeRequest = { id: 13, requestType: 'user', userId: 'root-user-3', status: 'cooling', coolingEndsAt: new Date() };
     createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
-    findCommunitiesUserIsRootOfMock.mockRejectedValue(new Error('db down'));
+    findRootOffboardingImpactMock.mockResolvedValue([
+      impact(42, 'Has A PM', true),
+      impact(99, 'Nobody Left', false),
+    ]);
 
-    const result = await requestUserDeletion('root-user-2');
+    await requestUserDeletion('root-user-3', true);
 
-    expect(result).toEqual(fakeRequest);
-    expect(logAuditEventMock).not.toHaveBeenCalled();
+    const byCommunity = new Map(
+      logAuditEventMock.mock.calls.map((c) => [
+        (c[0] as Record<string, unknown>).communityId,
+        c[0] as Record<string, unknown>,
+      ]),
+    );
+    expect(byCommunity.get(42)?.action).toBe('root_pending_deletion');
+    expect(byCommunity.get(99)?.action).toBe('root_pending_deletion_no_successor');
+    expect(byCommunity.get(99)?.metadata).toMatchObject({ hasSuccessor: false, communityName: 'Nobody Left' });
+  });
+
+  // BEHAVIOUR CHANGE (R3-03b). Previously the whole root lookup sat inside a
+  // try/catch that swallowed failures, so a DB error meant the request was
+  // created as if the user were root of nothing. That is the one case where
+  // proceeding silently is unacceptable, so the impact lookup now propagates.
+  it('does NOT create the request when the impact lookup fails', async () => {
+    const dbMock = buildDbMock({ insertReturning: [[{ id: 11 }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    findRootOffboardingImpactMock.mockRejectedValue(new Error('db down'));
+
+    await expect(requestUserDeletion('root-user-2')).rejects.toThrow('db down');
+
+    expect(dbMock._calls.find((c) => c.op === 'insert')).toBeUndefined();
+  });
+
+  it('still returns the request when only the AUDIT write fails (best-effort)', async () => {
+    const fakeRequest = { id: 12, requestType: 'user', userId: 'root-user-4', status: 'cooling', coolingEndsAt: new Date() };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ insertReturning: [[fakeRequest]] }));
+    findRootOffboardingImpactMock.mockResolvedValue([impact(42, 'Sunset Condos')]);
+    logAuditEventMock.mockRejectedValueOnce(new Error('audit down'));
+
+    // The request is already committed and the user consented — a logging
+    // failure must not surface to them as an error.
+    await expect(requestUserDeletion('root-user-4', true)).resolves.toEqual(fakeRequest);
   });
 });
 
