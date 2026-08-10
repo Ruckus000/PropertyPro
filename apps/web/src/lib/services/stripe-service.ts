@@ -301,6 +301,30 @@ export function getStripeClient(): Stripe {
 }
 
 /**
+ * Which Stripe mode is this deployment configured for, per `STRIPE_SECRET_KEY`?
+ *
+ * `true` = live, `false` = test, `null` = UNKNOWN — key unset or an unrecognised
+ * prefix.
+ *
+ * Callers MUST treat `null` as "do not gate". A prefix we failed to parse must
+ * never start dropping real payment events; the worst this may do is leave
+ * today's behaviour unchanged.
+ *
+ * Why a prefix and not an API call: mode is a property of the key itself, and a
+ * webhook cannot afford a network round-trip to learn it. `assertPriceRetrievable`
+ * above detects the same mismatch the expensive way (a `resource_missing` from
+ * Stripe), and `scripts/seed-stripe-test-prices.ts` already gates on this prefix.
+ */
+export function getExpectedLivemode(): boolean | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  // Restricted keys (`rk_`) are as valid here as secret keys (`sk_`).
+  if (key.startsWith('sk_live_') || key.startsWith('rk_live_')) return true;
+  if (key.startsWith('sk_test_') || key.startsWith('rk_test_')) return false;
+  return null;
+}
+
+/**
  * Create an Embedded Checkout session for a PM adding a community to their
  * existing billing group. No trial (PM is already a paying customer).
  */

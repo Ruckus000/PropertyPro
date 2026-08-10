@@ -72,7 +72,7 @@ Integration tests require a live DB: `scripts/with-env-local.sh pnpm exec vitest
 - **Roles are per-community:** Keyed by `(user_id, community_id)` in `user_roles`. Never assume a single global role.
 - **Driver:** Use `postgres-js`, NOT `node-postgres` (PgBouncer incompatibility).
 - **File uploads:** Presigned URLs for direct upload to Supabase Storage (Vercel 4.5MB body limit). Validate file types via magic bytes (`file-type` package), never trust Content-Type headers.
-- **Stripe webhooks:** Handlers must be idempotent. Events arrive out of order. Always fetch fresh state from the Stripe API inside the handler.
+- **Stripe webhooks:** Handlers must be idempotent. Events arrive out of order. Always fetch fresh state from the Stripe API inside the handler. An event that can never be processed (unknown `signupRequestId`, wrong Stripe mode) must return **200**, not throw — a non-2xx makes Stripe retry something that cannot succeed. Never point local dev at production's webhook endpoint; use `stripe listen --forward-to` (see *Webhook Failures* in `docs/DEPLOYMENT.md`).
 
 ---
 
