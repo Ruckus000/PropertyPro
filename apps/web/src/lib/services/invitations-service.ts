@@ -202,11 +202,29 @@ export async function createSupabaseAuthUserFromInvitation(params: {
     // empty app — so refuse to report success on a mismatch.
     const createdId = data?.user?.id;
     if (createdId !== params.externalUserId) {
+      // Roll the auth user back before bailing out. It already holds the
+      // invitee's email address, and the caller leaves the invitation
+      // UNCONSUMED so the link still works — but a retry would then hit
+      // "email already registered" forever, turning a recoverable anomaly into
+      // a permanently dead invitation. Best-effort: if the delete also fails,
+      // report both, because at that point the account needs a human.
+      let rollback = 'rolled back';
+      if (createdId) {
+        try {
+          const { error: deleteError } = await admin.auth.admin.deleteUser(createdId);
+          if (deleteError) rollback = `rollback FAILED: ${deleteError.message}`;
+        } catch (deleteErr) {
+          rollback = `rollback FAILED: ${
+            deleteErr instanceof Error ? deleteErr.message : String(deleteErr)
+          }`;
+        }
+      }
       return {
         ok: false,
         error:
           `Supabase created auth user ${createdId ?? 'with no id'} but the invitation `
-          + `expects ${params.externalUserId}; refusing to leave the account unlinked`,
+          + `expects ${params.externalUserId}; refusing to leave the account unlinked `
+          + `(${rollback})`,
       };
     }
     return { ok: true };

@@ -23,11 +23,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createUserMock, createAdminClientMock } = vi.hoisted(() => {
+const { createUserMock, deleteUserMock, createAdminClientMock } = vi.hoisted(() => {
   const createUserMock = vi.fn();
+  const deleteUserMock = vi.fn();
   return {
     createUserMock,
-    createAdminClientMock: vi.fn(() => ({ auth: { admin: { createUser: createUserMock } } })),
+    deleteUserMock,
+    createAdminClientMock: vi.fn(() => ({
+      auth: { admin: { createUser: createUserMock, deleteUser: deleteUserMock } },
+    })),
   };
 });
 
@@ -54,6 +58,7 @@ const PROVISIONED_ID = 'cb16c090-fc25-4f26-8df9-3f24a9bf82bb';
 beforeEach(() => {
   vi.clearAllMocks();
   createUserMock.mockResolvedValue({ data: { user: { id: PROVISIONED_ID } }, error: null });
+  deleteUserMock.mockResolvedValue({ error: null });
 });
 
 describe('createSupabaseAuthUserFromInvitation', () => {
@@ -94,6 +99,56 @@ describe('createSupabaseAuthUserFromInvitation', () => {
     });
 
     expect(result.ok).toBe(false);
+  });
+
+  it('rolls the mis-created auth user back, so the invitation stays retryable', async () => {
+    // Without this, the orphaned account keeps the invitee's email address.
+    // The caller deliberately leaves the invitation UNCONSUMED so the link still
+    // works — but every retry would then fail "email already registered",
+    // turning a recoverable anomaly into a permanently dead invitation.
+    const strayId = '11111111-2222-3333-4444-555555555555';
+    createUserMock.mockResolvedValue({ data: { user: { id: strayId } }, error: null });
+
+    const result = await createSupabaseAuthUserFromInvitation({
+      email: 'resident@example.com',
+      password: 'sup3r-secret-pw',
+      fullName: 'Jane Doe',
+      externalUserId: PROVISIONED_ID,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(deleteUserMock).toHaveBeenCalledWith(strayId);
+  });
+
+  it('reports a failed rollback rather than hiding it', async () => {
+    // If the cleanup also fails the account genuinely needs a human, so the
+    // error must say so instead of reading like a simple mismatch.
+    createUserMock.mockResolvedValue({
+      data: { user: { id: '11111111-2222-3333-4444-555555555555' } },
+      error: null,
+    });
+    deleteUserMock.mockResolvedValue({ error: { message: 'service unavailable' } });
+
+    const result = await createSupabaseAuthUserFromInvitation({
+      email: 'resident@example.com',
+      password: 'sup3r-secret-pw',
+      fullName: 'Jane Doe',
+      externalUserId: PROVISIONED_ID,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toMatch(/rollback FAILED: service unavailable/);
+  });
+
+  it('does not delete anything on the happy path', async () => {
+    await createSupabaseAuthUserFromInvitation({
+      email: 'resident@example.com',
+      password: 'sup3r-secret-pw',
+      fullName: 'Jane Doe',
+      externalUserId: PROVISIONED_ID,
+    });
+
+    expect(deleteUserMock).not.toHaveBeenCalled();
   });
 
   it('still surfaces a Supabase error as a failure', async () => {
