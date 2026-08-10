@@ -124,4 +124,41 @@ EOF
     ;;
 esac
 
+# --- Outbound mail is suppressed unless you ask for it -----------------------
+#
+# `.env.local` carries the PRODUCTION Resend key, and this wrapper points the
+# database at production too — so an ops script run through it mails real
+# customers with real tokens. Nothing about the command line says so.
+#
+# EMAIL_DRY_RUN makes `sendEmail`/`sendBulkEmail` (packages/email/src/send.ts)
+# collect and LOG every message instead of transmitting it, so you can see who a
+# job would have mailed before it does. Default ON here: the documented uses of
+# this wrapper (db:migrate, seed:verify, integration suites) send no mail at all,
+# so the safe default costs nothing, and the one case that does want delivery is
+# rare enough to be explicit.
+#
+# KNOWN EXCEPTION — this covers Resend, which is every template the app renders,
+# but NOT mail that Supabase sends from its own SMTP. In practice that is
+# `supabase.auth.resetPasswordForEmail` (apps/web/src/lib/auth/password-reset.ts,
+# components/mobile/MobileSecurityContent.tsx); every other Supabase auth call
+# here is `generateLink`, which returns a URL and sends nothing. This wrapper
+# leaves Supabase pointed at production, so a password-reset trigger still
+# delivers for real. Gating that needs Supabase-side configuration, not an env
+# var. The sibling with-env-local-demo-db.sh is unaffected — it redirects
+# Supabase to loopback, so nothing escapes there.
+if [[ "${PROPERTYPRO_ALLOW_OUTBOUND_MAIL:-}" == "1" ]]; then
+  unset EMAIL_DRY_RUN || true
+  if [[ -n "${RESEND_API_KEY:-}" ]]; then
+    cat >&2 <<'EOF'
+⚠️  OUTBOUND MAIL IS LIVE — PROPERTYPRO_ALLOW_OUTBOUND_MAIL=1
+
+Emails from this command will be delivered to real recipients via production
+Resend, carrying working links and valid tokens. Unset that variable to dry-run.
+EOF
+  fi
+else
+  export EMAIL_DRY_RUN=1
+  echo "[with-env-local] outbound mail is DRY-RUN (set PROPERTYPRO_ALLOW_OUTBOUND_MAIL=1 to actually send)" >&2
+fi
+
 exec "$@"

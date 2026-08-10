@@ -166,6 +166,21 @@ fi
 unset UPSTASH_REDIS_REST_URL || true
 unset UPSTASH_REDIS_REST_TOKEN || true
 
+# --- Outbound mail follows Postgres to local ---------------------------------
+#
+# Same invariant as Supabase and Upstash above, and the last one that was still
+# missing: `.env.local` carries the PRODUCTION Resend key, and nothing here used
+# to touch it. So a run against a LOCAL database could still deliver real email
+# to real people — arguably worse than the production case, because the contents
+# are built from throwaway seed data.
+#
+# EMAIL_DRY_RUN (packages/email/src/send.ts) collects and logs every message
+# instead of transmitting it. Forced on with no opt-out: there is no legitimate
+# reason for a local-database run to mail anyone. To send for real, use
+# scripts/with-env-local.sh with PROPERTYPRO_ALLOW_OUTBOUND_MAIL=1, which at
+# least targets the production database the mail will describe.
+export EMAIL_DRY_RUN=1
+
 # --- The guard --------------------------------------------------------------
 #
 # Belt to the braces above. The redirects are unconditional, so this can only
