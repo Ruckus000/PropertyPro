@@ -188,6 +188,7 @@ const CONDO_SIGNUP = {
   communityType: 'condo_718' as const,
   address: '123 Main St, West Palm Beach, FL 33401',
   candidateSlug: 'palm-gardens',
+  planKey: 'professional',
 };
 
 /** Minimal pending signup for apartment. */
@@ -289,10 +290,17 @@ function buildDb(opts: {
     p.returning = updateWhereReturningMock;
     return p;
   });
-  const updateSetMock = vi.fn(() => ({ where: updateWhereMock }));
   const updateMock = vi.fn((table: unknown) => {
-    calls.push({ op: 'update', table: String(table) });
-    return { set: updateSetMock };
+    const call: DbCall = { op: 'update', table: String(table) };
+    calls.push(call);
+    return {
+      // Record the SET payload on the call we just pushed, so assertions can
+      // check WHAT an update wrote and not merely that one happened.
+      set: vi.fn((values: unknown) => {
+        call.values = values;
+        return { where: updateWhereMock };
+      }),
+    };
   });
 
   const db = {
@@ -341,6 +349,96 @@ describe('runProvisioning', () => {
     );
     expect(userRoleInsert).toBeDefined();
     expect((userRoleInsert?.values as { role?: string }).role).toBe('root_manager');
+  });
+
+  // 1b. The community row must carry the purchased plan.
+  //
+  // Regression guard for the 2026-08-09 incident: communities 2358/2359 were
+  // recovered by the provisioning watchdog and landed with
+  // `subscription_plan = null` even though their pending_signups row said
+  // `plan_key = 'professional'`. `stepCommunityCreated` never wrote the plan —
+  // it was only ever stamped by a later `customer.subscription.*` event, which
+  // resolves the community by `stripe_subscription_id` and therefore finds
+  // NOTHING while the community does not exist yet. Every such event is dropped
+  // silently, so a recovered (or merely race-losing) signup keeps a null plan
+  // and sits in the gated/lapsed state despite having paid.
+  it('stamps subscription_plan from the pending signup plan_key', async () => {
+    const job = makeJob({});
+
+    const { calls } = buildDb({
+      selectSequence: [
+        [job],
+        [CONDO_SIGNUP],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    const communityInsert = calls.find(
+      (c) => c.op === 'insert' && c.table === communitiesTable,
+    );
+    expect(communityInsert).toBeDefined();
+    expect((communityInsert?.values as { subscriptionPlan?: string }).subscriptionPlan).toBe(
+      'professional',
+    );
+  });
+
+  // 1c. An unrecognised plan_key must not be written verbatim — downstream
+  // plan gating calls resolvePlanId(), which returns null for junk, so writing
+  // it would produce a community that looks subscribed but gates as unplanned.
+  it('omits subscription_plan when plan_key is not a canonical plan id', async () => {
+    const job = makeJob({});
+
+    const { calls } = buildDb({
+      selectSequence: [
+        [job],
+        [{ ...CONDO_SIGNUP, planKey: 'not_a_real_plan' }],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    const communityInsert = calls.find(
+      (c) => c.op === 'insert' && c.table === communitiesTable,
+    );
+    expect(communityInsert).toBeDefined();
+    expect((communityInsert?.values as Record<string, unknown>).subscriptionPlan).toBeUndefined();
+  });
+
+  // 1d. Retry over an already-created community backfills the plan.
+  //
+  // The INSERT is onConflictDoNothing, so a community created by a run that
+  // predates the plan stamp can only be repaired here. This is the path that
+  // fixes communities 2358/2359 in place on the next watchdog pass.
+  it('backfills subscription_plan when the community row already exists', async () => {
+    const job = makeJob({});
+
+    const { calls } = buildDb({
+      // Empty .returning() → insert was a no-op → existing-row lookup branch.
+      insertReturning: [],
+      selectSequence: [
+        [job],
+        [CONDO_SIGNUP],
+        [{ id: 10 }], // community_created: existing community by slug
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    const planBackfill = calls.find(
+      (c) =>
+        c.op === 'update' &&
+        c.table === String(communitiesTable) &&
+        (c.values as { subscriptionPlan?: string } | undefined)?.subscriptionPlan ===
+          'professional',
+    );
+    expect(planBackfill).toBeDefined();
   });
 
   // 2. Full happy path — apartment (checklist is a no-op)

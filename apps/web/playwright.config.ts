@@ -20,7 +20,22 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Adding a spec that needs a non-default host, port or build must either fit
  * one of those configs or get its own — do not widen this one.
+ *
+ * ## Port
+ *
+ * 3000 unless `PLAYWRIGHT_WEB_PORT` says otherwise. The override exists because
+ * a second checkout (another worktree) frequently already owns 3000, and the
+ * failure mode when it does is silent rather than loud: `reuseExistingServer`
+ * is deliberately always-on, so Playwright attaches to THAT server and runs the
+ * whole suite against another branch's code. Overriding the port is the only
+ * way to run here without killing someone else's server.
+ *
+ * The default is unchanged, so every documented command behaves exactly as
+ * before. Set it on BOTH the runner and any server you start yourself, or the
+ * two disagree and every navigation 404s.
  */
+const WEB_PORT = process.env.PLAYWRIGHT_WEB_PORT ?? '3000';
+
 export default defineConfig({
   testDir: './e2e',
   testIgnore: [
@@ -67,7 +82,7 @@ export default defineConfig({
     // crossed to localhost, arrived with NO cookies, and was bounced to
     // /auth/login — a logged-in test failing as though it were logged out.
     // `add-community.spec.ts:40` is the case that exposed it.
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'on-first-retry',
   },
   // `dev:e2e` begins with `rm -rf .next`, so BOTH servers below do a cold
@@ -79,7 +94,8 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm dev:e2e',
-      url: 'http://127.0.0.1:3000',
+      env: { PORT: WEB_PORT },
+      url: `http://127.0.0.1:${WEB_PORT}`,
       // Always allow reuse: if nothing is listening, Playwright still starts dev:e2e.
       // When CI is set in a dev shell and 3000 is already taken, false would error.
       reuseExistingServer: true,

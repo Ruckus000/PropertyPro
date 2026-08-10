@@ -361,17 +361,35 @@ export async function markCommunityPaymentFailed(input: {
 }
 
 /**
+ * Record that an invoice was paid: clear the failure markers and sync the
+ * status to what the subscription ACTUALLY is.
+ *
+ * `subscriptionStatus` is required, not defaulted to `'active'`, and that is the
+ * whole point of its shape. A trialing subscription's first invoice is $0 and
+ * Stripe still emits `invoice.payment_succeeded` for it, so hardcoding
+ * `'active'` here ended trials early in our own database while Stripe was still
+ * trialing — the trial banner disappeared, the trial-end date was wrong, and
+ * whether it happened at all depended on webhook arrival order, which made it
+ * look like a flake rather than a bug. Measured live on 2026-08-09: two
+ * identical signups landed `trialing` and `active`.
+ *
+ * Making the parameter mandatory means a future caller cannot reintroduce the
+ * assumption by omission — it has to state what Stripe says.
+ *
  * AUTHZ: Caller MUST verify the invoice.payment_succeeded event belongs to Stripe.
  */
-export async function markCommunityPaymentSucceeded(stripeSubscriptionId: string): Promise<void> {
+export async function markCommunityPaymentSucceeded(
+  stripeSubscriptionId: string,
+  subscriptionStatus: string,
+): Promise<void> {
   const db = createUnscopedClient();
   await db
     .update(communities)
     .set({
-      subscriptionStatus: 'active',
+      subscriptionStatus,
       paymentFailedAt: null,
       updatedAt: new Date(),
-      ...reactivationClears('active'),
+      ...reactivationClears(subscriptionStatus),
     })
     .where(eq(communities.stripeSubscriptionId, stripeSubscriptionId));
 }

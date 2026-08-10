@@ -1675,6 +1675,54 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(communitySet!.nextReminderAt).toBeNull();
     });
 
+    // Regression guard, measured live 2026-08-09: a trial's FIRST invoice is $0
+    // and Stripe emits `invoice.payment_succeeded` for it. This handler used to
+    // write a hardcoded 'active', which ended a brand-new 30-day trial in our
+    // database seconds after it began — the "Free trial active" banner
+    // disappeared and the trial-end date was wrong. Whether it happened at all
+    // depended on webhook arrival order, so two identical signups landed
+    // `trialing` and `active` respectively and it read as a flaky test.
+    it('keeps a trialing subscription trialing when its $0 trial invoice succeeds', async () => {
+      const invoice = {
+        id: 'inv_trial_001',
+        customer: 'cus_trial',
+        parent: { subscription_details: { subscription: 'sub_trial' }, type: 'subscription_details' },
+      };
+      const event = makeEvent('invoice.payment_succeeded', invoice, 'evt_inv_trial_001');
+      constructEventMock.mockReturnValue(event);
+      retrieveSubscriptionMock.mockResolvedValue({
+        id: 'sub_trial',
+        status: 'trialing',
+        items: { data: [{ price: { id: 'price_x', lookup_key: 'essentials_condo_718_monthly' } }] },
+      });
+
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({ limit: vi.fn().mockResolvedValue([]) })),
+        })),
+      }));
+      const capturedSets: Record<string, unknown>[] = [];
+      const setMock = vi.fn((vals: Record<string, unknown>) => {
+        capturedSets.push(vals);
+        return { where: vi.fn(() => Promise.resolve([])) };
+      });
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+        })),
+        update: vi.fn(() => ({ set: setMock })),
+      });
+
+      const res = await POST(makeRequest());
+      expect(res.status).toBe(200);
+
+      const communitySet = capturedSets.find((s) => 'paymentFailedAt' in s);
+      expect(communitySet).toBeDefined();
+      expect(communitySet!.subscriptionStatus).toBe('trialing');
+      expect(communitySet!.paymentFailedAt).toBeNull();
+    });
+
     it('skips processing when invoice has no subscription', async () => {
       const invoice = { id: 'inv_ok_no_cus', parent: null };
       const event = makeEvent('invoice.payment_succeeded', invoice, 'evt_inv_ok_no_cus');

@@ -8,12 +8,21 @@
  * the community. When those aren't configured the spec skips (see
  * `stripeE2eConfigured`), keeping the default suite green.
  *
- * ── First-run validation ──
- * Two seams here interact with external UIs/APIs that this repo can't exercise
- * in CI, so VERIFY them on the first real run and adjust if needed:
- *   1. `confirmSupabaseEmail` — Supabase admin `updateUserById(..., { email_confirm })`.
- *   2. `fillStripeEmbeddedCheckout` — Stripe controls the embedded-checkout iframe
- *      DOM; the field selectors are best-effort and may need tweaking.
+ * Also used by `signup-failure-paths.spec.ts` (declined card, abandonment,
+ * duplicate signup), which shares the same guards and skip behaviour.
+ *
+ * ── First run: DONE, 2026-08-09 ──
+ * Both externally-owned seams flagged here have now been exercised against a
+ * real Stripe test account and a local Supabase stack:
+ *   1. `confirmSupabaseEmail` — the admin `updateUserById(..., { email_confirm })`
+ *      shape is correct as written; no change was needed.
+ *   2. `fillStripeEmbeddedCheckout` — needed three fixes, all recorded at the
+ *      function itself: the card form is not mounted until the accordion is
+ *      expanded, the submit control must be found by test id (a name regex
+ *      matches an invisible accordion header first), and a REQUIRED phone field
+ *      silently blocks submission when the account collects one.
+ * The end-to-end result: community `trialing` on the purchased plan, verified in
+ * the database and not merely from the UI banner.
  */
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
@@ -173,7 +182,36 @@ export const STRIPE_TEST_CARD = {
   expiry: '12 / 34',
   cvc: '123',
   zip: '33139',
+  /** Only used when the Stripe account collects a phone number at checkout. */
+  phone: '2015550123',
 } as const;
+
+/**
+ * Stripe's generic-decline test card.
+ *
+ * MEASURED against a trialing subscription (2026-08-09): because the first
+ * invoice is $0, Checkout sets the card up rather than charging it, so the
+ * decline surfaces as `setup_intent.setup_failed` and NO
+ * `checkout.session.completed` is emitted. A Stripe **customer** IS created —
+ * so "a customer exists in Stripe" is not evidence that anyone paid.
+ */
+export const STRIPE_DECLINED_CARD = {
+  ...STRIPE_TEST_CARD,
+  number: '4000000000000002',
+} as const;
+
+/**
+ * Structural, not `typeof STRIPE_TEST_CARD`: the `as const` on that object makes
+ * every field a string LITERAL type, so the declined card's number is not
+ * assignable to it.
+ */
+export interface StripeTestCard {
+  readonly number: string;
+  readonly expiry: string;
+  readonly cvc: string;
+  readonly zip: string;
+  readonly phone: string;
+}
 
 export interface SignupInputs {
   email: string;
@@ -275,29 +313,108 @@ export async function confirmSupabaseEmail(email: string): Promise<void> {
 /**
  * Fill and submit the Stripe **Embedded Checkout** form on `/signup/checkout`.
  *
- * Stripe renders this inside an iframe on our page and owns its DOM — the
- * selectors below target the current embedded-checkout markup and may need
- * adjustment when Stripe changes it. Card fields may live in nested PCI iframes;
- * `frameLocator` chaining handles one level, and `getByLabel` is resilient to
- * minor label changes.
+ * ── Measured against the live test-mode UI, 2026-08-09 ──
+ * The two things that made the original best-effort version time out:
+ *
+ *  1. **The card form is not mounted on load.** Checkout renders a payment-method
+ *     accordion (Card / Cash App / Klarna) with every item COLLAPSED, and mounts
+ *     an item's fields only once it is selected. A frame dump on arrival shows no
+ *     card input at all — just the accordion radios and a phone field — so any
+ *     wait for a card field waits forever, however generous the timeout. The
+ *     accordion must be expanded first.
+ *  2. **There is no nested PCI iframe here, and no usable label for every field.**
+ *     Once expanded, the card inputs live DIRECTLY in the `embedded-checkout`
+ *     frame, so `frameLocator` chaining is unnecessary. `#billingName` in
+ *     particular carries no `aria-label`, so the old `getByLabel(/name on card/i)`
+ *     matched nothing — and because it was guarded by `if (await count())` it
+ *     failed SILENTLY, leaving the name blank instead of erroring.
+ *
+ * Fields are therefore addressed by their stable Stripe ids (`#cardNumber`,
+ * `#cardExpiry`, `#cardCvc`, `#billingName`, `#billingPostalCode`). These are
+ * still Stripe-owned markup and remain the most likely thing in this file to
+ * need updating — `e2e/tmp-inspect-checkout` style frame dumping is how they
+ * were obtained, and re-dumping is the fastest way to re-derive them.
  */
-export async function fillStripeEmbeddedCheckout(page: Page): Promise<void> {
+export async function fillStripeEmbeddedCheckout(
+  page: Page,
+  options: { card?: StripeTestCard } = {},
+): Promise<void> {
+  const card = options.card ?? STRIPE_TEST_CARD;
   await assertCheckoutSessionStarted(page);
 
   const checkout = page.frameLocator(CHECKOUT_IFRAME_SELECTOR).first();
+  const cardNumber = checkout.locator('#cardNumber');
 
-  await checkout.getByLabel(/card number/i).fill(STRIPE_TEST_CARD.number);
-  await checkout.getByLabel(/expiration|expiry|MM \/ YY/i).fill(STRIPE_TEST_CARD.expiry);
-  await checkout.getByLabel(/CVC|CVV|security code/i).fill(STRIPE_TEST_CARD.cvc);
+  // Expand the Card accordion item, and keep expanding until it STAYS expanded.
+  //
+  // A single click is not enough and the failure is timing-dependent, which is
+  // worse than a hard one: Checkout keeps initialising after the accordion first
+  // paints (Link lookup, wallet availability, express-checkout frames), and a
+  // re-render during that window discards an early selection and collapses the
+  // item again. The click then appears to have worked and the card form is
+  // simply absent 30 seconds later. Polling both conditions together — click if
+  // collapsed, stop when `#cardNumber` exists — converges regardless of where in
+  // that sequence we land, and needs no arbitrary settle sleep.
+  await expect
+    .poll(
+      async () => {
+        if (await cardNumber.count()) return 'mounted';
+        const radio = checkout.locator('#payment-method-accordion-item-title-card');
+        if (await radio.count()) {
+          // `force`: the hit target is the styled row, not the radio itself.
+          await radio.click({ force: true }).catch(() => {
+            /* mid-re-render detach — the next poll iteration retries */
+          });
+        }
+        return 'collapsed';
+      },
+      {
+        timeout: 60_000,
+        message:
+          'Stripe Checkout mounted but the card form never appeared. Either the ' +
+          'payment-method accordion markup changed, or card is not an enabled ' +
+          'payment method on this account — re-dump the frame contents.',
+      },
+    )
+    .toBe('mounted');
 
-  // These two are conditionally collected depending on Stripe Checkout config.
-  const nameField = checkout.getByLabel(/name on card|cardholder name/i);
+  await expect(cardNumber).toBeVisible({ timeout: 15_000 });
+
+  await cardNumber.fill(card.number);
+  await checkout.locator('#cardExpiry').fill(card.expiry);
+  await checkout.locator('#cardCvc').fill(card.cvc);
+
+  // Conditionally collected, depending on the account's Checkout settings.
+  // Unlike the fields above these may legitimately be absent, so a zero count
+  // is tolerated — but they are addressed by id, so absence means absence
+  // rather than a stale selector.
+  const nameField = checkout.locator('#billingName');
   if (await nameField.count()) await nameField.fill('E2E Founding Admin');
-  const zipField = checkout.getByLabel(/zip|postal code/i);
-  if (await zipField.count()) await zipField.fill(STRIPE_TEST_CARD.zip);
+  const zipField = checkout.locator('#billingPostalCode');
+  if (await zipField.count()) await zipField.fill(card.zip);
 
-  await checkout
-    .getByRole('button', { name: /subscribe|start trial|pay|confirm|complete/i })
-    .first()
-    .click();
+  // Phone number, when the account has phone collection enabled.
+  //
+  // This one is worth its own note because of how it fails: an unfilled
+  // REQUIRED phone leaves the form invalid, and Stripe's response to submitting
+  // an invalid form is to do nothing at all — no error banner, no navigation,
+  // no network call. The observed symptom was the test timing out on the return
+  // URL with zero Stripe events forwarded, which reads like a broken webhook or
+  // a dead redirect rather than an unfilled field three steps earlier. The only
+  // visible tell was `aria-invalid="true"` on an empty `#phoneNumber`.
+  const phoneField = checkout.locator('#phoneNumber');
+  if (await phoneField.count()) await phoneField.fill(card.phone);
+
+  // Submit by test id, NOT by accessible name.
+  //
+  // A name regex is what a form like this looks like it wants, and it is wrong
+  // here: the accordion's own collapsed rows are `<button aria-label="Pay with
+  // card">`, so a `/pay/i` alternative matches an INVISIBLE accordion header
+  // before it ever reaches the real submit. The observed failure is 30s of
+  // "element is not visible" retries against a button that was never the target
+  // — a locator bug that reads exactly like an app hang.
+  //
+  // `hosted-payment-submit-button` is Stripe's own stable hook for this control
+  // (measured: `type="submit"`, label "Start trial" while a trial applies).
+  await checkout.getByTestId('hosted-payment-submit-button').click();
 }

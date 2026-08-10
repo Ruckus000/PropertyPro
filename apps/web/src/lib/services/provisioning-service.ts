@@ -38,7 +38,12 @@ import {
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
-import { getComplianceTemplate, getDefaultDocumentCategories, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
+import {
+  getComplianceTemplate,
+  getDefaultDocumentCategories,
+  PM_SCOPE_DB_ROLES,
+  resolvePlanId,
+} from '@propertypro/shared';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 import { resolvePendingSignupAddress } from './provisioning-address';
 import {
@@ -116,6 +121,7 @@ type PendingSignupRow = {
   state: string | null;
   zipCode: string | null;
   candidateSlug: string;
+  planKey: string | null;
   payload: Record<string, unknown>;
 };
 
@@ -140,6 +146,31 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   const periodEndRaw = payload.subscriptionCurrentPeriodEndAt as string | null | undefined;
   const subscriptionCurrentPeriodEndAt = periodEndRaw ? new Date(periodEndRaw) : null;
 
+  // Stamp the purchased plan from the signup itself, at creation time.
+  //
+  // This is the ONLY moment at which the plan is knowable without a race. The
+  // plan is otherwise written exclusively by `customer.subscription.*`, which
+  // resolves its community through `stripe_subscription_id` — a link that does
+  // not exist until the INSERT below lands. Stripe does not order
+  // `checkout.session.completed` against `customer.subscription.created`, so
+  // whenever the subscription event wins the race it finds no community and is
+  // dropped silently, leaving `subscription_plan = null` until some later
+  // subscription update happens to arrive (for a trialing subscription, that is
+  // the end of the trial — or never).
+  //
+  // The watchdog/reconciler paths make this certain rather than merely likely:
+  // they run minutes-to-hours after checkout, by which time every subscription
+  // event for that signup has already been dropped. Communities 2358/2359
+  // (2026-08-09) were recovered exactly this way and both landed with a null
+  // plan despite `plan_key = 'professional'`, which leaves a paying customer in
+  // the gated/lapsed state.
+  //
+  // `resolvePlanId` normalises legacy aliases and rejects junk: an unresolvable
+  // key is left unset rather than written verbatim, because downstream gating
+  // runs the same resolver and would treat a bogus value as no plan anyway —
+  // better an absent value than one that lies about being canonical.
+  const subscriptionPlan = resolvePlanId(ctx.signup.planKey ?? null);
+
   // Insert the community — slug unique constraint prevents duplicates on retry.
   // Use onConflictDoNothing to tolerate exact-duplicate retries.
   const [inserted] = await db
@@ -156,6 +187,7 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       stripeCustomerId,
       stripeSubscriptionId,
       ...(subscriptionStatus ? { subscriptionStatus } : {}),
+      ...(subscriptionPlan ? { subscriptionPlan } : {}),
       ...(subscriptionCurrentPeriodEndAt ? { subscriptionCurrentPeriodEndAt } : {}),
     })
     .onConflictDoNothing()
@@ -175,6 +207,19 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
       throw new Error(`[provisioning] community_created: slug ${ctx.signup.candidateSlug} not found after conflict`);
     }
     communityId = existing.id;
+
+    // Backfill the plan onto a community created by an earlier run that didn't
+    // stamp it. Without this, a retry/watchdog pass over a community created
+    // before this write existed can never repair it — the INSERT is a no-op and
+    // no other code path knows the plan. Guarded on IS NULL so a deliberate
+    // later plan change (upgrade/downgrade via subscription.updated) is never
+    // reverted to the originally-purchased plan.
+    if (subscriptionPlan) {
+      await db
+        .update(communities)
+        .set({ subscriptionPlan, updatedAt: new Date() })
+        .where(and(eq(communities.id, communityId), isNull(communities.subscriptionPlan)));
+    }
   }
 
   // Update the job row with the resolved communityId.
@@ -459,6 +504,7 @@ export async function runProvisioning(jobId: number): Promise<void> {
       state: pendingSignups.state,
       zipCode: pendingSignups.zipCode,
       candidateSlug: pendingSignups.candidateSlug,
+      planKey: pendingSignups.planKey,
       payload: pendingSignups.payload,
     })
     .from(pendingSignups)

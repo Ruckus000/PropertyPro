@@ -467,7 +467,14 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
   const subscriptionId = typeof rawSub === 'string' ? rawSub : rawSub?.id ?? null;
   if (!subscriptionId) return;
 
-  await markCommunityPaymentSucceeded(subscriptionId);
+  // Fetch fresh state [AGENTS #28] — and here it is load-bearing rather than
+  // hygiene. This handler used to write a hardcoded `'active'`, but a trialing
+  // subscription's first invoice is $0 and still produces
+  // `invoice.payment_succeeded`, so a brand-new trial was flipped out of
+  // `trialing` seconds after it started. Asking Stripe what the subscription
+  // actually is makes "payment succeeded" mean only what it says: not failed.
+  const fresh = await retrieveSubscription(subscriptionId);
+  await markCommunityPaymentSucceeded(subscriptionId, fresh.status);
 }
 
 /**
