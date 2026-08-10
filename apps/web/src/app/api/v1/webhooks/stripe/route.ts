@@ -45,6 +45,7 @@ import {
   markCommunityPaymentSucceeded,
   markPendingSignupPaymentCompleted,
   markStripeWebhookProcessed,
+  pendingSignupExists,
   persistSelfServeCommunityStripeIds,
   updateCommunitySubscriptionFromStripe,
   updateStripePriceUnitAmount,
@@ -303,6 +304,30 @@ async function handleCheckoutSessionCompleted(
   const subscriptionCurrentPeriodEndAt = subscriptionObject
     ? resolveSubscriptionPeriodEndAt(subscriptionObject)
     : null;
+
+  // The signup half of this checkout must already be recorded here. If it is
+  // not, provisioning cannot proceed: `provisioning_jobs.signup_request_id` is
+  // a FK onto `pending_signups`, so the fence insert below dies on the
+  // constraint — and because that surfaces as a 500, Stripe retries an event
+  // that can NEVER succeed. Observed in prod as an unbounded retry loop across
+  // six sessions whose signups were never written to this database.
+  //
+  // Returning without throwing is deliberate: this is unprocessable, not
+  // transient, and matches how unrecognised metadata is handled above. It is
+  // logged at `error` (not `warn`) so a genuinely lost signup row stays loud —
+  // dropping the retry must not also drop the signal.
+  if (!(await pendingSignupExists(signupRequestId))) {
+    logStripeWebhookEvent('error', 'checkout.session.completed for unknown signupRequestId', {
+      eventId,
+      eventType: 'checkout.session.completed',
+      category: 'validation',
+      metricName: 'stripe_webhook_event',
+      outcome: 'skipped',
+      reason: 'pending_signup_not_found',
+      payloadSnippet: { signupRequestId, sessionId: session.id },
+    });
+    return;
+  }
 
   await markPendingSignupPaymentCompleted({
     signupRequestId,
