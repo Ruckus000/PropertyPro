@@ -78,3 +78,6 @@ supabase/
 /*.png
 /*.jpg
 /*.jpeg
+
+# CI-only Supabase project dir created by .github/workflows/stripe-e2e.yml
+.supabase-ci/

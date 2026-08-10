@@ -214,8 +214,29 @@ Playwright silently attaches to the other checkout's server and tests another
 branch's code.
 
 Both specs skip — not fail — when the env is absent, so the default suite stays
-green. They remain outside CI: CI has no Stripe account, no Supabase Auth and no
-seed.
+green.
+
+### In CI
+
+`.github/workflows/stripe-e2e.yml` runs all five specs against real Stripe test
+mode: it starts a full local Supabase stack (Auth included — the Postgres stub
+`integration-tests.yml` uses cannot serve `auth.admin.generateLink`), migrates,
+seeds test-mode prices, forwards webhooks with the Stripe CLI, and runs
+Playwright.
+
+It is **not a required check**, on purpose: it is the only suite that depends on
+a third-party API, so making it gate merges would block unrelated PRs whenever
+Stripe has a blip. It runs on PRs touching billing/signup code, nightly, and on
+demand.
+
+Two repository secrets enable it — `STRIPE_SECRET_KEY` (must be `sk_test_…`; a
+live key is refused) and `STRIPE_PUBLISHABLE_KEY`. Without them the job reports
+"not configured" in the run summary and exits 0, which is also what fork PRs do.
+
+The job **fails if the specs skipped** while the secrets were present. That
+guard is the point: these specs self-skip on missing env, which is right locally
+and would be a lie in CI — a green run that exercised nothing is the exact
+failure mode that let four defects live in this path through a fully green CI.
 
 ### What is covered
 

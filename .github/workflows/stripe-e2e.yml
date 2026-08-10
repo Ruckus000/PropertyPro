@@ -1,0 +1,327 @@
+name: Stripe E2E
+
+# The signup → Checkout → provisioning → trialing → trial-end path, run against
+# real Stripe test mode.
+#
+# ## Why this is its own workflow and not a job in ci.yml
+#
+# It is the only suite in the repo that talks to a third-party API, needs
+# repository secrets, and needs a full Supabase stack (Auth included, not the
+# Postgres stub `integration-tests.yml` uses — `/api/v1/auth/signup` calls
+# `auth.admin.generateLink`, which a bare Postgres cannot serve). Putting that on
+# the critical path of every merge would make an unrelated PR unmergeable
+# whenever Stripe has a blip, and would deny secrets to fork PRs, where it would
+# then fail for everyone outside the repo.
+#
+# So it runs on its own cadence and is NOT a required check. What it buys is a
+# daily answer to "does the paid signup path still work end to end", which
+# nothing else in CI can tell you: these four defects
+# (docs/signup-checkout-provisioning.md §2) all survived a fully green CI.
+#
+# ## Triggers
+#
+#   - pull_request, but only for commits touching billing/signup/e2e code. Fork
+#     PRs get no secrets and so land in the "not configured" path below, which
+#     reports clearly instead of failing.
+#   - schedule, daily. Stripe can change Checkout's markup under us at any time
+#     without a commit on our side; three of the four selector faults this suite
+#     already hit were exactly that kind of change.
+#   - workflow_dispatch, for running it on demand.
+#
+# ## Setup required before this can do anything
+#
+# Two repository secrets, both TEST MODE (Settings → Secrets and variables →
+# Actions):
+#   - STRIPE_SECRET_KEY               (must start with sk_test_)
+#   - STRIPE_PUBLISHABLE_KEY          (pk_test_…)
+#
+# Until they exist, every run reports "not configured" and exits 0 — visibly, in
+# the summary, not silently.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/web/src/app/api/v1/webhooks/stripe/**'
+      - 'apps/web/src/app/api/v1/auth/**'
+      - 'apps/web/src/lib/services/stripe-*.ts'
+      - 'apps/web/src/lib/services/provisioning-service.ts'
+      - 'apps/web/src/lib/actions/checkout.ts'
+      - 'apps/web/src/lib/auth/signup.ts'
+      - 'apps/web/src/app/(marketing)/signup/**'
+      - 'apps/web/e2e/signup-*.spec.ts'
+      - 'apps/web/e2e/helpers/stripe-e2e.ts'
+      - 'packages/db/migrations/**'
+      - 'scripts/seed-stripe-test-prices.ts'
+      - '.github/workflows/stripe-e2e.yml'
+  schedule:
+    # 07:20 UTC daily. Offset off the hour so it does not queue behind the
+    # crowd of on-the-hour cron workflows.
+    - cron: '20 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never run two of these at once: they share one Stripe test account, and a
+  # concurrent run makes "how many customers/subscriptions exist" untestable.
+  group: stripe-e2e
+  cancel-in-progress: false
+
+jobs:
+  stripe-e2e:
+    name: stripe-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # DATABASE_URL / DIRECT_URL / the Supabase keys are deliberately NOT set
+      # here. They come from `supabase status` via $GITHUB_ENV once the stack is
+      # up.
+      #
+      # GitHub does not document which wins when a job-level `env:` and a later
+      # $GITHUB_ENV write share a name, and the failure mode if the job-level
+      # one wins is nasty — every query silently goes to a database that does
+      # not exist, which reads as "the app is broken", not "the URL is stale".
+      # Rather than depend on undocumented behaviour, there is exactly ONE
+      # writer per variable.
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_ROOT_DOMAIN: localhost:3000
+      E2E_STRIPE: '1'
+      # The specs never touch the admin app; starting it would cost a cold
+      # Next build and a second env surface for no coverage.
+      PLAYWRIGHT_SKIP_ADMIN_SERVER: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Decide ONCE whether this run can do real work, and make the answer
+      # visible. Everything below keys off this, so there is exactly one place
+      # where "configured" is defined.
+      - name: Check Stripe secrets
+        id: gate
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -z "$STRIPE_SECRET_KEY" ] || [ -z "$STRIPE_PUBLISHABLE_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Stripe E2E — NOT CONFIGURED"
+              echo
+              echo "No \`STRIPE_SECRET_KEY\` / \`STRIPE_PUBLISHABLE_KEY\` repository secret is set,"
+              echo "so this run exercised **nothing**. This is expected on fork PRs."
+              echo
+              echo "To enable: add both as TEST-MODE secrets under"
+              echo "Settings → Secrets and variables → Actions."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # A live key here would create real customers and real subscriptions on
+          # a real account. Refuse loudly rather than find out afterwards.
+          case "$STRIPE_SECRET_KEY" in
+            sk_test_*) ;;
+            *)
+              echo "::error::STRIPE_SECRET_KEY is not a test-mode key (expected an sk_test_ prefix). Refusing to run."
+              exit 1
+              ;;
+          esac
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm
+        if: steps.gate.outputs.configured == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.configured == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Supabase CLI
+        if: steps.gate.outputs.configured == 'true'
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Own project directory, NOT the repo root. The repo deliberately ships no
+      # `supabase/` config, and writing one here would collide with whatever a
+      # developer already has locally.
+      - name: Start local Supabase
+        if: steps.gate.outputs.configured == 'true'
+        run: |
+          mkdir -p .supabase-ci
+          cd .supabase-ci
+          supabase init --force
+          # The CLI now defaults this OFF, which leaves tables created by our
+          # migrations with NO Data API grants — routes then fail with
+          # `permission denied for table … (42501)` on 85 of 100 public tables.
+          # Production is not like this. See CLAUDE.md.
+          sed -i 's/^# *auto_expose_new_tables = true/auto_expose_new_tables = true/' supabase/config.toml
+          grep -q '^auto_expose_new_tables = true' supabase/config.toml \
+            || { echo "::error::failed to enable auto_expose_new_tables"; exit 1; }
+          supabase start
+
+      - name: Export Supabase credentials
+        if: steps.gate.outputs.configured == 'true'
+        working-directory: .supabase-ci
+        run: |
+          supabase status -o env > /tmp/supabase.env
+          . /tmp/supabase.env
+          # Local demo keys, but masked anyway: a service-role key in a public
+          # log teaches the wrong habit even when the target is a throwaway.
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          echo "::add-mask::$ANON_KEY"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL/localhost/127.0.0.1}"
+            echo "SUPABASE_URL=${API_URL/localhost/127.0.0.1}"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "DATABASE_URL=${DB_URL/localhost/127.0.0.1}"
+            echo "DIRECT_URL=${DB_URL/localhost/127.0.0.1}"
+          } >> "$GITHUB_ENV"
+
+      # Secrets the app reads at boot or on first use. Generated per run: these
+      # protect nothing here (throwaway stack, throwaway data) but several call
+      # sites throw by design when they are absent, and a missing one surfaces
+      # as an unrelated-looking 500 deep inside a spec.
+      - name: Generate app secrets
+        if: steps.gate.outputs.configured == 'true'
+        run: |
+          for name in CRON_SECRET PROVISIONING_RETRY_SECRET OTP_HMAC_SECRET \
+                      TOKEN_ENCRYPTION_KEY SUPPORT_SESSION_JWT_SECRET \
+                      DEMO_TOKEN_ENCRYPTION_KEY_HEX; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+          echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}" >> "$GITHUB_ENV"
+          echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}" >> "$GITHUB_ENV"
+
+      - name: Build workspace packages
+        if: steps.gate.outputs.configured == 'true'
+        run: pnpm --filter @propertypro/shared --filter @propertypro/email --filter @propertypro/db --filter @propertypro/api-contract build
+
+      - name: Run migrations
+        if: steps.gate.outputs.configured == 'true'
+        run: pnpm --filter @propertypro/db db:migrate
+
+      # Without this, `stripe_prices` is empty and `resolveStripePrice` throws
+      # STRIPE_PRICE_CONFIG_MISSING — the page renders only "Unable to start
+      # checkout", which the helper is careful to diagnose by name.
+      - name: Seed test-mode Stripe prices
+        if: steps.gate.outputs.configured == 'true'
+        run: pnpm tsx scripts/seed-stripe-test-prices.ts --apply
+
+      - name: Install Playwright browsers
+        if: steps.gate.outputs.configured == 'true'
+        run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
+
+      # GitHub runners do not ship the Stripe CLI. Pinned rather than `latest`:
+      # this binary decides whether webhooks reach the app at all, so a silent
+      # upstream change here would look like a provisioning failure.
+      - name: Install Stripe CLI
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          STRIPE_CLI_VERSION: '1.45.1'
+        run: |
+          curl -fsSL \
+            "https://github.com/stripe/stripe-cli/releases/download/v${STRIPE_CLI_VERSION}/stripe_${STRIPE_CLI_VERSION}_linux_x86_64.tar.gz" \
+            -o /tmp/stripe.tar.gz
+          tar -xzf /tmp/stripe.tar.gz -C /usr/local/bin stripe
+          stripe --version
+
+      # MUST come before the dev server starts: STRIPE_WEBHOOK_SECRET is read at
+      # boot, so a server started first verifies every webhook against a stale
+      # secret and 400s the lot — with provisioning simply never happening.
+      #
+      # `--api-key` rather than `stripe login`: the CLI's stored credential is
+      # interactive and expires, which is not something a scheduled job can fix.
+      - name: Start Stripe webhook forwarder
+        if: steps.gate.outputs.configured == 'true'
+        run: |
+          nohup stripe listen \
+            --api-key "$STRIPE_SECRET_KEY" \
+            --forward-to localhost:3000/api/v1/webhooks/stripe \
+            > /tmp/stripe-listen.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if grep -qE 'whsec_[A-Za-z0-9]+' /tmp/stripe-listen.log; then break; fi
+            sleep 2
+          done
+          whsec="$(grep -oE 'whsec_[A-Za-z0-9]+' /tmp/stripe-listen.log | head -1)"
+          if [ -z "$whsec" ]; then
+            echo "::error::stripe listen never reported a signing secret"
+            sed -E 's/whsec_[A-Za-z0-9]+/whsec_<redacted>/g' /tmp/stripe-listen.log
+            exit 1
+          fi
+          echo "::add-mask::$whsec"
+          echo "STRIPE_WEBHOOK_SECRET=$whsec" >> "$GITHUB_ENV"
+
+      - name: Run Stripe E2E specs
+        if: steps.gate.outputs.configured == 'true'
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/playwright-report.json
+        run: |
+          pnpm --filter @propertypro/web exec playwright test \
+            -c playwright.config.ts \
+            --reporter=list,json \
+            e2e/signup-trialing.spec.ts \
+            e2e/signup-failure-paths.spec.ts \
+            e2e/signup-trial-end.spec.ts
+
+      # A green run that skipped everything is the failure mode this whole
+      # workflow exists to prevent — the specs self-skip when their env is
+      # missing, which is right locally and would be a lie here. Secrets were
+      # present (we are past the gate), so a skip means the environment is
+      # broken, not that the suite passed.
+      - name: Assert the specs actually ran
+        if: steps.gate.outputs.configured == 'true'
+        run: |
+          node -e '
+            const r = require("/tmp/playwright-report.json");
+            const s = r.stats ?? {};
+            const ran = s.expected ?? 0;
+            const skipped = s.skipped ?? 0;
+            console.log(`expected=${ran} skipped=${skipped} unexpected=${s.unexpected ?? 0}`);
+            if (skipped > 0) {
+              console.error(`::error::${skipped} Stripe spec(s) SKIPPED despite secrets being configured — the run proved nothing. Check the Supabase stack and the Stripe env.`);
+              process.exit(1);
+            }
+            if (ran < 5) {
+              console.error(`::error::only ${ran} test(s) ran; expected at least 5. Did a spec file get renamed out of the invocation?`);
+              process.exit(1);
+            }
+          '
+
+      - name: Redact and upload diagnostics
+        if: always() && steps.gate.outputs.configured == 'true'
+        run: |
+          mkdir -p /tmp/diagnostics
+          # The forwarder log carries the signing secret in its banner.
+          sed -E 's/whsec_[A-Za-z0-9]+/whsec_<redacted>/g' /tmp/stripe-listen.log \
+            > /tmp/diagnostics/stripe-listen.log 2>/dev/null || true
+          cp /tmp/playwright-report.json /tmp/diagnostics/ 2>/dev/null || true
+          cp -r apps/web/test-results /tmp/diagnostics/test-results 2>/dev/null || true
+
+      - name: Upload diagnostics
+        if: always() && steps.gate.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: stripe-e2e-diagnostics
+          path: /tmp/diagnostics
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Stop local Supabase
+        if: always() && steps.gate.outputs.configured == 'true'
+        working-directory: .supabase-ci
+        run: supabase stop --no-backup || true
