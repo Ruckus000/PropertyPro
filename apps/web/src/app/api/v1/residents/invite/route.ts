@@ -77,7 +77,8 @@ export const POST = withErrorHandler(
       isUnitOwner,
     });
 
-    let invitationToken: string | null = null;
+    // The token is deliberately NOT captured for the response — see the return
+    // statement below. Only whether the send succeeded is reported.
     let invitationExpiresAt: Date | null = null;
     let invitationFailed = false;
 
@@ -94,7 +95,6 @@ export const POST = withErrorHandler(
           actorUserId,
           inviterName,
         });
-        invitationToken = invitation.token;
         invitationExpiresAt = invitation.expiresAt;
       } catch (inviteError) {
         invitationFailed = true;
@@ -115,11 +115,23 @@ export const POST = withErrorHandler(
 
     void tryAutoComplete(communityId, actorUserId, 'invite_first_member');
 
+    // The invitation token is NEVER returned to the caller.
+    //
+    // A live token is enough to complete the accept flow and SET THAT USER'S
+    // PASSWORD. Handing it back put it in reach of whoever called this route,
+    // and `users` is not tenant-scoped (no `community_id` column, so
+    // `createScopedClient` applies no filter — see `hasTenantIsolation` in
+    // packages/db/src/scoped-client.ts). `createOnboardingResident` therefore
+    // matches an invitee by email across the WHOLE platform and reuses that
+    // row's id, so a manager of any community could name a resident of another
+    // community by email address and be handed a working credential for them.
+    //
+    // Emailing it is what binds acceptance to control of the mailbox. Nothing
+    // in the UI ever read this field — only `invitationFailed`.
     return {
       userId,
       isNewUser,
       invitationFailed,
-      ...(invitationToken && { token: invitationToken }),
       ...(invitationExpiresAt && { expiresAt: invitationExpiresAt.toISOString() }),
     };
   }),

@@ -368,7 +368,18 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     createAdminClientMock.mockReturnValue({
       auth: {
         admin: {
-          createUser: vi.fn().mockResolvedValue({ error: null }),
+          // Echo the requested id back, as real GoTrue does. The invitation
+          // accept path now REQUIRES the created auth user to carry the
+          // pre-provisioned id — a fresh uuid there left the invitee able to
+          // sign in while owning no roles — and verifies it rather than
+          // assuming. A stub returning a bare `{ error: null }` has no
+          // `data.user` at all, which is not a shape the API ever produces.
+          createUser: vi
+            .fn()
+            .mockImplementation(async (attrs: { id?: string } | undefined) => ({
+              data: { user: { id: attrs?.id ?? 'test-auth-user' } },
+              error: null,
+            })),
         },
       },
     });

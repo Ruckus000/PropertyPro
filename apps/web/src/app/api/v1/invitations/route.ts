@@ -159,6 +159,14 @@ export const PATCH = withErrorHandler(
     });
 
     if (!result.ok) {
+      // The client deliberately gets a fixed message, but the reason has to
+      // reach the server log or an accept failure is undiagnosable in prod —
+      // "already registered" and "id mismatch" need very different responses.
+      // Safe to log: the reason carries user ids, never the token or password.
+      // eslint-disable-next-line no-console
+      console.error(
+        `[invitations] accept failed for user ${userId} in community ${communityId}: ${result.error}`,
+      );
       throw new ValidationError('Failed to create user');
     }
 

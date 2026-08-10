@@ -86,9 +86,14 @@ vi.mock('@propertypro/db/supabase/admin', async (importOriginal) => {
     createAdminClient: () => ({
       auth: {
         admin: {
-          createUser: async () => ({
+          // Echo the requested id back, as real GoTrue does when `id` is
+          // supplied. The invitation accept path passes the pre-provisioned
+          // user id and verifies the created account adopted it, so a stub
+          // hard-coding a different id would fail a check that production
+          // passes.
+          createUser: async (attrs?: { id?: string }) => ({
             data: {
-              user: { id: 'test-auth-user' },
+              user: { id: attrs?.id ?? 'test-auth-user' },
             },
             error: null,
           }),

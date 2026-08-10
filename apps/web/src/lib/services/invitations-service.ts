@@ -54,8 +54,16 @@ export interface InvitedUser {
  * One-row user lookup for the invitation flow (email + display name).
  * Returns `null` when no row matches OR email is missing/wrong-typed.
  *
- * `users` is a global table; the scoped client still applies the
- * community-membership join under the hood for tenant isolation.
+ * ⚠️ `users` is a global table and the scoped client does **NOT** isolate it.
+ * There is no `community_id` column, so `hasTenantIsolation`
+ * (packages/db/src/scoped-client.ts) returns false and the only predicate
+ * applied is `deleted_at IS NULL`. This lookup will therefore resolve ANY user
+ * on the platform, member of `communityId` or not.
+ *
+ * The previous version of this comment claimed the scoped client "applies the
+ * community-membership join under the hood for tenant isolation". No such join
+ * exists. Callers must not treat a successful lookup here as proof of
+ * membership — check it explicitly.
  */
 export async function getUserForInvitation(
   communityId: number,
@@ -178,7 +186,14 @@ export async function createSupabaseAuthUserFromInvitation(params: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const admin = createAdminClient();
-    const { error } = await admin.auth.admin.createUser({
+    const { data, error } = await admin.auth.admin.createUser({
+      // The invitee's `users` row (and the `user_roles` row carrying their unit
+      // and owner/tenant binding) was created when the admin invited them, with
+      // this id. Supabase must adopt it rather than mint its own: middleware
+      // stamps the SESSION user id into `x-user-id`, and every membership
+      // lookup keys off it. Diverge here and the invitee signs in successfully
+      // and owns nothing — no community, no unit, no role.
+      id: params.externalUserId,
       email: params.email,
       password: params.password,
       email_confirm: true,
@@ -189,6 +204,36 @@ export async function createSupabaseAuthUserFromInvitation(params: {
     });
     if (error) {
       return { ok: false, error: error.message };
+    }
+    // Verify rather than assume. If a future GoTrue ignores the requested id,
+    // the failure mode is silent and only shows up when the invitee finds an
+    // empty app — so refuse to report success on a mismatch.
+    const createdId = data?.user?.id;
+    if (createdId !== params.externalUserId) {
+      // Roll the auth user back before bailing out. It already holds the
+      // invitee's email address, and the caller leaves the invitation
+      // UNCONSUMED so the link still works — but a retry would then hit
+      // "email already registered" forever, turning a recoverable anomaly into
+      // a permanently dead invitation. Best-effort: if the delete also fails,
+      // report both, because at that point the account needs a human.
+      let rollback = 'rolled back';
+      if (createdId) {
+        try {
+          const { error: deleteError } = await admin.auth.admin.deleteUser(createdId);
+          if (deleteError) rollback = `rollback FAILED: ${deleteError.message}`;
+        } catch (deleteErr) {
+          rollback = `rollback FAILED: ${
+            deleteErr instanceof Error ? deleteErr.message : String(deleteErr)
+          }`;
+        }
+      }
+      return {
+        ok: false,
+        error:
+          `Supabase created auth user ${createdId ?? 'with no id'} but the invitation `
+          + `expects ${params.externalUserId}; refusing to leave the account unlinked `
+          + `(${rollback})`,
+      };
     }
     return { ok: true };
   } catch (err) {

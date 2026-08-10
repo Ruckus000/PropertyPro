@@ -188,10 +188,17 @@ Everything in this section was performed as a real role and the result read back
 - Soft-delete correctly unlinks the document from its compliance checklist item, and
   the item drops back to `unsatisfied`.
 
-### Resident invitation — verified
+### Resident invitation — verified, but see D10: this check was aimed at the wrong thing
 Created a resident (`resident`, unit 2, `isUnitOwner=false`) → invited → accepted
 with a password → role/unit binding correct in `user_roles` → token reuse rejected
 with `TOKEN_USED`. One-time use is enforced.
+
+> **This section overstated what was proven.** It confirmed the `user_roles` row
+> was correct *for the pre-provisioned user id* — and never asked whether the
+> accepted user's **session** would resolve to that id. It does not. See
+> [D10](#d10--accepting-an-invitation-produced-a-login-with-no-roles-critical),
+> found only when the same flow was run against production on 2026-08-10.
+> Verifying a row exists is not the same as verifying the user can reach it.
 
 ### Violations — verified
 Created → `noticed` → `hearing_scheduled` → hearing-notice PDF generated. The status
@@ -424,3 +431,161 @@ The unit test passed. The cause was a stale server-side module: Turbopack's dev 
 had not picked up the change. A clean `next dev` restart produced the correct two
 recipients. A live probe against a hot-reloaded dev server is not evidence — restart
 before trusting one.
+
+## 9. Second addendum — the production run (2026-08-10)
+
+The flows above were exercised against a local full-stack mirror. Running the
+invitation flow against **production** — the deployed app over real HTTPS, real
+Supabase Auth, real Resend — found a defect the local run had structurally been
+unable to see.
+
+### D10 — Accepting an invitation produced a login with no roles (Critical)
+
+`createSupabaseAuthUserFromInvitation` called `admin.auth.admin.createUser`
+without an `id`, so GoTrue minted a fresh UUID. But the invitee's `users` row —
+and the `user_roles` row carrying their unit and owner/tenant binding — had been
+created days earlier, when the admin invited them, with a *different* id. The two
+were never reconciled. The pre-provisioned id was written into
+`user_metadata.external_user_id`, and **nothing in the codebase ever read that
+key** (`grep` returns only the write site).
+
+Middleware stamps the **session** user id into `x-user-id`
+(`apps/web/src/middleware.ts:428`), and every membership lookup keys off it. So
+the invitee could set a password, sign in successfully, and own nothing: no
+community, no unit, no role.
+
+Measured on production, not inferred:
+
+| Check | Result |
+|---|---|
+| `PATCH /api/v1/invitations` (first) | `200 {success: true}` |
+| `PATCH /api/v1/invitations` (replay) | `400 TOKEN_USED` |
+| Sign-in with the password just set | **SUCCESS** |
+| Session user id | `bcfce716-decb-…` |
+| Pre-provisioned user id | `cb16c090-fc25-…` |
+| `user_roles` for the **session** id | **0** |
+| `user_roles` for the provisioned id | 1 |
+
+**Blast radius: latent, not live.** Production `invitations` held exactly one row
+— the probe's. No real user has ever completed this flow, which is why it had
+never been reported.
+
+**Fix.** Pass `id: params.externalUserId` to `createUser` so Supabase adopts the
+existing id (`AdminUserAttributes.id` exists for precisely this), and then verify
+the returned id rather than assume it — a future GoTrue that ignored the request
+would reintroduce the bug silently, and the symptom only appears when the invitee
+finds an empty app.
+
+Every other account-creation path already holds the invariant
+`public.users.id === auth.users.id` by creating the auth user **first** and using
+`data.user.id` (`provisioning-service.ts` for signup, `access-request-service.ts`
+for access requests). Invitations are the one path that runs in the other
+direction, and the one that got it wrong.
+
+**Why the tests did not catch it.** `__tests__/invitations/route.test.ts` mocks
+`createSupabaseAuthUserFromInvitation` wholesale, so no assertion could ever reach
+the argument in question. The new tests sit at the service level and were
+confirmed red before the fix.
+
+### Why the local run missed it
+
+The local verification checked that `user_roles` held the right role, unit and
+`isUnitOwner` — keyed by the id the script had provisioned. That is the same id
+the *bug* leaves stranded. Nothing in the check ever obtained a session and asked
+which id it carried, so the assertion passed on a broken system. §3 has been
+annotated accordingly.
+
+The generalisable lesson: **verifying that a row is correct is not verifying that
+the user can reach it.** An identity-binding defect is invisible to any check
+that supplies the identity itself.
+
+### Three toolchain faults, none of them production bugs
+
+Rendering the real email template from a root-level `tsx` script failed three
+times, and each failure impersonated an application bug:
+
+1. `Objects are not valid as a React child` — a bare `import ... from 'react'` in
+   `/scripts` resolved to a stray `~/node_modules/react` **outside the repo**, so
+   the element came from a different React instance than the renderer.
+2. `React is not defined` — `tsx` compiled the templates with the *classic* JSX
+   runtime; `packages/email/vitest.config.ts` sets `esbuild.jsx: "automatic"`,
+   which is why the package's own 59 template tests pass.
+3. `Dynamic require of "react" is not supported` — the tsup ESM bundle cannot
+   dynamically require `react-dom/server` outside Next's bundler.
+
+None affect the deployed app, which bundles a single React. The email was
+ultimately rendered and sent through the package's own toolchain. Worth recording
+because the first error in particular reads exactly like a broken template, and
+chasing it as one would waste an afternoon.
+
+### Dry-run gate, exercised in anger
+
+The gate from PR #935 was exercised on the real path: with a **live invitation
+token** in scope, the suppressed-send log line carried recipient, subject,
+category and sender — and no token. The live send (`PROPERTYPRO_ALLOW_OUTBOUND_MAIL=1`)
+then delivered the real template to a real inbox with a working link.
+
+### Verification
+
+```
+pnpm typecheck                                   15/15 tasks successful
+node scripts/run-lint-guards.mjs                 23/23 guards passed
+DATABASE_URL=<stub> pnpm test                    11,480 passed | 26 skipped | 7 todo
+```
+
+### D11 — The D10 fix armed a cross-tenant takeover; both ship together (High, security)
+
+The security review of D10 did not come back clean, and the finding is the more
+important half of this addendum: **fixing D10 in isolation would have converted a
+latent nuisance into account takeover.**
+
+Three pre-existing facts compose:
+
+1. `users` has **no `community_id` column**, so `createScopedClient` applies no
+   tenant filter to it — `hasTenantIsolation`
+   (`packages/db/src/scoped-client.ts`) returns false and the only predicate is
+   `deleted_at IS NULL`. `scoped.query(users)` returns **every user on the
+   platform**.
+2. `createOnboardingResident` (`onboarding-service.ts:82-90`) therefore matches
+   an invitee by email against that global set and **reuses the found row's id**.
+3. `POST /api/v1/residents/invite` **returned the live invitation token in its
+   response body**, gated only on `residents:write` in the caller's *own*
+   community.
+
+So a manager of **any** community could name another community's resident by
+email address and be handed a working credential for them.
+
+| | Before D10's fix | After D10's fix, without D11 |
+|---|---|---|
+| Attacker gets | a role-less account | **the victim's identity** |
+| Victim gets | their email permanently claimed in auth, blocking their real acceptance (a denial of service) | same |
+| Inherited | nothing | every `user_roles` row the victim holds, in **every** community, including `designation` (`board_president` / `board_member`) |
+
+The limiting gate is GoTrue's duplicate-email check, so exposure is exactly the
+users who have a `users` row and **no `auth.users` row** — every
+invited-but-not-yet-accepted resident and every bulk-imported one. That set is
+normally populated, and such a user can already carry a board designation.
+
+**Fix.** The token is no longer returned to the caller. Emailing it is what binds
+acceptance to control of the mailbox; returning it bypassed that. Nothing in the
+UI ever read the field — only `invitationFailed` — and the contract types the
+response `z.unknown()`, so nothing breaks. The happy-path test asserted
+`token: 'tok'`, i.e. it **pinned the leak in place**; it now asserts the token is
+absent from the entire response.
+
+Also corrected: a docstring on `getUserForInvitation` claiming the scoped client
+"applies the community-membership join under the hood for tenant isolation". No
+such join exists. That sentence is precisely the reasoning that makes this whole
+class of bug look safe, so it was load-bearing in the wrong direction.
+
+**Residual, not fixed here:** `users` lookups remain unscoped platform-wide
+(`getUserForInvitation`, `getResidentUserByEmail`, `getResidentUserById`), so a
+manager can still add an arbitrary known-email user to *their own* community.
+That grants the victim access to the attacker's community rather than the
+reverse, so it is a consent/nuisance problem rather than takeover — tracked
+separately.
+
+**Lesson worth keeping.** A correct fix to a real bug can still be the wrong
+thing to ship alone. D10 was found by running the flow; D11 was found only
+because the fix went through security review before merging, and it was invisible
+from the two changed lines.
