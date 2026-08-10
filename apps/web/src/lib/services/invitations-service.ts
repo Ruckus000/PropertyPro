@@ -178,7 +178,14 @@ export async function createSupabaseAuthUserFromInvitation(params: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const admin = createAdminClient();
-    const { error } = await admin.auth.admin.createUser({
+    const { data, error } = await admin.auth.admin.createUser({
+      // The invitee's `users` row (and the `user_roles` row carrying their unit
+      // and owner/tenant binding) was created when the admin invited them, with
+      // this id. Supabase must adopt it rather than mint its own: middleware
+      // stamps the SESSION user id into `x-user-id`, and every membership
+      // lookup keys off it. Diverge here and the invitee signs in successfully
+      // and owns nothing — no community, no unit, no role.
+      id: params.externalUserId,
       email: params.email,
       password: params.password,
       email_confirm: true,
@@ -189,6 +196,18 @@ export async function createSupabaseAuthUserFromInvitation(params: {
     });
     if (error) {
       return { ok: false, error: error.message };
+    }
+    // Verify rather than assume. If a future GoTrue ignores the requested id,
+    // the failure mode is silent and only shows up when the invitee finds an
+    // empty app — so refuse to report success on a mismatch.
+    const createdId = data?.user?.id;
+    if (createdId !== params.externalUserId) {
+      return {
+        ok: false,
+        error:
+          `Supabase created auth user ${createdId ?? 'with no id'} but the invitation `
+          + `expects ${params.externalUserId}; refusing to leave the account unlinked`,
+      };
     }
     return { ok: true };
   } catch (err) {
