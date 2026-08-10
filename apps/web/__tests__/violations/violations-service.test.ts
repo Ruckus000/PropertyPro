@@ -12,7 +12,10 @@ const {
   logAuditEventMock: vi.fn(),
   sendNotificationMock: vi.fn(),
   tables: {
-    arcSubmissions: Symbol('arc_submissions'),
+    arcSubmissions: {
+      id: Symbol('arc_submissions.id'),
+      unitId: Symbol('arc_submissions.unit_id'),
+    },
     assessmentLineItems: { id: Symbol('assessment_line_items.id') },
     documents: { id: Symbol('documents.id') },
     ledgerEntries: { id: Symbol('ledger_entries.id') },
@@ -193,7 +196,7 @@ describe('violations-service', () => {
       expect(update).toHaveBeenCalledWith(
         tables.arcSubmissions,
         expect.objectContaining({ status: 'denied' }),
-        { eq: [undefined, 7] },
+        { eq: [tables.arcSubmissions.id, 7] },
       );
     });
 
