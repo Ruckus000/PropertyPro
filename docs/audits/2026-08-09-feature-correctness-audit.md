@@ -19,9 +19,9 @@ was explicitly requested.
 
 ## 1. Headline
 
-Eight defects. Seven are fixed in this branch with tests that fail before the fix and
+Nine defects. Eight are fixed in this branch with tests that fail before the fix and
 pass after; one is documented rather than fixed because the correct behaviour is a
-product decision.
+product decision. (D9 was found by the pre-merge code review — see §7.)
 
 **The statutory timing math was the worst of it, and it had no unit tests at all.**
 `apps/web/src/lib/utils/meeting-calculator.ts` — the file that computes the §718
@@ -41,6 +41,7 @@ minimum**, and owner meetings routinely lost two of their fourteen statutory day
 | D6 | 30-day posting deadlines silently lose an hour to DST | Medium | Fixed |
 | D7 | Deadline weekday is evaluated in the *server's* timezone, not the community's | Medium | Documented |
 | D8 | Nothing warns or blocks when a meeting/hearing is scheduled inside its notice window | Medium | Documented |
+| D9 | The 30-day posting rule existed in three copies; a production backfill script kept the bug | **High** | Fixed (§7) |
 
 ---
 
@@ -86,7 +87,7 @@ returned 2,588,400,000 ms where 2,592,000,000 was required.
 
 **Fix.** Lead times and posting windows are computed as exact elapsed milliseconds
 (`shiftDays`, `meeting-calculator.ts:44`; `calculatePostingDeadline`,
-`compliance-calculator.ts:52`).
+`packages/shared/src/compliance/posting-deadline.ts`).
 
 ### The weekend rule on statutory *maximums* — removed, not reversed
 
@@ -342,12 +343,76 @@ left untouched.
 
 ---
 
-## 7. Verification
+## 7. Post-review addendum
+
+A code review and a security review were run over the branch before merge. The
+security review found nothing. The code review found one real miss, and
+revert-checking every test found two coverage gaps. All three are fixed in the
+follow-up commit.
+
+### D9 — the 30-day rule existed in THREE copies; the audit fixed one (High)
+
+`calculatePostingDeadline` was independently reimplemented in
+`scripts/backfill-compliance-templates.ts` and
+`packages/db/src/seed/seed-community.ts`, both hand-rolled with `setUTCDate` and
+both still rolling a weekend landing **forward** (Saturday +2, Sunday +1) — the
+exact defect §2 fixed in `compliance-calculator.ts`. Neither imported the shared
+function. `backfill-compliance-templates.ts` is an ops script that writes real
+compliance-checklist deadlines against production data, so this was not
+demo-seed cosmetics: a backfill run produced deadlines overstating the statutory
+maximum by one to two days.
+
+Fixed by making one implementation, in
+`packages/shared/src/compliance/posting-deadline.ts`, with the reasoning beside
+it. `compliance-calculator.ts` re-exports it so existing importers are
+unaffected; the script and the seed now import it. Pinned by
+`packages/shared/src/__tests__/posting-deadline.test.ts`.
+
+> Fallout worth recording: `transparency-service.test.ts` mocked
+> `@propertypro/shared` with a bare factory, so the newly-shared export became
+> `undefined` at *call* time rather than failing at import — a green typecheck
+> and 969 green files, one red test. Switched to spreading `importActual`.
+
+### Two coverage gaps, found by revert-checking rather than by reading
+
+Each fix was tested by deleting its production line and re-running. Two fixes
+turned out to be **unprotected**:
+
+- The **ARC service-level** HB 1203 check could be deleted with all 171 arc and
+  violations tests still green — only the contract was covered.
+- The **announcements audience → `RecipientFilter` mapping** — the actual site of
+  the `tenants_only` leak — could be reverted to `'all'` with all 48
+  announcements tests still green. Only the underlying `isRoleMatch` branch was
+  covered.
+
+Both now have direct tests. Final revert-check, one production line removed at a
+time:
+
+| Fix | Line reverted | Tests that go red |
+|---|---|---|
+| D1 weekend direction | `previousFriday` → `nextMonday` | 9 |
+| D6 exact-ms lead time | `shiftDays` → `addDays` | 8 |
+| D9 shared posting deadline | → old `setUTCDate` roll-forward | 7 |
+| D5 lead-time rounding | `Math.floor` → `Math.round` | 1 |
+| D2 ARC contract gate | `superRefine` removed | 2 |
+| D2 ARC service gate | service check removed | 2 (was **0**) |
+| D3 invitations `resourceId` | → `token` | 1 |
+| D3 onboarding `resourceId` | → `token` | 1 |
+| D4 `tenants_only` filter | `isRoleMatch` branch removed | 1 |
+| D4 announcements mapping | → `'all'` | 1 (was **0**) |
+
+One further test was rewritten rather than added: `applies weekend rollover
+forward to Monday for post-by dates` used a meeting whose 14-day mark (a
+Wednesday) never touched a weekend, so it passed regardless of roll direction and
+would not have caught the original bug *or* the fix. Re-pointed at a start date
+whose deadline genuinely lands on a Sunday.
+
+## 8. Verification
 
 ```
 pnpm typecheck                                   15/15 tasks successful
 node scripts/run-lint-guards.mjs                 23/23 guards passed
-DATABASE_URL=<stub> pnpm test                    11,419 passed | 27 skipped | 7 todo
+DATABASE_URL=<stub> pnpm test                    11,431 passed | 27 skipped | 7 todo
 ```
 
 Every fix in §2 and §4 was additionally re-verified against the running dev server
