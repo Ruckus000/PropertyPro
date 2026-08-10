@@ -39,8 +39,8 @@ minimum**, and owner meetings routinely lost two of their fourteen statutory day
 | D4 | `tenants_only` announcements notified everyone, leaking title + body | **High** | Fixed |
 | D5 | Public transparency page rounded a short notice up into "compliant" | **High** | Fixed |
 | D6 | 30-day posting deadlines silently lose an hour to DST | Medium | Fixed |
-| D7 | Deadline weekday is evaluated in the *server's* timezone, not the community's | Medium | Documented |
-| D8 | Nothing warns or blocks when a meeting/hearing is scheduled inside its notice window | Medium | Documented |
+| D7 | Deadline weekday is evaluated in the *server's* timezone, not the community's | Medium | Documented — [#931](https://github.com/Ruckus000/PropertyPro/issues/931) |
+| D8 | Nothing warns or blocks when a meeting/hearing is scheduled inside its notice window | Medium | Documented — [#932](https://github.com/Ruckus000/PropertyPro/issues/932) |
 | D9 | The 30-day posting rule existed in three copies; a production backfill script kept the bug | **High** | Fixed (§7) |
 
 ---
@@ -237,7 +237,7 @@ or covenant relied on. **Verified live:** `POST /api/v1/arc/1/decide` with body
 denial. `reviewNotes` was `.nullable().optional()` with no conditional requirement,
 and there was no check in the service either.
 
-The task asked whether *the UI* enforces this. **There is no ARC write UI at all.**
+The task asked whether *the UI* enforces this. **There is no ARC write UI at all** ([#933](https://github.com/Ruckus000/PropertyPro/issues/933)).
 `ArcSubmissionsTab.tsx` is read-only and nothing in `apps/web/src` calls
 `/api/v1/arc/[id]/decide`, `/review`, or `/withdraw`. The four write endpoints exist
 and are reachable; no screen drives them. That is a product gap worth its own ticket
