@@ -311,6 +311,47 @@ export async function confirmSupabaseEmail(email: string): Promise<void> {
 }
 
 /**
+ * Read a community's billing columns straight from the database.
+ *
+ * The UI banner is a rendering of `subscriptionStatus` and proves only that one
+ * field is right. `subscriptionPlan` has no banner at all — a null plan looks
+ * completely normal on screen and only shows up later as unexplained plan
+ * gating. Both of the billing defects fixed on 2026-08-09 were invisible from
+ * the UI, so assertions about billing state should come from here.
+ *
+ * Uses the service-role key, so it bypasses RLS deliberately — the same key the
+ * spec already holds to confirm signup emails.
+ */
+export async function readCommunityBillingBySlug(slug: string): Promise<{
+  subscriptionStatus: string | null;
+  subscriptionPlan: string | null;
+  subscriptionCurrentPeriodEndAt: string | null;
+} | null> {
+  const admin = createClient(
+    STRIPE_E2E_ENV.supabaseUrl as string,
+    STRIPE_E2E_ENV.supabaseServiceRoleKey as string,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const { data, error } = await admin
+    .from('communities')
+    .select('subscription_status, subscription_plan, subscription_current_period_end_at')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) throw new Error(`community lookup failed for ${slug}: ${error.message}`);
+  if (!data) return null;
+  const row = data as {
+    subscription_status: string | null;
+    subscription_plan: string | null;
+    subscription_current_period_end_at: string | null;
+  };
+  return {
+    subscriptionStatus: row.subscription_status,
+    subscriptionPlan: row.subscription_plan,
+    subscriptionCurrentPeriodEndAt: row.subscription_current_period_end_at,
+  };
+}
+
+/**
  * Fill and submit the Stripe **Embedded Checkout** form on `/signup/checkout`.
  *
  * ── Measured against the live test-mode UI, 2026-08-09 ──
@@ -339,10 +380,41 @@ export async function fillStripeEmbeddedCheckout(
   page: Page,
   options: { card?: StripeTestCard } = {},
 ): Promise<void> {
-  const card = options.card ?? STRIPE_TEST_CARD;
   await assertCheckoutSessionStarted(page);
+  await fillCheckoutForm(page.frameLocator(CHECKOUT_IFRAME_SELECTOR).first(), options.card);
+}
 
-  const checkout = page.frameLocator(CHECKOUT_IFRAME_SELECTOR).first();
+/**
+ * Same form, on Stripe's HOSTED checkout page (`checkout.stripe.com`).
+ *
+ * Hosted and embedded are the same Checkout application — hosted simply renders
+ * it as the top-level document instead of inside our iframe — so the field ids
+ * and the accordion behaviour are identical and the logic is shared below.
+ * Used by `signup-trial-end.spec.ts`, which must mint its own session (a test
+ * clock can only be attached at customer creation) and so cannot go through our
+ * embedded page.
+ */
+export async function fillHostedStripeCheckout(
+  page: Page,
+  options: { card?: StripeTestCard } = {},
+): Promise<void> {
+  await fillCheckoutForm(page, options.card);
+}
+
+/**
+ * The shared body. `surface` is whatever exposes `locator`/`getByTestId` —
+ * a `FrameLocator` for embedded, the `Page` itself for hosted.
+ *
+ * Deliberately ONE implementation: every selector here cost a diagnosis (see
+ * the notes above and at the call sites), and two copies would drift the moment
+ * Stripe changes its markup, leaving one surface silently broken.
+ */
+async function fillCheckoutForm(
+  surface: Pick<Page, 'locator' | 'getByTestId'>,
+  cardOverride?: StripeTestCard,
+): Promise<void> {
+  const card = cardOverride ?? STRIPE_TEST_CARD;
+  const checkout = surface;
   const cardNumber = checkout.locator('#cardNumber');
 
   // Expand the Card accordion item, and keep expanding until it STAYS expanded.
