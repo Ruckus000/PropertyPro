@@ -16,6 +16,7 @@ const {
   requireCommunityMembershipMock,
   requireActiveSubscriptionForMutationMock,
   listVisibleAnnouncementsMock,
+  createNotificationsForEventMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   auditLogMock: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +41,7 @@ const {
   }),
   requireActiveSubscriptionForMutationMock: vi.fn().mockResolvedValue(undefined),
   listVisibleAnnouncementsMock: vi.fn(),
+  createNotificationsForEventMock: vi.fn().mockResolvedValue({ created: 0, skipped: 0 }),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -88,6 +90,11 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
+
+vi.mock('@/lib/services/notification-service', () => ({
+  createNotificationsForEvent: createNotificationsForEventMock,
+}));
+
 import { GET, POST } from '../../src/app/api/v1/announcements/route';
 
 describe('p1-17 announcements route', () => {
@@ -186,6 +193,51 @@ describe('p1-17 announcements route', () => {
       42,
       expect.objectContaining({ userId: 'session-user-1' }),
       { includeArchived: false, query: '', cursor: undefined, pageSize: undefined },
+    );
+  });
+
+  // Each announcement audience must reach the notification feed as its OWN
+  // RecipientFilter. `tenants_only` used to fall through to 'all' here, so a
+  // renters-only announcement pushed its title and body into every owner's,
+  // board member's and manager's feed — while the email and read-visibility
+  // paths correctly excluded them, which is why it went unnoticed.
+  it.each([
+    ['all', 'all'],
+    ['owners_only', 'owners_only'],
+    ['board_only', 'board_only'],
+    ['tenants_only', 'tenants_only'],
+  ] as const)('POST create maps audience %s to recipient filter %s', async (audience, expectedFilter) => {
+    const insert = vi.fn().mockResolvedValue([
+      { id: 11, title: 'T', body: 'B', audience, isPinned: false, archivedAt: null },
+    ]);
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn().mockImplementation(async (table) => (
+        table === usersTableMock ? [{ id: 'session-user-1', fullName: 'Session User' }] : []
+      )),
+      selectFrom: vi.fn().mockResolvedValue([]),
+      insert,
+      update: vi.fn(),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
+      method: 'POST',
+      body: JSON.stringify({ title: 'T', body: 'B', audience, isPinned: false, communityId: 200 }),
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+
+    // The email path takes the audience verbatim...
+    expect(queueAnnouncementDeliveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ audience }),
+    );
+    // ...and the notification feed must receive the matching filter, not 'all'.
+    expect(createNotificationsForEventMock).toHaveBeenCalledWith(
+      200,
+      expect.objectContaining({ category: 'announcement' }),
+      expectedFilter,
+      'session-user-1',
     );
   });
 

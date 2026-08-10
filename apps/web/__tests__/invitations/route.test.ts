@@ -128,6 +128,17 @@ describe('p1-20 invitation auth flow', () => {
       expect.objectContaining({ action: 'user_invited', communityId: 99 }),
     );
 
+    // The live invitation token must never reach compliance_audit_log. That
+    // table is readable by every board member and manager through
+    // GET /api/v1/audit-trail, and the accept endpoint turns a token into a
+    // password reset for the invitee — so logging it published an account
+    // takeover primitive. It is also append-only by trigger, so a leaked row
+    // cannot be scrubbed afterwards.
+    const token = (reactEl.props.inviteUrl.split('token=')[1] ?? '').split('&')[0] ?? '';
+    expect(token.length).toBeGreaterThan(20);
+    const auditPayload = JSON.stringify(logAuditEventMock.mock.calls);
+    expect(auditPayload).not.toContain(token);
+
     const json = (await res.json()) as { data: { success: boolean } };
     expect(json.data.success).toBe(true);
   });

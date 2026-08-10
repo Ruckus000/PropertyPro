@@ -1,12 +1,4 @@
-import {
-  addDays,
-  addMonths,
-  isAfter,
-  isBefore,
-  isWeekend,
-  nextMonday,
-  startOfDay,
-} from 'date-fns';
+import { addMonths, isAfter, isBefore } from 'date-fns';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 
 export type ComplianceStatus = 'satisfied' | 'unsatisfied' | 'overdue' | 'not_applicable';
@@ -33,26 +25,12 @@ export interface ComplianceStatusInput {
 }
 
 /**
- * Business rule: deadlines that land on weekends roll forward to Monday.
+ * Re-exported so existing `@/lib/utils/compliance-calculator` importers keep
+ * working. The implementation — and the reasoning for why 30 days carries no
+ * weekend adjustment — lives in `@propertypro/shared`, because this rule had
+ * drifted into three separate copies and only this one was being fixed.
  */
-function adjustWeekendDeadline(deadline: Date): Date {
-  const dayStart = startOfDay(deadline);
-  if (!isWeekend(dayStart)) {
-    return deadline;
-  }
-
-  const monday = nextMonday(dayStart);
-  return monday;
-}
-
-/**
- * Calculate posting deadline from a source date (default 30 days),
- * with weekend rollover handling.
- */
-export function calculatePostingDeadline(sourceDate: Date, days: number = 30): Date {
-  const raw = addDays(sourceDate, days);
-  return adjustWeekendDeadline(raw);
-}
+export { calculatePostingDeadline } from '@propertypro/shared';
 
 /**
  * Rolling window start boundary for compliance checks.

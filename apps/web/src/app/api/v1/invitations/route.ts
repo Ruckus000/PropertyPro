@@ -94,11 +94,16 @@ export const POST = withErrorHandler(
       }),
     });
 
+    // resourceId is the INVITED USER, never the token. compliance_audit_log is
+    // readable by board members and managers via GET /api/v1/audit-trail, and a
+    // live token is enough to complete the accept flow and set that user's
+    // password. The table is append-only by trigger, so anything logged here is
+    // permanent.
     await logAuditEvent({
       userId: actorUserId,
       action: 'user_invited',
       resourceType: 'invitation',
-      resourceId: token,
+      resourceId: userId,
       communityId,
       newValues: { userId, expiresAt: expiresAt.toISOString() },
     });
@@ -159,11 +164,14 @@ export const PATCH = withErrorHandler(
 
     await markInvitationConsumed(communityId, token, new Date());
 
+    // Same rule as the POST branch: identify the invitation by its invitee, not
+    // by the token. (The token is consumed by this point, but it is still a
+    // secret that was valid, and the row is permanent.)
     await logAuditEvent({
       userId,
       action: 'update',
       resourceType: 'invitation',
-      resourceId: token,
+      resourceId: userId,
       communityId,
       newValues: { consumedAt: new Date().toISOString() },
     });

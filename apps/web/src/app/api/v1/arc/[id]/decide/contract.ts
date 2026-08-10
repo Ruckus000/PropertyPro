@@ -63,11 +63,28 @@ export const arcDecideContract = defineRoute({
     params: z.object({
       id: z.coerce.number().int().positive(),
     }),
-    body: z.object({
-      communityId: z.number().int().positive(),
-      decision: z.enum(['approved', 'denied']),
-      reviewNotes: z.string().max(4000).nullable().optional(),
-    }),
+    body: z
+      .object({
+        communityId: z.number().int().positive(),
+        decision: z.enum(['approved', 'denied']),
+        reviewNotes: z.string().max(4000).nullable().optional(),
+      })
+      // HB 1203: an ARC/ACC denial must state the specific reason and identify
+      // the rule or covenant relied on. Until the 2026-08-09 feature-correctness
+      // audit this endpoint accepted `{ decision: 'denied' }` with no notes at
+      // all and then emailed the resident an unexplained denial. The statute's
+      // *content* requirement (citing the covenant) cannot be machine-checked;
+      // requiring a non-empty written reason is the part that can.
+      .superRefine((value, ctx) => {
+        if (value.decision !== 'denied') return;
+        if (value.reviewNotes != null && value.reviewNotes.trim().length > 0) return;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['reviewNotes'],
+          message:
+            'A denial must include written reasons citing the specific rule or covenant relied on (HB 1203).',
+        });
+      }),
   },
   response: z.unknown(),
   permission: { resource: 'arc_submissions', action: 'write' },

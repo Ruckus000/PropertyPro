@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { calculateComplianceStatus } from '@/lib/utils/compliance-calculator';
+import {
+  calculateComplianceStatus,
+  calculatePostingDeadline,
+} from '@/lib/utils/compliance-calculator';
 
 const ms = (iso: string) => new Date(iso);
 
@@ -188,5 +191,38 @@ describe('calculateComplianceStatus', () => {
         }),
       ).toBe('overdue');
     });
+  });
+});
+
+describe('calculatePostingDeadline — §718.111(12)(g) 30-day window', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  it('is exactly 30 days out for a mid-week source date', () => {
+    const source = new Date('2026-08-12T18:00:00.000Z'); // Wednesday
+    expect(calculatePostingDeadline(source).getTime() - source.getTime()).toBe(30 * DAY_MS);
+  });
+
+  it('is exactly 30 days for any source date in a year — never 31 or 32', () => {
+    // 30 days is a MAXIMUM with no weekend exception. Rolling a weekend landing
+    // forward to Monday told managers they could post on day 31 or 32 and let a
+    // posting made after the statutory date read as "satisfied".
+    const base = Date.UTC(2026, 0, 1, 12, 0, 0);
+    for (let day = 0; day < 365; day += 1) {
+      const source = new Date(base + day * DAY_MS);
+      const elapsed = calculatePostingDeadline(source).getTime() - source.getTime();
+      expect(elapsed, `posting deadline for ${source.toISOString()}`).toBe(30 * DAY_MS);
+    }
+  });
+
+  it('does not lose an hour to a DST transition', () => {
+    // Local-calendar addDays() returns a 719-hour "30 days" across
+    // spring-forward (2026-03-08), silently shortening the window.
+    const source = new Date('2026-02-18T18:00:00.000Z');
+    expect(calculatePostingDeadline(source).getTime() - source.getTime()).toBe(30 * DAY_MS);
+  });
+
+  it('honours a non-default window length', () => {
+    const source = new Date('2026-08-12T18:00:00.000Z');
+    expect(calculatePostingDeadline(source, 14).getTime() - source.getTime()).toBe(14 * DAY_MS);
   });
 });

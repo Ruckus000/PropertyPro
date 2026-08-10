@@ -52,6 +52,7 @@ import { getBaseUrl } from '@/lib/utils/url';
 export type RecipientFilter =
   | 'all'
   | 'owners_only'
+  | 'tenants_only'
   | 'board_only'
   | 'community_admins'
   | { type: 'specific_user'; userId: string };
@@ -188,6 +189,10 @@ function isInAppEnabled(
 function isRoleMatch(role: string, filter: RecipientFilter, userId: string, opts?: { isUnitOwner?: boolean; designation?: string | null }): boolean {
   if (filter === 'all') return true;
   if (filter === 'owners_only') return role === 'resident' && opts?.isUnitOwner === true;
+  // Mirrors `isAudienceMatch` in announcement-delivery.ts and
+  // `canReadAnnouncement` in announcements/read-visibility.ts — a "tenant" is a
+  // resident who does not own their unit.
+  if (filter === 'tenants_only') return role === 'resident' && opts?.isUnitOwner !== true;
   if (filter === 'board_only') {
     // Phase 3.2: board targeting sources from designation (role-independent, §3.2).
     return hasBoardDesignation(opts?.designation);

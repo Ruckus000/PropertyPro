@@ -18,6 +18,7 @@ import { createAdminClient } from '../supabase/admin';
 import { createUnscopedClient } from '../unsafe';
 import {
   BOARD_DESIGNATIONS,
+  calculatePostingDeadline,
   getComplianceTemplate,
   getDefaultDocumentCategories,
   isBoardPresident,
@@ -326,20 +327,6 @@ function debugSeed(message: string): void {
     // eslint-disable-next-line no-console
     console.log(`[seed-community] ${message}`);
   }
-}
-
-function calculatePostingDeadline(sourceDate: Date, days: number): Date {
-  const deadline = new Date(sourceDate);
-  deadline.setUTCDate(deadline.getUTCDate() + days);
-
-  const weekday = deadline.getUTCDay();
-  if (weekday === 6) {
-    deadline.setUTCDate(deadline.getUTCDate() + 2);
-  } else if (weekday === 0) {
-    deadline.setUTCDate(deadline.getUTCDate() + 1);
-  }
-
-  return deadline;
 }
 
 function assertValidConfig(config: SeedCommunityConfig): void {

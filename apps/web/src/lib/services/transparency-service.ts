@@ -237,8 +237,11 @@ function toMeetingNotice(
   const noticePostedAt = asDate(row['noticePostedAt']);
   const requiredLeadTimeHours = getNoticeLeadDays(meetingType, communityType) * 24;
 
+  // Math.floor, never Math.round: this number decides whether the association's
+  // PUBLIC transparency page claims statutory compliance. Rounding 47h31m up to
+  // 48 published a false claim for any notice up to 30 minutes short.
   const leadTimeHours = noticePostedAt
-    ? Math.round((startsAt.getTime() - noticePostedAt.getTime()) / 3_600_000)
+    ? Math.floor((startsAt.getTime() - noticePostedAt.getTime()) / 3_600_000)
     : null;
 
   return {

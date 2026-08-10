@@ -359,8 +359,13 @@ async function handleCreate(body: Record<string, unknown>, audit: AuditLog): Pro
     });
   }
 
+  // The four audiences map 1:1 onto RecipientFilter. `tenants_only` used to
+  // fall through to 'all' here, which pushed a renters-only announcement —
+  // title and body — into every owner's and manager's notification feed while
+  // the email and in-app-list paths correctly excluded them.
   const audienceFilter: import('@/lib/services/notification-service').RecipientFilter =
     data.audience === 'owners_only' ? 'owners_only'
+    : data.audience === 'tenants_only' ? 'tenants_only'
     : data.audience === 'board_only' ? 'board_only'
     : 'all';
 

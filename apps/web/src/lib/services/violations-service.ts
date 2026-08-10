@@ -871,6 +871,19 @@ export async function decideArcSubmissionForCommunity(
     throw new UnprocessableEntityError('ARC submission is already decided');
   }
 
+  // HB 1203: a denial must carry written reasons citing the rule or covenant
+  // relied on. The route contract validates this too; this is the defence for
+  // any other caller, and it accounts for `reviewNotes` falling back to the
+  // notes left by an earlier `review` step just below.
+  if (input.decision === 'denied') {
+    const effectiveNotes = input.reviewNotes ?? existing.reviewNotes;
+    if (!effectiveNotes || effectiveNotes.trim().length === 0) {
+      throw new UnprocessableEntityError(
+        'A denial must include written reasons citing the specific rule or covenant relied on.',
+      );
+    }
+  }
+
   const [updated] = await scoped.update(
     arcSubmissions,
     {
