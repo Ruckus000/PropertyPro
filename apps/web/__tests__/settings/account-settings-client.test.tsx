@@ -24,11 +24,29 @@ const useDeletionStatusMock = vi.fn();
 const useRequestAccountDeletionMock = vi.fn();
 const useCancelAccountDeletionMock = vi.fn();
 
+// The component does `err instanceof RootOffboardingAckRequired`, so the class
+// it imports and the one the test throws must be the SAME identity.
+// `vi.hoisted` is required: vi.mock factories are hoisted above module scope,
+// and unlike the mock fns above (deferred behind arrows) a class referenced
+// directly in the returned object is evaluated when the factory runs, so a
+// plain top-level declaration hits a TDZ ReferenceError.
+const { MockAckError } = vi.hoisted(() => ({
+  MockAckError: class extends Error {
+    communities: Array<{ communityId: number; name: string; hasSuccessor: boolean }>;
+    constructor(communities: Array<{ communityId: number; name: string; hasSuccessor: boolean }>) {
+      super('Root-offboarding acknowledgement required.');
+      this.name = 'RootOffboardingAckRequired';
+      this.communities = communities;
+    }
+  },
+}));
+
 vi.mock('@/hooks/use-account-settings', () => ({
   useUpdateProfile: () => useUpdateProfileMock(),
   useDeletionStatus: () => useDeletionStatusMock(),
   useRequestAccountDeletion: () => useRequestAccountDeletionMock(),
   useCancelAccountDeletion: () => useCancelAccountDeletionMock(),
+  RootOffboardingAckRequired: MockAckError,
 }));
 
 // ── Supabase password flow (stays in component) ─────────────
@@ -219,11 +237,77 @@ describe('AccountSettingsClient — danger zone', () => {
 
     expect(requestDeletionReset).toHaveBeenCalled();
     await waitFor(() =>
+      // R3-03b: the first attempt sends acknowledge=false. If the user is root
+      // of anything the server answers 409 and the ack dialog takes over.
       expect(requestDeletionMutate).toHaveBeenCalledWith(
-        undefined,
-        expect.objectContaining({ onSuccess: expect.any(Function) }),
+        false,
+        expect.objectContaining({
+          onSuccess: expect.any(Function),
+          onError: expect.any(Function),
+        }),
       ),
     );
+  });
+
+  // ── R3-03b: root-offboarding acknowledgement (issue #924) ────────────────
+  //
+  // A root manager deleting their account leaves the community with nobody who
+  // can manage billing. The server answers the first attempt with 409; these
+  // cover the second step.
+
+  /** Drives the component to the point where the ack dialog is showing. */
+  async function openAckDialog(communities: Array<{ communityId: number; name: string; hasSuccessor: boolean }>) {
+    requestDeletionMutate.mockImplementation((_ack: unknown, opts: { onError?: (e: unknown) => void }) => {
+      opts?.onError?.(new MockAckError(communities));
+    });
+    renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+    fireEvent.change(screen.getByLabelText(/type .*delete.* to confirm/i), {
+      target: { value: 'DELETE' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /confirm deletion/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/leaves communities without a root manager/i)).toBeInTheDocument(),
+    );
+  }
+
+  it('surfaces the affected communities instead of a generic error', async () => {
+    await openAckDialog([{ communityId: 42, name: 'Sunset Condos', hasSuccessor: true }]);
+
+    expect(screen.getByText('Sunset Condos')).toBeInTheDocument();
+    expect(screen.getByText(/can claim the root role afterwards/i)).toBeInTheDocument();
+  });
+
+  it('calls out a community with no successor — it needs support to recover', async () => {
+    // No property_manager remains, so `reassignRootOp` has no valid target and
+    // there is no self-service path. The user must be told plainly.
+    await openAckDialog([{ communityId: 99, name: 'Nobody Left', hasSuccessor: false }]);
+
+    expect(screen.getByText(/no property manager remains here/i)).toBeInTheDocument();
+    expect(screen.getByText(/contacting support/i)).toBeInTheDocument();
+  });
+
+  it('re-submits WITH the acknowledgement on confirm', async () => {
+    await openAckDialog([{ communityId: 42, name: 'Sunset Condos', hasSuccessor: true }]);
+    requestDeletionMutate.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: /delete anyway/i }));
+
+    await waitFor(() =>
+      expect(requestDeletionMutate).toHaveBeenCalledWith(true, expect.anything()),
+    );
+  });
+
+  it('backing out does NOT delete anything', async () => {
+    await openAckDialog([{ communityId: 42, name: 'Sunset Condos', hasSuccessor: true }]);
+    requestDeletionMutate.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: /go back/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByText(/leaves communities without a root manager/i)).not.toBeInTheDocument(),
+    );
+    expect(requestDeletionMutate).not.toHaveBeenCalled();
   });
 
   it('does not mutate when reauth is declined', async () => {

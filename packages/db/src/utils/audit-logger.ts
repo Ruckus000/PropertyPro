@@ -64,6 +64,12 @@ export type AuditAction =
   | 'portfolio_template_applied'
   // Role-simplification (v3): root-offboarding flag (Phase 2a)
   | 'root_pending_deletion'
+  // Same event, but for a community where NO property_manager remains who could
+  // claim root. Distinct action (not a metadata flag) so the admin rootless
+  // report can filter for the cases needing the two-step break-glass —
+  // `reassignRootOp` requires the target to already be a property_manager, so
+  // these have no self-service recovery. R3-03b / issue #924.
+  | 'root_pending_deletion_no_successor'
   // Role-simplification (v3): claim-root flow (Phase 2b)
   | 'root_claimed' | 'root_claim_disputed' | 'root_reassigned' | 'root_transferred'
   // Role-simplification (v3): role-management actions (Phase 2c)

@@ -8,6 +8,8 @@ import {
   useUpdateProfile,
   useDeletionStatus,
   useRequestAccountDeletion,
+  RootOffboardingAckRequired,
+  type RootOffboardingCommunity,
   useCancelAccountDeletion,
 } from '@/hooks/use-account-settings';
 import {
@@ -445,6 +447,9 @@ function getDaysUntil(dateStr: string): number {
 function DangerZoneSection() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  // R3-03b: populated from the server's 409 when the user is root somewhere.
+  // Non-null drives the acknowledgement dialog.
+  const [rootOffboarding, setRootOffboarding] = useState<RootOffboardingCommunity[] | null>(null);
   const { triggerReauth, isOpen: reauthOpen, onCancel: reauthCancel, verify: reauthVerify } = useReauth();
 
   // Fetch active deletion request
@@ -617,10 +622,17 @@ function DangerZoneSection() {
                 setConfirmText('');
                 const confirmed = await triggerReauth();
                 if (confirmed)
-                  requestDeletion.mutate(undefined, {
+                  requestDeletion.mutate(false, {
                     onSuccess: () => {
                       setDialogOpen(false);
                       setConfirmText('');
+                    },
+                    onError: (err) => {
+                      // Not a failure — the server is asking the user to
+                      // confirm that this orphans their communities.
+                      if (err instanceof RootOffboardingAckRequired) {
+                        setRootOffboarding(err.communities);
+                      }
                     },
                   });
               }}
@@ -632,6 +644,95 @@ function DangerZoneSection() {
               )}
             >
               {requestDeletion.isPending ? 'Requesting...' : 'Confirm Deletion'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* ── Root-offboarding acknowledgement (R3-03b / issue #924) ───────────
+          Shown when the server returns 409: this user is the root manager of
+          one or more communities, and deleting their account leaves those
+          communities with nobody who can manage billing or the subscription.
+          Deliberately an acknowledgement rather than a refusal — account
+          deletion has to stay self-service for erasure requests. */}
+      <Dialog
+        open={rootOffboarding !== null}
+        onOpenChange={(open) => {
+          if (!open) setRootOffboarding(null);
+        }}
+      >
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>This leaves communities without a root manager</DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                <p>
+                  You are the root manager of the{' '}
+                  {(rootOffboarding?.length ?? 0) === 1 ? 'community' : 'communities'} below.
+                  Deleting your account removes that role, and nobody will be able to
+                  manage billing or the subscription until someone claims it.
+                </p>
+                <ul className="space-y-2">
+                  {(rootOffboarding ?? []).map((c) => (
+                    <li
+                      key={c.communityId}
+                      className="rounded-[var(--radius-sm,6px)] border border-[var(--border-default)] px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium text-[var(--text-primary)]">{c.name}</span>
+                      {c.hasSuccessor ? (
+                        <span className="mt-0.5 block text-[var(--text-secondary)]">
+                          A property manager here can claim the root role afterwards.
+                        </span>
+                      ) : (
+                        /* No self-service recovery: reassignRootOp requires the
+                           target to already be a property_manager, so this one
+                           needs a platform admin. Say so plainly. */
+                        <span className="mt-0.5 block font-medium text-[var(--status-danger)]">
+                          No property manager remains here — recovering this community
+                          will require contacting support.
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[var(--text-secondary)]">
+                  You can transfer the root role to another property manager first if you
+                  would rather not leave these communities unmanaged.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setRootOffboarding(null)}
+              className={cn(
+                'inline-flex items-center justify-center rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
+                'border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]',
+                'hover:bg-[var(--surface-subtle)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
+              )}
+            >
+              Go back
+            </button>
+            <button
+              type="button"
+              disabled={requestDeletion.isPending}
+              onClick={() => {
+                // Re-submit with the acknowledgement. Reauth already happened on
+                // the first attempt, so it is not repeated here.
+                requestDeletion.mutate(true, {
+                  onSuccess: () => setRootOffboarding(null),
+                });
+              }}
+              className={cn(
+                'inline-flex items-center justify-center gap-2 rounded-[var(--radius-md,10px)] px-4 py-2.5 text-sm font-medium transition-colors',
+                'bg-[var(--status-danger)] text-white hover:bg-[var(--red-900,var(--status-danger))]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-color)] focus-visible:ring-offset-2',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+            >
+              {requestDeletion.isPending ? 'Requesting...' : 'Delete anyway'}
             </button>
           </DialogFooter>
         </DialogContent>

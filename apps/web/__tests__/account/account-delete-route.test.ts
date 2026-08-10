@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { ReauthRequiredError } from '../../src/lib/api/errors';
 const {
   requireAuthenticatedUserIdMock,
   requireFreshReauthMock,
@@ -11,6 +12,7 @@ const {
   requestUserDeletionMock,
   findCoolingDeletionRequestForUserMock,
   cancelUserDeletionMock,
+  MockRootOffboardingAckRequiredError,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireFreshReauthMock: vi.fn(),
@@ -18,6 +20,18 @@ const {
   requestUserDeletionMock: vi.fn(),
   findCoolingDeletionRequestForUserMock: vi.fn(),
   cancelUserDeletionMock: vi.fn(),
+  // The route does `err instanceof RootOffboardingAckRequiredError`, so the
+  // class the test throws must be the SAME identity the route imports. Declared
+  // here (not at top level) because vi.mock factories are hoisted above module
+  // scope and would otherwise hit a TDZ ReferenceError.
+  MockRootOffboardingAckRequiredError: class extends Error {
+    communities: unknown[];
+    constructor(communities: unknown[]) {
+      super('Root-offboarding acknowledgement required.');
+      this.name = 'RootOffboardingAckRequiredError';
+      this.communities = communities;
+    }
+  },
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -33,6 +47,7 @@ vi.mock('@/lib/services/account-lifecycle-service', () => ({
   requestUserDeletion: requestUserDeletionMock,
   findCoolingDeletionRequestForUser: findCoolingDeletionRequestForUserMock,
   cancelUserDeletion: cancelUserDeletionMock,
+  RootOffboardingAckRequiredError: MockRootOffboardingAckRequiredError,
 }));
 
 import { DELETE, GET, POST } from '../../src/app/api/v1/account/delete/route';
@@ -121,7 +136,59 @@ describe('POST /api/v1/account/delete', () => {
     });
     expect(json.data.coolingEndsAt).toBe(activeRequest.coolingEndsAt.toISOString());
     expect(requireFreshReauthMock).toHaveBeenCalledWith('user-1');
-    expect(requestUserDeletionMock).toHaveBeenCalledWith('user-1');
+    expect(requestUserDeletionMock).toHaveBeenCalledWith('user-1', false);
+  });
+
+  // R3-03b: a root deleting their account orphans the community, so the first
+  // attempt is refused with a CONFIRMABLE 409 rather than a 403 — the client
+  // re-submits with the ack. 409 is load-bearing: 403 would read as "you may
+  // not", which is wrong; erasure stays self-service.
+  it('returns 409 with the affected communities when the caller is root and has not acknowledged', async () => {
+    requestUserDeletionMock.mockRejectedValueOnce(
+      new MockRootOffboardingAckRequiredError([
+        { communityId: 42, name: 'Sunset Condos', hasSuccessor: true },
+        { communityId: 99, name: 'Palm Shores HOA', hasSuccessor: false },
+      ]),
+    );
+
+    const res = await POST(
+      new NextRequest(URL, { method: 'POST', headers: { 'content-type': 'application/json' } }),
+    );
+
+    expect(res.status).toBe(409);
+    const json = await res.json();
+    expect(json.error.code).toBe('ROOT_OFFBOARDING_ACK_REQUIRED');
+    // The prompt needs names, and needs to single out the community nobody can
+    // take over — that one has no self-service recovery.
+    expect(json.error.details.communities).toEqual([
+      { communityId: 42, name: 'Sunset Condos', hasSuccessor: true },
+      { communityId: 99, name: 'Palm Shores HOA', hasSuccessor: false },
+    ]);
+  });
+
+  it('forwards the acknowledgement on re-submit', async () => {
+    const res = await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ acknowledgeRootOffboarding: true }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(requestUserDeletionMock).toHaveBeenCalledWith('user-1', true);
+  });
+
+  it('checks reauth BEFORE the root-offboarding gate', async () => {
+    // Ordering matters: a stale session must not be able to enumerate which
+    // communities the user is root of via the 409 payload.
+    requireFreshReauthMock.mockRejectedValueOnce(new ReauthRequiredError());
+
+    await POST(
+      new NextRequest(URL, { method: 'POST', headers: { 'content-type': 'application/json' } }),
+    ).catch(() => undefined);
+
+    expect(requestUserDeletionMock).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated and does not call reauth or service', async () => {
