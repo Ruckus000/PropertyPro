@@ -491,12 +491,30 @@ describe('stripe-webhook-service', () => {
 
     it('clears it when an invoice payment succeeds', async () => {
       const db = setupDb();
-      await markCommunityPaymentSucceeded('sub_abc');
+      await markCommunityPaymentSucceeded('sub_abc', 'active');
       expect(db.setMock).toHaveBeenCalledWith(
         expect.objectContaining({
           subscriptionStatus: 'active',
           subscriptionCanceledAt: null,
           nextReminderAt: null,
+        }),
+      );
+    });
+
+    // A trial's FIRST invoice is $0 and Stripe still emits
+    // `invoice.payment_succeeded` for it. Writing a hardcoded 'active' there
+    // ends the trial in our database while Stripe is still trialing — the
+    // "Free trial active" banner vanishes, the trial-end date is wrong, and
+    // anything gated on `trialing` misbehaves. Observed live on 2026-08-09: two
+    // otherwise identical signups landed `trialing` and `active` respectively,
+    // decided purely by webhook arrival order.
+    it('keeps a trialing subscription trialing when its $0 invoice succeeds', async () => {
+      const db = setupDb();
+      await markCommunityPaymentSucceeded('sub_abc', 'trialing');
+      expect(db.setMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subscriptionStatus: 'trialing',
+          paymentFailedAt: null,
         }),
       );
     });

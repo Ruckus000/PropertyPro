@@ -8,7 +8,7 @@
     "dev": "next dev --turbopack --port 3000",
     "dev:webpack": "next dev --port 3000",
     "predev:e2e": "node ./scripts/sync-pdfjs-assets.mjs",
-    "dev:e2e": "rm -rf .next && next dev --port 3000 --hostname 127.0.0.1",
+    "dev:e2e": "rm -rf .next && next dev --port ${PORT:-3000} --hostname 127.0.0.1",
     "prebuild": "node ./scripts/sync-pdfjs-assets.mjs",
     "build": "next build",
     "start": "next start",

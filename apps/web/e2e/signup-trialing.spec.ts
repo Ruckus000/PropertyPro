@@ -86,5 +86,36 @@ test.describe('Signup → Stripe Checkout → trialing (GA gate)', () => {
     //    definitive success signal and is host-agnostic (works even if the
     //    redirect lands on the community's subdomain).
     await expect(page.getByText(/free trial active/i)).toBeVisible({ timeout: 120_000 });
+
+    // 7. A paid email cannot start a second signup.
+    //
+    // Asserted here rather than in signup-failure-paths.spec.ts because it needs
+    // an email that has genuinely completed payment, and this test has just
+    // produced one — checking it there would mean paying twice. Without this
+    // guard a customer who already has a community can walk the pricing page
+    // again and be charged for a second one.
+    const duplicate = await request.post('/api/v1/auth/signup', {
+      data: {
+        primaryContactName: inputs.primaryContactName,
+        email: inputs.email,
+        password: inputs.password,
+        communityName: `${inputs.communityName} Duplicate`,
+        addressLine1: '100 Ocean Drive',
+        city: 'Miami',
+        state: 'FL',
+        zipCode: '33139',
+        county: 'Miami-Dade',
+        unitCount: 40,
+        communityType: inputs.communityType,
+        planKey: inputs.planKey,
+        candidateSlug: `${inputs.candidateSlug}-dup`.slice(0, 40),
+        termsAccepted: true,
+      },
+    });
+    expect(
+      duplicate.status(),
+      'a second signup with an already-paid email must be refused',
+    ).toBe(400);
+    expect(await duplicate.text()).toMatch(/already exists/i);
   });
 });
