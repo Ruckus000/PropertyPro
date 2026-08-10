@@ -94,8 +94,23 @@ unset _caller_node_env_set _caller_node_env
 export NEXT_PUBLIC_APP_URL="${PROPERTYPRO_APP_URL:-https://getpropertypro.com}"
 
 # Fail loudly rather than quietly emailing a localhost link to a real person.
-case "$NEXT_PUBLIC_APP_URL" in
-  *localhost* | *127.0.0.1* | *::1*)
+#
+# Host extraction, then an exact host match — deliberately the same shape as
+# `host_of` + `assert_loopback` in with-env-local-demo-db.sh, just inverted
+# (that script demands loopback; this one refuses it). A naive `*localhost*`
+# substring test both over- and under-matches: it rejects a legitimate
+# `notlocalhost.example.com`, and it lets `127.1`, `0.0.0.0`, `2130706433` and a
+# trailing-dot `localhost.` through — all of which resolve to loopback.
+host_of() {
+  # strip scheme, then credentials, then path/query, then :port, then trailing dot
+  printf '%s' "$1" \
+    | sed -E 's#^[a-zA-Z][a-zA-Z0-9+.-]*://##; s#^[^@/]*@##; s#[/?].*$##; s#:[0-9]+$##; s#\.$##'
+}
+
+case "$(host_of "$NEXT_PUBLIC_APP_URL")" in
+  localhost | *.localhost \
+  | 127.* | '[::1]' | ::1 | 0.0.0.0 | '[::]' | 2130706433 \
+  | host.docker.internal | *.localtest.me | localtest.me)
     cat >&2 <<EOF
 REFUSING TO RUN — NEXT_PUBLIC_APP_URL is local while the database is production.
 
