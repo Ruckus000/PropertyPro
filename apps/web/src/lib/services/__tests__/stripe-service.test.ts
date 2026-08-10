@@ -5,7 +5,7 @@
  * Used by the `customer.subscription.updated` webhook to map a Stripe Price ID
  * back to a canonical PlanId when `price.lookup_key` is missing.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must exist before the module under test is imported.
@@ -42,7 +42,7 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 // Import after mocks
-import { resolvePlanIdFromStripePriceId } from '../stripe-service';
+import { getExpectedLivemode, resolvePlanIdFromStripePriceId } from '../stripe-service';
 import { AppError } from '@/lib/api/errors/AppError';
 
 /** Build a chainable select builder that terminates with the given rows. */
@@ -112,4 +112,48 @@ describe('resolvePlanIdFromStripePriceId', () => {
 
     await expect(resolvePlanIdFromStripePriceId('price_ghost')).rejects.toThrow(/price_ghost/);
   });
+});
+
+// ---------------------------------------------------------------------------
+// getExpectedLivemode — which Stripe mode this deployment's key belongs to.
+// ---------------------------------------------------------------------------
+
+describe('getExpectedLivemode', () => {
+  const originalKey = process.env.STRIPE_SECRET_KEY;
+
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.STRIPE_SECRET_KEY;
+    else process.env.STRIPE_SECRET_KEY = originalKey;
+  });
+
+  it.each([
+    ['sk_live_abc123', true],
+    ['rk_live_abc123', true],
+    ['sk_test_abc123', false],
+    ['rk_test_abc123', false],
+  ])('maps %s to livemode=%s', (key, expected) => {
+    process.env.STRIPE_SECRET_KEY = key;
+    expect(getExpectedLivemode()).toBe(expected);
+  });
+
+  // null means "do not gate". Every case below must stay null: the webhook's
+  // mode guard keys off this, and returning a boolean by mistake would start
+  // dropping real payment events.
+  it('returns null when the key is unset', () => {
+    delete process.env.STRIPE_SECRET_KEY;
+    expect(getExpectedLivemode()).toBeNull();
+  });
+
+  it('returns null for an empty key rather than treating it as test mode', () => {
+    process.env.STRIPE_SECRET_KEY = '';
+    expect(getExpectedLivemode()).toBeNull();
+  });
+
+  it.each(['pk_live_abc', 'sk_LIVE_abc', 'live_abc', 'whsec_abc', 'sk_live', 'garbage'])(
+    'returns null for the unrecognised prefix %s',
+    (key) => {
+      process.env.STRIPE_SECRET_KEY = key;
+      expect(getExpectedLivemode()).toBeNull();
+    },
+  );
 });

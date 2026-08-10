@@ -379,3 +379,36 @@ Check Vercel Dashboard > Project > Settings > Environment Variables. Ensure all 
 1. Check Stripe Dashboard > Developers > Webhooks > Recent events
 2. Verify `STRIPE_WEBHOOK_SECRET` matches the endpoint's signing secret
 3. Check Vercel function logs for the webhook route
+
+#### Local development must not share production's webhook endpoint
+
+**A Stripe webhook endpoint is registered per Stripe account + mode, not per
+deployment.** It holds one destination URL. So if local development uses the same
+`STRIPE_SECRET_KEY` as production, a checkout completed on `localhost` is delivered
+to whatever URL that endpoint points at — production — while the matching
+`pending_signups` row exists only in the local database.
+
+Symptom, and it is easy to misread as a production bug: FK violations on
+`provisioning_jobs` for signups that exist in no database you can inspect.
+
+```
+insert or update on table "provisioning_jobs" violates foreign key constraint
+"provisioning_jobs_signup_request_id_pending_signups_signup_requ"
+```
+
+This happened on 2026-08-10 — six local checkouts produced twelve production error
+events (Sentry `PROPERTY-PRO-1G`). Nothing was wrong with the production code path.
+
+For local work, forward events to your own machine instead:
+
+```bash
+stripe listen --forward-to localhost:3000/api/v1/webhooks/stripe
+```
+
+Use the signing secret the CLI prints as your local `STRIPE_WEBHOOK_SECRET` — it is
+specific to that listener. A separate Stripe account for development works too.
+
+Note that the mode guard in the webhook route does **not** protect against this: the
+guard compares `event.livemode` against the mode of `STRIPE_SECRET_KEY`, and local
+dev sharing production's key is by definition in the *same* mode. The guard catches a
+different fault — an endpoint wired to a deployment whose keys are in the other mode.

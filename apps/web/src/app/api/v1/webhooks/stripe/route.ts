@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { captureException } from '@sentry/nextjs';
 import type Stripe from 'stripe';
 import {
+  getExpectedLivemode,
   getStripeClient,
   resolvePlanIdFromStripePriceId,
   resolveSubscriptionPeriodEndAt,
@@ -649,6 +650,39 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
       payloadSnippet: { hasSignatureHeader: Boolean(sig), rawBodyLength: rawBody.length },
     });
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+  }
+
+  // 2b. Mode guard — the event's Stripe mode must match this deployment's key.
+  //
+  // A cross-mode event cannot be processed: Stripe API keys are mode-scoped, so
+  // the very first thing the checkout handler does — `retrieveCheckoutSession`
+  // — throws "No such checkout.session". That throw becomes a 500 and Stripe
+  // retries forever, the same unbounded loop the pending-signup guard closes
+  // further down. Catching it here stops it BEFORE any Stripe API call.
+  //
+  // Placed ahead of the idempotency fence so a foreign event never leaves a row
+  // in `stripe_webhook_events`. 200, not 500: unprocessable, not transient.
+  // Logged at `error` because a mismatch means this deployment's keys and its
+  // registered webhook endpoint disagree — a real misconfiguration.
+  //
+  // Fails OPEN: when the key is unset or its prefix is unrecognised,
+  // `getExpectedLivemode()` returns null and nothing is gated.
+  const expectedLivemode = getExpectedLivemode();
+  if (
+    expectedLivemode !== null &&
+    typeof event.livemode === 'boolean' &&
+    event.livemode !== expectedLivemode
+  ) {
+    logStripeWebhookEvent('error', 'Stripe webhook event mode does not match this deployment', {
+      eventId: event.id,
+      eventType: event.type,
+      category: 'configuration',
+      metricName: 'stripe_webhook_request',
+      outcome: 'skipped',
+      reason: 'livemode_mismatch',
+      payloadSnippet: { eventLivemode: event.livemode, expectedLivemode },
+    });
+    return NextResponse.json({ received: true }, { status: 200 });
   }
 
   // 3. Idempotency check — distinguish processed vs failed vs new

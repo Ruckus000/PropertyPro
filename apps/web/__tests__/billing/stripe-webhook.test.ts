@@ -27,6 +27,7 @@ import { NextRequest } from 'next/server';
 // ---------------------------------------------------------------------------
 const {
   constructEventMock,
+  getExpectedLivemodeMock,
   retrieveCheckoutSessionMock,
   retrieveSubscriptionMock,
   retrieveInvoiceMock,
@@ -68,6 +69,7 @@ const {
 
   return {
     constructEventMock: vi.fn(),
+    getExpectedLivemodeMock: vi.fn(() => null as boolean | null),
     retrieveCheckoutSessionMock: vi.fn(),
     retrieveSubscriptionMock: vi.fn(),
     retrieveInvoiceMock: vi.fn(),
@@ -146,6 +148,10 @@ vi.mock('@/lib/services/stripe-service', () => ({
   getStripeClient: () => ({
     webhooks: { constructEvent: constructEventMock },
   }),
+  // Defaults to null = "mode unknown, do not gate", so every pre-existing test
+  // is unaffected by the mode guard. The prefix parsing itself is covered in
+  // apps/web/src/lib/services/__tests__/stripe-service.test.ts.
+  getExpectedLivemode: getExpectedLivemodeMock,
   retrieveCheckoutSession: retrieveCheckoutSessionMock,
   retrieveSubscription: retrieveSubscriptionMock,
   retrieveInvoice: retrieveInvoiceMock,
@@ -285,6 +291,10 @@ function setupDb(options: {
 describe('POST /api/v1/webhooks/stripe', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks clears CALLS, not implementations — a mockReturnValue set by
+    // one test would otherwise leak into every test after it. Restore the
+    // "mode unknown, do not gate" default explicitly.
+    getExpectedLivemodeMock.mockReturnValue(null);
     // Default env
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
   });
@@ -448,6 +458,103 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(res.status).toBe(500);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe('Webhook fence insert failed');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 2b. Mode guard (test vs live)
+  // -------------------------------------------------------------------------
+
+  describe('livemode guard', () => {
+    /** A checkout event in the given Stripe mode. */
+    function stubModeEvent(livemode: boolean) {
+      const session = {
+        id: 'cs_mode_guard',
+        status: 'complete',
+        metadata: { signupRequestId: 'req-mode' },
+      };
+      constructEventMock.mockReturnValue({
+        ...makeEvent('checkout.session.completed', session, 'evt_mode_guard'),
+        livemode,
+      });
+      retrieveCheckoutSessionMock.mockResolvedValue({ ...session, status: 'complete' });
+    }
+
+    it('drops a test-mode event on a live deployment WITHOUT calling Stripe', async () => {
+      getExpectedLivemodeMock.mockReturnValue(true);
+      stubModeEvent(false);
+      const { insertMock } = setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+
+      // 200 — a cross-mode event is unprocessable, not transient. A retry can
+      // never succeed, so Stripe must not be asked to make one.
+      expect(res.status).toBe(200);
+
+      // The whole point of the guard's placement: it fires BEFORE the Stripe
+      // API call that would otherwise throw "No such checkout.session" and turn
+      // into a 500 retry loop.
+      expect(retrieveCheckoutSessionMock).not.toHaveBeenCalled();
+
+      // Ahead of the idempotency fence, so a foreign event leaves no row behind.
+      expect(insertMock).not.toHaveBeenCalled();
+      expect(runProvisioningMock).not.toHaveBeenCalled();
+    });
+
+    it('drops a live-mode event on a test deployment', async () => {
+      getExpectedLivemodeMock.mockReturnValue(false);
+      stubModeEvent(true);
+      const { insertMock } = setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).not.toHaveBeenCalled();
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('processes an event whose mode matches the deployment', async () => {
+      getExpectedLivemodeMock.mockReturnValue(true);
+      stubModeEvent(true);
+      setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).toHaveBeenCalled();
+    });
+
+    it('FAILS OPEN when the key mode is unknown, even on a mode mismatch', async () => {
+      // An unrecognised STRIPE_SECRET_KEY prefix must never start dropping real
+      // payment events — the guard may only ever be as permissive as before.
+      getExpectedLivemodeMock.mockReturnValue(null);
+      stubModeEvent(false);
+      setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).toHaveBeenCalled();
+    });
+
+    it('does not gate an event that carries no livemode field', async () => {
+      getExpectedLivemodeMock.mockReturnValue(true);
+      const session = {
+        id: 'cs_no_livemode',
+        status: 'complete',
+        metadata: { signupRequestId: 'req-none' },
+      };
+      // No `livemode` key at all — must not be read as "false" and dropped.
+      constructEventMock.mockReturnValue(
+        makeEvent('checkout.session.completed', session, 'evt_no_livemode'),
+      );
+      retrieveCheckoutSessionMock.mockResolvedValue({ ...session, status: 'complete' });
+      setupDb({ selectRows: [] });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).toHaveBeenCalled();
     });
   });
 
