@@ -198,13 +198,25 @@ export async function retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice
 
 /**
  * Resolve the Stripe period end for trial/renewal banners (Stripe API-version
- * tolerant). Prefers `trial_end` (so a trialing sub reports its trial end),
- * then the first item's `current_period_end`, then the legacy top-level field.
- * Shared by the webhook, the trial-stamping step, and the lost-checkout
+ * tolerant). While the subscription is TRIALING it reports the trial end;
+ * otherwise the first item's `current_period_end`, then the legacy top-level
+ * field. Shared by the webhook, the trial-stamping step, and the lost-checkout
  * reconciler so all three compute the same value.
+ *
+ * The `status === 'trialing'` gate is load-bearing. Stripe does not clear
+ * `trial_end` when a trial converts — it remains on the subscription as a
+ * historical fact — so preferring it unconditionally made every converted
+ * subscription report a period end in the PAST, and one that never advanced,
+ * because each renewal recomputed the same stale value. Measured on a test
+ * clock advanced past trial end (2026-08-10): status `active`, real period end
+ * 2026-10-09, `trial_end` still 2026-09-09 — and 2026-09-09 was what we stored.
+ *
+ * Gating on status rather than on "is trial_end in the future" is deliberate:
+ * Stripe's own status is the authority on whether a trial is running, and a
+ * date comparison would additionally depend on clock skew.
  */
 export function resolveSubscriptionPeriodEndAt(subscription: Stripe.Subscription): Date | null {
-  if (typeof subscription.trial_end === 'number') {
+  if (subscription.status === 'trialing' && typeof subscription.trial_end === 'number') {
     return new Date(subscription.trial_end * 1000);
   }
   const itemPeriodEnd = subscription.items?.data?.[0]?.current_period_end;

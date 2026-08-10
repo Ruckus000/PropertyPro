@@ -5,9 +5,10 @@ run the flow end to end yourself, and what to do when a real customer's payment
 goes wrong.
 
 Verified end to end against Stripe test mode and a local Supabase stack on
-2026-08-09 — the first time this path had ever been exercised whole, by CI or by
-a human. Three defects were found doing it; all three are fixed and are
-described below, because each one tells you something about how the flow fails.
+2026-08-09, and through trial end via a Stripe test clock on 2026-08-10 — the
+first time this path had ever been exercised whole, by CI or by a human. Four
+defects were found doing it; all four are fixed and are described below, because
+each one tells you something about how the flow fails.
 
 ---
 
@@ -131,7 +132,27 @@ its real status; `markCommunityPaymentSucceeded` now *requires* the status
 rather than defaulting it, so the assumption cannot be reintroduced by omission.
 "Payment succeeded" now means only what it says: not failed.
 
-### 2.3 The E2E could never have passed
+### 2.3 The renewal date froze at the trial end (found 2026-08-10)
+
+**Symptom.** After a trial converted, `communities.subscription_current_period_end_at`
+still held the trial-end date — a date in the past — and it never advanced,
+because every later renewal recomputed the same value.
+
+**Cause.** `resolveSubscriptionPeriodEndAt` preferred `trial_end` whenever it was
+a number. Stripe does **not** clear `trial_end` when a trial converts; it stays
+on the subscription as a historical fact. Measured on a test clock advanced past
+trial end: subscription `active`, real period end **2026-10-09**, `trial_end`
+still **2026-09-09** — and 2026-09-09 was what we stored.
+
+**Fix.** Prefer `trial_end` only while `status === 'trialing'`, otherwise use the
+item's `current_period_end`. Gating on Stripe's status rather than on "is
+`trial_end` in the future" is deliberate: the status is the authority on whether
+a trial is running, and a date comparison would also depend on clock skew.
+
+This one is only visible in the database or on a renewal-date UI — a date is a
+date, so nothing looks broken until a customer reads it.
+
+### 2.4 The E2E could never have passed
 
 `signup-trialing.spec.ts` existed but had never run. Three things in
 `fillStripeEmbeddedCheckout` were wrong, and each failed in a way that pointed
@@ -159,6 +180,9 @@ Needs Stripe **test-mode** keys and a **local** Supabase stack. The spec refuses
 to run against the known production Supabase ref, and refuses a non-`sk_test_`
 key — do not defeat either; it creates real auth users and communities.
 
+The trial-end spec additionally needs no setup beyond the above — it creates and
+advances its own Stripe test clock.
+
 ```bash
 # 1. Local Supabase (auto_expose_new_tables = true under [api] in config.toml)
 supabase start
@@ -175,8 +199,14 @@ stripe listen --api-key sk_test_… --forward-to localhost:3000/api/v1/webhooks/
 
 # 4. Run
 E2E_STRIPE=1 pnpm --filter @propertypro/web exec playwright test \
-  -c playwright.config.ts e2e/signup-trialing.spec.ts e2e/signup-failure-paths.spec.ts
+  -c playwright.config.ts e2e/signup-trialing.spec.ts e2e/signup-failure-paths.spec.ts \
+  e2e/signup-trial-end.spec.ts
 ```
+
+If another checkout already runs a Supabase stack, start your own on shifted
+ports rather than sharing one: a stack torn down mid-run by another session
+surfaces as `subdomain.check.db_failure` and a 400 from `/api/v1/auth/signup`,
+which looks like a validation bug rather than a missing database.
 
 If :3000 is taken by another worktree, set `PLAYWRIGHT_WEB_PORT` (and forward
 webhooks to that port). `reuseExistingServer` is always on, so without this
@@ -193,6 +223,7 @@ seed.
 |---|---|
 | `signup-trialing` | full path to `trialing`; then that a **second signup with the paid email is refused** (400, "already exists") — otherwise a paying customer can buy a second community |
 | `signup-failure-paths` | declined card (`4000 0000 0000 0002`) provisions nothing; abandoned checkout provisions nothing; a duplicate signup *before* payment may resubmit |
+| `signup-trial-end` | day 30 via a Stripe **test clock**: trial expires, the first REAL invoice is charged, the community becomes `active`, and it keeps both its plan and a correctly-advanced renewal date |
 
 ---
 

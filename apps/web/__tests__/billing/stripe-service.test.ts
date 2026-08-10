@@ -150,10 +150,32 @@ describe('stripe-service', () => {
       const svc = await importService();
       const trialEnd = Math.floor(Date.UTC(2026, 7, 12) / 1000);
       const result = svc.resolveSubscriptionPeriodEndAt({
+        status: 'trialing',
         trial_end: trialEnd,
         items: { data: [{ current_period_end: 999 }] },
       } as never);
       expect(result?.getTime()).toBe(trialEnd * 1000);
+    });
+
+    // Stripe does NOT clear `trial_end` when a trial converts — it stays on the
+    // subscription as a historical fact. Preferring it unconditionally therefore
+    // reports a date in the PAST as the current period end for every active
+    // subscription that ever had a trial, and never advances: each renewal
+    // recomputes the same stale value.
+    //
+    // Measured on a Stripe test clock advanced past trial end (2026-08-10): the
+    // subscription was `active` with a real period end of 2026-10-09, while
+    // `trial_end` still read 2026-09-09 — and 2026-09-09 is what we stored.
+    it('ignores a stale trial_end once the subscription has converted', async () => {
+      const svc = await importService();
+      const trialEnd = Math.floor(Date.UTC(2026, 8, 9) / 1000);
+      const periodEnd = Math.floor(Date.UTC(2026, 9, 9) / 1000);
+      const result = svc.resolveSubscriptionPeriodEndAt({
+        status: 'active',
+        trial_end: trialEnd,
+        items: { data: [{ current_period_end: periodEnd }] },
+      } as never);
+      expect(result?.getTime()).toBe(periodEnd * 1000);
     });
 
     it('falls back to the item current_period_end when there is no trial', async () => {
