@@ -30,7 +30,12 @@ vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
 }));
 
-vi.mock('@propertypro/shared', () => ({
+// Spread the real module rather than listing two exports: this service also
+// reaches `calculatePostingDeadline` (now single-sourced in @propertypro/shared),
+// and a bare factory mock silently turns any un-listed export into `undefined`
+// at call time rather than failing at import.
+vi.mock('@propertypro/shared', async (importActual) => ({
+  ...(await importActual<typeof import('@propertypro/shared')>()),
   getComplianceTemplate: getComplianceTemplateMock,
   getFeaturesForCommunity: getFeaturesForCommunityMock,
 }));

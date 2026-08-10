@@ -24,24 +24,13 @@ export interface ComplianceStatusInput {
   now?: Date;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
- * Calculate the posting deadline from a source date (default 30 days).
- *
- * §718.111(12)(g) states 30 days as a MAXIMUM, and grants no weekend
- * exception. Until the 2026-08-09 feature-correctness audit this rolled a
- * weekend landing forward to Monday, which told managers they had 31 or 32 days
- * and let a posting made after the statutory date read as "satisfied". A
- * weekend rule has no direction it can move a maximum without misstating it, so
- * it is not applied here at all — the deadline is exactly the statute.
- *
- * The offset is exact elapsed time, not `date-fns` `addDays`: a local-calendar
- * shift returns a 719-hour "30 days" across DST spring-forward.
+ * Re-exported so existing `@/lib/utils/compliance-calculator` importers keep
+ * working. The implementation — and the reasoning for why 30 days carries no
+ * weekend adjustment — lives in `@propertypro/shared`, because this rule had
+ * drifted into three separate copies and only this one was being fixed.
  */
-export function calculatePostingDeadline(sourceDate: Date, days: number = 30): Date {
-  return new Date(sourceDate.getTime() + days * DAY_MS);
-}
+export { calculatePostingDeadline } from '@propertypro/shared';
 
 /**
  * Rolling window start boundary for compliance checks.

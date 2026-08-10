@@ -56,9 +56,33 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 import {
+  decideArcSubmissionForCommunity,
   imposeViolationFineForCommunity,
   updateViolationForCommunity,
 } from '../../src/lib/services/violations-service';
+
+function createArcSubmissionRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 7,
+    communityId: 42,
+    unitId: 9,
+    submittedByUserId: 'resident-1',
+    title: 'Fence',
+    description: 'Six-foot wood fence along the north property line',
+    projectType: 'exterior_modification',
+    estimatedStartDate: null,
+    estimatedCompletionDate: null,
+    attachmentDocumentIds: [],
+    status: 'submitted',
+    reviewNotes: null,
+    decidedByUserId: null,
+    decidedAt: null,
+    createdAt: new Date('2026-03-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-03-01T00:00:00.000Z'),
+    deletedAt: null,
+    ...overrides,
+  };
+}
 
 function createViolationRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -104,6 +128,93 @@ describe('violations-service', () => {
     vi.clearAllMocks();
     sendNotificationMock.mockResolvedValue(undefined);
     logAuditEventMock.mockResolvedValue(undefined);
+  });
+
+  // HB 1203 requires an ARC/ACC denial to state the specific reason and cite the
+  // rule or covenant relied on. The route contract enforces this too, but this
+  // service is the last line — it is what any non-route caller reaches, and it
+  // is where the `?? existing.reviewNotes` fallback lives.
+  describe('decideArcSubmissionForCommunity — HB 1203 denial reasons', () => {
+    function mockSubmission(row: Record<string, unknown>) {
+      const update = vi.fn().mockResolvedValue([{ ...row, status: 'denied' }]);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([row]),
+        update,
+        insert: vi.fn(),
+      });
+      return update;
+    }
+
+    it('rejects a denial with no written reason', async () => {
+      const update = mockSubmission(createArcSubmissionRow({ reviewNotes: null }));
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'denied',
+          reviewNotes: null,
+        }),
+      ).rejects.toMatchObject({ statusCode: 422 });
+
+      expect(update).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+      expect(sendNotificationMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a denial whose written reason is only whitespace', async () => {
+      const update = mockSubmission(createArcSubmissionRow({ reviewNotes: null }));
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'denied',
+          reviewNotes: '   \n\t ',
+        }),
+      ).rejects.toMatchObject({ statusCode: 422 });
+
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('accepts a denial whose reason was already recorded by an earlier review step', async () => {
+      // The service falls back to `existing.reviewNotes`, so notes left during
+      // `review` satisfy the requirement without being resent on the decision.
+      const update = mockSubmission(
+        createArcSubmissionRow({
+          status: 'under_review',
+          reviewNotes: 'Denied under Declaration Art. VII §3 — exceeds 4ft height limit.',
+        }),
+      );
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'denied',
+          reviewNotes: null,
+        }),
+      ).resolves.toMatchObject({ status: 'denied' });
+
+      expect(update).toHaveBeenCalledWith(
+        tables.arcSubmissions,
+        expect.objectContaining({ status: 'denied' }),
+        { eq: [undefined, 7] },
+      );
+    });
+
+    it('does not require a reason to APPROVE', async () => {
+      const row = createArcSubmissionRow({ reviewNotes: null });
+      const update = vi.fn().mockResolvedValue([{ ...row, status: 'approved' }]);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([row]),
+        update,
+        insert: vi.fn(),
+      });
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'approved',
+          reviewNotes: null,
+        }),
+      ).resolves.toMatchObject({ status: 'approved' });
+
+      expect(update).toHaveBeenCalled();
+    });
   });
 
   it('throws a conflict error when a concurrent status change wins the update race', async () => {

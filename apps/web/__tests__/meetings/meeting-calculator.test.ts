@@ -34,14 +34,24 @@ describe('p1-16 meeting calculator', () => {
     expect(postBy.toISOString().slice(0, 10) >= '2026-11-13').toBe(true);
   });
 
-  it('applies weekend rollover forward to Monday for post-by dates', () => {
-    // Meeting on Monday Feb 11, 2026 in EST → 14 days prior lands on a Tuesday (Jan 28) typically
-    const meeting = new Date('2026-02-11T14:00:00-05:00');
+  // This case was named "applies weekend rollover forward to Monday" and used a
+  // meeting whose 14-day mark (Wed 2026-01-28) never touched a weekend — so it
+  // passed no matter which direction the roll went, and would not have caught
+  // the original zero-notice bug or its fix. Re-pointed at a start date whose
+  // deadline genuinely lands on a Sunday.
+  it('rolls a post-by date that lands on a weekend BACK to a weekday', () => {
+    // Sat 2026-02-14 14:00 EST minus 14 days = Sun 2026-01-31.
+    const meeting = new Date('2026-02-14T14:00:00-05:00');
     const postBy = calculateNoticePostBy(meeting, 'annual', 'condo_718');
     expect(Number.isNaN(postBy.getTime())).toBe(false);
-    // Ensure we get a weekday (Mon-Fri)
-    const dow = postBy.getUTCDay();
+
+    // Weekday in the zone the rule is evaluated in (the server's — see the
+    // documented timezone limitation on calculateNoticePostBy).
+    const dow = postBy.getDay();
     expect(dow === 0 || dow === 6).toBe(false);
+
+    // And the roll went backwards: still at least the statutory 14 days.
+    expect(meeting.getTime() - postBy.getTime()).toBeGreaterThanOrEqual(14 * 24 * 60 * 60 * 1000);
   });
 
   it('reflects Florida timezone split as one-hour UTC difference for deadlines', () => {

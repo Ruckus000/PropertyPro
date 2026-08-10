@@ -11,26 +11,13 @@ import {
 // AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
+  calculatePostingDeadline,
   getComplianceTemplate,
   type CommunityType,
 } from '@propertypro/shared';
 import { runOpsScript } from './lib/run-ops-script';
 
 const db = createUnscopedClient();
-
-function calculatePostingDeadline(sourceDate: Date, days: number): Date {
-  const deadline = new Date(sourceDate);
-  deadline.setUTCDate(deadline.getUTCDate() + days);
-
-  const weekday = deadline.getUTCDay();
-  if (weekday === 6) {
-    deadline.setUTCDate(deadline.getUTCDate() + 2);
-  } else if (weekday === 0) {
-    deadline.setUTCDate(deadline.getUTCDate() + 1);
-  }
-
-  return deadline;
-}
 
 async function backfillCommunity(
   communityId: number,

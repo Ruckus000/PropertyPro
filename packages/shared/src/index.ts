@@ -53,6 +53,7 @@ export function toInitials(name: string | null): string {
 
 export * from './branding';
 export * from './compliance/templates';
+export * from './compliance/posting-deadline';
 export * from './access-policies';
 export * from './default-document-categories';
 export * from './rbac-matrix';
