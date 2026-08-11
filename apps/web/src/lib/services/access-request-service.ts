@@ -344,15 +344,15 @@ export async function approveAccessRequest(params: {
   // the email address, so a retry would fail "already registered" forever —
   // the account has to go back.
   try {
-    if (existingUserId) {
-      // Row already exists (pre-provisioned elsewhere): update it in place
-      // rather than inserting a duplicate that the UNIQUE email would reject.
-      await scoped.update(
-        users,
-        { fullName: requestFullName, phone: requestPhone },
-        eq(users.id, userId),
-      );
-    } else {
+    // Only INSERT when the row is genuinely new. When adopting an existing row
+    // we deliberately leave `fullName` / `phone` alone: that row is shared with
+    // every other community this person belongs to (`users` has no
+    // `community_id`), so writing this request's self-reported values there
+    // would overwrite another association's data — and blank out a stored phone
+    // whenever the request form did not collect one. Nothing here requires the
+    // profile to be fresh; the invariant this code owns is
+    // `public.users.id === auth.users.id`.
+    if (!existingUserId) {
       await scoped.insert(users, {
         id: userId,
         email: requestEmail,

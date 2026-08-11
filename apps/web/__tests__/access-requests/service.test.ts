@@ -28,7 +28,10 @@ const {
   createAdminClientMock: vi.fn(),
   tables: {
     accessRequests: Symbol('access_requests'),
-    users: Symbol('users'),
+    // Real per-column identities, not a bare Symbol: the approval path does
+    // `eq(users.email, ...)`, and on a Symbol that argument is `undefined`,
+    // which makes any predicate assertion pass for ANY column.
+    users: { __table: 'users', id: Symbol('users.id'), email: Symbol('users.email') },
     userRoles: Symbol('user_roles'),
     communities: Symbol('communities'),
     notificationPreferences: Symbol('notification_preferences'),
@@ -50,7 +53,12 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
-  eq: vi.fn((_col: unknown, _val: unknown) => ({ _type: 'eq' })),
+  // Preserves column + value. A bare `{ _type: 'eq' }` would make every
+  // predicate assertion vacuous: approval adopts an existing `users` row found
+  // by this filter, so a regression that dropped the email condition — or
+  // matched the wrong column — would adopt an ARBITRARY user and bind an auth
+  // account to their identity, with the whole suite still green.
+  eq: vi.fn((col: unknown, val: unknown) => ({ _type: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ _type: 'and', args })),
   isNull: vi.fn((_col: unknown) => ({ _type: 'isNull' })),
   inArray: vi.fn((_col: unknown, _vals: unknown) => ({ _type: 'inArray' })),
@@ -615,11 +623,67 @@ describe('access-request-service', () => {
         'existing-user-uuid',
       );
 
-      // The existing row is UPDATED, never re-inserted — a second insert would
-      // violate the UNIQUE email constraint.
+      // The lookup MUST be constrained to this request's email. Without this
+      // assertion a regression that dropped the predicate would adopt whichever
+      // row came back first — binding an auth account to a stranger's identity.
+      expect(scoped.selectFrom).toHaveBeenCalledWith(
+        tables.users,
+        expect.anything(),
+        expect.objectContaining({
+          _type: 'eq',
+          col: tables.users.email,
+          val: 'preprovisioned@example.com',
+        }),
+      );
+
+      // The existing row is never re-inserted — that would violate the UNIQUE
+      // email constraint.
       const insertedTables = scoped.insert.mock.calls.map((call) => call[0]);
       expect(insertedTables).not.toContain(tables.users);
       expect(insertedTables).toContain(tables.userRoles);
+    });
+
+    it('does NOT write to the adopted users row — it is shared across communities', async () => {
+      // `users` has no `community_id`, so that row belongs to every community
+      // this person is in. Writing the request's self-reported fullName/phone
+      // there would overwrite another association's data, and would blank out a
+      // stored phone whenever this form did not collect one. It would also be
+      // unrecoverable: the rollback below restores the auth account, not row
+      // contents.
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'preprovisioned@example.com',
+            fullName: 'Name From This Request',
+            phone: null,
+            status: 'pending',
+            isUnitOwner: false,
+          },
+        ],
+      });
+      scoped.selectFrom.mockResolvedValue([{ id: 'existing-user-uuid' }]);
+
+      createAdminClientMock.mockReturnValue({
+        auth: {
+          admin: {
+            createUser: vi
+              .fn()
+              .mockResolvedValue({ data: { user: { id: 'existing-user-uuid' } }, error: null }),
+          },
+        },
+      });
+
+      await approveAccessRequest({
+        requestId: 10,
+        communityId: COMMUNITY_ID,
+        reviewerId: 'reviewer-uuid',
+      });
+
+      // The only update is the access-request status transition.
+      const updatedTables = scoped.update.mock.calls.map((call) => call[0]);
+      expect(updatedTables).not.toContain(tables.users);
+      expect(updatedTables).toEqual([tables.accessRequests]);
     });
 
     it('rolls the auth user back when a later insert fails', async () => {
