@@ -11,7 +11,7 @@
  *   7. Minutes posting deadline = 30 days after meeting
  */
 import { NextRequest } from 'next/server';
-import { subDays, addDays, isWeekend, isSameDay, nextMonday, startOfDay } from 'date-fns';
+import { addDays, isWeekend, isSameDay, previousFriday, startOfDay } from 'date-fns';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -96,13 +96,30 @@ function requireMeetingsRoute(): MeetingsRouteModule {
 }
 
 /**
- * Mirror the weekend-forward adjustment from meeting-calculator.ts
- * so we can predict exact deadline values in assertions.
+ * Mirror `adjustWeekendBackward` from meeting-calculator.ts.
+ *
+ * These deadlines are **lead-time minimums** — a "post this BY" date sitting
+ * *before* the event — so a weekend landing may only ever move EARLIER. Rolling
+ * one forward shortens the notice period, which is the defect fixed in the
+ * 2026-08-09 feature-correctness audit (D1): a Monday-morning board meeting was
+ * assigned a deadline equal to its own start instant, i.e. zero hours of notice
+ * against a 48-hour statutory minimum.
+ *
+ * This helper previously rolled FORWARD, matching the old buggy production
+ * behaviour. It passed only on calendar dates where the deadline missed a
+ * weekend — roughly five days in seven — so the suite went green on main and
+ * red here purely because this run crossed UTC midnight. The audit fixed the
+ * production math and the unit tests but never swept the integration suite.
  */
-function adjustWeekendForward(date: Date): Date {
+/** Elapsed-ms shift, matching production's `shiftDays`. */
+function shiftDaysExact(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function adjustWeekendBackward(date: Date): Date {
   const dayStart = startOfDay(date);
   if (!isWeekend(dayStart)) return date;
-  return nextMonday(dayStart);
+  return previousFriday(dayStart);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +201,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     expect(deadlines).toHaveProperty('minutesPostBy');
     expect(typeof deadlines['minutesPostBy']).toBe('string');
 
-    const expectedNoticeBy = adjustWeekendForward(subDays(meetingDate, 2));
+    const expectedNoticeBy = adjustWeekendBackward(shiftDaysExact(meetingDate, -2));
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
@@ -220,7 +237,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     if (!meeting) throw new Error('Annual meeting not found');
 
     const deadlines = meeting['deadlines'] as Record<string, string>;
-    const expectedNoticeBy = adjustWeekendForward(subDays(meetingDate, 14));
+    const expectedNoticeBy = adjustWeekendBackward(shiftDaysExact(meetingDate, -14));
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
@@ -247,7 +264,10 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
 
     const startsAt = new Date(meeting['startsAt'] as string);
     const deadlines = meeting['deadlines'] as Record<string, string>;
-    const expectedMinutesBy = adjustWeekendForward(addDays(startsAt, 30));
+    // §718.111(12)(g) grants no weekend exception, and this is a
+    // MAXIMUM, not a lead time: rolling it forward would advertise day 31
+    // or 32 as compliant. The deadline is exactly the statute.
+    const expectedMinutesBy = shiftDaysExact(startsAt, 30);
     const actualMinutesBy = new Date(deadlines['minutesPostBy']);
     expect(isSameDay(actualMinutesBy, expectedMinutesBy)).toBe(true);
   });

@@ -143,6 +143,35 @@ describe('p1-20 invitation auth flow', () => {
     expect(json.data.success).toBe(true);
   });
 
+  it('POST refuses a userId that is not a member of the community', async () => {
+    // `getUserForInvitation` reads `users`, which has NO `community_id` — the
+    // scoped client does not isolate it, so that lookup resolves ANY user on the
+    // platform. The role lookup DOES scope (user_roles carries community_id), so
+    // it is the only thing standing between an arbitrary user id and an
+    // invitation email branded with this community's name. It used to default a
+    // non-member to 'resident' and mail them anyway. Issue #940.
+    getCommunityNameForInvitationMock.mockResolvedValueOnce({ id: 99, name: 'Sunset Condos' });
+    getUserForInvitationMock.mockResolvedValueOnce({
+      id: 'outsider-1',
+      email: 'someone@another-association.example.com',
+      fullName: 'Someone Else',
+    });
+    getUserRoleForInvitationMock.mockResolvedValueOnce(null);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ communityId: 99, userId: 'outsider-1', ttlDays: 7 }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+
+    // No invitation minted, and above all no email sent to them.
+    expect(createInvitationMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
   it('POST returns 403 for authenticated non-member', async () => {
     requireCommunityMembershipMock.mockRejectedValueOnce(new ForbiddenError());
 
