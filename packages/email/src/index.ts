@@ -57,6 +57,9 @@ export type { SignupVerificationEmailProps } from "./templates/signup-verificati
 export { PaymentFailedEmail } from "./templates/payment-failed";
 export type { PaymentFailedEmailProps } from "./templates/payment-failed";
 
+export { AuthenticateCardEmail } from "./templates/authenticate-card";
+export type { AuthenticateCardEmailProps } from "./templates/authenticate-card";
+
 export { SubscriptionCanceledEmail } from "./templates/subscription-canceled";
 export type { SubscriptionCanceledEmailProps } from "./templates/subscription-canceled";
 

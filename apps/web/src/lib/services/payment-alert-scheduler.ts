@@ -20,6 +20,7 @@ import { and, eq, inArray, isNull, lte } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, users, userRoles } from '@propertypro/db';
 import {
+  AuthenticateCardEmail,
   PaymentFailedEmail,
   SubscriptionCanceledEmail,
   SubscriptionExpiryWarningEmail,
@@ -89,6 +90,20 @@ async function lookupAdminRecipients(
       and(
         eq(userRoles.communityId, communityId),
         inArray(userRoles.role, [...adminRoles]),
+        // Soft-deleted users are NOT ex-members as far as this query is
+        // concerned. `executeUserSoftDelete` stamps `users.deleted_at` and bans
+        // the Supabase auth identity, but deliberately leaves `user_roles`
+        // alone — the row is needed to restore the account inside the 6-month
+        // window. Without this predicate every billing alert kept reaching
+        // people who can no longer log in.
+        //
+        // That was survivable while the alerts carried only login-walled app
+        // URLs. It stopped being survivable with the SCA email, whose CTA is
+        // Stripe's `hosted_invoice_url` — a bearer capability needing no
+        // session, which lets the holder read the association's invoice and pay
+        // it. Ordinary role removal is unaffected: `user_roles` rows are
+        // hard-deleted, so only the soft-delete path leaked.
+        isNull(users.deletedAt),
       ),
     );
 
@@ -163,6 +178,79 @@ export async function sendPaymentFailedEmail(
         recipientName: r.fullName,
         amountDue: opts.amountDue,
         lastFourDigits: opts.lastFourDigits,
+        billingPortalUrl,
+      }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Public API: sendPaymentActionRequiredEmail (SCA — called directly from webhook)
+// ---------------------------------------------------------------------------
+
+export interface SendPaymentActionRequiredEmailOpts {
+  amountDue: string;
+  communityName: string;
+  /**
+   * Stripe's `invoice.hosted_invoice_url`, or `null` when Stripe did not
+   * provide one — in which case the billing portal is used instead.
+   *
+   * Bearer-ish — it authorises viewing and paying the invoice with no further
+   * check, and with no session. Application code puts it in the email body and
+   * nowhere else: not a log line, not an audit-log payload, not an error
+   * message. `compliance_audit_log` matters most, being board-readable and
+   * append-only, so a leak there would be permanent.
+   *
+   * Known residual, outside this code's control: `@sentry/nextjs` buffers
+   * incoming request bodies (`maxRequestBodySize` defaults to 'medium') and
+   * `beforeSend` in `sentry.server.config.ts` strips headers but not
+   * `event.request.data`, so an exception raised inside the Stripe webhook
+   * request may still carry the raw invoice JSON. Tracked in issue 951 — do not
+   * read this docblock as a guarantee that extends to Sentry.
+   */
+  authenticateUrl: string | null;
+}
+
+/**
+ * Sends the SCA "confirm this payment" email on `invoice.payment_action_required`.
+ *
+ * Shares `lookupAdminRecipients` and `sendToAll` with the other billing alerts —
+ * recipient resolution is genuinely the same job, and duplicating the role-tier
+ * branching is how one copy silently stops matching the role model. Only the
+ * template and the subject differ, which is the whole reason those two helpers
+ * were factored out in the first place.
+ */
+export async function sendPaymentActionRequiredEmail(
+  communityId: number,
+  opts: SendPaymentActionRequiredEmailOpts,
+): Promise<void> {
+  const db = createUnscopedClient();
+  const communityRows = await db
+    .select({ communityType: communities.communityType })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+
+  const communityType = communityRows[0]?.communityType ?? 'condo_718';
+  const recipients = await lookupAdminRecipients(communityId, communityType);
+  if (recipients.length === 0) return;
+
+  const billingPortalUrl = `${getBaseUrl()}/billing/portal?communityId=${communityId}`;
+
+  await sendToAll(
+    recipients,
+    // Deliberately not the word "failed". Stripe fires this BEFORE the payment
+    // gives up, and a subject claiming failure would make a recipient replace a
+    // perfectly good card instead of completing the bank's check.
+    `Confirm your payment of ${opts.amountDue} for ${opts.communityName}`,
+    (r) =>
+      createElement(AuthenticateCardEmail, {
+        branding: { communityName: opts.communityName },
+        recipientName: r.fullName,
+        amountDue: opts.amountDue,
+        // Falling back to the portal keeps the email useful rather than
+        // dropping it: the message is still correct, and a payment started from
+        // the portal is on-session, so the bank's check can be completed there.
+        authenticateUrl: opts.authenticateUrl ?? billingPortalUrl,
         billingPortalUrl,
       }),
   );
