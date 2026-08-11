@@ -21,7 +21,7 @@ import {
   users,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createAuthUserBoundTo } from '@/lib/services/auth-user-binding';
 
 export interface InvitationCommunityName {
   name: string;
@@ -184,60 +184,18 @@ export async function createSupabaseAuthUserFromInvitation(params: {
   fullName: string | null;
   externalUserId: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin.auth.admin.createUser({
-      // The invitee's `users` row (and the `user_roles` row carrying their unit
-      // and owner/tenant binding) was created when the admin invited them, with
-      // this id. Supabase must adopt it rather than mint its own: middleware
-      // stamps the SESSION user id into `x-user-id`, and every membership
-      // lookup keys off it. Diverge here and the invitee signs in successfully
-      // and owns nothing — no community, no unit, no role.
-      id: params.externalUserId,
-      email: params.email,
-      password: params.password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: params.fullName,
-        external_user_id: params.externalUserId,
-      },
-    });
-    if (error) {
-      return { ok: false, error: error.message };
-    }
-    // Verify rather than assume. If a future GoTrue ignores the requested id,
-    // the failure mode is silent and only shows up when the invitee finds an
-    // empty app — so refuse to report success on a mismatch.
-    const createdId = data?.user?.id;
-    if (createdId !== params.externalUserId) {
-      // Roll the auth user back before bailing out. It already holds the
-      // invitee's email address, and the caller leaves the invitation
-      // UNCONSUMED so the link still works — but a retry would then hit
-      // "email already registered" forever, turning a recoverable anomaly into
-      // a permanently dead invitation. Best-effort: if the delete also fails,
-      // report both, because at that point the account needs a human.
-      let rollback = 'rolled back';
-      if (createdId) {
-        try {
-          const { error: deleteError } = await admin.auth.admin.deleteUser(createdId);
-          if (deleteError) rollback = `rollback FAILED: ${deleteError.message}`;
-        } catch (deleteErr) {
-          rollback = `rollback FAILED: ${
-            deleteErr instanceof Error ? deleteErr.message : String(deleteErr)
-          }`;
-        }
-      }
-      return {
-        ok: false,
-        error:
-          `Supabase created auth user ${createdId ?? 'with no id'} but the invitation `
-          + `expects ${params.externalUserId}; refusing to leave the account unlinked `
-          + `(${rollback})`,
-      };
-    }
-    return { ok: true };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: message };
-  }
+  // The invitee's `users` row — and the `user_roles` row carrying their unit and
+  // owner/tenant binding — was created when the admin invited them, days
+  // earlier, with this id. So the id is ALWAYS known here and must always be
+  // adopted; see auth-user-binding.ts for why that matters and what happens on
+  // a mismatch.
+  const result = await createAuthUserBoundTo({
+    email: params.email,
+    password: params.password,
+    fullName: params.fullName,
+    userId: params.externalUserId,
+    metadata: { external_user_id: params.externalUserId },
+  });
+
+  return result.ok ? { ok: true } : { ok: false, error: result.error };
 }

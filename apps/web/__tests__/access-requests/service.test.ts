@@ -28,7 +28,10 @@ const {
   createAdminClientMock: vi.fn(),
   tables: {
     accessRequests: Symbol('access_requests'),
-    users: Symbol('users'),
+    // Real per-column identities, not a bare Symbol: the approval path does
+    // `eq(users.email, ...)`, and on a Symbol that argument is `undefined`,
+    // which makes any predicate assertion pass for ANY column.
+    users: { __table: 'users', id: Symbol('users.id'), email: Symbol('users.email') },
     userRoles: Symbol('user_roles'),
     communities: Symbol('communities'),
     notificationPreferences: Symbol('notification_preferences'),
@@ -50,7 +53,12 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
-  eq: vi.fn((_col: unknown, _val: unknown) => ({ _type: 'eq' })),
+  // Preserves column + value. A bare `{ _type: 'eq' }` would make every
+  // predicate assertion vacuous: approval adopts an existing `users` row found
+  // by this filter, so a regression that dropped the email condition — or
+  // matched the wrong column — would adopt an ARBITRARY user and bind an auth
+  // account to their identity, with the whole suite still green.
+  eq: vi.fn((col: unknown, val: unknown) => ({ _type: 'eq', col, val })),
   and: vi.fn((...args: unknown[]) => ({ _type: 'and', args })),
   isNull: vi.fn((_col: unknown) => ({ _type: 'isNull' })),
   inArray: vi.fn((_col: unknown, _vals: unknown) => ({ _type: 'inArray' })),
@@ -128,11 +136,18 @@ function setupScopedMock(overrides: {
   // exercise the rejection path.
   const queryByIdMock = vi.fn(async (_table: unknown, id: number) => ({ id }));
 
+  // Approval looks up an existing `users` row by email before creating the auth
+  // account, so it can adopt that row's id (issue #944). Default to "no existing
+  // row" — the ordinary new-resident case; tests override it to model someone
+  // pre-provisioned by another community.
+  const selectFromMock = vi.fn(async () => []);
+
   const scoped = {
     query: queryMock,
     insert: insertMock,
     update: updateMock,
     queryById: queryByIdMock,
+    selectFrom: selectFromMock,
   };
 
   createScopedClientMock.mockReturnValue(scoped);
@@ -566,6 +581,190 @@ describe('access-request-service', () => {
       expect(scoped.update).not.toHaveBeenCalled();
       // No users/roles should have been inserted
       expect(scoped.insert).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // Issue #944 — identity binding and rollback
+    // -----------------------------------------------------------------------
+
+    it('ADOPTS an existing users row id instead of minting a new one', async () => {
+      // The pre-provisioned case: this person already has a `users` row created
+      // by another community. `users` is not tenant-scoped, so the lookup finds
+      // it. Letting Supabase mint a fresh id here would (a) break
+      // public.users.id === auth.users.id and (b) make the users INSERT fail on
+      // the UNIQUE email — after the auth account already exists.
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'preprovisioned@example.com',
+            fullName: 'Pre Provisioned',
+            phone: null,
+            status: 'pending',
+            isUnitOwner: false,
+          },
+        ],
+      });
+      scoped.selectFrom.mockResolvedValue([{ id: 'existing-user-uuid' }]);
+
+      const createUser = vi
+        .fn()
+        .mockResolvedValue({ data: { user: { id: 'existing-user-uuid' } }, error: null });
+      createAdminClientMock.mockReturnValue({ auth: { admin: { createUser } } });
+
+      const result = await approveAccessRequest({
+        requestId: 10,
+        communityId: COMMUNITY_ID,
+        reviewerId: 'reviewer-uuid',
+      });
+
+      expect(result.userId).toBe('existing-user-uuid');
+      expect((createUser.mock.calls[0]![0] as Record<string, unknown>)['id']).toBe(
+        'existing-user-uuid',
+      );
+
+      // The lookup MUST be constrained to this request's email. Without this
+      // assertion a regression that dropped the predicate would adopt whichever
+      // row came back first — binding an auth account to a stranger's identity.
+      expect(scoped.selectFrom).toHaveBeenCalledWith(
+        tables.users,
+        expect.anything(),
+        expect.objectContaining({
+          _type: 'eq',
+          col: tables.users.email,
+          val: 'preprovisioned@example.com',
+        }),
+      );
+
+      // The existing row is never re-inserted — that would violate the UNIQUE
+      // email constraint.
+      const insertedTables = scoped.insert.mock.calls.map((call) => call[0]);
+      expect(insertedTables).not.toContain(tables.users);
+      expect(insertedTables).toContain(tables.userRoles);
+    });
+
+    it('does NOT write to the adopted users row — it is shared across communities', async () => {
+      // `users` has no `community_id`, so that row belongs to every community
+      // this person is in. Writing the request's self-reported fullName/phone
+      // there would overwrite another association's data, and would blank out a
+      // stored phone whenever this form did not collect one. It would also be
+      // unrecoverable: the rollback below restores the auth account, not row
+      // contents.
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'preprovisioned@example.com',
+            fullName: 'Name From This Request',
+            phone: null,
+            status: 'pending',
+            isUnitOwner: false,
+          },
+        ],
+      });
+      scoped.selectFrom.mockResolvedValue([{ id: 'existing-user-uuid' }]);
+
+      createAdminClientMock.mockReturnValue({
+        auth: {
+          admin: {
+            createUser: vi
+              .fn()
+              .mockResolvedValue({ data: { user: { id: 'existing-user-uuid' } }, error: null }),
+          },
+        },
+      });
+
+      await approveAccessRequest({
+        requestId: 10,
+        communityId: COMMUNITY_ID,
+        reviewerId: 'reviewer-uuid',
+      });
+
+      // The only update is the access-request status transition.
+      const updatedTables = scoped.update.mock.calls.map((call) => call[0]);
+      expect(updatedTables).not.toContain(tables.users);
+      expect(updatedTables).toEqual([tables.accessRequests]);
+    });
+
+    it('rolls the auth user back when a later insert fails', async () => {
+      // Without this the account is already loginable (email_confirm: true) and
+      // holds the address, so every retry fails "already registered" — a
+      // permanently wedged request plus an orphan account.
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'resident@example.com',
+            fullName: 'New Resident',
+            phone: null,
+            status: 'pending',
+            isUnitOwner: false,
+          },
+        ],
+      });
+      scoped.insert.mockRejectedValueOnce(new Error('duplicate key value violates unique constraint'));
+
+      const deleteUser = vi.fn().mockResolvedValue({ error: null });
+      createAdminClientMock.mockReturnValue({
+        auth: {
+          admin: {
+            createUser: vi
+              .fn()
+              .mockResolvedValue({ data: { user: { id: 'new-user-uuid' } }, error: null }),
+            deleteUser,
+          },
+        },
+      });
+
+      await expect(
+        approveAccessRequest({
+          requestId: 10,
+          communityId: COMMUNITY_ID,
+          reviewerId: 'reviewer-uuid',
+        }),
+      ).rejects.toThrow(/duplicate key/);
+
+      expect(deleteUser).toHaveBeenCalledWith('new-user-uuid');
+      // The request stays pending so an admin can retry — and the retry can now
+      // succeed, because the orphan is gone.
+      expect(scoped.update).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed rollback rather than hiding it behind the original error', async () => {
+      const scoped = setupScopedMock({
+        accessRequestRows: [
+          {
+            id: 10,
+            email: 'resident@example.com',
+            fullName: 'New Resident',
+            phone: null,
+            status: 'pending',
+            isUnitOwner: false,
+          },
+        ],
+      });
+      scoped.insert.mockRejectedValueOnce(new Error('db exploded'));
+
+      createAdminClientMock.mockReturnValue({
+        auth: {
+          admin: {
+            createUser: vi
+              .fn()
+              .mockResolvedValue({ data: { user: { id: 'new-user-uuid' } }, error: null }),
+            deleteUser: vi.fn().mockResolvedValue({ error: { message: 'auth unreachable' } }),
+          },
+        },
+      });
+
+      // At this point the account genuinely needs a human, so both facts must
+      // reach the operator.
+      await expect(
+        approveAccessRequest({
+          requestId: 10,
+          communityId: COMMUNITY_ID,
+          reviewerId: 'reviewer-uuid',
+        }),
+      ).rejects.toThrow(/db exploded.*rollback FAILED: auth unreachable/);
     });
   });
 

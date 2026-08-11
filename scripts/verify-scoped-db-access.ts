@@ -146,8 +146,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/queries/cross-community.ts'),
   // Cross-community notifications — aggregated feed across all communities the user belongs to.
   resolve(repoRoot, 'apps/web/src/app/api/v1/notifications/all/route.ts'),
-  // Invitation acceptance — creates Supabase auth user via admin client (service_role)
-  resolve(repoRoot, 'apps/web/src/lib/services/invitations-service.ts'),
+  // Binds a Supabase auth identity to a public.users row (service_role admin
+  // client). Single home for that rule — invitation acceptance and
+  // access-request approval both delegate here, so neither imports the admin
+  // client itself any more.
+  resolve(repoRoot, 'apps/web/src/lib/services/auth-user-binding.ts'),
   // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session.
   // The unsafe-client usage moved into demo-conversion service in A3 Phase 2,
   // so the route itself no longer needs the allowance.
@@ -205,8 +208,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/middleware/demo-grace-guard.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-session.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/demo-conversion.ts'),
-  // U-06: Access request service — pre-tenant OTP verification before communityId is scoped
-  resolve(repoRoot, 'apps/web/src/lib/services/access-request-service.ts'),
   // Public e-sign links are authorized by possession of submissionExternalId + signer slug
   // and must resolve across tenants before any community context exists.
   resolve(repoRoot, 'apps/web/src/lib/services/esign-service.ts'),
