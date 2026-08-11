@@ -83,10 +83,32 @@ function readFields(details: Record<string, unknown> | undefined): ApiErrorField
   return parsed.length > 0 ? parsed : undefined;
 }
 
-export async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+/** One advisory a route attached to an otherwise-successful mutation. */
+export interface ApiWarning {
+  code: string;
+  message: string;
+}
+
+/**
+ * `requestJson`, but keeping the `warnings` sibling instead of discarding it.
+ *
+ * A handful of routes return `{ data, warnings?: [...] }` — the document upload
+ * and, since #932, the meetings mutations. `requestJson` returns `.data` alone,
+ * so those advisories were unreachable to any caller that used it. This is the
+ * same request, the same error semantics, and the whole envelope.
+ *
+ * `warnings` is normalised to `[]` when absent, so callers never branch on
+ * undefined; a malformed value is treated as absent rather than passed through
+ * half-typed to a component that would render `undefined` at a board member.
+ */
+export async function requestJsonEnvelope<T>(
+  input: RequestInfo,
+  init?: RequestInit,
+): Promise<{ data: T; warnings: ApiWarning[] }> {
   const response = await fetch(input, init);
   const json = (await response.json()) as {
     data?: T;
+    warnings?: unknown;
     error?: { message?: string; code?: string; details?: Record<string, unknown> };
   };
   if (!response.ok) {
@@ -99,5 +121,21 @@ export async function requestJson<T>(input: RequestInfo, init?: RequestInit): Pr
   if (json.data === undefined) {
     throw new Error('Missing response payload');
   }
-  return json.data;
+  return { data: json.data, warnings: readWarnings(json.warnings) };
+}
+
+function readWarnings(raw: unknown): ApiWarning[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is ApiWarning =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as ApiWarning).code === 'string' &&
+      typeof (entry as ApiWarning).message === 'string',
+  );
+}
+
+export async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
+  const { data } = await requestJsonEnvelope<T>(input, init);
+  return data;
 }

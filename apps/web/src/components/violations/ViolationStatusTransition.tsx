@@ -6,6 +6,7 @@
  */
 import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
 import type { ViolationItem } from '@/lib/api/violations';
 
@@ -41,6 +42,10 @@ function NotesEditor({ value, onChange, placeholder }: NotesEditorProps) {
   );
 }
 import { updateViolation, imposeFine, resolveViolation, dismissViolation } from '@/lib/api/violations';
+import {
+  buildHearingNoticeWarning,
+  HEARING_NOTICE_DAYS,
+} from '@/lib/violations/hearing-notice-warning';
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss';
 
@@ -100,7 +105,27 @@ export function ViolationStatusTransition({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const minHearingDate = format(addDays(new Date(), 14), 'yyyy-MM-dd');
+  /**
+   * Warn, never block.
+   *
+   * This used to be a `min` attribute on the date input, which browsers enforce
+   * as a hard constraint — a board could not schedule an emergency hearing at
+   * all, and the rule is a bylaws convention rather than a statutory floor.
+   * Worse, `min` is client-only: the server accepted any date, so the "rule"
+   * bound the one form that already respected it and nothing else. Now the
+   * server computes the same warning (`buildHearingNoticeWarning`), and this
+   * calls that same function so the two cannot disagree.
+   */
+  const hearingNoticeWarning = buildHearingNoticeWarning({
+    // Parsed exactly as it will be SUBMITTED (`new Date(hearingDate)` — a bare
+    // `yyyy-MM-dd` is UTC midnight), not as local midnight. The two differ by
+    // the host's UTC offset, and while the rule's one-day tolerance currently
+    // absorbs that, an accidental asymmetry between what the form warns about
+    // and what it sends is the kind of thing that only surfaces after someone
+    // tightens the tolerance.
+    hearingDate: hearingDate ? new Date(hearingDate) : null,
+    now: new Date(),
+  });
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -134,12 +159,25 @@ export function ViolationStatusTransition({
             break;
           }
           case 'hearing': {
-            await updateViolation(violation.id, {
+            const result = await updateViolation(violation.id, {
               communityId,
               status: 'hearing_scheduled',
               hearingDate: new Date(hearingDate).toISOString(),
               resolutionNotes: notes.trim() || undefined,
             });
+            // The form closes on `onComplete()`, taking the live warning with
+            // it. Re-raise the server's copy as a toast so the record of a
+            // short-noticed hearing outlives the dialog — and so the server's
+            // warning is actually reachable rather than computed into a payload
+            // nothing reads. Dismiss-only: a compliance warning that fades in
+            // four seconds is one the board can honestly say it never saw.
+            for (const warning of result.data.warnings ?? []) {
+              toast.warning('Hearing scheduled — short notice', {
+                description: warning.message,
+                duration: Infinity,
+                closeButton: true,
+              });
+            }
             break;
           }
           case 'fine': {
@@ -190,13 +228,23 @@ export function ViolationStatusTransition({
               id="hearing-date"
               type="date"
               value={hearingDate}
-              min={minHearingDate}
               onChange={(e) => setHearingDate(e.target.value)}
               className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
-            <p className="mt-1 text-xs text-content-disabled">
-              Must be at least 14 days from today per Florida bylaw requirements.
-            </p>
+            {hearingNoticeWarning ? (
+              <p
+                role="status"
+                data-testid="hearing-notice-window-warning"
+                className="mt-1 rounded-md bg-status-warning-bg px-3 py-2 text-xs text-status-warning"
+              >
+                {hearingNoticeWarning.message}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-content-disabled">
+                Most Florida condo bylaws require at least {HEARING_NOTICE_DAYS} days&apos;
+                notice. Check your governing documents.
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="hearing-location" className="mb-1 block text-sm font-medium text-content-secondary">

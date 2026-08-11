@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardDescription, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useCreateMeeting, useMeeting, useUpdateMeeting } from '@/hooks/use-meetings';
+import { buildMeetingNoticeWarning } from '@/lib/meetings/notice-warning';
 import {
   utcDateToWallClockValue,
   wallClockValueToUtcIso,
 } from '@/lib/utils/zoned-datetime';
+import type { CommunityType } from '@propertypro/shared';
 
 type MeetingTypeOption = 'board' | 'annual' | 'special' | 'budget' | 'committee';
 
@@ -26,6 +28,8 @@ interface FormState {
 interface MeetingFormProps {
   communityId: number;
   communityTimezone: string;
+  /** Drives the notice lead time — condos and HOAs are noticed differently. */
+  communityType: CommunityType;
   meetingId?: number | null;
   onClose: () => void;
   onSuccess?: () => void;
@@ -98,9 +102,38 @@ function validateForm(state: FormState, isEditing: boolean): Record<string, stri
   return errors;
 }
 
+/**
+ * `null` for an incomplete or unparseable start — the field-level validator
+ * owns those, and a half-typed date must not produce a compliance claim.
+ */
+function buildLiveNoticeWarning(
+  state: FormState,
+  communityTimezone: string,
+  communityType: CommunityType,
+) {
+  if (!state.startsAt) {
+    return null;
+  }
+  try {
+    const startsAt = new Date(wallClockValueToUtcIso(state.startsAt, communityTimezone));
+    if (Number.isNaN(startsAt.getTime())) {
+      return null;
+    }
+    return buildMeetingNoticeWarning({
+      startsAt,
+      meetingType: state.meetingType,
+      communityType,
+      now: new Date(),
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function MeetingForm({
   communityId,
   communityTimezone,
+  communityType,
   meetingId,
   onClose,
   onSuccess,
@@ -149,6 +182,21 @@ export function MeetingForm({
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
+  /**
+   * The same warning the API returns, computed live so it is readable.
+   *
+   * Not a second copy of the rule — `buildMeetingNoticeWarning` is the one the
+   * route calls, so the two can never disagree. It runs here as well because
+   * the API's copy arrives with the success response, and this form closes
+   * 400ms later; a warning nobody can finish reading is not a warning. Shown
+   * while the date is still being chosen, it is something the board can act on.
+   */
+  const noticeWarning = buildLiveNoticeWarning(
+    formState,
+    communityTimezone,
+    communityType,
+  );
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(null);
@@ -171,14 +219,24 @@ export function MeetingForm({
     };
 
     try {
-      if (isEditing && meetingId) {
-        await updateMutation.mutateAsync({ id: meetingId, ...payload });
-        setSuccessMessage('Meeting updated.');
-        toast.success('Meeting updated.');
+      const verb = isEditing && meetingId ? 'updated' : 'created';
+      const result =
+        isEditing && meetingId
+          ? await updateMutation.mutateAsync({ id: meetingId, ...payload })
+          : await createMutation.mutateAsync(payload);
+
+      setSuccessMessage(`Meeting ${verb}.`);
+      if (result.warnings.length > 0) {
+        // The form is about to close, so this has to outlive it. Long-lived and
+        // dismiss-only: a compliance warning that auto-hides in four seconds is
+        // one the board can honestly say it never saw.
+        toast.warning(`Meeting ${verb} — notice window missed`, {
+          description: result.warnings.map((warning) => warning.message).join(' '),
+          duration: Infinity,
+          closeButton: true,
+        });
       } else {
-        await createMutation.mutateAsync(payload);
-        setSuccessMessage('Meeting created.');
-        toast.success('Meeting created.');
+        toast.success(`Meeting ${verb}.`);
       }
 
       window.setTimeout(() => {
@@ -345,6 +403,27 @@ export function MeetingForm({
                   )}
                 </label>
               </div>
+
+              {/*
+                Placed after the grid rather than under the Start field: the
+                warning depends on the start time AND the meeting type (a board
+                meeting gets 48 hours where an annual meeting gets 14 days), and
+                a full-width block inside a two-column grid would push End onto
+                its own row.
+
+                `role="status"`, not `role="alert"` — it appears while the user
+                is still typing a date. An assertive live region would interrupt
+                a screen-reader user mid-field on every keystroke.
+              */}
+              {noticeWarning ? (
+                <div
+                  role="status"
+                  data-testid="meeting-notice-window-warning"
+                  className="rounded-[var(--radius-md)] border border-[var(--status-warning-border)] bg-[var(--status-warning-bg)] px-3 py-2 text-sm text-[var(--status-warning)]"
+                >
+                  {noticeWarning.message}
+                </div>
+              ) : null}
 
               <label className="flex flex-col gap-2">
                 <span className="text-sm font-medium text-[var(--text-primary)]">Location</span>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ApiRequestError, requestJson } from '../request-json';
+import { ApiRequestError, requestJson, requestJsonEnvelope } from '../request-json';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -165,5 +165,67 @@ describe('requestJson — the server\'s structured detail survives the throw', (
     expect(error.fields).toEqual([
       { field: 'page:7.slug', message: 'Another page already uses "/contact".' },
     ]);
+  });
+});
+
+describe('requestJsonEnvelope', () => {
+  it('returns the payload and the warnings sibling together', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: { id: 7 },
+        warnings: [{ code: 'notice_window_missed', message: 'Inside the window.' }],
+      }),
+    });
+
+    await expect(requestJsonEnvelope<{ id: number }>('/api/test')).resolves.toEqual({
+      data: { id: 7 },
+      warnings: [{ code: 'notice_window_missed', message: 'Inside the window.' }],
+    });
+  });
+
+  it('normalises a missing warnings key to an empty array', async () => {
+    // Most routes never send one. Callers must not have to branch on undefined.
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { id: 7 } }) });
+
+    const { warnings } = await requestJsonEnvelope<{ id: number }>('/api/test');
+    expect(warnings).toEqual([]);
+  });
+
+  it('drops malformed entries rather than passing them to a component', async () => {
+    // A half-typed warning would render as `undefined` in front of a board
+    // member. Same policy as `readFields` for validation errors.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: { id: 7 },
+        warnings: ['junk', { code: 'ok', message: 'Real.' }, { code: 4 }],
+      }),
+    });
+
+    const { warnings } = await requestJsonEnvelope<{ id: number }>('/api/test');
+    expect(warnings).toEqual([{ code: 'ok', message: 'Real.' }]);
+  });
+
+  it('treats a non-array warnings value as absent', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: 7 }, warnings: 'oops' }),
+    });
+
+    await expect(requestJsonEnvelope<{ id: number }>('/api/test')).resolves.toEqual({
+      data: { id: 7 },
+      warnings: [],
+    });
+  });
+
+  it('throws ApiRequestError on a failure, exactly as requestJson does', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({ error: { message: 'Nope.', code: 'VALIDATION_ERROR' } }),
+    });
+
+    await expect(requestJsonEnvelope('/api/test')).rejects.toBeInstanceOf(ApiRequestError);
   });
 });

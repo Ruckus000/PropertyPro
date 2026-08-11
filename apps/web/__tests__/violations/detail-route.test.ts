@@ -3,7 +3,7 @@
  *
  * Added alongside Plan A1 drain #120.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
@@ -206,6 +206,81 @@ describe('PATCH /api/v1/violations/[id]', () => {
       expect.objectContaining({ status: 'noticed' }),
       'req-1',
     );
+  });
+
+  /**
+   * #932 — `hearingDate` had NO server-side check of any kind before this. The
+   * 14-day rule lived only as a `min` attribute on one date input, so any
+   * caller that was not that form could schedule a hearing for tomorrow.
+   */
+  describe('hearing notice window', () => {
+    const NOW = new Date('2026-04-01T12:00:00.000Z');
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('saves a short-noticed hearing and returns a warning inside the payload', async () => {
+      const res = await PATCH(
+        jsonPatch(12, {
+          communityId: 42,
+          status: 'hearing_scheduled',
+          hearingDate: '2026-04-06T00:00:00.000Z',
+        }),
+        routeCtx('12'),
+      );
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      // Saved, not rejected — warn, never block.
+      expect(updateViolationForCommunityMock).toHaveBeenCalledWith(
+        42,
+        12,
+        'user-admin-1',
+        expect.objectContaining({ hearingDate: '2026-04-06T00:00:00.000Z' }),
+        null,
+      );
+      // INSIDE `data`, not beside it: this route runs through `runRoute`, whose
+      // single-wrap cannot carry a top-level sibling.
+      expect(json.data.warnings).toHaveLength(1);
+      expect(json.data.warnings[0].code).toBe('hearing_notice_window_missed');
+      expect(json.data.warnings[0].message).toContain('14-day notice window');
+      // The violation itself still round-trips unchanged.
+      expect(json.data.status).toBe('noticed');
+    });
+
+    it('adds no warning for a hearing scheduled with full notice', async () => {
+      const res = await PATCH(
+        jsonPatch(12, {
+          communityId: 42,
+          status: 'hearing_scheduled',
+          hearingDate: '2026-05-01T00:00:00.000Z',
+        }),
+        routeCtx('12'),
+      );
+
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.data).not.toHaveProperty('warnings');
+    });
+
+    it('does not nag when an unrelated field is saved on an existing violation', async () => {
+      // Keyed off the incoming `hearingDate`, not the stored one — otherwise
+      // every later edit to an already-short-noticed violation would re-warn.
+      const res = await PATCH(
+        jsonPatch(12, { communityId: 42, resolutionNotes: 'Spoke with owner' }),
+        routeCtx('12'),
+      );
+
+      const json = await res.json();
+      expect(res.status).toBe(200);
+      expect(json.data).not.toHaveProperty('warnings');
+    });
   });
 
   it('returns 401 when unauthenticated', async () => {

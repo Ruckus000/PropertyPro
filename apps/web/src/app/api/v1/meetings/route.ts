@@ -15,6 +15,8 @@ import { requirePermission, requireBoardDesignation } from '@/lib/db/access-cont
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
+import { buildMeetingNoticeWarning } from '@/lib/meetings/notice-warning';
+import type { NoticeWarning } from '@/lib/compliance/notice-window';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import {
   attachMeetingDocument,
@@ -169,6 +171,37 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   return handleCreate(normalizedBody, actorUserId, membership.communityType);
 });
 
+/**
+ * `{ data: <meeting> }`, plus a top-level `warnings` sibling when the schedule
+ * is already inside its notice window.
+ *
+ * The envelope matches the documents route (`{ data, warnings?: [...] }`),
+ * which is the app's only existing warnings precedent — #932's issue text cites
+ * announcements, but announcements has none. `warnings` is spliced in only when
+ * non-empty, so the wire shape for a compliant meeting is byte-identical to
+ * what it was before.
+ *
+ * Only mutations warn. A read does not, deliberately: every meeting whose
+ * notice window has since closed would flag on every list request forever, and
+ * there is nothing a board can do about a meeting that already happened. The
+ * detail modal already shows the deadline itself with an escalation badge.
+ */
+function meetingResponse(
+  meeting: Parameters<typeof serializeMeetingResponse>[0],
+  communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
+): NextResponse {
+  const data = serializeMeetingResponse(meeting, communityType);
+  const warning = buildMeetingNoticeWarning({
+    startsAt: meeting.startsAt,
+    meetingType: meeting.meetingType as Parameters<typeof buildMeetingNoticeWarning>[0]['meetingType'],
+    communityType,
+    now: new Date(),
+  });
+
+  const warnings: NoticeWarning[] = warning ? [warning] : [];
+  return NextResponse.json(warnings.length > 0 ? { data, warnings } : { data });
+}
+
 async function handleCreate(
   body: Record<string, unknown>,
   actorUserId: string,
@@ -272,9 +305,7 @@ async function handleCreate(
     console.error('[meetings] in-app notification failed', { communityId, meetingId: createdMeeting.id, error: err instanceof Error ? err.message : String(err) });
   });
 
-  return NextResponse.json(
-    { data: serializeMeetingResponse(createdMeeting, communityType) }
-  );
+  return meetingResponse(createdMeeting, communityType);
 }
 
 async function handleUpdate(
@@ -350,9 +381,7 @@ async function handleUpdate(
     newValues,
   });
 
-  return NextResponse.json({
-    data: serializeMeetingResponse(updatedMeeting, communityType),
-  });
+  return meetingResponse(updatedMeeting, communityType);
 }
 
 async function handleDelete(
