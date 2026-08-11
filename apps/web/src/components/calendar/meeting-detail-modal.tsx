@@ -189,12 +189,26 @@ export function MeetingDetailModal({
                           </div>
                           <Badge variant={badge.variant}>{badge.label}</Badge>
                         </div>
+                        {/*
+                          Show the weekday AND the time, not just the date.
+
+                          These deadlines carry the meeting's clock time — a
+                          14:00 meeting has a 14:00 post-by — so a date alone
+                          reads as "any time that day" and invites posting nine
+                          hours late. The weekday matters too: since the weekend
+                          rule was removed (issue 931) a deadline can
+                          legitimately land on a Saturday, and a manager needs to
+                          see that rather than discover it.
+                        */}
                         <div className="mt-2 text-sm text-[var(--text-primary)]">
-                          {new Date(value).toLocaleDateString('en-US', {
+                          {new Date(value).toLocaleString('en-US', {
                             timeZone: communityTimezone,
+                            weekday: 'short',
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
                           })}
                         </div>
                       </div>

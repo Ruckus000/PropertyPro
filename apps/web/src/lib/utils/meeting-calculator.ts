@@ -1,4 +1,3 @@
-import { isWeekend, previousFriday, startOfDay } from 'date-fns';
 import type { CommunityType } from '@propertypro/shared';
 
 export type MeetingType = 'board' | 'annual' | 'special' | 'budget' | 'committee';
@@ -7,25 +6,30 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 /**
- * Weekend policy: every deadline this module produces is a "post this BY"
- * deadline, so the only safe direction to move one is EARLIER.
+ * There is no weekend rule. Every deadline here is exactly the statute.
  *
- * This used to roll forward to Monday. For a notice lead time that is
- * catastrophic: a Monday 00:00 board meeting has its 48-hour deadline land on
- * Saturday, and rolling that forward to Monday 00:00 produced *zero hours* of
- * notice while the UI reported the association as on track. Owner meetings lost
- * two of their fourteen statutory days the same way.
+ * A weekend adjustment used to live in this module. It arrived with the initial
+ * scaffolding rather than as a decision, and **neither §718 nor §720 grants a
+ * weekend exception** — so any roll misstates the statute in one direction or
+ * the other. The 2026-08-09 audit removed it from the 30-day maximums for that
+ * reason (rolling forward advertised day 32 as compliant); this module's
+ * lead-time deadlines are now consistent with them.
  *
- * Rolling backward can only ever give the association more margin than the
- * statute demands, which also makes the (server-local) weekday evaluation below
- * a presentation nicety rather than a compliance risk — see the timezone note
- * in `calculateNoticePostBy`.
+ * Deleting it also removed the last timezone dependency in the deadline math.
+ * The rule ran `startOfDay`/`isWeekend`/`previousFriday`, all of which evaluate
+ * in the **process's** local zone — Eastern on a dev Mac, UTC on Vercel — so the
+ * same Miami meeting could yield different deadlines on different hosts
+ * (issue #931). Everything below is exact elapsed milliseconds and therefore
+ * host-independent, which is why threading `communities.timezone` through the
+ * calculators turned out to be unnecessary.
+ *
+ * One further quiet bug went with it: `previousFriday` returns local midnight,
+ * so a rolled deadline silently lost its time-of-day.
+ *
+ * A deadline may now land on a Saturday. That is the statute. An association
+ * that posts notices by mail rather than to the website should schedule with its
+ * own margin; the product must not invent one and call it law.
  */
-function adjustWeekendBackward(deadline: Date): Date {
-  const dayStart = startOfDay(deadline);
-  if (!isWeekend(dayStart)) return deadline;
-  return previousFriday(dayStart);
-}
 
 /**
  * Subtract an exact elapsed duration.
@@ -54,17 +58,11 @@ export function getNoticeLeadDays(
 }
 
 /**
- * Calculate the latest post-by timestamp to satisfy notice lead time.
- * Stored/displayed as UTC; presentation converts to community timezone.
+ * Latest post-by timestamp that still satisfies the notice lead time — exactly
+ * the statutory minimum before the meeting, to the millisecond.
  *
- * KNOWN LIMITATION (documented, not fixed here): the weekend check runs in the
- * *server's* local timezone, not the community's `timezone` column, so a
- * deadline within a few hours of local midnight can roll on one host and not on
- * another. Since the roll now only ever moves the deadline earlier, the worst
- * case is up to two extra days of margin — never a statutory shortfall.
- * Threading the community timezone through every caller is the real fix and is
- * a product decision (it also has to settle whether the weekend rule should
- * survive at all, since neither §718 nor §720 grants a weekend exception).
+ * Stored/displayed as UTC; presentation converts to the community timezone. The
+ * value itself is timezone-independent (see the note at the top of this file).
  */
 export function calculateNoticePostBy(
   meetingStartsAt: Date,
@@ -72,16 +70,14 @@ export function calculateNoticePostBy(
   communityType: CommunityType,
 ): Date {
   const leadDays = getNoticeLeadDays(meetingType, communityType);
-  const raw = shiftDays(meetingStartsAt, -leadDays);
-  return adjustWeekendBackward(raw);
+  return shiftDays(meetingStartsAt, -leadDays);
 }
 
 /**
- * Deadline for owner vote documents — 7 days before the meeting.
+ * Deadline for owner vote documents — exactly 7 days before the meeting.
  */
 export function calculateOwnerVoteDocsDeadline(meetingStartsAt: Date): Date {
-  const raw = shiftDays(meetingStartsAt, -7);
-  return adjustWeekendBackward(raw);
+  return shiftDays(meetingStartsAt, -7);
 }
 
 /**
