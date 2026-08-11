@@ -20,6 +20,7 @@ import { and, eq, inArray, isNull, lte } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, users, userRoles } from '@propertypro/db';
 import {
+  AuthenticateCardEmail,
   PaymentFailedEmail,
   SubscriptionCanceledEmail,
   SubscriptionExpiryWarningEmail,
@@ -163,6 +164,71 @@ export async function sendPaymentFailedEmail(
         recipientName: r.fullName,
         amountDue: opts.amountDue,
         lastFourDigits: opts.lastFourDigits,
+        billingPortalUrl,
+      }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Public API: sendPaymentActionRequiredEmail (SCA — called directly from webhook)
+// ---------------------------------------------------------------------------
+
+export interface SendPaymentActionRequiredEmailOpts {
+  amountDue: string;
+  communityName: string;
+  /**
+   * Stripe's `invoice.hosted_invoice_url`, or `null` when Stripe did not
+   * provide one — in which case the billing portal is used instead.
+   *
+   * Bearer-ish — it authorises viewing and paying the invoice with no further
+   * check. It goes into the email body and NOWHERE else: not a log line, not an
+   * audit-log payload, not an error message. `compliance_audit_log` in
+   * particular is board-readable and append-only, so a leak there is permanent.
+   */
+  authenticateUrl: string | null;
+}
+
+/**
+ * Sends the SCA "confirm this payment" email on `invoice.payment_action_required`.
+ *
+ * Shares `lookupAdminRecipients` and `sendToAll` with the other billing alerts —
+ * recipient resolution is genuinely the same job, and duplicating the role-tier
+ * branching is how one copy silently stops matching the role model. Only the
+ * template and the subject differ, which is the whole reason those two helpers
+ * were factored out in the first place.
+ */
+export async function sendPaymentActionRequiredEmail(
+  communityId: number,
+  opts: SendPaymentActionRequiredEmailOpts,
+): Promise<void> {
+  const db = createUnscopedClient();
+  const communityRows = await db
+    .select({ communityType: communities.communityType })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+
+  const communityType = communityRows[0]?.communityType ?? 'condo_718';
+  const recipients = await lookupAdminRecipients(communityId, communityType);
+  if (recipients.length === 0) return;
+
+  const billingPortalUrl = `${getBaseUrl()}/billing/portal?communityId=${communityId}`;
+
+  await sendToAll(
+    recipients,
+    // Deliberately not the word "failed". Stripe fires this BEFORE the payment
+    // gives up, and a subject claiming failure would make a recipient replace a
+    // perfectly good card instead of completing the bank's check.
+    `Confirm your payment of ${opts.amountDue} for ${opts.communityName}`,
+    (r) =>
+      createElement(AuthenticateCardEmail, {
+        branding: { communityName: opts.communityName },
+        recipientName: r.fullName,
+        amountDue: opts.amountDue,
+        // Falling back to the portal keeps the email useful rather than
+        // dropping it: the message is still correct, and a payment started from
+        // the portal is on-session, so the bank's check can be completed there.
+        authenticateUrl: opts.authenticateUrl ?? billingPortalUrl,
         billingPortalUrl,
       }),
   );

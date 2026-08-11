@@ -32,6 +32,7 @@ const {
   retrieveSubscriptionMock,
   retrieveInvoiceMock,
   resolvePlanIdFromStripePriceIdMock,
+  sendPaymentActionRequiredEmailMock,
   sendPaymentFailedEmailMock,
   sendSubscriptionCanceledEmailMock,
   captureExceptionMock,
@@ -74,6 +75,7 @@ const {
     retrieveSubscriptionMock: vi.fn(),
     retrieveInvoiceMock: vi.fn(),
     resolvePlanIdFromStripePriceIdMock: vi.fn(),
+    sendPaymentActionRequiredEmailMock: vi.fn().mockResolvedValue(undefined),
     sendPaymentFailedEmailMock: vi.fn().mockResolvedValue(undefined),
     sendSubscriptionCanceledEmailMock: vi.fn().mockResolvedValue(undefined),
     captureExceptionMock: vi.fn(),
@@ -171,6 +173,7 @@ vi.mock('@/lib/services/stripe-service', () => ({
 }));
 
 vi.mock('@/lib/services/payment-alert-scheduler', () => ({
+  sendPaymentActionRequiredEmail: sendPaymentActionRequiredEmailMock,
   sendPaymentFailedEmail: sendPaymentFailedEmailMock,
   sendSubscriptionCanceledEmail: sendSubscriptionCanceledEmailMock,
 }));
@@ -1967,4 +1970,135 @@ describe('POST /api/v1/webhooks/stripe', () => {
       expect(captureExceptionMock).toHaveBeenCalled();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // invoice.payment_action_required (SCA / 3-D Secure) — #772
+  // -------------------------------------------------------------------------
+
+  describe('invoice.payment_action_required', () => {
+    function setupCommunity() {
+      const communityRow = {
+        id: 55,
+        name: 'Coral Ridge',
+        communityType: 'condo_718',
+        stripeCustomerId: 'cus_sca',
+        stripeSubscriptionId: 'sub_sca',
+      };
+      let idx = 0;
+      const sequence: unknown[][] = [[], [communityRow]];
+      const selectMock = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve(sequence[idx++] ?? [])),
+          })),
+        })),
+      }));
+      createUnscopedClientMock.mockReturnValue({
+        select: selectMock,
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue([]) })),
+        })),
+        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })) })),
+      });
+    }
+
+    it('sends the SCA email, not the payment-failed one', async () => {
+      // The #772 defect: this event routed to sendPaymentFailedEmail, so a board
+      // whose card was fine was told the payment had failed and to update its
+      // payment method — advice that cannot clear a 3-D Secure challenge.
+      constructEventMock.mockReturnValue(
+        makeEvent(
+          'invoice.payment_action_required',
+          {
+            id: 'inv_sca',
+            customer: 'cus_sca',
+            parent: {
+              subscription_details: { subscription: 'sub_sca' },
+              type: 'subscription_details',
+            },
+            amount_due: 24900,
+            hosted_invoice_url: 'https://invoice.stripe.com/i/acct_1/live_abc',
+          },
+          'evt_sca_001',
+        ),
+      );
+      setupCommunity();
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(sendPaymentFailedEmailMock).not.toHaveBeenCalled();
+      expect(sendPaymentActionRequiredEmailMock).toHaveBeenCalledWith(55, {
+        amountDue: '$249.00',
+        communityName: 'Coral Ridge',
+        authenticateUrl: 'https://invoice.stripe.com/i/acct_1/live_abc',
+      });
+    });
+
+    it('passes null when Stripe supplied no hosted invoice URL', async () => {
+      constructEventMock.mockReturnValue(
+        makeEvent(
+          'invoice.payment_action_required',
+          {
+            id: 'inv_sca_2',
+            customer: 'cus_sca',
+            parent: {
+              subscription_details: { subscription: 'sub_sca' },
+              type: 'subscription_details',
+            },
+            amount_due: 24900,
+          },
+          'evt_sca_002',
+        ),
+      );
+      setupCommunity();
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(sendPaymentActionRequiredEmailMock).toHaveBeenCalledWith(
+        55,
+        expect.objectContaining({ authenticateUrl: null }),
+      );
+    });
+
+    it('never writes the bearer-ish invoice URL to a log line', async () => {
+      // `hosted_invoice_url` authorises viewing and paying the invoice. It goes
+      // in the email body and nowhere else.
+      const url = 'https://invoice.stripe.com/i/acct_1/live_secret';
+      constructEventMock.mockReturnValue(
+        makeEvent(
+          'invoice.payment_action_required',
+          {
+            id: 'inv_sca_3',
+            customer: 'cus_sca',
+            parent: {
+              subscription_details: { subscription: 'sub_sca' },
+              type: 'subscription_details',
+            },
+            amount_due: 24900,
+            hosted_invoice_url: url,
+          },
+          'evt_sca_003',
+        ),
+      );
+      setupCommunity();
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await POST(makeRequest());
+
+      for (const spy of [consoleSpy, consoleWarnSpy, consoleErrorSpy]) {
+        for (const call of spy.mock.calls) {
+          expect(JSON.stringify(call)).not.toContain('live_secret');
+        }
+      }
+      consoleSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
 });

@@ -27,6 +27,7 @@ import {
   type PlanId,
 } from '@propertypro/shared';
 import {
+  sendPaymentActionRequiredEmail,
   sendPaymentFailedEmail,
   sendSubscriptionCanceledEmail,
 } from '@/lib/services/payment-alert-scheduler';
@@ -506,12 +507,19 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
 /**
  * A8: a subscription renewal requires off-session SCA/3DS authentication. Stripe
  * fires `invoice.payment_action_required` BEFORE the payment ultimately fails to
- * `past_due`. Previously unhandled — so the customer only saw a generic
- * "payment failed" later with no authenticate affordance. We resolve the
- * community and notify billing admins so they can authenticate in time.
+ * `past_due`, so this is the only window in which a board can act while the
+ * renewal can still succeed.
  *
- * Fast-follow: a dedicated "authenticate your card" email template linking
- * `invoice.hosted_invoice_url` (this reuses the payment-failed notification infra).
+ * This used to send `PaymentFailedEmail` (#772) — telling the association a
+ * payment had failed and to update its payment method, for a payment that had
+ * not failed and a card that was fine. Following that advice does not clear a
+ * 3-D Secure challenge; it just costs a re-entered card while the clock runs
+ * out. It now sends the dedicated template, whose CTA is
+ * `invoice.hosted_invoice_url` — the only page that can actually complete the
+ * bank's check.
+ *
+ * `hosted_invoice_url` is bearer-ish and is deliberately absent from every log
+ * call below.
  */
 async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Promise<void> {
   const rawSub = invoice.parent?.subscription_details?.subscription;
@@ -536,10 +544,16 @@ async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Prom
       )
     : 'your subscription payment';
 
-  await sendPaymentFailedEmail(community.id, {
+  await sendPaymentActionRequiredEmail(community.id, {
     amountDue,
-    lastFourDigits: null,
     communityName: community.name,
+    // Nullable in Stripe's type and effectively always present for a finalized
+    // subscription invoice, which is the only kind that reaches this event. The
+    // sender falls back to the billing portal rather than dropping the email —
+    // "your bank needs to confirm this" is still the correct thing to say, and
+    // a payment made from the portal is on-session, so the challenge can be
+    // completed there too. Only the directness of the link degrades.
+    authenticateUrl: invoice.hosted_invoice_url ?? null,
   });
 }
 

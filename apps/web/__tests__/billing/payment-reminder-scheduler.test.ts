@@ -34,6 +34,7 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 vi.mock('@propertypro/email', () => ({
+  AuthenticateCardEmail: vi.fn(),
   PaymentFailedEmail: vi.fn(),
   SubscriptionCanceledEmail: vi.fn(),
   SubscriptionExpiryWarningEmail: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock('react', () => ({
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createElement } from 'react';
 import {
+  AuthenticateCardEmail,
   PaymentFailedEmail,
   SubscriptionExpiryWarningEmail,
   SubscriptionLapsedEmail,
@@ -61,6 +63,7 @@ import {
 } from '@propertypro/email';
 import {
   processPaymentReminders,
+  sendPaymentActionRequiredEmail,
   sendSubscriptionCanceledEmail,
 } from '../../src/lib/services/payment-alert-scheduler';
 
@@ -662,6 +665,132 @@ describe('sendSubscriptionCanceledEmail', () => {
       communityName: 'Empty Community',
       communityType: 'condo_718',
       canceledAt: new Date(),
+    });
+
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: sendPaymentActionRequiredEmail (SCA — #772)
+// ---------------------------------------------------------------------------
+
+describe('sendPaymentActionRequiredEmail', () => {
+  const AUTHENTICATE_URL = 'https://invoice.stripe.com/i/acct_123/live_abc123';
+
+  function mockDbReturning(communityTypeRows: object[], recipients: object[]) {
+    resetDbMocks();
+    // First .where() resolves the community-type lookup, the next the recipients.
+    const limit = vi.fn().mockResolvedValue(communityTypeRows);
+    mockDbWhere.mockReturnValueOnce({ limit }).mockResolvedValue(recipients);
+    mockDbInnerJoin.mockReturnValue({ where: mockDbWhere });
+    mockDbFrom.mockReturnValue({ where: mockDbWhere, innerJoin: mockDbInnerJoin });
+    mockDbSelect.mockReturnValue({ from: mockDbFrom });
+    return { select: mockDbSelect };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (sendEmail as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  it('sends AuthenticateCardEmail — NOT PaymentFailedEmail — with the invoice URL', async () => {
+    // The #772 regression in one assertion. This event used to send
+    // PaymentFailedEmail, telling a board its payment had failed and to replace
+    // a card that was working, for a charge that had not failed.
+    const db = mockDbReturning(
+      [{ communityType: 'condo_718' }],
+      [{ email: 'board@example.com', fullName: 'Alice Board' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: '$249.00',
+      communityName: 'Palm Gardens',
+      authenticateUrl: AUTHENTICATE_URL,
+    });
+
+    const createElementMock = createElement as ReturnType<typeof vi.fn>;
+    expect(createElementMock.mock.calls.find(([c]) => c === PaymentFailedEmail)).toBeUndefined();
+
+    const call = createElementMock.mock.calls.find(([c]) => c === AuthenticateCardEmail);
+    expect(call?.[1]).toEqual(
+      expect.objectContaining({
+        amountDue: '$249.00',
+        authenticateUrl: AUTHENTICATE_URL,
+        recipientName: 'Alice Board',
+      }),
+    );
+  });
+
+  it('uses a subject that does not claim the payment failed', async () => {
+    const db = mockDbReturning(
+      [{ communityType: 'condo_718' }],
+      [{ email: 'board@example.com', fullName: 'Alice Board' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: '$249.00',
+      communityName: 'Palm Gardens',
+      authenticateUrl: AUTHENTICATE_URL,
+    });
+
+    const subject = (sendEmail as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.subject as string;
+    expect(subject).toBe('Confirm your payment of $249.00 for Palm Gardens');
+    expect(subject).not.toMatch(/fail/i);
+  });
+
+  it('falls back to the billing portal when Stripe supplied no invoice URL', async () => {
+    // Better a slightly less direct link than no email: the message is still
+    // correct, and a payment started from the portal is on-session, so the
+    // bank's check can be completed there.
+    const db = mockDbReturning(
+      [{ communityType: 'condo_718' }],
+      [{ email: 'board@example.com', fullName: 'Alice Board' }],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: '$249.00',
+      communityName: 'Palm Gardens',
+      authenticateUrl: null,
+    });
+
+    const call = (createElement as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([c]) => c === AuthenticateCardEmail,
+    );
+    expect(call?.[1]?.authenticateUrl).toBe(call?.[1]?.billingPortalUrl);
+    expect(call?.[1]?.authenticateUrl).toContain('/billing/portal?communityId=42');
+  });
+
+  it('sends one email per admin recipient', async () => {
+    const db = mockDbReturning(
+      [{ communityType: 'apartment' }],
+      [
+        { email: 'a@example.com', fullName: 'Alice' },
+        { email: 'b@example.com', fullName: 'Bob' },
+      ],
+    );
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: '$10.00',
+      communityName: 'Sunset Ridge',
+      authenticateUrl: AUTHENTICATE_URL,
+    });
+
+    expect(sendEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends nothing when the community has no admin recipients', async () => {
+    const db = mockDbReturning([{ communityType: 'condo_718' }], []);
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue(db);
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: '$10.00',
+      communityName: 'Empty',
+      authenticateUrl: AUTHENTICATE_URL,
     });
 
     expect(sendEmail).not.toHaveBeenCalled();
