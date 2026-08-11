@@ -494,7 +494,12 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     keywords: ['arc', 'architectural', 'submit', 'modification', 'renovation', 'improvement', 'exterior', 'paint', 'fence', 'window'],
     description: 'Submit an architectural review application',
     icon: ClipboardCheck,
-    href: '/arc-requests',
+    // Points at the form the label promises, not the list. This advertised
+    // "Submit ARC Application" to `roles: 'all'` while linking to a page that
+    // redirected every non-admin to the dashboard — so the one audience that
+    // can actually submit was bounced (#933). Managers who follow it are
+    // redirected to the review queue, which is the useful page for them.
+    href: '/arc-requests/new',
     roles: 'all',
     audience: 'all',
     category: 'action',

@@ -8,6 +8,8 @@ import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { SlideOverPanel } from '@/components/shared/slide-over-panel';
 import { useArcSubmissions, type ArcSubmission, type ArcSubmissionStatus } from '@/hooks/use-arc';
 import { cn } from '@/lib/utils';
+import { ArcDecisionForm } from './ArcDecisionForm';
+import { STATUS_BADGE_CLASSES, STATUS_LABELS } from './arc-status';
 
 /* ─────── Helpers ─────── */
 
@@ -18,22 +20,6 @@ function formatDate(dateStr: string): string {
     year: 'numeric',
   });
 }
-
-const STATUS_BADGE_CLASSES: Record<ArcSubmissionStatus, string> = {
-  submitted: 'bg-status-warning-bg text-status-warning border-status-warning-border',
-  under_review: 'bg-interactive-muted text-content-link border-status-info-border',
-  approved: 'bg-status-success-bg text-status-success border-status-success-border',
-  denied: 'bg-status-danger-bg text-status-danger border-status-danger-border',
-  withdrawn: 'bg-surface-muted text-content-secondary border-edge',
-};
-
-const STATUS_LABELS: Record<ArcSubmissionStatus, string> = {
-  submitted: 'Submitted',
-  under_review: 'Under Review',
-  approved: 'Approved',
-  denied: 'Denied',
-  withdrawn: 'Withdrawn',
-};
 
 /* ─────── Columns ─────── */
 
@@ -168,7 +154,22 @@ export function ArcSubmissionsTab({ communityId }: ArcSubmissionsTabProps) {
         width="md"
       >
         {selectedSubmission && (
-          <ArcDetailContent submission={selectedSubmission} />
+          <>
+            <ArcDetailContent submission={selectedSubmission} />
+            {/*
+              The decision form lives below the read-only detail rather than in
+              its own screen: a reviewer decides while reading the request, and
+              the HB 1203 written reason should be written with the description
+              still in view.
+            */}
+            <div className="mt-6">
+              <ArcDecisionForm
+                submission={selectedSubmission}
+                communityId={communityId}
+                onComplete={() => setSelectedSubmission(null)}
+              />
+            </div>
+          </>
         )}
       </SlideOverPanel>
     </div>
