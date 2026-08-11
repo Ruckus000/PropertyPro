@@ -11,7 +11,7 @@
  *   7. Minutes posting deadline = 30 days after meeting
  */
 import { NextRequest } from 'next/server';
-import { addDays, isWeekend, isSameDay, previousFriday, startOfDay } from 'date-fns';
+import { addDays, isSameDay } from 'date-fns';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -96,30 +96,17 @@ function requireMeetingsRoute(): MeetingsRouteModule {
 }
 
 /**
- * Mirror `adjustWeekendBackward` from meeting-calculator.ts.
+ * Elapsed-ms shift, matching production's `shiftDays`.
  *
- * These deadlines are **lead-time minimums** — a "post this BY" date sitting
- * *before* the event — so a weekend landing may only ever move EARLIER. Rolling
- * one forward shortens the notice period, which is the defect fixed in the
- * 2026-08-09 feature-correctness audit (D1): a Monday-morning board meeting was
- * assigned a deadline equal to its own start instant, i.e. zero hours of notice
- * against a 48-hour statutory minimum.
- *
- * This helper previously rolled FORWARD, matching the old buggy production
- * behaviour. It passed only on calendar dates where the deadline missed a
- * weekend — roughly five days in seven — so the suite went green on main and
- * red here purely because this run crossed UTC midnight. The audit fixed the
- * production math and the unit tests but never swept the integration suite.
+ * There is deliberately no weekend helper here any more. This file used to
+ * mirror `adjustWeekendBackward` from meeting-calculator.ts — a second copy of a
+ * production rule, which drifted: it rolled FORWARD long after production rolled
+ * backward, and passed only on calendar dates where the deadline missed a
+ * weekend. The rule itself is now gone (issue #931), so the expectation is
+ * simply the statute.
  */
-/** Elapsed-ms shift, matching production's `shiftDays`. */
 function shiftDaysExact(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
-}
-
-function adjustWeekendBackward(date: Date): Date {
-  const dayStart = startOfDay(date);
-  if (!isWeekend(dayStart)) return date;
-  return previousFriday(dayStart);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,14 +181,14 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     );
     if (!createdMeeting) throw new Error('Board meeting not found');
 
-    // Board meeting notice deadline: 2 days before, adjusted for weekends
+    // Board meeting notice deadline: exactly 2 days before (no weekend rule)
     const deadlines = createdMeeting['deadlines'] as Record<string, string>;
     expect(deadlines).toHaveProperty('noticePostBy');
     expect(typeof deadlines['noticePostBy']).toBe('string');
     expect(deadlines).toHaveProperty('minutesPostBy');
     expect(typeof deadlines['minutesPostBy']).toBe('string');
 
-    const expectedNoticeBy = adjustWeekendBackward(shiftDaysExact(meetingDate, -2));
+    const expectedNoticeBy = shiftDaysExact(meetingDate, -2);
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });
@@ -237,7 +224,7 @@ describeDb('P4-58: meeting management & deadline calculations (db-backed integra
     if (!meeting) throw new Error('Annual meeting not found');
 
     const deadlines = meeting['deadlines'] as Record<string, string>;
-    const expectedNoticeBy = adjustWeekendBackward(shiftDaysExact(meetingDate, -14));
+    const expectedNoticeBy = shiftDaysExact(meetingDate, -14);
     const actualNoticeBy = new Date(deadlines['noticePostBy']);
     expect(isSameDay(actualNoticeBy, expectedNoticeBy)).toBe(true);
   });

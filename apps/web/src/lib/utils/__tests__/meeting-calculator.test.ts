@@ -8,10 +8,21 @@
  *   - board / committee meetings: 48 hours
  *   - annual / special / budget (owner) meetings: 14 days
  *
- * The weekend rule is a *business* rule layered on top of the statute. It must
- * only ever move a notice deadline EARLIER. Rolling a "post notice by" deadline
- * forward to Monday shortens the lead time below the statutory minimum, which
- * is the one thing the rule can never be allowed to do.
+ * THERE IS NO WEEKEND RULE (issue #931). One used to sit on top of the statute
+ * here; it arrived with the initial scaffolding rather than as a decision, and
+ * neither §718 nor §720 grants a weekend exception — so any roll misstated the
+ * law. Rolling forward shortened the lead time below the statutory minimum (the
+ * D1 zero-notice bug); rolling backward advertised more margin than the statute
+ * requires. Deleting it also removed the last host-timezone dependency from the
+ * deadline math, which is what closed #931.
+ *
+ * These assertions are therefore host-independent: elapsed milliseconds, and
+ * `getUTC*` where a weekday matters. That is load-bearing — CI pins `TZ: UTC`,
+ * so a test leaning on the ambient zone could never reproduce #931.
+ *
+ * This is the canonical unit suite for this module. A near-duplicate lived at
+ * `__tests__/meetings/meeting-calculator.test.ts` and drifted out of sync; it
+ * was deleted in favour of this file.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -84,20 +95,42 @@ describe('calculateNoticePostBy — statutory minimum is a floor, never a ceilin
     },
   );
 
-  it('rolls a weekend deadline BACKWARD (earlier), never forward', () => {
-    // Monday 2026-08-10 18:00Z minus 2 days = Saturday 2026-08-08 18:00Z.
-    // Rolling forward to Monday would leave ZERO hours of notice.
+  it('does NOT move a deadline that lands on a weekend', () => {
+    // Monday 2026-08-10 18:00Z minus 2 days = Saturday 2026-08-08 18:00Z. The
+    // old rule rolled that off the weekend; the statute grants no exception, so
+    // it stays exactly where the arithmetic puts it.
     const startsAt = new Date('2026-08-10T18:00:00.000Z');
     const postBy = calculateNoticePostBy(startsAt, 'board', 'condo_718');
-    expect(postBy.getTime()).toBeLessThanOrEqual(
-      new Date('2026-08-08T18:00:00.000Z').getTime(),
-    );
-    expect(leadHours(startsAt, postBy)).toBeGreaterThanOrEqual(48);
+
+    expect(postBy.toISOString()).toBe('2026-08-08T18:00:00.000Z');
+    expect(postBy.getUTCDay()).toBe(6); // Saturday
+    expect(leadHours(startsAt, postBy)).toBe(48);
   });
+
+  it('gives a Monday-morning board meeting its full 48 hours (the D1 regression)', () => {
+    // The original defect: the 48-hour mark landed on Saturday, the rule rolled
+    // it FORWARD to Monday, and the post-by became the meeting's own start
+    // instant — zero hours of notice, reported as on track.
+    const startsAt = new Date('2026-01-05T00:00:00.000Z'); // Monday 00:00
+    const postBy = calculateNoticePostBy(startsAt, 'board', 'condo_718');
+
+    expect(leadHours(startsAt, postBy)).toBe(48);
+    expect(postBy.getTime()).toBeLessThan(startsAt.getTime());
+  });
+
+  it('preserves the meeting time-of-day', () => {
+    // The old roll returned `previousFriday(startOfDay(...))` — local midnight —
+    // so a rolled deadline silently lost its clock time.
+    const startsAt = new Date('2026-02-14T09:37:11.000Z');
+    const postBy = calculateNoticePostBy(startsAt, 'annual', 'condo_718');
+
+    expect(postBy.toISOString()).toBe('2026-01-31T09:37:11.000Z');
+  });
+
 });
 
 describe('calculateOwnerVoteDocsDeadline', () => {
-  it('is at least 7 days before the meeting, never fewer', () => {
+  it('is exactly 7 days before the meeting', () => {
     const base = Date.UTC(2026, 0, 1, 12, 0, 0);
     for (let day = 0; day < 120; day += 1) {
       const startsAt = new Date(base + day * DAY_MS);

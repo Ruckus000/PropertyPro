@@ -589,3 +589,46 @@ separately.
 thing to ship alone. D10 was found by running the flow; D11 was found only
 because the fix went through security review before merging, and it was invisible
 from the two changed lines.
+
+## 10. D7 resolved — the weekend rule is gone (2026-08-11)
+
+D7 (§2) recorded that the deadline calculators evaluate weekday in the **server's**
+timezone rather than the community's, and deferred the fix because it first had to
+settle a question the code could not answer: *should the weekend rule exist at all?*
+
+It should not, and #931 closed by deleting it rather than by threading a timezone
+through three layers.
+
+The entire timezone exposure was one helper — `adjustWeekendBackward`, using
+`startOfDay` / `isWeekend` / `previousFriday`. Everything else in the module was
+already exact elapsed milliseconds. Remove the helper and the host clock stops
+mattering, so `communities.timezone` never needed plumbing into the calculators
+at all.
+
+Deleting it is also the statutorily correct answer, and this audit had already
+reached that conclusion for the 30-day maximums (§2, "The weekend rule on
+statutory *maximums* — removed, not reversed"). Lead times are now consistent
+with them. `git log -S` confirms the rule arrived with the initial scaffolding
+rather than as a decision, and the product's own published guidance already
+contradicted it — `content/resources/official-records-posting-checklist.mdx`
+states these windows are "in calendar days unless the governing documents say
+otherwise."
+
+Two things surfaced only in the doing:
+
+- `previousFriday(startOfDay(...))` returns **local midnight**, so a rolled
+  deadline silently discarded its time-of-day. That is why the meeting detail
+  modal now renders weekday and time rather than a bare date: every deadline
+  carries the meeting's clock time, and "post by Jan 31" for a 2pm meeting
+  invited a 9-hour shortfall.
+- The integration suite held a **second copy** of the rule that had already
+  drifted — it rolled forward long after production rolled backward, and passed
+  only on calendar dates where the deadline missed a weekend. A near-duplicate
+  unit suite existed too. Both are now consolidated into the canonical
+  co-located file.
+
+**No backfill was required**: meeting deadlines are never persisted.
+
+Consequence, stated for the record: a deadline can now land on a Saturday. That
+is the statute. The help content tells associations that post by mail to plan
+their own margin rather than have the product invent one.
