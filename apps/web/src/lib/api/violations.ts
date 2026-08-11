@@ -10,6 +10,7 @@
  */
 
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
+import type { ApiWarning } from '@/lib/api/request-json';
 import { walkAndSlice } from '@/lib/api/walk-paginated';
 
 export interface ViolationItem {
@@ -155,14 +156,24 @@ export async function createViolation(
   });
 }
 
+/**
+ * The updated row, plus any advisory the server attached.
+ *
+ * `warnings` rides INSIDE the payload rather than beside it because this route
+ * runs through `runRoute`, whose single-wrap emits exactly `{ data: payload }`.
+ * Optional and additive — the field is absent for an ordinary update.
+ */
 export async function updateViolation(
   id: number,
   payload: UpdateViolationPayload,
-): Promise<{ data: ViolationItem }> {
-  return apiFetch<{ data: ViolationItem }>(`/api/v1/violations/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+): Promise<{ data: ViolationItem & { warnings?: ApiWarning[] } }> {
+  return apiFetch<{ data: ViolationItem & { warnings?: ApiWarning[] } }>(
+    `/api/v1/violations/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export async function imposeFine(

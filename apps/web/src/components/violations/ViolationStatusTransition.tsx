@@ -6,6 +6,7 @@
  */
 import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
 import type { ViolationItem } from '@/lib/api/violations';
 
@@ -116,7 +117,13 @@ export function ViolationStatusTransition({
    * calls that same function so the two cannot disagree.
    */
   const hearingNoticeWarning = buildHearingNoticeWarning({
-    hearingDate: hearingDate ? new Date(`${hearingDate}T00:00:00`) : null,
+    // Parsed exactly as it will be SUBMITTED (`new Date(hearingDate)` — a bare
+    // `yyyy-MM-dd` is UTC midnight), not as local midnight. The two differ by
+    // the host's UTC offset, and while the rule's one-day tolerance currently
+    // absorbs that, an accidental asymmetry between what the form warns about
+    // and what it sends is the kind of thing that only surfaces after someone
+    // tightens the tolerance.
+    hearingDate: hearingDate ? new Date(hearingDate) : null,
     now: new Date(),
   });
 
@@ -152,12 +159,25 @@ export function ViolationStatusTransition({
             break;
           }
           case 'hearing': {
-            await updateViolation(violation.id, {
+            const result = await updateViolation(violation.id, {
               communityId,
               status: 'hearing_scheduled',
               hearingDate: new Date(hearingDate).toISOString(),
               resolutionNotes: notes.trim() || undefined,
             });
+            // The form closes on `onComplete()`, taking the live warning with
+            // it. Re-raise the server's copy as a toast so the record of a
+            // short-noticed hearing outlives the dialog — and so the server's
+            // warning is actually reachable rather than computed into a payload
+            // nothing reads. Dismiss-only: a compliance warning that fades in
+            // four seconds is one the board can honestly say it never saw.
+            for (const warning of result.data.warnings ?? []) {
+              toast.warning('Hearing scheduled — short notice', {
+                description: warning.message,
+                duration: Infinity,
+                closeButton: true,
+              });
+            }
             break;
           }
           case 'fine': {
