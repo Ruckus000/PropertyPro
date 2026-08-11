@@ -47,6 +47,10 @@ import {
   loadUserEmailMapForImport,
   loadUsersWithExistingRoleForImport,
 } from "@/lib/services/import-residents-service";
+import {
+  assertActorMayAttachExistingUser,
+  loadActorCommunitiesForLinking,
+} from "@/lib/services/user-linking";
 import { importResidentsContract } from "./contract";
 
 interface MappedRole {
@@ -95,6 +99,9 @@ export const POST = withErrorHandler(
     const communityType = await getCommunityTypeForOnboarding(communityId);
     const unitByNumber = await loadUnitNumberMapForImport(communityId);
     const userByEmail = await loadUserEmailMapForImport(communityId);
+    // Hoisted out of the row loop: the cross-tenant guard needs the actor's own
+    // memberships for every pre-existing match, and they do not change mid-import.
+    const actorCommunities = await loadActorCommunitiesForLinking(actorUserId);
     const userHasRole = await loadUsersWithExistingRoleForImport(communityId);
 
     const errors = [...parsedCsv.errors];
@@ -158,6 +165,13 @@ export const POST = withErrorHandler(
 
       // Find or create user
       let userId = userByEmail.get(email);
+      // `userByEmail` comes from a platform-wide scan (`users` has no
+      // `community_id`, so the scoped client does not filter it). A hit here
+      // may therefore be a resident of a DIFFERENT association, and binding
+      // them in would publish their real name, email and phone through this
+      // community's residents list. Issue #940 — same hole as the single-add
+      // paths, reachable with one CSV row per victim.
+      const isPreExistingUser = Boolean(userId);
       if (!userId) {
         const newUserId = crypto.randomUUID();
         const insertedUserId = await insertUserForImport(communityId, {
@@ -174,6 +188,27 @@ export const POST = withErrorHandler(
 
         userId = insertedUserId;
         userByEmail.set(email, insertedUserId);
+      }
+
+      if (isPreExistingUser) {
+        try {
+          await assertActorMayAttachExistingUser({
+            actorUserId,
+            targetUserId: userId,
+            communityId,
+            actorCommunities,
+          });
+        } catch {
+          // Soft-fail the ROW, not the import. Throwing here would let a single
+          // stranger's address abort an otherwise valid CSV.
+          errors.push({
+            rowNumber: row.rowNumber,
+            column: "email",
+            message: `'${email}' belongs to an existing account you cannot already see`,
+          });
+          skippedCount++;
+          continue;
+        }
       }
 
       // Skip if user already has a role in this community

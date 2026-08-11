@@ -22,6 +22,7 @@ import { validateRoleAssignment } from '@/lib/utils/role-validator';
 import { getBaseUrl } from '@/lib/utils/url';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireCommunityType } from '@/lib/utils/community-validators';
+import { assertActorMayAttachExistingUser } from '@/lib/services/user-linking';
 
 /**
  * Look up a community's `communityType` by id (single-row projection).
@@ -88,6 +89,15 @@ export async function createOnboardingResident(params: {
 
   const isNewUser = !userRow;
   const userId = isNewUser ? crypto.randomUUID() : (userRow?.['id'] as string);
+
+  // `scoped.query(users)` above is NOT tenant-filtered — `users` has no
+  // `community_id`, so the match ran against every user on the platform. Before
+  // reusing a stranger's row, require that the actor already shares a community
+  // with them; otherwise this is a way to harvest another association's
+  // residents by guessing email addresses. See user-linking.ts.
+  if (!isNewUser) {
+    await assertActorMayAttachExistingUser({ actorUserId, targetUserId: userId, communityId });
+  }
 
   if (isNewUser) {
     const insertedUsers = await scoped.insert(users, {

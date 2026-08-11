@@ -4,10 +4,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Hoisted mocks — must be declared before any imports that use them
 // ---------------------------------------------------------------------------
 
-const { mockScopedQuery, mockScopedInsert, mockLogAuditEvent } = vi.hoisted(() => ({
+const {
+  mockScopedQuery,
+  mockScopedInsert,
+  mockLogAuditEvent,
+  mockFindUserCommunitiesUnscoped,
+} = vi.hoisted(() => ({
   mockScopedQuery: vi.fn(),
   mockScopedInsert: vi.fn(),
   mockLogAuditEvent: vi.fn(),
+  mockFindUserCommunitiesUnscoped: vi.fn(),
+}));
+
+// The cross-tenant guard (user-linking.ts) reads BOTH users' memberships when an
+// existing platform user is matched by email. Unmocked, it reaches for a real
+// database. Default: the target already belongs to this community, which is the
+// ordinary "admin re-adds someone who is already here" shape.
+vi.mock('@propertypro/db/unsafe', () => ({
+  findUserCommunitiesUnscoped: mockFindUserCommunitiesUnscoped,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -32,7 +46,10 @@ vi.mock('react', () => ({
   createElement: vi.fn((_comp, props) => ({ props })),
 }));
 
-vi.mock('@propertypro/shared', () => ({
+// importOriginal keeps RBAC_MATRIX real — the cross-tenant guard resolves the
+// actor's `residents:read` through checkPermissionV2, which reads it.
+vi.mock('@propertypro/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@propertypro/shared')>()),
   getPresetPermissions: vi.fn(() => ({ docs: 'read' })),
   hasBoardDesignation: vi.fn(
     (value: unknown) => value === 'board_president' || value === 'board_member',
@@ -54,6 +71,13 @@ vi.mock('@/lib/api/errors', () => ({
     constructor(msg: string) {
       super(msg);
       this.name = 'NotFoundError';
+    }
+  },
+  // Thrown by the cross-tenant guard in user-linking.ts.
+  ForbiddenError: class ForbiddenError extends Error {
+    constructor(msg: string) {
+      super(msg);
+      this.name = 'ForbiddenError';
     }
   },
   ValidationError: class ValidationError extends Error {
@@ -81,6 +105,18 @@ import {
 // ---------------------------------------------------------------------------
 
 const COMMUNITY_ID = 42;
+
+/**
+ * A membership row as `findUserCommunitiesUnscoped` returns it. The cross-tenant
+ * guard reads role + communityType + isUnitOwner to resolve `residents:read`, so
+ * a bare `{ communityId }` is not a faithful fixture.
+ */
+const membershipRow = (communityId: number) => ({
+  communityId,
+  communityType: 'condo_718' as const,
+  role: 'property_manager' as const,
+  isUnitOwner: false,
+});
 const ACTOR_USER_ID = 'actor-uuid-000';
 const USER_ID = 'user-uuid-123';
 
@@ -90,6 +126,10 @@ function resetMocks() {
   mockLogAuditEvent.mockReset().mockResolvedValue(undefined);
   (sendEmail as ReturnType<typeof vi.fn>).mockReset().mockResolvedValue(undefined);
   (validateRoleAssignment as ReturnType<typeof vi.fn>).mockReset().mockReturnValue({ valid: true });
+  // Default: the matched user is already a member of THIS community, so the
+  // cross-tenant guard permits the attach. Tests that model a stranger override
+  // this per-user.
+  mockFindUserCommunitiesUnscoped.mockReset().mockResolvedValue([membershipRow(COMMUNITY_ID)]);
 }
 
 /**
@@ -315,6 +355,84 @@ describe('createOnboardingResident', () => {
     // First insert call should be for userRoles, not users
     const firstInsertTable = mockScopedInsert.mock.calls[0]?.[0];
     expect(firstInsertTable).toBe(userRoles);
+  });
+
+  it('REFUSES to attach an existing user the actor shares no community with', async () => {
+    // Issue #940. The lookup above is not tenant-filtered — `users` has no
+    // `community_id` — so this matched a resident of a DIFFERENT association.
+    // Binding them here would publish their real name, email and phone through
+    // this community's residents list.
+    const stranger = { id: USER_ID, email: 'stranger@example.com', fullName: 'Stranger' };
+    setupResidentQueryMocks({ existingUsers: [stranger], existingRoles: [] });
+
+    mockFindUserCommunitiesUnscoped.mockImplementation(async (userId: string) =>
+      userId === USER_ID ? [membershipRow(999)] : [membershipRow(COMMUNITY_ID)],
+    );
+
+    await expect(
+      createOnboardingResident({
+        communityId: COMMUNITY_ID,
+        email: 'Stranger@Example.com',
+        fullName: 'Stranger',
+        phone: null,
+        role: 'resident',
+        unitId: 3,
+        actorUserId: ACTOR_USER_ID,
+        communityType: 'condo_718',
+        isUnitOwner: true,
+      }),
+    ).rejects.toThrow(/cannot already see/i);
+
+    // Nothing was written — no role row, no notification preferences.
+    expect(mockScopedInsert).not.toHaveBeenCalled();
+  });
+
+  it('attaches an existing user the actor DOES share a community with', async () => {
+    // The legitimate case the global lookup exists to serve: one person owning
+    // units in two associations, added by a manager who runs both.
+    const shared = { id: USER_ID, email: 'owner@example.com', fullName: 'Owner' };
+    setupResidentQueryMocks({ existingUsers: [shared], existingRoles: [] });
+
+    mockFindUserCommunitiesUnscoped.mockImplementation(async (userId: string) =>
+      userId === USER_ID
+        ? [membershipRow(7)]
+        : [membershipRow(7), membershipRow(COMMUNITY_ID)],
+    );
+
+    const result = await createOnboardingResident({
+      communityId: COMMUNITY_ID,
+      email: 'Owner@Example.com',
+      fullName: 'Owner',
+      phone: null,
+      role: 'resident',
+      unitId: 3,
+      actorUserId: ACTOR_USER_ID,
+      communityType: 'condo_718',
+      isUnitOwner: true,
+    });
+
+    expect(result.isNewUser).toBe(false);
+    expect(mockScopedInsert).toHaveBeenCalledWith(userRoles, expect.anything());
+  });
+
+  it('does not consult the cross-tenant guard for a brand-new email', async () => {
+    // A new user belongs to nobody yet, so there is no relationship to check —
+    // and paying for two unscoped reads on the common path would be waste.
+    setupResidentQueryMocks({ existingUsers: [], existingRoles: [] });
+
+    await createOnboardingResident({
+      communityId: COMMUNITY_ID,
+      email: 'brand-new@example.com',
+      fullName: 'Brand New',
+      phone: null,
+      role: 'resident',
+      unitId: 3,
+      actorUserId: ACTOR_USER_ID,
+      communityType: 'condo_718',
+      isUnitOwner: true,
+    });
+
+    expect(mockFindUserCommunitiesUnscoped).not.toHaveBeenCalled();
   });
 });
 

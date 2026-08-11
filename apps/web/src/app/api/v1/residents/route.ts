@@ -23,6 +23,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
+import { assertActorMayAttachExistingUser } from '@/lib/services/user-linking';
 import {
   createResidentNotificationPreferences,
   createResidentRole,
@@ -117,6 +118,15 @@ export const POST = withErrorHandler(
 
     const isNewUser = !userRow;
     const userId = isNewUser ? crypto.randomUUID() : (userRow?.['id'] as string);
+
+    // `getResidentUserByEmail` is NOT tenant-filtered — `users` has no
+    // `community_id`, so this matched against every user on the platform.
+    // Before reusing a stranger's row, require that the actor already shares a
+    // community with them; otherwise this is a way to harvest another
+    // association's residents by guessing email addresses. See user-linking.ts.
+    if (!isNewUser) {
+      await assertActorMayAttachExistingUser({ actorUserId, targetUserId: userId, communityId });
+    }
 
     if (isNewUser) {
       userRow = await createResidentUser(communityId, {

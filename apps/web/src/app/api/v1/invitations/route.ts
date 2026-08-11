@@ -62,7 +62,23 @@ export const POST = withErrorHandler(
       throw new NotFoundError(`User ${userId} not found`);
     }
 
-    const role = (await getUserRoleForInvitation(communityId, userId)) ?? 'resident';
+    // Membership is asserted here, not assumed.
+    //
+    // `getUserForInvitation` reads the `users` table, which has NO
+    // `community_id` — the scoped client does not isolate it, so the lookup
+    // above resolves ANY user on the platform. This role lookup DOES scope
+    // (`user_roles` carries `community_id`), so it is the only thing standing
+    // between an arbitrary user id and an invitation email branded with this
+    // community's name. It previously defaulted a non-member to 'resident' and
+    // mailed them anyway.
+    //
+    // Every path that legitimately reaches here creates the role row first
+    // (residents POST, residents/invite, the onboarding wizard), so requiring
+    // one costs nothing real.
+    const role = await getUserRoleForInvitation(communityId, userId);
+    if (!role) {
+      throw new NotFoundError(`User ${userId} is not a member of community ${communityId}`);
+    }
 
     const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
     const expiresAt = addDays(new Date(), ttlDays ?? 7);

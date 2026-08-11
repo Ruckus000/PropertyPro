@@ -34,6 +34,8 @@ const {
   insertUserForImportMock,
   insertUserRoleForImportMock,
   insertNotificationPreferencesForImportMock,
+  assertActorMayAttachExistingUserMock,
+  loadActorCommunitiesForLinkingMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -51,6 +53,8 @@ const {
   insertUserForImportMock: vi.fn(),
   insertUserRoleForImportMock: vi.fn(),
   insertNotificationPreferencesForImportMock: vi.fn(),
+  assertActorMayAttachExistingUserMock: vi.fn(),
+  loadActorCommunitiesForLinkingMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -105,6 +109,14 @@ vi.mock('@/lib/services/onboarding-service', () => ({
   getCommunityTypeForOnboarding: getCommunityTypeForOnboardingMock,
 }));
 
+// The cross-tenant guard runs for every row whose email matched a PRE-EXISTING
+// platform user. Its own logic is unit-tested in __tests__/services/user-linking.test.ts;
+// here we only care that this route calls it and soft-fails the row it rejects.
+vi.mock('@/lib/services/user-linking', () => ({
+  assertActorMayAttachExistingUser: assertActorMayAttachExistingUserMock,
+  loadActorCommunitiesForLinking: loadActorCommunitiesForLinkingMock,
+}));
+
 vi.mock('@/lib/services/import-residents-service', () => ({
   loadUnitNumberMapForImport: loadUnitNumberMapForImportMock,
   loadUserEmailMapForImport: loadUserEmailMapForImportMock,
@@ -143,6 +155,8 @@ describe('POST /api/v1/import-residents', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('actor-1');
     resolveEffectiveCommunityIdMock.mockReturnValue(42);
+    assertActorMayAttachExistingUserMock.mockResolvedValue(undefined);
+    loadActorCommunitiesForLinkingMock.mockResolvedValue([{ communityId: 42 }]);
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
     requirePermissionMock.mockReturnValue(undefined);
@@ -318,6 +332,60 @@ describe('POST /api/v1/import-residents', () => {
       "User with email 'cy@x.com' already has a role in this community",
     );
     expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+  });
+
+  it('skips a row whose email belongs to a user the actor cannot already see', async () => {
+    // Issue #940. `loadUserEmailMapForImport` scans the platform-wide `users`
+    // table (no `community_id`, so the scoped client does not filter it), so a
+    // CSV row can name a resident of ANOTHER association. Importing them would
+    // publish their real name, email and phone through this community's
+    // residents list — one row per victim, and silently, since this path sends
+    // no email.
+    validateResidentCsvMock.mockReturnValueOnce({
+      header: ['name', 'email', 'role', 'unit_number'],
+      rows: [
+        {
+          rowNumber: 2,
+          data: { name: 'Whoever', email: 'victim@other.example.com', role: 'owner', unit_number: '' },
+        },
+      ],
+      errors: [],
+    });
+    loadUserEmailMapForImportMock.mockResolvedValueOnce(
+      new Map([['victim@other.example.com', 'stranger-1']]),
+    );
+    loadUsersWithExistingRoleForImportMock.mockResolvedValueOnce(new Set());
+    assertActorMayAttachExistingUserMock.mockRejectedValueOnce(new ForbiddenError('nope'));
+
+    const res = await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+
+    // The ROW is skipped, not the whole import — one stranger's address must not
+    // abort an otherwise valid CSV.
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      data: { importedCount: number; skippedCount: number; errors: Array<{ message: string }> };
+    };
+    expect(json.data.importedCount).toBe(0);
+    expect(json.data.skippedCount).toBe(1);
+    expect(json.data.errors[0]?.message).toContain('cannot already see');
+    expect(insertUserRoleForImportMock).not.toHaveBeenCalled();
+  });
+
+  it('does not consult the cross-tenant guard for brand-new emails', async () => {
+    validateResidentCsvMock.mockReturnValueOnce({
+      header: ['name', 'email', 'role', 'unit_number'],
+      rows: [
+        { rowNumber: 2, data: { name: 'New Person', email: 'new@x.com', role: 'owner', unit_number: '' } },
+      ],
+      errors: [],
+    });
+    loadUserEmailMapForImportMock.mockResolvedValueOnce(new Map());
+    loadUsersWithExistingRoleForImportMock.mockResolvedValueOnce(new Set());
+    insertUserForImportMock.mockResolvedValueOnce('brand-new-1');
+
+    await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+
+    expect(assertActorMayAttachExistingUserMock).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated', async () => {

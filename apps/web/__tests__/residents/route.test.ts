@@ -19,6 +19,7 @@ const {
   documentsTable,
   requireAuthenticatedUserIdMock,
   requireCommunityMembershipMock,
+  findUserCommunitiesUnscopedMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -36,6 +37,13 @@ const {
   documentsTable: Symbol('documents'),
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
+  findUserCommunitiesUnscopedMock: vi.fn(),
+}));
+
+// The cross-tenant guard (user-linking.ts) compares the actor's memberships
+// against the target's whenever an EXISTING platform user is matched by email.
+vi.mock('@propertypro/db/unsafe', () => ({
+  findUserCommunitiesUnscoped: findUserCommunitiesUnscopedMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -173,6 +181,47 @@ describe('p1-18 residents route', () => {
         userId: 'actor-1',
       }),
     );
+  });
+
+  it('POST refuses an existing user the actor shares no community with', async () => {
+    // Issue #940. `users` has no `community_id`, so the email lookup in this
+    // route is NOT tenant-filtered — it matches across the whole platform. A
+    // manager of community 42 typing the address of a resident of community 999
+    // would otherwise bind that person's id here, and the residents list would
+    // then hand back their real name, email and phone.
+    scopedSelectFromMock
+      .mockResolvedValueOnce([{ id: 42, communityType: 'condo_718' }])
+      // assertUnitInCommunity
+      .mockResolvedValueOnce([{ id: 12 }])
+      // getResidentUserByEmail — a stranger from another association
+      .mockResolvedValueOnce([
+        { id: 'ffffffff-0000-0000-0000-00000000dead', email: 'stranger@example.com' },
+      ]);
+
+    findUserCommunitiesUnscopedMock.mockImplementation(async (userId: string) =>
+      userId === 'actor-1' ? [{ communityId: 42 }] : [{ communityId: 999 }],
+    );
+
+    const req = new NextRequest('http://localhost:3000/api/v1/residents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 42,
+        email: 'stranger@example.com',
+        fullName: 'Whoever They Say',
+        phone: null,
+        role: 'resident',
+        isUnitOwner: true,
+        unitId: 12,
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+
+    // Nothing written: no role row, no notification preferences, no audit entry.
+    expect(scopedInsertMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('POST returns 403 when role is property_manager (manager-tier lockdown)', async () => {

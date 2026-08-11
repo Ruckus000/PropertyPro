@@ -57,6 +57,15 @@ vi.mock('@/lib/api/user-communities', () => ({
 }));
 
 
+// The cross-tenant guard runs for rows matching a PRE-EXISTING platform user.
+// This file's subject is CSV mapping and validation; the guard's own behaviour is
+// covered by __tests__/services/user-linking.test.ts and the wiring by
+// __tests__/import-residents/import-residents-route.test.ts.
+vi.mock('@/lib/services/user-linking', () => ({
+  assertActorMayAttachExistingUser: vi.fn().mockResolvedValue(undefined),
+  loadActorCommunitiesForLinking: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
 
 vi.mock('@/lib/middleware/subscription-guard', () => ({
