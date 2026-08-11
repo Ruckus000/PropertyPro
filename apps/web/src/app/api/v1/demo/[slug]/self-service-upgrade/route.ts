@@ -77,7 +77,11 @@ export const POST = withErrorHandler(
     }
     const priceId = await resolveStripePrice(planId, demo.communityType, 'month');
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+    // Pin the API version, as every other Stripe client in this repo does.
+    // Unpinned, this one silently follows the account's default version, so a
+    // dashboard-side upgrade changes the shape of THIS route's responses and
+    // nothing else's.
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-01-28.clover' });
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],

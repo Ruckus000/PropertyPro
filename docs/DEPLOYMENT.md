@@ -67,13 +67,9 @@ Set for **Production** and **Preview** environments unless noted.
 | `DEMO_TOKEN_ENCRYPTION_KEY_HEX` | Server only | AES-256-GCM key used to decrypt `demo_instances.auth_token_secret` |
 | `DATABASE_URL` | Server only | Pooled connection string (port 6543) |
 | `DIRECT_URL` | Server only | Direct connection string (port 5432, migrations only) |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | All | Stripe publishable key |
-| `STRIPE_SECRET_KEY` | Server only | Stripe secret key |
-| `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret |
-| `STRIPE_PRICE_COMPLIANCE_BASIC` | Server only | Stripe price ID |
-| `STRIPE_PRICE_COMPLIANCE_PLUS_MOBILE` | Server only | Stripe price ID |
-| `STRIPE_PRICE_FULL_PLATFORM` | Server only | Stripe price ID |
-| `STRIPE_PRICE_APARTMENT_OPERATIONS` | Server only | Stripe price ID |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | All | Stripe publishable key. **Inlined into the client bundle at build time** — changing it requires a redeploy, not just an env update. Must be the same account+mode as `STRIPE_SECRET_KEY`. |
+| `STRIPE_SECRET_KEY` | Server only | Stripe secret key. Its `sk_live_`/`sk_test_` prefix is what the app treats as this deployment's Stripe mode. |
+| `STRIPE_WEBHOOK_SECRET` | Server only | Stripe webhook signing secret. Endpoint-specific: a mode change means a *different* endpoint and therefore a different secret. |
 | `RESEND_API_KEY` | Server only | Resend email API key |
 | `NEXT_PUBLIC_SENTRY_DSN` | All | Sentry client DSN |
 | `SENTRY_DSN` | Server only | Sentry server DSN |

@@ -138,6 +138,7 @@ export * from './constants/subscription-statuses';
 export * from './constants/cancellation-reasons';
 export * from './auth/password-policy';
 export * from './billing/permissions';
+export * from './billing/stripe-mode';
 export * from './billing/signup-trial';
 export * from './billing/subscription-lifecycle';
 export * from './billing/paid-grace';
