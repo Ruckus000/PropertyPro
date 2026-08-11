@@ -519,7 +519,9 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Promise<v
  * bank's check.
  *
  * `hosted_invoice_url` is bearer-ish and is deliberately absent from every log
- * call below.
+ * call below. That covers application code only — Sentry may still buffer the
+ * raw request body; see issue 951 and the note on
+ * `SendPaymentActionRequiredEmailOpts.authenticateUrl`.
  */
 async function handleInvoicePaymentActionRequired(invoice: Stripe.Invoice): Promise<void> {
   const rawSub = invoice.parent?.subscription_details?.subscription;

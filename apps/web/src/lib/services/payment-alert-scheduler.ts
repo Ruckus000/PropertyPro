@@ -90,6 +90,20 @@ async function lookupAdminRecipients(
       and(
         eq(userRoles.communityId, communityId),
         inArray(userRoles.role, [...adminRoles]),
+        // Soft-deleted users are NOT ex-members as far as this query is
+        // concerned. `executeUserSoftDelete` stamps `users.deleted_at` and bans
+        // the Supabase auth identity, but deliberately leaves `user_roles`
+        // alone — the row is needed to restore the account inside the 6-month
+        // window. Without this predicate every billing alert kept reaching
+        // people who can no longer log in.
+        //
+        // That was survivable while the alerts carried only login-walled app
+        // URLs. It stopped being survivable with the SCA email, whose CTA is
+        // Stripe's `hosted_invoice_url` — a bearer capability needing no
+        // session, which lets the holder read the association's invoice and pay
+        // it. Ordinary role removal is unaffected: `user_roles` rows are
+        // hard-deleted, so only the soft-delete path leaked.
+        isNull(users.deletedAt),
       ),
     );
 
@@ -181,9 +195,17 @@ export interface SendPaymentActionRequiredEmailOpts {
    * provide one — in which case the billing portal is used instead.
    *
    * Bearer-ish — it authorises viewing and paying the invoice with no further
-   * check. It goes into the email body and NOWHERE else: not a log line, not an
-   * audit-log payload, not an error message. `compliance_audit_log` in
-   * particular is board-readable and append-only, so a leak there is permanent.
+   * check, and with no session. Application code puts it in the email body and
+   * nowhere else: not a log line, not an audit-log payload, not an error
+   * message. `compliance_audit_log` matters most, being board-readable and
+   * append-only, so a leak there would be permanent.
+   *
+   * Known residual, outside this code's control: `@sentry/nextjs` buffers
+   * incoming request bodies (`maxRequestBodySize` defaults to 'medium') and
+   * `beforeSend` in `sentry.server.config.ts` strips headers but not
+   * `event.request.data`, so an exception raised inside the Stripe webhook
+   * request may still carry the raw invoice JSON. Tracked in issue 951 — do not
+   * read this docblock as a guarantee that extends to Sentry.
    */
   authenticateUrl: string | null;
 }

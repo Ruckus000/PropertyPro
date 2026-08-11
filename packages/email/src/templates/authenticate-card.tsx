@@ -1,4 +1,4 @@
-import { Heading, Text } from '@react-email/components';
+import { Heading, Link, Text } from '@react-email/components';
 import { emailColors } from '@propertypro/tokens/email';
 import { EmailLayout } from '../components/email-layout';
 import { EmailButton } from '../components/email-button';
@@ -84,7 +84,7 @@ export function AuthenticateCardEmail({
         The button takes you to Stripe to complete the check. Anyone with that
         link can view and pay the invoice, so please don&apos;t forward this
         email. You can also manage billing from{' '}
-        <a href={billingPortalUrl}>your billing portal</a>.
+        <Link href={billingPortalUrl}>your billing portal</Link>.
       </Text>
     </EmailLayout>
   );

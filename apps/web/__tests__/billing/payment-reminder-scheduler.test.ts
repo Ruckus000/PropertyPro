@@ -29,7 +29,12 @@ vi.mock('@propertypro/db/filters', () => ({
 
 vi.mock('@propertypro/db', () => ({
   communities: { id: 'communities.id', nextReminderAt: 'communities.nextReminderAt', deletedAt: 'communities.deletedAt' },
-  users: { email: 'users.email', fullName: 'users.fullName', id: 'users.id' },
+  users: {
+    email: 'users.email',
+    fullName: 'users.fullName',
+    id: 'users.id',
+    deletedAt: 'users.deletedAt',
+  },
   userRoles: { userId: 'userRoles.userId', communityId: 'userRoles.communityId', role: 'userRoles.role' },
 }));
 
@@ -794,5 +799,49 @@ describe('sendPaymentActionRequiredEmail', () => {
     });
 
     expect(sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: lookupAdminRecipients excludes soft-deleted users
+// ---------------------------------------------------------------------------
+
+describe('admin recipient lookup — soft-deleted users', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (sendEmail as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  it('filters on users.deletedAt IS NULL', async () => {
+    // `executeUserSoftDelete` stamps `users.deleted_at` and bans the auth
+    // identity but leaves `user_roles` in place, so without this predicate
+    // every billing alert keeps reaching people who cannot log in. That became
+    // a real capability leak with the SCA email, whose CTA is a bearer link
+    // needing no session.
+    //
+    // Asserted on the emitted WHERE clause rather than on a filtered result
+    // set: the DB is mocked, so a result-based assertion would only be testing
+    // the mock's own return value and would pass with the predicate deleted.
+    resetDbMocks();
+    const limit = vi.fn().mockResolvedValue([{ communityType: 'condo_718' }]);
+    mockDbWhere.mockReturnValueOnce({ limit }).mockResolvedValue([]);
+    mockDbInnerJoin.mockReturnValue({ where: mockDbWhere });
+    mockDbFrom.mockReturnValue({ where: mockDbWhere, innerJoin: mockDbInnerJoin });
+    mockDbSelect.mockReturnValue({ from: mockDbFrom });
+    (createUnscopedClient as ReturnType<typeof vi.fn>).mockReturnValue({ select: mockDbSelect });
+
+    await sendPaymentActionRequiredEmail(42, {
+      amountDue: '$1.00',
+      communityName: 'Palm Gardens',
+      authenticateUrl: 'https://invoice.stripe.com/i/acct_1/live_abc',
+    });
+
+    // The recipient query is the second .where() — the first resolves communityType.
+    const recipientWhere = JSON.stringify(mockDbWhere.mock.calls[1]);
+    expect(recipientWhere).toContain('users.deletedAt');
+    expect(recipientWhere).toContain('isNull');
+    // Still scoped to the one community, and to admin-tier roles only.
+    expect(recipientWhere).toContain('userRoles.communityId');
+    expect(recipientWhere).toContain('userRoles.role');
   });
 });

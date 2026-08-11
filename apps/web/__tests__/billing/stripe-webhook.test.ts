@@ -2084,20 +2084,27 @@ describe('POST /api/v1/webhooks/stripe', () => {
       );
       setupCommunity();
 
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // `console.info` is the one that matters and is easy to omit:
+      // `logStripeWebhookEvent` routes level 'info' there, and 'info' is what
+      // every success-path log in this route uses — including the one that
+      // fires immediately after this handler returns. A version of this test
+      // watching only log/warn/error passed while leaving the dominant channel
+      // unobserved, which would have let a `payloadSnippet: { hosted_invoice_url }`
+      // land without a single test going red.
+      const spies = (['log', 'info', 'warn', 'error'] as const).map((level) =>
+        vi.spyOn(console, level).mockImplementation(() => {}),
+      );
 
       await POST(makeRequest());
 
-      for (const spy of [consoleSpy, consoleWarnSpy, consoleErrorSpy]) {
-        for (const call of spy.mock.calls) {
-          expect(JSON.stringify(call)).not.toContain('live_secret');
-        }
-      }
-      consoleSpy.mockRestore();
-      consoleWarnSpy.mockRestore();
-      consoleErrorSpy.mockRestore();
+      const everythingLogged = JSON.stringify(spies.map((spy) => spy.mock.calls));
+      for (const spy of spies) spy.mockRestore();
+
+      // Assert the logger actually ran — otherwise this passes vacuously on any
+      // change that stops the route logging at all.
+      expect(everythingLogged).toContain('stripe-webhook');
+      expect(everythingLogged).not.toContain('live_secret');
+      expect(everythingLogged).not.toContain('invoice.stripe.com');
     });
   });
 
