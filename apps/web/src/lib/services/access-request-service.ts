@@ -27,7 +27,7 @@ import {
   sendEmail,
 } from '@propertypro/email';
 import { PM_SCOPE_DB_ROLES, isBoardPresident } from '@propertypro/shared';
-import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { createAuthUserBoundTo, rollBackAuthUser } from '@/lib/services/auth-user-binding';
 import { ValidationError, NotFoundError } from '@/lib/api/errors';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import { getBaseUrl } from '@/lib/utils/url';
@@ -311,42 +311,76 @@ export async function approveAccessRequest(params: {
   const requestPhone = request['phone'] as string | null;
   const requestIsUnitOwner = request['isUnitOwner'] as boolean;
 
-  // Create Supabase auth user
-  const supabase = createAdminClient();
-  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-    email: requestEmail,
-    email_confirm: true,
-    user_metadata: { full_name: requestFullName },
-  });
+  // Adopt an existing `users` row if this person already has one.
+  //
+  // `users` has no `community_id`, so this lookup is platform-wide (see the
+  // docblock on getUserForInvitation). A hit is the normal shape for someone
+  // pre-provisioned by ANOTHER community who has not accepted yet. Letting
+  // Supabase mint a fresh id in that case violates `public.users.id ===
+  // auth.users.id` and, worse, the `users` insert below would then fail on the
+  // UNIQUE email — after the auth account already exists.
+  const existingUserRows = await scoped.selectFrom<Record<string, unknown>>(
+    users,
+    { id: users.id },
+    eq(users.email, requestEmail),
+  );
+  const existingUserId = existingUserRows[0]?.['id'] as string | undefined;
 
-  if (authError || !authData?.user) {
-    // Do NOT update request status so admin can retry
-    throw new Error(`Failed to create auth user: ${authError?.message ?? 'Unknown error'}`);
-  }
-
-  const userId = authData.user.id;
-
-  // Insert users row
-  await scoped.insert(users, {
-    id: userId,
+  const authResult = await createAuthUserBoundTo({
     email: requestEmail,
     fullName: requestFullName,
-    phone: requestPhone,
+    ...(existingUserId ? { userId: existingUserId } : {}),
   });
 
-  // Insert user_roles row
-  await scoped.insert(userRoles, {
-    userId,
-    role: 'resident',
-    unitId: unitId ?? null,
-    isUnitOwner: requestIsUnitOwner,
-    displayTitle: requestIsUnitOwner ? 'Owner' : 'Tenant',
-  });
+  if (!authResult.ok) {
+    // Do NOT update request status so admin can retry
+    throw new Error(`Failed to create auth user: ${authResult.error}`);
+  }
 
-  // Create notification preferences
-  await scoped.insert(notificationPreferences, {
-    userId,
-  });
+  const userId = authResult.userId;
+
+  // Everything below writes rows that the auth account depends on. If any of it
+  // fails, the account is already loginable (`email_confirm: true`) and holds
+  // the email address, so a retry would fail "already registered" forever —
+  // the account has to go back.
+  try {
+    if (existingUserId) {
+      // Row already exists (pre-provisioned elsewhere): update it in place
+      // rather than inserting a duplicate that the UNIQUE email would reject.
+      await scoped.update(
+        users,
+        { fullName: requestFullName, phone: requestPhone },
+        eq(users.id, userId),
+      );
+    } else {
+      await scoped.insert(users, {
+        id: userId,
+        email: requestEmail,
+        fullName: requestFullName,
+        phone: requestPhone,
+      });
+    }
+
+    // Insert user_roles row
+    await scoped.insert(userRoles, {
+      userId,
+      role: 'resident',
+      unitId: unitId ?? null,
+      isUnitOwner: requestIsUnitOwner,
+      displayTitle: requestIsUnitOwner ? 'Owner' : 'Tenant',
+    });
+
+    // Create notification preferences
+    await scoped.insert(notificationPreferences, {
+      userId,
+    });
+  } catch (err) {
+    const rollback = await rollBackAuthUser(userId);
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to provision approved access request ${requestId}: ${reason} (${rollback})`,
+    );
+  }
 
   // Update access request status
   await scoped.update(
