@@ -34,7 +34,19 @@ const REFUSAL =
 export async function loadActorCommunitiesForLinking(
   actorUserId: string,
 ): Promise<LinkingMembership[]> {
-  return (await findUserCommunitiesUnscoped(actorUserId)) as unknown as LinkingMembership[];
+  const rows = (await findUserCommunitiesUnscoped(actorUserId)) as unknown as LinkingMembership[];
+  // Project down to the four fields this guard reads. `findUserCommunitiesUnscoped`
+  // also returns community name, slug, subscriptionPlan, trialEndsAt and more, and
+  // exporting it whole would launder an unscoped read behind a path
+  // verify-scoped-db-access.ts does not police (it allowlists importers of
+  // @propertypro/db/unsafe, not of this module). Narrowing here means the extra
+  // fields never leave the file even if a future caller misuses the helper.
+  return rows.map((row) => ({
+    communityId: row.communityId,
+    communityType: row.communityType,
+    role: row.role,
+    isUnitOwner: row.isUnitOwner,
+  }));
 }
 
 /**
@@ -99,6 +111,17 @@ async function hasActivatedAuthAccount(userId: string): Promise<boolean> {
  * being added to community B by a manager who does not run A. That person is
  * refused, and must accept A's invitation (or request access to B) first. An
  * earlier draft of this comment claimed otherwise; it was wrong.
+ *
+ * That last point has a sharper edge worth naming: **one membership anywhere
+ * burns the address everywhere else.** An attacker who adds `victim@x.com` to
+ * their own community creates a `users` row, after which every unrelated
+ * community is refused here — and the self-service fallback is currently broken
+ * too (see issue #944). Availability is traded for confidentiality deliberately,
+ * but the durable fix is an approve-the-link request flow, not this predicate.
+ *
+ * Finally, claiming a never-activated orphan does disclose the name and phone
+ * that the FIRST community's admin typed for that address. That is the accepted
+ * price of not handing every manager a way to permanently burn an email.
  *
  * @throws ForbiddenError when the actor cannot already read the target.
  */
