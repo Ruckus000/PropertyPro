@@ -3,7 +3,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CalendarEvent } from '@/lib/calendar/event-types';
 import type { MeetingDeadlines } from '@/lib/meetings/meeting-response';
-import { requestJson } from '@/lib/api/request-json';
+import type { NoticeWarning } from '@/lib/compliance/notice-window';
+import { requestJson, requestJsonEnvelope } from '@/lib/api/request-json';
 
 export interface MeetingListItem {
   id: number;
@@ -92,6 +93,19 @@ export function useCalendarEvents(
   });
 }
 
+/**
+ * `{ data, warnings }` rather than the bare meeting.
+ *
+ * The route attaches a `notice_window_missed` warning when the schedule is
+ * already inside its statutory notice window (#932). Going through
+ * `requestJson` would drop it silently — the meeting saves, the board is never
+ * told the notice deadline is unreachable.
+ */
+export type MeetingMutationResult = {
+  data: MeetingListItem;
+  warnings: NoticeWarning[];
+};
+
 export function useCreateMeeting(communityId: number) {
   const queryClient = useQueryClient();
 
@@ -102,8 +116,8 @@ export function useCreateMeeting(communityId: number) {
       startsAt: string;
       endsAt?: string | null;
       location: string;
-    }) =>
-      requestJson<MeetingListItem>('/api/v1/meetings', {
+    }): Promise<MeetingMutationResult> =>
+      requestJsonEnvelope<MeetingListItem>('/api/v1/meetings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId, ...payload }),
@@ -125,8 +139,8 @@ export function useUpdateMeeting(communityId: number) {
       startsAt?: string;
       endsAt?: string | null;
       location?: string;
-    }) =>
-      requestJson<MeetingListItem>('/api/v1/meetings', {
+    }): Promise<MeetingMutationResult> =>
+      requestJsonEnvelope<MeetingListItem>('/api/v1/meetings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'update', communityId, ...payload }),

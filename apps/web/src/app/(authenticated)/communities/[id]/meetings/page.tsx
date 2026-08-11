@@ -40,6 +40,7 @@ export default async function MeetingsPage({ params }: PageProps) {
       userId={userId}
       role={membership.role}
       timezone={membership.timezone}
+      communityType={membership.communityType}
       canWrite={canWrite}
     />
   );

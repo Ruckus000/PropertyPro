@@ -13,13 +13,15 @@ import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
 import { MeetingForm } from '@/components/meetings/meeting-form';
 import { useCalendarEvents } from '@/hooks/use-meetings';
 import { getCalendarEventDateKey } from '@/lib/calendar/event-types';
-import type { CommunityRole } from '@propertypro/shared';
+import type { CommunityRole, CommunityType } from '@propertypro/shared';
 
 interface MeetingsPageShellProps {
   communityId: number;
   userId: string;
   role: CommunityRole;
   timezone: string;
+  /** Passed to the meeting form so it can compute the notice lead time. */
+  communityType: CommunityType;
   canWrite: boolean;
 }
 
@@ -28,6 +30,7 @@ export function MeetingsPageShell({
   userId,
   role,
   timezone,
+  communityType,
   canWrite,
 }: MeetingsPageShellProps) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
@@ -178,6 +181,7 @@ export function MeetingsPageShell({
         <MeetingForm
           communityId={communityId}
           communityTimezone={timezone}
+          communityType={communityType}
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {
             setShowCreateForm(false);
@@ -189,6 +193,7 @@ export function MeetingsPageShell({
         <MeetingForm
           communityId={communityId}
           communityTimezone={timezone}
+          communityType={communityType}
           meetingId={editingMeetingId}
           onClose={() => setEditingMeetingId(null)}
           onSuccess={() => {

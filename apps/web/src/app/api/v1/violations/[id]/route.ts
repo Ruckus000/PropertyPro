@@ -20,6 +20,7 @@ import {
   requireViolationsEnabled,
 } from '@/lib/violations/common';
 import { getViolationForCommunity, updateViolationForCommunity } from '@/lib/services/violations-service';
+import { buildHearingNoticeWarning } from '@/lib/violations/hearing-notice-warning';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
@@ -59,7 +60,7 @@ export const PATCH = withErrorHandler(
     requireViolationAdminWrite(membership);
 
     const requestId = req.headers.get('x-request-id');
-    return updateViolationForCommunity(
+    const updated = await updateViolationForCommunity(
       communityId,
       params.id,
       actorUserId,
@@ -78,5 +79,23 @@ export const PATCH = withErrorHandler(
       },
       requestId,
     );
+
+    // Warn, never block — a hearing may legitimately be short-noticed, and the
+    // association is the one that has to answer for it.
+    //
+    // The warning rides INSIDE the payload rather than as a top-level sibling
+    // of `data`, unlike the meetings route. That is forced, not stylistic: this
+    // route runs through `runRoute`, whose single-wrap produces exactly
+    // `{ data: payload }`, so a field beside `data` cannot round-trip. Adding a
+    // key to the row is additive — every existing consumer reads named fields
+    // and is unaffected.
+    //
+    // Keyed off `body.hearingDate`, not the stored value, so re-saving an
+    // unrelated field on an already-short-noticed violation does not nag.
+    const warning = buildHearingNoticeWarning({
+      hearingDate: body.hearingDate,
+      now: new Date(),
+    });
+    return warning ? { ...updated, warnings: [warning] } : updated;
   }),
 );

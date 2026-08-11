@@ -41,6 +41,10 @@ function NotesEditor({ value, onChange, placeholder }: NotesEditorProps) {
   );
 }
 import { updateViolation, imposeFine, resolveViolation, dismissViolation } from '@/lib/api/violations';
+import {
+  buildHearingNoticeWarning,
+  HEARING_NOTICE_DAYS,
+} from '@/lib/violations/hearing-notice-warning';
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss';
 
@@ -100,7 +104,21 @@ export function ViolationStatusTransition({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const minHearingDate = format(addDays(new Date(), 14), 'yyyy-MM-dd');
+  /**
+   * Warn, never block.
+   *
+   * This used to be a `min` attribute on the date input, which browsers enforce
+   * as a hard constraint — a board could not schedule an emergency hearing at
+   * all, and the rule is a bylaws convention rather than a statutory floor.
+   * Worse, `min` is client-only: the server accepted any date, so the "rule"
+   * bound the one form that already respected it and nothing else. Now the
+   * server computes the same warning (`buildHearingNoticeWarning`), and this
+   * calls that same function so the two cannot disagree.
+   */
+  const hearingNoticeWarning = buildHearingNoticeWarning({
+    hearingDate: hearingDate ? new Date(`${hearingDate}T00:00:00`) : null,
+    now: new Date(),
+  });
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -190,13 +208,23 @@ export function ViolationStatusTransition({
               id="hearing-date"
               type="date"
               value={hearingDate}
-              min={minHearingDate}
               onChange={(e) => setHearingDate(e.target.value)}
               className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus:outline-none focus:ring-1 focus:ring-focus"
             />
-            <p className="mt-1 text-xs text-content-disabled">
-              Must be at least 14 days from today per Florida bylaw requirements.
-            </p>
+            {hearingNoticeWarning ? (
+              <p
+                role="status"
+                data-testid="hearing-notice-window-warning"
+                className="mt-1 rounded-md bg-status-warning-bg px-3 py-2 text-xs text-status-warning"
+              >
+                {hearingNoticeWarning.message}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-content-disabled">
+                Most Florida condo bylaws require at least {HEARING_NOTICE_DAYS} days&apos;
+                notice. Check your governing documents.
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="hearing-location" className="mb-1 block text-sm font-medium text-content-secondary">

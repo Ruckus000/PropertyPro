@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
@@ -402,5 +402,137 @@ describe('meetings route', () => {
       new NextRequest('http://localhost:3000/api/v1/meetings?communityId=42'),
     );
     expect(response.status).toBe(403);
+  });
+
+  /**
+   * #932 — the route says so when a schedule is already inside its notice
+   * window, and never refuses it.
+   *
+   * The clock is frozen here for a reason beyond determinism: every other test
+   * in this file hard-codes April 2026 dates, so as real time passed they
+   * quietly crossed from "future meeting" to "past meeting". Without a fixed
+   * `now` these assertions would flip meaning on an arbitrary date and read as
+   * a regression in the route.
+   */
+  describe('notice-window warnings', () => {
+    const NOW = new Date('2026-04-01T12:00:00.000Z');
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function mockMeetingRow(startsAt: string, meetingType: string) {
+      const selectFromMock = vi.fn((table: unknown) => {
+        if (table === meetingsTableMock) {
+          return makeSelectResult([
+            {
+              id: 501,
+              title: 'Scheduled Meeting',
+              meetingType,
+              startsAt: new Date(startsAt),
+              endsAt: null,
+              location: 'Clubhouse',
+              noticePostedAt: null,
+              minutesApprovedAt: null,
+            },
+          ]);
+        }
+        if (table === communitiesTableMock) {
+          return makeSelectResult([{ timezone: 'America/New_York' }]);
+        }
+        return makeSelectResult([]);
+      });
+
+      createScopedClientMock.mockReturnValue({
+        selectFrom: selectFromMock,
+        insert: vi.fn().mockResolvedValue([{ id: 501 }]),
+        update: vi.fn().mockResolvedValue([{ id: 501 }]),
+        softDelete: vi.fn(),
+        hardDelete: vi.fn(),
+      });
+    }
+
+    async function createMeeting(startsAt: string, meetingType: string) {
+      mockMeetingRow(startsAt, meetingType);
+      const response = await POST(
+        new NextRequest('http://localhost:3000/api/v1/meetings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            communityId: 42,
+            title: 'Scheduled Meeting',
+            meetingType,
+            startsAt,
+            location: 'Clubhouse',
+          }),
+        }),
+      );
+      return {
+        status: response.status,
+        json: (await response.json()) as {
+          data: { id: number };
+          warnings?: Array<{ code: string; message: string }>;
+        },
+      };
+    }
+
+    it('omits warnings entirely for a compliant schedule', async () => {
+      // 20 days out against a 14-day window. The absence of the key — not an
+      // empty array — is what keeps the wire shape byte-identical to before.
+      const { status, json } = await createMeeting('2026-04-21T12:00:00.000Z', 'annual');
+
+      expect(status).toBe(200);
+      expect(json.data.id).toBe(501);
+      expect(json).not.toHaveProperty('warnings');
+    });
+
+    it('creates the meeting anyway and returns a warning when inside the window', async () => {
+      // 4 days out against a 14-day window: 10 days short.
+      const { status, json } = await createMeeting('2026-04-05T12:00:00.000Z', 'annual');
+
+      // Created, not rejected — there is no emergency meeting type to fall back
+      // on, so refusing would make a lawful short-notice meeting impossible.
+      expect(status).toBe(200);
+      expect(json.data.id).toBe(501);
+      expect(json.warnings).toHaveLength(1);
+      expect(json.warnings?.[0]?.code).toBe('notice_window_missed');
+      expect(json.warnings?.[0]?.message).toContain('14-day notice window');
+      expect(json.warnings?.[0]?.message).toContain('passed 10 days ago');
+    });
+
+    it('uses the 48-hour window for a board meeting, not the 14-day one', async () => {
+      const compliant = await createMeeting('2026-04-04T12:00:00.000Z', 'board');
+      expect(compliant.json).not.toHaveProperty('warnings');
+
+      const short = await createMeeting('2026-04-02T00:00:00.000Z', 'board');
+      expect(short.json.warnings?.[0]?.message).toContain('48-hour notice window');
+    });
+
+    it('warns on a reschedule that moves a meeting inside its window', async () => {
+      mockMeetingRow('2026-04-03T12:00:00.000Z', 'annual');
+      const response = await POST(
+        new NextRequest('http://localhost:3000/api/v1/meetings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update',
+            communityId: 42,
+            id: 501,
+            startsAt: '2026-04-03T12:00:00.000Z',
+          }),
+        }),
+      );
+      const json = (await response.json()) as {
+        warnings?: Array<{ code: string }>;
+      };
+
+      expect(response.status).toBe(200);
+      expect(json.warnings?.[0]?.code).toBe('notice_window_missed');
+    });
   });
 });
