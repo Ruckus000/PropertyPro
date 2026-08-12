@@ -168,4 +168,51 @@ describe('readiness route', () => {
     expect(body.checks.otp_hmac_secret.status).toBe('fail');
     expect(body.checks.otp_hmac_secret.error).toContain('too short');
   });
+
+  // TOKEN_ENCRYPTION_KEY needs a FORMAT check, not a length floor.
+  // `parseTokenEncryptionKeyHex` requires exactly 64 hex characters, so both
+  // cases below throw on every encrypt and decrypt — while a `length >= 64`
+  // test called them healthy. A green probe over a permanently broken
+  // encryption path is the worst outcome this endpoint can produce, because it
+  // actively certifies the fault as fine.
+  it.each([
+    [
+      'a 128-char key from `openssl rand -hex 64` (the arg is BYTES, not chars)',
+      'a'.repeat(128),
+    ],
+    ['a 64-char passphrase that is not hex', 'z'.repeat(64)],
+  ])('reports degraded for TOKEN_ENCRYPTION_KEY set to %s', async (_label, value) => {
+    process.env.TOKEN_ENCRYPTION_KEY = value;
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { token_encryption_key: { status: string; error?: string } };
+    };
+
+    expect(body.status).toBe('degraded');
+    expect(body.checks.token_encryption_key.status).toBe('fail');
+    expect(body.checks.token_encryption_key.error).toContain('exactly 64 hex characters');
+  });
+
+  it('still passes TOKEN_ENCRYPTION_KEY for a real 64-char hex key', async () => {
+    // Anti-vacuity for the two cases above: the new format check must not
+    // reject the value operators are told to generate.
+    process.env.TOKEN_ENCRYPTION_KEY = '0123456789abcdefABCDEF0123456789abcdefABCDEF01234567890123456789';
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { token_encryption_key: { status: string } };
+    };
+
+    expect(body.checks.token_encryption_key.status).toBe('pass');
+    expect(body.status).toBe('healthy');
+  });
 });

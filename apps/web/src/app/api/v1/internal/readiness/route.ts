@@ -63,7 +63,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //   - CRON_SECRET: Vercel Cron only sends `Authorization: Bearer $CRON_SECRET`
   //     when the var exists. Unset, it sends no header, every scheduled job
   //     401s, and the platform still reports the cron as registered and firing.
-  //     All 10 jobs were dead for months with a green dashboard.
+  //     Every scheduled job (15 as of apps/web/vercel.json) was dead for months
+  //     with a green dashboard.
   //   - OTP_HMAC_SECRET: access-request OTPs are 6 digits, so the HMAC secret is
   //     the only barrier to precomputing the whole space.
   //   - TOKEN_ENCRYPTION_KEY: calendar sync and accounting connectors throw
@@ -72,23 +73,47 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // This is the check that would have caught the cron outage on day one. It
   // deliberately makes "a secret is missing" a monitorable signal instead of
   // silence.
-  for (const [name, minLength] of [
-    ['CRON_SECRET', 16],
-    ['OTP_HMAC_SECRET', 16],
-    ['TOKEN_ENCRYPTION_KEY', 64],
-  ] as const) {
-    const value = process.env[name];
-    const key = name.toLowerCase();
+  //
+  // TOKEN_ENCRYPTION_KEY is checked by FORMAT, not by minimum length. A length
+  // floor cannot express its requirement: `parseTokenEncryptionKeyHex` demands
+  // exactly 64 hex characters, so `openssl rand -hex 64` (128 chars — the
+  // argument is a byte count) and any 64-character non-hex passphrase both pass
+  // a `length >= 64` test while throwing on every encrypt and decrypt. That
+  // combination is the worst case this check exists to prevent: a green
+  // readiness probe over a permanently broken encryption path.
+  const secretRules = [
+    { name: 'CRON_SECRET', minLength: 16 },
+    { name: 'OTP_HMAC_SECRET', minLength: 16 },
+    { name: 'TOKEN_ENCRYPTION_KEY', exactHexChars: 64 },
+  ] as const;
+
+  for (const rule of secretRules) {
+    const value = process.env[rule.name];
+    const key = rule.name.toLowerCase();
+
     if (!value) {
-      checks[key] = { status: 'fail', error: `${name} is not set` };
-    } else if (value.length < minLength) {
-      checks[key] = {
-        status: 'fail',
-        error: `${name} is too short (${value.length} chars; min ${minLength})`,
-      };
-    } else {
-      checks[key] = { status: 'pass' };
+      checks[key] = { status: 'fail', error: `${rule.name} is not set` };
+      continue;
     }
+
+    if ('exactHexChars' in rule) {
+      const valid = new RegExp(`^[0-9a-fA-F]{${rule.exactHexChars}}$`).test(value);
+      checks[key] = valid
+        ? { status: 'pass' }
+        : {
+            status: 'fail',
+            error: `${rule.name} must be exactly ${rule.exactHexChars} hex characters (got ${value.length})`,
+          };
+      continue;
+    }
+
+    checks[key] =
+      value.length < rule.minLength
+        ? {
+            status: 'fail',
+            error: `${rule.name} is too short (${value.length} chars; min ${rule.minLength})`,
+          }
+        : { status: 'pass' };
   }
 
   // Determine overall status

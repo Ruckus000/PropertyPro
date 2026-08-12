@@ -86,6 +86,9 @@ Set for **Production** and **Preview** environments unless noted.
 | `ADMIN_ORIGIN` | Web | Optional; CSP framing for admin→web previews, e.g. `https://admin.getpropertypro.com` |
 | `SUPPORT_SESSION_JWT_SECRET` | **Both apps, server only** | **Required** — HMAC key for support-impersonation JWTs (min 32 chars). Admin signs, web verifies, so the **same value** must be set on `property-pro-admin` **and** `property-pro-web`. Generate with `openssl rand -hex 32`. See the note below. |
 | `NODE_ENV` | All | `production` |
+| `CRON_SECRET` | **Production, server only** | **Required — every scheduled job depends on it.** Vercel Cron authenticates all 15 jobs with this one platform-wide value. See §4.2. |
+| `OTP_HMAC_SECRET` | Server only | **Required** (min 16 chars). Access-request OTPs are 6 digits, so this HMAC key is the only thing preventing an attacker precomputing the entire code space. See §4.2. |
+| `TOKEN_ENCRYPTION_KEY` | Server only | **Required** — **exactly 64 hex characters** (32 bytes for AES-256-GCM); not a minimum, and not any 64 characters. Calendar sync and accounting connectors throw without it — those features 500 rather than degrade. See §4.2. |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `READINESS_CHECK_SECRET` | Server only | Shared bearer secret for deployment readiness checks |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
@@ -127,6 +130,91 @@ environments. Use `--no-sensitive`: a Sensitive variable is written back by
 
 Also add it to the root `.env.local` — `apps/web/e2e/support-access.spec.ts`
 drives the real signer and verifier and cannot pass without it.
+
+### 4.2 `CRON_SECRET`, `OTP_HMAC_SECRET`, `TOKEN_ENCRYPTION_KEY` — the three that fail *silently*
+
+These three are grouped because they share a property nothing else in §4 has:
+**when they are missing, production keeps serving traffic and nothing reports a
+problem.** A missing `DATABASE_URL` announces itself immediately. These do not.
+
+Each was, at some point, actually unset in production, and none of them
+surfaced:
+
+- **`CRON_SECRET`** — Vercel Cron only sends `Authorization: Bearer
+  $CRON_SECRET` **when the variable exists**. Unset, it sends no header at all,
+  every scheduled job answers 401, and the Vercel dashboard still shows each
+  cron as registered and firing on schedule. All 15 jobs — payment reminders,
+  late fees, assessment generation, compliance alerts, demo expiry, account
+  lifecycle — can be dead for months behind a green dashboard.
+
+  It is one platform-wide value, **not** per route. A `PER_ROUTE ?? CRON_SECRET`
+  fallback does **not** fix this: `??` only reaches the fallback when the
+  per-route secret is *unset*, and the routes that were configured all had
+  theirs set — so they would go on rejecting the platform's token, and the
+  fallback would quietly repair only the routes nobody had configured. The
+  actual fix is that `requireCronSecret`
+  (`apps/web/src/lib/api/cron-auth.ts`) accepts *any* of the candidates it is
+  handed, so a route stays reachable by both its dedicated secret and by
+  `CRON_SECRET`.
+
+- **`OTP_HMAC_SECRET`** (min 16) — access-request OTPs are 6 digits. This key is
+  the only barrier to precomputing the whole space.
+
+- **`TOKEN_ENCRYPTION_KEY`** (**exactly 64 hex chars**) — calendar sync and
+  accounting connectors throw without it, so those features return 500 instead
+  of degrading.
+
+Generate **all three** with the same command:
+
+```bash
+openssl rand -hex 32     # 32 bytes → 64 hex characters
+```
+
+Add them with `--no-sensitive`, for the same reason as §4.1.
+
+> **`openssl rand -hex 64` is wrong for `TOKEN_ENCRYPTION_KEY`.** The argument
+> is a byte count, not a character count, so `-hex 64` emits **128**
+> characters. `parseTokenEncryptionKeyHex`
+> (`packages/db/src/crypto/token-encryption.ts`) requires
+> `/^[0-9a-fA-F]{64}$/` exactly, so a 128-character key throws on every
+> encrypt and decrypt. The same applies to a 64-character *passphrase* that
+> isn't hex.
+
+#### Verifying them
+
+`/api/v1/internal/readiness` exists to make this a monitorable signal rather
+than silence. It checks all three for presence **and minimum length**, and
+reports `degraded` — not `healthy` — when any is missing:
+
+```bash
+curl -H "Authorization: Bearer $READINESS_CHECK_SECRET" \
+  https://www.getpropertypro.com/api/v1/internal/readiness
+```
+
+Look for `checks.cron_secret`, `checks.otp_hmac_secret` and
+`checks.token_encryption_key`.
+
+A green readiness check proves the variables are *set*. To prove the cron path
+actually **works end to end**, read the freshness of a job's output — this
+endpoint needs no auth, and a recent timestamp means a scheduled job ran *and*
+authenticated:
+
+```bash
+curl https://www.getpropertypro.com/api/v1/internal/revenue-snapshot/health
+# {"status":"healthy","last_snapshot_at":"…","hours_since":21.4}
+```
+
+On a freshly provisioned environment — the most likely moment to run this —
+there is a third shape, with neither timestamp nor age:
+
+```json
+{"status":"unhealthy","reason":"no_snapshots_ever"}
+```
+
+`revenue-snapshot` runs at `0 2 * * *`, and the endpoint returns **503** once
+`hours_since` passes 26 (one daily run plus a two-hour grace). A 503 here means
+the job stopped running — most likely a 401, most likely this secret. It is
+already suitable for an external uptime monitor.
 
 ## 5. Domain & DNS Configuration
 
@@ -345,6 +433,7 @@ For database rollbacks, Supabase provides point-in-time recovery (PITR) on Pro p
 | `/` | GET | 200 (marketing page) |
 | `/api/v1/compliance` | GET (authed) | 200/401 |
 | `/api/v1/internal/readiness` | GET + Bearer `READINESS_CHECK_SECRET` | `healthy`/`degraded`; `schema_compatibility` must pass |
+| `/api/v1/internal/revenue-snapshot/health` | GET, **no auth** | 200 while `hours_since` < 26, else 503. The only check that proves the cron path *works* rather than that its config exists — see §4.2. |
 
 ## 9. Troubleshooting
 
@@ -362,6 +451,27 @@ DATABASE_URL=... NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... 
 ### Missing Environment Variables
 
 Check Vercel Dashboard > Project > Settings > Environment Variables. Ensure all variables from Section 4 are set for the correct environment scope (Production/Preview/Development).
+
+To list what is actually set without revealing any value:
+
+```bash
+vercel env ls production --project property-pro-web
+```
+
+### Scheduled Jobs Silently Not Running
+
+The symptom is that there is no symptom: the Vercel Cron tab shows every job
+registered and firing, while nothing they were supposed to do has happened —
+no reminder emails, no late fees, no generated assessments.
+
+1. Open the Vercel Cron tab. **A wall of 401s is the direct signal**; the cron
+   still reports as having fired.
+2. Confirm `CRON_SECRET` exists for **Production** (`vercel env ls production`).
+   Unset, Vercel sends no `Authorization` header at all, so every job 401s.
+3. Confirm a job actually completed, not merely that config is present:
+   `curl https://www.getpropertypro.com/api/v1/internal/revenue-snapshot/health`
+
+See §4.2 — and note that adding a per-route secret does **not** fix this.
 
 ### Subdomain Not Resolving
 
