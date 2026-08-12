@@ -88,7 +88,7 @@ Set for **Production** and **Preview** environments unless noted.
 | `NODE_ENV` | All | `production` |
 | `CRON_SECRET` | **Production, server only** | **Required — every scheduled job depends on it.** Vercel Cron authenticates all 15 jobs with this one platform-wide value. See §4.2. |
 | `OTP_HMAC_SECRET` | Server only | **Required** (min 16 chars). Access-request OTPs are 6 digits, so this HMAC key is the only thing preventing an attacker precomputing the entire code space. See §4.2. |
-| `TOKEN_ENCRYPTION_KEY` | Server only | **Required** (min 64 chars). Calendar sync and accounting connectors throw without it — those features 500 rather than degrade. See §4.2. |
+| `TOKEN_ENCRYPTION_KEY` | Server only | **Required** — **exactly 64 hex characters** (32 bytes for AES-256-GCM); not a minimum, and not any 64 characters. Calendar sync and accounting connectors throw without it — those features 500 rather than degrade. See §4.2. |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `READINESS_CHECK_SECRET` | Server only | Shared bearer secret for deployment readiness checks |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
@@ -147,23 +147,38 @@ surfaced:
   late fees, assessment generation, compliance alerts, demo expiry, account
   lifecycle — can be dead for months behind a green dashboard.
 
-  It is one platform-wide value, **not** per route. `requireCronSecret`
+  It is one platform-wide value, **not** per route. A `PER_ROUTE ?? CRON_SECRET`
+  fallback does **not** fix this: `??` only reaches the fallback when the
+  per-route secret is *unset*, and the routes that were configured all had
+  theirs set — so they would go on rejecting the platform's token, and the
+  fallback would quietly repair only the routes nobody had configured. The
+  actual fix is that `requireCronSecret`
   (`apps/web/src/lib/api/cron-auth.ts`) accepts *any* of the candidates it is
   handed, so a route stays reachable by both its dedicated secret and by
-  `CRON_SECRET`. That is why a `PER_ROUTE ?? CRON_SECRET` fallback does **not**
-  work: `??` only reaches the fallback when the per-route secret is *unset*, and
-  the routes that were configured all had theirs set — so they would go on
-  rejecting the platform's token.
+  `CRON_SECRET`.
 
 - **`OTP_HMAC_SECRET`** (min 16) — access-request OTPs are 6 digits. This key is
   the only barrier to precomputing the whole space.
 
-- **`TOKEN_ENCRYPTION_KEY`** (min 64) — calendar sync and accounting connectors
-  throw without it, so those features return 500 instead of degrading.
+- **`TOKEN_ENCRYPTION_KEY`** (**exactly 64 hex chars**) — calendar sync and
+  accounting connectors throw without it, so those features return 500 instead
+  of degrading.
 
-Generate each with `openssl rand -hex 32` (use `-hex 64` for
-`TOKEN_ENCRYPTION_KEY`) and add with `--no-sensitive`, for the same reason as
-§4.1.
+Generate **all three** with the same command:
+
+```bash
+openssl rand -hex 32     # 32 bytes → 64 hex characters
+```
+
+Add them with `--no-sensitive`, for the same reason as §4.1.
+
+> **`openssl rand -hex 64` is wrong for `TOKEN_ENCRYPTION_KEY`.** The argument
+> is a byte count, not a character count, so `-hex 64` emits **128**
+> characters. `parseTokenEncryptionKeyHex`
+> (`packages/db/src/crypto/token-encryption.ts`) requires
+> `/^[0-9a-fA-F]{64}$/` exactly, so a 128-character key throws on every
+> encrypt and decrypt. The same applies to a 64-character *passphrase* that
+> isn't hex.
 
 #### Verifying them
 
@@ -187,6 +202,13 @@ authenticated:
 ```bash
 curl https://www.getpropertypro.com/api/v1/internal/revenue-snapshot/health
 # {"status":"healthy","last_snapshot_at":"…","hours_since":21.4}
+```
+
+On a freshly provisioned environment — the most likely moment to run this —
+there is a third shape, with neither timestamp nor age:
+
+```json
+{"status":"unhealthy","reason":"no_snapshots_ever"}
 ```
 
 `revenue-snapshot` runs at `0 2 * * *`, and the endpoint returns **503** once
