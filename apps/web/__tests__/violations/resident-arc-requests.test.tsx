@@ -46,7 +46,7 @@ function makeSubmission(overrides: Partial<ArcSubmission> = {}): ArcSubmission {
 }
 
 function withSubmissions(data: ArcSubmission[] | undefined, isLoading = false) {
-  useArcSubmissionsMock.mockReturnValue({ data, isLoading });
+  useArcSubmissionsMock.mockReturnValue({ data, isLoading, isError: false, refetch: vi.fn() });
   render(<ResidentArcRequests communityId={42} />);
 }
 
@@ -66,6 +66,27 @@ describe('ResidentArcRequests', () => {
       'href',
       '/arc-requests/new?communityId=42',
     );
+  });
+
+  it('reports a failed fetch instead of claiming there are no requests', () => {
+    // A failed query leaves `data` undefined, which looks identical to "none
+    // yet". Rendering the empty state there would tell a resident whose
+    // request is sitting in the queue that they never submitted it, and hand
+    // them a button to submit it again.
+    const refetch = vi.fn();
+    useArcSubmissionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+    render(<ResidentArcRequests communityId={42} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load your requests/i);
+    expect(screen.queryByText(/No architectural requests yet/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalled();
   });
 
   it('shows the request with its status', () => {

@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { cn } from '@/lib/utils';
 import {
@@ -41,7 +42,7 @@ function formatDate(dateStr: string): string {
 }
 
 export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
-  const { data: submissions, isLoading } = useArcSubmissions(communityId);
+  const { data: submissions, isLoading, isError, refetch } = useArcSubmissions(communityId);
   const withdrawMutation = useWithdrawArcSubmission(communityId);
   const [pendingId, setPendingId] = useState<number | null>(null);
 
@@ -67,6 +68,25 @@ export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
           <div key={i} className="h-24 animate-pulse rounded-md border border-edge bg-surface-hover" />
         ))}
       </div>
+    );
+  }
+
+  // Before the empty check, not after: a failed fetch also leaves `submissions`
+  // undefined, and falling through would tell a resident whose request is
+  // sitting in the queue that they have never submitted one — inviting them to
+  // submit it twice.
+  if (isError) {
+    return (
+      <AlertBanner
+        status="danger"
+        title="We couldn't load your requests"
+        description="This is a problem on our end, not with your submissions. Please try again."
+        action={
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        }
+      />
     );
   }
 
