@@ -753,6 +753,17 @@ export async function dismissViolationForCommunity(
   );
 }
 
+/**
+ * Single ARC submission, scoped per UNIT for residents — see the visibility
+ * note on `paginateArcSubmissionsForCommunity` (#955). Read scope here must
+ * stay identical to the list's, or a row hidden from the list would still be
+ * reachable by guessing its id.
+ *
+ * Note this is READ scope only. Acting on a submission is narrower:
+ * `withdrawArcSubmissionForCommunity` additionally requires
+ * `existing.submittedByUserId === actorUserId`, so a co-resident can see a
+ * request but cannot withdraw it.
+ */
 export async function getArcSubmissionForCommunity(
   communityId: number,
   submissionId: number,
@@ -1059,6 +1070,38 @@ export interface PaginatedArcSubmissions {
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
  * community membership, ARC feature gate, and `arc_submissions:read`
  * permission. For resident roles, `allowedUnitIds` MUST be passed.
+ *
+ * ## Visibility is per UNIT, not per submitter — deliberately (#955)
+ *
+ * `listActorUnitIds` resolves a user's units from EITHER a `user_roles.unit_id`
+ * assignment OR `units.owner_user_id`. So on a unit that has both an owner and
+ * a tenant, each sees the other's ARC submissions — title, description, status
+ * and `reviewNotes`.
+ *
+ * That is the intended scope, not an oversight:
+ *
+ * - An ARC application is a request to alter the PROPERTY. Under a Florida
+ *   declaration the OWNER is the party bound by the covenants and liable for
+ *   unapproved work, so an owner who could not see a request against their own
+ *   unit would be the actual defect. Hiding it would also let a tenant commit
+ *   the owner to a modification the owner never saw.
+ * - It matches `paginateViolationsForCommunity` exactly, which scopes the same
+ *   way for the same reason. Diverging here would give two adjacent
+ *   property-scoped features two different mental models.
+ *
+ * The residual case — a tenant seeing their landlord's requests — is
+ * low-consequence: the request concerns the home they live in and the work
+ * would be visible to them anyway.
+ *
+ * Weighed and rejected: per-submitter scoping (`eq(submittedByUserId, actor)`),
+ * and an asymmetric rule (owners see the unit, tenants see only their own).
+ * The asymmetric version is the tighter design, but it buys privacy from a
+ * party with no standing in the decision at the cost of diverging from
+ * violations. Revisit only with a real requirement, not on the general
+ * principle that narrower is safer.
+ *
+ * Pinned by `__tests__/violations/arc-visibility-scope.test.ts` so a future
+ * change has to be deliberate.
  */
 export async function paginateArcSubmissionsForCommunity(params: {
   communityId: number;
