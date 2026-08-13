@@ -110,15 +110,27 @@ export default defineConfig({
       command: 'pnpm dev:e2e',
       env: {
         PORT: WEB_PORT,
-        // Per-server, deliberately. `next dev` compiles routes on demand and
-        // accumulates heap; its watchdog restarts as it nears the ceiling, and
-        // a restart kills whatever navigation is in flight.
+        // Per-server, and LARGE. `next dev` compiles routes on demand and
+        // accumulates heap across a 28-spec run; its watchdog restarts as
+        // heapUsed nears the ceiling, and a restart kills whatever navigation
+        // is in flight (`ERR_CONNECTION_RESET`, then `ERR_CONNECTION_REFUSED`
+        // while it comes back).
         //
-        // This used to be a step-level NODE_OPTIONS in e2e.yml, which reached
-        // BOTH servers — so adding the admin server turned "8GB" into "8GB
-        // each", over-subscribing a 16GB runner before Chromium is counted.
-        // 6GB + 2GB leaves real headroom for the browser and the OS.
-        NODE_OPTIONS: '--max-old-space-size=6144',
+        // MEASURED, after getting this wrong twice:
+        //   step-level 8192 (reached BOTH servers)  -> restarted, 1 failure
+        //   web 6144 + admin 2048                   -> restarted TWICE
+        // The threshold is relative to the heap ceiling, so lowering it makes
+        // the restart come SOONER. Direction matters more than tidiness here.
+        //
+        // The runner has 15Gi with ~12Gi free before the servers start (see the
+        // "Report runner resources" step — that is a measurement of this job,
+        // not GitHub's docs). 10GB + 1.5GB is a ceiling, not a reservation, and
+        // leaves Chromium real room.
+        //
+        // If this recurs, stop tuning the number: the structural fix is to
+        // split the run across two Playwright invocations so no single dev
+        // server has to survive all 28 specs.
+        NODE_OPTIONS: '--max-old-space-size=10240',
       },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: false,
@@ -143,11 +155,11 @@ export default defineConfig({
       command:
         'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
       env: {
-        // Smaller than the web server's on purpose: exactly ONE spec touches
-        // this app, and the warmup compiles the two routes it uses. It has no
-        // reason to grow a large heap, and every GB reserved here is a GB the
-        // web server and Chromium cannot use.
-        NODE_OPTIONS: '--max-old-space-size=2048',
+        // Small on purpose: exactly ONE spec touches this app and the warmup
+        // compiles the two routes it uses, so it never grows a large heap.
+        // Every GB ceded here is a GB the web server — which must survive all
+        // 28 specs — can use instead.
+        NODE_OPTIONS: '--max-old-space-size=1536',
       },
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: false,
