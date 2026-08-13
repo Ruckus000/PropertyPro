@@ -1,0 +1,39 @@
+{
+  "$comment": [
+    "The specs `.github/workflows/e2e.yml` runs, and the number of test blocks they contain.",
+    "",
+    "MEASURED, not assumed. Every spec here was run against a full local Supabase",
+    "stack (Auth + Storage + `pnpm seed:demo`) on 2026-08-12 and passed with zero",
+    "skips. The full default suite in that run was 27 passed / 1 failed / 7 skipped,",
+    "and this list is exactly the 27.",
+    "",
+    "`expectedTestCount` is a FLOOR the workflow asserts against the Playwright JSON",
+    "report. Its job is to catch a spec being renamed or moved out of the glob, which",
+    "would otherwise shrink CI coverage silently — the exact failure mode this whole",
+    "job exists to end. Update it deliberately when adding or removing a spec.",
+    "",
+    "Deliberately absent:",
+    "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
+    "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
+    "    run that proved nothing.",
+    "  - support-access — fails against this stack: times out after 120s waiting for",
+    "    the `popup` event after Start Session. It is the only allowlist candidate that",
+    "    drives the admin app on :3001. Filed separately; add it once it passes.",
+    "  - onboarding-first-run — contains no runnable test, only two `test.fixme`",
+    "    describing a wizard that was never built.",
+    "  - pdfjs-runtime — owned by playwright.prod.config.ts; needs a production build",
+    "    with PDFJS_TEST_ENABLED=1, which a dev server never sets.",
+    "  - community-tenant-host-precedence / wave-2-ga-staging — owned by",
+    "    playwright.tenant.config.ts; they need the tenant host on :3002."
+  ],
+  "specs": [
+    "activation-smoke.spec.ts",
+    "add-community.spec.ts",
+    "demo-flows.spec.ts",
+    "esign-and-documents-flow.spec.ts",
+    "marketing-smoke.spec.ts",
+    "meeting-create-spacebar.spec.ts",
+    "phase1-roadmap-smoke.spec.ts"
+  ],
+  "expectedTestCount": 27
+}

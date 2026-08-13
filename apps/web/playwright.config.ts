@@ -6,13 +6,25 @@ import { defineConfig, devices } from '@playwright/test';
  * `testIgnore` is load-bearing, not tidiness. `testDir` alone globs in three
  * specs that CANNOT pass here, which made `pnpm test:e2e` — the command
  * CLAUDE.md tells you to run — red by construction. A documented command that
- * always fails trains everyone to ignore e2e results, and that is how 36 of
- * this suite's 40 test blocks came to run nowhere at all.
+ * always fails trains everyone to ignore e2e results, and that is how most of
+ * this suite came to run nowhere at all.
+ *
+ * That is no longer the state. Measured 2026-08-12 against a full local stack:
+ * 43 test blocks across 15 spec files, of which **31 now run on a PR** — 10 in
+ * `perf-check` (pdfjs-runtime, activation-smoke, marketing-smoke against a
+ * production build) and 27 in the `E2E` workflow, which brings up Supabase and
+ * a seed so the authenticated specs can run at all. The two overlap on
+ * activation-smoke and marketing-smoke.
+ *
+ * The 12 still unexercised on a PR: the 5 signup blocks (owned by
+ * stripe-e2e.yml, and conditional on its secrets), the 6 tenant-host blocks
+ * (community-tenant-host-precedence, wave-2-ga-staging — they need :3002), and
+ * support-access, which fails against the CI stack and is tracked separately.
  *
  * Each excluded spec is owned by another config; none of them is unowned:
  *   - pdfjs-runtime.spec.ts → playwright.prod.config.ts. Needs a production
  *     build on :3100 with PDFJS_TEST_ENABLED=1, a gate the dev server never
- *     sets. This is the ONE spec CI runs (inside perf-check).
+ *     sets.
  *   - community-tenant-host-precedence.spec.ts, wave-2-ga-staging.spec.ts →
  *     playwright.tenant.config.ts, which already names both in its own
  *     `testMatch`. They hardcode `http://…localtest.me:3002` origins and need

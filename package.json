@@ -31,6 +31,7 @@
     "playwright:install": "pnpm --filter @propertypro/web playwright:install",
     "test:e2e": "pnpm --filter @propertypro/web test:e2e",
     "test:e2e:esign": "pnpm --filter @propertypro/web test:e2e -- e2e/esign-and-documents-flow.spec.ts",
+    "test:e2e:ci": "pnpm --filter @propertypro/web test:e2e:ci",
     "test:e2e:headed": "pnpm --filter @propertypro/web test:e2e:headed",
     "test:e2e:tenant": "pnpm --filter @propertypro/web test:e2e:tenant",
     "test:watch": "vitest",

@@ -16,6 +16,7 @@
     "playwright:install": "playwright install chromium",
     "test:e2e": "playwright test -c playwright.config.ts",
     "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
+    "test:e2e:ci": "playwright test -c playwright.ci.config.ts",
     "test:e2e:headed": "playwright test -c playwright.config.ts --headed",
     "test:e2e:tenant": "playwright test -c playwright.tenant.config.ts",
     "clean": "rm -rf .next .turbo",
