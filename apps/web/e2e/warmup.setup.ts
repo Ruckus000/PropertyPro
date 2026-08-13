@@ -94,10 +94,23 @@ test('warm up the dev server routes', async ({ page }) => {
   }
 
   // Admin last: it needs its own identity, and `loginAsPlatformAdmin` replaces
-  // the session established above. Swallowed like everything else here — if the
-  // admin app is misconfigured, `support-access` is the place that should say
-  // so, with the dialog error it now surfaces.
-  await loginAsPlatformAdmin(page).catch(() => {});
+  // the session established above.
+  //
+  // LOGGED, not silently swallowed. A bare `.catch(() => {})` here is worse
+  // than a failure: `loginAsPlatformAdmin` contains assertions, so if the
+  // platform-admin grant does not take, the loop below navigates the admin
+  // routes UNAUTHENTICATED, middleware bounces both to /auth/login, and the two
+  // routes this warmup exists to compile are never compiled. `support-access`
+  // then pays the full cold compile inside its own budget and dies with
+  // `Test timeout of 120000ms exceeded` — the exact flake this file was added
+  // to fix, with nothing pointing back here. The warning is the breadcrumb.
+  await loginAsPlatformAdmin(page).catch((err) => {
+    console.warn(
+      '[warmup] platform-admin login failed; the :3001 routes will NOT be warmed and ' +
+        'support-access will pay their cold compile inside its own timeout:',
+      err,
+    );
+  });
 
   for (const route of ADMIN_ROUTES) {
     await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 120_000 }).catch(() => {});

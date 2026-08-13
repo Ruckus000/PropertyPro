@@ -42,7 +42,7 @@ const ciSafeSpecs = JSON.parse(
  *   that is worth paying for the one check on a high-privilege path (#958).
  * - **`retries: 1`, not 2.** The allowlist runs ~8.3 minutes locally at one
  *   worker (measured; the 11.1 min figure elsewhere is the full 35-block
- *   suite, not this 27-block subset).
+ *   suite, not this 28-block subset).
  *   Two retries on a slow runner can triple a spec's contribution and
  *   push the job past its timeout — and a timed-out job reports as CANCELLED,
  *   which reads green-ish in `gh pr checks`. One retry absorbs genuine CI

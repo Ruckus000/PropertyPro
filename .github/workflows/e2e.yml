@@ -108,7 +108,7 @@ jobs:
       # sync, `/dev/agent-login` returns 500 "Failed to generate login link" and
       # every authenticated spec dies.
       DEMO_DEFAULT_PASSWORD: DemoPass123!
-      # Not needed by the current 7 specs — `foreignHost()` and
+      # Not needed by the allowlisted specs — `foreignHost()` and
       # `parseHostSubdomain()` short-circuit on host `localhost`, and
       # /dev/agent-login never reads the app URL under NODE_ENV=development. Set
       # anyway so absolute community links resolve to this stack rather than to
@@ -226,7 +226,8 @@ jobs:
           #   01:37:17.3 Error: page.goto: net::ERR_CONNECTION_RESET
           #
           # `next dev` compiles routes on demand and accumulates heap across a
-          # 27-spec run; its watchdog restarts when it nears the Node heap
+          # 28-spec run (and there are now TWO dev servers on the runner);
+          # its watchdog restarts when it nears the Node heap
           # ceiling. The default ceiling is a fraction of runner RAM, so this is
           # a CI-only failure — the same run passes locally, where the machine
           # has more headroom, which is exactly why it could not be caught
@@ -330,10 +331,10 @@ jobs:
       # CLI's published local-dev secret, over `127.0.0.1`, against seeded
       # fixtures. No production credential is reachable from this job at all.
       #
-      # So: if you ever give this job a REAL secret — the likely reason being
-      # whatever it takes to get support-access (#958) green — you must add a
-      # redaction step before this upload, the way stripe-e2e.yml does for its
-      # live `whsec_`. There is nothing guarding this path today.
+      # So: if you ever give this job a REAL secret, you must add a redaction step
+      # before this upload, the way stripe-e2e.yml does for its live `whsec_`.
+      # There is nothing guarding this path today. (support-access, #958, did
+      # NOT need one — its secret is generated per run like the rest.)
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4

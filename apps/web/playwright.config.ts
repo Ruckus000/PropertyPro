@@ -17,22 +17,26 @@ import { defineConfig, devices } from '@playwright/test';
  *   default (this file)  35 in 12 files
  *   prod                 10 in  3 files  (pdfjs 4 + activation 3 + marketing 3)
  *   tenant                6 in  2 files
- *   ci                   27 in  7 files
+ *   ci                   28 in  8 files
  *
  * Distinct total: **45 blocks across 15 spec files** (35 + pdfjs's 4, which
  * this config ignores, + the 6 tenant blocks).
  *
- * **31 now run on a PR** — 10 in `perf-check` against a production build, and
- * 27 in the `E2E` workflow, which brings up Supabase and a seed so the
+ * **32 now run on a PR** — 10 in `perf-check` against a production build, and
+ * 28 in the `E2E` workflow, which brings up Supabase and a seed so the
  * authenticated specs can run at all. The two overlap on activation-smoke and
- * marketing-smoke, hence 31 rather than 37.
+ * marketing-smoke, hence 32 rather than 38.
  *
- * The 14 still unexercised on a PR: the 5 signup blocks (owned by
+ * The 13 still unexercised on a PR: the 5 signup blocks (owned by
  * stripe-e2e.yml, and conditional on its secrets), the 6 tenant-host blocks
- * (community-tenant-host-precedence, wave-2-ga-staging — they need :3002),
- * support-access (fails against the CI stack, tracked separately), and the 2
- * `onboarding-first-run` `test.fixme` blocks, which describe a wizard that was
- * never built.
+ * (community-tenant-host-precedence, wave-2-ga-staging — they need :3002), and
+ * the 2 `onboarding-first-run` `test.fixme` blocks, which describe a wizard
+ * that was never built.
+ *
+ * `support-access` was on that list until #958. It had looked like a broken
+ * spec; the admin app was simply running with no environment, so
+ * `signSupportToken` threw and the dialog never opened the popup being waited
+ * on. The `E2E` workflow now starts the admin server for it.
  *
  * Each excluded spec is owned by another config; none of them is unowned:
  *   - pdfjs-runtime.spec.ts → playwright.prod.config.ts. Needs a production

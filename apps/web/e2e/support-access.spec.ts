@@ -170,10 +170,24 @@ test.describe('support access flow', () => {
       // two more minutes to fail and said nothing about why.
       //
       // Now the error text wins the race and is reported verbatim.
+      // Matched by ROLE, not by expected copy. An earlier version of this
+      // listed message fragments — and would have caught almost nothing:
+      // `StartSessionDialog` surfaces the route's error string verbatim
+      // (`typeof data.error === 'string' ? data.error : 'Failed to start
+      // session'`), and every string-bodied error the route returns is
+      // different text — "This community has not granted support access…"
+      // (403, the most likely real failure), "Cannot impersonate another
+      // platform admin" (403), "Daily session limit of 10 reached." (429),
+      // "Failed to create session" (500), "Invalid JSON body" (400). A copy
+      // allowlist would have fallen through to the same 120s popup wait it
+      // exists to prevent, just 30s later.
+      //
+      // The error div is the ONLY `role="alert"` in the dialog
+      // (StartSessionDialog.tsx:228) — the "Read-only mode" banner is a plain
+      // div — and it renders only when `error` is non-empty, which is reset at
+      // the top of every submit. So this cannot fire on the success path.
       const popupPromise = adminPage.waitForEvent('popup');
-      const dialogError = dialog
-        .getByText(/Failed to start session|Network error|not authorized|rate limit/i)
-        .first();
+      const dialogError = dialog.getByRole('alert').first();
 
       await dialog
         .getByRole('button', { name: /^Start Session$/i })
