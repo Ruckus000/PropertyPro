@@ -108,7 +108,18 @@ export default defineConfig({
       // `dev:e2e` starts with `rm -rf .next`, so this is always a cold webpack
       // build. The budget is only ever spent waiting for readiness.
       command: 'pnpm dev:e2e',
-      env: { PORT: WEB_PORT },
+      env: {
+        PORT: WEB_PORT,
+        // Per-server, deliberately. `next dev` compiles routes on demand and
+        // accumulates heap; its watchdog restarts as it nears the ceiling, and
+        // a restart kills whatever navigation is in flight.
+        //
+        // This used to be a step-level NODE_OPTIONS in e2e.yml, which reached
+        // BOTH servers — so adding the admin server turned "8GB" into "8GB
+        // each", over-subscribing a 16GB runner before Chromium is counted.
+        // 6GB + 2GB leaves real headroom for the browser and the OS.
+        NODE_OPTIONS: '--max-old-space-size=6144',
+      },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: false,
       timeout: 300_000,
@@ -131,6 +142,13 @@ export default defineConfig({
       // whole of #958: an environment gap wearing a timeout as a disguise.
       command:
         'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
+      env: {
+        // Smaller than the web server's on purpose: exactly ONE spec touches
+        // this app, and the warmup compiles the two routes it uses. It has no
+        // reason to grow a large heap, and every GB reserved here is a GB the
+        // web server and Chromium cannot use.
+        NODE_OPTIONS: '--max-old-space-size=2048',
+      },
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: false,
       timeout: 300_000,
