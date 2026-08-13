@@ -213,6 +213,16 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
 
+      # The heap budgets in playwright.ci.config.ts (6GB web + 2GB admin) were
+      # chosen against GitHub's DOCUMENTED runner size, not a measurement of
+      # this job. Print the real numbers so the next person tuning them, or
+      # diagnosing another `ERR_CONNECTION_RESET`, is working from evidence.
+      - name: Report runner resources
+        run: |
+          echo "cores: $(nproc)"
+          free -h || true
+          df -h / | tail -1
+
       - name: Run E2E specs
         id: specs
         env:
@@ -233,9 +243,18 @@ jobs:
           # has more headroom, which is exactly why it could not be caught
           # before this job existed.
           #
-          # Playwright merges `webServer.env` OVER `process.env` rather than
-          # replacing it, so setting this on the step reaches the dev server.
-          NODE_OPTIONS: --max-old-space-size=8192
+          # Heap budgets are now set PER SERVER in playwright.ci.config.ts, not
+          # here.
+          #
+          # A step-level NODE_OPTIONS reaches BOTH dev servers, because
+          # Playwright merges `webServer.env` over `process.env`. Once
+          # support-access added the admin server (#958), `8192` stopped meaning
+          # "the web server may use 8GB" and started meaning "each of two
+          # servers may use 8GB" — over-subscribing a 16GB runner before
+          # Chromium is counted. `main` then failed with
+          # `net::ERR_CONNECTION_RESET` and `ERR_ABORTED; maybe frame was
+          # detached?`, which is what a dying dev server looks like from the
+          # browser.
         run: |
           pnpm --filter @propertypro/web exec playwright test \
             -c playwright.ci.config.ts \
