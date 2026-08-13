@@ -1,13 +1,18 @@
 import type { Metadata } from 'next';
-import { Fraunces } from 'next/font/google';
+import localFont from 'next/font/local';
 import './marketing-theme.css';
 
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  style: ['normal', 'italic'],
+// Vendored rather than fetched from Google at build time — see the note in
+// `app/layout.tsx` and `app/fonts/README.md` (#962). This layout needs the
+// italic face too, which the app shell does not.
+const fraunces = localFont({
+  src: [
+    { path: '../fonts/fraunces-latin-var.woff2', weight: '100 900', style: 'normal' },
+    { path: '../fonts/fraunces-latin-var-italic.woff2', weight: '100 900', style: 'italic' },
+  ],
   display: 'swap',
   variable: '--font-fraunces',
+  adjustFontFallback: 'Times New Roman',
 });
 
 export const metadata: Metadata = {
