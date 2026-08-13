@@ -40,13 +40,13 @@ const ciSafeSpecs = JSON.parse(
  *   covers support impersonation — an admin viewing a tenant user's data. It
  *   costs a second cold Next build, the largest fixed cost in this job, and
  *   that is worth paying for the one check on a high-privilege path (#958).
- * - **`retries: 1`, not 2.** The allowlist runs ~8.3 minutes locally at one
- *   worker (measured; the 11.1 min figure elsewhere is the full 35-block
- *   suite, not this 28-block subset).
- *   Two retries on a slow runner can triple a spec's contribution and
- *   push the job past its timeout — and a timed-out job reports as CANCELLED,
- *   which reads green-ish in `gh pr checks`. One retry absorbs genuine CI
- *   flakiness without hiding a spec that fails every time.
+ * - **`retries: 2`** — raised from 1 on evidence. The failures that have made
+ *   this job red are always the same heavy specs (`esign-and-documents-flow`,
+ *   `phase1-roadmap-smoke`, `support-access`), each of which passes on a retry
+ *   more often than not; one retry was not always enough. This matches
+ *   `playwright.config.ts`, which already uses 2 under CI.
+ *   The wall-clock worry that originally argued for 1 has been measured away:
+ *   runs take 16-22 min against a 45 min budget.
  * - **`reuseExistingServer: false`.** On a fresh runner nothing should already
  *   own the port. If something does, that is a bug worth failing on rather than
  *   silently testing against another process — the default config allows reuse
@@ -67,7 +67,7 @@ export default defineConfig({
   // first-compile navigations at once. See playwright.config.ts for the table.
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
-  retries: 1,
+  retries: 2,
   reporter: 'list',
   /**
    * Raised for `next dev` FIRST-COMPILE latency, not to paper over slowness.
@@ -110,27 +110,23 @@ export default defineConfig({
       command: 'pnpm dev:e2e',
       env: {
         PORT: WEB_PORT,
-        // Per-server, and LARGE. `next dev` compiles routes on demand and
-        // accumulates heap across a 28-spec run; its watchdog restarts as
-        // heapUsed nears the ceiling, and a restart kills whatever navigation
-        // is in flight (`ERR_CONNECTION_RESET`, then `ERR_CONNECTION_REFUSED`
-        // while it comes back).
+        // Per-server rather than a step-level NODE_OPTIONS in e2e.yml, which
+        // reached BOTH servers. That is tidiness, NOT a fix for anything.
         //
-        // MEASURED, after getting this wrong twice:
-        //   step-level 8192 (reached BOTH servers)  -> restarted, 1 failure
-        //   web 6144 + admin 2048                   -> restarted TWICE
-        // The threshold is relative to the heap ceiling, so lowering it makes
-        // the restart come SOONER. Direction matters more than tidiness here.
+        // Do not repeat my mistake here: `next dev` logs
+        // "Server is approaching the used memory threshold, restarting..."
+        // during this job, and it is TEMPTING to read that as the cause of the
+        // ERR_CONNECTION_RESET failures. It is not. Measured across runs:
         //
-        // The runner has 15Gi with ~12Gi free before the servers start (see the
-        // "Report runner resources" step — that is a measurement of this job,
-        // not GitHub's docs). 10GB + 1.5GB is a ceiling, not a reservation, and
-        // leaves Chromium real room.
+        //   4e7cb929  E2E success  1 restart
+        //   62d63c28  E2E success  1 restart
+        //   e91785d2  E2E failure  1 restart
         //
-        // If this recurs, stop tuning the number: the structural fix is to
-        // split the run across two Playwright invocations so no single dev
-        // server has to survive all 28 specs.
-        NODE_OPTIONS: '--max-old-space-size=10240',
+        // The restart happens just as often when the job PASSES. Tuning the
+        // ceiling changes nothing either — 6144 and 10240 both produced two
+        // restarts in a run. 8192 is simply the value that has run green
+        // repeatedly; it is not load-bearing.
+        NODE_OPTIONS: '--max-old-space-size=8192',
       },
       url: `http://127.0.0.1:${WEB_PORT}`,
       reuseExistingServer: false,
