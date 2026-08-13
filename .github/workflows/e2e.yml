@@ -82,6 +82,11 @@ jobs:
       # No local Upstash; the limiter falls back to its in-memory implementation.
       UPSTASH_REDIS_REST_URL: ''
       UPSTASH_REDIS_REST_TOKEN: ''
+      # `pnpm seed:demo` REFUSES to run without this — `assertSeedEnvironment`
+      # (scripts/lib/seed-safety.ts) requires one of development | ci |
+      # demo-nightly, and treats unset as "you have not told me this is not
+      # production". Same value integration-tests.yml uses.
+      PROPERTYPRO_SEED_ENV: ci
 
     steps:
       - name: Checkout
@@ -194,6 +199,9 @@ jobs:
       # The floor is asserted against the allowlist's own declared count, so
       # renaming a spec out of `CI_SAFE_SPECS` fails loudly instead of quietly
       # shrinking what CI covers.
+      # No `working-directory:` — `require("./apps/web/...")` below resolves
+      # against the process cwd, which is the repo root. Adding one would break
+      # the path.
       - name: Assert the specs actually ran
         if: always()
         run: |
@@ -220,6 +228,23 @@ jobs:
             }
           '
 
+      # SAFE BECAUSE THE STACK IS DISPOSABLE, NOT BECAUSE ANYTHING IS FILTERED.
+      #
+      # `::add-mask::` redacts log output only — it has NO effect on file
+      # contents. With `retries: 1` and `trace: 'on-first-retry'`, any flaky
+      # spec writes a trace zip capturing full request headers, cookies and
+      # localStorage: real session JWTs and the anon-key header. On a public
+      # repo, artifacts are world-downloadable for their retention window.
+      #
+      # That is fine here only because every value in them is scoped to a
+      # container destroyed by the last step of this job, signed by the Supabase
+      # CLI's published local-dev secret, over `127.0.0.1`, against seeded
+      # fixtures. No production credential is reachable from this job at all.
+      #
+      # So: if you ever give this job a REAL secret — the likely reason being
+      # whatever it takes to get support-access (#958) green — you must add a
+      # redaction step before this upload, the way stripe-e2e.yml does for its
+      # live `whsec_`. There is nothing guarding this path today.
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
