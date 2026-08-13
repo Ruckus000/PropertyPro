@@ -280,10 +280,22 @@ jobs:
             // single flake trips the floor and reports a spec rename that never
             // happened.
             const flaky = stats.flaky ?? 0;
-            const collected = ran + failed + flaky;
             const allowlist = require("./apps/web/e2e/ci-safe-specs.json");
             const floor = allowlist.expectedTestCount;
-            console.log(`expected=${ran} flaky=${flaky} unexpected=${failed} skipped=${skipped} collected=${collected} floor=${floor}`);
+            // Count from the report TREE, excluding the `warmup` project.
+            // `stats` is whole-run, so it includes the warmup test — counting it
+            // would inflate the total by one and let a genuinely missing spec
+            // hide behind it, defeating the floor.
+            const collectSpecs = (s) => [
+              ...(s.suites ?? []).flatMap(collectSpecs),
+              ...(s.specs ?? []),
+            ];
+            const realTests = (report.suites ?? [])
+              .flatMap(collectSpecs)
+              .flatMap((sp) => sp.tests ?? [])
+              .filter((t) => t.projectName !== "warmup");
+            const collected = realTests.filter((t) => t.status !== "skipped").length;
+            console.log(`expected=${ran} flaky=${flaky} unexpected=${failed} skipped=${skipped} counted(non-warmup, non-skipped)=${collected} floor=${floor}`);
             if (skipped > 0) {
               // Name them: an allowlisted spec can still self-skip at runtime
               // (esign checks that the feature and its seeded template exist),

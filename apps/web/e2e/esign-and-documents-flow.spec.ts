@@ -287,7 +287,19 @@ test.describe('Library documents (board admin → tenant)', () => {
     const docResp = await createDocResponse;
     expect(docResp.ok(), `POST /api/v1/documents failed: ${docResp.status()}`).toBeTruthy();
 
-    await expect(page.getByText('Uploading...')).toBeHidden({ timeout: 120_000 });
+    // Scoped to the submit BUTTON, not bare text. `document-upload-area.tsx`
+    // renders "Uploading..." twice while an upload is in flight — once as a
+    // `<span>` (:281) and once as the button label (:300) — so
+    // `getByText('Uploading...')` matched two elements and threw a strict mode
+    // violation.
+    //
+    // It failed only on slow machines, which is what made it look flaky rather
+    // than wrong: when the upload finishes quickly, both nodes are already gone
+    // by the time this line runs, the locator matches ZERO elements, and
+    // `toBeHidden` passes vacuously. CI is slow enough to catch them both alive.
+    await expect(page.getByRole('button', { name: 'Uploading...' })).toBeHidden({
+      timeout: 120_000,
+    });
     await expect(page.getByText(uniqueTitle)).toBeVisible();
     await page.getByText(uniqueTitle).click();
     await expectPdfPreviewCanvas(page);
