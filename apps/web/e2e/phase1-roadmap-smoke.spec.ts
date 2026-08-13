@@ -27,15 +27,29 @@ async function loginAs(page: Page, role: DevRole): Promise<number> {
 }
 
 test.describe('phase 1 roadmap smoke', () => {
-  test.describe.configure({ mode: 'serial' });
+  // NOT `mode: 'serial'`, deliberately — it used to be.
+  //
+  // Every block here is self-contained: each calls `loginAs` itself and
+  // navigates itself, and none reads state another one wrote. So serial bought
+  // no isolation (`workers: 1` already runs them one at a time) while costing
+  // two things that made CI far worse than the underlying fault:
+  //
+  //   1. One failure SKIPS every later block in the describe. A single flake in
+  //      the violations inbox took four passing tests down with it, turning a
+  //      1-test problem into a 5-test one — and tripped the workflow's
+  //      "allowlisted specs must not skip" assertion for a second, unrelated
+  //      reason.
+  //   2. A retry re-runs the whole group rather than the failed block, so the
+  //      slowest possible recovery from the smallest possible flake.
+  //
+  // Restore it only if a block ever genuinely depends on an earlier one — and
+  // prefer making that block independent instead.
 
   // Playwright's 30s default is a first-compile budget here, not a correctness
-  // one: these seven blocks each visit a different heavy authenticated route,
-  // so each pays a fresh `next dev` compile. Blocks were dying inside
-  // `page.goto` (`Test timeout of 30000ms exceeded`, and once
-  // `net::ERR_ABORTED; maybe frame was detached?` on `/emergency/new`) before a
-  // single assertion ran — and because this describe is `serial`, one such
-  // death skips every block after it. No assertion is relaxed by this.
+  // one: these blocks each visit a different heavy authenticated route, so each
+  // can pay a fresh `next dev` compile. (`playwright.ci.config.ts` warms these
+  // routes up front, but `pnpm test:e2e` does not.) Blocks were dying inside
+  // `page.goto` before a single assertion ran. No assertion is relaxed by this.
   test.setTimeout(90_000);
 
   test('Phase 1A assessment manager opens its creation flow for a board user', async ({ page }) => {

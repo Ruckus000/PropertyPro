@@ -113,9 +113,24 @@ export default defineConfig({
     timeout: 300_000,
   },
   projects: [
+    /**
+     * Compiles the heavy routes before anything is asserted. See
+     * e2e/warmup.setup.ts for why a bigger timeout was not the fix.
+     *
+     * A project dependency rather than `globalSetup`: the ordering of
+     * `globalSetup` relative to `webServer` has changed across Playwright
+     * versions, and a warmup that runs before the server exists is worse than
+     * no warmup — it would silently do nothing.
+     */
+    {
+      name: 'warmup',
+      testMatch: /warmup\.setup\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      dependencies: ['warmup'],
     },
   ],
 });
