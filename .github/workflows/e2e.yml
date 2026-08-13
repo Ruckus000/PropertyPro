@@ -216,6 +216,24 @@ jobs:
         id: specs
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/playwright-report.json
+          # The dev server restarts itself mid-run without this, and a restart
+          # kills whatever navigation is in flight.
+          #
+          # Observed on the first full CI run, from the server's own log:
+          #   01:37:15.8 [WebServer] ⚠ Server is approaching the used memory
+          #                           threshold, restarting...
+          #   01:37:17.3 Error: page.goto: net::ERR_CONNECTION_RESET
+          #
+          # `next dev` compiles routes on demand and accumulates heap across a
+          # 27-spec run; its watchdog restarts when it nears the Node heap
+          # ceiling. The default ceiling is a fraction of runner RAM, so this is
+          # a CI-only failure — the same run passes locally, where the machine
+          # has more headroom, which is exactly why it could not be caught
+          # before this job existed.
+          #
+          # Playwright merges `webServer.env` OVER `process.env` rather than
+          # replacing it, so setting this on the step reaches the dev server.
+          NODE_OPTIONS: --max-old-space-size=8192
         run: |
           pnpm --filter @propertypro/web exec playwright test \
             -c playwright.ci.config.ts \
@@ -229,17 +247,22 @@ jobs:
       # the same file playwright.ci.config.ts reads — so renaming a spec out of
       # the glob fails loudly instead of quietly shrinking what CI covers.
       #
-      # Gated on the test step rather than `always()`: with `always()` this also
+      # Gated on the test step rather than a bare `always()`: the latter also
       # fires when install/migrate/seed failed, adding a misleading second red X
-      # ("no Playwright JSON report") on top of the real cause. It still runs
-      # when the specs FAIL, which is the case that matters — a failing run must
-      # not escape the collected-count check.
+      # ("no Playwright JSON report") on top of the real cause. It must still
+      # run when the specs FAIL — a failing run cannot escape the count check.
+      #
+      # `always() &&` is REQUIRED, not noise. A custom `if:` with no status
+      # function gets an implicit `success()` ANDed onto it, so the condition
+      # below evaluated true and the step was skipped anyway the first time this
+      # ran. `always()` restores the intent, and the explicit conclusion test
+      # then narrows it back to "the specs actually executed".
       #
       # No `working-directory:` — `require("./apps/web/...")` below resolves
       # against the process cwd, which is the repo root. Adding one would break
       # the path.
       - name: Assert the specs actually ran
-        if: steps.specs.conclusion == 'success' || steps.specs.conclusion == 'failure'
+        if: always() && (steps.specs.conclusion == 'success' || steps.specs.conclusion == 'failure')
         run: |
           test -f /tmp/playwright-report.json || {
             echo "::error::no Playwright JSON report — the run did not get far enough to produce one"
