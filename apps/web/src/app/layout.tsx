@@ -40,8 +40,18 @@ const fraunces = localFont({
   variable: "--font-display",
   // Default for local fonts is Arial; a serif needs a serif metric source or
   // the size-adjusted fallback fights the real face and CLS gets worse.
+  // `next/font/google` picked one from the family's category automatically;
+  // the local loader does not, so it has to be named.
   adjustFontFallback: "Times New Roman",
 });
+
+// NOTE: `next/font/local` derives the CSS family name from the FILE name, so
+// this call and the one in `(marketing)/layout.tsx` both emit the family
+// `fraunces`. On a marketing page both stylesheets load and that family ends up
+// with three @font-face rules (normal here, normal + italic there). Harmless
+// while every descriptor agrees — but if the two calls ever diverge (different
+// file, `display`, or `adjustFontFallback`) they will silently MERGE into one
+// family rather than staying separate. Change them together.
 
 export const metadata: Metadata = {
   title: "PropertyPro Florida",

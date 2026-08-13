@@ -29,16 +29,52 @@ without a commit.
 
 ## What is here
 
-| File | Family | Axes | Source |
-|---|---|---|---|
-| `inter-latin-var.woff2` | Inter | `wght 100..900` | `fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2` |
-| `fraunces-latin-var.woff2` | Fraunces (normal) | `wght 100..900` | `fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92uemAk_WBq8U_9v0c2Wa0KxC9TeA.woff2` |
-| `fraunces-latin-var-italic.woff2` | Fraunces (italic) | `wght 100..900` | `fonts.gstatic.com/s/fraunces/v38/6NU58FyLNQOQZAnv9ZwNjucMHVn85Ni7emAe9lKqZTnbB-gzTK0K1ChjeveQ.woff2` |
+| File | Family | Axes | sha256 | Bytes |
+|---|---|---|---|---|
+| `inter-latin-var.woff2` | Inter | `wght 100..900` | `3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62` | 48,256 |
+| `fraunces-latin-var.woff2` | Fraunces (normal) | `opsz 9..144`, `wght 100..900` | `7234ed860a9cc83045413c4faee63c960a8f2d1917adcf728119307d56e0d783` | 67,304 |
+| `fraunces-latin-var-italic.woff2` | Fraunces (italic) | `opsz 9..144`, `wght 100..900` | `066710ce7ed235a339d3d6cdcc8b55c0bea5632232662d83aacea25852108271` | 81,520 |
+
+Sources (all `/* latin */`, from the URLs in "Refreshing them" below):
+
+- `fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2`
+- `fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92uemAk_WBq8U_9v0c2Wa0KxC9TeA.woff2`
+- `fonts.gstatic.com/s/fraunces/v38/6NU58FyLNQOQZAnv9ZwNjucMHVn85Ni7emAe9lKqZTnbB-gzTK0K1ChjeveQ.woff2`
+
+`apps/admin/src/app/fonts/inter-latin-var.woff2` is a byte-identical copy of the
+Inter file above (same sha256).
+
+## What actually changed visually
+
+Two deltas, neither large, both real. Recorded because "we only changed where
+the bytes come from" would be untrue:
+
+**1. Fraunces now has live optical sizing.** The vendored files expose an
+`opsz` axis (9–144), and `font-optical-sizing: auto` is the CSS initial value —
+nothing in this repo overrides it. The per-weight files Google previously served
+had `opsz` pinned. So Fraunces now adapts its design to the rendered size:
+measured on the vendored file at `wght 600`, glyphs run roughly **1–3% narrower
+with a slightly smaller x-height** at the sizes actually used (marketing `.mk-h1`
+70px/46px, `.mk-price .mk-amt` 42px, app headings ~18–32px).
+
+This is what the family is designed to do and it is kept deliberately. If
+byte-identical rendering to the old build ever matters more, set
+`font-optical-sizing: none` on the Fraunces consumers — do not "fix" it by
+pinning the axis in the font file.
+
+**2. One rule now renders at true 800.** `(marketing)/marketing-theme.css:109`
+(`.mk-law .mk-n`, the numbered statute badges) sets `font-weight:800` on
+Fraunces. Google's files stopped at 700, so the browser snapped down; the
+variable file covers 800. Visible only side by side.
+
+The `font-weight:800` at `:73` and `:155` applies to `✓` (U+2713), which is in
+neither font's cmap and fell back to a system font before and after. No change.
 
 One variable file per face replaces the per-weight static instances Next used to
-download. The full 100–900 range is now available (previously 400/500/600/700
-for Inter, 500/600/700 for Fraunces), and total bytes are roughly unchanged:
-47K + 66K + 80K.
+download. The full 100–900 range is now available — previously 400/500/600/700
+for Inter and, in the app shell, 500/600/700 for Fraunces; the marketing layout
+requested Fraunces 400–700 in both normal and italic. Total bytes are roughly
+unchanged: 47K + 66K + 80K.
 
 `apps/admin/src/app/fonts/inter-latin-var.woff2` is a **copy of the same file**.
 The duplication is deliberate: `next/font/local` needs a literal path relative
@@ -67,12 +103,34 @@ family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900
 
 Then copy `inter-latin-var.woff2` to `apps/admin/src/app/fonts/`.
 
-Verify what you downloaded is actually a woff2 before committing — a rate-limit
-or error page will happily save as a `.woff2`:
+**Use `curl --fail`.** Bare `curl` writes an HTTP error body to the output file
+and still exits 0 — so a rate-limit or captcha page saves happily as a
+`.woff2`, which is the exact failure this section exists to prevent.
+
+### Verifying a refresh
+
+Update the sha256 column above in the same commit, and review the new values as
+carefully as the code — they are what makes these files *verifiable* rather than
+merely *pinned*.
 
 ```bash
-head -c4 inter-latin-var.woff2   # must print: wOF2
+shasum -a 256 *.woff2
 ```
+
+If the hash is unchanged, upstream did not revise the font and the refresh is a
+no-op. If it changed, confirm the file is a sound font before trusting it:
+
+```bash
+head -c4 inter-latin-var.woff2                  # must print: wOF2
+python3 -c "import struct,sys; d=open(sys.argv[1],'rb').read(); \
+  print('declared', struct.unpack('>I', d[8:12])[0], 'actual', len(d))" \
+  inter-latin-var.woff2                          # the two must match
+```
+
+The magic-byte check alone is not enough: it proves the first four bytes, not
+that the download completed. The WOFF2 header carries the total file length at
+offset 8, so comparing it against the real size is what catches a truncated
+fetch — a half-downloaded font still starts with `wOF2`.
 
 ## Licence
 
