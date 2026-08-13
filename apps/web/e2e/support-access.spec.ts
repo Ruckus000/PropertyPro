@@ -158,10 +158,42 @@ test.describe('support access flow', () => {
       await dialog.getByLabel(/^Reason/i).fill(reason);
       await dialog.getByLabel(/ticket id/i).fill('PW-SUPPORT-ACCESS');
 
+      // Race the popup against the dialog's own error, rather than waiting for
+      // an event a failure guarantees will never arrive.
+      //
+      // `StartSessionDialog` only calls `window.open` when the POST succeeds;
+      // on any failure it calls `setError(...)` and returns. So a 500 — the
+      // likely one being a missing or too-short SUPPORT_SESSION_JWT_SECRET,
+      // which `signSupportToken` throws on — used to surface as
+      // `waitForEvent('popup')` timing out after 120s with the useless message
+      // "waiting for event popup", burying the real cause. This spec then took
+      // two more minutes to fail and said nothing about why.
+      //
+      // Now the error text wins the race and is reported verbatim.
       const popupPromise = adminPage.waitForEvent('popup');
+      const dialogError = dialog
+        .getByText(/Failed to start session|Network error|not authorized|rate limit/i)
+        .first();
+
       await dialog
         .getByRole('button', { name: /^Start Session$/i })
         .click();
+
+      const outcome = await Promise.race([
+        popupPromise.then(() => 'popup' as const),
+        dialogError
+          .waitFor({ state: 'visible', timeout: 30_000 })
+          .then(() => 'error' as const)
+          .catch(() => 'timeout' as const),
+      ]);
+
+      if (outcome === 'error') {
+        throw new Error(
+          `Admin refused to start the support session: "${await dialogError.innerText()}". ` +
+            'Check SUPPORT_SESSION_JWT_SECRET is set on BOTH apps (admin signs, web verifies) ' +
+            'and that the admin identity holds platform_admin_users.',
+        );
+      }
 
       const supportPage = await popupPromise;
       await supportPage.waitForLoadState('domcontentloaded');

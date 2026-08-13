@@ -42,11 +42,12 @@ on:
     # An allowlist, so an unrelated PR does not spend 20 minutes of runner time.
     # It errs toward running: everything below can change what these specs see.
     #
-    # `apps/admin/**` is deliberately ABSENT — this job starts no admin server
-    # (see playwright.ci.config.ts), so an admin-only change could only burn the
-    # budget. Add it if support-access (#958) ever joins the allowlist.
+    # `apps/admin/src/**` IS included now: support-access joined the allowlist
+    # (#958) and drives the admin app, so an admin-only change can break this
+    # job. It was excluded while no spec touched :3001.
     paths:
       - 'apps/web/src/**'
+      - 'apps/admin/src/**'
       - 'apps/web/e2e/**'
       - 'apps/web/playwright*.ts'
       - 'apps/web/next.config.ts'

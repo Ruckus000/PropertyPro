@@ -12,13 +12,16 @@
     "would otherwise shrink CI coverage silently — the exact failure mode this whole",
     "job exists to end. Update it deliberately when adding or removing a spec.",
     "",
+    "`support-access` is the newest addition (#958). It was excluded for timing out",
+    "after 120s on the `popup` event; the cause was never the spec but a missing admin",
+    "environment — `signSupportToken` threw, the route 500d, and the dialog returned",
+    "without opening the popup it was waiting for. It is the only spec anywhere that",
+    "covers support impersonation, so it is worth the second dev server it costs.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
     "    run that proved nothing.",
-    "  - support-access — fails against this stack: times out after 120s waiting for",
-    "    the `popup` event after Start Session. It is the only allowlist candidate that",
-    "    drives the admin app on :3001. Filed separately; add it once it passes.",
     "  - onboarding-first-run — contains no runnable test, only two `test.fixme`",
     "    describing a wizard that was never built.",
     "  - pdfjs-runtime — owned by playwright.prod.config.ts; needs a production build",
@@ -33,7 +36,8 @@
     "esign-and-documents-flow.spec.ts",
     "marketing-smoke.spec.ts",
     "meeting-create-spacebar.spec.ts",
-    "phase1-roadmap-smoke.spec.ts"
+    "phase1-roadmap-smoke.spec.ts",
+    "support-access.spec.ts"
   ],
-  "expectedTestCount": 27
+  "expectedTestCount": 28
 }

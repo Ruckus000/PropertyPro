@@ -35,11 +35,11 @@ const ciSafeSpecs = JSON.parse(
  *
  * ## Differences from playwright.config.ts, each deliberate
  *
- * - **No admin server.** None of the allowlisted specs touches `:3001`; the one
- *   that does, `support-access`, is not on the list. Skipping it saves a second
- *   cold Next build, which is the single largest fixed cost in this job. The
- *   default config warns this omission is SILENT, so it is justified by the
- *   measured run, not by reading the specs.
+ * - **The admin server IS started**, unlike an earlier revision of this file.
+ *   `support-access` drives `:3001`, and it is the only spec anywhere that
+ *   covers support impersonation — an admin viewing a tenant user's data. It
+ *   costs a second cold Next build, the largest fixed cost in this job, and
+ *   that is worth paying for the one check on a high-privilege path (#958).
  * - **`retries: 1`, not 2.** The allowlist runs ~8.3 minutes locally at one
  *   worker (measured; the 11.1 min figure elsewhere is the full 35-block
  *   suite, not this 27-block subset).
@@ -103,15 +103,39 @@ export default defineConfig({
     baseURL: `http://localhost:${WEB_PORT}`,
     trace: 'on-first-retry',
   },
-  webServer: {
-    // `dev:e2e` starts with `rm -rf .next`, so this is always a cold webpack
-    // build. The budget is only ever spent waiting for readiness.
-    command: 'pnpm dev:e2e',
-    env: { PORT: WEB_PORT },
-    url: `http://127.0.0.1:${WEB_PORT}`,
-    reuseExistingServer: false,
-    timeout: 300_000,
-  },
+  webServer: [
+    {
+      // `dev:e2e` starts with `rm -rf .next`, so this is always a cold webpack
+      // build. The budget is only ever spent waiting for readiness.
+      command: 'pnpm dev:e2e',
+      env: { PORT: WEB_PORT },
+      url: `http://127.0.0.1:${WEB_PORT}`,
+      reuseExistingServer: false,
+      timeout: 300_000,
+    },
+    {
+      // The admin app, for `support-access` — the only spec covering support
+      // impersonation.
+      //
+      // It needs a real environment, and gets it from `process.env` in CI
+      // (e2e.yml sets DATABASE_URL, the Supabase keys and
+      // SUPPORT_SESSION_JWT_SECRET at job level). LOCALLY it needs
+      // `apps/admin/.env.local` to exist — `scripts/setup.sh` creates that
+      // symlink, but only if it is re-run after the admin app was added, and a
+      // worktree created before then will not have it.
+      //
+      // With no env at all, `signSupportToken` throws on a missing
+      // SUPPORT_SESSION_JWT_SECRET, the session route 500s, and
+      // `StartSessionDialog` returns WITHOUT calling `window.open` — so the
+      // spec waited 120s for a popup that could never arrive. That was the
+      // whole of #958: an environment gap wearing a timeout as a disguise.
+      command:
+        'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
+      url: 'http://127.0.0.1:3001',
+      reuseExistingServer: false,
+      timeout: 300_000,
+    },
+  ],
   projects: [
     /**
      * Compiles the heavy routes before anything is asserted. See

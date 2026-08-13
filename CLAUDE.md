@@ -119,7 +119,7 @@ pnpm --filter @propertypro/web test:e2e:prod
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
 > session (see the eighth addendum).
 >
-> **CI now runs 31 of the suite's 45 test blocks, across two jobs.** (45 is from
+> **CI now runs 32 of the suite's 45 test blocks, across two jobs.** (45 is from
 > `playwright test --list` per config — 35 default + 4 pdfjs + 6 tenant. Do not
 > count with `grep -c 'test('`; that is how an earlier note said 43.)
 >
@@ -129,18 +129,25 @@ pnpm --filter @propertypro/web test:e2e:prod
 >    job whose `DATABASE_URL` points at a stub that was never started. This is
 >    also the only job that exercises a PRODUCTION build — do not fold it into
 >    the one below.
-> 2. **`.github/workflows/e2e.yml`** runs the 27 blocks in
+> 2. **`.github/workflows/e2e.yml`** runs the 28 blocks in
 >    `apps/web/e2e/ci-safe-specs.json` via `playwright.ci.config.ts`, against a
 >    real Supabase stack (`supabase start` in `.supabase-ci/`, migrations,
 >    `pnpm seed:demo`) and a **dev** server — which is what `/dev/agent-login`
 >    requires, and why `next start` cannot host these. It is NOT a required
 >    check, and it only fires on PRs touching app/package/e2e paths.
 >
-> **The remaining 14 blocks are still unexercised on a PR**: the 5 signup blocks
+> **The remaining 13 blocks are still unexercised on a PR**: the 5 signup blocks
 > (owned by `stripe-e2e.yml` and conditional on its secrets), the 6 tenant-host
-> blocks (they need `:3002`), `support-access` — which fails against the CI
-> stack, timing out waiting for the admin app's popup — and the 2
-> `onboarding-first-run` `test.fixme` blocks.
+> blocks (they need `:3002`), and the 2 `onboarding-first-run` `test.fixme`
+> blocks.
+>
+> `support-access` joined the allowlist in #958. It had looked like a broken
+> spec — a 120s timeout on the admin popup — but the cause was that the admin
+> app was running with NO environment: `signSupportToken` throws without
+> `SUPPORT_SESSION_JWT_SECRET`, the route 500s, and the dialog returns without
+> ever opening the popup being waited on. `scripts/setup.sh` symlinks
+> `apps/admin/.env.local`, but a worktree created before the admin app existed
+> will not have it. The e2e job starts the admin server for this spec.
 >
 > The allowlist is meant to GROW: fix a spec, add it to `ci-safe-specs.json` and
 > bump `expectedTestCount`, which the workflow asserts as a floor so a spec
