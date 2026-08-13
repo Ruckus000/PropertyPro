@@ -151,11 +151,23 @@ export default defineConfig({
       command:
         'pnpm --filter @propertypro/admin exec next dev --port 3001 --hostname 127.0.0.1',
       env: {
-        // Small on purpose: exactly ONE spec touches this app and the warmup
-        // compiles the two routes it uses, so it never grows a large heap.
-        // Every GB ceded here is a GB the web server — which must survive all
-        // 28 specs — can use instead.
-        NODE_OPTIONS: '--max-old-space-size=1536',
+        // 4GB. I first set this to 1536 reasoning that one spec touches this
+        // app so it cannot need much — and killed it. A `next dev` process has
+        // a substantial baseline regardless of how little you ask of it, and
+        // the run failed with the admin server simply GONE:
+        //
+        //   net::ERR_CONNECTION_REFUSED at http://localhost:3001/clients/1
+        //   Admin refused to start the support session:
+        //     "Network error. Please try again."
+        //
+        // (That second line is the spec's own diagnostic from #958 — the dialog
+        // reporting that `fetch` could not reach the server at all. Without it
+        // this was a 120s wait on a popup event with no stated cause.)
+        //
+        // support-access passed reliably when admin inherited the step-level
+        // 8192, so the ceiling was never the thing to economise on. These are
+        // ceilings, not reservations: 8GB + 4GB on a 15Gi runner is fine.
+        NODE_OPTIONS: '--max-old-space-size=4096',
       },
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: false,
