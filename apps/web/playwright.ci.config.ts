@@ -69,6 +69,31 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: 1,
   reporter: 'list',
+  /**
+   * Raised for `next dev` FIRST-COMPILE latency, not to paper over slowness.
+   *
+   * Playwright's default `expect` timeout is 5s, which assumes a warm server.
+   * These specs run against a dev server that compiles each route on demand,
+   * on a runner far slower than the machine the allowlist was measured on. The
+   * first run on `main` failed exactly there:
+   *
+   *   phase1-roadmap-smoke ›Phase 1A finance dashboard tab shell
+   *     expect(locator).toBeVisible() failed
+   *     Timeout: 5000ms — element(s) not found
+   *     page.goto: net::ERR_ABORTED; maybe frame was detached?
+   *
+   * That spec navigates `/communities/[id]/finance`, which is a COMPATIBILITY
+   * REDIRECT into the payments surface — so it pays two cold compiles before
+   * the first assertion. And because `phase1-roadmap-smoke` declares
+   * `mode: 'serial'`, that single timeout skipped the four tests behind it:
+   * the run reported `expected=21 flaky=1 unexpected=1 skipped=4`.
+   *
+   * These budgets are ceilings, not waits — a genuinely missing element still
+   * fails, just later. The alternative (dropping the spec from the allowlist)
+   * would trade real coverage for a dev-server artefact.
+   */
+  expect: { timeout: 15_000 },
+  timeout: 90_000,
   use: {
     // MUST be `localhost`, not `127.0.0.1`. `next dev` pins its redirect origin
     // to `http://localhost:<port>` regardless of the request Host header, and
