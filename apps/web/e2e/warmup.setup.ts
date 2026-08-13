@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-import { loginAs } from './helpers/dev-login';
+import { loginAs, loginAsPlatformAdmin } from './helpers/dev-login';
 
 /**
  * Compile the heavy authenticated routes ONCE, before the real specs run.
@@ -60,6 +60,21 @@ const AUTHENTICATED_ROUTES = [
 /** Public routes — no session, so they are warmed without logging in. */
 const PUBLIC_ROUTES = ['/', '/contact', '/resources'];
 
+/**
+ * Admin app routes, absolute because this project's baseURL is the web app.
+ *
+ * `localhost`, never `127.0.0.1` — Supabase auth cookies are host-only and
+ * Next normalises `request.url` to `localhost` regardless of `--hostname`, so
+ * mixing the two silently drops the session (CLAUDE.md, eighth addendum).
+ *
+ * Added after `support-access` went flaky on its FIRST attempt in a full run
+ * (`Test timeout of 120000ms exceeded`) while passing in 48s on its own. It is
+ * the only spec that touches `:3001` and it runs last, so it was paying the
+ * admin app's entire cold compile inside its own budget — the same fault this
+ * file already fixes for the web app, just on the server nobody had warmed.
+ */
+const ADMIN_ROUTES = ['http://localhost:3001/clients', 'http://localhost:3001/clients/1'];
+
 test('warm up the dev server routes', async ({ page }) => {
   for (const route of PUBLIC_ROUTES) {
     await page
@@ -76,5 +91,28 @@ test('warm up the dev server routes', async ({ page }) => {
         timeout: 120_000,
       })
       .catch(() => {});
+  }
+
+  // Admin last: it needs its own identity, and `loginAsPlatformAdmin` replaces
+  // the session established above.
+  //
+  // LOGGED, not silently swallowed. A bare `.catch(() => {})` here is worse
+  // than a failure: `loginAsPlatformAdmin` contains assertions, so if the
+  // platform-admin grant does not take, the loop below navigates the admin
+  // routes UNAUTHENTICATED, middleware bounces both to /auth/login, and the two
+  // routes this warmup exists to compile are never compiled. `support-access`
+  // then pays the full cold compile inside its own budget and dies with
+  // `Test timeout of 120000ms exceeded` — the exact flake this file was added
+  // to fix, with nothing pointing back here. The warning is the breadcrumb.
+  await loginAsPlatformAdmin(page).catch((err) => {
+    console.warn(
+      '[warmup] platform-admin login failed; the :3001 routes will NOT be warmed and ' +
+        'support-access will pay their cold compile inside its own timeout:',
+      err,
+    );
+  });
+
+  for (const route of ADMIN_ROUTES) {
+    await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 120_000 }).catch(() => {});
   }
 });

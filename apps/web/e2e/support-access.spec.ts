@@ -158,10 +158,56 @@ test.describe('support access flow', () => {
       await dialog.getByLabel(/^Reason/i).fill(reason);
       await dialog.getByLabel(/ticket id/i).fill('PW-SUPPORT-ACCESS');
 
+      // Race the popup against the dialog's own error, rather than waiting for
+      // an event a failure guarantees will never arrive.
+      //
+      // `StartSessionDialog` only calls `window.open` when the POST succeeds;
+      // on any failure it calls `setError(...)` and returns. So a 500 — the
+      // likely one being a missing or too-short SUPPORT_SESSION_JWT_SECRET,
+      // which `signSupportToken` throws on — used to surface as
+      // `waitForEvent('popup')` timing out after 120s with the useless message
+      // "waiting for event popup", burying the real cause. This spec then took
+      // two more minutes to fail and said nothing about why.
+      //
+      // Now the error text wins the race and is reported verbatim.
+      // Matched by ROLE, not by expected copy. An earlier version of this
+      // listed message fragments — and would have caught almost nothing:
+      // `StartSessionDialog` surfaces the route's error string verbatim
+      // (`typeof data.error === 'string' ? data.error : 'Failed to start
+      // session'`), and every string-bodied error the route returns is
+      // different text — "This community has not granted support access…"
+      // (403, the most likely real failure), "Cannot impersonate another
+      // platform admin" (403), "Daily session limit of 10 reached." (429),
+      // "Failed to create session" (500), "Invalid JSON body" (400). A copy
+      // allowlist would have fallen through to the same 120s popup wait it
+      // exists to prevent, just 30s later.
+      //
+      // The error div is the ONLY `role="alert"` in the dialog
+      // (StartSessionDialog.tsx:228) — the "Read-only mode" banner is a plain
+      // div — and it renders only when `error` is non-empty, which is reset at
+      // the top of every submit. So this cannot fire on the success path.
       const popupPromise = adminPage.waitForEvent('popup');
+      const dialogError = dialog.getByRole('alert').first();
+
       await dialog
         .getByRole('button', { name: /^Start Session$/i })
         .click();
+
+      const outcome = await Promise.race([
+        popupPromise.then(() => 'popup' as const),
+        dialogError
+          .waitFor({ state: 'visible', timeout: 30_000 })
+          .then(() => 'error' as const)
+          .catch(() => 'timeout' as const),
+      ]);
+
+      if (outcome === 'error') {
+        throw new Error(
+          `Admin refused to start the support session: "${await dialogError.innerText()}". ` +
+            'Check SUPPORT_SESSION_JWT_SECRET is set on BOTH apps (admin signs, web verifies) ' +
+            'and that the admin identity holds platform_admin_users.',
+        );
+      }
 
       const supportPage = await popupPromise;
       await supportPage.waitForLoadState('domcontentloaded');
