@@ -1,0 +1,343 @@
+name: E2E
+
+# Browser coverage of the authenticated app, against a real Supabase stack.
+#
+# ## What this exists to fix
+#
+# `perf-check` runs three specs — `pdfjs-runtime`, `activation-smoke`,
+# `marketing-smoke` — and those three are exactly the ones needing no database,
+# no Auth and no seed, which is what lets them run in a job whose DATABASE_URL
+# points at a stub that was never started. Every other block in the suite went
+# unexercised on a PR. "There is a Playwright spec for that" has therefore not
+# meant "a PR would catch it breaking".
+#
+# The blocker was never Playwright. The rest of the suite calls
+# `/dev/agent-login`, which needs live GoTrue (`auth.admin.generateLink`) AND
+# `pnpm seed:demo` AND a *dev* server — `playwright.prod.config.ts` uses
+# `next start`, which 404s that route by design. So this job brings up the stack
+# those specs actually require.
+#
+# ## Why a curated allowlist and not the directory
+#
+# Turning the whole suite on would land red on day one, and a job that is red on
+# arrival gets muted or reverted — taking the coverage with it. The specs named
+# in `apps/web/e2e/ci-safe-specs.json` (read by both `playwright.ci.config.ts`
+# and the assertion step below) are the ones measured
+# to pass against this stack. The list is meant to GROW: fix a spec, add it.
+#
+# ## Why its own workflow rather than a job in ci.yml
+#
+# Same reasoning as `stripe-e2e.yml`: it needs a full Supabase stack and several
+# minutes of Docker pulls. Putting that on the critical path of every merge
+# makes an unrelated PR unmergeable whenever a container registry has a blip.
+# It is NOT a required check. It runs on PRs that touch app code, and on main.
+#
+# `test:e2e:prod` inside `perf-check` is deliberately left alone — it is the
+# only thing that can exercise a PRODUCTION build with an unreachable database,
+# which is a genuinely different question from the one this job asks.
+
+on:
+  pull_request:
+    branches: [main]
+    # An allowlist, so an unrelated PR does not spend 20 minutes of runner time.
+    # It errs toward running: everything below can change what these specs see.
+    #
+    # `apps/admin/**` is deliberately ABSENT — this job starts no admin server
+    # (see playwright.ci.config.ts), so an admin-only change could only burn the
+    # budget. Add it if support-access (#958) ever joins the allowlist.
+    paths:
+      - 'apps/web/src/**'
+      - 'apps/web/e2e/**'
+      - 'apps/web/playwright*.ts'
+      - 'apps/web/next.config.ts'
+      - 'apps/web/package.json' # `dev:e2e` lives here
+      - 'packages/**' # includes db/migrations
+      - 'scripts/seed-demo.ts'
+      - 'scripts/lib/**' # seed-safety.ts can abort the whole job
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    # Budgeted, not guessed. The allowlist takes 8.3 min locally at one worker
+    # (measured end to end through this exact config; the full 35-block suite
+    # was 11.1 min). Setup is the larger half and is all fixed cost:
+    # `supabase start` pulls a dozen images on a cold runner, plus install,
+    # package build, migrations, seed, browser download, and a cold webpack
+    # build before the dev server answers. A GitHub runner is slower than the
+    # machine that produced those numbers, and `retries: 1` can add a spec's
+    # duration back.
+    #
+    # Generous on purpose: a timed-out job reports as CANCELLED, which reads
+    # green-ish in `gh pr checks` — strictly worse than a job that took longer.
+    timeout-minutes: 45
+
+    env:
+      # `/dev/agent-login` and the dev server both require this. `next start`
+      # would 404 the login route, which is why this job runs a dev server.
+      NODE_ENV: development
+      # No local Upstash; the limiter falls back to its in-memory implementation.
+      UPSTASH_REDIS_REST_URL: ''
+      UPSTASH_REDIS_REST_TOKEN: ''
+      # `pnpm seed:demo` REFUSES to run without this — `assertSeedEnvironment`
+      # (scripts/lib/seed-safety.ts) requires one of development | ci |
+      # demo-nightly, and treats unset as "you have not told me this is not
+      # production". Same value integration-tests.yml uses.
+      PROPERTYPRO_SEED_ENV: ci
+      # Also required by the seed: `getDefaultPassword()`
+      # (packages/db/src/seed/seed-community.ts) throws when it is unset, and it
+      # is reached because `shouldSyncDemoAuthUsers()` defaults to TRUE.
+      #
+      # A literal, not a secret, deliberately: this stack is destroyed at the end
+      # of the job and is only ever reachable over loopback. Do NOT "avoid" the
+      # variable by setting DEMO_SEED_SYNC_AUTH_USERS=0 — without the auth-user
+      # sync, `/dev/agent-login` returns 500 "Failed to generate login link" and
+      # every authenticated spec dies.
+      DEMO_DEFAULT_PASSWORD: DemoPass123!
+      # Not needed by the current 7 specs — `foreignHost()` and
+      # `parseHostSubdomain()` short-circuit on host `localhost`, and
+      # /dev/agent-login never reads the app URL under NODE_ENV=development. Set
+      # anyway so absolute community links resolve to this stack rather than to
+      # production, which would otherwise be a live trap for the next spec added
+      # to the allowlist.
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_ROOT_DOMAIN: localhost
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Own project directory, NOT the repo root: the repo deliberately ships no
+      # `supabase/` config (it is gitignored, because ports get shifted per
+      # worktree so several stacks can coexist), and writing one here would
+      # collide with whatever a developer already has locally. Same approach as
+      # stripe-e2e.yml, and `.supabase-ci/` is already gitignored for it.
+      - name: Start local Supabase
+        run: |
+          mkdir -p .supabase-ci
+          cd .supabase-ci
+          supabase init --force
+          # The CLI now defaults this OFF, which leaves tables created by our
+          # migrations with NO Data API grants — routes then fail with
+          # `permission denied for table … (42501)` on 85 of 100 public tables.
+          # Production is not like this. See CLAUDE.md.
+          sed -i 's/^# *auto_expose_new_tables = true/auto_expose_new_tables = true/' supabase/config.toml
+          grep -q '^auto_expose_new_tables = true' supabase/config.toml \
+            || { echo "::error::failed to enable auto_expose_new_tables"; exit 1; }
+          supabase start
+
+      - name: Export Supabase credentials
+        working-directory: .supabase-ci
+        run: |
+          supabase status -o env > /tmp/supabase.env
+          . /tmp/supabase.env
+          # Local demo keys, but masked anyway: a service-role key in a public
+          # log teaches the wrong habit even when the target is a throwaway.
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          echo "::add-mask::$ANON_KEY"
+          # 127.0.0.1, not localhost, for the API URL — but note the Playwright
+          # baseURL is the opposite (see playwright.config.ts): browsers treat
+          # the two as different cookie hosts, and `next dev` pins its redirect
+          # origin to `localhost`.
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=${API_URL/localhost/127.0.0.1}"
+            echo "SUPABASE_URL=${API_URL/localhost/127.0.0.1}"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+            echo "DATABASE_URL=${DB_URL/localhost/127.0.0.1}"
+            echo "DIRECT_URL=${DB_URL/localhost/127.0.0.1}"
+          } >> "$GITHUB_ENV"
+
+      # Secrets the app reads at boot or on first use. Generated per run: they
+      # protect nothing here (throwaway stack, throwaway data) but several call
+      # sites throw by design when they are absent, and a missing one surfaces
+      # as an unrelated-looking 500 deep inside a spec.
+      #
+      # `-hex 32` for all of them, deliberately: that is 64 characters, which is
+      # what TOKEN_ENCRYPTION_KEY requires EXACTLY (`-hex 64` would emit 128 and
+      # throw on every encrypt). See DEPLOYMENT.md §4.2.
+      - name: Generate app secrets
+        run: |
+          for name in CRON_SECRET PROVISIONING_RETRY_SECRET OTP_HMAC_SECRET \
+                      TOKEN_ENCRYPTION_KEY SUPPORT_SESSION_JWT_SECRET \
+                      DEMO_TOKEN_ENCRYPTION_KEY_HEX REAUTH_JWT_SECRET; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+
+      - name: Build workspace packages
+        run: pnpm --filter @propertypro/shared --filter @propertypro/email --filter @propertypro/db --filter @propertypro/api-contract build
+
+      - name: Run migrations
+        run: pnpm --filter @propertypro/db db:migrate
+
+      # The demo users `/dev/agent-login` authenticates as. Without this every
+      # authenticated spec fails at login, which reads like an auth bug.
+      - name: Seed demo data
+        run: pnpm seed:demo
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
+
+      - name: Run E2E specs
+        id: specs
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/playwright-report.json
+          # The dev server restarts itself mid-run without this, and a restart
+          # kills whatever navigation is in flight.
+          #
+          # Observed on the first full CI run, from the server's own log:
+          #   01:37:15.8 [WebServer] ⚠ Server is approaching the used memory
+          #                           threshold, restarting...
+          #   01:37:17.3 Error: page.goto: net::ERR_CONNECTION_RESET
+          #
+          # `next dev` compiles routes on demand and accumulates heap across a
+          # 27-spec run; its watchdog restarts when it nears the Node heap
+          # ceiling. The default ceiling is a fraction of runner RAM, so this is
+          # a CI-only failure — the same run passes locally, where the machine
+          # has more headroom, which is exactly why it could not be caught
+          # before this job existed.
+          #
+          # Playwright merges `webServer.env` OVER `process.env` rather than
+          # replacing it, so setting this on the step reaches the dev server.
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: |
+          pnpm --filter @propertypro/web exec playwright test \
+            -c playwright.ci.config.ts \
+            --reporter=list,json
+
+      # A green run that skipped everything is the failure mode this workflow
+      # exists to prevent. The suite's whole history is coverage that reported
+      # success while running nothing, so "it exited 0" is not evidence here.
+      #
+      # The floor is asserted against the count declared in ci-safe-specs.json —
+      # the same file playwright.ci.config.ts reads — so renaming a spec out of
+      # the glob fails loudly instead of quietly shrinking what CI covers.
+      #
+      # Gated on the test step rather than a bare `always()`: the latter also
+      # fires when install/migrate/seed failed, adding a misleading second red X
+      # ("no Playwright JSON report") on top of the real cause. It must still
+      # run when the specs FAIL — a failing run cannot escape the count check.
+      #
+      # `always() &&` is REQUIRED, not noise. A custom `if:` with no status
+      # function gets an implicit `success()` ANDed onto it, so the condition
+      # below evaluated true and the step was skipped anyway the first time this
+      # ran. `always()` restores the intent, and the explicit conclusion test
+      # then narrows it back to "the specs actually executed".
+      #
+      # No `working-directory:` — `require("./apps/web/...")` below resolves
+      # against the process cwd, which is the repo root. Adding one would break
+      # the path.
+      - name: Assert the specs actually ran
+        if: always() && (steps.specs.conclusion == 'success' || steps.specs.conclusion == 'failure')
+        run: |
+          test -f /tmp/playwright-report.json || {
+            echo "::error::no Playwright JSON report — the run did not get far enough to produce one"
+            exit 1
+          }
+          node -e '
+            const report = require("/tmp/playwright-report.json");
+            const stats = report.stats ?? {};
+            const ran = stats.expected ?? 0;
+            const skipped = stats.skipped ?? 0;
+            const failed = stats.unexpected ?? 0;
+            // `flaky` is a FOURTH bucket, not a subset of the others: a test
+            // that fails once and passes on retry lands there and in neither
+            // `expected` nor `unexpected`. With retries: 1, omitting it means a
+            // single flake trips the floor and reports a spec rename that never
+            // happened.
+            const flaky = stats.flaky ?? 0;
+            const collected = ran + failed + flaky;
+            const allowlist = require("./apps/web/e2e/ci-safe-specs.json");
+            const floor = allowlist.expectedTestCount;
+            console.log(`expected=${ran} flaky=${flaky} unexpected=${failed} skipped=${skipped} collected=${collected} floor=${floor}`);
+            if (skipped > 0) {
+              // Name them: an allowlisted spec can still self-skip at runtime
+              // (esign checks that the feature and its seeded template exist),
+              // and "1 skipped" alone sends you looking for a config problem
+              // when the real cause is a half-applied seed.
+              const names = (report.suites ?? []).flatMap(function walk(s) {
+                return [
+                  ...(s.suites ?? []).flatMap(walk),
+                  ...(s.specs ?? []).filter((sp) => (sp.tests ?? []).some((t) => t.status === "skipped")).map((sp) => `${s.title} › ${sp.title}`),
+                ];
+              });
+              console.error(`::error::${skipped} allowlisted test(s) SKIPPED: ${names.join("; ") || "(unnamed)"}. Allowlisted specs must not self-skip — either the stack is incomplete (seed? storage bucket?) or the spec does not belong on the list.`);
+              process.exit(1);
+            }
+            if (collected < floor) {
+              console.error(`::error::only ${collected} test(s) were collected; the allowlist declares ${floor}. A spec was probably renamed out of ci-safe-specs.json.`);
+              process.exit(1);
+            }
+          '
+
+      # SAFE BECAUSE THE STACK IS DISPOSABLE, NOT BECAUSE ANYTHING IS FILTERED.
+      #
+      # `::add-mask::` redacts log output only — it has NO effect on file
+      # contents. With `retries: 1` and `trace: 'on-first-retry'`, any flaky
+      # spec writes a trace zip capturing full request headers, cookies and
+      # localStorage: real session JWTs and the anon-key header. On a public
+      # repo, artifacts are world-downloadable for their retention window.
+      #
+      # That is fine here only because every value in them is scoped to a
+      # container destroyed by the last step of this job, signed by the Supabase
+      # CLI's published local-dev secret, over `127.0.0.1`, against seeded
+      # fixtures. No production credential is reachable from this job at all.
+      #
+      # So: if you ever give this job a REAL secret — the likely reason being
+      # whatever it takes to get support-access (#958) green — you must add a
+      # redaction step before this upload, the way stripe-e2e.yml does for its
+      # live `whsec_`. There is nothing guarding this path today.
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            /tmp/playwright-report.json
+            apps/web/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # No `working-directory:` — that is resolved before the shell runs, so if
+      # the job died before the start step created `.supabase-ci`, this
+      # `always()` step would itself error on a missing directory and bury the
+      # real failure under a second one.
+      - name: Stop local Supabase
+        if: always()
+        run: |
+          [ -d .supabase-ci ] || exit 0
+          cd .supabase-ci && supabase stop --no-backup || true

@@ -119,27 +119,45 @@ pnpm --filter @propertypro/web test:e2e:prod
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
 > session (see the eighth addendum).
 >
-> **CI runs three specs — 8 of the suite's 39 test blocks** —
-> `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`, in one
-> `test:e2e:prod` invocation inside `perf-check` (~5s). Those three are exactly
-> the ones needing no DB, no Auth and no seed, which is what lets them run in a
-> job whose `DATABASE_URL` points at a stub that was never started.
+> **CI now runs 31 of the suite's 45 test blocks, across two jobs.** (45 is from
+> `playwright test --list` per config — 35 default + 4 pdfjs + 6 tenant. Do not
+> count with `grep -c 'test('`; that is how an earlier note said 43.)
 >
-> **The other 31 blocks are unexercised by CI — do not assume a Playwright spec
-> guards anything on a PR.** They call `/dev/agent-login`, so a CI job covering
-> them is blocked on Supabase **Auth** + a seed in a workflow, not on Playwright.
-> `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite; as of the
-> **eleventh addendum (2026-08-05)** the default suite is **26 passed / 1 failed /
-> 2 skipped / 0 never ran** in 7.5 min at `workers: 1`, up from 19/8/2 — and
-> "never ran" is 0 for the first time, so every block now executes. Before
-> trusting a local number, confirm the port is clear AND
+> 1. `perf-check` runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
+>    (10 blocks) in one `test:e2e:prod` invocation. Those three are exactly the
+>    ones needing no DB, no Auth and no seed, which is what lets them run in a
+>    job whose `DATABASE_URL` points at a stub that was never started. This is
+>    also the only job that exercises a PRODUCTION build — do not fold it into
+>    the one below.
+> 2. **`.github/workflows/e2e.yml`** runs the 27 blocks in
+>    `apps/web/e2e/ci-safe-specs.json` via `playwright.ci.config.ts`, against a
+>    real Supabase stack (`supabase start` in `.supabase-ci/`, migrations,
+>    `pnpm seed:demo`) and a **dev** server — which is what `/dev/agent-login`
+>    requires, and why `next start` cannot host these. It is NOT a required
+>    check, and it only fires on PRs touching app/package/e2e paths.
+>
+> **The remaining 14 blocks are still unexercised on a PR**: the 5 signup blocks
+> (owned by `stripe-e2e.yml` and conditional on its secrets), the 6 tenant-host
+> blocks (they need `:3002`), `support-access` — which fails against the CI
+> stack, timing out waiting for the admin app's popup — and the 2
+> `onboarding-first-run` `test.fixme` blocks.
+>
+> The allowlist is meant to GROW: fix a spec, add it to `ci-safe-specs.json` and
+> bump `expectedTestCount`, which the workflow asserts as a floor so a spec
+> renamed out of the glob fails loudly instead of shrinking coverage silently.
+> `docs/audits/2026-08-03-e2e-inventory.md` measures the whole suite. Latest
+> measurement (**2026-08-12**, full local stack, `workers: 1`): the default
+> suite is **27 passed / 1 failed / 7 skipped** in 11.1 min. The 7 skipped are
+> the 5 Stripe signup blocks (no test-mode secrets locally) and the 2 deliberate
+> `onboarding-first-run` `test.fixme` blocks — that spec describes a 4-/5-step
+> wizard, but **both** condo and apartment ship the same 2-step one. The single
+> failure is `support-access`, which times out after 120s waiting for the admin
+> app's `popup` event after Start Session.
+>
+> Before trusting a local number, confirm the port is clear AND
 > `ps -eo comm | grep -c vitest` is 0; also compare the CANARY TIMINGS
 > (`activation-smoke` ~0.7-4s, `marketing-smoke` ~3s), because a canary that
-> passes but is 5x slower still means the environment moved. The 2 skipped are
-> the deliberate `onboarding-first-run` `test.fixme` blocks: that spec describes
-> a 4-/5-step wizard, but **both** condo and apartment ship the same 2-step one.
-> The single remaining failure is `signup-trialing` (placeholder Stripe price
-> ids — needs test-mode ids, not a code fix).
+> passes but is 5x slower still means the environment moved.
 >
 > **Never click straight after waiting for a heading — use `clickWhenHydrated`**
 > (`apps/web/e2e/helpers/hydration.ts`). Playwright actionability is a DOM check
