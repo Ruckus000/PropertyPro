@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import { NavigationProgress } from '@/components/NavigationProgress';
 import '../styles/globals.css';
 
@@ -9,13 +9,21 @@ import '../styles/globals.css';
  * anywhere in apps/admin — so every screen silently fell back to system-ui and
  * the operator console matched none of the product's typography.
  *
- * `next/font/google` self-hosts the font files under `/_next` at build time, so
- * the CSP added in this same phase needs nothing beyond `font-src 'self'` and
- * no request leaves for fonts.googleapis.com at runtime.
+ * The font is served from `/_next` at build time, so the CSP added in this same
+ * phase needs nothing beyond `font-src 'self'` and no request leaves for
+ * fonts.googleapis.com at runtime.
+ *
+ * It is VENDORED (`./fonts/`) rather than fetched from Google during the build:
+ * `next/font/google` downloads at build time, which twice took CI down on
+ * unrelated PRs when `fonts.gstatic.com` was unreachable (#962). Same file as
+ * `apps/web` uses — duplicated deliberately, because `next/font/local` needs a
+ * literal path relative to this file and a cross-package `../../../../` would
+ * break the moment either app moved. See fonts/README.md.
  */
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+const inter = localFont({
+  src: './fonts/inter-latin-var.woff2',
+  weight: '100 900',
+  style: 'normal',
   display: 'swap',
   variable: '--font-sans',
 });
