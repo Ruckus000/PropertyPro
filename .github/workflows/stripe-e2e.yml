@@ -291,13 +291,30 @@ jobs:
             const s = r.stats ?? {};
             const ran = s.expected ?? 0;
             const skipped = s.skipped ?? 0;
-            console.log(`expected=${ran} skipped=${skipped} unexpected=${s.unexpected ?? 0}`);
+            const failed = s.unexpected ?? 0;
+            // Playwright buckets every test into exactly ONE of
+            // expected | skipped | unexpected | flaky. `flaky` is a fourth
+            // bucket, not a subset — a test that fails once and passes on retry
+            // appears ONLY there, and this config runs `retries: 2` in CI.
+            //
+            // Playwright EXITS 0 when a flaky test eventually passes, so the
+            // test step goes green and this assertion runs — and counting
+            // `expected` alone then failed the job with `only 4 test(s) ran`,
+            // naming a spec rename that never happened. That is the whole bug:
+            // it fires precisely when everything actually worked.
+            //
+            // `unexpected` is included for correctness of the phrase "was it
+            // collected", not because it is reachable here — a real failure
+            // fails the test step first and skips this one.
+            const flaky = s.flaky ?? 0;
+            const collected = ran + failed + flaky;
+            console.log(`expected=${ran} flaky=${flaky} unexpected=${failed} skipped=${skipped} collected=${collected}`);
             if (skipped > 0) {
               console.error(`::error::${skipped} Stripe spec(s) SKIPPED despite secrets being configured — the run proved nothing. Check the Supabase stack and the Stripe env.`);
               process.exit(1);
             }
-            if (ran < 5) {
-              console.error(`::error::only ${ran} test(s) ran; expected at least 5. Did a spec file get renamed out of the invocation?`);
+            if (collected < 5) {
+              console.error(`::error::only ${collected} test(s) were collected; expected at least 5. Did a spec file get renamed out of the invocation?`);
               process.exit(1);
             }
           '
