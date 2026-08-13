@@ -119,7 +119,9 @@ pnpm --filter @propertypro/web test:e2e:prod
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
 > session (see the eighth addendum).
 >
-> **CI now runs 31 of the suite's 43 test blocks, across two jobs.**
+> **CI now runs 31 of the suite's 45 test blocks, across two jobs.** (45 is from
+> `playwright test --list` per config — 35 default + 4 pdfjs + 6 tenant. Do not
+> count with `grep -c 'test('`; that is how an earlier note said 43.)
 >
 > 1. `perf-check` runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
 >    (10 blocks) in one `test:e2e:prod` invocation. Those three are exactly the
@@ -134,10 +136,11 @@ pnpm --filter @propertypro/web test:e2e:prod
 >    requires, and why `next start` cannot host these. It is NOT a required
 >    check, and it only fires on PRs touching app/package/e2e paths.
 >
-> **The remaining 12 blocks are still unexercised on a PR**: the 5 signup blocks
+> **The remaining 14 blocks are still unexercised on a PR**: the 5 signup blocks
 > (owned by `stripe-e2e.yml` and conditional on its secrets), the 6 tenant-host
-> blocks (they need `:3002`), and `support-access`, which fails against the CI
-> stack — it times out waiting for the admin app's popup.
+> blocks (they need `:3002`), `support-access` — which fails against the CI
+> stack, timing out waiting for the admin app's popup — and the 2
+> `onboarding-first-run` `test.fixme` blocks.
 >
 > The allowlist is meant to GROW: fix a spec, add it to `ci-safe-specs.json` and
 > bump `expectedTestCount`, which the workflow asserts as a floor so a spec

@@ -21,7 +21,8 @@ name: E2E
 #
 # Turning the whole suite on would land red on day one, and a job that is red on
 # arrival gets muted or reverted — taking the coverage with it. The specs named
-# in `CI_SAFE_SPECS` (`apps/web/playwright.ci.config.ts`) are the ones measured
+# in `apps/web/e2e/ci-safe-specs.json` (read by both `playwright.ci.config.ts`
+# and the assertion step below) are the ones measured
 # to pass against this stack. The list is meant to GROW: fix a spec, add it.
 #
 # ## Why its own workflow rather than a job in ci.yml
@@ -38,14 +39,23 @@ name: E2E
 on:
   pull_request:
     branches: [main]
+    # An allowlist, so an unrelated PR does not spend 20 minutes of runner time.
+    # It errs toward running: everything below can change what these specs see.
+    #
+    # `apps/admin/**` is deliberately ABSENT — this job starts no admin server
+    # (see playwright.ci.config.ts), so an admin-only change could only burn the
+    # budget. Add it if support-access (#958) ever joins the allowlist.
     paths:
       - 'apps/web/src/**'
       - 'apps/web/e2e/**'
       - 'apps/web/playwright*.ts'
-      - 'apps/admin/src/**'
-      - 'packages/**'
+      - 'apps/web/next.config.ts'
+      - 'apps/web/package.json' # `dev:e2e` lives here
+      - 'packages/**' # includes db/migrations
       - 'scripts/seed-demo.ts'
-      - 'packages/db/migrations/**'
+      - 'scripts/lib/**' # seed-safety.ts can abort the whole job
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/e2e.yml'
   push:
     branches: [main]
@@ -62,9 +72,9 @@ jobs:
   e2e:
     name: e2e
     runs-on: ubuntu-latest
-    # Budgeted, not guessed. The allowlist takes ~9 min locally at one worker
-    # (measured: the full 35-block suite was 11.1 min, and support-access alone
-    # was 2 of those). Setup is the larger half and is all fixed cost:
+    # Budgeted, not guessed. The allowlist takes 8.3 min locally at one worker
+    # (measured end to end through this exact config; the full 35-block suite
+    # was 11.1 min). Setup is the larger half and is all fixed cost:
     # `supabase start` pulls a dozen images on a cold runner, plus install,
     # package build, migrations, seed, browser download, and a cold webpack
     # build before the dev server answers. A GitHub runner is slower than the
@@ -87,6 +97,24 @@ jobs:
       # demo-nightly, and treats unset as "you have not told me this is not
       # production". Same value integration-tests.yml uses.
       PROPERTYPRO_SEED_ENV: ci
+      # Also required by the seed: `getDefaultPassword()`
+      # (packages/db/src/seed/seed-community.ts) throws when it is unset, and it
+      # is reached because `shouldSyncDemoAuthUsers()` defaults to TRUE.
+      #
+      # A literal, not a secret, deliberately: this stack is destroyed at the end
+      # of the job and is only ever reachable over loopback. Do NOT "avoid" the
+      # variable by setting DEMO_SEED_SYNC_AUTH_USERS=0 — without the auth-user
+      # sync, `/dev/agent-login` returns 500 "Failed to generate login link" and
+      # every authenticated spec dies.
+      DEMO_DEFAULT_PASSWORD: DemoPass123!
+      # Not needed by the current 7 specs — `foreignHost()` and
+      # `parseHostSubdomain()` short-circuit on host `localhost`, and
+      # /dev/agent-login never reads the app URL under NODE_ENV=development. Set
+      # anyway so absolute community links resolve to this stack rather than to
+      # production, which would otherwise be a live trap for the next spec added
+      # to the allowlist.
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_ROOT_DOMAIN: localhost
 
     steps:
       - name: Checkout
@@ -185,6 +213,7 @@ jobs:
         run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
 
       - name: Run E2E specs
+        id: specs
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/playwright-report.json
         run: |
@@ -196,14 +225,21 @@ jobs:
       # exists to prevent. The suite's whole history is coverage that reported
       # success while running nothing, so "it exited 0" is not evidence here.
       #
-      # The floor is asserted against the allowlist's own declared count, so
-      # renaming a spec out of `CI_SAFE_SPECS` fails loudly instead of quietly
-      # shrinking what CI covers.
+      # The floor is asserted against the count declared in ci-safe-specs.json —
+      # the same file playwright.ci.config.ts reads — so renaming a spec out of
+      # the glob fails loudly instead of quietly shrinking what CI covers.
+      #
+      # Gated on the test step rather than `always()`: with `always()` this also
+      # fires when install/migrate/seed failed, adding a misleading second red X
+      # ("no Playwright JSON report") on top of the real cause. It still runs
+      # when the specs FAIL, which is the case that matters — a failing run must
+      # not escape the collected-count check.
+      #
       # No `working-directory:` — `require("./apps/web/...")` below resolves
       # against the process cwd, which is the repo root. Adding one would break
       # the path.
       - name: Assert the specs actually ran
-        if: always()
+        if: steps.specs.conclusion == 'success' || steps.specs.conclusion == 'failure'
         run: |
           test -f /tmp/playwright-report.json || {
             echo "::error::no Playwright JSON report — the run did not get far enough to produce one"
@@ -215,15 +251,32 @@ jobs:
             const ran = stats.expected ?? 0;
             const skipped = stats.skipped ?? 0;
             const failed = stats.unexpected ?? 0;
+            // `flaky` is a FOURTH bucket, not a subset of the others: a test
+            // that fails once and passes on retry lands there and in neither
+            // `expected` nor `unexpected`. With retries: 1, omitting it means a
+            // single flake trips the floor and reports a spec rename that never
+            // happened.
+            const flaky = stats.flaky ?? 0;
+            const collected = ran + failed + flaky;
             const allowlist = require("./apps/web/e2e/ci-safe-specs.json");
             const floor = allowlist.expectedTestCount;
-            console.log(`expected=${ran} skipped=${skipped} unexpected=${failed} floor=${floor}`);
+            console.log(`expected=${ran} flaky=${flaky} unexpected=${failed} skipped=${skipped} collected=${collected} floor=${floor}`);
             if (skipped > 0) {
-              console.error(`::error::${skipped} allowlisted spec(s) SKIPPED. Allowlisted specs must not self-skip — either the stack is broken or the spec does not belong on the list.`);
+              // Name them: an allowlisted spec can still self-skip at runtime
+              // (esign checks that the feature and its seeded template exist),
+              // and "1 skipped" alone sends you looking for a config problem
+              // when the real cause is a half-applied seed.
+              const names = (report.suites ?? []).flatMap(function walk(s) {
+                return [
+                  ...(s.suites ?? []).flatMap(walk),
+                  ...(s.specs ?? []).filter((sp) => (sp.tests ?? []).some((t) => t.status === "skipped")).map((sp) => `${s.title} › ${sp.title}`),
+                ];
+              });
+              console.error(`::error::${skipped} allowlisted test(s) SKIPPED: ${names.join("; ") || "(unnamed)"}. Allowlisted specs must not self-skip — either the stack is incomplete (seed? storage bucket?) or the spec does not belong on the list.`);
               process.exit(1);
             }
-            if (ran + failed < floor) {
-              console.error(`::error::only ${ran + failed} test(s) were collected; the allowlist declares ${floor}. A spec was probably renamed out of ci-safe-specs.json.`);
+            if (collected < floor) {
+              console.error(`::error::only ${collected} test(s) were collected; the allowlist declares ${floor}. A spec was probably renamed out of ci-safe-specs.json.`);
               process.exit(1);
             }
           '
@@ -256,7 +309,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # No `working-directory:` — that is resolved before the shell runs, so if
+      # the job died before the start step created `.supabase-ci`, this
+      # `always()` step would itself error on a missing directory and bury the
+      # real failure under a second one.
       - name: Stop local Supabase
         if: always()
-        working-directory: .supabase-ci
-        run: supabase stop --no-backup || true
+        run: |
+          [ -d .supabase-ci ] || exit 0
+          cd .supabase-ci && supabase stop --no-backup || true

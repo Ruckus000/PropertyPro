@@ -9,17 +9,30 @@ import { defineConfig, devices } from '@playwright/test';
  * always fails trains everyone to ignore e2e results, and that is how most of
  * this suite came to run nowhere at all.
  *
- * That is no longer the state. Measured 2026-08-12 against a full local stack:
- * 43 test blocks across 15 spec files, of which **31 now run on a PR** — 10 in
- * `perf-check` (pdfjs-runtime, activation-smoke, marketing-smoke against a
- * production build) and 27 in the `E2E` workflow, which brings up Supabase and
- * a seed so the authenticated specs can run at all. The two overlap on
- * activation-smoke and marketing-smoke.
+ * That is no longer the state. Counts below are from `playwright test --list`
+ * per config, NOT from grepping for `test(` — that regex both overcounts
+ * (`.test(` calls) and undercounts, and is how an earlier version of this
+ * comment arrived at 43.
  *
- * The 12 still unexercised on a PR: the 5 signup blocks (owned by
+ *   default (this file)  35 in 12 files
+ *   prod                 10 in  3 files  (pdfjs 4 + activation 3 + marketing 3)
+ *   tenant                6 in  2 files
+ *   ci                   27 in  7 files
+ *
+ * Distinct total: **45 blocks across 15 spec files** (35 + pdfjs's 4, which
+ * this config ignores, + the 6 tenant blocks).
+ *
+ * **31 now run on a PR** — 10 in `perf-check` against a production build, and
+ * 27 in the `E2E` workflow, which brings up Supabase and a seed so the
+ * authenticated specs can run at all. The two overlap on activation-smoke and
+ * marketing-smoke, hence 31 rather than 37.
+ *
+ * The 14 still unexercised on a PR: the 5 signup blocks (owned by
  * stripe-e2e.yml, and conditional on its secrets), the 6 tenant-host blocks
- * (community-tenant-host-precedence, wave-2-ga-staging — they need :3002), and
- * support-access, which fails against the CI stack and is tracked separately.
+ * (community-tenant-host-precedence, wave-2-ga-staging — they need :3002),
+ * support-access (fails against the CI stack, tracked separately), and the 2
+ * `onboarding-first-run` `test.fixme` blocks, which describe a wizard that was
+ * never built.
  *
  * Each excluded spec is owned by another config; none of them is unowned:
  *   - pdfjs-runtime.spec.ts → playwright.prod.config.ts. Needs a production
