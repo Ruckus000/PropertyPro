@@ -336,7 +336,29 @@ jobs:
     # the required `Build` status check hangs off its result), so it carries
     # the largest blast radius.
     runs-on: ${{ github.event_name == 'pull_request' && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
-    timeout-minutes: 15
+    # 25, raised from 15 on 2026-08-16. Not headroom for growth — headroom for a
+    # runner that intermittently runs this job 3x slow.
+    #
+    # Measured 2026-08-15/16 across consecutive runs of the same workload:
+    #   pushes to main (hosted):  4.0 / 4.5 / 4.5 / 4.7 / 4.8 / 4.8 / 5.0 / 5.2
+    #   PRs (self-hosted):        4.8 / 5.0 / 5.0 / 5.5 / 5.9 / 6.6 / 7.7
+    #   degraded, same tree:      15m30s (KILLED by the old 15) then 6m31s on the
+    #                             immediate re-run; another at 14m17s
+    # The short jobs on those degraded runs were unaffected (Lint 1.1 vs 1.2 min),
+    # so this is the runner, not the workload. #969 measured Unit Tests at 23.7
+    # min against a 3.8-7.5 min norm in the same window.
+    #
+    # The tradeoff the `test` job's note warns about applies here and is accepted
+    # deliberately: at 25 a genuine HANG now burns 25 minutes and reports as
+    # *cancelled* rather than failed. That is the lesser evil against a ~5 min job
+    # being killed at 15 and reading as a red PR — which then costs a re-run and
+    # invites the wrong diagnosis (it did: #968's failure was read as a code
+    # problem before the durations were compared against passing runs).
+    #
+    # RATCHET THIS DOWN to ~2x p95 (i.e. back toward 15) once the runner stops
+    # producing 3x outliers. Raising it is a stopgap for the symptom; the cause
+    # is unfixed.
+    timeout-minutes: 25
 
     env:
       # See the `test` job — same reason, same guarantee.
