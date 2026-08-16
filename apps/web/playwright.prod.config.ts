@@ -32,9 +32,7 @@ const PROD_SAFE_SPECS = [
  * The port `next start` binds and the specs target.
  *
  * Overridable because `reuseExistingServer: false` makes a taken port a HARD
- * FAILURE, not a fallback — and once `perf-check` runs on a self-hosted runner
- * there can be two of them on one machine (different refs are not covered by
- * the workflow's `concurrency` group, which is keyed on ref).
+ * FAILURE, not a fallback.
  */
 const PORT = process.env.PLAYWRIGHT_PROD_PORT ?? '3100';
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -49,13 +47,11 @@ export default defineConfig({
   /**
    * PINNED, not left to the default.
    *
-   * Playwright's default is `cores / 2`, so this silently tracked whatever
-   * hardware CI happened to run on: 2 workers on a 4-core `ubuntu-latest`
-   * runner, 4 on the 8-vCPU self-hosted VM. Four Chromiums against a single
+   * Playwright's default is `cores / 2`, so this would silently track whatever
+   * hardware CI happens to run on. More Chromiums against a single
    * `next start` is a different test than the one these budgets and this
    * allowlist were validated against, and combined with `retries: 2` the
-   * failure mode is not a clean red — it is intermittently-slow green, which
-   * gets misattributed to "the new runner" for weeks.
+   * failure mode is not a clean red — it is intermittently-slow green.
    *
    * 2 preserves the behaviour CI has actually been exercising. The sibling
    * `playwright.config.ts` pins `workers: 1` on measured evidence that
