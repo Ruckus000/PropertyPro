@@ -610,7 +610,7 @@ describe('processComplianceAlerts', () => {
 
 - [ ] **Step 2: Run the tests**
 
-Run: `pnpm test -- apps/web/__tests__/notifications/compliance-alert-service.test.ts`
+Run: `pnpm test apps/web/__tests__/notifications/compliance-alert-service.test.ts`
 Expected: All tests pass.
 
 - [ ] **Step 3: Commit**
@@ -742,7 +742,7 @@ describe('compliance-alerts cron route', () => {
 
 - [ ] **Step 3: Run the tests**
 
-Run: `pnpm test -- apps/web/__tests__/cron/compliance-alerts-route.test.ts`
+Run: `pnpm test apps/web/__tests__/cron/compliance-alerts-route.test.ts`
 Expected: All 4 tests pass.
 
 - [ ] **Step 4: Commit**
@@ -845,7 +845,7 @@ compliance-calculator.ts (status logic) and compliance-alert-service.ts
 
 - [ ] **Step 1: Run all compliance-related tests**
 
-Run: `pnpm test -- apps/web/__tests__/notifications/compliance-alert-service.test.ts apps/web/__tests__/cron/compliance-alerts-route.test.ts apps/web/__tests__/compliance/`
+Run: `pnpm test apps/web/__tests__/notifications/compliance-alert-service.test.ts apps/web/__tests__/cron/compliance-alerts-route.test.ts apps/web/__tests__/compliance/`
 Expected: All tests pass.
 
 - [ ] **Step 2: Run lint + typecheck + DB guard**

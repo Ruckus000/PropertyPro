@@ -33,6 +33,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo",
     "lint": "eslint . --cache --cache-location .turbo/eslint-cache"

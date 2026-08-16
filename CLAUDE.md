@@ -260,6 +260,7 @@ Domain-specific rules are in `.claude/rules/` and load automatically when releva
 - `api-patterns.md` — Route structure, required patterns, route contracts (`runRoute`), tenant scoping, pagination, middleware, route catalog
 - `agent-testing.md` — How to authenticate as demo users for testing
 - `design.md` — UI/UX design system rules, component patterns, accessibility, quality gate
+- `verification.md` — Revert-checks, why an exit code is not evidence, running one test file, guard shape
 
 ## Documentation
 
