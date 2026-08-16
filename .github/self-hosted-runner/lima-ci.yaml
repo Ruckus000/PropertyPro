@@ -161,6 +161,24 @@ provision:
         /opt/ci-cache/tool-cache \
         /opt/ci-cache/pnpm-store \
         /opt/ci-cache/ms-playwright
+      # /etc/environment IS FOR INTERACTIVE DEBUGGING ONLY — IT DOES NOT REACH JOBS.
+      #
+      # This file is read by `pam_env`, i.e. on a real PAM login. The supervisor
+      # starts jobs with `limactl shell -- bash -lc`, which never goes through
+      # PAM, so for the runner's whole first nine days every one of these was
+      # unset inside jobs. Measured in exactly that shell:
+      #
+      #   PLAYWRIGHT_BROWSERS_PATH=[<unset>]   RUNNER_TOOL_CACHE=[<unset>]
+      #
+      # Result on disk: tool-cache empty at 4.0K while each runner kept its own
+      # 40M .cache/node; ms-playwright duplicated three ways (929M here + 929M in
+      # EACH runner's $HOME); pnpm-store's 1.2G orphaned. Every job re-downloaded
+      # the Node tarball and Chromium.
+      #
+      # The authoritative exports now live in runner-supervisor.sh, in the
+      # `limactl shell` command itself — the one place guaranteed to be in the
+      # job's environment. KEEP THE TWO IN SYNC, and do not "fix" a missing
+      # variable by adding it here: it will look right and do nothing.
       cat > /etc/environment <<'EOF'
       TZ=UTC
       LANG=C.UTF-8

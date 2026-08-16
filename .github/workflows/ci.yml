@@ -215,7 +215,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          # Hosted only. `cache: pnpm` resolves its path by running
+          # `pnpm store path`, and the supervisor now points that at the SHARED
+          # /opt/ci-cache/pnpm-store/store — so leaving this on would tar and
+          # upload the whole shared store (1.2 GB and growing) every job, and
+          # restore hosted-cache content back into it. Strictly worse than the
+          # per-runner behaviour it replaced: that upload was already 43-54% of
+          # every slow self-hosted job at 292 MB.
+          #
+          # Self-hosted does not need it: the shared store persists on disk
+          # between jobs (it lives outside `_work`, which is what the supervisor
+          # wipes), so a warm install needs no network round-trip at all.
+          cache: ${{ runner.environment != 'self-hosted' && 'pnpm' || '' }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -414,7 +425,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          # Hosted only. `cache: pnpm` resolves its path by running
+          # `pnpm store path`, and the supervisor now points that at the SHARED
+          # /opt/ci-cache/pnpm-store/store — so leaving this on would tar and
+          # upload the whole shared store (1.2 GB and growing) every job, and
+          # restore hosted-cache content back into it. Strictly worse than the
+          # per-runner behaviour it replaced: that upload was already 43-54% of
+          # every slow self-hosted job at 292 MB.
+          #
+          # Self-hosted does not need it: the shared store persists on disk
+          # between jobs (it lives outside `_work`, which is what the supervisor
+          # wipes), so a warm install needs no network round-trip at all.
+          cache: ${{ runner.environment != 'self-hosted' && 'pnpm' || '' }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
