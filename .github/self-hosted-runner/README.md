@@ -199,11 +199,32 @@ What the boundary actually buys:
   compromised npm postinstall gets internet access but cannot reach the Mac's
   services or anything else on the LAN. Verified: host `:22` and `:3000` refuse.
 
-Realistic threat here is a compromised dependency, not a malicious fork PR — the
-repo is private and effectively single-writer. Also verified: neither `ci.yml`
-nor `integration-tests.yml` references `secrets.*` at all, so the only
-credential reaching the VM is the job's ephemeral `GITHUB_TOKEN`, already scoped
-`contents: read`.
+**Corrected 2026-08-16: the repo is PUBLIC, not private.** This paragraph used to
+read "the repo is private and effectively single-writer" and concluded a malicious
+fork PR was not a realistic threat. That premise was false, and it is the premise
+this whole isolation posture was argued from — so treat a malicious fork PR as in
+scope, alongside a compromised dependency.
+
+`ci.yml` now selects the self-hosted label only for same-repo pull requests, which
+removes the accidental path. It is **not** a boundary: for `pull_request`, GitHub
+reads the workflow from the PR's own merge ref, so a fork PR can edit that
+condition out or add a workflow naming the label. The gate a fork cannot edit is
+the approval policy — currently `first_time_contributors`, which stops covering an
+author after their first merged PR. `all_external_contributors` is the setting that
+actually holds:
+
+```
+gh api -X PUT repos/Ruckus000/PropertyPro/actions/permissions/fork-pr-contributor-approval \
+  -f approval_policy=all_external_contributors
+```
+
+Note the amplifier below: `/opt/ci-cache` is shared across jobs by design, so a job
+that does reach the runner can poison the pnpm store and Playwright browsers for
+subsequent same-repo jobs.
+
+Also verified: neither `ci.yml` nor `integration-tests.yml` references `secrets.*`
+at all, so the only credential reaching the VM is the job's ephemeral
+`GITHUB_TOKEN`, already scoped `contents: read`.
 
 **The VM does not fix `.env.local` itself.** Every ordinary `pnpm install` runs
 package lifecycle scripts on the *Mac* as your user. The file has been

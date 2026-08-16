@@ -140,7 +140,32 @@ jobs:
     # fall back instantly. runner-watchdog.yml flips it automatically when the
     # self-hosted runner goes offline. Note that flipping it does NOT
     # re-dispatch already-queued runs — the watchdog re-runs them too.
-    runs-on: ${{ github.event_name == 'pull_request' && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
+    #
+    # SAME-REPO PULL REQUESTS ONLY. This repo is PUBLIC and `pull_request` fires
+    # for FORK PRs, so without the head-repo check a fork's PR ran `pnpm install`
+    # (lifecycle scripts), a build and Playwright on the laptop. GitHub's approval
+    # gate is `first_time_contributors`, which covers exactly the first PR — one
+    # merged typo fix makes an author a returning contributor whose later fork PRs
+    # run unprompted. Forks now fall back to `ubuntu-latest`; their CI is slower,
+    # which is the intended trade.
+    #
+    # THIS IS DEFENCE IN DEPTH, NOT A SECURITY BOUNDARY. For `pull_request`,
+    # GitHub reads the workflow definition from the PR's own merge ref — so a
+    # fork PR can delete this condition, or add a new workflow naming the label
+    # directly (`paths-ignore` does not exclude `.github/**`). It removes the
+    # ACCIDENTAL path; it does not stop a deliberate attacker.
+    #
+    # The only control a fork PR cannot edit is the approval policy:
+    #   gh api -X PUT repos/Ruckus000/PropertyPro/actions/permissions/\
+    #     fork-pr-contributor-approval -f approval_policy=all_external_contributors
+    # Repo-level runners have no runner-group "allow public repositories" toggle
+    # (org/enterprise only), so that setting is the only in-product gate here.
+    #
+    # `&&` short-circuits, so the pull_request context is not dereferenced on a
+    # push. A PR whose head repo is gone yields null, fails the comparison and
+    # falls back to hosted — the safe direction. Orthogonal to the watchdog: when
+    # it sets the var to `ubuntu-latest`, this still evaluates to `ubuntu-latest`.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
     # 25, not the 15 every other job uses, because this is the ONLY job whose
     # runtime is anywhere near a ceiling.
     #
@@ -330,12 +355,12 @@ jobs:
   # read the emitted build output from disk, so they must share a job with it.
   perf-check:
     name: perf-check
-    # Self-hosted on PRs, hosted on pushes to main — same rationale as the
-    # `test` job above. Cut over AFTER `test`: this job is the most
-    # environment-sensitive of the two (it is the only production build, and
-    # the required `Build` status check hangs off its result), so it carries
-    # the largest blast radius.
-    runs-on: ${{ github.event_name == 'pull_request' && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
+    # Self-hosted on SAME-REPO PRs, hosted on pushes to main and on fork PRs —
+    # same rationale, and the same fork-PR reasoning, as the `test` job above.
+    # Cut over AFTER `test`: this job is the most environment-sensitive of the
+    # two (it is the only production build, and the required `Build` status
+    # check hangs off its result), so it carries the largest blast radius.
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (vars.CI_RUNNER_LABEL || 'ubuntu-latest') || 'ubuntu-latest' }}
     # 25, raised from 15 on 2026-08-16. Not headroom for growth — headroom for a
     # runner that intermittently runs this job 3x slow.
     #
