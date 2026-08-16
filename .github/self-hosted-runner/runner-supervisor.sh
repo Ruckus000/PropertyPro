@@ -39,6 +39,21 @@ case "$IDX" in
   '' | *[!0-9]*) echo "runner index must be a positive integer, got: $IDX" >&2; exit 1 ;;
 esac
 RUNNER_DIR="/opt/runners/${IDX}"
+# Caches shared by BOTH runners, deliberately outside _work so the between-job
+# wipe does not touch them. Provisioned in lima-ci.yaml; exported into the job
+# further down (see the long note there — /etc/environment does not reach jobs).
+CI_CACHE="${PROPERTYPRO_CI_CACHE:-/opt/ci-cache}"
+# Absolute path, conservative charset — same reason IDX is validated above: this
+# is interpolated into remote shell commands. Nothing in the VM can set it (it is
+# a host env var, and anyone able to set it can already run commands as this
+# user), so this is consistency with the rule six lines up, not a live hole.
+case "$CI_CACHE" in
+  /*) ;;
+  *) echo "PROPERTYPRO_CI_CACHE must be an absolute path, got: $CI_CACHE" >&2; exit 1 ;;
+esac
+case "$CI_CACHE" in
+  *[!a-zA-Z0-9/_.-]*) echo "PROPERTYPRO_CI_CACHE has unsafe characters: $CI_CACHE" >&2; exit 1 ;;
+esac
 # Set when a JIT config is minted, so the EXIT trap can deregister it.
 RUNNER_NAME=""
 
@@ -79,8 +94,15 @@ ensure_runner_dir() {
 #                                          re-downloads the arm64 Node 20
 #                                          tarball on EVERY job, a silent ~30s
 #                                          tax that reads as "the VM is slow")
-#           /opt/ci-cache/pnpm-store      (content-addressed + --frozen-lockfile,
-#                                          so no state-carryover risk)
+#           /opt/ci-cache/pnpm-store      (a warm store is a 2-3s install instead
+#                                          of 40-90s. NOT risk-free: see the note
+#                                          at the launch command — content-
+#                                          addressing gives concurrency safety,
+#                                          not tamper safety, and --frozen-lockfile
+#                                          verifies integrity at FETCH time, which
+#                                          a warm hit skips. An earlier version of
+#                                          this line claimed "no state-carryover
+#                                          risk"; that was wrong.)
 #           /opt/ci-cache/ms-playwright   (~150MB Chromium per job otherwise)
 wipe_work() {
   limactl shell "$VM" -- sudo rm -rf "${RUNNER_DIR}/_work" || true
@@ -234,13 +256,78 @@ while true; do
   # survived the same race on timing luck, which is exactly why the shadow
   # phase runs for a week rather than once.
   #
-  # The caches that are meant to be shared do not live under $HOME — they are
-  # pinned by absolute path in /etc/environment (RUNNER_TOOL_CACHE,
-  # PLAYWRIGHT_BROWSERS_PATH) — so splitting $HOME costs only a per-runner pnpm
-  # store, a few GB against a 150GB disk.
+  # THE SHARED CACHES ARE EXPORTED HERE, NOT IN /etc/environment.
+  #
+  # lima-ci.yaml writes RUNNER_TOOL_CACHE / AGENT_TOOLSDIRECTORY /
+  # PLAYWRIGHT_BROWSERS_PATH into /etc/environment. That file is read by
+  # `pam_env`, i.e. only on a real PAM login. We start jobs with
+  # `limactl shell -- bash -lc`, which never goes through PAM, so those
+  # variables were NEVER set in any job. Measured in exactly that shell:
+  #
+  #   PLAYWRIGHT_BROWSERS_PATH=[<unset>]   RUNNER_TOOL_CACHE=[<unset>]
+  #
+  # and it showed on disk: /opt/ci-cache/tool-cache sat at 4.0K (empty) while
+  # each runner carried its own 40M .cache/node; ms-playwright was duplicated
+  # three ways (929M shared + 929M in EACH runner's $HOME); and the 1.2G
+  # /opt/ci-cache/pnpm-store was orphaned because pnpm resolved its store under
+  # $HOME instead. Every job re-downloaded the arm64 Node tarball and the
+  # Chromium build — the "silent ~30s tax that reads as 'the VM is slow'" this
+  # repo's own README warned about.
+  #
+  # This is the one place guaranteed to be in the job's environment, so the
+  # exports belong here. Keep /etc/environment as-is for interactive debugging.
+  #
+  # PNPM_HOME STAYS PER-RUNNER; ONLY THE STORE IS SHARED.
+  #
+  # lima-ci.yaml is right that two concurrent runners racing on one writable
+  # directory is a hazard — but the hazard is `pnpm/action-setup` self-installing
+  # into $PNPM_HOME/setup-pnpm, not the store. pnpm's store is content-addressed
+  # and supports concurrent access by design (prune refuses to run during an
+  # install, and pnpm 10.22 fixed the last known concurrent-hardlink crash; we
+  # are on 10.28.0). That is what makes an install 2-3s instead of 40-90s.
+  #
+  # CONCURRENCY-SAFE IS NOT TAMPER-SAFE, and it is worth being exact about the
+  # difference. Content-addressing does not verify content on READ: the lockfile
+  # `integrity` field is checked when a package is FETCHED, so a warm store hit
+  # skips that check entirely and `--frozen-lockfile` does not protect you here.
+  # `pnpm store status` is a separate opt-in command. So a job that can write to
+  # this directory can influence every later job on this machine.
+  #
+  # There is also a non-deliberate path: node_modules entries are HARDLINKS into
+  # the store (ext4 in the guest, so no reflink), meaning anything that edits a
+  # file in place under node_modules mutates the shared store for both runners.
+  # This repo has no patchedDependencies and no step that writes into
+  # node_modules, so nothing triggers it today — but `pnpm install` runs
+  # lifecycle scripts, which is the realistic way it would happen.
+  #
+  # The mitigation is upstream of this file: only same-repo PRs reach this
+  # runner (ci.yml), and the gate a fork PR cannot edit is
+  # `fork-pr-contributor-approval`. That is still `first_time_contributors`,
+  # which stops covering an author after one merged PR. Sharing these caches
+  # makes tightening it to `all_external_contributors` materially more urgent
+  # than it was while they were inert.
+  #
+  # RUNNER_TOOL_CACHE is the sharpest of the three, not the store: actions/
+  # tool-cache gates a hit on a `.complete` marker with no hash verification, so
+  # a poisoned `node` there runs in EVERY step of every later job. It also has a
+  # cold-cache race — `cacheDir` does rmRF-then-mkdirP, so two runners missing
+  # simultaneously can have one wipe the directory the other is executing from.
+  # That is the same shape as the `~/setup-pnpm` race documented below, which the
+  # per-runner $HOME fixed; it is rare (first job after provisioning, or a Node
+  # version bump) and would be very confusing when it hits.
+  #
+  # The path is `/opt/ci-cache/pnpm-store/store`, NOT `/opt/ci-cache/pnpm-store`.
+  # pnpm appends the store version itself: the populated 1.2G store is at
+  # .../pnpm-store/store/v10, so pointing at the parent would create an empty
+  # sibling .../pnpm-store/v10 and reuse nothing. Verified with `pnpm store path`
+  # under both values before choosing.
   limactl shell "$VM" -- bash -lc \
-    "mkdir -p '${RUNNER_DIR}/home' \
+    "mkdir -p '${RUNNER_DIR}/home' '${CI_CACHE}/tool-cache' '${CI_CACHE}/ms-playwright' '${CI_CACHE}/pnpm-store/store' \
      && export HOME='${RUNNER_DIR}/home' PNPM_HOME='${RUNNER_DIR}/home/.pnpm' \
+     && export RUNNER_TOOL_CACHE='${CI_CACHE}/tool-cache' \
+                AGENT_TOOLSDIRECTORY='${CI_CACHE}/tool-cache' \
+                PLAYWRIGHT_BROWSERS_PATH='${CI_CACHE}/ms-playwright' \
+                npm_config_store_dir='${CI_CACHE}/pnpm-store/store' \
      && cd '${RUNNER_DIR}' && ./run.sh --jitconfig '${JIT}'" || \
     log 'runner exited non-zero (job failure is normal here)'
 

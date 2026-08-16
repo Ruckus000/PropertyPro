@@ -173,6 +173,21 @@ job. The supervisor wipes `_work`. Everything worth caching
 tension. Leave `RUNNER_TOOL_CACHE` inside `_work` and `setup-node` re-downloads
 the arm64 Node 20 tarball on every job.
 
+> **Corrected 2026-08-16: none of that was in effect for the first nine days.**
+> The three paths were exported via `/etc/environment`, which `pam_env` reads only
+> on a real PAM login — and jobs start through `limactl shell -- bash -lc`, which
+> bypasses PAM. Measured in that shell, `RUNNER_TOOL_CACHE` and
+> `PLAYWRIGHT_BROWSERS_PATH` were both **unset**. So `/opt/ci-cache/tool-cache`
+> sat empty at 4.0K while each runner carried its own 40M `.cache/node`,
+> `ms-playwright` was duplicated three ways (929M shared + 929M per runner), and
+> the 1.2G `pnpm-store` was orphaned because pnpm resolved its store under `$HOME`
+> — to a directory that did not even exist. The "silent ~30s tax that reads as
+> *the VM is slow*" warned about just above was being paid on every job.
+>
+> The exports now live in `runner-supervisor.sh`, inside the `limactl shell`
+> command. Adding a variable to `/etc/environment` alone will look correct and do
+> nothing.
+
 **PR-only.** `push: main` stays hosted. A laptop gets closed, and a job with no
 runner does not fail — it *queues*, leaving required checks pending and the PR
 unmergeable with nothing red. Merges to main must never depend on this machine.
