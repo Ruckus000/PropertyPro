@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { DataTable } from '@/components/shared/data-table';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { SlideOverPanel } from '@/components/shared/slide-over-panel';
@@ -110,7 +112,10 @@ export function ArcSubmissionsTab({ communityId }: ArcSubmissionsTabProps) {
       ? undefined
       : { status: statusFilter as ArcSubmissionStatus };
 
-  const { data: submissions, isLoading } = useArcSubmissions(communityId, apiFilter);
+  const { data: submissions, isLoading, isError, refetch } = useArcSubmissions(
+    communityId,
+    apiFilter,
+  );
 
   const filterTabs = useMemo(() => {
     const all = submissions ?? [];
@@ -129,6 +134,26 @@ export function ArcSubmissionsTab({ communityId }: ArcSubmissionsTabProps) {
     () => buildColumns(setSelectedSubmission),
     [],
   );
+
+  // Ahead of the tabs and the table, both of which report a failed fetch as an
+  // empty queue: `data` is undefined either way, so the table falls back to
+  // "No ARC submissions found." and every tab count renders 0. A reviewer who
+  // reads that as a clear queue stops checking, and submissions sit unanswered
+  // past the review window the declaration sets.
+  if (isError) {
+    return (
+      <AlertBanner
+        status="danger"
+        title="We couldn't load the ARC queue"
+        description="This is a problem on our end. Submissions may be waiting — please try again rather than treating the queue as empty."
+        action={
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
