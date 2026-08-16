@@ -1171,7 +1171,7 @@ describe('deriveVisitorStatus', () => {
 
 - [ ] **Step 2: Run tests to verify they pass**
 
-Run: `pnpm test -- --run apps/web/__tests__/visitors/status-derivation.test.ts`
+Run: `pnpm test apps/web/__tests__/visitors/status-derivation.test.ts`
 Expected: All 7 tests pass
 
 - [ ] **Step 3: Write denied-match unit tests**
@@ -1180,7 +1180,7 @@ Test exact name match (case-insensitive), plate match, no match, multiple matche
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm test -- --run apps/web/__tests__/visitors/denied-match.test.ts`
+Run: `pnpm test apps/web/__tests__/visitors/denied-match.test.ts`
 
 - [ ] **Step 5: Commit**
 

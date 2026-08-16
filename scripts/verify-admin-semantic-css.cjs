@@ -28,6 +28,22 @@
  * Not wired into `pnpm lint` because it requires a production build. Run it
  * after any batch that introduces semantic classes, and after any edit to
  * apps/admin/tailwind.config.ts.
+ *
+ * Exit codes:
+ *   0 — every referenced class emits CSS
+ *   1 — at least one class emits nothing
+ *   2 — this guard COULD NOT CHECK (no built CSS, missing search root, grep
+ *       errored, or zero classes found). It refuses to report success from a
+ *       tree it cannot search.
+ *
+ * That last case is not hypothetical. This guard shipped with
+ * `grep … || true` and no assertion on the match count, which is the same bug
+ * ce0ec269 fixed in verify-css-var-migration.sh: with apps/admin/src absent,
+ * grep printed "No such file or directory", `|| true` swallowed the status,
+ * `used` was empty, so `missing` was empty and it printed "✅ all emit CSS"
+ * and exited 0 — having verified nothing, while the error sat in its own
+ * stderr. Reproduced before fixing. Renaming the admin source root would have
+ * left this permanently green.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -43,21 +59,75 @@ if (!fs.existsSync(cssDir)) {
   process.exit(2);
 }
 
-const css = fs
-  .readdirSync(cssDir)
-  .filter((f) => f.endsWith('.css'))
+// Recursive: Next emits the stylesheet at static/css/app/layout.css, one level
+// down. A non-recursive readdir saw only the `app` directory, matched no *.css,
+// and read the empty string — so every class "emitted nothing" and the guard
+// failed 39/39 regardless of the code. Vacuously RED is as useless as vacuously
+// green: it cannot pass, so it proves nothing either way.
+const cssFiles = fs
+  .readdirSync(cssDir, { recursive: true })
+  .map(String)
+  .filter((f) => f.endsWith('.css'));
+
+if (cssFiles.length === 0) {
+  console.error(
+    `No *.css under ${path.relative(repoRoot, cssDir)} — the build output moved. ` +
+      'Refusing to report every class as missing from a stylesheet that was never read.',
+  );
+  process.exit(2);
+}
+
+const css = cssFiles
   .map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8'))
   .join('\n');
 
 const SEMANTIC_FAMILIES = 'content|surface|edge|interactive|status|nav';
 const UTILITY_PREFIXES = 'bg|text|border|ring|divide|placeholder|fill|stroke|from|via|to';
 
-const grep = cp.execSync(
-  `grep -rhoE '(${UTILITY_PREFIXES})-(${SEMANTIC_FAMILIES})(-[a-z0-9]+)*' apps/admin/src || true`,
-  { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 26 },
-);
+const SRC_REL = 'apps/admin/src';
+
+if (!fs.existsSync(path.join(repoRoot, SRC_REL))) {
+  console.error(
+    `Search root '${SRC_REL}' does not exist — refusing to report success from a tree this guard cannot search.`,
+  );
+  process.exit(2);
+}
+
+// Branch on grep's real exit status, never on its stdout: 0 = matched,
+// 1 = no matches, >=2 = the search itself failed. `|| true` here is what made
+// a broken search indistinguishable from a clean one.
+let grep = '';
+let grepStatus = 0;
+try {
+  grep = cp.execFileSync(
+    'grep',
+    ['-rhoE', `(${UTILITY_PREFIXES})-(${SEMANTIC_FAMILIES})(-[a-z0-9]+)*`, SRC_REL],
+    { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 26 },
+  );
+} catch (err) {
+  grepStatus = typeof err.status === 'number' ? err.status : 2;
+  grep = typeof err.stdout === 'string' ? err.stdout : '';
+}
+
+if (grepStatus >= 2) {
+  console.error(
+    `grep exited ${grepStatus} — the search did not complete, so this guard proves nothing.`,
+  );
+  process.exit(grepStatus);
+}
 
 const used = [...new Set(grep.split('\n').filter(Boolean))].sort();
+
+// Zero is not a clean result here: admin is mid-migration and references
+// hundreds of semantic classes. Zero means the pattern, the search root or the
+// migration's premise moved — every downstream check would pass vacuously.
+if (used.length === 0) {
+  console.error(
+    `No semantic classes found in ${SRC_REL}. Expected hundreds — the pattern or ` +
+      'the search root has moved. Refusing to pass a check that examined nothing.',
+  );
+  process.exit(2);
+}
 
 // A class emits if its name appears in a selector position: preceded by `.`
 // (plain, `.bg-x{`) or by an escaped `\:` (variant-prefixed,

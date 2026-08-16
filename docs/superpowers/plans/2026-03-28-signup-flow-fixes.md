@@ -61,7 +61,7 @@ setSubdomainDirty(true);
 
 - [ ] **Step 3: Run the unit tests to verify nothing breaks**
 
-Run: `cd /Users/jphilistin/Documents/Coding/PropertyPro && pnpm test -- --filter @propertypro/web`
+Run: `cd apps/web && pnpm exec vitest run`
 
 Expected: All existing tests pass. The signup service tests mock the API layer and don't test the React component state, so they should be unaffected.
 

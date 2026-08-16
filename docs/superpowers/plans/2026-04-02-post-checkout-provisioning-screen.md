@@ -324,7 +324,7 @@ describe('GET /api/v1/auth/provisioning-status', () => {
 
 - [ ] **Step 2: Run tests — verify they fail**
 
-Run: `pnpm test -- apps/web/__tests__/auth/provisioning-status-route.test.ts`
+Run: `pnpm test apps/web/__tests__/auth/provisioning-status-route.test.ts`
 Expected: All tests FAIL (module not found — route handler doesn't exist yet)
 
 - [ ] **Step 3: Commit test file**
@@ -484,7 +484,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
 - [ ] **Step 2: Run tests — verify they pass**
 
-Run: `pnpm test -- apps/web/__tests__/auth/provisioning-status-route.test.ts`
+Run: `pnpm test apps/web/__tests__/auth/provisioning-status-route.test.ts`
 Expected: All 7 tests PASS
 
 - [ ] **Step 3: Verify typecheck**
@@ -865,7 +865,7 @@ git commit -m "a11y(signup): respect prefers-reduced-motion on provisioning spin
 
 - [ ] **Step 1: Run provisioning-status tests**
 
-Run: `pnpm test -- apps/web/__tests__/auth/provisioning-status-route.test.ts`
+Run: `pnpm test apps/web/__tests__/auth/provisioning-status-route.test.ts`
 Expected: All 7 tests PASS
 
 - [ ] **Step 2: Run full unit test suite**

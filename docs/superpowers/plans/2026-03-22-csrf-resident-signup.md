@@ -193,7 +193,7 @@ Note: `pathname` and `isTokenAuthenticatedApiRoute` are already available in sco
 - [ ] **Step 4: Run tests and typecheck**
 
 ```bash
-pnpm test -- --filter="csrf" 2>&1 | tail -20
+pnpm test csrf 2>&1 | tail -20
 pnpm typecheck 2>&1 | tail -10
 ```
 
@@ -611,7 +611,7 @@ describe('access-request-service', () => {
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-pnpm test -- --filter="access-requests/service" 2>&1 | tail -20
+pnpm test access-requests/service 2>&1 | tail -20
 ```
 
 Expected: FAIL — service module does not exist yet.
@@ -668,7 +668,7 @@ const { data, error } = await adminClient.auth.admin.createUser({
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-pnpm test -- --filter="access-requests/service" 2>&1 | tail -20
+pnpm test access-requests/service 2>&1 | tail -20
 ```
 
 Expected: PASS.
@@ -783,7 +783,7 @@ Follow the pattern from `apps/web/__tests__/esign/esign-route.test.ts`:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-pnpm test -- --filter="access-requests/route" 2>&1 | tail -20
+pnpm test access-requests/route 2>&1 | tail -20
 ```
 
 Expected: FAIL — route files don't exist yet.
@@ -865,7 +865,7 @@ In `apps/web/src/middleware.ts`, add to the `TOKEN_AUTH_ROUTES` array:
 - [ ] **Step 5: Run tests and typecheck**
 
 ```bash
-pnpm test -- --filter="access-requests" 2>&1 | tail -20
+pnpm test access-requests 2>&1 | tail -20
 pnpm typecheck 2>&1 | tail -10
 ```
 
