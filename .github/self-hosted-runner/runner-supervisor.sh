@@ -108,6 +108,123 @@ wipe_work() {
   limactl shell "$VM" -- sudo rm -rf "${RUNNER_DIR}/_work" || true
 }
 
+# --- systemd-logind spin guard ---------------------------------------------
+#
+# systemd-logind span at 100% of one core for the VM's entire 6-day uptime —
+# `TIME` equalled `ELAPSED` — while managing ZERO sessions (`loginctl
+# list-sessions` was empty) and logging nothing since boot. That is 1 of the
+# VM's 8 vCPUs, 12.5% of CI capacity, burned continuously and invisibly from
+# the day self-hosted CI went live. Nothing noticed: runner-watchdog.yml only
+# counts runners as online/offline, so a runner that is online and slow reads
+# as perfectly healthy.
+#
+# THE TRIGGER IS UNKNOWN, and the obvious guess is WRONG. An earlier version of
+# this comment blamed `limactl shell` opening a login session per invocation and
+# this loop churning them. Measured with both listeners up:
+#
+#   loginctl list-sessions  ->  No sessions.
+#
+# Lima multiplexes every `limactl shell` over ONE persistent SSH master
+# (ControlMaster auto / ControlPersist yes in ~/.lima/ci/ssh.config), and
+# `bash -lc` never goes through PAM — which lima-ci.yaml already documents — so
+# no pam_systemd, therefore no logind session, therefore no churn. Whatever puts
+# logind into the spin, it is not that. This guard treats the symptom and says
+# so, rather than dressing a guess up as a root cause.
+#
+# THRESHOLD: a healthy logind here accumulates seconds of CPU over days; a
+# spinning one accumulates a second per second. 600s separates the two by
+# orders of magnitude — healthy would need months to trip it, spinning trips it
+# in ten minutes. No ratio or rate calculation needed.
+#
+# THE DEFERRAL IS CHEAP INSURANCE, NOT A PROVEN NECESSITY. Restarting logind
+# was measured NOT to disturb running listeners: after a manual restart the two
+# Runner.Listener pids were LOWER than the new logind pid, i.e. they predated it
+# and survived. With no sessions to tear down that is the expected result. The
+# check stays because it costs ~30ms (Lima's persistent master), because the
+# other runner's job is invisible to this process, and because "probably
+# harmless" is a poor thing to bet a 20-minute build on.
+LOGIND_CPU_LIMIT_SECONDS="${PROPERTYPRO_CI_LOGIND_CPU_LIMIT:-600}"
+# Validated like IDX and CI_CACHE above. A non-numeric value makes the `[ -ge ]`
+# test error out, `|| return 0` swallows it, and the guard is then silently dead
+# for the life of the process while logging nothing anyone would connect to it.
+case "$LOGIND_CPU_LIMIT_SECONDS" in
+  '' | *[!0-9]*)
+    echo "PROPERTYPRO_CI_LOGIND_CPU_LIMIT must be a positive integer (seconds), got: $LOGIND_CPU_LIMIT_SECONDS" >&2
+    exit 1
+    ;;
+esac
+
+ensure_logind_healthy() {
+  local secs
+  secs="$(
+    limactl shell "$VM" -- bash -c '
+      pid="$(pgrep -x systemd-logind 2>/dev/null | head -1)"
+      [ -n "$pid" ] || exit 0
+      ps -o cputimes= -p "$pid" 2>/dev/null | tr -d " "
+    ' 2>/dev/null || true
+  )"
+
+  # Unreadable, absent, or non-numeric: do nothing. A guard that acts on a
+  # value it could not read is worse than one that skips a cycle.
+  case "$secs" in
+    '' | *[!0-9]*) return 0 ;;
+  esac
+  [ "$secs" -ge "$LOGIND_CPU_LIMIT_SECONDS" ] || return 0
+
+  # POSITIVE PROOF OF IDLENESS, not "the probe did not say busy".
+  #
+  # `if limactl shell … pgrep -x Runner.Worker` looks equivalent and is not:
+  # `pgrep` exits 1 for "no match" and limactl exits 1 when the VM is
+  # unreachable, so a transport failure is BYTE-IDENTICAL to an idle VM — and
+  # 2>&1 hides the error text. That fails OPEN, in the one check whose whole
+  # job is protecting a running build, and it contradicts the fail-closed rule
+  # applied to the CPU read directly above. Requiring the literal string `idle`
+  # means anything that goes wrong reads as busy and defers.
+  local busy
+  busy="$(
+    limactl shell "$VM" -- bash -c \
+      'if pgrep -x Runner.Worker >/dev/null 2>&1; then echo busy; else echo idle; fi' \
+      2>/dev/null || true
+  )"
+  if [ "$busy" != idle ]; then
+    log "systemd-logind at ${secs}s CPU (limit ${LOGIND_CPU_LIMIT_SECONDS}s) but the VM is busy or unreachable (probe: ${busy:-<no answer>}); deferring restart"
+    return 0
+  fi
+
+  # Re-read immediately before acting. Both supervisor instances run this loop
+  # independently, so without this the second one restarts a logind the first
+  # one already replaced seconds ago — harmless (systemd merges the jobs) but it
+  # logs a "restarting it" that did not need to happen, which is exactly the
+  # kind of noise that makes a real recurrence hard to spot later.
+  local secs_now
+  secs_now="$(
+    limactl shell "$VM" -- bash -c '
+      pid="$(pgrep -x systemd-logind 2>/dev/null | head -1)"
+      [ -n "$pid" ] || exit 0
+      ps -o cputimes= -p "$pid" 2>/dev/null | tr -d " "
+    ' 2>/dev/null || true
+  )"
+  case "$secs_now" in
+    '' | *[!0-9]*) return 0 ;;
+  esac
+  [ "$secs_now" -ge "$LOGIND_CPU_LIMIT_SECONDS" ] || return 0
+
+  log "systemd-logind has burned ${secs_now}s of CPU (limit ${LOGIND_CPU_LIMIT_SECONDS}s) — restarting it"
+  if limactl shell "$VM" -- sudo systemctl restart systemd-logind >/dev/null 2>&1; then
+    log 'systemd-logind restarted'
+  else
+    log 'systemd-logind restart FAILED — a core is still being burned'
+  fi
+
+  # If a Worker appears here, the deferral above raced and this restart may have
+  # disturbed a live job. Log it loudly: the whole reason this file exists is
+  # that a degraded runner previously surfaced only as "flaky CI".
+  if limactl shell "$VM" -- bash -c \
+       'pgrep -x Runner.Worker >/dev/null 2>&1' >/dev/null 2>&1; then
+    log 'WARNING: a Runner.Worker appeared during the logind restart — if a job fails around this timestamp, start here'
+  fi
+}
+
 # --- kill this index's runner INSIDE the vm --------------------------------
 #
 # THE BUG THIS EXISTS FOR
@@ -219,6 +336,10 @@ deregister_stale_for_index
 
 while true; do
   wipe_work
+
+  # Between jobs is the only safe moment to restart logind, and this is that
+  # moment for THIS runner — ensure_logind_healthy checks the other one.
+  ensure_logind_healthy
 
   # Single-use JIT config. A fresh one is minted per job; there is nothing
   # persistent to steal from inside the VM.
