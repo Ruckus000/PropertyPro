@@ -2,11 +2,11 @@
 
 Compliance and community management platform for Florida condominium associations (§718.111(12)(g)).
 
-**Status:** role-v3 / ADR-006 fully landed — the legacy 7-role vocabulary is retired and a single v3 role vocabulary runs end-to-end. Phase 5 (table-stakes) in progress.
+**Status:** role-v3 / ADR-006 fully landed — the legacy 7-role vocabulary is retired and a single v3 role vocabulary runs end-to-end. Pre-launch hardening in progress.
 
 ## Tech Stack
 
-- **Framework:** Next.js 15.1.0 (App Router) / TypeScript / React 19
+- **Framework:** Next.js 15.5.x (App Router) / TypeScript / React 19
 - **Styling:** Tailwind CSS + shadcn/ui
 - **State:** TanStack Query (React Query)
 - **Database:** PostgreSQL via Supabase, Drizzle ORM
@@ -27,6 +27,7 @@ packages/shared/        # Shared types and constants (roles, RBAC, access polici
 packages/api-contract/  # Typed API route contracts (@propertypro/api-contract)
 packages/ui/            # Shared UI components
 packages/tokens/        # Design tokens
+packages/theme/         # Per-community theme resolution → CSS vars + font links
 scripts/                # Seed, verify, and utility scripts
 docs/                   # Specs, ADRs, audits, design system
 ```
