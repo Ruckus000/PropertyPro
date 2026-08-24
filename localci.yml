@@ -1,0 +1,69 @@
+# Local CI for PropertyPro. See ~/Documents/Coding/localci.
+#
+# Covers .github/workflows/ci.yml. The other eleven workflows (e2e, integration,
+# stripe, the guards, the crons) are not converted yet.
+#
+# `pnpm install --frozen-lockfile` is deliberately absent from every step. On a
+# runner it is how the tree comes to exist; here it would rewrite node_modules
+# underneath you while the suite runs detached in the background. The working
+# tree is what local CI should be testing. Lockfile drift is a real concern this
+# does not cover and belongs on a schedule.
+#
+# TZ and LANG are pinned on every step that runs tests, and that is not
+# decoration. ci.yml pins them because ubuntu-latest is UTC/C.UTF-8 and nothing
+# in the repo pins either -- and ~82 files under apps/web/src use Intl or
+# toLocale*. This machine is America/New_York. Without these, date assertions do
+# not fail loudly; they quietly assert something else.
+
+# Blocks `git push`. ~17s.
+gate:
+  - pnpm lint
+  - pnpm typecheck
+  - ./scripts/verify-css-var-migration.sh
+
+suite:
+  # The two guards first: seconds each, and they fail on structure rather than
+  # behaviour, so there is no reason to spend minutes before hearing about them.
+  - pnpm exec tsx scripts/verify-no-mocks-in-integration.ts
+  - pnpm exec tsx scripts/verify-migration-ordering.ts
+
+  # Resolve-only. Nightly Demo Reset was broken for ~4 months without this.
+  #
+  # These carry the stub DATABASE_URL for the same reason the vitest steps below
+  # do. In ci.yml it is job-level env, so it covers every step in the `test` job
+  # invisibly; here each step is its own process and has to say so. Missing it
+  # the first time failed at packages/db/src/drizzle.ts:19, which throws at
+  # import time -- nothing here connects, it just has to construct.
+  - TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub PROPERTYPRO_SEED_RESOLVE_ONLY=1 pnpm reset:demo
+  - TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub PROPERTYPRO_SEED_RESOLVE_ONLY=1 pnpm seed:demo
+
+  - TZ=UTC LANG=C.UTF-8 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub pnpm --filter '@propertypro/shared' --filter '@propertypro/db' --filter '@propertypro/email' --filter '@propertypro/ui' --filter '@propertypro/theme' --filter '@propertypro/api-contract' build
+
+  # DATABASE_URL is a stub so @propertypro/db can load at import time. These
+  # tests never connect -- they mock createScopedClient or call pure functions.
+  - |
+    set -e
+    export TZ=UTC LANG=C.UTF-8
+    export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
+    cd apps/web && pnpm exec vitest run --coverage
+  - |
+    set -e
+    export TZ=UTC LANG=C.UTF-8
+    export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
+    pnpm --filter '@propertypro/shared' --filter '@propertypro/ui' --filter '@propertypro/email' --filter '@propertypro/theme' --filter '@propertypro/db' --filter '@propertypro/api-contract' --filter '@propertypro/tokens' test
+    pnpm --filter '@propertypro/admin' test
+
+  # The production build and the checks that ride on it. SUPABASE_SERVICE_ROLE_KEY
+  # is deliberately NOT set, matching ci.yml: createAdminClient() throws without
+  # it, so leaving it unset keeps a tripwire for anything that starts calling it
+  # at build time.
+  - |
+    set -e
+    export TZ=UTC LANG=C.UTF-8
+    export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
+    export DIRECT_URL=postgresql://postgres:postgres@localhost:5432/propertypro_stub
+    export NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co
+    export NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder
+    pnpm build
+    pnpm --filter @propertypro/web test:e2e:prod
+    pnpm perf:check
