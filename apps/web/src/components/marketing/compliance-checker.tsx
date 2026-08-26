@@ -1,229 +1,169 @@
 'use client';
 
 import React, { useState } from 'react';
-import { captureLead } from '@/hooks/use-capture-lead';
-import {
-  getComplianceObligation,
-  type AssociationType,
-  type ObligationResult,
-} from '@/lib/marketing/compliance-obligation';
+import { SIGNUP_TRIAL_DAYS } from '@propertypro/shared';
+import { daysInForce } from './days-in-force';
+
+type AssociationType = 'condo' | 'hoa';
+
+interface Verdict {
+  required: boolean;
+  /** Rendered as the leading bold sentence. */
+  headline: string;
+  body: string;
+  cite: string;
+}
+
+/** Condominium thresholds: 150+ since 2019, 25+ since 2026-01-01. */
+function condoVerdict(count: number, days: number): Verdict {
+  if (count >= 150) {
+    return {
+      required: true,
+      headline: 'Required — and has been since 2019.',
+      body: `A condominium of ${count} units must maintain a website with the official records posted within 30 days, owner meeting notices 14 days ahead, and board meeting notices 48 hours ahead.`,
+      cite: 'Fla. Stat. §718.111(12)(g)',
+    };
+  }
+  if (count >= 25) {
+    return {
+      required: true,
+      headline: 'Required, as of January 1, 2026.',
+      body: `A condominium of ${count} units falls inside the 25-unit threshold: official records posted within 30 days, owner meeting notices 14 days ahead, board meeting notices 48 hours ahead. That has been the law for ${days.toLocaleString('en-US')} days.`,
+      cite: 'Fla. Stat. §718.111(12)(g)',
+    };
+  }
+  return {
+    required: false,
+    headline: 'Exempt from the website requirement.',
+    body: 'Below 25 units a condominium isn’t required to publish online — but the duty to keep records, and to answer an owner’s written request inside the statutory window, still applies.',
+    cite: 'Fla. Stat. §718.111(12)(c)',
+  };
+}
+
+/** HOA threshold: 100+ parcels. */
+function hoaVerdict(count: number): Verdict {
+  if (count >= 100) {
+    return {
+      required: true,
+      headline: 'Required.',
+      body: `An HOA of ${count} parcels must maintain a website or application with the official records posted, member meeting notices 14 days ahead, and board meeting notices 48 hours ahead.`,
+      cite: 'Fla. Stat. §720.303(4)',
+    };
+  }
+  return {
+    required: false,
+    headline: 'Exempt from the website requirement.',
+    body: 'Below 100 parcels an HOA isn’t required to publish online — but the duty to keep records and produce them on request still applies.',
+    cite: 'Fla. Stat. §720.303(5)',
+  };
+}
 
 /**
- * Interactive "is your association required to comply?" checker for the
- * landing page. General information only — not legal advice.
+ * "Does my association need a website?" — thresholds only, no email capture.
+ * Deliberately answers *exempt* honestly rather than steering every visitor to
+ * signup; the section it lives in is titled "The honest answers" for a reason.
  */
-type CaptureState = 'idle' | 'submitting' | 'done' | 'error';
-
 export function ComplianceChecker() {
   const [type, setType] = useState<AssociationType>('condo');
-  const [count, setCount] = useState('');
-  const [result, setResult] = useState<ObligationResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [raw, setRaw] = useState('');
+  const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [error, setError] = useState(false);
 
-  // Lead capture — see docs/gtm/03-LAUNCH-READINESS.md B1. The checked unit
-  // count and type are the ICP qualification fields, so they ride along with
-  // the email rather than being thrown away when the visitor doesn't click through.
-  const [email, setEmail] = useState('');
-  const [associationName, setAssociationName] = useState('');
-  const [capture, setCapture] = useState<CaptureState>('idle');
-  const [captureError, setCaptureError] = useState<string | null>(null);
-
-  function onCheck() {
-    const trimmed = count.trim();
-    if (!/^\d+$/.test(trimmed)) {
-      setResult(null);
-      setError('Please enter a whole number of units or parcels.');
+  /**
+   * Strict whole numbers only — NOT the mockup's `replace(/[^\d]/g, '')`.
+   * Stripping non-digits turns "25.5" into 255 and "-5" into 5, which answers a
+   * statutory threshold question about a building the visitor does not have.
+   * A wrong "you're exempt" here is the one output of this widget that could
+   * actually cost a board something, so an unparseable count must fail loudly.
+   * Leading zeros are rejected too, so "00" cannot read as a valid 0.
+   */
+  function check() {
+    if (!/^[1-9]\d*$/.test(raw.trim())) {
+      setVerdict(null);
+      setError(true);
       return;
     }
-    const n = Number.parseInt(trimmed, 10);
-    if (n < 1) {
-      setResult(null);
-      setError('Please enter a whole number of units or parcels.');
-      return;
-    }
-    try {
-      setError(null);
-      setResult(getComplianceObligation({ type, count: n }));
-      setCapture('idle');
-      setCaptureError(null);
-    } catch {
-      setResult(null);
-      setError('We couldn’t check that. Please try again.');
-    }
+    setError(false);
+    setVerdict(
+      type === 'condo'
+        ? condoVerdict(Number(raw.trim()), daysInForce())
+        : hoaVerdict(Number(raw.trim())),
+    );
   }
 
-  async function onCapture(e: React.FormEvent) {
-    e.preventDefault();
-    if (!result) return;
-
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail.includes('@')) {
-      setCapture('error');
-      setCaptureError('Please enter a valid email address.');
-      return;
-    }
-
-    setCapture('submitting');
-    setCaptureError(null);
-    try {
-      await captureLead({
-        email: trimmedEmail,
-        associationName: associationName.trim() || undefined,
-        associationType: type,
-        unitCount: Number.parseInt(count.trim(), 10),
-        obligationRequired: result.required,
-      });
-      setCapture('done');
-    } catch {
-      setCapture('error');
-      setCaptureError('We couldn’t save that. Please try again.');
-    }
+  /** A result is only true for the inputs that produced it. */
+  function clearResult() {
+    setVerdict(null);
+    setError(false);
   }
 
   return (
     <div className="mk-checker">
-      <span className="mk-eyebrow">30-second check</span>
-      <h3 className="mk-display">Is your association required to comply?</h3>
-      <p style={{ opacity: 0.85, fontSize: 14 }}>
-        Enter the unit or parcel count — we&apos;ll tell you the exact obligation
-        and deadline.
-      </p>
-
-      <div className="mk-field">
-        <label htmlFor="mk-assoc-type" className="sr-only">
-          Association type
-        </label>
-        <select
-          id="mk-assoc-type"
-          value={type}
-          onChange={(e) => {
-            setType(e.target.value as AssociationType);
-            setResult(null);
-            setError(null);
-          }}
-        >
-          <option value="condo">Condo</option>
-          <option value="hoa">HOA</option>
-        </select>
-
-        <label htmlFor="mk-assoc-count" className="sr-only">
-          Number of units or parcels
-        </label>
-        <input
-          id="mk-assoc-count"
-          inputMode="numeric"
-          placeholder="e.g. 84 units"
-          value={count}
-          onChange={(e) => {
-            setCount(e.target.value);
-            setResult(null);
-            setError(null);
-          }}
-        />
-
-        <button type="button" className="mk-pill mk-pill-primary" onClick={onCheck}>
-          Check
-        </button>
+      <div>
+        <h3>Check your own numbers.</h3>
+        <p>Enter a unit or parcel count. No email required.</p>
+        <div className="mk-cfield">
+          <label className="sr-only" htmlFor="mk-ck-type">
+            Association type
+          </label>
+          <select
+            id="mk-ck-type"
+            value={type}
+            onChange={(e) => {
+              setType(e.target.value as AssociationType);
+              clearResult();
+            }}
+          >
+            <option value="condo">Condominium</option>
+            <option value="hoa">HOA</option>
+          </select>
+          <label className="sr-only" htmlFor="mk-ck-n">
+            Number of units or parcels
+          </label>
+          <input
+            id="mk-ck-n"
+            inputMode="numeric"
+            autoComplete="off"
+            placeholder="e.g. 84"
+            value={raw}
+            onChange={(e) => {
+              setRaw(e.target.value);
+              clearResult();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                check();
+              }
+            }}
+          />
+          <button className="mk-pill mk-pill-primary" type="button" onClick={check}>
+            Check
+          </button>
+        </div>
       </div>
-
-      <div className="mk-res" aria-live="polite">
-        {error ? (
-          <span>{error}</span>
-        ) : result ? (
+      <div className="mk-cres" role="status">
+        {error && <b>Enter a whole number of units or parcels.</b>}
+        {!error && verdict === null && (
           <>
-            <b>{result.headline}.</b> {result.detail}
-            {result.required ? (
-              <a
-                href="/signup"
-                className="mk-pill mk-pill-primary"
-                style={{ display: 'inline-block', marginTop: 16 }}
-              >
-                Get compliant →
-              </a>
-            ) : null}
-
-            {capture === 'done' ? (
-              <p style={{ marginTop: 16, fontSize: 14 }}>
-                Thanks — we’ll be in touch at <b>{email.trim()}</b>.
-              </p>
-            ) : (
-              <form onSubmit={onCapture} style={{ marginTop: 16 }}>
-                {/*
-                  This used to promise an emailed summary. Nothing sent one — the
-                  lead was only recorded — so the copy now describes what actually
-                  happens: a human follows up. See docs/gtm/03-LAUNCH-READINESS.md
-                  B1 and the week 1–3 motion in docs/gtm/04-90-DAY-PLAN.md.
-                */}
-                <p style={{ fontSize: 14, marginBottom: 8 }}>
-                  Want help getting compliant? Leave your email and we’ll follow
-                  up with what your association needs to post.
-                </p>
-                <div className="mk-field">
-                  <label htmlFor="mk-lead-email" className="sr-only">
-                    Email address
-                  </label>
-                  <input
-                    id="mk-lead-email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="you@association.org"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (capture === 'error') {
-                        setCapture('idle');
-                        setCaptureError(null);
-                      }
-                    }}
-                    required
-                  />
-
-                  <label htmlFor="mk-lead-assoc" className="sr-only">
-                    Association name (optional)
-                  </label>
-                  <input
-                    id="mk-lead-assoc"
-                    placeholder="Association name (optional)"
-                    value={associationName}
-                    onChange={(e) => setAssociationName(e.target.value)}
-                  />
-
-                  <button
-                    type="submit"
-                    className="mk-pill mk-pill-primary"
-                    disabled={capture === 'submitting'}
-                  >
-                    {capture === 'submitting' ? 'Saving…' : 'Have someone follow up'}
-                  </button>
-                </div>
-                {captureError ? (
-                  <p role="alert" style={{ marginTop: 8, fontSize: 14 }}>
-                    {captureError}
-                  </p>
-                ) : null}
-              </form>
-            )}
+            <b>
+              Condominiums at 25 or more units, and HOAs at 100 or more parcels, must
+              maintain a compliant website.
+            </b>{' '}
+            Records go up within 30 days, owner meeting notices 14 days ahead, board
+            meetings 48 hours ahead.
+            <span className="mk-cite">Fla. Stat. §718.111(12)(g) · §720.303(4)</span>
           </>
-        ) : (
+        )}
+        {!error && verdict !== null && (
           <>
-            {/*
-              This used to headline "$50 per day, per association" as the penalty
-              for lacking a website. That figure is minimum damages under
-              §718.111(12)(c) for failing to answer an owner's written RECORDS
-              REQUEST — capped at 10 days, and unrelated to whether a website
-              exists. There is no automatic fine for not having one.
-
-              Do not reintroduce a money claim here. We sell records integrity to
-              fiduciaries; a prospect who checks the citation and finds it
-              overstated has been handed a reason to distrust the exact thing
-              we're selling. The deadlines below are true and carry the urgency
-              on their own. /resources/condo-website-requirements explains the
-              $50 figure properly, for readers who meet it elsewhere.
-            */}
-            Most <b>condos with 25+ units</b> — and <b>HOAs with 100+ parcels</b>{' '}
-            — are now required to maintain a compliant website. Records go up
-            within <b>30 days</b>, owner meeting notices <b>14 days</b> ahead,
-            board meetings <b>48 hours</b> ahead.
+            <b>{verdict.headline}</b> {verdict.body}
+            <span className="mk-cite">{verdict.cite}</span>
+            {verdict.required && (
+              <a className="mk-pill mk-pill-inverse mk-pill-sm" href="/signup">
+                Start a {SIGNUP_TRIAL_DAYS}-day trial
+              </a>
+            )}
           </>
         )}
       </div>

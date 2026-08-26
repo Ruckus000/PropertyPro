@@ -61,6 +61,15 @@ const APPS: readonly AppSpec[] = [
         '/(public)/[subdomain]/page',
         '/public-site/page',
       ],
+      // The apex marketing page. Unbudgeted until 2026-08 despite being the
+      // highest-traffic route in the product — it is mostly static, so the
+      // ceiling exists to catch scripts accreting onto it over time rather
+      // than to police what is there now. NOTE this measures JS only (see the
+      // header): the page's largest payload is photography, which no budget
+      // here covers.
+      marketing: [
+        '/(marketing)/page',
+      ],
       // Website editor v3 (docs/redesign/website-page/). Budgeted from Phase 0,
       // before the canvas exists, so bundle growth shows up as it lands rather
       // than as a single 700 KiB surprise at Phase 2b. The canvas pulls in the

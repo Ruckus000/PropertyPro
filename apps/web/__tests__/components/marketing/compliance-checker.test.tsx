@@ -18,14 +18,14 @@ function clickCheck() {
 describe('ComplianceChecker', () => {
   it('renders the prompt and the obligation deadlines', () => {
     render(<ComplianceChecker />);
-    expect(screen.getByText(/Is your association required to comply/i)).toBeTruthy();
-    // Reframed present-tense default copy.
+    expect(screen.getByText(/Check your own numbers/i)).toBeTruthy();
     expect(
-      screen.getByText(/now required to maintain a compliant website/i),
+      screen.getByText(/must maintain a compliant website/i),
     ).toBeTruthy();
-    // The deadline cadence replaced the money claim as the default hook.
-    expect(screen.getByText(/30 days/)).toBeTruthy();
-    expect(screen.getByText(/48 hours/)).toBeTruthy();
+    // The deadline cadence is the default hook, not a money claim.
+    const { container } = render(<ComplianceChecker />);
+    expect(container.textContent).toMatch(/30 days/);
+    expect(container.textContent).toMatch(/48 hours/);
   });
 
   it('makes no penalty claim in the default state', () => {
@@ -49,11 +49,11 @@ describe('ComplianceChecker', () => {
     expect(screen.getAllByText(/January 1, 2026/).length).toBeGreaterThan(0);
   });
 
-  it('shows a "Get compliant" CTA to /signup for a required condo result', () => {
+  it('shows a trial CTA to /signup for a required condo result', () => {
     render(<ComplianceChecker />);
     setCount('84');
     clickCheck();
-    const cta = screen.getByRole('link', { name: /get compliant/i });
+    const cta = screen.getByRole('link', { name: /start a 30-day trial/i });
     expect(cta).toBeTruthy();
     expect(cta.getAttribute('href')).toBe('/signup');
   });
@@ -63,9 +63,9 @@ describe('ComplianceChecker', () => {
     setCount('10');
     clickCheck();
     // Exempt result still renders.
-    expect(screen.getByText(/currently exempt/i)).toBeTruthy();
+    expect(screen.getByText(/Exempt from the website requirement/i)).toBeTruthy();
     // But no CTA.
-    expect(screen.queryByRole('link', { name: /get compliant/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /start a 30-day trial/i })).toBeNull();
   });
 
   it('computes an HOA obligation on check', () => {
@@ -75,8 +75,8 @@ describe('ComplianceChecker', () => {
     });
     setCount('150');
     clickCheck();
-    expect(screen.getByText(/100\+ parcels/i)).toBeTruthy();
-    expect(screen.getByRole('link', { name: /get compliant/i })).toBeTruthy();
+    expect(screen.getByText(/An HOA of 150 parcels must maintain/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /start a 30-day trial/i })).toBeTruthy();
   });
 
   describe('strict whole-number validation', () => {
@@ -89,9 +89,9 @@ describe('ComplianceChecker', () => {
         }
         clickCheck();
         expect(screen.getByText(INVALID_ERROR)).toBeTruthy();
-        // No obligation headline should be present.
-        expect(screen.queryByText(/Required now/i)).toBeNull();
-        expect(screen.queryByText(/Not yet required/i)).toBeNull();
+        // No obligation verdict should be present.
+        expect(screen.queryByText(/^Required/i)).toBeNull();
+        expect(screen.queryByText(/Exempt from the website requirement/i)).toBeNull();
       });
     }
   });
@@ -105,7 +105,7 @@ describe('ComplianceChecker', () => {
     // Editing the input clears the previous result.
     setCount('8');
     expect(screen.queryByText(/January 1, 2026/)).toBeNull();
-    expect(screen.queryByText(/Required now/i)).toBeNull();
+    expect(screen.queryByText(/^Required, as of/i)).toBeNull();
   });
 
   it('clears a stale result when the association type changes', () => {
@@ -118,6 +118,6 @@ describe('ComplianceChecker', () => {
       target: { value: 'hoa' },
     });
     expect(screen.queryByText(/January 1, 2026/)).toBeNull();
-    expect(screen.queryByText(/Required now/i)).toBeNull();
+    expect(screen.queryByText(/^Required, as of/i)).toBeNull();
   });
 });

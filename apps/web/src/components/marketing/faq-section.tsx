@@ -2,62 +2,68 @@
 
 import React, { useState } from 'react';
 import { SIGNUP_TRIAL_DAYS } from '@propertypro/shared';
+import { SectionMark } from './marketing-brand';
 
-const QA = [
+const QUESTIONS: { q: string; a: string }[] = [
   {
     q: 'Is my association actually required to have a website?',
-    a: 'Condos with 25+ units are required to maintain a compliant website (150+ units already were); HOAs with 100+ parcels are required too. Run the 30-second checker above for the exact obligation per community.',
+    a: 'Condominiums with 25 or more units are required to maintain a compliant website — those at 150 or more units already were, since 2019. HOAs are required at 100 or more parcels. Below those thresholds you’re exempt from the website requirement, though the underlying duty to keep records and produce them doesn’t go away.',
   },
   {
-    q: 'Do I need to be technical to set this up?',
-    a: 'No. If you can use email, you can run PropertyPro — at one building or across a whole portfolio. Most communities are live the same afternoon, no committee or consultant required.',
+    q: 'What actually happens if we’re late?',
+    a: 'There’s no automatic fine for lacking a website, and we won’t pretend otherwise. The exposure is a records request you can’t answer: §718.111(12)(c) sets minimum damages per day, and a board that can’t produce records has handed an owner a straightforward claim. Directors are fiduciaries — that’s the real risk, and it’s the one we’re built around.',
   },
   {
-    q: 'Is each association’s data secure?',
-    a: 'Every association is fully isolated, encrypted, and backed up. Owners only see what you publish to them; sensitive records stay private to the board and manager.',
+    q: 'Do I need to be technical to run this?',
+    a: 'No. If you can use email, you can run PropertyPro. Setup is adding the association and dragging in the documents you already have.',
   },
   {
-    q: 'What if a community already has a website?',
-    a: 'Most general websites don’t meet the statute’s posting and notice requirements. PropertyPro can run alongside or replace it — and each community can use its own custom domain.',
+    q: 'We already have a website. Does this replace it?',
+    a: 'Either. Most general-purpose association sites don’t meet the statute’s posting and notice requirements — they were built to look nice, not to prove a date. You keep your domain either way.',
   },
   {
-    q: 'Is there a free trial? Do I need a card?',
-    a: `Yes — a ${SIGNUP_TRIAL_DAYS}-day trial. A card is required to start; you will not be charged until the trial ends unless you cancel.`,
+    q: 'Who can see what?',
+    a: 'Three tiers, set per record: public, owners-only, board. Each association’s data is isolated and encrypted. Review notes and audit reasons are never visible to owners.',
+  },
+  {
+    q: 'Is there a trial? Do you need a card?',
+    a: `A ${SIGNUP_TRIAL_DAYS}-day trial on both self-serve plans. A card is required to start, and you won’t be charged until the trial ends unless you cancel first.`,
   },
 ];
 
-/** Objection-handling FAQ as an accessible single-open accordion. */
+/** Single-open accordion — opening one answer closes the others. */
 export function FaqSection() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="mk-band mk-band-alt">
-      <div className="mk-wrap">
-        <div className="mk-sec-head mk-center">
-          <span className="mk-eyebrow">Questions, answered</span>
-          <h2 className="mk-display">The things managers always ask.</h2>
+    <section className="mk-band" id="faq" aria-labelledby="faq-h">
+      <div className="mk-wrap mk-sec">
+        <div className="mk-sec-l">
+          <SectionMark index="08" label="Questions boards ask" />
+          <h2 className="mk-display" id="faq-h">
+            The honest answers.
+          </h2>
         </div>
         <div className="mk-faq">
-          {QA.map((item, index) => {
-            const isOpen = openIndex === index;
-            const answerId = `faq-answer-${index}`;
+          {QUESTIONS.map((item, i) => {
+            const expanded = open === i;
             return (
-              <div className="mk-card mk-qa" key={item.q}>
+              <div className="mk-qa" key={item.q}>
                 <h3>
                   <button
-                    type="button"
                     className="mk-qa-toggle"
-                    aria-expanded={isOpen}
-                    aria-controls={answerId}
-                    onClick={() => setOpenIndex(isOpen ? null : index)}
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={`mk-faq-a${i}`}
+                    onClick={() => setOpen(expanded ? null : i)}
                   >
                     <span>{item.q}</span>
-                    <span className="mk-muted mk-qa-glyph" aria-hidden="true">
-                      {isOpen ? '−' : '+'}
+                    <span className="mk-g" aria-hidden="true">
+                      {expanded ? '−' : '+'}
                     </span>
                   </button>
                 </h3>
-                <p id={answerId} className="mk-muted" hidden={!isOpen}>
+                <p id={`mk-faq-a${i}`} hidden={!expanded}>
                   {item.a}
                 </p>
               </div>

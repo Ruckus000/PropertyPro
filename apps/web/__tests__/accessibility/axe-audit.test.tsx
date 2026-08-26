@@ -152,11 +152,27 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       expect(results).toHaveNoViolations();
     });
 
-    it('FeaturesSection has no axe violations', async () => {
-      const { FeaturesSection } = await import(
-        '@/components/marketing/features-section'
+    it('WhoSection has no axe violations', async () => {
+      const { WhoSection } = await import('@/components/marketing/who-section');
+      const { container } = render(<WhoSection />);
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
+    });
+
+    it('StatuteSection has no axe violations', async () => {
+      const { StatuteSection } = await import(
+        '@/components/marketing/statute-section'
       );
-      const { container } = render(<FeaturesSection />);
+      const { container } = render(<StatuteSection />);
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
+    });
+
+    it('ProductSection has no axe violations', async () => {
+      const { ProductSection } = await import(
+        '@/components/marketing/product-section'
+      );
+      const { container } = render(<ProductSection />);
       const results = await axe(container);
       expect(results).toHaveNoViolations();
     });
@@ -170,11 +186,36 @@ describe('P4-63: Accessibility audit — axe-core', () => {
       expect(results).toHaveNoViolations();
     });
 
-    it('ComplianceUrgencySection has no axe violations', async () => {
-      const { ComplianceUrgencySection } = await import(
-        '@/components/marketing/compliance-urgency-section'
+    it('ReckoningSection has no axe violations', async () => {
+      const { ReckoningSection } = await import(
+        '@/components/marketing/reckoning-section'
       );
-      const { container } = render(<ComplianceUrgencySection />);
+      const { container } = render(<ReckoningSection />);
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
+    });
+
+    it('PortfolioSection has no axe violations', async () => {
+      const { PortfolioSection } = await import(
+        '@/components/marketing/portfolio-section'
+      );
+      const { container } = render(<PortfolioSection />);
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
+    });
+
+    it('FaqSection has no axe violations', async () => {
+      const { FaqSection } = await import('@/components/marketing/faq-section');
+      const { container } = render(<FaqSection />);
+      const results = await axe(container);
+      expect(results).toHaveNoViolations();
+    });
+
+    it('FinalCtaSection has no axe violations', async () => {
+      const { FinalCtaSection } = await import(
+        '@/components/marketing/final-cta-section'
+      );
+      const { container } = render(<FinalCtaSection />);
       const results = await axe(container);
       expect(results).toHaveNoViolations();
     });

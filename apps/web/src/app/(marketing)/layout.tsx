@@ -21,9 +21,9 @@ const fraunces = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'PropertyPro Florida — Condo & HOA Compliance Software',
+  title: 'PropertyPro — Florida condo & HOA records, kept to statute',
   description:
-    'Run a portfolio of Florida condo & HOA associations compliant by default — document posting, meeting notices, owner portals, and one compliance view.',
+    'The Florida website requirement took effect January 1, 2026. PropertyPro turns §718 and §720 recordkeeping into a tracked list with dates, evidence, and an audit trail.',
   keywords: [
     'Florida property management software',
     'Florida condo compliance',
@@ -37,9 +37,9 @@ export const metadata: Metadata = {
     'document management',
   ],
   openGraph: {
-    title: 'PropertyPro Florida — Compliance for Florida property managers',
+    title: 'PropertyPro — Florida condo & HOA records, kept to statute',
     description:
-      'Run a whole portfolio of Florida associations compliant by default. §718 & §720 document posting, notices, owner portals, and centralized compliance.',
+      'The Florida website requirement took effect January 1, 2026. PropertyPro turns §718 and §720 recordkeeping into a tracked list with dates, evidence, and an audit trail.',
     type: 'website',
     locale: 'en_US',
     siteName: 'PropertyPro Florida',

@@ -12,7 +12,7 @@ describe('FaqSection', () => {
   it('renders the section with the deep-link id and heading', () => {
     const { container } = render(<FaqSection />);
     expect(container.querySelector('section#faq')).toBeTruthy();
-    expect(screen.getByText('The things managers always ask.')).toBeTruthy();
+    expect(screen.getByText('The honest answers.')).toBeTruthy();
   });
 
   it('collapses all answers by default', () => {

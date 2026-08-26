@@ -1,8 +1,12 @@
 import { MarketingNav } from '@/components/marketing/marketing-nav';
 import { HeroSection } from '@/components/marketing/hero-section';
-import { ComplianceUrgencySection } from '@/components/marketing/compliance-urgency-section';
-import { HowItWorksSection } from '@/components/marketing/how-it-works-section';
-import { FeaturesSection } from '@/components/marketing/features-section';
+import { WhoSection } from '@/components/marketing/who-section';
+import { StatuteSection } from '@/components/marketing/statute-section';
+import { RecordsBand } from '@/components/marketing/records-band';
+import { ReckoningSection } from '@/components/marketing/reckoning-section';
+import { ProductSection } from '@/components/marketing/product-section';
+import { OnboardingSection } from '@/components/marketing/onboarding-section';
+import { PortfolioSection } from '@/components/marketing/portfolio-section';
 import { PricingSection } from '@/components/marketing/pricing-section';
 import { FaqSection } from '@/components/marketing/faq-section';
 import { FinalCtaSection } from '@/components/marketing/final-cta-section';
@@ -14,7 +18,6 @@ export default function MarketingLandingPage() {
     <>
       <MarketingNav />
       <main id="main-content">
-        <HeroSection />
         {/*
           LogoProofSection and TestimonialSection are unrendered until real
           customer proof exists. Both shipped placeholder content — the
@@ -24,10 +27,19 @@ export default function MarketingLandingPage() {
           fabricated proof on our own homepage attacks the exact attribute the
           product is bought for. Restore each once a real customer has agreed in
           writing. See docs/gtm/03-LAUNCH-READINESS.md item B4.
+
+          The v6 landing has no proof section at all, which is why neither is
+          slotted in below. The components and their CSS stay in the tree so
+          that decision remains visible rather than silently reversed.
         */}
-        <ComplianceUrgencySection />
-        <HowItWorksSection />
-        <FeaturesSection />
+        <HeroSection />
+        <WhoSection />
+        <StatuteSection />
+        <RecordsBand />
+        <ReckoningSection />
+        <ProductSection />
+        <OnboardingSection />
+        <PortfolioSection />
         <PricingSection />
         <FaqSection />
         <FinalCtaSection />

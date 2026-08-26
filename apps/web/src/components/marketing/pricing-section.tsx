@@ -1,115 +1,191 @@
 import React from 'react';
 import { signupTrialMarketingLine } from '@propertypro/shared';
+import { CheckIcon, SectionMark } from './marketing-brand';
 
-interface Tier {
-  name: string;
-  price: string;
-  unit?: string;
-  blurb: string;
-  features: string[];
-  cta: { label: string; href: string };
-  featured?: boolean;
-  ribbon?: string;
+const INCLUDED_IN_ALL = [
+  'Unlimited board members',
+  'Unlimited owners',
+  'Statute monitoring',
+  'Hosting and SSL',
+  'Custom domain',
+  'Audit trail export',
+];
+
+/** `null` renders "Not included"; a string renders as an included value. */
+interface ComparisonRow {
+  label: string;
+  essentials: string | null;
+  professional: string | null;
+  manager: string | null;
 }
 
-const TIERS: Tier[] = [
+const ROWS: ComparisonRow[] = [
   {
-    name: 'Essentials',
-    price: '$199',
-    unit: '/mo',
-    blurb: 'Self-managed condos & HOAs getting compliant',
-    features: [
-      'Branded association website',
-      'Document management',
-      'Meeting notice tracking',
-      'Owner portal',
-      'Compliance dashboard',
-    ],
-    cta: { label: 'Start free trial', href: '/signup?plan=essentials&communityType=condo_718' },
-    featured: true,
-    // Not "Most popular" — that is a claim about customers we do not have yet,
-    // and this codebase already un-rendered a fabricated testimonial and logo
-    // strip for exactly that reason (see (marketing)/page.tsx). This states
-    // where we point boards, which is true today.
-    ribbon: 'Where most self-managed boards start',
+    label: 'Compliance list & deadlines',
+    essentials: 'Included',
+    professional: 'Included',
+    manager: 'Included',
   },
   {
-    name: 'Professional',
-    price: '$349',
-    unit: '/mo',
-    blurb: 'The full single-community toolkit',
-    features: [
-      'Everything in Essentials',
-      'Mobile resident portal',
-      'E-sign workflows',
-      'Maintenance & violations',
-      'Advanced reporting',
-    ],
-    cta: { label: 'Start free trial', href: '/signup?plan=professional&communityType=condo_718' },
+    label: 'Association website & owner portal',
+    essentials: 'Branded',
+    professional: 'Branded',
+    manager: 'White-label',
   },
   {
-    name: 'Property Manager',
-    price: "Let's talk",
-    blurb: 'For management companies running portfolios',
-    features: [
-      'Multi-association portfolio',
-      'Bulk operations across communities',
-      'White-label branding',
-      'Centralized compliance reporting',
-      'Volume pricing & dedicated onboarding',
-    ],
-    cta: { label: 'Talk to us about a portfolio', href: '/contact' },
+    label: 'Meeting notices & minutes',
+    essentials: 'Included',
+    professional: 'Included',
+    manager: 'Included',
+  },
+  {
+    label: 'Mobile resident portal',
+    essentials: null,
+    professional: 'Included',
+    manager: 'Included',
+  },
+  {
+    label: 'E-sign, maintenance & violations',
+    essentials: null,
+    professional: 'Included',
+    manager: 'Included',
+  },
+  {
+    label: 'Portfolio roll-up & bulk posting',
+    essentials: null,
+    professional: null,
+    manager: 'Included',
+  },
+  {
+    label: 'Volume pricing & dedicated onboarding',
+    essentials: null,
+    professional: null,
+    manager: 'Included',
   },
 ];
 
-/**
- * Pricing — Essentials carries the primary emphasis.
- *
- * It used to be the Property Manager tier, which was the most prominent thing
- * on the page while routing to a `mailto:` with no funnel behind it. The board
- * channel is where we actually sell (docs/gtm/01-RECONCILIATION.md §5) and
- * Essentials is the plan a self-managed 25–149 unit board buys, so the emphasis
- * now matches the motion. `featured` and `ribbon` must move together: only
- * `.mk-price.mk-feat` sets `position:relative`, and `.mk-ribbon` is absolutely
- * positioned against it.
- */
+function Cell({ value, pick }: { value: string | null; pick?: boolean }) {
+  const className = [pick ? 'mk-pick' : '', value === null ? 'mk-no' : '']
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <td className={className || undefined}>
+      {value === null ? (
+        'Not included'
+      ) : (
+        <span className="mk-yes">
+          <CheckIcon />
+          {value}
+        </span>
+      )}
+    </td>
+  );
+}
+
 export function PricingSection() {
   return (
-    <section className="mk-band" id="pricing">
+    <section className="mk-band mk-band-warm" id="pricing" aria-labelledby="pr-h">
       <div className="mk-wrap">
-        <div className="mk-sec-head mk-center">
-          <span className="mk-eyebrow">Simple pricing</span>
-          <h2 className="mk-display">Priced for one building or fifty.</h2>
-          <p className="mk-muted" style={{ marginLeft: 'auto', marginRight: 'auto' }}>
-            Every plan includes statute compliance monitoring, hosting, and SSL.
-            {' '}{signupTrialMarketingLine()}
-          </p>
+        <div className="mk-sec mk-sec-end">
+          <div className="mk-sec-l mk-sec-l-static">
+            <SectionMark index="07" label="Pricing" />
+            <h2 className="mk-display" id="pr-h">
+              Per association, not per owner.
+            </h2>
+          </div>
+          <ul className="mk-incl">
+            {INCLUDED_IN_ALL.map((item) => (
+              <li key={item}>
+                <CheckIcon />
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="mk-price-grid">
-          {TIERS.map((t) => (
-            <div className={`mk-card mk-price${t.featured ? ' mk-feat' : ''}`} key={t.name}>
-              {t.ribbon ? <span className="mk-ribbon">{t.ribbon}</span> : null}
-              <div style={{ fontWeight: 700, fontSize: 15 }}>{t.name}</div>
-              <div className="mk-amt mk-display">
-                {t.price}
-                {t.unit ? <span>{t.unit}</span> : null}
-              </div>
-              <p className="mk-muted" style={{ fontSize: 14 }}>
-                {t.blurb}
-              </p>
-              <ul>
-                {t.features.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
-              <a
-                href={t.cta.href}
-                className={`mk-pill ${t.featured ? 'mk-pill-primary' : 'mk-pill-ghost'}`}
-              >
-                {t.cta.label}
-              </a>
-            </div>
-          ))}
+
+        <div className="mk-price">
+          <table className="mk-ptbl">
+            <caption className="sr-only">
+              PropertyPro plans compared. Essentials is $199 a month, Professional is $349
+              a month, and Property Manager is quoted.
+            </caption>
+            <thead>
+              <tr>
+                <td />
+                <th scope="col" className="mk-pick">
+                  {/* Not "Most popular" — that is a claim about customers we do not
+                      have yet. This states where we point boards, which is true. */}
+                  <span className="mk-flag">Where most boards start</span>
+                  <span className="mk-tier">Essentials</span>
+                  <span className="mk-amt">
+                    $199<span>/mo</span>
+                  </span>
+                  <span className="mk-for">
+                    Self-managed condos and HOAs getting compliant
+                  </span>
+                </th>
+                <th scope="col">
+                  <span className="mk-tier">Professional</span>
+                  <span className="mk-amt">
+                    $349<span>/mo</span>
+                  </span>
+                  <span className="mk-for">The full single-community toolkit</span>
+                </th>
+                <th scope="col">
+                  <span className="mk-tier">Property Manager</span>
+                  <span className="mk-amt">Let&apos;s talk</span>
+                  <span className="mk-for">Management companies running portfolios</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {ROWS.map((row) => (
+                <tr key={row.label}>
+                  <th scope="row">{row.label}</th>
+                  <Cell value={row.essentials} pick />
+                  <Cell value={row.professional} />
+                  <Cell value={row.manager} />
+                </tr>
+              ))}
+              <tr>
+                <th scope="row">
+                  <span className="sr-only">Sign up</span>
+                </th>
+                <td className="mk-pick">
+                  <a
+                    className="mk-pill mk-pill-primary mk-pill-sm"
+                    href="/signup?plan=essentials&communityType=condo_718"
+                  >
+                    Start free trial
+                  </a>
+                </td>
+                <td>
+                  <a
+                    className="mk-pill mk-pill-ghost mk-pill-sm"
+                    href="/signup?plan=professional&communityType=condo_718"
+                  >
+                    Start free trial
+                  </a>
+                </td>
+                <td>
+                  <a className="mk-pill mk-pill-ghost mk-pill-sm" href="/contact">
+                    Talk to us
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="mk-pfoot">
+            {/* Rendered from the shared helper, NOT hand-written. `activation-smoke`
+                asserts the literal phrase "card required" here, and this line is
+                the one place the page promises a trial length — both have to keep
+                agreeing with what Stripe Checkout actually does. Rewording it by
+                hand is how they drift. */}
+            <span>
+              {signupTrialMarketingLine()} Nothing is charged until the trial ends.
+            </span>
+            <span className="mk-mono">No setup fee · cancel anytime</span>
+          </div>
         </div>
       </div>
     </section>
