@@ -51,7 +51,7 @@ describe('MarketingNav mobile menu', () => {
     const scope = within(panel as HTMLElement);
     expect(scope.getByRole('link', { name: /pricing/i })).toBeTruthy();
     expect(scope.getByRole('link', { name: /log in/i })).toBeTruthy();
-    expect(scope.getByRole('link', { name: /get started/i })).toBeTruthy();
+    expect(scope.getByRole('link', { name: /start a trial/i })).toBeTruthy();
   });
 
   it('closes the menu when Escape is pressed and returns focus to the toggle', () => {
@@ -78,11 +78,19 @@ describe('MarketingNav mobile menu', () => {
     expect(document.getElementById('mk-mobile-menu')).toBeNull();
   });
 
-  it('updates the toggle aria-label between open and closed states', () => {
+  it('keeps a stable accessible name and conveys state through aria-expanded', () => {
+    // The toggle carries a visible "Menu" label, so it no longer swaps an
+    // aria-label between "Open menu"/"Close menu". A disclosure button's name
+    // should describe WHAT it controls, not its state — state is aria-expanded,
+    // which every assistive tech announces. Renaming the control on each click
+    // also breaks voice-control users, who address it by its visible text.
     render(<MarketingNav />);
     const toggle = getToggle();
-    expect(toggle.getAttribute('aria-label')).toMatch(/open menu/i);
+    const name = toggle.textContent?.replace(/[^A-Za-z ]/g, '').trim();
+    expect(name).toMatch(/menu/i);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-label')).toMatch(/close menu/i);
+    expect(toggle.textContent?.replace(/[^A-Za-z ]/g, '').trim()).toBe(name);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 });

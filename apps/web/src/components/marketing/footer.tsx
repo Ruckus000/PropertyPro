@@ -1,6 +1,7 @@
 import React from 'react';
 import type { LegalDocs } from '@/lib/legal-types';
 import { FooterLegalLinks } from './footer-legal-links';
+import { Logomark } from './marketing-brand';
 
 /** Warm marketing footer. Keeps legal links, contact, and the law-firm disclaimer. */
 export function MarketingFooter({
@@ -23,39 +24,41 @@ export function MarketingFooter({
       <div className="mk-wrap">
         <div className="mk-foot-grid">
           <div>
-            <div className="mk-logo" style={{ color: '#fff' /* design-tokens:exempt — marketing-theme.css is frozen and already uses bare #fff for footer text (.mk-footer h5, .mk-logo-dot); matches that convention */ }}>
-              <span className="mk-logo-dot" aria-hidden="true">
-                ◐
-              </span>
+            <p className="mk-logo">
+              <Logomark />
               PropertyPro
-            </div>
-            <p style={{ marginTop: 14, maxWidth: '24em', fontSize: 14 }}>
-              Compliance and community management for Florida condominium and HOA
-              associations — and the property managers who run them.
+            </p>
+            <p className="mk-foot-blurb">
+              Records and compliance for Florida condominium and HOA associations — and
+              the managers who run them.
             </p>
           </div>
-          <div>
-            <h5>Product</h5>
-            <a href="/#features">Features</a>
-            <a href="/#compliance">Compliance</a>
+          <nav aria-label="Product">
+            <h3>Product</h3>
+            <a href="/#product">The product</a>
+            <a href="/#statute">The statute</a>
+            <a href="/#onboarding">Getting started</a>
+            <a href="/#portfolio">For managers</a>
             <a href="/#pricing">Pricing</a>
-            <a href="/#managers">For managers</a>
-          </div>
-          <div>
-            <h5>Company</h5>
+          </nav>
+          <nav aria-label="Company">
+            <h3>Company</h3>
+            <a href="/#who">Who it&apos;s for</a>
             <a href="/resources">Resources</a>
             <a href="/transparency">Community Transparency</a>
-            <a href="mailto:support@getpropertypro.com">Contact</a>
-          </div>
-          <div>
-            <h5>Legal</h5>
+            <a href="/contact">Contact</a>
+          </nav>
+          <nav aria-label="Legal">
+            <h3>Legal</h3>
+            {/* Real Privacy/Terms wiring — the v6 mockup pointed both at #faq.
+                Renders the in-page modal, falling back to /legal/* without JS. */}
             <FooterLegalLinks legalDocs={legalDocs} />
-          </div>
+          </nav>
         </div>
         <div className="mk-foot-bot">
           <span>
-            © {year} PropertyPro Florida. PropertyPro is not a law firm and does
-            not provide legal advice.
+            © {year} PropertyPro Florida. PropertyPro is not a law firm and does not
+            provide legal advice.
           </span>
           <span>West Palm Beach, FL · support@getpropertypro.com</span>
         </div>

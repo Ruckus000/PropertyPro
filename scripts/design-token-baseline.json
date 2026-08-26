@@ -33,8 +33,8 @@
     "raw-palette": 6
   },
   "apps/web/src/app/(marketing)/marketing-theme.css": {
-    "raw-hex": 50,
-    "raw-color-fn": 12
+    "raw-hex": 53,
+    "raw-color-fn": 20
   },
   "apps/web/src/app/layout.tsx": {
     "raw-palette": 2

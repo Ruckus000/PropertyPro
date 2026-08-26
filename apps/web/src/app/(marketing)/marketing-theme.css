@@ -1,209 +1,513 @@
 /* Warm "Florida Modern" theme — scoped to the marketing route group only.
-   Does NOT change global app tokens. All selectors live under .marketing-theme. */
+   Does NOT change global app tokens. All selectors live under .marketing-theme.
+
+   The landing-page half of this file is a port of `PropertyPro Landing v6.html`
+   from the Claude Design project. Two things about that port are load-bearing:
+
+   1. The design ships a bare `:root { --cream … }` block. That is moved onto
+      `.marketing-theme` and every custom property is `--mk-`-prefixed, so none
+      of it leaks into the authenticated app shell.
+   2. The design asks for JetBrains Mono. We deliberately do NOT vendor a third
+      font for six statute citations — `--mk-mono` is the design's own fallback
+      chain. Everything else is faithful.
+
+   The tail of this file (`.mk-prose`, `.mk-note*`, `.mk-res-*`, `.mk-form*`,
+   `.mk-modal-*`) is NOT landing-page CSS. /resources, /contact, /legal/* and
+   the footer's legal modal all depend on it — do not fold it into a landing
+   rewrite. `.mk-quote` / `.mk-logo-proof` likewise stay: see the comment in
+   `(marketing)/page.tsx` about un-rendered proof sections. */
 
 .marketing-theme {
-  --mk-cream:#fdf6ee; --mk-cream-2:#fbeee1; --mk-card:#fffdfb; --mk-line:#efe2d4;
-  --mk-ink:#241712; --mk-ink-soft:#6b574c;
-  --mk-coral:#c2533a; --mk-coral-d:#a8412c; --mk-teal:#2f8f83; --mk-gold:#e3a93c;
-  /* AA-passing teal for TEXT (5.4:1 on cream); --mk-teal stays for graphics/fills */
+  /* surfaces + ink */
+  --mk-cream:#fdf6ee; --mk-cream-2:#faece0; --mk-card:#fffdfb;
+  --mk-line:#eee0d1; --mk-line-2:#e0d0bd;
+  /* WCAG 1.4.11. --mk-line-2 is shared with decorative rules and card outlines,
+     which are exempt — darkening it globally would heavy-up the whole page for no
+     conformance gain. This one is for borders that ARE the control: a ghost button
+     is card-on-cream (1.02:1), so its border is the only affordance it has.
+     3.04:1 on cream, 3.21:1 on card. */
+  --mk-edge-control:#a08b76;
+  --mk-ink:#231610; --mk-ink-soft:#33211a; --mk-ink-2:#6b574c; --mk-ink-3:#7a6454;
+  --mk-onink:#d8c8bc; --mk-onink-2:#ab9789;
+  /* brand */
+  --mk-coral:#c2533a; --mk-coral-d:#a8412c; --mk-coral-ink:#8f3423; --mk-coral-wash:#fcf1ed; --mk-coral-line:#edb9a6;
+  --mk-teal:#1f6a60; --mk-teal-wash:#ecf6f4; --mk-teal-line:#a6d5cd;
+  /* AA-passing teal for TEXT on cream; --mk-teal stays for graphics/fills */
   --mk-teal-text:#237066;
+  --mk-gold:#e3a93c; --mk-gold-2:#f0bb56;
+  /* status */
+  --mk-red:#b91c1c; --mk-red-wash:#fef2f2; --mk-red-line:#fecaca;
+  --mk-amber:#a8520a; --mk-amber-wash:#fffbeb; --mk-amber-line:#fde68a;
+  --mk-green:#047857; --mk-green-wash:#ecfdf5; --mk-green-line:#a7f3d0;
+  /* neutral "screenshot" scale used inside the product surfaces */
+  --mk-s0:#fffefc; --mk-s25:#fdfaf6; --mk-s100:#f6efe6; --mk-s200:#efe7dc;
+  --mk-g500:#63697a; --mk-g600:#4b5563; --mk-g900:#111827;
+
   --mk-shadow:0 18px 40px -20px rgba(80,40,20,.35);
   --mk-shadow-sm:0 8px 24px -12px rgba(80,40,20,.28);
-  --mk-maxw:1680px; --mk-gutter:56px;
 
+  --mk-sans:var(--font-sans),Inter,system-ui,sans-serif;
+  --mk-disp:var(--font-fraunces),Georgia,"Times New Roman",serif;
+  --mk-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+
+  --mk-maxw:1260px; --mk-gutter:56px;
+
+  position:relative;
   background:var(--mk-cream); color:var(--mk-ink);
-  font-family:var(--font-sans),Inter,system-ui,sans-serif; line-height:1.55;
+  font-family:var(--mk-sans); font-size:16px; line-height:1.55;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
+
+/* paper grain — materiality, not decoration. Scoped to the theme wrapper rather
+   than `body`, which the authenticated app also owns. */
+.marketing-theme::after{content:"";position:fixed;inset:0;z-index:100;pointer-events:none;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");background-size:140px}
+
+.marketing-theme h1,.marketing-theme h2,.marketing-theme h3,.marketing-theme h4{margin:0;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+.marketing-theme p{margin:0;text-wrap:pretty}
+.marketing-theme a{color:var(--mk-coral-d);text-decoration:none}
+/* Hover must DARKEN. The mockup hovered coral-d -> coral, which lightens the
+   text and takes it from 5.67:1 to 4.27:1 — i.e. hovering a link was what
+   broke AA. --mk-coral-ink is the darker end of the same ramp (7.4:1). */
+.marketing-theme a:hover{color:var(--mk-coral-ink);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+.marketing-theme button,.marketing-theme input,.marketing-theme select,.marketing-theme textarea{font:inherit;color:inherit}
+.marketing-theme ::selection{background:var(--mk-coral-line);color:var(--mk-ink)}
+.marketing-theme :focus-visible{outline:2px solid var(--mk-coral);outline-offset:3px;border-radius:2px}
+.marketing-theme :focus:not(:focus-visible){outline:none}
+.marketing-theme .mk-band-ink :focus-visible,.marketing-theme .mk-foot :focus-visible,.marketing-theme .mk-close :focus-visible{outline-color:var(--mk-gold)}
+@media(forced-colors:active){.marketing-theme :focus-visible{outline:3px solid CanvasText}}
 @media(prefers-reduced-motion:no-preference){html:has(.marketing-theme){scroll-behavior:smooth}}
+.marketing-theme [id]{scroll-margin-top:88px}
+.marketing-theme .mk-mono{font-family:var(--mk-mono);font-variant-numeric:tabular-nums}
 
 /* layout */
 .marketing-theme .mk-wrap{max-width:var(--mk-maxw);margin:0 auto;padding:0 var(--mk-gutter);width:100%}
-.marketing-theme .mk-band{padding:64px 0;position:relative}
-.marketing-theme .mk-band-alt{background:linear-gradient(180deg,var(--mk-cream),var(--mk-cream-2))}
-.marketing-theme [id]{scroll-margin-top:80px}
-.marketing-theme .mk-sec-head{max-width:40em}
-.marketing-theme .mk-sec-head h2{font-size:46px;margin:12px 0}
-.marketing-theme .mk-sec-head p{font-size:18px}
-.marketing-theme .mk-center{margin-left:auto;margin-right:auto;text-align:center}
+.marketing-theme .mk-band{padding:80px 0}
+.marketing-theme .mk-band-warm,.marketing-theme .mk-band-alt{background:var(--mk-cream-2)}
+.marketing-theme .mk-band-ink{background:var(--mk-ink);color:var(--mk-onink)}
+.marketing-theme .mk-band-ink h2,.marketing-theme .mk-band-ink h3{color:var(--mk-cream)}
 
 /* type */
-.marketing-theme .mk-display{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;letter-spacing:-.01em;line-height:1.05}
-.marketing-theme .mk-eyebrow{font-weight:700;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mk-coral-d)}
-.marketing-theme .mk-muted{color:var(--mk-ink-soft)}
+.marketing-theme .mk-display{font-family:var(--mk-disp);font-weight:600;letter-spacing:-.018em;line-height:1.05;font-variation-settings:"opsz" 144}
+/* Metric-matched fallback for Fraunces ROMAN at the hero's optical size.
+ *
+ * Fraunces is a variable font with an `opsz` axis and `font-optical-sizing: auto`,
+ * so its advance widths change ~20% across the range this page uses:
+ * measured against next's generated `fraunces Fallback`, the real face is 0.907x
+ * at opsz 48 but 0.756x at opsz 144. next/font calibrates that fallback once, from
+ * the capsize entry for Fraunces Regular at default opsz — so it is roughly right
+ * for the small display text and badly wrong for the 72px hero, which is where the
+ * pixels (and the layout shift) are.
+ *
+ * One fallback therefore cannot serve every `.mk-display` size. This one is tuned
+ * for opsz 144 and applied ONLY to the hero h1. The smaller uses keep next's
+ * fallback, which is close enough at their sizes to be worth leaving alone.
+ */
+@font-face{
+  font-family:"Fraunces 144 Fallback";
+  font-style:normal;
+  src:local("Georgia"),local("Times New Roman");
+  size-adjust:75.03%;
+  ascent-override:130.35%;
+  descent-override:33.99%;
+  line-gap-override:0%;
+}
+/* Metric-matched fallback for Fraunces ITALIC.
+ *
+ * `adjustFontFallback` on the loader only covers the roman face — Next's bundled
+ * metrics DB (`next/dist/server/capsize-font-metrics.json`) has a `fraunces` entry
+ * with no italic variant, so no italic fallback is generated. The hero swash therefore
+ * swapped in from un-adjusted Georgia italic, which is 25% WIDER than Fraunces italic
+ * (measured 0.80x across the real h1 string). That single element was ~0.049 of the
+ * page's 0.139 mobile CLS.
+ *
+ * size-adjust is measured, not guessed: Canvas measureText of the actual headline in
+ * loaded `fraunces` italic vs Georgia italic. The vertical overrides follow capsize's
+ * formula — metric / sizeAdjust — using Fraunces' roman ascent/descent, which are
+ * shared across styles within the family.
+ *
+ * Re-measure if the vendored italic file is ever refreshed (see app/fonts/README.md).
+ */
+@font-face{
+  font-family:"Fraunces Italic Fallback";
+  font-style:italic;
+  src:local("Georgia Italic"),local("Georgia");
+  size-adjust:80%;
+  ascent-override:122.25%;
+  descent-override:31.88%;
+  line-gap-override:0%;
+}
+/* Names the `fraunces` family directly rather than going through --mk-disp: that var
+ * expands to `fraunces, "fraunces Fallback"`, and the roman-metric fallback inside it
+ * would win before this one could apply. `fraunces` is derived by next/font from the
+ * FILE name — if fraunces-latin-var.woff2 is ever renamed this degrades to the
+ * metric-matched Georgia above, which is the safe direction. */
+.marketing-theme .mk-swash{font-style:italic;font-weight:400;color:var(--mk-coral-d);font-variation-settings:"opsz" 144;font-family:fraunces,"Fraunces Italic Fallback",Georgia,"Times New Roman",serif}
+.marketing-theme .mk-muted{color:var(--mk-ink-2)}
+/* section marker: 07 —— PRICING */
+.marketing-theme .mk-mark{display:flex;align-items:center;gap:14px;font-size:12px;line-height:1.55;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--mk-ink-3);width:max-content;max-width:none;margin-top:0}
+.marketing-theme .mk-mark .mk-lb{white-space:nowrap}
+.marketing-theme .mk-mark .mk-ix{font-family:var(--mk-mono);font-weight:500;letter-spacing:.06em;color:var(--mk-coral-d);font-variant-numeric:tabular-nums;white-space:nowrap}
+.marketing-theme .mk-mark .mk-er{flex:0 0 44px;height:1px;background:var(--mk-line-2)}
+.marketing-theme .mk-band-ink .mk-mark,.marketing-theme .mk-close .mk-mark{color:var(--mk-onink-2)}
+.marketing-theme .mk-band-ink .mk-mark .mk-ix,.marketing-theme .mk-close .mk-mark .mk-ix{color:var(--mk-gold)}
+.marketing-theme .mk-band-ink .mk-mark .mk-er,.marketing-theme .mk-close .mk-mark .mk-er{background:rgba(216,200,188,.34)}
+/* kept for /resources + /contact, which predate the v6 landing */
+.marketing-theme .mk-eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
+.marketing-theme .mk-card{background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:7px}
 
-/* buttons */
-.marketing-theme .mk-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;font-weight:600;font-size:15px;padding:13px 22px;transition:.18s;cursor:pointer;border:none;text-decoration:none}
-.marketing-theme .mk-pill-primary{background:var(--mk-coral);color:#fff;box-shadow:var(--mk-shadow-sm)}
-.marketing-theme .mk-pill-primary:hover{background:var(--mk-coral-d);transform:translateY(-1px)}
-.marketing-theme .mk-pill-ghost{background:#fff;color:var(--mk-ink);border:1px solid var(--mk-line)}
-.marketing-theme .mk-pill-ghost:hover{border-color:var(--mk-coral);color:var(--mk-coral-d)}
-
-/* cards */
-.marketing-theme .mk-card{background:var(--mk-card);border:1px solid var(--mk-line);border-radius:18px;box-shadow:var(--mk-shadow-sm)}
+/* buttons — named .mk-pill* because /resources and /contact already use those */
+.marketing-theme .mk-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:4px;font-size:15px;font-weight:600;border:1px solid transparent;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
+.marketing-theme .mk-pill:hover{text-decoration:none}
+/* Filled on coral-d, not coral. White on --mk-coral is 4.57:1 nominal but 4.49:1 as
+   rendered, because the paper-grain overlay composites over it — the page's primary
+   control had no headroom at all. coral-d is 6.07:1, coral-ink 7.83:1. */
+.marketing-theme .mk-pill-primary{background:var(--mk-coral-d);color:#fff;box-shadow:0 1px 2px rgba(80,40,20,.18)}
+.marketing-theme .mk-pill-primary:hover{background:var(--mk-coral-ink);color:#fff;transform:translateY(-1px)}
+.marketing-theme .mk-pill-ghost{background:var(--mk-card);color:var(--mk-ink);border-color:var(--mk-edge-control)}
+.marketing-theme .mk-pill-ghost:hover{border-color:var(--mk-ink-3);color:var(--mk-ink)}
+.marketing-theme .mk-pill-inverse{background:var(--mk-cream);color:var(--mk-ink)}
+.marketing-theme .mk-pill-inverse:hover{background:#fff;color:var(--mk-ink);transform:translateY(-1px)}
+.marketing-theme .mk-pill-ghost-inverse{background:transparent;color:var(--mk-cream);border-color:rgba(216,200,188,.42)}
+.marketing-theme .mk-pill-ghost-inverse:hover{border-color:var(--mk-cream);color:#fff}
+.marketing-theme .mk-pill-sm{min-height:40px;padding:0 15px;font-size:13.5px}
+.marketing-theme .mk-arrow{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;min-height:44px}
+.marketing-theme .mk-arrow::after{content:"→";transition:transform .18s ease}
+.marketing-theme .mk-arrow:hover::after{transform:translateX(4px)}
 
 /* nav */
-.marketing-theme .mk-nav{position:sticky;top:0;z-index:50;background:rgba(253,246,238,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--mk-line)}
-.marketing-theme .mk-nav-in{display:flex;align-items:center;justify-content:space-between;height:70px}
-.marketing-theme .mk-logo{display:flex;align-items:center;gap:10px;font-family:var(--font-fraunces),serif;font-weight:600;font-size:21px;color:var(--mk-ink)}
-.marketing-theme .mk-logo-dot{width:30px;height:30px;border-radius:9px;background:linear-gradient(140deg,var(--mk-coral),var(--mk-gold));display:grid;place-items:center;color:#fff;font-size:16px}
-.marketing-theme .mk-nav-links{display:flex;gap:34px;font-weight:500;font-size:15px;color:var(--mk-ink-soft)}
-.marketing-theme .mk-nav-links a{position:relative;padding:4px 0;text-decoration:none;color:inherit}
-.marketing-theme .mk-nav-links a:hover{color:var(--mk-ink)}
-.marketing-theme .mk-nav-right{display:flex;align-items:center;gap:18px;font-weight:600;font-size:15px}
-.marketing-theme .mk-nav-toggle{display:none;align-items:center;gap:8px;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--mk-line);background:var(--mk-card);color:var(--mk-ink);font-weight:600;font-size:15px;cursor:pointer}
-.marketing-theme .mk-nav-toggle:hover{border-color:var(--mk-coral);color:var(--mk-coral-d)}
+.marketing-theme .mk-nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--mk-cream) 86%,transparent);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-bottom:1px solid var(--mk-line);transition:box-shadow .2s ease}
+.marketing-theme .mk-nav.mk-stuck{box-shadow:0 6px 20px -14px rgba(80,40,20,.34)}
+.marketing-theme .mk-nav-in{display:flex;align-items:center;justify-content:space-between;height:68px;gap:32px}
+.marketing-theme .mk-logo{display:flex;align-items:center;gap:11px;font-family:var(--mk-disp);font-weight:600;font-size:20px;letter-spacing:-.012em;color:var(--mk-ink);white-space:nowrap;font-variation-settings:"opsz" 48}
+.marketing-theme .mk-logo:hover{color:var(--mk-ink);text-decoration:none}
+.marketing-theme .mk-logo .mk-logomark{width:29px;height:29px;flex:0 0 auto;display:block;overflow:visible}
+.marketing-theme .mk-logo .mk-logomark-a{fill:var(--mk-coral)}
+.marketing-theme .mk-nav-links{display:flex;gap:28px;font-size:14.5px;font-weight:500}
+.marketing-theme .mk-nav-links a{position:relative;color:var(--mk-ink-2);padding:22px 0;white-space:nowrap}
+.marketing-theme .mk-nav-links a:hover{color:var(--mk-ink);text-decoration:none}
+.marketing-theme .mk-nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:20px;height:1.5px;background:var(--mk-coral);transition:right .2s ease}
+.marketing-theme .mk-nav-links a:hover::after{right:0}
+.marketing-theme .mk-nav-links a[aria-current]{color:var(--mk-ink);font-weight:600}
+.marketing-theme .mk-nav-links a[aria-current]::after{right:0;background:var(--mk-ink)}
+.marketing-theme .mk-nav-right{display:flex;align-items:center;gap:16px;font-size:14.5px;font-weight:600}
+.marketing-theme .mk-nav-right>a:first-child{color:var(--mk-ink-2);padding:12px 2px;white-space:nowrap}
+.marketing-theme .mk-nav-right>a:first-child:hover{color:var(--mk-ink);text-decoration:none}
+.marketing-theme .mk-nav-toggle{display:none;align-items:center;gap:9px;min-height:44px;padding:0 15px;border:1px solid var(--mk-edge-control);border-radius:4px;font-weight:600;font-size:14.5px;background:var(--mk-card);cursor:pointer}
 .marketing-theme .mk-mobile-menu{border-bottom:1px solid var(--mk-line);background:var(--mk-card)}
-.marketing-theme .mk-mobile-menu-in{display:flex;flex-direction:column;gap:4px;padding:8px 0 16px}
-.marketing-theme .mk-mobile-menu-in a{display:flex;align-items:center;min-height:44px;padding:0 4px;text-decoration:none;color:var(--mk-ink-soft);font-weight:500;font-size:16px}
-.marketing-theme .mk-mobile-menu-in a:hover{color:var(--mk-ink)}
-.marketing-theme .mk-mobile-menu-in a.mk-pill-primary{justify-content:center;color:#fff;margin-top:8px}
+.marketing-theme .mk-mobile-menu-in{display:flex;flex-direction:column;padding:4px 0 16px}
+.marketing-theme .mk-mobile-menu-in a{min-height:52px;display:flex;align-items:center;color:var(--mk-ink-2);font-weight:500;font-size:16.5px;border-bottom:1px solid var(--mk-line)}
+.marketing-theme .mk-mobile-menu-in a:hover{color:var(--mk-ink);text-decoration:none}
+.marketing-theme .mk-mobile-menu-in a:last-child{border-bottom:0;margin-top:14px;justify-content:center}
+/* WCAG 1.4.3. `.mk-mobile-menu-in a` is (0,2,1) and outranks `.mk-pill-primary`
+   at (0,2,0), so the panel's link colour repainted the filled CTA's label
+   ink-on-coral — measured 1.48:1. Same specificity trap as `.mk-shead p` vs
+   `.mk-sscore`; axe caught this one only in the menu-open state. */
+.marketing-theme .mk-mobile-menu-in a.mk-pill-primary{color:#fff}
 
 /* hero */
-.marketing-theme .mk-hero{padding:62px 0 40px;overflow:hidden}
-.marketing-theme .mk-hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:64px;align-items:center}
-.marketing-theme .mk-badge{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--mk-line);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--mk-teal-text)}
-.marketing-theme .mk-badge .mk-pulse{width:8px;height:8px;border-radius:50%;background:var(--mk-teal)}
-.marketing-theme .mk-h1{font-size:70px;margin:24px 0 20px}
-.marketing-theme .mk-h1 .mk-swash{font-style:italic;color:var(--mk-coral-d)}
-.marketing-theme .mk-lede{font-size:20px;max-width:32em}
-.marketing-theme .mk-hero-cta{display:flex;gap:14px;margin:30px 0 14px;flex-wrap:wrap}
-.marketing-theme .mk-hero-sub{font-size:14px;color:var(--mk-ink-soft);margin-bottom:14px}
-.marketing-theme .mk-trust{display:flex;gap:24px;font-size:14px;color:var(--mk-ink-soft);font-weight:500;flex-wrap:wrap}
-.marketing-theme .mk-trust span{display:flex;align-items:center;gap:7px}
-.marketing-theme .mk-check{color:var(--mk-teal-text);font-weight:800}
-.marketing-theme .mk-sun{position:absolute;top:-160px;right:-160px;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(227,169,60,.20),rgba(194,83,58,.05) 55%,transparent 70%);pointer-events:none}
+.marketing-theme .mk-hero{padding:72px 0 84px}
+.marketing-theme .mk-hero-grid{display:grid;grid-template-columns:1.04fr .96fr;gap:60px;align-items:start}
+.marketing-theme .mk-hero h1{font-size:clamp(42px,5.3vw,72px);margin:22px 0 0;max-width:19ch;font-family:fraunces,"Fraunces 144 Fallback",Georgia,"Times New Roman",serif}
+.marketing-theme .mk-hero-lede{margin-top:26px;font-size:19.5px;line-height:1.5;max-width:45ch;color:var(--mk-ink-2)}
+.marketing-theme .mk-hero-lede b{color:var(--mk-ink);font-weight:600}
+.marketing-theme .mk-hero-cta{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap;align-items:center}
+.marketing-theme .mk-facts{margin-top:44px;border-top:1px solid var(--mk-line-2);display:grid;grid-template-columns:repeat(3,1fr)}
+.marketing-theme .mk-fact{padding:18px 22px 0 0;border-right:1px solid var(--mk-line)}
+.marketing-theme .mk-fact:last-child{border-right:0;padding-right:0}
+.marketing-theme .mk-fact b{display:block;font-family:var(--mk-disp);font-weight:600;font-size:30px;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 72}
+.marketing-theme .mk-fact.mk-live b{color:var(--mk-coral-d)}
+.marketing-theme .mk-fact span{display:block;font-size:13px;color:var(--mk-ink-2);margin-top:7px;max-width:22ch;line-height:1.4}
+.marketing-theme .mk-hero-art{padding-top:48px}
 
-/* logo proof strip */
-.marketing-theme .mk-logo-proof{padding:22px 0 6px}
-.marketing-theme .mk-logo-eyebrow{text-align:center;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-ink-soft);margin-bottom:18px}
-.marketing-theme .mk-logo-strip{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:center;opacity:.72;max-width:1040px;margin:0 auto}
-.marketing-theme .mk-logo-strip .mk-logo-name{font-size:19px}
+/* product surface — the in-page browser mockups */
+.marketing-theme .mk-surface{border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-s0);overflow:hidden;box-shadow:0 1px 1px rgba(80,40,20,.04),0 22px 48px -26px rgba(80,40,20,.34)}
+.marketing-theme .mk-sbar{display:flex;align-items:center;gap:7px;height:40px;padding:0 13px;background:var(--mk-s25);border-bottom:1px solid var(--mk-s200)}
+.marketing-theme .mk-sbar i{width:9px;height:9px;border-radius:99px;display:block;flex:0 0 auto}
+.marketing-theme .mk-sbar i:nth-child(1){background:#f6b4a4}
+.marketing-theme .mk-sbar i:nth-child(2){background:#f3d488}
+.marketing-theme .mk-sbar i:nth-child(3){background:#9fd8cf}
+/* `min-width:0` is what makes the ellipsis actually truncate. A flex item
+   defaults to `min-width:auto`, so this nowrap URL would otherwise refuse to
+   shrink and push the whole surface — and the page — wider than a phone. */
+.marketing-theme .mk-surl{margin-left:8px;min-width:0;font-family:var(--mk-mono);font-size:12px;color:var(--mk-g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.marketing-theme .mk-sbody{background:var(--mk-s0);color:var(--mk-g900);font-size:13px}
+.marketing-theme .mk-shead{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px 18px;border-bottom:1px solid var(--mk-s200)}
+/* Class selectors, not `.mk-shead h3` / `.mk-shead p`. The title inside a
+   product mockup is picture content, not document structure — an <h3> there
+   trips axe's heading-order beside the hero's <h1>. And a bare `.mk-shead p`
+   outranks `.mk-sscore`, flattening the 34px animated figure to 12px; the v6
+   mockup has that bug and we do not want it. */
+.marketing-theme .mk-shead-title{font-family:var(--mk-disp);font-weight:600;font-size:20px;letter-spacing:-.012em;font-variation-settings:"opsz" 48}
+.marketing-theme .mk-shead-sub{font-size:12px;color:var(--mk-g500);margin-top:3px}
+.marketing-theme .mk-sscore{display:flex;align-items:baseline;gap:3px;font-family:var(--mk-disp);font-weight:600;font-size:34px;line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 72;white-space:nowrap;transition:color .3s ease}
+.marketing-theme .mk-sscore.mk-up{color:var(--mk-green)}
+.marketing-theme .mk-sscore span{font-family:var(--mk-sans);font-size:13px;font-weight:500;color:var(--mk-g500);letter-spacing:0}
+.marketing-theme .mk-srow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--mk-s100);transition:background .25s ease}
+.marketing-theme .mk-srow:last-child{border-bottom:0}
+.marketing-theme .mk-srow.mk-at{background:var(--mk-coral-wash);box-shadow:inset 3px 0 0 var(--mk-coral)}
+.marketing-theme .mk-srow b{display:block;font-weight:500;font-size:13.5px}
+.marketing-theme .mk-srow small{display:block;font-family:var(--mk-mono);font-size:12px;color:var(--mk-g500);margin-top:3px}
+.marketing-theme .mk-srow .mk-ord{color:var(--mk-g500);font-weight:500}
+.marketing-theme .mk-srow .mk-act{display:flex;align-items:center;gap:8px}
+.marketing-theme .mk-resolve{min-height:36px;padding:0 13px;border-radius:5px;background:var(--mk-coral-d);color:#fff;font-size:12.5px;font-weight:600;white-space:nowrap;border:0;cursor:pointer;transition:background .15s ease}
+.marketing-theme .mk-resolve:hover{background:var(--mk-coral-ink)}
+.marketing-theme .mk-pin{display:inline-flex;align-items:center;gap:5px;height:23px;padding:0 9px;border-radius:99px;font-size:12px;font-weight:500;border:1px solid;white-space:nowrap}
+.marketing-theme .mk-pin svg{width:12px;height:12px;flex:0 0 auto}
+.marketing-theme .mk-pin-ok{color:var(--mk-green);background:var(--mk-green-wash);border-color:var(--mk-green-line)}
+.marketing-theme .mk-pin-warn{color:var(--mk-amber);background:var(--mk-amber-wash);border-color:var(--mk-amber-line)}
+.marketing-theme .mk-pin-bad{color:var(--mk-red);background:var(--mk-red-wash);border-color:var(--mk-red-line)}
+.marketing-theme .mk-pin-flat{color:var(--mk-g600);background:var(--mk-s100);border-color:var(--mk-s200)}
+.marketing-theme .mk-sfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-top:1px solid var(--mk-s200);background:var(--mk-s25);font-family:var(--mk-mono);font-size:11.5px;color:var(--mk-g500);min-height:44px}
+.marketing-theme .mk-sfoot button{font-family:var(--mk-sans);font-size:12.5px;font-weight:600;color:var(--mk-coral-d);min-height:32px;padding:0 4px;background:none;border:0;cursor:pointer}
+.marketing-theme .mk-sfoot button:hover{text-decoration:underline}
+.marketing-theme .mk-cap{margin-top:14px;font-size:13px;color:var(--mk-ink-3);max-width:46ch;line-height:1.5}
+.marketing-theme .mk-cap b{color:var(--mk-ink-2);font-weight:600}
 
-/* device / portfolio + product panels */
-.marketing-theme .mk-device{background:var(--mk-card);border:1px solid var(--mk-line);border-radius:22px;box-shadow:var(--mk-shadow);overflow:hidden;position:relative;max-width:100%}
-.marketing-theme .mk-device-top{height:44px;background:#fff;border-bottom:1px solid var(--mk-line);display:flex;align-items:center;gap:7px;padding:0 18px}
-.marketing-theme .mk-device-top i{width:10px;height:10px;border-radius:50%;display:block}
-.marketing-theme .mk-device-body{padding:22px}
-.marketing-theme .mk-portfolio-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-.marketing-theme .mk-portfolio-score{font-family:var(--font-fraunces),serif;font-size:22px;font-weight:600;color:var(--mk-teal-text)}
-.marketing-theme .mk-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--mk-line);border-radius:11px;padding:12px 14px;margin-bottom:9px}
-.marketing-theme .mk-row .mk-ic{width:30px;height:30px;border-radius:8px;background:#fbeee1;display:grid;place-items:center;font-size:14px;flex:0 0 auto}
-.marketing-theme .mk-row .mk-nm{font-size:14px;font-weight:600;flex:1}
-.marketing-theme .mk-mini-ring{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--mk-ink)}
-.marketing-theme .mk-mini-ring .mk-mini-dot{width:26px;height:26px;border-radius:50%;background:#fff;display:grid;place-items:center}
-.marketing-theme .mk-device-top .mk-tl-coral{background:#f6b4a4}
-.marketing-theme .mk-device-top .mk-tl-gold{background:#f3d488}
-.marketing-theme .mk-device-top .mk-tl-teal{background:#9fd8cf}
-.marketing-theme .mk-device-top .mk-url{margin-left:10px;font-size:12px;color:var(--mk-ink-soft);font-weight:600}
-.marketing-theme .mk-portfolio-label{font-size:13px;color:var(--mk-ink-soft)}
-.marketing-theme .mk-portfolio-pill{font-size:12px;font-weight:700;color:var(--mk-teal-text);background:#e7f4f1;padding:4px 10px;border-radius:999px}
-.marketing-theme .mk-float{position:absolute;right:-14px;bottom:-16px;background:#fff;border:1px solid var(--mk-line);border-radius:14px;box-shadow:var(--mk-shadow-sm);padding:13px 17px;display:flex;align-items:center;gap:11px}
-.marketing-theme .mk-float .mk-av{width:36px;height:36px;border-radius:50%;background:linear-gradient(140deg,var(--mk-teal),var(--mk-gold))}
-.marketing-theme .mk-float .mk-t{font-size:12px;line-height:1.3}
+/* section heads */
+.marketing-theme .mk-head{max-width:46ch}
+.marketing-theme .mk-head h2{font-size:clamp(32px,3.7vw,48px);margin:16px 0 0}
+.marketing-theme .mk-head p:not(.mk-mark){margin-top:20px;font-size:17.5px;color:var(--mk-ink-2);max-width:56ch}
+.marketing-theme .mk-band-ink .mk-head p:not(.mk-mark){color:var(--mk-onink)}
+/* two-column section: short sticky head left, evidence right — no orphan column */
+.marketing-theme .mk-sec{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:64px;align-items:start}
+.marketing-theme .mk-sec-end{align-items:end}
+.marketing-theme .mk-sec-l{position:sticky;top:104px;align-self:start}
+.marketing-theme .mk-sec-l-static{position:static}
+.marketing-theme .mk-sec-l h2{font-size:clamp(27px,2.7vw,36px);margin:16px 0 0}
+.marketing-theme .mk-sec-l>p:not(.mk-mark){margin-top:16px;font-size:16px;color:var(--mk-ink-2)}
+.marketing-theme .mk-sec-l .mk-arrow{margin-top:18px}
+.marketing-theme .mk-sec-note{margin-top:20px;padding-top:16px;border-top:1px solid var(--mk-line-2);font-size:13px;color:var(--mk-ink-3);line-height:1.6}
 
-/* relief / checker */
-.marketing-theme .mk-relief{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:38px}
-.marketing-theme .mk-relief-card{padding:34px}
-.marketing-theme .mk-law{display:flex;gap:16px;padding:18px 0;border-bottom:1px solid var(--mk-line)}
-.marketing-theme .mk-law:last-child{border-bottom:none}
-.marketing-theme .mk-law .mk-n{width:36px;height:36px;border-radius:10px;background:#fbeee1;color:var(--mk-coral-d);display:grid;place-items:center;font-weight:800;flex:0 0 auto;font-family:var(--font-fraunces),serif}
-.marketing-theme .mk-law h3{font-size:17px;font-weight:700}
-.marketing-theme .mk-checker{background:linear-gradient(140deg,var(--mk-ink),#3a2419);color:#fff;border-radius:20px;padding:34px}
-.marketing-theme .mk-checker .mk-eyebrow{color:var(--mk-gold)}
-.marketing-theme .mk-checker h3{color:#fff;font-size:27px;margin:10px 0 16px}
-.marketing-theme .mk-checker label{font-size:13px;font-weight:600;display:block;margin-bottom:6px}
-.marketing-theme .mk-checker .mk-field{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
-.marketing-theme .mk-checker select,.marketing-theme .mk-checker input{border-radius:12px;border:1px solid #5a4034;background:#3a2419;color:#fff;padding:13px 15px;font-size:15px;font-family:var(--font-sans),sans-serif}
-.marketing-theme .mk-checker input{flex:1;min-width:120px}
-.marketing-theme .mk-checker .mk-res{margin-top:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:13px;padding:17px;font-size:14px}
-.marketing-theme .mk-checker .mk-res b{color:var(--mk-gold)}
+/* deadline tiles — the statute, as figures */
+.marketing-theme .mk-dl{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--mk-line-2);border:1px solid var(--mk-line-2);border-radius:7px;overflow:hidden}
+.marketing-theme .mk-dlt{background:var(--mk-card);padding:26px 26px 28px;transition:background .16s ease}
+.marketing-theme .mk-dlt:hover{background:var(--mk-cream)}
+.marketing-theme .mk-dlt .mk-c{font-family:var(--mk-mono);font-size:12px;color:var(--mk-coral-d);letter-spacing:-.01em}
+.marketing-theme .mk-dlt b{display:block;margin-top:16px;font-family:var(--mk-disp);font-weight:600;font-size:clamp(32px,3.2vw,44px);line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
+.marketing-theme .mk-dlt .mk-u{display:block;margin-top:7px;font-size:13px;color:var(--mk-ink-3)}
+.marketing-theme .mk-dlt h3{margin-top:20px;font-size:16px;letter-spacing:-.008em}
+.marketing-theme .mk-dlt p{margin-top:5px;font-size:14px;color:var(--mk-ink-2);max-width:34ch}
 
-/* steps */
-.marketing-theme .mk-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:38px}
-.marketing-theme .mk-step{padding:30px}
-.marketing-theme .mk-step .mk-num{font-family:var(--font-fraunces),serif;font-size:15px;font-weight:700;color:#fff;background:var(--mk-coral);width:36px;height:36px;border-radius:10px;display:grid;place-items:center}
-.marketing-theme .mk-step h3{font-size:21px;margin:18px 0 8px}
+/* who it's for — the imagery band */
+.marketing-theme .mk-who{margin-top:44px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.marketing-theme .mk-wcard{display:grid;gap:0}
+.marketing-theme .mk-wshot{position:relative;width:100%;aspect-ratio:1/1;background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:6px;overflow:hidden}
+.marketing-theme .mk-wshot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.marketing-theme .mk-wcard .mk-n{margin-top:18px;font-family:var(--mk-mono);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
+.marketing-theme .mk-wcard h3{margin-top:10px;font-family:var(--mk-disp);font-weight:600;font-size:22px;letter-spacing:-.015em;font-variation-settings:"opsz" 48}
+.marketing-theme .mk-wcard p{margin-top:8px;font-size:15px;color:var(--mk-ink-2);max-width:30ch}
+.marketing-theme .mk-wcard .mk-stat{margin-top:14px;padding-top:12px;border-top:1px solid var(--mk-line-2);font-size:13px;color:var(--mk-ink-3)}
+.marketing-theme .mk-wcard .mk-stat b{color:var(--mk-ink);font-weight:600;font-variant-numeric:tabular-nums}
 
-/* features */
-.marketing-theme .mk-feat-hero{display:grid;grid-template-columns:1fr 1fr;gap:0;overflow:hidden;margin-top:38px}
-.marketing-theme .mk-feat-hero .mk-copy{padding:48px}
-.marketing-theme .mk-feat-hero .mk-copy .mk-eyebrow{color:var(--mk-teal-text)}
-.marketing-theme .mk-feat-hero h3{font-size:32px;margin:12px 0}
-.marketing-theme .mk-feat-hero .mk-art{background:linear-gradient(140deg,#fef6ee,#fbeee1);padding:44px;display:grid;place-items:center}
-.marketing-theme .mk-feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:26px}
-.marketing-theme .mk-fcard{padding:28px}
-.marketing-theme .mk-fcard .mk-fic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:21px;margin-bottom:16px;background:#fbeee1}
-.marketing-theme .mk-fcard h4{font-family:var(--font-fraunces),serif;font-size:20px;font-weight:600;margin-bottom:6px}
-.marketing-theme .mk-fcard p{font-size:14.5px}
+/* full-bleed photographic band */
+.marketing-theme .mk-shotband{position:relative;height:340px;background:var(--mk-ink-soft);color:var(--mk-cream);overflow:hidden}
+.marketing-theme .mk-shotband img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+/* The scrim has to cover the TALLEST the caption ever gets, not the shortest.
+   At 390px it wraps to two lines and climbed out of the old single-stop
+   gradient into bright sky — measured 3.00:1 at p95 against 12px text.
+   Three stops keep the glyph band opaque and still fade out at the top. */
+.marketing-theme .mk-shotband .mk-sbcap{position:absolute;left:0;right:0;bottom:0;padding:22px var(--mk-gutter);background:linear-gradient(to top,rgba(35,22,16,.94) 0%,rgba(35,22,16,.88) 55%,rgba(35,22,16,.62) 80%,transparent 100%);color:var(--mk-cream);font-family:var(--mk-mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase}
 
-/* testimonial */
-.marketing-theme .mk-quote{padding:54px;text-align:center;max-width:960px;margin:0 auto}
-.marketing-theme .mk-quote .mk-q{font-family:var(--font-fraunces),serif;font-size:30px;line-height:1.35;font-weight:500}
-.marketing-theme .mk-quote .mk-hl{background:linear-gradient(180deg,transparent 62%,#fce3b6 62%)}
-.marketing-theme .mk-quote .mk-who{margin-top:26px;display:flex;align-items:center;justify-content:center;gap:13px}
-.marketing-theme .mk-quote .mk-who .mk-av{width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,var(--mk-coral),var(--mk-gold))}
+/* the reckoning band */
+.marketing-theme .mk-reck{max-width:24ch}
+.marketing-theme .mk-reck h2{font-size:clamp(38px,5.4vw,74px);margin-top:18px}
+.marketing-theme .mk-reck-sub{margin-top:26px;font-size:19px;color:var(--mk-onink);max-width:44ch}
+.marketing-theme .mk-reck-sub b{color:#fff;font-weight:600}
+.marketing-theme .mk-counter{margin-top:44px;padding-top:32px;border-top:1px solid rgba(216,200,188,.24);display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
+.marketing-theme .mk-cbox b{display:block;font-family:var(--mk-disp);font-weight:600;font-size:clamp(34px,4vw,52px);line-height:1;letter-spacing:-.025em;color:var(--mk-gold);font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
+.marketing-theme .mk-cbox span{display:block;margin-top:10px;font-size:14px;color:var(--mk-onink);max-width:26ch}
+
+/* obligation checker (dark panel — its own field styling, see the form note below) */
+.marketing-theme .mk-checker{margin-top:52px;border-top:1px solid rgba(216,200,188,.24);padding-top:40px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:56px;align-items:start}
+.marketing-theme .mk-checker h3{font-family:var(--mk-disp);font-weight:600;font-size:28px;line-height:1.1;letter-spacing:-.015em;font-variation-settings:"opsz" 72}
+.marketing-theme .mk-checker>div>p{margin-top:14px;font-size:15.5px;color:var(--mk-onink);max-width:34ch}
+.marketing-theme .mk-cfield{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.marketing-theme .mk-cfield select,.marketing-theme .mk-cfield input{min-height:48px;border:1px solid rgba(216,200,188,.34);border-radius:4px;background:rgba(216,200,188,.09);color:var(--mk-cream);padding:0 14px;font-size:15px}
+.marketing-theme .mk-cfield input{flex:1;min-width:120px}
+.marketing-theme .mk-cfield input::placeholder{color:var(--mk-onink-2)}
+.marketing-theme .mk-cfield .mk-pill-primary{background:var(--mk-gold);color:var(--mk-ink);box-shadow:none}
+.marketing-theme .mk-cfield .mk-pill-primary:hover{background:var(--mk-gold-2);color:var(--mk-ink)}
+.marketing-theme .mk-cres{border-left:2px solid var(--mk-gold);padding:2px 0 2px 24px;font-size:16.5px;line-height:1.6;color:var(--mk-onink)}
+.marketing-theme .mk-cres b{color:#fff;font-weight:600}
+.marketing-theme .mk-cite{display:block;margin-top:14px;font-family:var(--mk-mono);font-size:12.5px;color:var(--mk-onink-2)}
+.marketing-theme .mk-cres .mk-pill{margin-top:22px}
+
+/* two-up: copy beside a product surface */
+.marketing-theme .mk-pitem{display:grid;grid-template-columns:.84fr 1.16fr;gap:60px;align-items:center}
+.marketing-theme .mk-pitem.mk-flip>div:first-child{order:2}
+.marketing-theme .mk-pitem h3{font-family:var(--mk-disp);font-weight:600;font-size:31px;line-height:1.1;letter-spacing:-.018em;font-variation-settings:"opsz" 96;max-width:22ch}
+.marketing-theme .mk-pitem>div>p:not(.mk-mark){margin-top:18px;font-size:16.5px;color:var(--mk-ink-2);max-width:40ch}
+.marketing-theme .mk-pitem .mk-arrow{margin-top:14px}
+/* micro-UI tiles — capabilities shown, not described */
+.marketing-theme .mk-tiles{margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.marketing-theme .mk-tile{border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-card);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(80,40,20,.04)}
+.marketing-theme .mk-tui{background:var(--mk-s25);border-bottom:1px solid var(--mk-line);padding:16px;display:grid;gap:7px;align-content:center;min-height:106px}
+.marketing-theme .mk-mrow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--mk-s0);border:1px solid var(--mk-s200);border-radius:5px;padding:9px 11px;font-size:12.5px;font-weight:500;color:var(--mk-g900)}
+.marketing-theme .mk-mrow .mk-k{font-family:var(--mk-mono);font-size:12px;font-weight:400;color:var(--mk-g500);white-space:nowrap}
+.marketing-theme .mk-mrow .mk-kk{font-family:var(--mk-mono);font-size:12px;font-weight:500;color:var(--mk-teal);white-space:nowrap}
+.marketing-theme .mk-mrow .mk-kr{font-family:var(--mk-mono);font-size:12px;font-weight:500;color:var(--mk-red);white-space:nowrap}
+.marketing-theme .mk-tb{padding:16px 18px 18px}
+.marketing-theme .mk-tb h3{font-size:15.5px;letter-spacing:-.008em}
+.marketing-theme .mk-tb p{margin-top:5px;font-size:14px;color:var(--mk-ink-2)}
+.marketing-theme .mk-tiles-wrap{margin-top:64px}
+
+/* first week — ruled rows, plus its photo */
+.marketing-theme .mk-wk{display:grid;gap:0;border-top:1px solid var(--mk-line-2)}
+.marketing-theme .mk-wkr{display:grid;grid-template-columns:132px minmax(0,1fr);gap:28px;padding:22px 0;border-bottom:1px solid var(--mk-line);align-items:baseline}
+.marketing-theme .mk-wkr .mk-d{font-family:var(--mk-mono);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
+.marketing-theme .mk-wkr h3{font-size:17.5px;letter-spacing:-.012em}
+.marketing-theme .mk-wkr p{margin-top:6px;font-size:15px;color:var(--mk-ink-2);max-width:52ch}
+.marketing-theme .mk-wk-shot{margin-top:26px;aspect-ratio:4/3;border-radius:6px;overflow:hidden;border:1px solid var(--mk-line-2);position:relative}
+.marketing-theme .mk-wk-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+
+/* portfolio roll-up */
+.marketing-theme .mk-pf-h{font-size:clamp(30px,3.4vw,44px);margin-top:16px}
+.marketing-theme .mk-pf-lede{margin-top:20px;font-size:16.5px;max-width:40ch}
+.marketing-theme .mk-pf-cta{margin-top:26px}
+.marketing-theme .mk-stack-36{display:grid;gap:36px;min-width:0}
 
 /* pricing */
-.marketing-theme .mk-price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:40px;align-items:start;max-width:1180px;margin-left:auto;margin-right:auto}
-.marketing-theme .mk-price{padding:34px}
-.marketing-theme .mk-price.mk-feat{border:2px solid var(--mk-coral);position:relative}
-.marketing-theme .mk-price .mk-ribbon{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--mk-coral);color:#fff;font-size:12px;font-weight:700;padding:5px 14px;border-radius:999px}
-.marketing-theme .mk-price .mk-amt{font-family:var(--font-fraunces),serif;font-size:42px;font-weight:600;margin:10px 0 2px}
-.marketing-theme .mk-price .mk-amt span{font-size:15px;font-family:var(--font-sans),sans-serif;color:var(--mk-ink-soft);font-weight:500}
-.marketing-theme .mk-price ul{list-style:none;margin:22px 0;padding:0;display:flex;flex-direction:column;gap:12px}
-.marketing-theme .mk-price li{font-size:14px;display:flex;gap:9px}
-.marketing-theme .mk-price li::before{content:"✓";color:var(--mk-teal-text);font-weight:800}
-.marketing-theme .mk-price .mk-pill{width:100%;justify-content:center;margin-top:6px}
+.marketing-theme .mk-incl{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;border-top:1px solid var(--mk-line-2);margin:0;padding-left:0}
+.marketing-theme .mk-incl li{list-style:none;padding:13px 0;border-bottom:1px solid var(--mk-line);font-size:14.5px;display:flex;align-items:center;gap:10px}
+.marketing-theme .mk-incl li svg{width:15px;height:15px;flex:0 0 auto;color:var(--mk-teal)}
+.marketing-theme .mk-price{margin-top:48px;border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-card);overflow:hidden;box-shadow:0 1px 2px rgba(80,40,20,.05)}
+.marketing-theme table.mk-ptbl{width:100%;border-collapse:collapse;text-align:left}
+.marketing-theme .mk-ptbl th,.marketing-theme .mk-ptbl td{padding:17px 22px;border-bottom:1px solid var(--mk-line);vertical-align:top}
+.marketing-theme .mk-ptbl thead th,.marketing-theme .mk-ptbl thead td{border-bottom:1px solid var(--mk-line-2);vertical-align:top}
+.marketing-theme .mk-ptbl thead th{position:relative;padding-top:58px}
+.marketing-theme .mk-ptbl tbody tr:last-child td,.marketing-theme .mk-ptbl tbody tr:last-child th{border-bottom:0}
+.marketing-theme .mk-ptbl tbody tr:hover th[scope=row],.marketing-theme .mk-ptbl tbody tr:hover td{background:color-mix(in srgb,var(--mk-cream) 55%,transparent)}
+.marketing-theme .mk-ptbl .mk-pick{background:var(--mk-coral-wash);box-shadow:inset 1px 0 0 var(--mk-coral-line),inset -1px 0 0 var(--mk-coral-line)}
+.marketing-theme .mk-ptbl tbody tr:hover td.mk-pick{background:color-mix(in srgb,var(--mk-coral-wash) 88%,var(--mk-coral-line))}
+.marketing-theme .mk-ptbl thead .mk-pick{box-shadow:inset 1px 0 0 var(--mk-coral-line),inset -1px 0 0 var(--mk-coral-line),inset 0 3px 0 var(--mk-coral)}
+.marketing-theme .mk-tier{display:block;min-height:calc(2 * 1.55em);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--mk-ink-3)}
+.marketing-theme .mk-amt{display:block;margin-top:10px;font-family:var(--mk-disp);font-weight:600;font-size:36px;letter-spacing:-.025em;line-height:1;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
+.marketing-theme .mk-amt span{font-family:var(--mk-sans);font-size:14px;font-weight:500;color:var(--mk-ink-2);letter-spacing:0}
+.marketing-theme .mk-for{display:block;margin-top:12px;font-size:13.5px;font-weight:400;color:var(--mk-ink-2);max-width:25ch;line-height:1.45}
+.marketing-theme .mk-flag{position:absolute;top:20px;left:22px;right:22px;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mk-coral-d);margin:0}
+.marketing-theme .mk-ptbl th[scope=row]{font-weight:500;font-size:14.5px;width:31%;color:var(--mk-ink)}
+.marketing-theme .mk-ptbl td{font-size:14.5px;color:var(--mk-ink-2)}
+.marketing-theme .mk-yes{display:inline-flex;align-items:center;gap:8px;color:var(--mk-teal);font-weight:500}
+.marketing-theme .mk-yes svg{width:15px;height:15px;flex:0 0 auto}
+.marketing-theme .mk-no{color:var(--mk-ink-3)}
+.marketing-theme .mk-pfoot{padding:20px 22px;background:var(--mk-cream-2);border-top:1px solid var(--mk-line-2);display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;font-size:13.5px;color:var(--mk-ink-2)}
+.marketing-theme .mk-pfoot .mk-mono{color:var(--mk-ink-3);font-size:12.5px}
 
 /* faq */
-.marketing-theme .mk-faq{max-width:860px;margin:38px auto 0}
-.marketing-theme .mk-qa{padding:24px 26px;margin-bottom:13px}
-.marketing-theme .mk-qa h3{font-size:17px;font-weight:700;margin:0}
-.marketing-theme .mk-qa-toggle{display:flex;width:100%;align-items:center;justify-content:space-between;gap:16px;min-height:44px;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.marketing-theme .mk-qa-glyph{flex:none;font-weight:700;font-size:20px;line-height:1}
-.marketing-theme .mk-qa p{font-size:15px;margin-top:9px}
+.marketing-theme .mk-faq{border-top:1px solid var(--mk-line-2);max-width:74ch;min-width:0}
+.marketing-theme .mk-qa{border-bottom:1px solid var(--mk-line)}
+.marketing-theme .mk-qa h3{margin:0}
+.marketing-theme .mk-qa-toggle{display:flex;width:100%;gap:24px;align-items:baseline;justify-content:space-between;text-align:left;padding:22px 0;min-height:44px;font-size:18px;font-weight:600;letter-spacing:-.008em;background:none;border:0;cursor:pointer;transition:color .16s ease}
+.marketing-theme .mk-qa-toggle:hover{color:var(--mk-coral-d)}
+.marketing-theme .mk-qa-toggle .mk-g{flex:none;font-family:var(--mk-mono);font-size:18px;font-weight:400;color:var(--mk-ink-3);line-height:1;transition:color .16s ease}
+.marketing-theme .mk-qa-toggle:hover .mk-g,.marketing-theme .mk-qa-toggle[aria-expanded=true] .mk-g{color:var(--mk-coral-d)}
+.marketing-theme .mk-qa p{padding:0 0 24px;font-size:16.5px;color:var(--mk-ink-2);max-width:66ch}
 
-/* final cta */
-.marketing-theme .mk-final{background:linear-gradient(140deg,var(--mk-coral),#d4663f);color:#fff;border-radius:28px;padding:64px;text-align:center;position:relative;overflow:hidden}
-.marketing-theme .mk-final h2{color:#fff;font-size:48px}
-.marketing-theme .mk-final p{font-size:18px;opacity:.92;margin:14px auto 26px;max-width:32em}
-.marketing-theme .mk-final .mk-pill-primary{background:#fff;color:var(--mk-coral-d)}
-.marketing-theme .mk-cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
-.marketing-theme .mk-pill-ghost-inverse{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+/* close — photographic */
+.marketing-theme .mk-close{background:var(--mk-ink);color:var(--mk-onink);display:grid;grid-template-columns:1fr 1fr;align-items:stretch;min-height:520px}
+.marketing-theme .mk-close-copy{display:flex;flex-direction:column;justify-content:center;padding:88px var(--mk-gutter);max-width:calc(var(--mk-maxw)/2);margin-left:auto;width:100%}
+.marketing-theme .mk-close-copy h2{color:var(--mk-cream);font-size:clamp(31px,3.6vw,48px);max-width:21ch;margin-top:18px}
+.marketing-theme .mk-close-copy>p:not(.mk-mark){margin-top:22px;font-size:17px;color:var(--mk-onink);max-width:38ch}
+.marketing-theme .mk-close-cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:34px}
+.marketing-theme .mk-close-shot{position:relative;min-height:520px;background:var(--mk-ink-soft);overflow:hidden}
+.marketing-theme .mk-close-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 
 /* footer */
-.marketing-theme .mk-footer{background:var(--mk-ink);color:#d9c8bc;padding:60px 0 34px;margin-top:64px}
-.marketing-theme .mk-foot-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:40px;max-width:1300px}
-.marketing-theme .mk-footer h5{color:#fff;font-size:13px;letter-spacing:.04em;margin-bottom:14px}
-.marketing-theme .mk-footer a{display:block;color:#bda99c;font-size:14px;margin-bottom:9px;text-decoration:none}
+.marketing-theme .mk-footer{background:var(--mk-ink);color:var(--mk-onink-2);padding:0 0 36px}
+.marketing-theme .mk-foot-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:44px;padding:56px 0 44px;border-top:1px solid rgba(216,200,188,.16)}
+.marketing-theme .mk-footer .mk-logo{color:var(--mk-cream)}
+.marketing-theme .mk-footer .mk-logo .mk-logomark-a{fill:var(--mk-gold)}
+.marketing-theme .mk-footer h3{color:var(--mk-cream);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-bottom:16px}
+.marketing-theme .mk-footer a{display:block;color:var(--mk-onink);font-size:14.5px;margin-bottom:11px}
 .marketing-theme .mk-footer a:hover{color:#fff}
-.marketing-theme .mk-foot-bot{border-top:1px solid #3a2a20;margin-top:40px;padding-top:22px;font-size:13px;color:#9c8576;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.marketing-theme .mk-foot-blurb{margin-top:18px;max-width:27em;font-size:14.5px;color:var(--mk-onink)}
+.marketing-theme .mk-foot-bot{border-top:1px solid rgba(216,200,188,.16);padding-top:24px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
 
-/* motion */
-@media(prefers-reduced-motion:no-preference){
-  .marketing-theme .mk-pulse{animation:mk-pulse 2s infinite}
-  .marketing-theme .mk-nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:-2px;height:2px;background:var(--mk-coral);transition:right .2s}
-  .marketing-theme .mk-nav-links a:hover::after{right:0}
-  .marketing-theme .mk-mobile-menu{animation:mk-menu-in .18s ease}
-}
-@keyframes mk-menu-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
-@keyframes mk-pulse{0%{box-shadow:0 0 0 0 rgba(47,143,131,.5)}70%{box-shadow:0 0 0 9px rgba(47,143,131,0)}100%{box-shadow:0 0 0 0 rgba(47,143,131,0)}}
+/* logo proof strip + testimonial — un-rendered, see (marketing)/page.tsx */
+.marketing-theme .mk-logo-proof{padding:22px 0 6px}
+.marketing-theme .mk-logo-eyebrow{text-align:center;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-ink-2);margin-bottom:18px}
+.marketing-theme .mk-logo-strip{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:center;opacity:.72;max-width:1040px;margin:0 auto}
+.marketing-theme .mk-logo-strip .mk-logo-name{font-size:19px}
+.marketing-theme .mk-quote{padding:54px;text-align:center;max-width:960px;margin:0 auto}
+.marketing-theme .mk-quote .mk-q{font-family:var(--mk-disp);font-size:30px;line-height:1.35;font-weight:500}
+.marketing-theme .mk-quote .mk-hl{background:linear-gradient(180deg,transparent 62%,#fce3b6 62%)}
+.marketing-theme .mk-quote .mk-who-c{margin-top:26px;display:flex;align-items:center;justify-content:center;gap:13px}
+.marketing-theme .mk-quote .mk-who-c .mk-av{width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,var(--mk-coral),var(--mk-gold))}
 
 /* responsive */
-@media(max-width:1100px){.marketing-theme{--mk-gutter:32px}}
-@media(max-width:880px){
-  .marketing-theme .mk-hero-grid,.marketing-theme .mk-relief,.marketing-theme .mk-feat-hero,.marketing-theme .mk-foot-grid{grid-template-columns:1fr}
-  .marketing-theme .mk-steps,.marketing-theme .mk-feat-grid,.marketing-theme .mk-price-grid{grid-template-columns:1fr}
-  .marketing-theme .mk-h1{font-size:46px}
-  .marketing-theme .mk-nav-links{display:none}
-  .marketing-theme .mk-nav-right{display:none}
+@media(max-width:1200px){
+  .marketing-theme{--mk-gutter:36px}
+  .marketing-theme .mk-pitem{grid-template-columns:minmax(0,1fr);gap:32px}
+  .marketing-theme .mk-pitem.mk-flip>div:first-child{order:0}
+  .marketing-theme .mk-sec{grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:44px}
+  .marketing-theme .mk-tiles{grid-template-columns:1fr 1fr}
+}
+@media(max-width:1040px){
+  .marketing-theme .mk-nav-links,.marketing-theme .mk-nav-right{display:none}
   .marketing-theme .mk-nav-toggle{display:inline-flex}
+  .marketing-theme .mk-shotband{height:250px}
 }
-/* small-screen overflow safety — keep hero product card / device from forcing horizontal scroll at 320–480px */
-@media(max-width:480px){
-  .marketing-theme .mk-device,.marketing-theme .mk-card,.marketing-theme .mk-checker{max-width:100%}
-  .marketing-theme .mk-float{right:0;max-width:calc(100% - 14px)}
+@media(max-width:900px){
+  /* minmax(0,1fr), not 1fr: an auto-minimum track is sized by its content's
+     min-content width, which the product surfaces exceed on a phone. */
+  .marketing-theme .mk-hero-grid,.marketing-theme .mk-checker,
+  .marketing-theme .mk-who,.marketing-theme .mk-counter,.marketing-theme .mk-sec,
+  .marketing-theme .mk-dl,.marketing-theme .mk-incl,
+  .marketing-theme .mk-tiles,.marketing-theme .mk-pitem{grid-template-columns:minmax(0,1fr)}
+  .marketing-theme .mk-sec{gap:32px}
+  .marketing-theme .mk-sec-l{position:static}
+  .marketing-theme .mk-wkr{grid-template-columns:1fr;gap:0}
+  .marketing-theme .mk-wkr .mk-d{margin-bottom:8px}
+  .marketing-theme .mk-hero{padding:52px 0 64px}
+  .marketing-theme .mk-hero-art{padding-top:36px}
+  .marketing-theme .mk-band{padding:64px 0}
+  .marketing-theme .mk-checker{gap:32px;padding-top:32px}
+  .marketing-theme .mk-who{gap:36px;margin-top:36px}
+  .marketing-theme .mk-wshot{aspect-ratio:16/10}
+  .marketing-theme .mk-counter{gap:26px;margin-top:34px;padding-top:26px}
+  .marketing-theme .mk-facts{grid-template-columns:1fr;border-top:0;margin-top:34px}
+  .marketing-theme .mk-fact{border-right:0;border-top:1px solid var(--mk-line);padding:16px 0 0}
+  .marketing-theme .mk-close{grid-template-columns:1fr;min-height:0}
+  .marketing-theme .mk-close-copy{padding:60px var(--mk-gutter);max-width:none;margin:0}
+  .marketing-theme .mk-close-shot{min-height:320px;order:-1}
+  .marketing-theme .mk-foot-grid{grid-template-columns:1fr 1fr;gap:32px}
+  /* the comparison table scrolls in its OWN container — the page body must not */
+  .marketing-theme .mk-price{overflow-x:auto}
+  .marketing-theme .mk-ptbl thead,.marketing-theme .mk-ptbl tbody,.marketing-theme .mk-ptbl tr{white-space:nowrap}
+  .marketing-theme .mk-for{white-space:normal;min-width:21ch}
+  .marketing-theme .mk-ptbl th[scope=row]{white-space:normal;min-width:17ch}
 }
+/* .claude/rules/design.md: 44px touch targets below 768px. These two are real
+   controls sized for desktop (36px and 40px). Nav and footer links stay as they
+   are — they clear WCAG 2.5.8 on the spacing exception (22px on a 33px pitch) and
+   reaching 44px would mean re-spacing the footer. */
+@media(max-width:768px){
+  .marketing-theme .mk-resolve{min-height:44px}
+  .marketing-theme .mk-pill-sm{min-height:44px}
+}
+@media(max-width:640px){
+  .marketing-theme .mk-mark{flex-wrap:wrap;width:auto}
+  .marketing-theme .mk-mark .mk-lb{white-space:normal}
+}
+@media(max-width:540px){
+  .marketing-theme .mk-foot-grid{grid-template-columns:1fr}
+  .marketing-theme .mk-hero h1{font-size:38px}
+  .marketing-theme .mk-reck h2{font-size:36px}
+}
+
+/* ─── Shared content-page CSS below this line ────────────────────────────────
+   NOT landing-page styling. /resources, /contact, /legal/* and the footer's
+   legal modal depend on it. */
+
+/* page header for /resources and /contact. These predate the v6 landing and
+   were laid out by the browser's default h1/p margins — which the landing's
+   `h1,h2,h3,h4{margin:0}` reset removes, so the spacing is explicit here. */
+.marketing-theme .mk-sec-head{max-width:40em;margin-bottom:34px}
+.marketing-theme .mk-sec-head .mk-eyebrow{display:block;margin-bottom:14px}
+.marketing-theme .mk-sec-head h1{font-size:clamp(34px,4vw,50px);margin:0 0 18px}
+.marketing-theme .mk-sec-head h2{font-size:clamp(28px,3.2vw,42px);margin:0 0 16px}
+.marketing-theme .mk-sec-head p{font-size:18px;line-height:1.55;color:var(--mk-ink-2)}
+.marketing-theme .mk-res-card p{margin:0}
 
 /* legal prose — themed markdown for /legal pages and the footer modal */
 .marketing-theme .mk-prose{color:var(--mk-ink);font-size:16px;line-height:1.7;max-width:46em}

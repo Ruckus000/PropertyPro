@@ -1,32 +1,35 @@
 import React from 'react';
+import { SectionMark } from './marketing-brand';
+import { MarketingPhoto } from './marketing-photo';
 
-/** Warm closing CTA band. */
 export function FinalCtaSection() {
   return (
-    <section className="mk-band">
-      <div className="mk-wrap">
-        <div className="mk-final">
-          <h2 className="mk-display">Beat the deadline across every community.</h2>
-          {/*
-            Was "Join the Florida management companies running compliant…".
-            That implies an existing customer base we do not have yet — the same
-            defect as the fabricated testimonial and logo strip un-rendered in
-            (marketing)/page.tsx, just in smaller type. Restore a social-proof
-            framing only when there are real customers to point at.
-          */}
-          <p>
-            Compliant, modern, transparent portfolios — without the stress of
-            tracking every deadline by hand.
-          </p>
-          <div className="mk-cta-row">
-            <a href="/signup" className="mk-pill mk-pill-primary">
-              Get your portfolio online →
-            </a>
-            <a href="/contact" className="mk-pill mk-pill-ghost mk-pill-ghost-inverse">
-              Talk to us
-            </a>
-          </div>
+    <section className="mk-close" aria-labelledby="close-h">
+      <div className="mk-close-copy">
+        <SectionMark index="§720" label="Get on the record" />
+        <h2 className="mk-display" id="close-h">
+          Put the next twelve months of deadlines somewhere other than your memory.
+        </h2>
+        <p>Bring one association online this week.</p>
+        <div className="mk-close-cta">
+          <a className="mk-pill mk-pill-inverse" href="/signup">
+            Start a trial
+          </a>
+          <a className="mk-pill mk-pill-ghost-inverse" href="/contact">
+            Talk to us
+          </a>
         </div>
+      </div>
+      <div className="mk-close-shot">
+        <MarketingPhoto
+          name="close-coast"
+          widths={[800, 1440]}
+          // Half the viewport on desktop, full width once .mk-close stacks.
+          sizes="(max-width: 900px) 100vw, 50vw"
+          alt=""
+          width={1800}
+          height={1350}
+        />
       </div>
     </section>
   );
