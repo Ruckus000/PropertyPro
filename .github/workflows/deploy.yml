@@ -1,11 +1,33 @@
 name: Deploy
 
 on:
-  # Production deploy only after CI passes on main
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  # Push to main, directly. This USED to be `workflow_run: [CI]` — deploy only
+  # after CI passed on main. #976 moved CI off GitHub (Actions minutes ran out)
+  # and DISABLED ci.yml, and a disabled workflow never completes, so that
+  # trigger could never fire again: every merge after #976 landed on main and
+  # silently went nowhere, the exact two-week failure mode the comment below
+  # describes. The unit/build gate `workflow_run` used to encode now runs as
+  # localci's pre-push gate + suite on the branch head; with squash merges the
+  # merged tree is identical to the branch head whenever the branch was 0
+  # behind main. Integration Tests still run on GitHub, and the `gate` job
+  # below still refuses to deploy until they pass for this exact sha — that
+  # part is unchanged.
+  #
+  # If ci.yml is ever re-enabled, restore the workflow_run trigger and drop
+  # this one, or every merge will deploy twice.
+  push:
     branches: [main]
+    # Same inert-path list as ci.yml's push trigger, and it MUST stay in sync:
+    # under workflow_run these commits never deployed (CI itself skipped, so
+    # its completion event never came); listing them here preserves that. A
+    # docs-only commit cannot change build output, so deploying it is pure
+    # churn against the production environment.
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.claude/**'
+      - '.vscode/**'
+      - 'LICENSE'
   # Manual trigger. Deploys are otherwise reachable ONLY by landing a commit on
   # main, which makes two ordinary operations awkward: applying a changed Vercel
   # env var (values are baked in at `vercel pull` + `vercel build`, so an existing
@@ -29,14 +51,11 @@ jobs:
   # dependency skips its dependents, so this condition governs all of them.
   gate:
     name: Require Integration Tests
-    # Auto: only when CI actually succeeded. Manual: the operator has decided,
-    # and a dispatch carries no workflow_run conclusion to check — without this
-    # second branch the dispatch trigger above would be accepted and then
-    # silently skip every job.
-    if: >-
-      (github.event_name == 'workflow_run'
-        && github.event.workflow_run.conclusion == 'success')
-      || github.event_name == 'workflow_dispatch'
+    # Both remaining triggers proceed to the gate: a push has no upstream
+    # conclusion to check anymore (localci validated the branch pre-push), and
+    # a dispatch means the operator has decided. The Integration Tests step
+    # below is what actually stands between a push and production.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -46,7 +65,7 @@ jobs:
 
     steps:
       # `Integration Tests` is a required check for MERGING, but it is a separate
-      # workflow, and this one triggers on `workflow_run: [CI]` only. So green CI
+      # workflow. Back when this triggered on `workflow_run: [CI]`, green CI
       # plus red integration-tests used to deploy to production anyway.
       #
       # Gating by adding `Integration Tests` to the `workflows:` trigger list does
@@ -60,11 +79,13 @@ jobs:
         # hatch that exists *because* this pipeline once silently blocked every
         # production deploy for two weeks; giving it a new way to refuse would
         # recreate exactly that failure mode. A human running it has decided.
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          # On push this IS the merge commit — under workflow_run it had to be
+          # dug out of the triggering run's payload.
+          HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           echo "Resolving Integration Tests for $HEAD_SHA"
