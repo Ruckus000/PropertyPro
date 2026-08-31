@@ -143,8 +143,13 @@ describeDb('Statutory compliance deadlines (db-backed integration)', () => {
     );
 
     const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    // Should have all 16 condo items
-    expect(json.data.length).toBe(16);
+    // 17 since `718_meeting_notices` was added: the condo template had no
+    // meeting-notice item at all, so an association could sit at 100% having
+    // never posted a notice or agenda, while meeting-calculator computed the
+    // 14-day / 48-hour lead times the whole time. The HOA template already had
+    // its equivalent. See docs/audits/2026-08-09-legal-risk-audit.md F-01.
+    expect(json.data.length).toBe(17);
+    expect(json.data.some((item) => item.templateKey === '718_meeting_notices')).toBe(true);
   });
 
   it('HOA community generates exactly 10 checklist items', async () => {
