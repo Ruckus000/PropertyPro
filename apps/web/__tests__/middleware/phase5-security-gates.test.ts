@@ -111,6 +111,53 @@ describe('WS72 middleware rate-limit and spoofing hardening', () => {
     expect(payload.error).toBe('Unauthorized');
   });
 
+  /**
+   * The counterpart to the 401 case above.
+   *
+   * `/api/v1` is a protected prefix, so a sessionless route is unreachable
+   * unless it is in TOKEN_AUTH_ROUTES. The community bulk-email unsubscribe
+   * shipped in #982 without an entry and was INERT in production: Gmail's
+   * RFC 8058 one-click POST got a 401, and a human clicking the visible link
+   * was redirected to /auth/login — the exact login wall the feature exists to
+   * remove.
+   *
+   * Both verbs are asserted separately. `isTokenAuthenticatedApiRoute` matches
+   * path AND method, so a GET-only entry would leave the POST 401'd; that is
+   * the shape that once broke every cron.
+   */
+  it('does NOT 401 the no-login unsubscribe GET without a session', async () => {
+    mockAuthState(null);
+
+    const response = await middleware(
+      createApiRequest('/api/v1/notifications/unsubscribe?token=whatever', 'GET'),
+    );
+
+    expect(response.status).not.toBe(401);
+  });
+
+  it('does NOT 401 the no-login unsubscribe POST — the one-click target', async () => {
+    mockAuthState(null);
+
+    const response = await middleware(
+      createApiRequest('/api/v1/notifications/unsubscribe?token=whatever', 'POST'),
+    );
+
+    expect(response.status).not.toBe(401);
+  });
+
+  it('control: a NEIGHBOURING /api/v1/notifications path is still 401 without a session', async () => {
+    // Proves the carve-out is path-exact rather than a prefix hole. Without
+    // this, an entry that accidentally matched all of /api/v1/notifications
+    // would satisfy both cases above while exposing the rest of the namespace.
+    mockAuthState(null);
+
+    const response = await middleware(
+      createApiRequest('/api/v1/notifications/unread-count', 'GET'),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   it('strips spoofed tenant headers before forwarding downstream', async () => {
     const spoofedCommunity = '1;DROP TABLE communities;--';
     const spoofedUser = 'attacker-user';
