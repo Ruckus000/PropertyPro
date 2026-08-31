@@ -14,6 +14,7 @@
     "new:resource": "tsx scripts/scaffold-resource.ts",
     "seed:demo": "tsx --tsconfig apps/web/tsconfig.json scripts/seed-demo.ts",
     "reset:demo": "tsx --tsconfig apps/web/tsconfig.json scripts/reset-demo.ts",
+    "demo:enable-gates": "tsx --tsconfig apps/web/tsconfig.json scripts/demo-enable-gates.ts",
     "seed:verify": "tsx scripts/verify-seed-evidence.ts",
     "reap:test-communities": "tsx --tsconfig apps/web/tsconfig.json scripts/reap-test-communities.ts",
     "address-index:build": "tsx scripts/address-index/build.ts",

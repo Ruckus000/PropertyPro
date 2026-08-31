@@ -13,6 +13,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { BroadcastComposer } from '@/components/emergency/BroadcastComposer';
+import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
@@ -49,9 +50,17 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
       <PageHeader
         title="Send Emergency Alert"
       />
+      {/*
+        BOTH layers, not just the per-community flag. The service checks the env
+        floor as well, so passing only `membership.smsDispatchEnabled` would offer
+        an SMS channel that silently gets skipped server-side — worse than not
+        offering it, because the admin would believe texts went out.
+        See @/lib/sms/common.
+      */}
       <BroadcastComposer
         communityId={context.communityId}
         communityName={communityName}
+        smsEnabled={isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled}
       />
     </div>
   );

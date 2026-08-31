@@ -82,6 +82,16 @@ export const createDocumentBodySchema = z.object({
   fileName: z.string().min(1),
   fileSize: z.number().int().positive(),
   mimeType: z.string().min(1).optional(),
+  /**
+   * The uploader's attestation that protected personal information has been
+   * redacted (§718.111(12)(c)).
+   *
+   * Optional in the SCHEMA, required by the HANDLER for categories that
+   * routinely contain such information — the check needs the category's name,
+   * which is a database read, so Zod cannot express it. See
+   * `isRedactionSensitiveCategory` and F-02.
+   */
+  redactionAttested: z.boolean().optional(),
 });
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;

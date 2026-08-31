@@ -8,6 +8,7 @@
  * - X-Export-Truncated header when data is truncated
  * - communityId validation
  */
+import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
@@ -53,28 +54,30 @@ vi.mock('@/lib/services/community-export', () => ({
 }));
 
 vi.mock('archiver', () => {
+  // A REAL PassThrough, not a hand-rolled EventEmitter.
+  //
+  // The route bridges the archive to a web stream with `Readable.toWeb`, which
+  // duck-types on `_readableState` — a plain object with `on`/`append` throws
+  // `The "streamReadable" argument must be an stream.Readable`. The previous
+  // mock was that plain object, and it only "worked" because the route used to
+  // hand-roll the bridge off raw 'data' events (with no backpressure — the very
+  // defect that change fixed). A mock that cannot fail the way production fails
+  // is not testing production.
+  //
+  // Verified against the real library: archiver is NOT `instanceof Readable`,
+  // but Readable.toWeb accepts it, and a two-entry archive yields ~251 bytes.
   return {
     default: vi.fn(() => {
-      const listeners: Record<string, Array<(arg: unknown) => void>> = {};
-      return {
-        on: vi.fn((event: string, cb: (arg: unknown) => void) => {
-          if (!listeners[event]) listeners[event] = [];
-          listeners[event].push(cb);
-        }),
-        append: vi.fn((content: string) => {
-          const buf = Buffer.from(content, 'utf-8');
-          if (listeners['data']) {
-            for (const cb of listeners['data']) cb(buf);
-          }
-        }),
-        finalize: vi.fn(() => {
-          // Emit 'end' so the ReadableStream controller closes
-          if (listeners['end']) {
-            for (const cb of listeners['end']) cb(undefined);
-          }
-          return Promise.resolve();
-        }),
-      };
+      const pass = new PassThrough();
+      const archive = pass as unknown as Record<string, unknown>;
+      archive.append = vi.fn((content: string) => {
+        pass.write(Buffer.from(String(content), 'utf-8'));
+      });
+      archive.finalize = vi.fn(() => {
+        pass.end();
+        return Promise.resolve();
+      });
+      return archive;
     }),
   };
 });
@@ -180,10 +183,43 @@ describe('GET /api/v1/export', () => {
     expect(exportAnnouncementsMock).toHaveBeenCalledWith(42);
   });
 
-  it('allows owner role access', async () => {
+  // ── This block asserted the OPPOSITE, and the assertion was the bug ────────
+  //
+  // The route gated on `requirePermission(membership, 'settings', 'read')`,
+  // which the RBAC matrix grants to the `owner` row — so every unit owner could
+  // pull a CSV of every resident's full name and email address. The test
+  // faithfully encoded that as intended behaviour, which is why nothing caught
+  // it. The bar is now management-tier-or-board.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-07.
+
+  it('REFUSES a plain unit owner', async () => {
     requireCommunityMembershipMock.mockResolvedValue({
       role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
-      communityType: 'condo_718',
+      communityType: 'condo_718', designation: null,
+    });
+
+    const res = await GET(makeRequest(42));
+    expect(res.status).toBe(403);
+    expect(exportResidentsMock).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES a tenant', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
+      communityType: 'condo_718', designation: null,
+    });
+
+    const res = await GET(makeRequest(42));
+    expect(res.status).toBe(403);
+  });
+
+  it('allows a board member, who is a resident with a designation', async () => {
+    // Designation is orthogonal to role (ADR-006 §3.2), so a self-managed
+    // association's board would be refused by an isAdmin-only check — and they
+    // are exactly who runs this.
+    requireCommunityMembershipMock.mockResolvedValue({
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Board President',
+      communityType: 'condo_718', designation: 'board_president',
     });
 
     const res = await GET(makeRequest(42));

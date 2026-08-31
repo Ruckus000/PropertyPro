@@ -20,6 +20,8 @@ import {
   type EnqueueDigestItemInput,
 } from '@/lib/services/notification-digest-queue';
 import { getBaseUrl } from '@/lib/utils/url';
+import { loadEmailBranding } from './email-branding';
+import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
 
 export type AnnouncementAudience = 'all' | 'owners_only' | 'board_only' | 'tenants_only';
 
@@ -148,16 +150,6 @@ async function resolveRecipients(
   return recipients;
 }
 
-async function loadBranding(communityId: number): Promise<{ communityName: string }> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows.find((row) => row['id'] === communityId);
-  return {
-    communityName:
-      typeof community?.['name'] === 'string' ? (community['name'] as string) : 'PropertyPro',
-  };
-}
-
 async function markStatus(
   communityId: number,
   announcementId: number,
@@ -248,21 +240,34 @@ async function deliverImmediateAnnouncementEmails(
 ): Promise<number> {
   if (recipients.length === 0) return 0;
 
-  const branding = await loadBranding(params.communityId);
+  const branding = await loadEmailBranding(params.communityId);
   const portalUrl = `${getBaseUrl()}/dashboard?communityId=${params.communityId}`;
-  const unsubscribeUrl = `${getBaseUrl()}/settings?communityId=${params.communityId}`;
 
   for (const batch of chunk(recipients, 100)) {
     await Promise.all(
       batch.map(async (recipient) => {
         try {
+          // Per-recipient and no-login: the previous `/settings?communityId=`
+          // URL was behind an auth wall, which defeats Gmail's one-click
+          // List-Unsubscribe POST and CAN-SPAM's no-account expectation.
+          const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+            baseUrl: getBaseUrl(),
+            communityId: params.communityId,
+            userId: recipient.userId,
+            topic: 'announcements',
+          });
+
           const result = await sendEmail({
             to: recipient.email,
             subject: `${params.isPinned ? '[Important] ' : ''}${params.title}`,
             category: 'non-transactional',
             unsubscribeUrl,
             react: createElement(AnnouncementEmail, {
-              branding,
+              branding: {
+                ...branding,
+                unsubscribeUrl,
+                unsubscribeLabel: 'Unsubscribe from announcements',
+              },
               recipientName: recipient.fullName,
               announcementTitle: params.title,
               announcementBody: params.body,

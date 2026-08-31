@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { compileMDX } from 'next-mdx-remote/rsc';
 import { ArticleFeedback } from '@/components/help/article-feedback';
 import { ArticleViewTracker } from '@/components/help/article-view-tracker';
+import { HelpArticleDisclaimer } from '@/components/help/help-article-disclaimer';
 import { TableOfContents, helpMdxComponents } from '@/components/help/mdx-components';
 import { PageHeader } from '@/components/shared/page-header';
 import { requireHelpPageContext } from '@/lib/help/page-context';
@@ -132,9 +133,13 @@ export default async function HelpArticlePage({
       )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
-        <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
-          {content}
-        </article>
+        <div className="space-y-4">
+          {/* Injected, never authored — see HelpArticleDisclaimer. */}
+          <HelpArticleDisclaimer statutes={article.metadata.statutes ?? []} />
+          <article className="rounded-2xl border border-edge bg-surface-card p-6 shadow-sm">
+            {content}
+          </article>
+        </div>
 
         {tocItems.length > 0 && (
           <aside className="hidden lg:block">

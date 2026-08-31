@@ -77,6 +77,33 @@ export function PublicSiteFooter({
         {showStatutoryLine ? (
           <p className="text-center sm:text-left">{STATUTORY_FOOTER_LINE}</p>
         ) : null}
+
+        {/*
+          Accessibility statement — NOT opt-in, unlike the statutory line above.
+
+          A public association website is the surface an ADA demand letter
+          actually targets, and the single most protective thing on it is a
+          documented channel for requesting an accommodation: it changes the
+          posture of a negotiation from "no response mechanism existed" to "here
+          is where you ask and what we commit to". A PM toggle would mean the
+          sites most likely to need it are the ones that switch it off.
+
+          Absolute path, not the tenant host: the statement lives on the
+          PropertyPro marketing domain because the commitment it describes — the
+          five-business-day response — is ours to keep, not the association's.
+
+          See docs/audits/2026-08-09-legal-risk-audit.md F-12.
+        */}
+        <p className="text-center sm:text-left">
+          <a
+            href="https://getpropertypro.com/legal/accessibility"
+            className="text-content-link hover:text-content-link font-medium"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Accessibility
+          </a>
+        </p>
       </div>
     </footer>
   );

@@ -60,6 +60,8 @@ vi.mock('@/lib/db/access-control', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   requireViolationsEnabled: requireViolationsEnabledMock,
 }));
 

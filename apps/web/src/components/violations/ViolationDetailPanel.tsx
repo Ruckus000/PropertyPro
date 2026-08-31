@@ -24,7 +24,19 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss' | null;
 
-function getAvailableActions(status: string): { label: string; action: ActionType; variant: string }[] {
+/**
+ * `finesEnabled` reflects the per-community `violationFinesEnabled` legal gate.
+ * When false the "Impose Fine" action is removed from the list rather than
+ * rendered-and-disabled: a disabled button invites a support ticket asking how to
+ * enable it, and the server 403s the call regardless. The server guard in
+ * api/v1/violations/[id]/fine is authoritative — this is presentation only.
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-04.
+ */
+function getAvailableActions(
+  status: string,
+  finesEnabled: boolean,
+): { label: string; action: ActionType; variant: string }[] {
+  const actions = ((): { label: string; action: ActionType; variant: string }[] => {
   switch (status) {
     case 'reported':
       return [{ label: 'Send Notice', action: 'notice', variant: 'primary' }];
@@ -44,6 +56,10 @@ function getAvailableActions(status: string): { label: string; action: ActionTyp
     default:
       return [];
   }
+  })();
+
+  // Fines are gated per-community; drop the action entirely when disabled.
+  return actions.filter((a) => a.action !== 'fine' || finesEnabled);
 }
 
 const VARIANT_STYLES: Record<string, string> = {
@@ -58,6 +74,8 @@ interface ViolationDetailPanelProps {
   communityId: number;
   userId: string;
   userRole: CommunityRole;
+  /** Per-community `violationFinesEnabled` legal gate. Server guard is authoritative. */
+  finesEnabled: boolean;
   onActionComplete: () => void;
 }
 
@@ -66,11 +84,12 @@ export function ViolationDetailPanel({
   communityId,
   userId,
   userRole,
+  finesEnabled,
   onActionComplete,
 }: ViolationDetailPanelProps) {
   const [activeAction, setActiveAction] = useState<ActionType>(null);
 
-  const actions = getAvailableActions(violation.status);
+  const actions = getAvailableActions(violation.status, finesEnabled);
 
   return (
     <div className="mt-1 rounded-b-md border border-t-0 border-edge bg-surface-card p-4">

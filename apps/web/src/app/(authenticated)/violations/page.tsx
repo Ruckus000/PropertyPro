@@ -55,10 +55,17 @@ export default async function ViolationsPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasViolations" communityId={communityId}>
+      {/*
+        Legal gates ride on `membership` (hydrated from community_settings), NOT
+        through <FeatureGate> — that resolves via requirePlanFeature, which fails
+        open when a community has no plan. Passing a plain boolean from this
+        server component is the same pattern the board layout uses.
+      */}
       <ViolationsAdminInbox
         communityId={communityId}
         userId={userId}
         userRole={membership.role}
+        finesEnabled={membership.violationFinesEnabled}
       />
     </FeatureGate>
   );

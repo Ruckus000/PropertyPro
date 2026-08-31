@@ -13,6 +13,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import {
   requireFinanceAdminWrite,
   requireFinanceEnabled,
+  requirePaymentsEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
 import { startConnectOnboarding } from '@/lib/services/finance-service';
@@ -24,6 +25,8 @@ export const POST = withErrorHandler(
     const communityId = parseCommunityIdFromBody(req, body.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
+    // Legal gate — online payments ship disabled (audit F-15).
+    requirePaymentsEnabled(membership);
     requireFinanceWritePermission(membership);
     requireFinanceAdminWrite(membership);
     await requireActiveSubscriptionForMutation(communityId);

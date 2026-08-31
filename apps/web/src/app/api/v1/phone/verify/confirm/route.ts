@@ -9,6 +9,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { withErrorHandler } from '@/lib/api/error-handler';
+import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
@@ -58,7 +59,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const verifySid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
-  if (!accountSid || !authToken || !verifySid) {
+  // Global SMS kill switch. These routes call Twilio Verify DIRECTLY rather than
+  // going through sms-service, so the service-level floor does not cover them —
+  // and they are userId-scoped with no communityId, so the per-community
+  // `smsDispatchEnabled` flag cannot reach them either. The env floor is the only
+  // gate available here. Reuses the existing 503 shape the client already
+  // handles. See @/lib/sms/common and audit F-10.
+  if (!isSmsDispatchGloballyEnabled() || !accountSid || !authToken || !verifySid) {
     return NextResponse.json(
       { error: 'SMS verification is not configured' },
       { status: 503 },

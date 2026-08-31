@@ -70,7 +70,19 @@ tmp/
 # Local Supabase stack, from `supabase init` in a worktree when verifying UI
 # that needs Auth + Storage (the disposable test Postgres is not enough).
 # Machine-specific: ports get shifted per worktree to let stacks coexist.
-supabase/
+#
+# ROOT-ANCHORED, and it has to be. Unanchored, `supabase/` matches a directory
+# at ANY depth — including `packages/db/src/supabase/` and
+# `apps/web/src/lib/supabase/`, which are source. That is not hypothetical: it
+# silently swallowed `packages/db/src/supabase/storage-stream.ts` from a
+# `git add -A`, and the failure surfaced only in CI, as
+# `Could not resolve "./supabase/storage-stream"` while every local check was
+# green (local tooling tests the WORKING TREE; CI tests the COMMIT).
+#
+# It hid for so long because .gitignore only affects UNTRACKED files: the eight
+# files already tracked in that directory kept working, so the directory looked
+# tracked and nothing flagged that a ninth would not be.
+/supabase/
 
 # Stray screenshots dropped at the repo root by UI/design sessions.
 # Root-scoped (leading slash) so committed images under .claude/artifacts/

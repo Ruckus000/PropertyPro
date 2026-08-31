@@ -34,6 +34,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   requireFinanceEnabled: requireFinanceEnabledMock,
   requireFinanceReadPermission: requireFinanceReadPermissionMock,
   parseDateOnly: (s: string) => s,

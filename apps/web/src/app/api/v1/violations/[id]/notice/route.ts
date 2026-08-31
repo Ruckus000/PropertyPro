@@ -8,6 +8,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
+  requireNoticePdfEnabled,
   requireViolationAdminWrite,
   requireViolationsEnabled,
 } from '@/lib/violations/common';
@@ -33,6 +34,10 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
+    // Legal gate — generated notices ship disabled. This PDF states legal
+    // conclusions and names the Board as imposing the fine where the statute
+    // requires a fining committee. See docs/audits/2026-08-09-legal-risk-audit.md F-05.
+    requireNoticePdfEnabled(membership);
     requireViolationAdminWrite(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);

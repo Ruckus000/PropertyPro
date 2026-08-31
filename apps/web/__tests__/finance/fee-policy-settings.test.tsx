@@ -6,9 +6,11 @@
  * asserted directly.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 const useFeePolicyMock = vi.fn();
+// `useUpdateFeePolicy` is still mocked because the module exports it, but the
+// component no longer calls it — there is nothing left to update (F-16).
 const useUpdateFeePolicyMock = vi.fn();
 
 vi.mock('@/hooks/use-fee-policy', () => ({
@@ -55,7 +57,46 @@ describe('FeePolicySettings', () => {
     ).toBeInTheDocument();
   });
 
-  it('marks the current policy and only shows actions when dirty', () => {
+  // ── The choice is gone (F-16) ────────────────────────────────────────────
+  //
+  // These three blocks previously drove a two-option radio group: select
+  // `association_absorbs`, assert the Save button appears, assert the mutation
+  // fires, assert an unsaved selection is dropped on community switch. All of
+  // that described `owner_pays` being selectable, which is the defect — the fee
+  // was computed at card rates and applied to debit cards, which card-network
+  // rules prohibit. The mode was retired rather than repaired, so there is
+  // nothing to select and no mutation to fire.
+
+  it('offers NO way to pass fees to unit owners', () => {
+    useFeePolicyMock.mockReturnValue({
+      data: 'association_absorbs',
+      isPending: false,
+      isError: false,
+    });
+    render(<FeePolicySettings communityId={1} />);
+
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Pass fees to unit owners/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Save Changes' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('states the policy that is actually in force', () => {
+    useFeePolicyMock.mockReturnValue({
+      data: 'association_absorbs',
+      isPending: false,
+      isError: false,
+    });
+    render(<FeePolicySettings communityId={1} />);
+
+    expect(screen.getByText('Association absorbs fees')).toBeInTheDocument();
+  });
+
+  it('tells a community with owner_pays STORED that it is no longer used', () => {
+    // The stored value is deliberately not deleted, so it still reads back.
+    // Silently rendering a different setting than the one saved would leave a
+    // PM believing they had configured something they had not.
     useFeePolicyMock.mockReturnValue({
       data: 'owner_pays',
       isPending: false,
@@ -63,83 +104,23 @@ describe('FeePolicySettings', () => {
     });
     render(<FeePolicySettings communityId={1} />);
 
-    const ownerRadio = screen.getByRole('radio', {
-      name: /Pass fees to unit owners/,
-    }) as HTMLInputElement;
-    expect(ownerRadio.checked).toBe(true);
     expect(
-      screen.queryByRole('button', { name: 'Save Changes' }),
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole('radio', { name: /Association absorbs fees/ }),
-    );
-    expect(
-      screen.getByRole('button', { name: 'Save Changes' }),
+      screen.getByText('Your previous fee setting is no longer used'),
     ).toBeInTheDocument();
+    expect(screen.getByText(/card-network rules do not permit/)).toBeInTheDocument();
   });
 
-  it('calls the mutation with the selected policy and clears the selection on success', () => {
-    const mutate = vi.fn((_p, opts) => opts.onSuccess());
+  it('shows no such banner for a community that never used owner_pays', () => {
     useFeePolicyMock.mockReturnValue({
-      data: 'owner_pays',
+      data: 'association_absorbs',
       isPending: false,
       isError: false,
     });
-    useUpdateFeePolicyMock.mockReturnValue(makeMutation({ mutate }));
-
     render(<FeePolicySettings communityId={1} />);
-    fireEvent.click(
-      screen.getByRole('radio', { name: /Association absorbs fees/ }),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
-    expect(mutate).toHaveBeenCalledWith(
-      'association_absorbs',
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
-    // selection cleared → dirty actions disappear
     expect(
-      screen.queryByRole('button', { name: 'Save Changes' }),
+      screen.queryByText('Your previous fee setting is no longer used'),
     ).not.toBeInTheDocument();
   });
 
-  it('clears an unsaved selection when communityId changes', () => {
-    useFeePolicyMock.mockReturnValue({
-      data: 'owner_pays',
-      isPending: false,
-      isError: false,
-    });
-    const { rerender } = render(<FeePolicySettings communityId={1} />);
-
-    fireEvent.click(
-      screen.getByRole('radio', { name: /Association absorbs fees/ }),
-    );
-    expect(
-      screen.getByRole('button', { name: 'Save Changes' }),
-    ).toBeInTheDocument();
-
-    rerender(<FeePolicySettings communityId={2} />);
-    expect(
-      screen.queryByRole('button', { name: 'Save Changes' }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('renders the mutation error message verbatim', () => {
-    useFeePolicyMock.mockReturnValue({
-      data: 'owner_pays',
-      isPending: false,
-      isError: false,
-    });
-    useUpdateFeePolicyMock.mockReturnValue(
-      makeMutation({
-        isError: true,
-        error: new Error('Failed to update fee policy'),
-      }),
-    );
-    render(<FeePolicySettings communityId={1} />);
-    expect(
-      screen.getByText('Failed to update fee policy'),
-    ).toBeInTheDocument();
-  });
 });

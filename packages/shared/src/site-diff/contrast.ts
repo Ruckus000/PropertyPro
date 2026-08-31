@@ -207,9 +207,17 @@ export function contrastIssues(
     const ratio = contrastRatio(value, pair.against);
     if (ratio === null || ratio >= AA_NORMAL_TEXT_RATIO) continue;
 
+    // Naming WCAG AA and the audience is deliberate. This advisory is
+    // non-blocking by design (see the long note on `contrastIssues` in
+    // PublishSheet), which means its only job is to make an administrator's
+    // choice an INFORMED one. "Below the ratio needed to stay readable" reads as
+    // a style nitpick; association websites are public accommodations and
+    // Florida is a high-volume jurisdiction for website accessibility claims, so
+    // the copy should say what the standard is and who is affected.
+    // See docs/audits/2026-08-09-legal-risk-audit.md F-12.
     issues.push({
       field: pair.field,
-      message: `${pair.label} has a contrast ratio of ${ratio.toFixed(2)}:1, below the ${AA_NORMAL_TEXT_RATIO}:1 needed to stay readable.`,
+      message: `${pair.label} has a contrast ratio of ${ratio.toFixed(2)}:1, below the ${AA_NORMAL_TEXT_RATIO}:1 required by WCAG 2.1 AA. Residents with low vision may be unable to read this text. Publishing is still allowed, but the association carries the accessibility risk.`,
       severity: pair.alwaysWarning ? 'warning' : severity,
     });
   }

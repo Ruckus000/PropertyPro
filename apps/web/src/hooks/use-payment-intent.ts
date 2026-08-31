@@ -11,6 +11,15 @@ export interface PaymentIntentResponse {
   totalChargeCents: number;
   currency: string;
   feePolicy: PaymentFeePolicy;
+  /**
+   * The association's connected Stripe account.
+   *
+   * Required by the browser: payments are direct charges, so Stripe.js has to
+   * be loaded with `{ stripeAccount }` for the client secret to resolve at all
+   * (F-15). Optional in the type only so a cached response from before this
+   * shipped does not crash the dialog.
+   */
+  stripeAccountId?: string;
 }
 
 export interface UpdateIntentResponse {

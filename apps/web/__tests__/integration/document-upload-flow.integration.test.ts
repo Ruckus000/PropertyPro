@@ -223,6 +223,11 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
         filePath: `communities/${communityA.id}/documents/test-${kit.runSuffix}.pdf`,
         fileName: `test-${kit.runSuffix}.pdf`,
         fileSize: PDF_MAGIC.byteLength,
+        // Required since F-02: uploading into a redaction-sensitive category
+        // without attesting is a 400 BEFORE the row is created. This file tests
+        // upload mechanics, so it attests; the gate itself is covered below and
+        // in __tests__/documents/redaction-attestation.test.ts.
+        redactionAttested: true,
       }),
     );
 
@@ -252,6 +257,11 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
         filePath: `communities/${communityA.id}/documents/test-${kit.runSuffix}.png`,
         fileName: `test-${kit.runSuffix}.png`,
         fileSize: PNG_MAGIC.byteLength,
+        // Required since F-02: uploading into a redaction-sensitive category
+        // without attesting is a 400 BEFORE the row is created. This file tests
+        // upload mechanics, so it attests; the gate itself is covered below and
+        // in __tests__/documents/redaction-attestation.test.ts.
+        redactionAttested: true,
       }),
     );
 
@@ -280,10 +290,43 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
         filePath: `communities/${communityA.id}/documents/invalid-${kit.runSuffix}.exe`,
         fileName: `invalid-${kit.runSuffix}.exe`,
         fileSize: INVALID_MAGIC.byteLength,
+        // Required since F-02: uploading into a redaction-sensitive category
+        // without attesting is a 400 BEFORE the row is created. This file tests
+        // upload mechanics, so it attests; the gate itself is covered below and
+        // in __tests__/documents/redaction-attestation.test.ts.
+        redactionAttested: true,
       }),
     );
 
     expect(response.status).toBe(422);
+  });
+
+  it('POST into a redaction-sensitive category WITHOUT an attestation is refused', async () => {
+    // The gate that the three cases above now satisfy explicitly. Asserted here
+    // and not only in unit tests because it depends on a real category-name
+    // lookup: `categoryRequiresRedactionAttestation` resolves the category's
+    // NAME from the database, since categoryId is per-community and means
+    // nothing on its own. A mock cannot show that the seeded default category
+    // actually resolves as sensitive.
+    const kit = requireState();
+    const route = requireDocumentsRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    mockStorageBytes.current = PDF_MAGIC;
+
+    const response = await route.POST(
+      jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
+        communityId: communityA.id,
+        title: `Unattested Doc ${kit.runSuffix}`,
+        categoryId: requireCommunityADefaultCategoryId(),
+        filePath: `communities/${communityA.id}/documents/unattested-${kit.runSuffix}.pdf`,
+        fileName: `unattested-${kit.runSuffix}.pdf`,
+        fileSize: PDF_MAGIC.byteLength,
+        // redactionAttested deliberately omitted
+      }),
+    );
+
+    expect(response.status).toBe(400);
   });
 
   // =========================================================================

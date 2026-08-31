@@ -1761,6 +1761,27 @@ describeDb('P4-55 RLS policies (integration)', () => {
       esign_signers: ['pp_esign_admin_delete', 'pp_esign_admin_insert', 'pp_esign_admin_update', 'pp_tenant_select'],
       esign_events: ['pp_esign_events_admin_insert', 'pp_tenant_select'],
       esign_consent: ['pp_esign_consent_admin_delete', 'pp_esign_consent_insert', 'pp_esign_consent_update', 'pp_tenant_select'],
+      // community_export_job{,_parts} (tenant_admin_write): 0058 named the SELECT
+      // policy per table rather than using the canonical shared `pp_tenant_select`.
+      // A deviation, not a defect — the policy itself is the standard
+      // `pp_rls_can_read_audit_log` predicate, and both tables are read through
+      // the service role by the cron worker anyway, so the policy never fires in
+      // practice. Recorded here rather than renamed because 0058 is ALREADY
+      // APPLIED IN PRODUCTION: a rename would need its own migration and a manual
+      // prod apply, for a cosmetic gain. Same posture as onboarding_checklist_items
+      // above ("repaired in place, not renamed").
+      community_export_jobs: [
+        'pp_community_export_jobs_delete',
+        'pp_community_export_jobs_insert',
+        'pp_community_export_jobs_select',
+        'pp_community_export_jobs_update',
+      ],
+      community_export_job_parts: [
+        'pp_community_export_job_parts_delete',
+        'pp_community_export_job_parts_insert',
+        'pp_community_export_job_parts_select',
+        'pp_community_export_job_parts_update',
+      ],
       support_consent_grants: ['consent_community_read', 'consent_service_bypass'],
       support_access_log: ['access_log_community_read', 'access_log_service_bypass'],
       // onboarding_checklist_items (tenant_user_scoped): bespoke per-user policy

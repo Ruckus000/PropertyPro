@@ -24,6 +24,8 @@ vi.mock('@/lib/api/community-membership', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   requireViolationsEnabled: requireViolationsEnabledMock,
 }));
 

@@ -72,9 +72,16 @@ interface ViolationsAdminInboxProps {
   communityId: number;
   userId: string;
   userRole: CommunityRole;
+  /** Per-community `violationFinesEnabled` legal gate. */
+  finesEnabled: boolean;
 }
 
-export function ViolationsAdminInbox({ communityId, userId, userRole }: ViolationsAdminInboxProps) {
+export function ViolationsAdminInbox({
+  communityId,
+  userId,
+  userRole,
+  finesEnabled,
+}: ViolationsAdminInboxProps) {
   const [violations, setViolations] = useState<ViolationItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -265,6 +272,7 @@ export function ViolationsAdminInbox({ communityId, userId, userRole }: Violatio
                   communityId={communityId}
                   userId={userId}
                   userRole={userRole}
+                  finesEnabled={finesEnabled}
                   onActionComplete={handleActionComplete}
                 />
               )}

@@ -29,6 +29,7 @@ const {
   createUnscopedClientMock,
   createAdminClientMock,
   purgeCommunitySiteAssetsMock,
+  purgeCommunityExportArchivesMock,
   logAuditEventMock,
   findCommunitiesUserIsRootOfMock,
   findRootOffboardingImpactMock,
@@ -46,6 +47,7 @@ const {
     createUnscopedClientMock: vi.fn(),
     createAdminClientMock: vi.fn(),
     purgeCommunitySiteAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
+    purgeCommunityExportArchivesMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     logAuditEventMock: vi.fn().mockResolvedValue(undefined),
     findCommunitiesUserIsRootOfMock: vi.fn().mockResolvedValue([]),
     findRootOffboardingImpactMock: vi.fn().mockResolvedValue([]),
@@ -128,6 +130,10 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 
 vi.mock('@/lib/site-assets/cleanup', () => ({
   purgeCommunitySiteAssets: purgeCommunitySiteAssetsMock,
+}));
+
+vi.mock('@/lib/services/export/purge-export-archives', () => ({
+  purgeCommunityExportArchives: purgeCommunityExportArchivesMock,
 }));
 
 vi.mock('@/lib/account-lifecycle/root-offboarding', () => ({
@@ -956,6 +962,7 @@ describe('purgeCommunityData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 0 });
+    purgeCommunityExportArchivesMock.mockResolvedValue({ deletedCount: 0 });
   });
 
   it('sets status to purged', async () => {
@@ -1021,4 +1028,54 @@ describe('purgeCommunityData', () => {
     // Verify no DB update was attempted
     expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
   });
+
+  // ── Export archives must be purged too ────────────────────────────────────
+  //
+  // A generated export archive is a COPY OF THE ENTIRE ASSOCIATION — every table
+  // plus every uploaded document, including resident PII. The export feature
+  // would otherwise have introduced a right-to-erasure hole where a purged
+  // community's whole dataset survived in the exports bucket.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-07.
+  it('purges export archives when communityId is set', async () => {
+    const request = { id: 1, communityId: 100, status: 'soft_deleted' };
+    const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[updatedRequest]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await purgeCommunityData(1);
+
+    expect(purgeCommunityExportArchivesMock).toHaveBeenCalledOnce();
+    expect(purgeCommunityExportArchivesMock).toHaveBeenCalledWith(100);
+  });
+
+  it('does NOT purge export archives for a user deletion', async () => {
+    const request = { id: 2, communityId: null, status: 'soft_deleted' };
+    const updatedRequest = { id: 2, status: 'purged', purgedAt: new Date() };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[updatedRequest]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await purgeCommunityData(2);
+
+    expect(purgeCommunityExportArchivesMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts the status update when export-archive purge throws', async () => {
+    // Same failure posture as site assets: the request must stay retryable
+    // rather than being marked purged with a full dataset still in the bucket.
+    const request = { id: 3, communityId: 100, status: 'soft_deleted' };
+    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    purgeCommunityExportArchivesMock.mockRejectedValueOnce(new Error('storage down'));
+
+    await expect(purgeCommunityData(3)).rejects.toThrow('storage down');
+    expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
+  });
+
+
 });

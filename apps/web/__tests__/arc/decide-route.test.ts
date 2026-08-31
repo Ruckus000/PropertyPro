@@ -46,6 +46,8 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   requireArcEnabled: requireArcEnabledMock,
   requireArcReviewPermission: requireArcReviewPermissionMock,
 }));
@@ -157,32 +159,43 @@ describe('POST /api/v1/arc/[id]/decide', () => {
       {
         decision: 'approved',
         reviewNotes: 'Looks great.',
+        ruleReference: null,
       },
       'req-abc',
     );
   });
 
-  // BEHAVIOUR CHANGE (2026-08-09 feature-correctness audit). This case
-  // previously asserted that a denial with no reviewNotes returned 200 and
-  // persisted `reviewNotes: null`. HB 1203 requires an ARC/ACC denial to state
-  // the specific reason and cite the rule or covenant relied on, so an
-  // unexplained denial must not be representable through this endpoint.
-  it('rejects a denial that carries no written reason (HB 1203)', async () => {
+  // ── Denial requires a written reason ───────────────────────────────────────
+  //
+  // This block previously asserted the OPPOSITE — that a denial with no
+  // reviewNotes returned 200 and coerced to `null`. That was the statutory
+  // defect: HB 1203 (2024) amended §720.3035 to require an architectural-review
+  // denial to be in writing and to state the specific rule or covenant relied
+  // on, and the route let a board deny an owner with an empty reason field.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-03.
+  //
+  // The `?? null` coercion the old title referred to still exists and is still
+  // exercised — by the APPROVAL path, which is legitimately note-optional.
+
+  it('rejects a denial with no reviewNotes', async () => {
     const res = await POST(
       jsonPost(7, { communityId: 42, decision: 'denied' }),
       routeCtx('7'),
     );
 
     expect(res.status).toBe(400);
+    // Assert the error CODE, not just the status: a 400 from a different
+    // failure path (bad communityId, missing submission) would otherwise
+    // satisfy this case without the denial rule firing at all.
     await expect(res.json()).resolves.toMatchObject({
       error: { code: 'VALIDATION_ERROR' },
     });
     expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
   });
 
-  it('rejects a denial whose written reason is only whitespace', async () => {
+  it('rejects a denial whose reviewNotes are only whitespace', async () => {
     const res = await POST(
-      jsonPost(7, { communityId: 42, decision: 'denied', reviewNotes: '   \n  ' }),
+      jsonPost(7, { communityId: 42, decision: 'denied', reviewNotes: '   \n\t  ' }),
       routeCtx('7'),
     );
 
@@ -190,10 +203,59 @@ describe('POST /api/v1/arc/[id]/decide', () => {
     expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
   });
 
-  it('records a denial that carries a written reason', async () => {
-    const reason = 'Denied under Declaration Art. VII §3 — fence exceeds the 4ft height limit.';
+  it('rejects a denial whose reviewNotes are explicitly null', async () => {
     const res = await POST(
-      jsonPost(7, { communityId: 42, decision: 'denied', reviewNotes: reason }),
+      jsonPost(7, { communityId: 42, decision: 'denied', reviewNotes: null }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  // ── The rule citation is its OWN required field ────────────────────────────
+  //
+  // Prose can satisfy a reader without ever naming a rule. §720.3035 asks for
+  // the rule, so `ruleReference` is validated separately rather than trusting
+  // that a board wrote the citation into its notes.
+
+  it('rejects a denial with a written reason but NO rule reference', async () => {
+    const res = await POST(
+      jsonPost(7, {
+        communityId: 42,
+        decision: 'denied',
+        reviewNotes: 'The fence is too tall and does not suit the neighbourhood.',
+      }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a denial whose rule reference is only whitespace', async () => {
+    const res = await POST(
+      jsonPost(7, {
+        communityId: 42,
+        decision: 'denied',
+        reviewNotes: 'Fence height exceeds the limit.',
+        ruleReference: '   ',
+      }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(decideArcSubmissionForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('records a denied decision when BOTH a reason and a rule reference are supplied', async () => {
+    const res = await POST(
+      jsonPost(7, {
+        communityId: 42,
+        decision: 'denied',
+        reviewNotes: 'Fence height exceeds 6 feet.',
+        ruleReference: 'Declaration Art. VII §3',
+      }),
       routeCtx('7'),
     );
 
@@ -204,13 +266,16 @@ describe('POST /api/v1/arc/[id]/decide', () => {
       'user-admin-1',
       {
         decision: 'denied',
-        reviewNotes: reason,
+        reviewNotes: 'Fence height exceeds 6 feet.',
+        ruleReference: 'Declaration Art. VII §3',
       },
       null,
     );
   });
 
-  it('still allows an approval with no reviewNotes', async () => {
+  // Approvals stay note-optional: the statute's writing requirement attaches to
+  // denials. This is also what still covers the `?? null` coercion.
+  it('records an approval without reviewNotes (?? null coercion)', async () => {
     const res = await POST(
       jsonPost(7, { communityId: 42, decision: 'approved' }),
       routeCtx('7'),
@@ -224,6 +289,8 @@ describe('POST /api/v1/arc/[id]/decide', () => {
       {
         decision: 'approved',
         reviewNotes: null,
+        // Approvals carry no citation — the statute's requirement is on denials.
+        ruleReference: null,
       },
       null,
     );

@@ -8,6 +8,7 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
 import {
+  requireNoticePdfEnabled,
   requireViolationAdminWrite,
   requireViolationsEnabled,
 } from '@/lib/violations/common';
@@ -32,6 +33,8 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
+    // Legal gate — see the sibling notice route and audit F-05.
+    requireNoticePdfEnabled(membership);
     requireViolationAdminWrite(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);

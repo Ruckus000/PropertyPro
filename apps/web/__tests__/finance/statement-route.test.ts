@@ -41,6 +41,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parsePositiveInt: (raw: string, label: string) => {
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0) throw new Error(`Invalid ${label}`);

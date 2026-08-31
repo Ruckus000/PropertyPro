@@ -65,6 +65,38 @@ function requireRoutes(): RouteModules {
 }
 
 describeDb('WS67 violations/ARC (db-backed integration)', () => {
+
+/**
+ * Turn on a per-community legal gate.
+ *
+ * Fines ship DISABLED for every community — `requireViolationFinesEnabled`
+ * throws 403 unless `violationFinesEnabled` is set, because a fine carries
+ * statutory requirements (a fining committee, capped amounts) the product
+ * cannot enforce on the association's behalf. The lifecycle test below has to
+ * opt in explicitly, exactly as a real community would.
+ *
+ * Same shape as `mergeCommunitySettings` in visitor-upgrade.integration.test.ts
+ * — read-modify-write, so enabling one gate cannot clear another.
+ */
+async function enableCommunityGate(
+  communityId: number,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const kit = requireState();
+  const scoped = kit.dbModule.createScopedClient(communityId);
+  const rows = await scoped.selectFrom<Record<string, unknown>>(
+    kit.dbModule.communities,
+    {},
+    eq(kit.dbModule.communities.id, communityId),
+  );
+  const current = (rows[0]?.communitySettings as Record<string, unknown> | undefined) ?? {};
+  await scoped.update(
+    kit.dbModule.communities,
+    { communitySettings: { ...current, ...patch } },
+    eq(kit.dbModule.communities.id, communityId),
+  );
+}
+
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) return;
 
@@ -78,6 +110,8 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
     const neededUsers: MultiTenantUserKey[] = ['actorA', 'tenantA', 'actorB', 'actorC'];
     const communityA = requireCommunity(state, 'communityA');
     const communityB = requireCommunity(state, 'communityB');
+    await enableCommunityGate(communityA.id, { violationFinesEnabled: true });
+
     const scopedA = state.dbModule.createScopedClient(communityA.id);
     const scopedB = state.dbModule.createScopedClient(communityB.id);
 
@@ -126,6 +160,42 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
     }
   });
 
+  it('refuses a fine above the statutory per-violation ceiling', async () => {
+    // §718.303(3) caps a single fine at $100. Enforced in the SERVICE against
+    // resolveFineCaps, so it holds for every caller rather than only the UI —
+    // asserted end-to-end here because the cap reads the community's settings,
+    // which a unit test mocks away.
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    setActor(kit, 'tenantA');
+    const reportResponse = await routeModules.violations.POST(
+      jsonRequest(apiUrl('/api/v1/violations'), 'POST', {
+        communityId: communityA.id,
+        unitId: unitAId,
+        category: 'parking',
+        description: `Over-cap fine subject ${kit.runSuffix}`,
+        severity: 'moderate',
+      }),
+    );
+    expect(reportResponse.status).toBe(200);
+    const reportJson = await parseJson<{ data: Record<string, unknown> }>(reportResponse);
+    const violationId = readNumberField(reportJson.data, 'id');
+
+    setActor(kit, 'actorA');
+    const response = await routeModules.violationFine.POST(
+      jsonRequest(apiUrl(`/api/v1/violations/${violationId}/fine`), 'POST', {
+        communityId: communityA.id,
+        amountCents: 50_000, // $500, five times the ceiling
+        approvedByCommittee: true,
+        committeeMembers: [{ name: 'Integration Committee Member' }],
+      }),
+      { params: Promise.resolve({ id: String(violationId) }) },
+    );
+
+    expect(response.status).toBe(422);
+  });
+
   it('runs violation report -> notice -> fine -> resolve lifecycle', async () => {
     const kit = requireState();
     const routeModules = requireRoutes();
@@ -165,8 +235,18 @@ describeDb('WS67 violations/ARC (db-backed integration)', () => {
     const fineResponse = await routeModules.violationFine.POST(
       jsonRequest(apiUrl(`/api/v1/violations/${violationId}/fine`), 'POST', {
         communityId: communityA.id,
-        amountCents: 12500,
+        // $75, under the §718.303(3) per-violation ceiling of $100. Was $125,
+        // which the service now rejects with a 422 — the cap is enforced in
+        // `resolveFineCaps`, not merely documented.
+        amountCents: 7500,
         graceDays: 10,
+        // §718.303(3) / §720.305(2): a fine requires approval by a committee of
+        // members who are not officers, directors, or their relatives. Both
+        // fields are now REQUIRED by the contract — `approvedByCommittee` is
+        // z.literal(true), so a `false` is a 400 rather than a fine recorded as
+        // un-approved. See docs/audits/2026-08-09-legal-risk-audit.md F-04.
+        approvedByCommittee: true,
+        committeeMembers: [{ name: 'Integration Committee Member' }],
       }),
       { params: Promise.resolve({ id: String(violationId) }) },
     );

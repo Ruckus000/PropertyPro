@@ -35,6 +35,11 @@ import type {
 import { eq, and, desc, inArray } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendBulkEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
+import {
+  SMS_MAX_LENGTH,
+  appendStopDisclosure,
+  severityRequiresStopDisclosure,
+} from '@/lib/services/sms/sms-keyword';
 import { normalizeToE164, isValidE164, maskPhone } from '@/lib/utils/phone';
 import { chunk } from '@/lib/utils/chunk';
 import { sendBulkEmergencySms } from '@/lib/services/sms/sms-service';
@@ -59,6 +64,19 @@ export interface CreateBroadcastParams {
   templateKey?: string;
   targetAudience: BroadcastAudience;
   channels: BroadcastChannel[];
+  /**
+   * Whether the SMS legal gate permits texting for this community — BOTH the
+   * global SMS_DISPATCH_ENABLED floor and the per-community `smsDispatchEnabled`
+   * flag. Passed in by the caller rather than resolved here: the only caller is
+   * the create route, which already holds the membership, so reading it here
+   * would be a redundant query AND would drag the unscoped DB client into a
+   * service whose tests do not otherwise need one.
+   *
+   * REQUIRED, not optional-defaulting-to-false: a silent default would make a
+   * forgotten argument look like a working email-only broadcast.
+   * See docs/audits/2026-08-09-legal-risk-audit.md F-10.
+   */
+  smsAllowed: boolean;
   initiatedBy: string;
 }
 
@@ -162,7 +180,16 @@ export async function createBroadcast(
   if (!broadcastId) throw new Error('Failed to create broadcast record');
 
   // Create recipient rows
-  const smsEnabled = params.channels.includes('sms');
+  //
+  // The SMS legal gate is applied HERE rather than on the route, and it DEGRADES
+  // rather than refuses: an admin who selected both channels still gets the email
+  // broadcast out. A route-level 403 would kill the email leg too, which would
+  // invert this feature's whole premise ("life-safety over revenue" — see the
+  // header comment on api/v1/emergency-broadcasts/route.ts). With SMS off every
+  // recipient is written `smsStatus: 'skipped'` with a null phone, so
+  // `executeBroadcast` finds nothing pending and the SMS path is never entered.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-10.
+  const smsEnabled = params.channels.includes('sms') && params.smsAllowed;
   const emailEnabled = params.channels.includes('email');
 
   let smsEligibleCount = 0;
@@ -243,12 +270,20 @@ export async function executeBroadcast(
     );
   }
 
-  // If no explicit smsBody, fall back to body but truncate to SMS limit (1600 chars multi-part)
+  // If no explicit smsBody, fall back to body. Truncation to the 1600-char
+  // multi-part limit now happens INSIDE `appendStopDisclosure`, which reserves
+  // room for the notice first — appending after truncating can exceed the
+  // limit, and truncating after appending cuts off the disclosure itself, which
+  // is the one part that has to survive (F-10).
+  const severity = broadcast.severity;
   const rawSmsBody = broadcast.smsBody ?? broadcast.body;
-  const smsBody = rawSmsBody.length > 1600 ? rawSmsBody.slice(0, 1597) + '...' : rawSmsBody;
+  const smsBody = severityRequiresStopDisclosure(severity)
+    ? appendStopDisclosure(rawSmsBody)
+    : rawSmsBody.length > SMS_MAX_LENGTH
+      ? `${rawSmsBody.slice(0, SMS_MAX_LENGTH - 3)}...`
+      : rawSmsBody;
   const emailBody = broadcast.body;
   const title = broadcast.title;
-  const severity = broadcast.severity;
 
   // Load community name for email
   const communityRows = await scoped.selectFrom<Community>(

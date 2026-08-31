@@ -189,6 +189,10 @@ const CONDO_SIGNUP = {
   address: '123 Main St, West Palm Beach, FL 33401',
   candidateSlug: 'palm-gardens',
   planKey: 'professional',
+  // Accepted days BEFORE provisioning runs — the whole reason the version is
+  // carried from pending_signups rather than stamped with new Date() here.
+  termsAcceptedAt: new Date('2026-08-01T10:00:00Z'),
+  termsVersion: '2026-08-09.1',
 };
 
 /** Minimal pending signup for apartment. */
@@ -267,12 +271,28 @@ function buildDb(opts: {
     then: (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve),
   }));
 
+  // The `users` upserts use onConflictDoUpdate, NOT onConflictDoNothing —
+  // provisioning is retried, and DoNothing would silently skip the terms columns
+  // on any run where the users row already exists. Recorded on the call so the
+  // narrow-set assertion below can inspect it.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+  const onConflictDoUpdateMock = vi.fn((config: unknown) => {
+    calls.push({ op: 'onConflictDoUpdate', config });
+    return {
+      returning: returningMock,
+      then: (resolve: (v: unknown) => unknown) => Promise.resolve([]).then(resolve),
+    };
+  });
+
   const insertMock = vi.fn((table: unknown) => {
     const valuesMock = opts.insertError
       ? vi.fn(() => { throw opts.insertError; })
       : vi.fn((values: unknown) => {
           calls.push({ op: 'insert', table, values });
-          return { onConflictDoNothing: onConflictDoNothingMock };
+          return {
+            onConflictDoNothing: onConflictDoNothingMock,
+            onConflictDoUpdate: onConflictDoUpdateMock,
+          };
         });
     if (opts.insertError) {
       calls.push({ op: 'insert', table });
@@ -873,4 +893,50 @@ describe('reconcileLostCheckoutSignups', () => {
     });
     expect(markPendingSignupPaymentCompletedMock).not.toHaveBeenCalled();
   });
+
+  // ── Terms acceptance carries through provisioning ──────────────────────────
+  //
+  // Two failure modes this pins down, both silent:
+  //   1. `.onConflictDoNothing()` on the users upsert would skip the terms
+  //      columns on every retry where the row already exists — and provisioning
+  //      IS retried. A signup that genuinely accepted would end up with no record.
+  //   2. Stamping `new Date()` here would backdate-forward: the acceptance
+  //      happened at signup, possibly days earlier.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+  it('carries the signup terms acceptance onto the users row via an upsert', async () => {
+    const job = makeJob({});
+    const { calls } = buildDb({
+      selectSequence: [
+        [job],
+        [CONDO_SIGNUP],
+        [{ userId: 'auth-uuid-001' }],
+        [{ userId: 'auth-uuid-001' }],
+      ],
+    });
+
+    await runProvisioning(1);
+
+    const usersInsert = calls.find(
+      (c) => c.op === 'insert' && c.table === usersTable,
+    ) as { values?: Record<string, unknown> } | undefined;
+
+    expect(usersInsert?.values?.termsAcceptedAt).toEqual(CONDO_SIGNUP.termsAcceptedAt);
+    expect(usersInsert?.values?.termsVersion).toBe(CONDO_SIGNUP.termsVersion);
+
+    // Must be an UPDATE-on-conflict, not DoNothing, or a retry loses the write.
+    const upsert = calls.find((c) => c.op === 'onConflictDoUpdate') as
+      | { config?: { set?: Record<string, unknown> } }
+      | undefined;
+    expect(upsert, 'users upsert must use onConflictDoUpdate').toBeDefined();
+    expect(upsert?.config?.set?.termsAcceptedAt).toEqual(CONDO_SIGNUP.termsAcceptedAt);
+    expect(upsert?.config?.set?.termsVersion).toBe(CONDO_SIGNUP.termsVersion);
+
+    // NARROW set — email/fullName must not be clobbered on retry, since a user
+    // may have changed them in their profile since signup.
+    expect(Object.keys(upsert?.config?.set ?? {}).sort()).toEqual([
+      'termsAcceptedAt',
+      'termsVersion',
+    ]);
+  });
+
 });

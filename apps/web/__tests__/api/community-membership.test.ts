@@ -67,6 +67,93 @@ describe('requireCommunityMembership', () => {
       trialEndsAt: null,
       demoExpiresAt: null,
       electionsAttorneyReviewed: false,
+      // Resolved from `community_settings` at hydration. Absent keys mean the
+      // STATUTORY defaults, not "uncapped" — see resolveFineCaps (F-04).
+      fineCaps: { perFineCents: 10000, aggregateCents: 100000 },
+      // Legal gates default to FALSE when the key is absent from
+      // community_settings, which is every community until a platform admin
+      // turns one on. See docs/audits/2026-08-09-legal-risk-audit.md §2a.
+      violationFinesEnabled: false,
+      assessmentPaymentsEnabled: false,
+      smsDispatchEnabled: false,
+      noticePdfGenerationEnabled: false,
+    });
+  });
+
+  // ── Legal-gate hydration ──────────────────────────────────────────────────
+  //
+  // These gates read with a strict `=== true`. That is not defensive style:
+  // community_settings is untyped JSONB written by an admin API, so a malformed
+  // write must read as DISABLED rather than silently enabling a legally-exposed
+  // feature. The string case below is the one that actually matters — JSON round
+  // trips and form serialisation are exactly how `true` becomes `"true"`.
+  describe('legal gate hydration', () => {
+    const GATES = [
+      'violationFinesEnabled',
+      'assessmentPaymentsEnabled',
+      'smsDispatchEnabled',
+      'noticePdfGenerationEnabled',
+    ] as const;
+
+    async function membershipWithSettings(communitySettings: unknown) {
+      scopedSelectFromMock.mockImplementation(async (table: unknown) => {
+        if (table === userRolesTable) {
+          return [{
+            userId: 'user-1',
+            role: 'resident',
+            isUnitOwner: true,
+            displayTitle: 'Owner',
+            designation: null,
+          }];
+        }
+        return [{ communityType: 'condo_718', communitySettings }];
+      });
+      return requireCommunityMembership(42, 'user-1');
+    }
+
+    it('enables a gate only for boolean true', async () => {
+      const membership = await membershipWithSettings({
+        violationFinesEnabled: true,
+        assessmentPaymentsEnabled: true,
+        smsDispatchEnabled: true,
+        noticePdfGenerationEnabled: true,
+      });
+      for (const gate of GATES) {
+        expect(membership[gate], gate).toBe(true);
+      }
+    });
+
+    it.each([
+      ['the string "true"', 'true'],
+      ['the number 1', 1],
+      ['a truthy object', {}],
+      ['the string "yes"', 'yes'],
+      ['null', null],
+      ['false', false],
+    ])('treats %s as disabled', async (_label, value) => {
+      const membership = await membershipWithSettings(
+        Object.fromEntries(GATES.map((g) => [g, value])),
+      );
+      for (const gate of GATES) {
+        expect(membership[gate], gate).toBe(false);
+      }
+    });
+
+    it('defaults every gate to false when community_settings is empty or malformed', async () => {
+      for (const settings of [{}, null, undefined, 'not-an-object', 42]) {
+        const membership = await membershipWithSettings(settings);
+        for (const gate of GATES) {
+          expect(membership[gate], `${gate} with settings=${JSON.stringify(settings)}`).toBe(false);
+        }
+      }
+    });
+
+    it('resolves each gate independently', async () => {
+      const membership = await membershipWithSettings({ violationFinesEnabled: true });
+      expect(membership.violationFinesEnabled).toBe(true);
+      expect(membership.assessmentPaymentsEnabled).toBe(false);
+      expect(membership.smsDispatchEnabled).toBe(false);
+      expect(membership.noticePdfGenerationEnabled).toBe(false);
     });
   });
 

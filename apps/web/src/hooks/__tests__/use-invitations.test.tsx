@@ -35,13 +35,17 @@ describe('useAcceptInvitation', () => {
     const { result } = renderHook(() => useAcceptInvitation(), {
       wrapper: createWrapper(),
     });
-    result.current.mutate({ token: 't', communityId: 1, password: 'pw' });
+    result.current.mutate({ token: 't', communityId: 1, password: 'pw', termsAccepted: true });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBe('a@b.com');
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token: 't', communityId: 1, password: 'pw' }),
+      // The clickwrap MUST reach the wire. This assertion is the regression
+      // guard for the original bug: the form collected `termsAccepted` and the
+      // hook dropped it, so invited residents accepted nothing.
+      // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+      body: JSON.stringify({ token: 't', communityId: 1, password: 'pw', termsAccepted: true }),
     });
   });
 
@@ -52,7 +56,7 @@ describe('useAcceptInvitation', () => {
     const { result } = renderHook(() => useAcceptInvitation(), {
       wrapper: createWrapper(),
     });
-    result.current.mutate({ token: 't', communityId: 1, password: 'pw' });
+    result.current.mutate({ token: 't', communityId: 1, password: 'pw', termsAccepted: true });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toEqual(
       new Error('This invitation link has already been used.'),
@@ -66,7 +70,7 @@ describe('useAcceptInvitation', () => {
     const { result } = renderHook(() => useAcceptInvitation(), {
       wrapper: createWrapper(),
     });
-    result.current.mutate({ token: 't', communityId: 1, password: 'pw' });
+    result.current.mutate({ token: 't', communityId: 1, password: 'pw', termsAccepted: true });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toEqual(
       new Error('This invitation link has expired.'),
@@ -80,7 +84,7 @@ describe('useAcceptInvitation', () => {
     const { result } = renderHook(() => useAcceptInvitation(), {
       wrapper: createWrapper(),
     });
-    result.current.mutate({ token: '', communityId: 1, password: 'pw' });
+    result.current.mutate({ token: '', communityId: 1, password: 'pw', termsAccepted: true });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toEqual(new Error('Token required'));
   });
@@ -95,7 +99,7 @@ describe('useAcceptInvitation', () => {
     const { result } = renderHook(() => useAcceptInvitation(), {
       wrapper: createWrapper(),
     });
-    result.current.mutate({ token: 't', communityId: 1, password: 'pw' });
+    result.current.mutate({ token: 't', communityId: 1, password: 'pw', termsAccepted: true });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toEqual(
       new Error('Failed to accept invitation.'),

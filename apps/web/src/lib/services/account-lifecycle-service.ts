@@ -33,6 +33,7 @@ import type { AccessPlan } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
+import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';
 import {
   findRootOffboardingImpact,
   type RootOffboardingCommunity,
@@ -909,6 +910,14 @@ export async function purgeCommunityData(requestId: number) {
   // Failure aborts the status update so the request remains retryable.
   if (request.communityId !== null) {
     await purgeCommunitySiteAssets(request.communityId);
+    // Generated export archives are a COPY OF THE ENTIRE ASSOCIATION — every
+    // table plus every uploaded document, including resident PII. Without this
+    // the whole dataset would survive in the exports bucket after the community
+    // was purged, which is a right-to-erasure failure the export feature itself
+    // would have introduced. Same failure semantics as the line above: a throw
+    // here aborts the status update so the request stays retryable.
+    // See docs/audits/2026-08-09-legal-risk-audit.md F-07.
+    await purgeCommunityExportArchives(request.communityId);
   }
 
   const [updated] = await db

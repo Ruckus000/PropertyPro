@@ -29,7 +29,11 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
-import { requireViolationAdminWrite, requireViolationsEnabled } from '@/lib/violations/common';
+import {
+  requireViolationAdminWrite,
+  requireViolationFinesEnabled,
+  requireViolationsEnabled,
+} from '@/lib/violations/common';
 import { imposeViolationFineForCommunity } from '@/lib/services/violations-service';
 import { requirePermission } from '@/lib/db/access-control';
 import { violationsFineContract } from './contract';
@@ -43,6 +47,13 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     await requireViolationsEnabled(membership);
+    // Legal gate — fines still ship disabled by default. The two things that
+    // blocked re-enabling them are now in place: the §718.303(3)/§720.305(2)
+    // amount caps (enforced in the service, which can see the other fines on
+    // the violation) and the required fining-committee record (enforced by the
+    // contract above). WRITES only; existing fines stay readable via the
+    // violations GET responses. See docs/audits/2026-08-09-legal-risk-audit.md F-04.
+    requireViolationFinesEnabled(membership);
     requirePermission(membership, 'violations', 'write');
     requireViolationAdminWrite(membership);
 
@@ -55,6 +66,11 @@ export const POST = withErrorHandler(
         dueDate: body.dueDate,
         graceDays: body.graceDays,
         notes: body.notes ?? null,
+        approvedByCommittee: body.approvedByCommittee,
+        committeeMembers: body.committeeMembers,
+        // Caps are resolved onto the membership at hydration, so enforcing them
+        // costs no extra query.
+        caps: membership.fineCaps,
       },
       req.headers.get('x-request-id'),
     );

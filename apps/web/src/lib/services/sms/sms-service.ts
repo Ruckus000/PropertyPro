@@ -15,6 +15,7 @@ import type {
 } from './sms-types';
 import { TwilioProvider } from './twilio-provider';
 import { isValidE164 } from '@/lib/utils/phone';
+import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 
 // ── Singleton provider ──────────────────────────────────────────────────────
 
@@ -37,12 +38,40 @@ export function resetSmsProvider(): void {
   providerInstance = null;
 }
 
+// ── Global kill switch ──────────────────────────────────────────────────────
+
+/**
+ * The result returned for every recipient while SMS dispatch is globally off.
+ *
+ * Deliberately a SKIPPED RESULT, not a thrown error. Callers already treat SMS
+ * failures as per-recipient and isolated (`Promise.allSettled` in
+ * emergency-broadcast-service), and emergency broadcasts send email and SMS in
+ * parallel — so throwing from here risks taking the EMAIL leg down with it.
+ * A resident must still get their hurricane notice by email.
+ */
+function disabledResult(): SmsSendResult {
+  return {
+    success: false,
+    providerMessageId: null,
+    status: 'skipped',
+    errorCode: 'SMS_DISABLED',
+    errorMessage: 'SMS dispatch is disabled for this deployment',
+  };
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 /**
  * Send a single emergency SMS.
  *
  * Returns the provider result. Throws only for invalid input.
+ *
+ * Gated by the global `SMS_DISPATCH_ENABLED` floor — see @/lib/sms/dispatch-flag
+ * and @/lib/sms/common for
+ * why the kill switch lives here rather than on the routes. Note the check
+ * comes BEFORE provider construction: `TwilioProvider`'s constructor throws on
+ * missing credentials, so a deployment with SMS off need not carry Twilio env
+ * vars at all.
  */
 export async function sendEmergencySms(
   to: string,
@@ -51,6 +80,10 @@ export async function sendEmergencySms(
 ): Promise<SmsSendResult> {
   if (!isValidE164(to)) {
     throw new Error(`Invalid phone number: ${to}`);
+  }
+
+  if (!isSmsDispatchGloballyEnabled()) {
+    return disabledResult();
   }
 
   const provider = getProvider();
@@ -68,6 +101,17 @@ export async function sendEmergencySms(
 export async function sendBulkEmergencySms(
   request: SmsBulkSendRequest,
 ): Promise<SmsBulkSendResult> {
+  // Global kill switch. Every recipient comes back 'skipped' rather than
+  // 'failed', so delivery reports read as "not attempted" instead of implying a
+  // carrier problem — and, as above, the email leg is untouched.
+  if (!isSmsDispatchGloballyEnabled()) {
+    const skipped = new Map<string, SmsSendResult>();
+    for (const recipient of request.recipients) {
+      skipped.set(recipient.userId, disabledResult());
+    }
+    return { results: skipped, successCount: 0, failureCount: 0 };
+  }
+
   const provider = getProvider();
   const results = new Map<string, SmsSendResult>();
   let successCount = 0;

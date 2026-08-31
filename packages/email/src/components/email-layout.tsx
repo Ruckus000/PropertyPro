@@ -4,6 +4,7 @@ import {
   Head,
   Html,
   Img,
+  Link,
   Preview,
   Text,
 } from '@react-email/components';
@@ -86,6 +87,39 @@ export function EmailLayout({
                     &copy; {new Date().getFullYear()} {branding.communityName}{' '}
                     &middot; Powered by PropertyPro Florida
                   </Text>
+
+                  {/*
+                    CAN-SPAM sender postal address. The sender is the
+                    ASSOCIATION, so this is the community's own mailing address,
+                    not PropertyPro's. Rendered only when the caller supplied a
+                    complete one — a partial address is worse than none.
+                  */}
+                  {branding.postalAddressLines && branding.postalAddressLines.length > 0 && (
+                    <Text style={addressStyle}>
+                      {branding.communityName}
+                      {branding.postalAddressLines.map((line, index) => (
+                        <span key={index}>
+                          <br />
+                          {line}
+                        </span>
+                      ))}
+                    </Text>
+                  )}
+
+                  {/*
+                    Visible opt-out. The List-Unsubscribe HEADER is set by
+                    `sendEmail` and is what Gmail's one-click button uses; this
+                    is the in-body link CAN-SPAM asks for, for readers whose
+                    client shows no button.
+                  */}
+                  {branding.unsubscribeUrl && (
+                    <Text style={addressStyle}>
+                      <Link href={branding.unsubscribeUrl} style={unsubscribeLinkStyle}>
+                        {branding.unsubscribeLabel ?? 'Unsubscribe'}
+                      </Link>
+                    </Text>
+                  )}
+
                   {branding.customEmailFooter && (
                     <Text style={customFooterStyle}>
                       {branding.customEmailFooter}
@@ -151,6 +185,18 @@ const footerTextStyle: React.CSSProperties = {
   fontSize: '12px',
   color: emailColors.footerText,
   margin: 0,
+};
+
+const addressStyle: React.CSSProperties = {
+  fontSize: '12px',
+  color: emailColors.footerText,
+  margin: '8px 0 0 0',
+  lineHeight: 1.5,
+};
+
+const unsubscribeLinkStyle: React.CSSProperties = {
+  color: emailColors.footerText,
+  textDecoration: 'underline',
 };
 
 const customFooterStyle: React.CSSProperties = {

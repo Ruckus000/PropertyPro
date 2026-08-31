@@ -290,4 +290,131 @@ describe('violations-service', () => {
 
     consoleSpy.mockRestore();
   });
+
+  // ── §718.303(3) / §720.305(2) ceilings (F-04) ────────────────────────────
+  //
+  // Enforced in the SERVICE rather than the contract because the aggregate
+  // check needs the other fines already on this violation, which Zod cannot
+  // see. The per-fine check lives here too so the two cannot drift apart.
+
+  it('refuses a single fine above the per-violation cap', async () => {
+    const selectFrom = vi.fn().mockResolvedValue([createViolationRow({ status: 'noticed' })]);
+    createScopedClientMock.mockReturnValue({ selectFrom, insert: vi.fn(), update: vi.fn() });
+
+    await expect(
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 15_000 }),
+    ).rejects.toThrow(/may not exceed \$100\.00/);
+  });
+
+  it('applies the STATUTORY cap when no caps are passed', async () => {
+    // The load-bearing direction: an un-passed cap must mean "capped at the
+    // statute", never "uncapped". The latter is the hole this closes.
+    const selectFrom = vi.fn().mockResolvedValue([createViolationRow({ status: 'noticed' })]);
+    createScopedClientMock.mockReturnValue({ selectFrom, insert: vi.fn(), update: vi.fn() });
+
+    await expect(
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 10_001 }),
+    ).rejects.toThrow(/§718\.303\(3\)/);
+  });
+
+  it('honours a community override above the statutory floor', async () => {
+    const selectFrom = vi
+      .fn()
+      // violation lookup, then the existing-fines scan
+      .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+      .mockResolvedValueOnce([]);
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationFineRow({ amountCents: 15_000 })])
+      .mockResolvedValueOnce([{ id: 5 }]);
+    createScopedClientMock.mockReturnValue({
+      selectFrom,
+      insert,
+      update: vi.fn().mockResolvedValue([createViolationRow({ status: 'fined' })]),
+    });
+    postLedgerEntryMock.mockResolvedValue({ id: 77 });
+
+    await expect(
+      imposeViolationFineForCommunity(42, 10, 'actor-1', {
+        amountCents: 15_000,
+        caps: { perFineCents: 250_00, aggregateCents: 1_000_00 },
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses when the AGGREGATE would exceed the ceiling', async () => {
+    // Counts money, not rows — counting fines would let ten $100 fines through.
+    const selectFrom = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+      .mockResolvedValueOnce([
+        { amountCents: 95_000, status: 'pending' },
+        { amountCents: 4_000, status: 'paid' },
+      ]);
+    createScopedClientMock.mockReturnValue({ selectFrom, insert: vi.fn(), update: vi.fn() });
+
+    await expect(
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 5_000 }),
+    ).rejects.toThrow(/aggregate limit/);
+  });
+
+  it('EXCLUDES waived fines from the aggregate', async () => {
+    // A waiver undoes the charge. Counting it would penalise an association for
+    // showing leniency.
+    const selectFrom = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+      .mockResolvedValueOnce([
+        { amountCents: 99_000, status: 'waived' },
+        { amountCents: 1_000, status: 'pending' },
+      ]);
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationFineRow()])
+      .mockResolvedValueOnce([{ id: 5 }]);
+    createScopedClientMock.mockReturnValue({
+      selectFrom,
+      insert,
+      update: vi.fn().mockResolvedValue([createViolationRow({ status: 'fined' })]),
+    });
+    postLedgerEntryMock.mockResolvedValue({ id: 77 });
+
+    await expect(
+      imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2_500 }),
+    ).resolves.toBeDefined();
+  });
+
+  it('persists the fining-committee snapshot', async () => {
+    const selectFrom = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
+      .mockResolvedValueOnce([]);
+    const insert = vi
+      .fn()
+      .mockResolvedValueOnce([createViolationFineRow()])
+      .mockResolvedValueOnce([{ id: 5 }]);
+    createScopedClientMock.mockReturnValue({
+      selectFrom,
+      insert,
+      update: vi.fn().mockResolvedValue([createViolationRow({ status: 'fined' })]),
+    });
+    postLedgerEntryMock.mockResolvedValue({ id: 77 });
+
+    await imposeViolationFineForCommunity(42, 10, 'actor-1', {
+      amountCents: 2_500,
+      approvedByCommittee: true,
+      committeeMembers: [{ name: 'Dana Reyes' }],
+    });
+
+    // A SNAPSHOT, not a join: committee membership turns over, and the question
+    // in a dispute is who approved this fine at the time.
+    expect(insert).toHaveBeenCalledWith(
+      tables.violationFines,
+      expect.objectContaining({
+        approvedByCommittee: true,
+        committeeMembers: [{ name: 'Dana Reyes' }],
+        committeeApprovedAt: expect.any(Date),
+      }),
+    );
+  });
 });

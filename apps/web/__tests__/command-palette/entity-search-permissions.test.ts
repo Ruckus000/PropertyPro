@@ -48,6 +48,8 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   requireViolationsEnabled: requireViolationsEnabledMock,
 }));
 

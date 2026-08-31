@@ -466,6 +466,9 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         communityId: communityA.id,
         token: seeded.invitationTokenA1,
         password: 'SecureP@ss1234',
+        // Required by the accept contract (z.literal(true)) — invited residents
+        // have no other clickwrap. See audit F-18.
+        termsAccepted: true,
       }),
     );
     expect(response.status).toBe(200);
@@ -484,6 +487,9 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
         communityId: communityA.id,
         token: seeded.invitationTokenB1,
         password: 'SecureP@ss1234',
+        // Required by the accept contract (z.literal(true)) — invited residents
+        // have no other clickwrap. See audit F-18.
+        termsAccepted: true,
       }),
     );
     expect(response.status).toBe(404);
@@ -502,7 +508,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
       jsonRequest(
         apiUrl('/api/v1/invitations'),
         'PATCH',
-        { communityId: communityB.id, token: seeded.invitationTokenB2, password: 'SecureP@ss1234' },
+        { communityId: communityB.id, token: seeded.invitationTokenB2, password: 'SecureP@ss1234', termsAccepted: true },
         { 'x-community-id': String(communityA.id) },
       ),
     );

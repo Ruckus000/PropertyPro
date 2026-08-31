@@ -9,6 +9,12 @@ export interface UploadRequest {
   categoryId: number;
   description?: string | null;
   file: File;
+  /**
+   * Uploader's confirmation that protected personal information is redacted
+   * (§718.111(12)(c)). The server requires it for categories that commonly
+   * contain such information and 400s without it — see F-02.
+   */
+  redactionAttested?: boolean;
 }
 
 export interface DocumentUploadState {
@@ -109,6 +115,7 @@ export function useDocumentUpload() {
           fileName: request.file.name,
           fileSize: request.file.size,
           mimeType: request.file.type,
+          redactionAttested: request.redactionAttested ?? false,
         }),
       });
 

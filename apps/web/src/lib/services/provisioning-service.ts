@@ -123,6 +123,9 @@ type PendingSignupRow = {
   candidateSlug: string;
   planKey: string | null;
   payload: Record<string, unknown>;
+  /** When the signup accepted the Terms, and which version. Carried to `users`. */
+  termsAcceptedAt: Date;
+  termsVersion: string | null;
 };
 
 type JobContext = {
@@ -255,8 +258,28 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
         id: userId,
         email: ctx.signup.email,
         fullName: ctx.signup.primaryContactName,
+        termsAcceptedAt: ctx.signup.termsAcceptedAt,
+        termsVersion: ctx.signup.termsVersion,
       })
-      .onConflictDoNothing();
+      // NOT onConflictDoNothing. Provisioning is retried, and this step can run
+      // after the users row already exists — with DoNothing the terms columns
+      // would be silently skipped on every retry, leaving a signup that DID
+      // accept the terms with no record of it.
+      //
+      // The `set` is deliberately NARROW: only the terms columns. Including
+      // email/fullName would let a retry overwrite values a user may have since
+      // changed in their profile.
+      //
+      // Values come from the pending_signups row, never `new Date()` — the
+      // acceptance happened at signup, possibly days earlier.
+      // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          termsAcceptedAt: ctx.signup.termsAcceptedAt,
+          termsVersion: ctx.signup.termsVersion,
+        },
+      });
   } else {
     // Create a Supabase auth user. email_confirm: true skips verification since
     // the user already verified their email during the signup flow.
@@ -284,8 +307,28 @@ async function stepUserLinked(ctx: JobContext): Promise<void> {
         id: userId,
         email: ctx.signup.email,
         fullName: ctx.signup.primaryContactName,
+        termsAcceptedAt: ctx.signup.termsAcceptedAt,
+        termsVersion: ctx.signup.termsVersion,
       })
-      .onConflictDoNothing();
+      // NOT onConflictDoNothing. Provisioning is retried, and this step can run
+      // after the users row already exists — with DoNothing the terms columns
+      // would be silently skipped on every retry, leaving a signup that DID
+      // accept the terms with no record of it.
+      //
+      // The `set` is deliberately NARROW: only the terms columns. Including
+      // email/fullName would let a retry overwrite values a user may have since
+      // changed in their profile.
+      //
+      // Values come from the pending_signups row, never `new Date()` — the
+      // acceptance happened at signup, possibly days earlier.
+      // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          termsAcceptedAt: ctx.signup.termsAcceptedAt,
+          termsVersion: ctx.signup.termsVersion,
+        },
+      });
   }
 
   // Insert role — onConflictDoNothing satisfies ADR-001 one-role-per-community on retry.
@@ -506,6 +549,8 @@ export async function runProvisioning(jobId: number): Promise<void> {
       candidateSlug: pendingSignups.candidateSlug,
       planKey: pendingSignups.planKey,
       payload: pendingSignups.payload,
+      termsAcceptedAt: pendingSignups.termsAcceptedAt,
+      termsVersion: pendingSignups.termsVersion,
     })
     .from(pendingSignups)
     .where(eq(pendingSignups.signupRequestId, job.signupRequestId))

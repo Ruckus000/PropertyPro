@@ -55,7 +55,13 @@ describe('HelpArticleBody', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Reviewing the compliance dashboard');
     expect(screen.getByText('4 min read')).toBeInTheDocument();
     expect(container.querySelector('[data-media-frame]')).not.toBeNull();
-    expect(container.querySelector('.rounded-2xl')).toBeNull();
+    // "Flat content" means the ARTICLE BODY is not boxed. The injected legal
+    // disclaimer (F-05) is deliberately a card and sits outside the body, so
+    // this scopes to the content container rather than the whole subtree — the
+    // old blanket query would now fail for a reason unrelated to its intent.
+    const body = container.querySelector('[data-help-article-content]');
+    expect(body).not.toBeNull();
+    expect(body?.querySelector('.rounded-2xl')).toBeNull();
   });
 
   it('statute chips open in a new tab', () => {

@@ -1,6 +1,6 @@
 # Terms of Service
 
-**Effective Date:** February 14, 2026
+**Version:** 2026-08-10.1 · **Effective Date:** August 10, 2026 · *Supersedes version 2026-02-14.1*
 
 ---
 
@@ -11,6 +11,19 @@ PropertyPro Florida ("PropertyPro," "we," "us," or "our") is a technology platfo
 **PropertyPro helps you organize and publish documents required by Florida Statutes §718 and §720. This platform does not constitute legal advice.**
 
 PropertyPro is a technology tool designed to assist community associations with organizing, storing, and publishing documents and notices. We are NOT a law firm, and our platform does NOT provide legal advice, legal opinions, or legal representation. You should consult with a licensed Florida attorney for any legal questions regarding your association's compliance obligations.
+
+### 1.1 We Are Not Community Association Managers
+
+**PropertyPro does not provide community association management services as defined in Fla. Stat. §468.431, and we are not licensed as a community association manager or management firm.**
+
+We supply software. Every action the platform takes on your association's behalf — posting a document, scheduling a notice, recording a decision, sending a communication — is initiated by your own board members, managers, or agents through their own accounts. We do not perform management functions for you, and we will not do so on request. Specifically, we do not:
+
+- prepare, upload, or file your association's records or notices for you;
+- determine what your association is required to post, or when;
+- control association funds, budgets, or assessments; or
+- take any action requiring the exercise of association judgment without a human in your association acting.
+
+Where Florida law requires your association to engage a licensed community association manager, **that obligation is yours**, and using PropertyPro does not satisfy it.
 
 ---
 
@@ -87,12 +100,23 @@ You may cancel your subscription at any time through your account settings or by
 
 - Your access will continue through the end of the current billing period.
 - No refunds will be issued for partial billing periods.
-- Your data will be retained for thirty (30) days following the end of your billing period, after which it may be permanently deleted.
-- You may request an export of your data prior to deletion.
+- You may export your association's data at any time, including after your subscription has lapsed. See Section 5.4.
 
-### 5.4 Data Retention After Cancellation
+### 5.4 Data Retention and Deletion
 
-Upon cancellation or termination of your account, we will retain your data for thirty (30) calendar days to allow for account reactivation or data export. After this retention period, your data will be permanently and irreversibly deleted from our systems and backups.
+**We do not automatically destroy your association's records when you cancel.** Community associations are subject to statutory record-retention obligations under Florida law, and we have deliberately designed the platform so that cancelling a subscription does not put those records at risk.
+
+**Export.** You may export your association's data at any time through your account settings, including after your subscription has lapsed. We recommend exporting your records before requesting deletion.
+
+**If you request deletion.** Account and community deletion is initiated by you, not by cancellation. When you submit a deletion request:
+
+1. **Thirty (30) day cooling-off period.** The request can be cancelled by you or by our support team during this window. Nothing is removed.
+2. **Deactivation.** After the cooling-off period, the account or community is deactivated and is no longer accessible through the platform. Data is retained but not reachable by users.
+3. **Purge.** Approximately six (6) months after deactivation, we scrub personal information from the associated user records and delete community website assets.
+
+**What we do not delete.** Association records — uploaded documents, meeting minutes, financial records, and compliance audit logs — may be retained beyond the purge step where we believe retention is required by Florida statute or by an association's own record-retention obligations. If you need these records destroyed, contact us at privacy@getpropertypro.com and we will handle the request individually.
+
+**Backups.** We maintain encrypted database backups for disaster recovery. Data may persist in these backups after it has been removed from our active systems, and is deleted as those backups age out under our provider's retention schedule. We do not selectively purge individual records from historical backups.
 
 ---
 
@@ -115,14 +139,14 @@ By opting in, you consent to receive SMS messages from PropertyPro and its commu
 
 You may opt out of SMS notifications at any time by:
 
-- **Replying STOP** to any SMS message you receive from PropertyPro.
-- **Disabling SMS notifications** in your account notification settings.
+- **Disabling SMS notifications** in your account notification settings. This revokes your consent in our records and stops all further messages. This is the method we recommend.
+- **Replying STOP** to any SMS message you receive. This stops delivery at the carrier level through our messaging provider; we recommend also disabling SMS in your settings so the revocation is recorded on your account.
 
-After opting out, you will receive a confirmation message and no further SMS messages will be sent to you unless you opt in again.
+No further SMS messages will be sent to you unless you opt in again.
 
-### 6.3 Emergency Exception
+### 6.3 Consent Is Always Required
 
-In the event of an imminent life-safety emergency (such as a building evacuation, gas leak, hurricane, or fire), community administrators may send emergency broadcast messages to all verified residents, including those who have not opted in to general SMS notifications. This is permitted under the TCPA emergency purposes exception (47 U.S.C. § 227(b)(1)(A)).
+We do not send SMS messages to anyone who has not opted in, including in an emergency. If you have not verified your phone number and enabled SMS notifications, you will not receive text messages from PropertyPro — emergency alerts included. When a community administrator sends an emergency broadcast by email, that email is delivered to every resident with an email address on file and cannot be unsubscribed from.
 
 ### 6.4 Help and Support
 
@@ -192,4 +216,6 @@ If you have questions about these Terms of Service, please contact us at:
 
 ---
 
-*Last updated: February 14, 2026*
+*Version 2026-08-09.1 — last updated August 9, 2026.*
+
+*Version history is maintained in this document's revision record. When these terms are revised, the version identifier above changes and the prior version is noted as superseded.*

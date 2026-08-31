@@ -2,7 +2,7 @@ import { communities, createScopedClient, userRoles } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
 import type { CommunityType, CommunityRole, BoardDesignation } from '@propertypro/shared';
-import { ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS } from '@propertypro/shared';
+import { ADMIN_TIER_DB_ROLES, BOARD_DESIGNATIONS, resolveFineCaps } from '@propertypro/shared';
 import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 
 export interface CommunityMembership {
@@ -38,6 +38,43 @@ export interface CommunityMembership {
   demoExpiresAt: Date | null;
   /** Whether attorney review has cleared board elections for this community. */
   electionsAttorneyReviewed: boolean;
+  /**
+   * Per-community legal gates. All default to `false` for any community whose
+   * `community_settings` lacks the key — which is every community until a
+   * platform admin turns one on. See the block comment on
+   * `communities.communitySettings` for why these are settings keys rather than
+   * `CommunityFeatures` flags.
+   */
+  violationFinesEnabled: boolean;
+  assessmentPaymentsEnabled: boolean;
+  smsDispatchEnabled: boolean;
+  noticePdfGenerationEnabled: boolean;
+  /**
+   * §718.303(3)/§720.305(2) fine ceilings, already resolved.
+   *
+   * Resolved here rather than exposing the raw `community_settings` blob, for
+   * the same reason the gates above are booleans and not the blob: a caller
+   * that receives the whole object can read (or leak) settings it has no
+   * business with, and every consumer would re-implement the
+   * "absent means statutory default" rule. `resolveFineCaps` owns it once.
+   */
+  fineCaps: { perFineCents: number; aggregateCents: number };
+}
+
+/**
+ * Read a boolean flag out of the `community_settings` JSONB blob.
+ *
+ * The `=== true` comparison is load-bearing, not defensive style. `community_settings`
+ * is untyped JSONB written by an admin API; a value of `"true"` (string), `1`, or a
+ * stray truthy object must all read as DISABLED. Anything looser would turn a
+ * malformed write into a silently-enabled legal gate.
+ */
+function readSettingsFlag(settings: unknown, key: string): boolean {
+  return (
+    typeof settings === 'object'
+    && settings !== null
+    && (settings as Record<string, unknown>)[key] === true
+  );
 }
 
 /**
@@ -103,10 +140,6 @@ export async function requireCommunityMembership(
     `requireCommunityMembership(communityId=${communityId}) community`,
   );
   const communitySettings = community['communitySettings'];
-  const electionsAttorneyReviewed =
-    typeof communitySettings === 'object'
-    && communitySettings !== null
-    && (communitySettings as Record<string, unknown>).electionsAttorneyReviewed === true;
 
   return {
     userId,
@@ -140,6 +173,11 @@ export async function requireCommunityMembership(
     isDemo: community['isDemo'] === true,
     trialEndsAt: community['trialEndsAt'] instanceof Date ? community['trialEndsAt'] : null,
     demoExpiresAt: community['demoExpiresAt'] instanceof Date ? community['demoExpiresAt'] : null,
-    electionsAttorneyReviewed,
+    electionsAttorneyReviewed: readSettingsFlag(communitySettings, 'electionsAttorneyReviewed'),
+    violationFinesEnabled: readSettingsFlag(communitySettings, 'violationFinesEnabled'),
+    assessmentPaymentsEnabled: readSettingsFlag(communitySettings, 'assessmentPaymentsEnabled'),
+    smsDispatchEnabled: readSettingsFlag(communitySettings, 'smsDispatchEnabled'),
+    noticePdfGenerationEnabled: readSettingsFlag(communitySettings, 'noticePdfGenerationEnabled'),
+    fineCaps: resolveFineCaps(communitySettings),
   };
 }

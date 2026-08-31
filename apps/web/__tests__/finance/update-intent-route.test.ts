@@ -39,6 +39,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   requireFinanceEnabled: requireFinanceEnabledMock,
   requireFinanceWritePermission: requireFinanceWritePermissionMock,
   requireFinanceAdminWrite: requireFinanceAdminWriteMock,
@@ -104,7 +105,10 @@ describe('PATCH /api/v1/payments/update-intent', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { clientSecret: string } };
     expect(json.data.clientSecret).toBe('cs_test');
-    expect(requireActorOwnsPiMock).toHaveBeenCalledWith('pi_abc123', 'owner-1');
+    // communityId is the third arg now: under direct charges the PaymentIntent
+    // lives on the association's connected account, so the ownership check has
+    // to retrieve it from there (F-15).
+    expect(requireActorOwnsPiMock).toHaveBeenCalledWith('pi_abc123', 'owner-1', 10);
     expect(requireFinanceAdminWriteMock).not.toHaveBeenCalled();
     expect(updatePaymentIntentFeeMock).toHaveBeenCalledWith(10, 'pi_abc123', 'card', 'owner-1');
   });

@@ -6,6 +6,8 @@ import {
   useDocumentUpload,
   type UploadDocumentResult,
 } from '@/hooks/use-document-upload';
+import { isRedactionSensitiveCategory, normalizeCategoryName } from '@propertypro/shared';
+import { REDACTION_ATTESTATION_TEXT } from '@/lib/documents/redaction-attestation-text';
 
 interface DocumentUploaderProps {
   communityId: number;
@@ -23,7 +25,17 @@ export function DocumentUploader({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [redactionAttested, setRedactionAttested] = useState(false);
   const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
+
+  // Mirrors the server's rule so the uploader sees the prompt before submitting
+  // rather than after a 400. The SERVER is the enforcement point — this is only
+  // the affordance. When no category name has loaded yet we show the prompt, on
+  // the same reasoning as the server: an unknown category is not evidence that a
+  // document is safe to publish unredacted.
+  const requiresAttestation = isRedactionSensitiveCategory(
+    normalizeCategoryName(categoryName ?? null),
+  );
 
   const { uploadDocument, isUploading, progress, error } = useDocumentUpload();
 
@@ -40,12 +52,14 @@ export function DocumentUploader({
       description,
       categoryId,
       file: selectedFile,
+      redactionAttested,
     });
 
     setWarnings(result.warnings);
     setTitle('');
     setDescription('');
     setSelectedFile(null);
+    setRedactionAttested(false);
 
     onUploaded?.(result);
   }
@@ -108,6 +122,27 @@ export function DocumentUploader({
         />
       </label>
 
+      {requiresAttestation ? (
+        <div className="rounded-md border border-status-warning-border bg-status-warning-bg p-3">
+          <label className="flex items-start gap-3 text-sm text-content-secondary">
+            <input
+              type="checkbox"
+              checked={redactionAttested}
+              onChange={(event) => setRedactionAttested(event.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span>
+              <span className="block font-medium text-content">
+                Confirm redaction before uploading
+              </span>
+              {REDACTION_ATTESTATION_TEXT} Documents in this category commonly
+              contain social-security or driver-licence numbers, personal contact
+              details, or medical and personnel information.
+            </span>
+          </label>
+        </div>
+      ) : null}
+
       {isUploading ? (
         <div className="space-y-1">
           <p className="text-sm text-content-secondary">Uploading... {progress}%</p>
@@ -121,7 +156,12 @@ export function DocumentUploader({
 
       <button
         type="submit"
-        disabled={isUploading || !selectedFile || categoryId == null}
+        disabled={
+          isUploading
+          || !selectedFile
+          || categoryId == null
+          || (requiresAttestation && !redactionAttested)
+        }
         className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-white hover:bg-interactive-hover disabled:opacity-60"
       >
         {isUploading ? 'Uploading...' : 'Upload document'}

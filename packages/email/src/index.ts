@@ -123,6 +123,9 @@ export type { AccountDeletionExecutedEmailProps } from "./templates/account-dele
 export { AccountRecoveredEmail } from "./templates/account-recovered-email";
 export type { AccountRecoveredEmailProps } from "./templates/account-recovered-email";
 
+export { CommunityExportReadyEmail } from "./templates/community-export-ready-email";
+export type { CommunityExportReadyEmailProps } from "./templates/community-export-ready-email";
+
 // Shared components (v2 redesign)
 export { EmailButton } from "./components/email-button";
 export { EmailCard } from "./components/email-card";

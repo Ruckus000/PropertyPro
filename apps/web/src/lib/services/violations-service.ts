@@ -14,7 +14,18 @@ import {
   violations,
 } from '@propertypro/db';
 import { and, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
-import type { ArcSubmissionStatus, ViolationFineStatus, ViolationSeverity, ViolationStatus } from '@propertypro/db';
+import type {
+  ArcSubmissionStatus,
+  FiningCommitteeMember,
+  ViolationFineStatus,
+  ViolationSeverity,
+  ViolationStatus,
+} from '@propertypro/db';
+import {
+  DEFAULT_FINE_AGGREGATE_CAP_CENTS,
+  DEFAULT_FINE_CAP_CENTS,
+  formatCents,
+} from '@propertypro/shared';
 import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { parseDateOnly } from '@/lib/finance/common';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
@@ -68,6 +79,7 @@ export interface ArcSubmissionRecord {
   attachmentDocumentIds: number[];
   status: ArcSubmissionStatus;
   reviewNotes: string | null;
+  ruleReference: string | null;
   decidedByUserId: string | null;
   decidedAt: Date | null;
   createdAt: Date;
@@ -98,6 +110,11 @@ export interface CreateViolationFineInput {
   dueDate?: string;
   graceDays?: number;
   notes?: string | null;
+  /** §718.303(3): required `true` at the contract layer. */
+  approvedByCommittee?: boolean;
+  committeeMembers?: FiningCommitteeMember[];
+  /** Resolved ceilings. Omitted only by legacy callers; see the enforcement. */
+  caps?: { perFineCents: number; aggregateCents: number };
 }
 
 export interface CreateArcSubmissionInput {
@@ -117,6 +134,8 @@ export interface ReviewArcSubmissionInput {
 export interface DecideArcSubmissionInput {
   decision: 'approved' | 'denied';
   reviewNotes?: string | null;
+  /** The rule or covenant relied on. Required on denial at the contract layer. */
+  ruleReference?: string | null;
 }
 
 const VALID_VIOLATION_STATUSES: readonly ViolationStatus[] = [
@@ -603,6 +622,45 @@ export async function imposeViolationFineForCommunity(
     throw new BadRequestError('amountCents must be a positive integer');
   }
 
+  // ── §718.303(3) / §720.305(2) ceilings ──────────────────────────────────
+  //
+  // Enforced HERE rather than in the contract because the aggregate check needs
+  // the other fines already on this violation, which Zod cannot see. The
+  // per-fine check lives here too so the two cannot drift apart.
+  //
+  // `caps` defaults to the statutory figures when a caller omits it. That
+  // direction is deliberate: an un-passed cap must mean "capped at the statute",
+  // never "uncapped" — the latter is exactly the hole this closes.
+  const caps = input.caps ?? {
+    perFineCents: DEFAULT_FINE_CAP_CENTS,
+    aggregateCents: DEFAULT_FINE_AGGREGATE_CAP_CENTS,
+  };
+
+  if (input.amountCents > caps.perFineCents) {
+    throw new UnprocessableEntityError(
+      `A single fine may not exceed ${formatCents(caps.perFineCents)} (Fla. Stat. §718.303(3) / §720.305(2)).`,
+    );
+  }
+
+  // Waived fines are excluded — a waiver undoes the charge, so counting it
+  // toward the aggregate would penalise an association for showing leniency.
+  const existingFines = await scoped.selectFrom<{ amountCents: number; status: string }>(
+    violationFines,
+    { amountCents: violationFines.amountCents, status: violationFines.status },
+    eq(violationFines.violationId, violationId),
+  );
+  const alreadyImposed = existingFines
+    .filter((row) => row.status !== 'waived')
+    .reduce((sum, row) => sum + Number(row.amountCents), 0);
+
+  if (alreadyImposed + input.amountCents > caps.aggregateCents) {
+    throw new UnprocessableEntityError(
+      `Fines for this violation would total ${formatCents(alreadyImposed + input.amountCents)}, `
+        + `above the ${formatCents(caps.aggregateCents)} aggregate limit `
+        + `(Fla. Stat. §718.303(3) / §720.305(2)). ${formatCents(alreadyImposed)} has already been imposed.`,
+    );
+  }
+
   const dueDate = input.dueDate
     ? parseDateOnly(input.dueDate, 'dueDate')
     : format(addDays(new Date(), Math.max(1, input.graceDays ?? 14)), 'yyyy-MM-dd');
@@ -641,6 +699,11 @@ export async function imposeViolationFineForCommunity(
       amountCents: input.amountCents,
       ledgerEntryId,
       status: 'pending',
+      // Snapshot, not a join — committee membership turns over, and the
+      // question in a dispute is who approved this fine at the time.
+      approvedByCommittee: input.approvedByCommittee ?? null,
+      committeeMembers: input.committeeMembers ?? null,
+      committeeApprovedAt: input.approvedByCommittee ? new Date() : null,
     });
     if (!fineInserted) {
       throw new Error('Failed to create violation fine');
@@ -900,6 +963,7 @@ export async function decideArcSubmissionForCommunity(
     {
       status: input.decision,
       reviewNotes: input.reviewNotes ?? existing.reviewNotes,
+      ruleReference: input.ruleReference ?? existing.ruleReference,
       decidedByUserId: actorUserId,
       decidedAt: new Date(),
     },

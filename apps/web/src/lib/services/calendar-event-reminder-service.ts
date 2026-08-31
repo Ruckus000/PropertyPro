@@ -32,6 +32,7 @@ import {
 // AUTHZ: Calendar reminder cron — cross-community reminder enqueue + delivery
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { CalendarEventReminderEmail, sendEmail } from '@propertypro/email';
+import type { CommunityBranding } from '@propertypro/email';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import {
   getCalendarReminderLeadDays,
@@ -52,6 +53,8 @@ import {
 import { requireCommunityType, requireCommunityRole } from '@/lib/utils/community-validators';
 import { formatMeetingTitle } from '@/lib/utils/format-meeting-title';
 import { getBaseUrl } from '@/lib/utils/url';
+import { loadEmailBranding } from './email-branding';
+import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
 
 const MAX_ATTEMPTS = 5;
 const RETRY_MINUTES_BY_ATTEMPT = [15, 60, 240, 720] as const;
@@ -822,6 +825,8 @@ async function buildMeetingEmailPayload(params: {
   eventKey: string;
   reminderPreset: CalendarReminderPreset;
   now: Date;
+  /** Community name + CAN-SPAM footer fields, resolved once per community. */
+  branding: CommunityBranding;
 }): Promise<ReminderEmailPayload | null> {
   const parsed = parseMeetingEventKey(params.eventKey);
   if (!parsed) return null;
@@ -854,7 +859,7 @@ async function buildMeetingEmailPayload(params: {
   return {
     subject: `Reminder: ${meetingTitle} on ${eventDateLabel}`,
     react: createElement(CalendarEventReminderEmail, {
-      branding: { communityName: params.community.name },
+      branding: params.branding,
       recipientName: params.recipient.fullName ?? params.recipient.email,
       eventLabel: 'Meeting',
       eventTitle: meetingTitle,
@@ -874,6 +879,8 @@ async function buildAggregateAssessmentEmailPayload(params: {
   eventKey: string;
   reminderPreset: CalendarReminderPreset;
   now: Date;
+  /** Community name + CAN-SPAM footer fields, resolved once per community. */
+  branding: CommunityBranding;
 }): Promise<ReminderEmailPayload | null> {
   const parsed = parseAssessmentEventKey(params.eventKey);
   if (!parsed) return null;
@@ -894,7 +901,7 @@ async function buildAggregateAssessmentEmailPayload(params: {
   return {
     subject: `Reminder: ${assessment.assessmentTitle} due ${eventDateLabel}`,
     react: createElement(CalendarEventReminderEmail, {
-      branding: { communityName: params.community.name },
+      branding: params.branding,
       recipientName: params.recipient.fullName ?? params.recipient.email,
       eventLabel: 'Assessment due date',
       eventTitle: assessment.assessmentTitle,
@@ -916,6 +923,8 @@ async function buildOwnerAssessmentEmailPayload(params: {
   eventKey: string;
   reminderPreset: CalendarReminderPreset;
   now: Date;
+  /** Community name + CAN-SPAM footer fields, resolved once per community. */
+  branding: CommunityBranding;
 }): Promise<ReminderEmailPayload | null> {
   const parsed = parseMyAssessmentEventKey(params.eventKey);
   if (!parsed || params.recipient.unitId === null) return null;
@@ -974,7 +983,7 @@ async function buildOwnerAssessmentEmailPayload(params: {
   return {
     subject: `Reminder: ${assessmentTitle} due ${eventDateLabel}`,
     react: createElement(CalendarEventReminderEmail, {
-      branding: { communityName: params.community.name },
+      branding: params.branding,
       recipientName: params.recipient.fullName ?? params.recipient.email,
       eventLabel: 'Assessment due date',
       eventTitle: assessmentTitle,
@@ -992,6 +1001,7 @@ async function buildReminderEmailPayload(params: {
   recipient: CommunityRecipient;
   row: ClaimedReminderRow;
   now: Date;
+  branding: CommunityBranding;
 }): Promise<ReminderEmailPayload | null> {
   if (params.row.eventKind === 'meeting') {
     return buildMeetingEmailPayload({
@@ -1000,6 +1010,7 @@ async function buildReminderEmailPayload(params: {
       eventKey: params.row.eventKey,
       reminderPreset: params.row.reminderPreset,
       now: params.now,
+      branding: params.branding,
     });
   }
 
@@ -1010,6 +1021,7 @@ async function buildReminderEmailPayload(params: {
       eventKey: params.row.eventKey,
       reminderPreset: params.row.reminderPreset,
       now: params.now,
+      branding: params.branding,
     });
   }
 
@@ -1019,6 +1031,7 @@ async function buildReminderEmailPayload(params: {
     eventKey: params.row.eventKey,
     reminderPreset: params.row.reminderPreset,
     now: params.now,
+    branding: params.branding,
   });
 }
 
@@ -1070,6 +1083,18 @@ export async function processCalendarEventReminders(
     if (cached) return cached;
     const promise = loadCommunityRecipients(community);
     recipientCache.set(community.id, promise);
+    return promise;
+  };
+
+  // Branding is per-community but the send loop is per-ROW, so memoize it the
+  // same way recipients are — otherwise a community with 400 reminders due
+  // would re-read its own record 400 times to build one identical footer.
+  const brandingCache = new Map<number, Promise<CommunityBranding>>();
+  const getBrandingForCommunity = (communityId: number) => {
+    const cached = brandingCache.get(communityId);
+    if (cached) return cached;
+    const promise = loadEmailBranding(communityId);
+    brandingCache.set(communityId, promise);
     return promise;
   };
 
@@ -1143,11 +1168,27 @@ export async function processCalendarEventReminders(
         return;
       }
 
+      const baseUrl = getBaseUrl();
+      // Per-recipient and reachable with no session. The previous
+      // `/settings?communityId=` URL was login-walled, which defeats one-click
+      // List-Unsubscribe and CAN-SPAM's no-account expectation (F-11).
+      const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+        baseUrl,
+        communityId: community.id,
+        userId: recipient.userId,
+        topic: 'calendar',
+      });
+
       const payload = await buildReminderEmailPayload({
         community,
         recipient,
         row,
         now,
+        branding: {
+          ...(await getBrandingForCommunity(community.id)),
+          unsubscribeUrl,
+          unsubscribeLabel: 'Unsubscribe from event reminders',
+        },
       });
       if (!payload) {
         await markRowDiscarded(row, 'event no longer eligible', now);
@@ -1155,13 +1196,12 @@ export async function processCalendarEventReminders(
         return;
       }
 
-      const baseUrl = getBaseUrl();
       const result = await sendEmail({
         to: recipient.email,
         subject: payload.subject,
         react: payload.react,
         category: 'non-transactional',
-        unsubscribeUrl: `${baseUrl}/settings?communityId=${community.id}`,
+        unsubscribeUrl,
       });
 
       await markRowSent(row, result.id, now);

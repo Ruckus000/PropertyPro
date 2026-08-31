@@ -43,6 +43,7 @@ vi.mock('@/lib/api/community-membership', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   requireFinanceEnabled: requireFinanceEnabledMock,
   requireFinanceAdminWrite: requireFinanceAdminWriteMock,
 }));
@@ -212,7 +213,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     setCommunityFeePolicyMock.mockResolvedValue({
       oldPolicy: 'association_absorbs',
-      newPolicy: 'owner_pays',
+      newPolicy: 'association_absorbs',
     });
     logAuditEventMock.mockResolvedValue(undefined);
   });
@@ -221,7 +222,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     const res = await PATCH(
       new NextRequest('http://localhost:3000/api/v1/payments/fee-policy', {
         method: 'PATCH',
-        body: JSON.stringify({ communityId: 42, feePolicy: 'owner_pays' }),
+        body: JSON.stringify({ communityId: 42, feePolicy: 'association_absorbs' }),
         headers: {
           'content-type': 'application/json',
           'x-request-id': 'req-abc-123',
@@ -231,8 +232,8 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
 
     expect(res.status).toBe(200);
     const json = (await res.json()) as FeePolicyJson;
-    expect(json.data).toEqual({ feePolicy: 'owner_pays' });
-    expect(setCommunityFeePolicyMock).toHaveBeenCalledWith(42, 'owner_pays');
+    expect(json.data).toEqual({ feePolicy: 'association_absorbs' });
+    expect(setCommunityFeePolicyMock).toHaveBeenCalledWith(42, 'association_absorbs');
     expect(logAuditEventMock).toHaveBeenCalledWith({
       userId: 'admin-1',
       action: 'settings_changed',
@@ -240,14 +241,14 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
       resourceId: '42',
       communityId: 42,
       oldValues: { paymentFeePolicy: 'association_absorbs' },
-      newValues: { paymentFeePolicy: 'owner_pays' },
+      newValues: { paymentFeePolicy: 'association_absorbs' },
       metadata: { requestId: 'req-abc-123' },
     });
   });
 
   it('passes a null requestId in audit metadata when x-request-id header is absent', async () => {
     const res = await PATCH(
-      jsonPatch({ communityId: 42, feePolicy: 'owner_pays' }),
+      jsonPatch({ communityId: 42, feePolicy: 'association_absorbs' }),
     );
 
     expect(res.status).toBe(200);
@@ -262,7 +263,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo expired'));
 
     const res = await PATCH(
-      jsonPatch({ communityId: 42, feePolicy: 'owner_pays' }),
+      jsonPatch({ communityId: 42, feePolicy: 'association_absorbs' }),
     );
 
     expect(res.status).toBe(403);
@@ -277,7 +278,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     });
 
     const res = await PATCH(
-      jsonPatch({ communityId: 42, feePolicy: 'owner_pays' }),
+      jsonPatch({ communityId: 42, feePolicy: 'association_absorbs' }),
     );
 
     expect(res.status).toBe(403);
@@ -291,7 +292,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     );
 
     const res = await PATCH(
-      jsonPatch({ communityId: 42, feePolicy: 'owner_pays' }),
+      jsonPatch({ communityId: 42, feePolicy: 'association_absorbs' }),
     );
 
     expect(res.status).toBe(403);
@@ -304,7 +305,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
     const res = await PATCH(
-      jsonPatch({ communityId: 42, feePolicy: 'owner_pays' }),
+      jsonPatch({ communityId: 42, feePolicy: 'association_absorbs' }),
     );
 
     expect(res.status).toBe(401);
@@ -338,7 +339,7 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
   it('returns 404 when x-community-id header disagrees with body communityId', async () => {
     const res = await PATCH(
       jsonPatch(
-        { communityId: 42, feePolicy: 'owner_pays' },
+        { communityId: 42, feePolicy: 'association_absorbs' },
         { 'x-community-id': '99' },
       ),
     );
@@ -348,5 +349,33 @@ describe('PATCH /api/v1/payments/fee-policy', () => {
     expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
     expect(setCommunityFeePolicyMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  // ── owner_pays is no longer writable (F-16) ─────────────────────────────
+  //
+  // The mode charged a card-rate processing fee to the resident, and 'card'
+  // includes debit — which Visa/Mastercard rules prohibit surcharging. A 400
+  // rather than a silent accept: writing a setting that nothing honours would
+  // leave a PM believing they had configured something.
+  it('REJECTS a write of owner_pays', async () => {
+    const res = await PATCH(jsonPatch({ communityId: 42, feePolicy: 'owner_pays' }));
+
+    expect(res.status).toBe(400);
+    expect(setCommunityFeePolicyMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  // The READ side still returns it, so the settings UI can tell a PM their old
+  // choice is no longer used rather than silently showing a different one.
+  it('still READS a stored owner_pays back', async () => {
+    getCommunityFeePolicyMock.mockResolvedValue('owner_pays');
+
+    const res = await GET(
+      new NextRequest('http://localhost:3000/api/v1/payments/fee-policy?communityId=42'),
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { feePolicy: string } };
+    expect(json.data.feePolicy).toBe('owner_pays');
   });
 });

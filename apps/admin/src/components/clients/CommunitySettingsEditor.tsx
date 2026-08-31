@@ -12,7 +12,9 @@ import {
 import type {
   CommunitySettings,
   CommunityWriteSettings,
+  LegalGateKey,
 } from './community-settings';
+import { LEGAL_GATES } from './community-settings';
 
 interface CommunityData {
   id: number;
@@ -138,12 +140,12 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
     setSuccess(false);
   }
 
-  function handleAttorneyReviewChange(value: boolean) {
+  function handleLegalGateChange(key: LegalGateKey, value: boolean) {
     setForm((prev) => ({
       ...prev,
       community_settings: {
         ...prev.community_settings,
-        electionsAttorneyReviewed: value,
+        [key]: value,
       },
     }));
     setSuccess(false);
@@ -317,32 +319,46 @@ export function CommunitySettingsEditor({ community: initial }: CommunitySetting
         </div>
       </div>
 
-      {/* Elections Attorney Review */}
+      {/* Legal gates — one audited toggle per legally-exposed capability. */}
       <div className="rounded-lg border border-edge bg-surface-card p-5 shadow-e1">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-content-secondary">Elections Attorney Review</h2>
-            <p className="mt-0.5 text-xs text-content-disabled">
-              This is a legal readiness gate. Platform admins can mark the community as attorney-reviewed before elections are enabled for the Board.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => handleAttorneyReviewChange(!form.community_settings.electionsAttorneyReviewed)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              form.community_settings.electionsAttorneyReviewed ? 'bg-interactive' : 'bg-interactive-disabled'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-card shadow ring-0 transition-transform ${
-                form.community_settings.electionsAttorneyReviewed ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
-        <p className="mt-3 text-xs text-content-tertiary">
-          When enabled, board elections can be surfaced to tenant-facing users on this community.
+        <h2 className="mb-1 text-sm font-semibold text-content-secondary">Legal Readiness Gates</h2>
+        <p className="mb-4 text-xs text-content-disabled">
+          Each of these controls a feature with statutory or regulatory exposure. All
+          default to <strong>off</strong>. Every change is recorded individually in the
+          admin audit log.
         </p>
+        <div className="space-y-4">
+          {LEGAL_GATES.map((gate) => {
+            const enabled = form.community_settings[gate.key] === true;
+            return (
+              <div
+                key={gate.key}
+                className="flex items-start justify-between gap-4 border-t border-edge pt-4 first:border-t-0 first:pt-0"
+              >
+                <div>
+                  <h3 className="text-sm font-medium text-content-secondary">{gate.title}</h3>
+                  <p className="mt-0.5 text-xs text-content-disabled">{gate.description}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={`${gate.title} — ${enabled ? 'enabled' : 'disabled'}`}
+                  onClick={() => handleLegalGateChange(gate.key, !enabled)}
+                  className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                    enabled ? 'bg-interactive' : 'bg-interactive-disabled'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-card shadow ring-0 transition-transform ${
+                      enabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Write-Level Restrictions */}

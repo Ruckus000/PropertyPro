@@ -39,7 +39,22 @@ import { defineRoute, z } from '@propertypro/api-contract';
  * `communitySettings.paymentFeePolicy` is unset. The response schema is
  * therefore non-nullable.
  */
+/**
+ * READ shape — still both values, because a community may have `owner_pays`
+ * stored from before it was retired and the settings UI has to be able to say
+ * so. See `getCommunityFeePolicy`.
+ */
 export const feePolicyEnum = z.enum(['owner_pays', 'association_absorbs']);
+
+/**
+ * WRITE shape — `association_absorbs` only (F-16).
+ *
+ * `owner_pays` passed a card-rate processing fee to the resident, and `'card'`
+ * includes debit, which Visa/Mastercard rules prohibit surcharging. The mode is
+ * retired rather than repaired; a PATCH that still sends it now gets a 400
+ * naming the reason rather than silently writing a setting nothing honours.
+ */
+export const writableFeePolicyEnum = z.literal('association_absorbs');
 
 export type FeePolicyValue = z.infer<typeof feePolicyEnum>;
 
@@ -67,7 +82,7 @@ export const patchFeePolicyContract = defineRoute({
   request: {
     body: z.object({
       communityId: z.number().int().positive(),
-      feePolicy: feePolicyEnum,
+      feePolicy: writableFeePolicyEnum,
     }),
   },
   response: feePolicyResponseSchema,

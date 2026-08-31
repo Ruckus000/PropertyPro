@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
 import { PASSWORD_POLICY } from '@propertypro/shared';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
@@ -23,6 +24,14 @@ function validatePassword(pw: string): string | null {
 export function SetPasswordForm({ token, communityId }: Props) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  // Invited residents reach the product through this form and NEVER pass through
+  // the signup form's clickwrap — so without this checkbox they were bound by
+  // nothing, while the Terms purport to cover "all users ... including unit
+  // owners or residents" (ToS §2). Residents are also the people most likely to
+  // be harmed by a notice failure, i.e. exactly who the liability cap and
+  // disclaimers most need to bind.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
@@ -55,12 +64,29 @@ export function SetPasswordForm({ token, communityId }: Props) {
       setError('Passwords do not match.');
       return;
     }
+    // Belt-and-braces with the input's `required` attribute: `required` is
+    // bypassed by any programmatic submit, and this is the gate that makes the
+    // agreement formed.
+    if (!termsAccepted) {
+      setError('Please accept the Terms of Service and Privacy Policy to continue.');
+      return;
+    }
 
     setLoading(true);
 
     let email: string;
     try {
-      email = await acceptInvitation.mutateAsync({ token, communityId, password });
+      // `termsAccepted: true` is a literal, not `termsAccepted` — the guard
+      // above has already returned if the box is unticked, and the contract
+      // types the field as `z.literal(true)` so a `false` could never be a valid
+      // request anyway. Passing the state variable would type-error, which is
+      // the point: there is no path here that submits without acceptance.
+      email = await acceptInvitation.mutateAsync({
+        token,
+        communityId,
+        password,
+        termsAccepted: true,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept invitation.');
       setLoading(false);
@@ -154,6 +180,34 @@ export function SetPasswordForm({ token, communityId }: Props) {
           disabled={loading}
         />
       </div>
+
+      {/* Clickwrap — mirrors the signup form's checkbox verbatim so both entry
+          points into the product form the agreement the same way. */}
+      <label className="flex items-start gap-2 text-sm text-content-secondary">
+        <input
+          type="checkbox"
+          checked={termsAccepted}
+          onChange={(e) => {
+            if (error) setError('');
+            setTermsAccepted(e.target.checked);
+          }}
+          className="mt-0.5 h-4 w-4 rounded border-edge-strong"
+          required
+          disabled={loading}
+          data-testid="invite-terms-checkbox"
+        />
+        <span>
+          I agree to the{' '}
+          <Link href="/legal/terms" className="text-content-link hover:text-content-link">
+            Terms of Service
+          </Link>
+          {' '}and{' '}
+          <Link href="/legal/privacy" className="text-content-link hover:text-content-link">
+            Privacy Policy
+          </Link>
+          .
+        </span>
+      </label>
 
       {error && (
         <p className="text-sm text-status-danger" role="alert" data-testid="set-password-error">

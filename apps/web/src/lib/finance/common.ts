@@ -15,6 +15,31 @@ export async function requireFinanceEnabled(membership: CommunityMembership): Pr
   await requirePlanFeature(membership.communityId, 'hasFinance');
 }
 
+/**
+ * Gate on TAKING MONEY — the charge path and Stripe Connect onboarding.
+ *
+ * Synchronous, and deliberately narrower than `requireFinanceEnabled`: finance
+ * READS stay open. A resident must still be able to see what they owe and how it
+ * was computed; the exposure is in accepting the payment, not in displaying a
+ * balance. Same posture as fines — records visible, writes blocked.
+ *
+ * Disabled because payments currently run as Stripe DESTINATION charges
+ * (`transfer_data.destination`), so assessment funds transit PropertyPro's own
+ * Stripe balance and chargeback liability sits with us rather than the
+ * association — the wrong shape for customers with fund-segregation duties.
+ * Re-enable only after the switch to direct charges.
+ *
+ * Note for callers: place this BEFORE `requireActiveSubscriptionForMutation`, so
+ * it stays independent of that guard's deliberate resident-self-service bypass.
+ *
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-15, F-16.
+ */
+export function requirePaymentsEnabled(membership: CommunityMembership): void {
+  if (!membership.assessmentPaymentsEnabled) {
+    throw new ForbiddenError('Online payments are not available for this community');
+  }
+}
+
 export function requireFinanceReadPermission(membership: CommunityMembership): void {
   requirePermission(membership, 'finances', 'read');
 }

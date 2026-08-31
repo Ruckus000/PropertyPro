@@ -44,6 +44,8 @@ import {
   type DigestSourceType,
 } from './notification-digest-queue';
 import { getBaseUrl } from '@/lib/utils/url';
+import { loadEmailBranding } from './email-branding';
+import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -451,15 +453,9 @@ export async function resolveRecipients(
     .map(({ userId, email, fullName }) => ({ userId, email, fullName }));
 }
 
-async function loadBranding(communityId: number): Promise<CommunityBranding> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const community = rows.find((row) => row['id'] === communityId);
-  return {
-    communityName:
-      typeof community?.['name'] === 'string' ? (community['name'] as string) : 'PropertyPro',
-  };
-}
+// `loadBranding` now lives in `email-branding.ts`, shared with
+// announcement-delivery, and additionally carries the association's postal
+// address for the CAN-SPAM footer (F-11).
 
 // ---------------------------------------------------------------------------
 // Email rendering
@@ -602,15 +598,33 @@ async function dispatchNotification(
   let sentCount = 0;
   let failedCount = 0;
   if (immediateRecipients.length > 0) {
-    const branding = await loadBranding(communityId);
+    const branding = await loadEmailBranding(communityId);
     const baseUrl = getBaseUrl();
-    const unsubscribeUrl = `${baseUrl}/settings?communityId=${communityId}`;
 
     for (const batch of chunk(immediateRecipients, 100)) {
       await Promise.all(
         batch.map(async (recipient) => {
           try {
-            const { subject, react } = renderEmailForEvent(event, recipient, branding, communityId);
+            // Per-recipient and reachable with no session — the previous
+            // `/settings?communityId=` URL was login-walled, which defeats
+            // one-click List-Unsubscribe (F-11).
+            const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+              baseUrl,
+              communityId,
+              userId: recipient.userId,
+              topic: 'notifications',
+            });
+
+            const { subject, react } = renderEmailForEvent(
+              event,
+              recipient,
+              {
+                ...branding,
+                unsubscribeUrl,
+                unsubscribeLabel: 'Unsubscribe from these emails',
+              },
+              communityId,
+            );
 
             await sendEmail({
               to: recipient.email,

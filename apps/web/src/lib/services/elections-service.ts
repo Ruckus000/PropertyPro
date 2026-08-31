@@ -15,6 +15,7 @@ import {
   units,
 } from '@propertypro/db';
 import { and, asc, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
+import { createSelectionDigest } from '@/lib/elections/selection-digest';
 // AUTHZ: Elections vote/proxy/state transitions require one transaction for domain rows and audit rows.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
@@ -92,19 +93,12 @@ interface ElectionBallotSubmissionRecord {
   submittedByUserId: string;
   submissionFingerprint: string;
   voterHash: string;
+  /** Null for submissions recorded before the column existed — see F-08. */
+  selectionDigest: string | null;
   isAbstention: boolean;
   isProxyVote: boolean;
   proxyId: number | null;
   submittedAt: Date;
-}
-
-interface ElectionBallotRecord {
-  [key: string]: unknown;
-  id: number;
-  submissionId: number;
-  electionId: number;
-  candidateId: number;
-  unitId: number;
 }
 
 interface ElectionVoteCountRow {
@@ -471,6 +465,7 @@ async function getExistingSubmissionForUnit(
       submittedByUserId: electionBallotSubmissions.submittedByUserId,
       submissionFingerprint: electionBallotSubmissions.submissionFingerprint,
       voterHash: electionBallotSubmissions.voterHash,
+      selectionDigest: electionBallotSubmissions.selectionDigest,
       isAbstention: electionBallotSubmissions.isAbstention,
       isProxyVote: electionBallotSubmissions.isProxyVote,
       proxyId: electionBallotSubmissions.proxyId,
@@ -485,29 +480,9 @@ async function getExistingSubmissionForUnit(
   return (rows[0] as ElectionBallotSubmissionRecord | undefined) ?? null;
 }
 
-async function getBallotCandidateIdsForSubmission(
-  scoped: ReturnType<typeof createScopedClient>,
-  submissionId: number,
-): Promise<number[]> {
-  const rows = await scoped.selectFrom<ElectionBallotRecord>(
-    electionBallots,
-    {
-      id: electionBallots.id,
-      submissionId: electionBallots.submissionId,
-      electionId: electionBallots.electionId,
-      candidateId: electionBallots.candidateId,
-      unitId: electionBallots.unitId,
-    },
-    eq(electionBallots.submissionId, submissionId),
-  );
-
-  return rows.map((row) => row.candidateId).sort((a, b) => a - b);
-}
-
 function assertSameLogicalSubmission(
   existing: ElectionBallotSubmissionRecord,
-  existingCandidateIds: number[],
-  requestedCandidateIds: number[],
+  requestedDigest: string,
   isAbstention: boolean,
   proxyId: number | null,
 ): void {
@@ -519,15 +494,13 @@ function assertSameLogicalSubmission(
     throw new AppError('This unit has already submitted a ballot for this election', 409, 'CONFLICT');
   }
 
-  const normalizedRequested = [...requestedCandidateIds].sort((a, b) => a - b);
-  if (existingCandidateIds.length !== normalizedRequested.length) {
+  // A submission recorded before `selection_digest` existed has none, and it
+  // cannot be back-filled — doing so would need exactly the ballot→submission
+  // join that was removed. Treat it as a conflict: refusing a resubmission is
+  // the safe direction, since the alternative is silently accepting a DIFFERENT
+  // ballot as if it were the same one.
+  if (!existing.selectionDigest || existing.selectionDigest !== requestedDigest) {
     throw new AppError('This unit has already submitted a ballot for this election', 409, 'CONFLICT');
-  }
-
-  for (let index = 0; index < existingCandidateIds.length; index += 1) {
-    if (existingCandidateIds[index] !== normalizedRequested[index]) {
-      throw new AppError('This unit has already submitted a ballot for this election', 409, 'CONFLICT');
-    }
   }
 }
 
@@ -615,6 +588,7 @@ async function getExistingReceiptForActorUnits(
       submittedByUserId: electionBallotSubmissions.submittedByUserId,
       submissionFingerprint: electionBallotSubmissions.submissionFingerprint,
       voterHash: electionBallotSubmissions.voterHash,
+      selectionDigest: electionBallotSubmissions.selectionDigest,
       isAbstention: electionBallotSubmissions.isAbstention,
       isProxyVote: electionBallotSubmissions.isProxyVote,
       proxyId: electionBallotSubmissions.proxyId,
@@ -945,8 +919,12 @@ export async function castElectionVoteForCommunity(
     // serializes concurrent vote submissions for the same election.
     const existingSubmission = await getExistingSubmissionForUnit(scoped, electionId, unitId);
     if (existingSubmission) {
-      const existingCandidateIds = await getBallotCandidateIdsForSubmission(scoped, existingSubmission.id);
-      assertSameLogicalSubmission(existingSubmission, existingCandidateIds, selectedCandidateIds, isAbstention, proxyId);
+      assertSameLogicalSubmission(
+        existingSubmission,
+        createSelectionDigest(election.ballotSalt, selectedCandidateIds, isAbstention),
+        isAbstention,
+        proxyId,
+      );
 
       return {
         id: existingSubmission.id,
@@ -968,6 +946,11 @@ export async function castElectionVoteForCommunity(
         submittedByUserId: actorUserId,
         submissionFingerprint,
         voterHash,
+        selectionDigest: createSelectionDigest(
+          election.ballotSalt,
+          selectedCandidateIds,
+          isAbstention,
+        ),
         isAbstention,
         isProxyVote: proxy !== null,
         proxyId,
@@ -982,15 +965,14 @@ export async function castElectionVoteForCommunity(
       if (!isAbstention) {
         await scoped.insert(
           electionBallots,
+          // Election + candidate + "one vote", and nothing else. Every
+          // identifying column that used to be here — submissionId, unitId,
+          // voterHash, isProxyVote, proxyId — was a path from a vote back to a
+          // voter. See the block comment on `electionBallots` (F-08).
           selectedCandidateIds.map((candidateId) => ({
             electionId,
-            submissionId: typedSubmission.id,
             candidateId,
-            unitId,
-            voterHash,
             isAbstention: false,
-            isProxyVote: proxy !== null,
-            proxyId,
           })),
         );
       }

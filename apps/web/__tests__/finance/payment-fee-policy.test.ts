@@ -96,6 +96,7 @@ vi.mock('@/lib/services/oauth-state', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parseDateOnly: vi.fn((v: string) => v),
 }));
 
@@ -113,6 +114,7 @@ vi.mock('@/lib/services/csv-export', () => ({
 
 import {
   getCommunityFeePolicy,
+  getStoredFeePolicyPreference,
   createPaymentIntentForLineItem,
   updatePaymentIntentFee,
   processFinanceStripeEvent,
@@ -152,10 +154,27 @@ describe('getCommunityFeePolicy', () => {
     createScopedClientMock.mockImplementation(() => makeScopedClient());
   });
 
-  it('returns owner_pays when set in community settings', async () => {
+  // ── owner_pays is retired (F-16) ────────────────────────────────────────
+  //
+  // This block previously asserted the OPPOSITE — that a stored `owner_pays`
+  // was honoured. That mode charged the resident a card-rate processing fee,
+  // and `payment_method_types` includes 'card', which includes DEBIT; Visa and
+  // Mastercard rules prohibit surcharging debit outright, and they bind us
+  // through the Stripe agreement where the remedy is losing card acceptance.
+  //
+  // The stored value is deliberately NOT deleted — a migration over a JSONB
+  // blob to reverse a product decision is the wrong trade, and the settings UI
+  // reads it back to tell a PM their old choice is no longer used.
+
+  it('IGNORES a stored owner_pays and returns association_absorbs', async () => {
     selectFromMock.mockResolvedValue([{ communitySettings: { paymentFeePolicy: 'owner_pays' } }]);
     const policy = await getCommunityFeePolicy(11);
-    expect(policy).toBe('owner_pays');
+    expect(policy).toBe('association_absorbs');
+  });
+
+  it('still reads the stored preference back, for settings copy', async () => {
+    selectFromMock.mockResolvedValue([{ communitySettings: { paymentFeePolicy: 'owner_pays' } }]);
+    expect(await getStoredFeePolicyPreference(11)).toBe('owner_pays');
   });
 
   it('returns association_absorbs when set in community settings', async () => {
@@ -195,7 +214,11 @@ describe('updatePaymentIntentFee', () => {
     });
   });
 
-  it('sets application_fee_amount with convenience fee for owner_pays + card', async () => {
+  // A community that still has `owner_pays` stored. It used to produce a $15.25
+  // convenience fee charged to the resident; it now produces none, because the
+  // mode is retired (F-16). Kept as an owner_pays fixture ON PURPOSE — the
+  // regression worth guarding is "a stored owner_pays comes back to life".
+  it('charges the resident NOTHING even when owner_pays is stored', async () => {
     paymentIntentsRetrieve.mockResolvedValue({
       id: 'pi_test',
       status: 'requires_payment_method',
@@ -204,37 +227,69 @@ describe('updatePaymentIntentFee', () => {
         baseAmountCents: '50000',
       },
     });
-    selectFromMock.mockResolvedValue([{ communitySettings: { paymentFeePolicy: 'owner_pays' } }]);
-
-    const result = await updatePaymentIntentFee(11, 'pi_test', 'card', 'user-1');
-
-    expect(result.convenienceFeeCents).toBe(1525);
-    expect(result.totalChargeCents).toBe(50000 + 1525);
-    expect(paymentIntentsUpdate).toHaveBeenCalledWith('pi_test', expect.objectContaining({
-      amount: 50000 + 1525,
-      application_fee_amount: 1525,
-    }));
-  });
-
-  it('sets application_fee_amount with Stripe fee estimate for association_absorbs', async () => {
-    paymentIntentsRetrieve.mockResolvedValue({
-      id: 'pi_test',
-      status: 'requires_payment_method',
-      metadata: {
-        communityId: '11',
-        baseAmountCents: '50000',
-      },
-    });
-    selectFromMock.mockResolvedValue([{ communitySettings: { paymentFeePolicy: 'association_absorbs' } }]);
+    selectFromMock.mockResolvedValue([
+      { communitySettings: { paymentFeePolicy: 'owner_pays' }, stripeAccountId: 'acct_assoc' },
+    ]);
 
     const result = await updatePaymentIntentFee(11, 'pi_test', 'card', 'user-1');
 
     expect(result.convenienceFeeCents).toBe(0);
     expect(result.totalChargeCents).toBe(50000);
-    expect(paymentIntentsUpdate).toHaveBeenCalledWith('pi_test', expect.objectContaining({
-      amount: 50000,
-      application_fee_amount: 1480, // Stripe fee estimate for $500 card
-    }));
+    expect(paymentIntentsUpdate).toHaveBeenCalledWith(
+      'pi_test',
+      expect.objectContaining({ amount: 50000, application_fee_amount: 1480 }),
+      // Direct charge: the PI lives on the association's account (F-15).
+      { stripeAccount: 'acct_assoc' },
+    );
+  });
+
+  it('sets application_fee_amount with the Stripe fee estimate', async () => {
+    paymentIntentsRetrieve.mockResolvedValue({
+      id: 'pi_test',
+      status: 'requires_payment_method',
+      metadata: {
+        communityId: '11',
+        baseAmountCents: '50000',
+      },
+    });
+    selectFromMock.mockResolvedValue([
+      {
+        communitySettings: { paymentFeePolicy: 'association_absorbs' },
+        stripeAccountId: 'acct_assoc',
+      },
+    ]);
+
+    const result = await updatePaymentIntentFee(11, 'pi_test', 'card', 'user-1');
+
+    expect(result.convenienceFeeCents).toBe(0);
+    expect(result.totalChargeCents).toBe(50000);
+    expect(paymentIntentsUpdate).toHaveBeenCalledWith(
+      'pi_test',
+      expect.objectContaining({
+        amount: 50000,
+        application_fee_amount: 1480, // Stripe fee estimate for $500 card
+      }),
+      { stripeAccount: 'acct_assoc' },
+    );
+  });
+
+  it('RETRIEVES the payment intent from the connected account', async () => {
+    // Without the request option this raises `No such payment_intent` — a
+    // failure that reads like a missing record rather than a missing header.
+    paymentIntentsRetrieve.mockResolvedValue({
+      id: 'pi_test',
+      status: 'requires_payment_method',
+      metadata: { communityId: '11', baseAmountCents: '50000' },
+    });
+    selectFromMock.mockResolvedValue([
+      { communitySettings: {}, stripeAccountId: 'acct_assoc' },
+    ]);
+
+    await updatePaymentIntentFee(11, 'pi_test', 'card', 'user-1');
+
+    expect(paymentIntentsRetrieve).toHaveBeenCalledWith('pi_test', undefined, {
+      stripeAccount: 'acct_assoc',
+    });
   });
 
   it('rejects PI with mismatched communityId', async () => {
@@ -795,15 +850,26 @@ describe('createPaymentIntentForLineItem metadata contract', () => {
       actorUserId: 'user-11',
     });
 
-    expect(paymentIntentsCreate).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: expect.objectContaining({
-        payableType: 'assessment_line_item',
-        payableId: '44',
-        payableSourceType: 'assessment',
-        payableSourceId: '44',
-        lineItemId: '44',
+    expect(paymentIntentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          payableType: 'assessment_line_item',
+          payableId: '44',
+          payableSourceType: 'assessment',
+          payableSourceId: '44',
+          lineItemId: '44',
+        }),
       }),
-    }));
+      // DIRECT charge (F-15): created on the association's own account, so the
+      // funds never transit PropertyPro's Stripe balance and a chargeback hits
+      // the association rather than us.
+      { stripeAccount: 'acct_123' },
+    );
+
+    // `transfer_data` is what made it a DESTINATION charge. Its absence is the
+    // whole point of the change, so assert it explicitly rather than relying on
+    // objectContaining, which would happily ignore it.
+    expect(paymentIntentsCreate.mock.calls[0]![0]).not.toHaveProperty('transfer_data');
   });
 
   it('creates rent payable intents with rent metadata contract', async () => {
@@ -853,14 +919,17 @@ describe('createPaymentIntentForLineItem metadata contract', () => {
       actorUserId: 'user-11',
     });
 
-    expect(paymentIntentsCreate).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: expect.objectContaining({
-        payableType: 'rent_obligation',
-        payableId: '77',
-        payableSourceType: 'rent',
-        payableSourceId: '77',
+    expect(paymentIntentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          payableType: 'rent_obligation',
+          payableId: '77',
+          payableSourceType: 'rent',
+          payableSourceId: '77',
+        }),
       }),
-    }));
+      { stripeAccount: 'acct_123' },
+    );
     expect(updateMock).not.toHaveBeenCalledWith(
       assessmentLineItemsTable,
       expect.anything(),

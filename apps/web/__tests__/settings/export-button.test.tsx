@@ -68,7 +68,10 @@ describe('ExportButton', () => {
 
   it('renders the default button label', () => {
     render(<ExportButton communityId={1} />);
-    expect(screen.getByText('Download Community Data')).toBeDefined();
+    // Renamed when the async full-archive export landed alongside it: this
+    // button is now the *quick CSV* path, and "Download Community Data" would
+    // have implied it was the complete record set. It is not — no document files.
+    expect(screen.getByText('Download CSV export')).toBeDefined();
   });
 
   it('disables the button and shows pending label while pending', () => {

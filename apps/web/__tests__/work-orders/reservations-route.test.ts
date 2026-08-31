@@ -38,6 +38,7 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parsePositiveInt: parsePositiveIntMock,
 }));
 

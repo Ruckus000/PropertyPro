@@ -29,11 +29,30 @@
  * Body fields:
  *   - `communityId`: positive int
  *   - `decision`: 'approved' | 'denied'
- *   - `reviewNotes`: string ≤ 4000 chars, nullable + optional
+ *   - `reviewNotes`: string ≤ 4000 chars, nullable + optional ON APPROVAL,
+ *     REQUIRED AND NON-EMPTY ON DENIAL (see below)
+ *   - `ruleReference`: string ≤ 500 chars, same rule — the structured citation
  *
  * The `?? null` coercion on `reviewNotes` is preserved verbatim in the
  * handler — the service expects `null` (not `undefined`) for this field
  * (drain #46 precedent).
+ *
+ * ── Denial requires a written reason ──────────────────────────────────────
+ *
+ * HB 1203 (2024) amended §720.3035: an architectural-review denial must be in
+ * writing and must state the specific rule or covenant relied on. Before this
+ * refinement a board could deny an owner's application with an empty reason
+ * field, which is the statutory defect itself — not a UI nicety. The
+ * `superRefine` below enforces it SERVER-SIDE, so a client that omits the
+ * field (or sends whitespace) gets a 400 rather than a silently-empty denial.
+ *
+ * Approvals are deliberately left optional — the statute's writing requirement
+ * attaches to denials.
+ *
+ * NOTE: this is a deliberate BREAKING change to the request contract, unlike
+ * the byte-identical drain migrations described above. A denial that previously
+ * returned 200 with `reviewNotes: null` now returns 400 VALIDATION_ERROR.
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-03.
  *
  * Response intentionally typed `z.unknown()` (loose) because
  * `decideArcSubmissionForCommunity` returns a service value (Drizzle row)
@@ -68,22 +87,29 @@ export const arcDecideContract = defineRoute({
         communityId: z.number().int().positive(),
         decision: z.enum(['approved', 'denied']),
         reviewNotes: z.string().max(4000).nullable().optional(),
+        ruleReference: z.string().max(500).nullable().optional(),
       })
-      // HB 1203: an ARC/ACC denial must state the specific reason and identify
-      // the rule or covenant relied on. Until the 2026-08-09 feature-correctness
-      // audit this endpoint accepted `{ decision: 'denied' }` with no notes at
-      // all and then emailed the resident an unexplained denial. The statute's
-      // *content* requirement (citing the covenant) cannot be machine-checked;
-      // requiring a non-empty written reason is the part that can.
       .superRefine((value, ctx) => {
         if (value.decision !== 'denied') return;
-        if (value.reviewNotes != null && value.reviewNotes.trim().length > 0) return;
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['reviewNotes'],
-          message:
-            'A denial must include written reasons citing the specific rule or covenant relied on (HB 1203).',
-        });
+        // Whitespace is not a reason. `?.trim()` also covers null/undefined.
+        if (!value.reviewNotes?.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['reviewNotes'],
+            message:
+              'A written reason is required to deny an application. State the specific rule or covenant the application does not satisfy (Fla. Stat. §720.3035).',
+          });
+        }
+        // Separate issue, separate field. Prose in `reviewNotes` can satisfy a
+        // reader without ever naming the rule; the statute asks for the rule.
+        if (!value.ruleReference?.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['ruleReference'],
+            message:
+              'Cite the specific rule or covenant relied on to deny this application (Fla. Stat. §720.3035) — for example "Declaration Art. VII §3" or "Architectural Guidelines §2.4".',
+          });
+        }
       }),
   },
   response: z.unknown(),
