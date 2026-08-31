@@ -78,6 +78,16 @@ const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> = [
   // GET backs the human-clicked link, POST is the RFC 8058 one-click target.
   { path: '/api/v1/insurance-alerts/unsubscribe', method: 'GET' },
   { path: '/api/v1/insurance-alerts/unsubscribe', method: 'POST' },
+  // Community bulk-email one-click unsubscribe — announcements, the notification
+  // pipeline, the digest and calendar reminders. HMAC-token-authenticated, no
+  // session (CAN-SPAM + RFC 8058): GET backs the link a human clicks, POST is
+  // the List-Unsubscribe-Post target a mail client fires with no cookies.
+  //
+  // BOTH verbs, deliberately. `isTokenAuthenticatedApiRoute` matches on exact
+  // path AND method, so a GET-only entry leaves Gmail's POST 401'd — the exact
+  // shape that once broke every cron. Enforced now by guard:token-auth-routes.
+  { path: '/api/v1/notifications/unsubscribe', method: 'GET' },
+  { path: '/api/v1/notifications/unsubscribe', method: 'POST' },
   // Stripe webhook: signature-verified by handler, no session required [P2-34]
   { path: '/api/v1/webhooks/stripe', method: 'POST' },
   // Demo auto-auth: HMAC-token-validated, no session required [Task 2.4-2.6]
