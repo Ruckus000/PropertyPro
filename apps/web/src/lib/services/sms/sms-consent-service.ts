@@ -24,7 +24,7 @@
  * See docs/audits/2026-08-09-legal-risk-audit.md F-10.
  */
 import { logAuditEvent, notificationPreferences, users } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, inArray } from '@propertypro/db/filters';
 // The inbound webhook is authenticated by Twilio's HMAC signature and carries a
 // phone number, not a session or a community. Resolving that number to a user
 // and revoking their SMS consent everywhere is inherently cross-tenant — a STOP
@@ -34,29 +34,41 @@ import { eq } from '@propertypro/db/filters';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
 export interface SmsConsentChange {
-  /** Null when the number matches no user we know. */
-  userId: string | null;
-  /** How many community preference rows were updated. */
+  /** Every user who owns this number. Empty when we know none of them. */
+  userIds: string[];
+  /** How many community preference rows were updated, across all of them. */
   rowsUpdated: number;
 }
 
 /**
- * The user who owns this phone number.
+ * EVERY user who owns this phone number.
+ *
+ * Plural, and that is the whole point. `users.phone` is neither unique nor
+ * indexed, and handsets are shared — spouses on one unit, a parent and an adult
+ * child. This used to be `.limit(1)` with no ORDER BY, so a STOP revoked consent
+ * for whichever row Postgres happened to return first and the platform kept
+ * texting the other person: precisely the TCPA outcome the keyword handler
+ * exists to prevent, and damages are per message.
+ *
+ * Unverified rows are included deliberately. Over-revoking is the safe
+ * direction; under-revoking is the violation. Filtering to verified users would
+ * also leave a real hole — B shares the handset with an unverified number, A
+ * texts STOP, B verifies later and starts receiving texts on a handset that has
+ * already said stop.
  *
  * Matches on the stored `users.phone` verbatim. Both sides are E.164 — the
- * verification flow stores what Twilio Verify confirmed, and Twilio sends `From`
- * in E.164 — so no normalisation is applied. Normalising here would invent a
- * matching rule that the write path does not share, and a number that matches
- * on read but not on write is worse than no match at all.
+ * verification flow stores what `phoneE164Schema` normalised and validated, and
+ * Twilio sends `From` in E.164 — so no normalisation is applied. Normalising
+ * here would invent a matching rule that the write path does not share, and a
+ * number that matches on read but not on write is worse than no match at all.
  */
-async function findUserIdByPhone(phone: string): Promise<string | null> {
+async function findUserIdsByPhone(phone: string): Promise<string[]> {
   const db = createUnscopedClient();
   const rows = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.phone, phone))
-    .limit(1);
-  return rows[0]?.id ?? null;
+    .where(eq(users.phone, phone));
+  return rows.map((row) => row.id);
 }
 
 /**
@@ -70,8 +82,10 @@ export async function revokeSmsConsentByPhone(
   phone: string,
   now: Date = new Date(),
 ): Promise<SmsConsentChange> {
-  const userId = await findUserIdByPhone(phone);
-  if (!userId) return { userId: null, rowsUpdated: 0 };
+  const userIds = await findUserIdsByPhone(phone);
+  // Short-circuit before the query: drizzle forbids inArray(col, []), and it
+  // would be a nonsense statement anyway.
+  if (userIds.length === 0) return { userIds: [], rowsUpdated: 0 };
 
   const db = createUnscopedClient();
   const updated = await db
@@ -81,28 +95,36 @@ export async function revokeSmsConsentByPhone(
       smsConsentRevokedAt: now,
       updatedAt: now,
     })
-    .where(eq(notificationPreferences.userId, userId))
-    .returning({ communityId: notificationPreferences.communityId });
+    .where(inArray(notificationPreferences.userId, userIds))
+    .returning({
+      communityId: notificationPreferences.communityId,
+      userId: notificationPreferences.userId,
+    });
 
   // One audit row per community, because the audit log is tenant-scoped and a
   // board asking "why did this resident stop receiving texts" has to be able to
   // find the answer inside their own community's trail.
   for (const row of updated) {
     await logAuditEvent({
-      userId,
+      // row.userId, not a single captured id: a shared handset revokes several
+      // users at once, and an entry attributed to the wrong one is worse than
+      // none — it tells a board the wrong resident opted out.
+      userId: row.userId,
       action: 'update',
       resourceType: 'sms_consent',
-      resourceId: userId,
+      resourceId: row.userId,
       communityId: row.communityId,
       newValues: {
         smsEnabled: false,
         smsConsentRevokedAt: now.toISOString(),
         source: 'sms_keyword',
+        // Visible in the trail when one STOP silenced more than one person.
+        sharedHandsetUserCount: userIds.length,
       },
     });
   }
 
-  return { userId, rowsUpdated: updated.length };
+  return { userIds, rowsUpdated: updated.length };
 }
 
 /**
@@ -114,31 +136,41 @@ export async function revokeSmsConsentByPhone(
  * user who has never opted in through the app stays off, and the app's own
  * consent flow — which records `smsConsentGivenAt` and the method — remains the
  * only thing that turns SMS on.
+ *
+ * That property is what makes applying START to EVERY user on the handset safe.
+ * On a shared number the sender cannot be attributed, so a re-enabling START
+ * would let one person undo another's STOP. It cannot: the send gate requires
+ * `smsEnabled === true` (emergency-broadcast-service.ts) and STOP set it false,
+ * so START alone never resumes messages for anyone. Do not "fix" this by having
+ * START set `smsEnabled = true` — that is the bug this shape prevents.
  */
 export async function restoreSmsConsentByPhone(
   phone: string,
   now: Date = new Date(),
 ): Promise<SmsConsentChange> {
-  const userId = await findUserIdByPhone(phone);
-  if (!userId) return { userId: null, rowsUpdated: 0 };
+  const userIds = await findUserIdsByPhone(phone);
+  if (userIds.length === 0) return { userIds: [], rowsUpdated: 0 };
 
   const db = createUnscopedClient();
   const updated = await db
     .update(notificationPreferences)
     .set({ smsConsentRevokedAt: null, updatedAt: now })
-    .where(eq(notificationPreferences.userId, userId))
-    .returning({ communityId: notificationPreferences.communityId });
+    .where(inArray(notificationPreferences.userId, userIds))
+    .returning({
+      communityId: notificationPreferences.communityId,
+      userId: notificationPreferences.userId,
+    });
 
   for (const row of updated) {
     await logAuditEvent({
-      userId,
+      userId: row.userId,
       action: 'update',
       resourceType: 'sms_consent',
-      resourceId: userId,
+      resourceId: row.userId,
       communityId: row.communityId,
       newValues: { smsConsentRevokedAt: null, source: 'sms_keyword' },
     });
   }
 
-  return { userId, rowsUpdated: updated.length };
+  return { userIds, rowsUpdated: updated.length };
 }
