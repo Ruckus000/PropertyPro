@@ -153,6 +153,74 @@ describe('middleware: missing-tenant redirect for authenticated users on protect
     expect(response.status).not.toBe(307);
   });
 
+  it('does NOT bounce /account/join-community — the only escape route for a zero-community user', async () => {
+    // A user whose every membership points at a soft-deleted community resolves
+    // to zero communities and lands on /select-community's empty state. Its
+    // call to action links here. Without the carve-out this path is bounced
+    // straight back, so the button returns the user to the dead end it exists
+    // to escape — a loop no timeout or retry can recover from.
+    //
+    // Control for this case is the first test in this file: /settings on the
+    // same host, same auth state, MUST still bounce. If both go red the file is
+    // broken; only this one going red is the real regression.
+    const response = await middleware(
+      makeRequest('www.getpropertypro.com', '/account/join-community'),
+    );
+
+    // Assert the redirect TARGET, not just the status, so a regression reports
+    // the defect verbatim rather than a bare status mismatch.
+    const location = response.headers.get('location');
+    const bouncedTo = location ? new URL(location).pathname : null;
+    expect(bouncedTo).not.toBe('/select-community');
+    expect(response.status).not.toBe(307);
+  });
+
+  it('does NOT bounce /account/join-community on a COMMUNITY SUBDOMAIN, and resolves no tenant there', async () => {
+    // The subdomain case is the one the first version of this fix got wrong.
+    // Listing the path in the missing-tenant bounce alone was not enough: that
+    // branch is gated on the tenant header being ABSENT, and a subdomain stamps
+    // one. The layout then saw `community === null` with a tenant header and
+    // redirected to /select-community — whose empty state links back here, so
+    // the escape hatch looped forever. Only membership of TENANT_OPTIONAL_PATHS
+    // in `shouldResolveTenant` stops the stamp, so that is what this asserts.
+    //
+    // rpc, not from(): findCommunityIdBySlug calls
+    // supabase.rpc('pp_public_community_id_by_slug'). Mocking the from() chain
+    // instead (as the /dashboard case above does) leaves rpc undefined, the
+    // call throws, and middleware returns 500 — which would satisfy a lone
+    // `not.toBe(307)` while proving nothing. Asserting rpc was NOT called is
+    // the real evidence that tenant resolution was skipped rather than failed.
+    const rpcMock = vi.fn(async () => ({ data: 282, error: null }));
+    createMiddlewareClientMock.mockImplementation(async () => ({
+      supabase: { auth: { getUser: getUserMock }, rpc: rpcMock },
+      response: NextResponse.next(),
+      user: {
+        id: 'user-with-no-live-communities',
+        email: 'ruckus@example.com',
+        emailVerified: true,
+      },
+      authChecked: true,
+    }));
+
+    const response = await middleware(
+      makeRequest('ruckus-test.getpropertypro.com', '/account/join-community'),
+    );
+
+    // 1. Not bounced.
+    const location = response.headers.get('location');
+    const bouncedTo = location ? new URL(location).pathname : null;
+    expect(bouncedTo).not.toBe('/select-community');
+    expect(response.status).not.toBe(307);
+
+    // 2. No tenant stamped — this is what keeps the authenticated layout from
+    //    bouncing us. Next surfaces forwarded request headers on the response
+    //    under the x-middleware-request- prefix.
+    expect(response.headers.get('x-middleware-request-x-community-id')).toBeNull();
+
+    // 3. The slug was never even looked up.
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
   it('does NOT redirect API requests — handlers throw their own ValidationError', async () => {
     const response = await middleware(makeRequest('www.getpropertypro.com', '/api/v1/announcements'));
 

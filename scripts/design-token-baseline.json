@@ -30,7 +30,7 @@
     "raw-palette": 15
   },
   "apps/web/src/app/(authenticated)/select-community/page.tsx": {
-    "raw-palette": 6
+    "raw-palette": 4
   },
   "apps/web/src/app/(marketing)/marketing-theme.css": {
     "raw-hex": 53,

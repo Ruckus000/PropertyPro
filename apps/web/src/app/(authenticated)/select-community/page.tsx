@@ -1,6 +1,9 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
 import { PageBody } from '@/components/shared/page-body';
+import { Button } from '@/components/ui/button';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { UNKNOWN_SUBDOMAIN_REASON } from '@/lib/middleware/unknown-subdomain-reason';
 import { listCommunitiesForUser } from '@/lib/api/user-communities';
@@ -71,13 +74,33 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
       </div>
 
       {communities.length === 0 ? (
-        <div className="rounded-md border border-dashed border-edge-strong bg-surface-hover px-8 py-16 text-center dark:border-gray-600 dark:bg-gray-800">
-          <p className="text-sm font-medium text-content-secondary dark:text-gray-300">
-            You are not a member of any community yet.
-          </p>
-          <p className="mt-1 text-sm text-content-disabled dark:text-gray-500">
-            Contact your community manager or board to request access.
-          </p>
+        /* A user reaches this branch with NO live community — either they have
+           never been added to one, or every membership they had points at a
+           soft-deleted community. Both look identical from here, and both used
+           to dead-end: the old copy said "contact your manager" and offered
+           nothing to click, which reads as a broken login. The join path is the
+           one self-service route out, so it has to be an action, not advice.
+           /account/join-community is in middleware's TENANT_OPTIONAL_PATHS so
+           this button cannot land back on this page — on ANY host. Listing it
+           in the missing-tenant bounce alone was not enough: a subdomain still
+           stamped a tenant, and the authenticated layout bounced it right back.
+
+           The dark: variants are deliberate, not leftovers. The token layer is
+           single-theme light, so without them this box renders as a light
+           island on a dark page. They are frozen in
+           scripts/design-token-baseline.json — see CLAUDE.md's design-token
+           section before removing them. */
+        <div className="rounded-md border border-dashed border-edge-strong bg-surface-hover dark:border-gray-600 dark:bg-gray-800">
+          <EmptyState
+            icon="building"
+            title="Let's get you connected"
+            description="You are not a member of any community yet. Search for yours to request access, or ask your community manager or board to add you."
+            action={
+              <Button asChild>
+                <Link href="/account/join-community">Join a community</Link>
+              </Button>
+            }
+          />
         </div>
       ) : (
         <CommunityPickerGrid communities={communities} returnTo={safeReturnTo} />
