@@ -12,7 +12,7 @@
  */
 import { communityExportJobParts, communityExportJobs, logAuditEvent } from '@propertypro/db';
 import type { CommunityExportJob, ExportJobCursor, ExportJobManifest } from '@propertypro/db';
-import { and, asc, eq, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
+import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from '@propertypro/db/filters';
 // The worker's claim scan is cross-tenant by nature: a cron with no session,
 // looking for claimable jobs in ANY community, so there is no communityId to
 // scope by until a job has been selected. Touches ONLY the two job tables; every
@@ -155,6 +155,12 @@ export async function claimNextExportJob(
       and(
         inArray(communityExportJobs.status, ['queued', 'running']),
         isNull(communityExportJobs.deletedAt),
+        // Column-to-column. A job that has burned its attempts must stop being
+        // re-claimed. `markJobFailed` consults maxAttempts too, but only in the
+        // catch path — an invocation killed by the platform deadline never
+        // reaches it, so without this predicate a job that reliably outlives its
+        // budget is re-claimed on every tick, forever.
+        lt(communityExportJobs.attemptCount, communityExportJobs.maxAttempts),
         or(
           isNull(communityExportJobs.leaseExpiresAt),
           lt(communityExportJobs.leaseExpiresAt, now),
@@ -179,8 +185,10 @@ export async function claimNextExportJob(
         and(
           eq(communityExportJobs.id, candidate.id),
           inArray(communityExportJobs.status, ['queued', 'running']),
-          // Re-assert lease expiry INSIDE the update. Without this the guard is
-          // a TOCTOU: another tick could claim between our SELECT and UPDATE.
+          // Re-assert lease expiry AND the attempt cap INSIDE the update.
+          // Without this the guard is a TOCTOU: another tick could claim, or
+          // exhaust the last attempt, between our SELECT and UPDATE.
+          lt(communityExportJobs.attemptCount, communityExportJobs.maxAttempts),
           or(
             isNull(communityExportJobs.leaseExpiresAt),
             lt(communityExportJobs.leaseExpiresAt, now),
@@ -194,6 +202,53 @@ export async function claimNextExportJob(
   }
 
   return null;
+}
+
+/**
+ * Fail jobs that have exhausted their attempts, so they stop being invisible.
+ *
+ * The attempt cap in `claimNextExportJob` stops such a job being re-claimed, but
+ * on its own it would leave the row sitting in `running` with an expired lease
+ * forever — the UI would poll a job that can never progress and never errors.
+ * This is the other half: flip it to `failed` with a code the card can explain.
+ *
+ * Deliberately NOT restricted to `running`. A job can exhaust its attempts and
+ * be returned to `queued` by `markJobFailed`'s retry branch on the very attempt
+ * that reaches the cap, so both statuses need sweeping.
+ *
+ * Returns the ids it failed, so the cron can log a non-zero count rather than
+ * reporting a clean run while jobs die.
+ */
+export async function failExhaustedJobs(now: Date = new Date()): Promise<number[]> {
+  const db = createUnscopedClient();
+
+  const rows = await db
+    .update(communityExportJobs)
+    .set({
+      status: 'failed',
+      errorCode: 'ATTEMPTS_EXHAUSTED',
+      errorMessage:
+        'The export stopped after using all of its retries. This usually means one table is too large to process in the time available. Request a new export, or contact support if it happens again.',
+      leaseExpiresAt: null,
+      completedAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        inArray(communityExportJobs.status, ['queued', 'running']),
+        isNull(communityExportJobs.deletedAt),
+        gte(communityExportJobs.attemptCount, communityExportJobs.maxAttempts),
+        // Only once the lease has lapsed — a job still inside a live lease may
+        // be mid-flight on its final attempt and about to succeed.
+        or(
+          isNull(communityExportJobs.leaseExpiresAt),
+          lt(communityExportJobs.leaseExpiresAt, now),
+        ),
+      ),
+    )
+    .returning({ id: communityExportJobs.id });
+
+  return rows.map((r) => r.id);
 }
 
 /** Persist progress and renew the lease so the next tick resumes here. */

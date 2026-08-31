@@ -24,6 +24,11 @@ const {
       queuedAt: 'jobs.queued_at',
       leaseExpiresAt: 'jobs.lease_expires_at',
       attemptCount: 'jobs.attempt_count',
+      maxAttempts: 'jobs.max_attempts',
+      errorCode: 'jobs.error_code',
+      errorMessage: 'jobs.error_message',
+      completedAt: 'jobs.completed_at',
+      updatedAt: 'jobs.updated_at',
       startedAt: 'jobs.started_at',
       deletedAt: 'jobs.deleted_at',
       expiresAt: 'jobs.expires_at',
@@ -49,6 +54,7 @@ vi.mock('@propertypro/db/filters', () => ({
   and: (...c: unknown[]) => ({ __and: c }),
   asc: (c: unknown) => ({ __asc: c }),
   eq: (a: unknown, b: unknown) => ({ __eq: [a, b] }),
+  gte: (a: unknown, b: unknown) => ({ __gte: [a, b] }),
   inArray: (a: unknown, b: unknown) => ({ __inArray: [a, b] }),
   isNull: (a: unknown) => ({ __isNull: a }),
   lt: (a: unknown, b: unknown) => ({ __lt: [a, b] }),
@@ -62,6 +68,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 const {
   claimNextExportJob,
+  failExhaustedJobs,
   queueExportJob,
 } = await import('@/lib/services/export/export-job-service');
 
@@ -229,5 +236,80 @@ describe('claimNextExportJob', () => {
     const serialized = JSON.stringify(whereArg);
     expect(serialized).toContain('jobs.lease_expires_at');
     expect(serialized).toContain('jobs.status');
+  });
+});
+
+/**
+ * The attempt cap.
+ *
+ * `markJobFailed` already consulted `maxAttempts`, but only from the route's
+ * catch block — which an invocation killed by the platform deadline never
+ * reaches. A job that reliably outlives its budget was therefore re-claimed on
+ * every tick with nothing ever failing it. These two cases pin the halves of the
+ * fix: stop claiming it, and then actually fail it so it stops being invisible.
+ */
+describe('attempt cap', () => {
+  /** Flatten the nested operator stubs so a predicate can be searched by shape. */
+  function flatten(node: unknown, out: unknown[] = []): unknown[] {
+    if (node === null || typeof node !== 'object') return out;
+    out.push(node);
+    for (const v of Object.values(node as Record<string, unknown>)) {
+      if (Array.isArray(v)) v.forEach((x) => flatten(x, out));
+      else flatten(v, out);
+    }
+    return out;
+  }
+
+  const isAttemptCapClause = (n: unknown) =>
+    !!n
+    && typeof n === 'object'
+    && '__lt' in n
+    && Array.isArray((n as { __lt: unknown[] }).__lt)
+    && (n as { __lt: unknown[] }).__lt[0] === 'jobs.attempt_count'
+    && (n as { __lt: unknown[] }).__lt[1] === 'jobs.max_attempts';
+
+  it('claimNextExportJob refuses to consider a job that has burned its attempts', async () => {
+    const db = buildDb({ selectResults: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await claimNextExportJob('worker-1');
+
+    // Assert the PREDICATE, not an outcome: the stub cannot execute SQL, and a
+    // test that only checked "no job returned" would pass with an empty result
+    // set regardless of whether the cap is in the query at all.
+    const whereArg = db.select.mock.results[0]!.value as Record<string, unknown>;
+    const whereCalls = (whereArg.where as ReturnType<typeof vi.fn>).mock.calls;
+    expect(whereCalls.length).toBeGreaterThan(0);
+    expect(flatten(whereCalls[0]![0]).some(isAttemptCapClause)).toBe(true);
+  });
+
+  it('re-asserts the cap INSIDE the claiming update, not just the select', async () => {
+    // TOCTOU: another tick can exhaust the final attempt between our SELECT and
+    // our UPDATE. The guard has to appear in both or it is decorative.
+    const db = buildDb({ selectResults: [[{ id: 5 }]], updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await claimNextExportJob('worker-1');
+
+    const setChain = (db.update.mock.results[0]!.value as Record<string, unknown>);
+    const whereFn = ((setChain.set as ReturnType<typeof vi.fn>).mock.results[0]!.value as Record<string, unknown>)
+      .where as ReturnType<typeof vi.fn>;
+    expect(flatten(whereFn.mock.calls[0]![0]).some(isAttemptCapClause)).toBe(true);
+  });
+
+  it('failExhaustedJobs flips exhausted jobs to failed with a code the UI can explain', async () => {
+    const db = buildDb({ updateReturning: [[{ id: 11 }, { id: 12 }]] });
+    createUnscopedClientMock.mockReturnValue(db);
+
+    const failed = await failExhaustedJobs(new Date('2026-08-31T12:00:00Z'));
+
+    expect(failed).toEqual([11, 12]);
+    const setArg = (db.update.mock.results[0]!.value as Record<string, unknown>);
+    const payload = (setArg.set as ReturnType<typeof vi.fn>).mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.status).toBe('failed');
+    expect(payload.errorCode).toBe('ATTEMPTS_EXHAUSTED');
+    // A job left in `running` with an expired lease is polled forever by a UI
+    // that can never resolve it; releasing the lease is part of the fix.
+    expect(payload.leaseExpiresAt).toBeNull();
   });
 });

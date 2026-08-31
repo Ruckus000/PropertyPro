@@ -87,7 +87,18 @@ export interface ExportJobCursor {
  */
 export interface ExportJobManifest {
   schemaVersion?: number;
-  tables?: Array<{ name: string; file: string; rowCount: number; complete: boolean }>;
+  tables?: Array<{
+    name: string;
+    file: string;
+    rowCount: number;
+    complete: boolean;
+    /**
+     * Every entry this table produced. Usually just `[file]`, but a table too
+     * large for one invocation is emitted as `<file>` plus one or more
+     * `<file>.part-NNN` continuations across volumes — concatenate in order.
+     */
+    files?: string[];
+  }>;
   documents?: { expected: number; included: number; bytes: number };
   warnings?: Array<{ code: string; detail: string; documentId?: number }>;
   parts?: Array<{ index: number; file: string; bytes: number }>;

@@ -11,25 +11,23 @@
  * Auth: cron secret (COMMUNITY_EXPORT_CRON_SECRET, falling back to CRON_SECRET).
  * `scripts/verify-internal-cron-auth.ts` fails the build if this is missing.
  *
- * ⚠️ DELIBERATELY NOT SCHEDULED. This route has no entry in `apps/web/vercel.json`
- * crons, so nothing invokes it in production and a queued export is never picked
- * up. That is not an oversight — do not add the schedule back until BOTH of these
- * are fixed, because between them they can produce an archive that reports
- * `ready` while silently missing documents:
+ * ── How a job that outlives one invocation converges ──
  *
- *   1. `export-worker.ts` captures `cursor.partIndex` BEFORE `flushPart()`
- *      increments it, so a resumed run re-uses the index it just wrote. Storage
- *      upserts and `recordJobPart` does `onConflictDoUpdate`, so the completed
- *      volume is overwritten and its documents vanish. Symptom: a duplicate
- *      index in `manifest.parts`.
- *   2. `buildTableCsv` reads a whole table into memory with no deadline check —
- *      `outOfTime()` is only consulted BETWEEN tables. One oversized table
- *      hard-kills this 60s invocation, never reaches `markJobFailed` (the only
- *      place `maxAttempts` is consulted), and the job is re-claimed every tick
- *      forever.
+ * Every yield persists a cursor naming the NEXT volume index to write and, in
+ * the metadata phase, the row id inside the current table to resume after. Both
+ * halves matter, and both were once wrong:
  *
- * The routes that QUEUE a job are live and correctly authorized; only the
- * processing side is held back.
+ *   - `cursor.partIndex` is now assigned inside `flushPart`, AFTER the index is
+ *     incremented. Callers setting it beforehand captured the pre-increment
+ *     value, so the next tick resumed at the volume it had already uploaded and
+ *     overwrote it — silently dropping documents while reporting `ready`.
+ *   - `buildTableCsv` is bounded by deadline and bytes and reports where it
+ *     stopped, so a table larger than one invocation is emitted in chunks across
+ *     volumes instead of hard-killing the function on every attempt.
+ *
+ * A job that still cannot finish is capped rather than immortal: the attempt
+ * predicate in `claimNextExportJob` stops re-claiming it, and the sweep below
+ * flips it to `failed` so it surfaces instead of polling forever.
  *
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
@@ -40,6 +38,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import {
   claimNextExportJob,
+  failExhaustedJobs,
   findExpiredReadyJobs,
   findJobById,
   markJobExpired,
@@ -80,6 +79,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     notified: 0,
     yielded: 0,
     failed: 0,
+    exhausted: 0,
     expired: 0,
     errors: [] as string[],
   };
@@ -105,8 +105,11 @@ const handler = withErrorHandler(async (req: NextRequest) => {
           // The manifest AS BUILT by this run, not the stale one from the row we
           // claimed — otherwise a completed export would report zero warnings.
           manifest: result.manifest,
-          totalBytes: result.bytesWritten,
-          partCount: result.partsWritten,
+          // Cumulative across every tick, NOT this invocation's counters — a job
+          // that yielded even once would otherwise be recorded with only its
+          // final tick's volumes. See WorkerRunResult.
+          totalBytes: result.totalBytes,
+          partCount: result.totalParts,
           expiresAt,
         });
         summary.completed += 1;
@@ -146,6 +149,28 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       }
       summary.errors.push(`job ${job.id}: ${message}`);
     }
+  }
+
+  // ── Fail jobs that have used up their attempts ────────────────────────────
+  //
+  // Separate from the catch above, which only sees errors this process THREW. An
+  // invocation killed by the platform deadline throws nothing and never reaches
+  // markJobFailed, so without this sweep such a job sits in `running` with an
+  // expired lease and no error, polled forever by a UI that can never resolve it.
+  try {
+    const exhausted = await failExhaustedJobs();
+    summary.exhausted = exhausted.length;
+    if (exhausted.length > 0) {
+      console.warn(
+        `[export-worker] failed ${exhausted.length} job(s) that exhausted their attempts: ${exhausted.join(', ')}`,
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.errors.push(`exhausted-sweep: ${message}`);
+    captureException(error, {
+      tags: { job: 'community-export-worker', phase: 'exhausted-sweep' },
+    });
   }
 
   // ── Reaper ────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ const {
   claimNextExportJobMock,
   findJobByIdMock,
   markJobReadyMock,
+  failExhaustedJobsMock,
   markJobFailedMock,
   findExpiredReadyJobsMock,
   markJobExpiredMock,
@@ -29,6 +30,7 @@ const {
   claimNextExportJobMock: vi.fn(),
   findJobByIdMock: vi.fn(),
   markJobReadyMock: vi.fn(),
+  failExhaustedJobsMock: vi.fn(),
   markJobFailedMock: vi.fn(),
   findExpiredReadyJobsMock: vi.fn(),
   markJobExpiredMock: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock('@/lib/services/export/export-job-service', () => ({
   claimNextExportJob: claimNextExportJobMock,
   findJobById: findJobByIdMock,
   markJobReady: markJobReadyMock,
+  failExhaustedJobs: failExhaustedJobsMock,
   markJobFailed: markJobFailedMock,
   findExpiredReadyJobs: findExpiredReadyJobsMock,
   markJobExpired: markJobExpiredMock,
@@ -67,8 +70,13 @@ const { POST } = await import('@/app/api/v1/internal/community-export-worker/rou
 const JOB = { id: 5, communityId: 42 };
 const COMPLETED = {
   status: 'completed' as const,
+  // This invocation's counters...
   partsWritten: 1,
   bytesWritten: 2048,
+  // ...deliberately DIFFERENT from the cumulative ones, so a test asserting the
+  // recorded totals cannot pass by reading the wrong pair.
+  totalParts: 4,
+  totalBytes: 8192,
   warnings: 0,
   manifest: { tables: [] },
 };
@@ -88,6 +96,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   findExpiredReadyJobsMock.mockResolvedValue([]);
   markJobReadyMock.mockResolvedValue(undefined);
+  failExhaustedJobsMock.mockResolvedValue([]);
   findJobByIdMock.mockResolvedValue({ ...JOB, status: 'ready' });
   sendExportReadyEmailMock.mockResolvedValue({ sent: true });
 });
@@ -149,7 +158,7 @@ describe('community-export-worker', () => {
 
   it('does NOT email a job that only yielded', async () => {
     claimOnce();
-    runExportJobMock.mockResolvedValue({ status: 'yielded', partsWritten: 0, bytesWritten: 0, warnings: 0, manifest: {} });
+    runExportJobMock.mockResolvedValue({ status: 'yielded', partsWritten: 0, bytesWritten: 0, totalParts: 0, totalBytes: 0, warnings: 0, manifest: {} });
 
     const body = await (await POST(request())).json();
 
@@ -181,5 +190,53 @@ describe('community-export-worker', () => {
 
     expect(response.status).toBeGreaterThanOrEqual(400);
     expect(claimNextExportJobMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The two behaviours the worker fixes added to this route.
+ *
+ * Both concern jobs that fail WITHOUT throwing — the case the catch block above
+ * cannot see, because an invocation killed by the platform deadline unwinds
+ * nothing.
+ */
+describe('community-export-worker route — stuck and multi-tick jobs', () => {
+  it('records CUMULATIVE volumes on completion, not this invocation\'s', async () => {
+    // partsWritten/bytesWritten reset every run. A job that yielded four times
+    // and finished on the fifth would otherwise be stamped partCount: 1, and the
+    // download UI reads that number.
+    claimNextExportJobMock.mockResolvedValueOnce(JOB).mockResolvedValue(null);
+    runExportJobMock.mockResolvedValue(COMPLETED);
+    findJobByIdMock.mockResolvedValue({ ...JOB, status: 'ready' });
+
+    await POST(request());
+
+    expect(markJobReadyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ partCount: 4, totalBytes: 8192 }),
+    );
+  });
+
+  it('sweeps jobs that exhausted their attempts, and reports how many', async () => {
+    // Without this a hard-killed job sits in `running` with an expired lease and
+    // no error, polled forever by a card that can never resolve it.
+    claimNextExportJobMock.mockResolvedValue(null);
+    failExhaustedJobsMock.mockResolvedValue([11, 12]);
+
+    const res = await POST(request());
+    const body = await res.json();
+
+    expect(failExhaustedJobsMock).toHaveBeenCalled();
+    expect(body.data.exhausted).toBe(2);
+  });
+
+  it('a failing sweep is reported but does not take the whole run down', async () => {
+    claimNextExportJobMock.mockResolvedValue(null);
+    failExhaustedJobsMock.mockRejectedValue(new Error('db unavailable'));
+
+    const res = await POST(request());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.errors.some((e: string) => e.includes('exhausted-sweep'))).toBe(true);
   });
 });
