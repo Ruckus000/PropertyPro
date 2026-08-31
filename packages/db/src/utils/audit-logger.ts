@@ -73,7 +73,27 @@ export type AuditAction =
   // Role-simplification (v3): claim-root flow (Phase 2b)
   | 'root_claimed' | 'root_claim_disputed' | 'root_reassigned' | 'root_transferred'
   // Role-simplification (v3): role-management actions (Phase 2c)
-  | 'role_assigned' | 'role_revoked' | 'designation_set' | 'designation_cleared';
+  | 'role_assigned' | 'role_revoked' | 'designation_set' | 'designation_cleared'
+  // Out-of-band repair of production data, applied directly against the database
+  // (Supabase MCP `execute_sql`) rather than through an app mutation.
+  //
+  // This exists because the 2026-08-09 sweep that soft-deleted four communities
+  // wrote NOTHING here. With no record of who, when or why, the resulting
+  // "I cannot log in" report had to be diagnosed by inference from orphaned rows.
+  // A repair that leaves no trace is indistinguishable from a bug.
+  //
+  // Three rules for the payload, all forced by the table's own properties:
+  //   - `userId` is null. There is no acting user; AuditEntry renders "System".
+  //   - old_values/new_values carry the CHANGED COLUMNS ONLY. Never a secret,
+  //     never a credential, never a token. This table is append-only
+  //     (compliance_audit_log_append_only_guard) and readable by every manager of
+  //     the community, so anything written here can never be redacted.
+  //   - metadata should name the reason and a reference (PR/issue), because the
+  //     whole point is that a later reader can reconstruct intent.
+  //
+  // The repair and this entry belong in ONE statement — see the "Prod data
+  // repairs" section of .claude/rules/migration-safety.md for the CTE template.
+  | 'data_repair';
 
 export interface AuditEventParams {
   userId: string | null;
