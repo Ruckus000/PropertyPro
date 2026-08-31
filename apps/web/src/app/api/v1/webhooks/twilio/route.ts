@@ -76,16 +76,21 @@ export async function POST(req: NextRequest) {
       // `help` and unrecognised text change no consent state. Twilio's own
       // Advanced Opt-Out answers HELP at the carrier layer; replying again from
       // here would double-message someone who asked one question.
+      //
+      // `matchedUsers` is a COUNT, not a boolean. A handset can belong to more
+      // than one user — spouses on one unit — and a STOP silences all of them.
+      // The old boolean reported 1 and 3 identically, so the case this handler
+      // most needs to get right was the one the logs could not distinguish.
       if (keyword === 'stop' && from) {
         const change = await revokeSmsConsentByPhone(from);
         console.info('[twilio-webhook] SMS consent revoked by keyword', {
-          matchedUser: change.userId !== null,
+          matchedUsers: change.userIds.length,
           communitiesUpdated: change.rowsUpdated,
         });
       } else if (keyword === 'start' && from) {
         const change = await restoreSmsConsentByPhone(from);
         console.info('[twilio-webhook] SMS opt-out cleared by keyword', {
-          matchedUser: change.userId !== null,
+          matchedUsers: change.userIds.length,
           communitiesUpdated: change.rowsUpdated,
         });
       }
