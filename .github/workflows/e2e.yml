@@ -98,6 +98,13 @@ jobs:
       # demo-nightly, and treats unset as "you have not told me this is not
       # production". Same value integration-tests.yml uses.
       PROPERTYPRO_SEED_ENV: ci
+      # Layer 1 of the SMS gate (apps/web/src/lib/sms/dispatch-flag.ts). The
+      # emergency-composer spec walks a flow whose SMS step is hidden unless BOTH
+      # this and the per-community `smsDispatchEnabled` are on. Safe here because
+      # this job has no TWILIO_* credentials, so no send is possible — the spec
+      # asserts the composer is REACHABLE, not that a message goes out. Do not
+      # copy this into a job that does have them.
+      SMS_DISPATCH_ENABLED: 'true'
       # Also required by the seed: `getDefaultPassword()`
       # (packages/db/src/seed/seed-community.ts) throws when it is unset, and it
       # is reached because `shouldSyncDemoAuthUsers()` defaults to TRUE.
@@ -209,6 +216,21 @@ jobs:
       # authenticated spec fails at login, which reads like an auth bug.
       - name: Seed demo data
         run: pnpm seed:demo
+
+      # Four features ship DISABLED per community for legal reasons — violation
+      # fines, online payments, SMS dispatch, generated notice PDFs. That is
+      # deliberate: `pnpm seed:demo` leaves them off so local dev shows what a
+      # real customer sees. But this suite walks the payments and emergency-alert
+      # flows, which are gated, so it has to opt in exactly as a real association
+      # would. Without it three phase1-roadmap-smoke specs fail: the assessments
+      # route redirects to /communities/1/assessments instead of
+      # /payments?tab=assessments, and the composer's Select Recipients step
+      # never appears.
+      #
+      # Same `assertSeedEnvironment()` guard as the seed above, so it refuses to
+      # run outside development | ci | demo-nightly.
+      - name: Enable per-community legal gates on the demo communities
+        run: pnpm demo:enable-gates
 
       - name: Install Playwright browsers
         run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
