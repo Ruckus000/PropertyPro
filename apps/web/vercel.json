@@ -102,10 +102,6 @@
     {
       "path": "/api/v1/internal/insurance-alerts",
       "schedule": "10 13 * * *"
-    },
-    {
-      "path": "/api/v1/internal/community-export-worker",
-      "schedule": "*/5 * * * *"
     }
   ]
 }

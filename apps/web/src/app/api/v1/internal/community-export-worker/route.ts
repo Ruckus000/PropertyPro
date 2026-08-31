@@ -11,6 +11,26 @@
  * Auth: cron secret (COMMUNITY_EXPORT_CRON_SECRET, falling back to CRON_SECRET).
  * `scripts/verify-internal-cron-auth.ts` fails the build if this is missing.
  *
+ * ⚠️ DELIBERATELY NOT SCHEDULED. This route has no entry in `apps/web/vercel.json`
+ * crons, so nothing invokes it in production and a queued export is never picked
+ * up. That is not an oversight — do not add the schedule back until BOTH of these
+ * are fixed, because between them they can produce an archive that reports
+ * `ready` while silently missing documents:
+ *
+ *   1. `export-worker.ts` captures `cursor.partIndex` BEFORE `flushPart()`
+ *      increments it, so a resumed run re-uses the index it just wrote. Storage
+ *      upserts and `recordJobPart` does `onConflictDoUpdate`, so the completed
+ *      volume is overwritten and its documents vanish. Symptom: a duplicate
+ *      index in `manifest.parts`.
+ *   2. `buildTableCsv` reads a whole table into memory with no deadline check —
+ *      `outOfTime()` is only consulted BETWEEN tables. One oversized table
+ *      hard-kills this 60s invocation, never reaches `markJobFailed` (the only
+ *      place `maxAttempts` is consulted), and the job is re-claimed every tick
+ *      forever.
+ *
+ * The routes that QUEUE a job are live and correctly authorized; only the
+ * processing side is held back.
+ *
  * See docs/audits/2026-08-09-legal-risk-audit.md F-07.
  */
 import { NextResponse, type NextRequest } from 'next/server';

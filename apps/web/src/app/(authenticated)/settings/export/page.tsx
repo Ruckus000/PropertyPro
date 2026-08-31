@@ -1,6 +1,5 @@
 import { headers } from 'next/headers';
 import { ExportButton } from '@/components/settings/export-button';
-import { ExportJobCard } from '@/components/settings/export-job-card';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -93,7 +92,19 @@ export default async function ExportPage({
           <ExportButton communityId={context.communityId} />
         </div>
 
-        <ExportJobCard communityId={context.communityId} />
+        {/*
+          The async archive card (`components/settings/export-job-card`) is
+          deliberately NOT rendered here. Its worker has no cron schedule — the
+          entry was removed from apps/web/vercel.json until two data-loss defects
+          in export-worker.ts are fixed (see that route's docblock). Rendering it
+          would let a manager queue a job nothing ever claims, under a status
+          line reading "Queued — preparation starts within a few minutes."
+          A quiet absence is honest; a progress bar that never moves is not.
+
+          The card, its hook and all five /api/v1/export/jobs routes are live and
+          tested — only the invocation is held back. To re-enable: restore the
+          vercel.json cron entry, re-import ExportJobCard, and render it here.
+        */}
       </div>
     </>
   );
