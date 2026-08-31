@@ -32,6 +32,15 @@ const AUDIT_ACTIONS = [
   { value: 'document_deleted', label: 'Document Deleted' },
   { value: 'document_accessed', label: 'Document Accessed' },
   { value: 'announcement_email_sent', label: 'Announcement Sent' },
+  // Out-of-band production data repairs (see the AuditAction docblock in
+  // packages/db/src/utils/audit-logger.ts). Worth filtering for: these are the
+  // entries that explain a change no app mutation accounts for.
+  //
+  // NOTE this list is hand-maintained and already lags AuditAction badly — the
+  // union carries ~30 members and this has 11, so role_assigned, root_transferred
+  // and the rest are unfilterable. Display is unaffected (formatAction in
+  // AuditEntry.tsx derives a label from any string); only the dropdown is short.
+  { value: 'data_repair', label: 'Data Repair' },
 ];
 
 export function AuditFilters({

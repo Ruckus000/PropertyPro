@@ -16,6 +16,67 @@
   - *Ledger hygiene:* keep `__drizzle_migrations` reconciled with what's actually applied (record each manual apply: `hash` = sha256 of the migration file bytes, `created_at` = the journal `when`) so any future `drizzle-kit` use stays consistent.
 - The canonical tenant session GUC is `app.current_community_id`. `app.community_id` (no `current_`) is a historical drift that shipped in some baseline policies — repaired by 0021/0023; never introduce it in new policies.
 
+## Prod Data Repairs
+
+A **data repair** is an out-of-band change to production rows — un-deleting a
+record, fixing an orphan, correcting a bad value — applied with Supabase MCP
+`execute_sql` rather than through an app mutation. It is not a migration: no
+schema changes, no journal entry, no migration number.
+
+**The rule: a repair and its audit entry go in ONE `execute_sql` call.**
+
+Repairs bypass `logAuditEvent()` entirely, so nothing records them unless the
+statement does it itself. This is not hypothetical — the 2026-08-09 sweep that
+soft-deleted four communities wrote zero audit rows, and the "I cannot log in"
+report it caused had to be diagnosed by inference from orphaned `demo_instances`
+rows and the shape of the `expire-demos` predicate. A repair that leaves no trace
+is indistinguishable from a bug.
+
+Use a CTE so the repair cannot land without the record:
+
+```sql
+with repaired as (
+  update public.<table> t
+     set <changes>
+   where <narrow, self-limiting predicate>
+  returning t.id, t.community_id, <before/after columns>
+)
+insert into public.compliance_audit_log
+  (user_id, community_id, action, resource_type, resource_id,
+   old_values, new_values, metadata)
+select null,                    -- system actor; AuditEntry renders "System"
+       r.community_id, 'data_repair', '<table>', r.id::text,
+       jsonb_build_object(<prior values>),
+       jsonb_build_object(<new values>),
+       jsonb_build_object('reason', '<why>',
+                          'applied_via', 'supabase_mcp_execute_sql',
+                          'operator', '<who authorised>',
+                          'reference', '<PR or issue>')
+from repaired r;
+```
+
+Constraints, each forced by the table itself — read before composing a payload:
+
+- **Append-only, uncorrectable.** `compliance_audit_log_append_only_guard` raises
+  on UPDATE and DELETE. Compose the statement, read it back as a `SELECT` first,
+  and only then execute. You cannot fix a bad row afterwards.
+- **Never log a secret.** Append-only plus manager-readable means a leaked value
+  is permanent. `old_values`/`new_values` carry changed columns only — no
+  credentials, tokens, or unrelated PII.
+- **`community_id` is NOT NULL** (`ON DELETE restrict`), so a repair spanning N
+  communities writes N rows. A soft-deleted community still satisfies the FK.
+- **`user_id` null is correct** for a repair — the column is nullable precisely so
+  system actors can be recorded.
+- **Make the predicate self-limiting** (e.g. `and deleted_at = '<exact stamp>'`)
+  so re-running is idempotent and a concurrent change is not clobbered.
+
+Who sees these: `audit: { read: true }` is on the `manager` row only, so property
+and root managers of that community — not owners, not tenants.
+
+**This is a convention, not an enforcement mechanism.** Nothing stops a bare
+`UPDATE` through the same MCP tool. It makes the correct thing atomic and easy;
+it does not make the incorrect thing impossible.
+
 ## Rules
 
 - Every schema change MUST use a Drizzle migration — no manual SQL against production
