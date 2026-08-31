@@ -153,6 +153,28 @@ describe('middleware: missing-tenant redirect for authenticated users on protect
     expect(response.status).not.toBe(307);
   });
 
+  it('does NOT bounce /account/join-community — the only escape route for a zero-community user', async () => {
+    // A user whose every membership points at a soft-deleted community resolves
+    // to zero communities and lands on /select-community's empty state. Its
+    // call to action links here. Without the carve-out this path is bounced
+    // straight back, so the button returns the user to the dead end it exists
+    // to escape — a loop no timeout or retry can recover from.
+    //
+    // Control for this case is the first test in this file: /settings on the
+    // same host, same auth state, MUST still bounce. If both go red the file is
+    // broken; only this one going red is the real regression.
+    const response = await middleware(
+      makeRequest('www.getpropertypro.com', '/account/join-community'),
+    );
+
+    // Assert the redirect TARGET, not just the status, so a regression reports
+    // the defect verbatim rather than a bare status mismatch.
+    const location = response.headers.get('location');
+    const bouncedTo = location ? new URL(location).pathname : null;
+    expect(bouncedTo).not.toBe('/select-community');
+    expect(response.status).not.toBe(307);
+  });
+
   it('does NOT redirect API requests — handlers throw their own ValidationError', async () => {
     const response = await middleware(makeRequest('www.getpropertypro.com', '/api/v1/announcements'));
 

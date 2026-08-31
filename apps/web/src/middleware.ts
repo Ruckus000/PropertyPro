@@ -951,6 +951,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     //
     // Carve-outs:
     //   - /select-community itself (loop prevention)
+    //   - /account/join-community — a cross-community search that never reads
+    //     x-community-id, and the ONLY escape route for a user with zero live
+    //     communities (every membership soft-deleted). Without this carve-out
+    //     the /select-community empty state's own call to action bounces
+    //     straight back to the page it is trying to escape.
     //   - /pm/* — the PM portfolio is a cross-community view that doesn't
     //     need a single tenant in scope
     //   - API routes — clients shouldn't follow redirects; existing handlers
@@ -960,6 +965,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       !isApiPath(pathname) &&
       !forwardedHeaders.has(COMMUNITY_ID_HEADER) &&
       pathname !== '/select-community' &&
+      pathname !== '/account/join-community' &&
       !pathname.startsWith('/pm/')
     ) {
       const selectUrl = request.nextUrl.clone();
