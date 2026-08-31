@@ -5,6 +5,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import {
   requireFinanceAdminWrite,
   requireFinanceEnabled,
+  requirePaymentsEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
@@ -17,10 +18,15 @@ export const PATCH = withErrorHandler(
     const communityId = parseCommunityIdFromBody(req, body.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
+    // Legal gate — online payments ship disabled (audit F-15).
+    requirePaymentsEnabled(membership);
     requireFinanceWritePermission(membership);
 
     if (membership.role === 'resident' && membership.isUnitOwner) {
-      await requireActorOwnsPi(body.paymentIntentId, actorUserId);
+      // communityId is required now: under direct charges the PaymentIntent
+      // lives on the association's connected account, so the ownership check
+      // has to retrieve it from there (F-15).
+      await requireActorOwnsPi(body.paymentIntentId, actorUserId, communityId);
     } else {
       requireFinanceAdminWrite(membership);
     }

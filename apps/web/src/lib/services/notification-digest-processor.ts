@@ -27,6 +27,8 @@ import {
 } from '@/lib/utils/email-preferences';
 import { updateQueuedDigestAnnouncementStatus } from '@/lib/services/announcement-delivery';
 import { getBaseUrl } from '@/lib/utils/url';
+import { loadEmailBranding } from './email-branding';
+import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
 
 const MAX_ATTEMPTS = 5;
 const RETRY_MINUTES_BY_ATTEMPT = [15, 60, 240, 720] as const;
@@ -438,12 +440,10 @@ export async function processNotificationDigests(
       if (typeof userId === 'string') prefsByUserId.set(userId, row);
     }
 
-    const branding = {
-      communityName:
-        typeof community?.['name'] === 'string' ? (community['name'] as string) : 'PropertyPro',
-    };
+    // Postal address + community name for the CAN-SPAM footer (F-11). The
+    // digest is bulk mail from the association, so both are required.
+    const branding = await loadEmailBranding(communityId);
     const baseUrl = getBaseUrl();
-    const unsubscribeUrl = `${baseUrl}/settings?communityId=${communityId}`;
     const portalUrl = `${baseUrl}/dashboard?communityId=${communityId}`;
 
     const groups = groupRowsByRecipientAndFrequency(activeRows);
@@ -496,6 +496,15 @@ export async function processNotificationDigests(
 
       if (eligibleRows.length === 0) return;
 
+      // Per-recipient, no-login opt-out. The old `/settings?communityId=` URL
+      // was login-walled and so failed one-click List-Unsubscribe entirely.
+      const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+        baseUrl,
+        communityId,
+        userId: first.userId,
+        topic: 'notifications',
+      });
+
       try {
         emailBudgetRemaining -= 1;
         const result = await sendEmail({
@@ -504,7 +513,11 @@ export async function processNotificationDigests(
           category: 'non-transactional',
           unsubscribeUrl,
           react: createElement(NotificationDigestEmail, {
-            branding,
+            branding: {
+              ...branding,
+              unsubscribeUrl,
+              unsubscribeLabel: 'Unsubscribe from these digests',
+            },
             recipientName: fullName,
             frequency: first.frequency,
             portalUrl,

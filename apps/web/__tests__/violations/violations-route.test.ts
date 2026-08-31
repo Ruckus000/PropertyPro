@@ -95,10 +95,13 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parsePositiveInt: (s: string) => Number(s),
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   isResidentRole: isResidentRoleMock,
   getActorUnitIds: getActorUnitIdsMock,
   requireViolationsEnabled: requireViolationsEnabledMock,

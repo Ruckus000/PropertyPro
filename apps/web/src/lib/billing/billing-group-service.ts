@@ -7,7 +7,7 @@ import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
 import type { CommunityType } from '@propertypro/shared';
-import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
+import { CURRENT_TERMS_VERSION, PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 
 export interface RecalculateResult {
   billingGroupId: number;
@@ -572,6 +572,7 @@ export async function createPendingAddToGroupSignup(input: {
       planKey: input.input.planId,
       candidateSlug: input.input.subdomain,
       termsAcceptedAt: new Date(),
+      termsVersion: CURRENT_TERMS_VERSION,
       status: 'checkout_started',
       payload: {
         kind: 'add_to_group',

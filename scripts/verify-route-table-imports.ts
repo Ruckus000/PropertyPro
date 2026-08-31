@@ -64,6 +64,16 @@ const ALLOWED_SYMBOLS = new Set<string>([
   'createPresignedDownloadUrl',
   'createPresignedUploadUrl',
   'deleteStorageObject',
+  // Storage bucket names + retention/TTL constants. Plain string/number
+  // constants, not tables or schema enums — the thing this guard exists to
+  // block is a route reaching for a TABLE and bypassing the service layer.
+  // Keeping them in @propertypro/db (next to the storage helpers that consume
+  // them) is what stopped bucket names being bare string literals scattered
+  // across route files.
+  'COMMUNITY_EXPORTS_BUCKET',
+  'COMMUNITY_EXPORT_RETENTION_DAYS',
+  'COMMUNITY_EXPORT_SIGNED_URL_TTL_SECONDS',
+  'DOCUMENTS_BUCKET',
   // Search query helpers (canonical re-exports — implement in @propertypro/db
   // because they need raw SQL or trigram operators)
   'searchDocuments',

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
 import { SnowbirdDigestCard } from '@/components/settings/snowbird-digest-card';
 import { AccessibilitySettings } from '@/components/settings/accessibility-settings';
+import { SmsConsentCard } from '@/components/settings/sms-consent-card';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
 import { resolveCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
@@ -13,6 +14,14 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { PageHeader } from '@/components/shared/page-header';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
+import { users } from '@propertypro/db';
+import { eq } from '@propertypro/db/filters';
+// The `users` table has no community_id to scope by, and this reads exactly one
+// row — the signed-in user's own — for their phone number. Same shape and same
+// reason as settings/account/page.tsx.
+// AUTHZ: settings page — single-row read of the SIGNED-IN user's own record.
+import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 
 /**
  * Settings page — exposes Notification Preferences (P1-26).
@@ -70,6 +79,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     },
   );
 
+  // SMS consent is shown only where a text could actually be sent: the
+  // per-community legal gate AND the deployment-wide env floor must both be on.
+  // Offering to collect TCPA consent for a channel that cannot dispatch is
+  // worse than offering nothing — it records a consent the resident gave for a
+  // service they will never receive.
+  const smsAvailable = membership.smsDispatchEnabled && isSmsDispatchGloballyEnabled();
+  let currentPhone: string | null = null;
+  let phoneVerified = false;
+  if (smsAvailable) {
+    const rows = await createUnscopedClient()
+      .select({ phone: users.phone, phoneVerifiedAt: users.phoneVerifiedAt })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    currentPhone = rows[0]?.phone ?? null;
+    phoneVerified = rows[0]?.phoneVerifiedAt != null;
+  }
+
   return (
     <div className="space-y-8">
       <PageHeader title="Settings" />
@@ -118,6 +145,21 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
         )}
       </div>
+      {smsAvailable && (
+        <div>
+          <h2 className="mb-2 text-xl font-semibold">Text Message Alerts</h2>
+          <p className="mb-4 text-sm text-content-secondary">
+            Verify your mobile number to receive emergency alerts by text.
+            Message and data rates may apply. Reply STOP to any message to opt
+            out.
+          </p>
+          <SmsConsentCard
+            communityId={context.communityId}
+            currentPhone={currentPhone}
+            phoneVerified={phoneVerified}
+          />
+        </div>
+      )}
       <AccessibilitySettings />
       {membership.isAdmin && (
         <div>

@@ -6,7 +6,7 @@
  * to see what breaks.
  *
  * This is NOT "does the component render" — this is "does the system require
- * all 16 document categories, enforce 30-day posting deadlines, calculate
+ * all 17 document categories, enforce 30-day posting deadlines, calculate
  * meeting notice windows correctly, and generate a compliance score that
  * accurately reflects missing items."
  */
@@ -32,8 +32,8 @@ import {
 describe('§718.111(12)(g) condo compliance template completeness', () => {
   const template = CONDO_718_CHECKLIST_TEMPLATE;
 
-  it('requires exactly 16 document categories for condo associations', () => {
-    expect(template).toHaveLength(16);
+  it('requires exactly 17 document categories for condo associations', () => {
+    expect(template).toHaveLength(17);
   });
 
   it('includes all required governing documents per §718.111(12)(g)(2)(a)-(d)', () => {
@@ -184,9 +184,9 @@ describe('§720.303 HOA compliance template completeness', () => {
 // =============================================================================
 
 describe('getComplianceTemplate community type mapping', () => {
-  it('condo_718 returns the 16-item condo template', () => {
+  it('condo_718 returns the 17-item condo template', () => {
     const template = getComplianceTemplate('condo_718');
-    expect(template).toHaveLength(16);
+    expect(template).toHaveLength(17);
     expect(template[0].templateKey).toBe('718_declaration');
   });
 
@@ -441,7 +441,7 @@ describe('compliance score calculation accuracy', () => {
 
     const statuses = items.map(calculateComplianceStatus);
     const satisfiedCount = statuses.filter((s) => s === 'satisfied').length;
-    expect(satisfiedCount).toBe(16);
+    expect(satisfiedCount).toBe(17);
     expect(satisfiedCount / statuses.length).toBe(1);
   });
 
@@ -507,8 +507,8 @@ describe('legislative amendment regression detection', () => {
    *   1. Add the item to CONDO_718_CHECKLIST_TEMPLATE in templates.ts
    *   2. Run this suite — the "current template covers all known requirements" test
    *      will PASS (because it checks the actual template)
-   *   3. But any test pinned to the OLD count (e.g. "requires exactly 16") will FAIL
-   *   4. Update that count to 17, confirming you've reviewed the change
+   *   3. But any test pinned to the OLD count (e.g. "requires exactly 17") will FAIL
+   *   4. Update that count to 18, confirming you've reviewed the change
    */
 
   // Complete manifest of required template keys — the source of truth for what
@@ -524,6 +524,12 @@ describe('legislative amendment regression detection', () => {
     '718_financial_report',
     '718_minutes_rolling_12m',
     '718_video_recordings',
+    // Added 2026-08-10. Not a legislative amendment — a gap: the notice/agenda
+    // posting obligation was never on the condo checklist, so an association
+    // could score 100% having posted no notices at all. The HOA template
+    // already carried its equivalent (`720_meeting_notices`).
+    // See docs/audits/2026-08-09-legal-risk-audit.md F-01.
+    '718_meeting_notices',
     '718_affidavits',
     '718_insurance',
     '718_contracts',
@@ -596,6 +602,7 @@ describe('legislative amendment regression detection', () => {
       '718_financial_report': '§718.111(13)',
       '718_minutes_rolling_12m': '§718.111(12)(g)(2)(e)',
       '718_video_recordings': '§718.111(12)(g)(2)(f)',
+      '718_meeting_notices': '§718.111(12)(g)(2)(h), §718.112(2)(c)',
       '718_affidavits': '§718.111(12)(g)(2)(g)',
       '718_insurance': '§718.111(11)',
       '718_contracts': '§718.111(12)(g)(2)',
@@ -620,7 +627,7 @@ describe('legislative amendment regression detection', () => {
     // When a legislative amendment adds a new requirement:
     //   1. Add the item to templates.ts
     //   2. Add the key to REQUIRED_CONDO_KEYS above
-    //   3. Update this count from 16 to 17
+    //   3. Update this count from 17 to 18
     //   4. Add a statute reference entry in the drift check above
     // This 4-step process ensures no requirement is added without full review.
     expect(CONDO_718_CHECKLIST_TEMPLATE).toHaveLength(REQUIRED_CONDO_KEYS.length);

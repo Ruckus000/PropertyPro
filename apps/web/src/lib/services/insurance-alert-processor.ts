@@ -92,33 +92,19 @@ interface AdminRecipient {
   fullName: string;
 }
 
+/**
+ * Re-exported from `postal-address.ts`, where it now lives.
+ *
+ * It moved because this module imports `@propertypro/db/unsafe` and therefore
+ * throws `Missing DATABASE_URL` at load — which killed every test in any file
+ * that wanted only the address formatter. Kept as a re-export so existing
+ * importers are unaffected.
+ */
+export { formatCommunityPostalAddress } from './postal-address';
+import { formatCommunityPostalAddress } from './postal-address';
+
 function nonEmpty(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-}
-
-/**
- * The association's physical postal address as display lines, or null when it is
- * incomplete. CAN-SPAM requires a valid postal address, so an incomplete one
- * blocks the send rather than shipping a non-compliant footer.
- */
-export function formatCommunityPostalAddress(community: {
-  addressLine1: unknown;
-  addressLine2: unknown;
-  city: unknown;
-  state: unknown;
-  zipCode: unknown;
-}): string[] | null {
-  const line1 = nonEmpty(community.addressLine1);
-  const city = nonEmpty(community.city);
-  const state = nonEmpty(community.state);
-  const zip = nonEmpty(community.zipCode);
-  if (!line1 || !city || !state || !zip) return null;
-
-  const lines = [line1];
-  const line2 = nonEmpty(community.addressLine2);
-  if (line2) lines.push(line2);
-  lines.push(`${city}, ${state} ${zip}`);
-  return lines;
 }
 
 /** Board/admin members with a deliverable email who have NOT opted out. */

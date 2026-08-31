@@ -98,6 +98,28 @@ export const CONDO_718_CHECKLIST_TEMPLATE: readonly ComplianceTemplateItem[] = [
     defaultVisibility: 'owner_portal',
   },
   {
+    /**
+     * The condo checklist had no meeting-notice item, so an association could
+     * sit at 100% compliance having never posted a single notice or agenda —
+     * while the product's own `meeting-calculator` correctly computed the
+     * 14-day and 48-hour lead times the whole time. The math existed; it just
+     * never became a scored obligation.
+     *
+     * Shaped to match `720_meeting_notices`, which was already present — the
+     * HOA side of this was right and only the 718 side was missing.
+     *
+     * See docs/audits/2026-08-09-legal-risk-audit.md F-01.
+     */
+    templateKey: '718_meeting_notices',
+    title: 'Meeting Notices and Agendas',
+    description:
+      'Notices and agendas for board and unit-owner meetings, posted in advance of each meeting.',
+    category: 'meeting_records',
+    statuteReference: '§718.111(12)(g)(2)(h), §718.112(2)(c)',
+    rollingMonths: 12,
+    defaultVisibility: 'owner_portal',
+  },
+  {
     templateKey: '718_affidavits',
     title: 'Affidavits Required by Chapter 718',
     description: 'Affidavits required to be executed by officers or directors under Chapter 718.',

@@ -33,6 +33,7 @@ vi.mock('@/lib/api/community-membership', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   requireFinanceEnabled: requireFinanceEnabledMock,
   requireFinanceWritePermission: requireFinanceWritePermissionMock,
   requireFinanceAdminWrite: requireFinanceAdminWriteMock,

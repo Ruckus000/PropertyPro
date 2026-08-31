@@ -8,11 +8,13 @@ import type { LegalDocKey, LegalDocs } from '@/lib/legal-types';
 const DOC_TITLES: Record<LegalDocKey, string> = {
   terms: 'Terms of Service',
   privacy: 'Privacy Policy',
+  accessibility: 'Accessibility',
 };
 
 const DOC_HREFS: Record<LegalDocKey, string> = {
   terms: '/legal/terms',
   privacy: '/legal/privacy',
+  accessibility: '/legal/accessibility',
 };
 
 export interface FooterLegalLinksProps {
@@ -43,6 +45,9 @@ export function FooterLegalLinks({ legalDocs }: FooterLegalLinksProps) {
       </a>
       <a href={DOC_HREFS.privacy} onClick={(e) => handleClick(e, 'privacy')}>
         Privacy Policy
+      </a>
+      <a href={DOC_HREFS.accessibility} onClick={(e) => handleClick(e, 'accessibility')}>
+        Accessibility
       </a>
 
       <Dialog.Root open={openDoc !== null} onOpenChange={(open) => !open && setOpenDoc(null)}>

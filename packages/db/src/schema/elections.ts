@@ -144,6 +144,20 @@ export const electionBallotSubmissions = pgTable(
       .references(() => users.id, { onDelete: 'restrict' }),
     submissionFingerprint: text('submission_fingerprint').notNull(),
     voterHash: text('voter_hash').notNull(),
+    /**
+     * Digest of the sorted candidate-id selection.
+     *
+     * Exists so a duplicate submission can be recognised as *the same* ballot
+     * without reading the ballot rows back. That read-back was the only reason
+     * `election_ballots` needed a `submission_id`, and that column was the link
+     * that made the ballot table traceable to a unit and a voter. Moving the
+     * comparison here is what lets the ballot table become genuinely secret.
+     *
+     * Nullable: submissions recorded before this column existed have none, and
+     * back-filling would require exactly the ballot→submission join being
+     * removed. The comparison falls back to a straight 409 in that case.
+     */
+    selectionDigest: text('selection_digest'),
     isAbstention: boolean('is_abstention').notNull().default(false),
     isProxyVote: boolean('is_proxy_vote').notNull().default(false),
     proxyId: bigint('proxy_id', { mode: 'number' }).references(() => electionProxies.id, {
@@ -162,6 +176,38 @@ export const electionBallotSubmissions = pgTable(
 // election_ballots (append-only — NO updatedAt, NO deletedAt)
 // ---------------------------------------------------------------------------
 
+/**
+ * A cast vote, and nothing that identifies who cast it.
+ *
+ * ── §718.128 secret ballot ──
+ *
+ * This table used to carry `unit_id`, `voter_hash`, `submission_id`,
+ * `is_proxy_vote` and `proxy_id` — every one of them a direct or one-join path
+ * from a vote to the unit and the person who cast it. A secret ballot that
+ * records who voted for whom is not a secret ballot; it is a tallied roll call
+ * with extra steps, and anyone with database access could read the election.
+ *
+ * All five are gone. What remains is: this election, this candidate, one vote.
+ *
+ * ── Where the integrity guarantees moved ──
+ *
+ * - **One ballot per unit** is enforced by `uq_election_ballot_submissions_unit`
+ *   on the SUBMISSION table, which already existed. The old
+ *   `uq_election_ballots_unit_candidate` was a second, weaker copy of the same
+ *   rule that happened to require the identifying column.
+ * - **Duplicate-submission idempotency** compares
+ *   `election_ballot_submissions.selection_digest` instead of reading these rows
+ *   back — see that column.
+ * - **Turnout and eligibility** are answered from the submission table, which is
+ *   where per-unit facts belong.
+ *
+ * ⚠️ The consequence, stated plainly: a cast vote can no longer be traced to a
+ * submission, so an individual ballot cannot be retracted or recounted
+ * per-voter. That is what a secret ballot means. Do not add a column here to
+ * make some future feature easier without understanding that it re-opens this.
+ *
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-08.
+ */
 export const electionBallots = pgTable(
   'election_ballots',
   {
@@ -172,31 +218,16 @@ export const electionBallots = pgTable(
     electionId: bigint('election_id', { mode: 'number' })
       .notNull()
       .references(() => elections.id, { onDelete: 'cascade' }),
-    submissionId: bigint('submission_id', { mode: 'number' })
-      .notNull()
-      .references(() => electionBallotSubmissions.id, { onDelete: 'cascade' }),
     candidateId: bigint('candidate_id', { mode: 'number' })
       .notNull()
       .references(() => electionCandidates.id, { onDelete: 'cascade' }),
-    unitId: bigint('unit_id', { mode: 'number' })
-      .notNull()
-      .references(() => units.id, { onDelete: 'cascade' }),
-    voterHash: text('voter_hash').notNull(),
     isAbstention: boolean('is_abstention').notNull().default(false),
-    isProxyVote: boolean('is_proxy_vote').notNull().default(false),
-    proxyId: bigint('proxy_id', { mode: 'number' }),
     castAt: timestamp('cast_at', { withTimezone: true }).notNull().defaultNow(),
     // NO updatedAt, NO deletedAt — append-only / immutable
   },
   (table) => [
     index('idx_election_ballots_election').on(table.electionId),
-    index('idx_election_ballots_unit').on(table.electionId, table.unitId),
-    index('idx_election_ballots_submission').on(table.submissionId),
-    uniqueIndex('uq_election_ballots_unit_candidate').on(
-      table.electionId,
-      table.unitId,
-      table.candidateId,
-    ),
+    index('idx_election_ballots_candidate').on(table.electionId, table.candidateId),
   ],
 );
 

@@ -729,7 +729,58 @@ async function requireConnectAccount(
   return record;
 }
 
-export async function getCommunityFeePolicy(communityId: number): Promise<PaymentFeePolicy> {
+/**
+ * The connected account id a direct-charge Stripe call must be made against.
+ *
+ * Every read or write of a PaymentIntent created under direct charges needs
+ * this — omitting it does not fall back to the platform account, it raises
+ * `No such payment_intent`, which reads like a missing record rather than a
+ * missing header. Extracted so the three call sites cannot drift (F-15).
+ */
+async function requireConnectedAccountId(communityId: number): Promise<string> {
+  const record = await requireConnectAccount(communityId);
+  return record.stripeAccountId;
+}
+
+/**
+ * The effective fee policy. **Always `association_absorbs` (F-16).**
+ *
+ * ── Why `owner_pays` is refused rather than fixed ──
+ *
+ * In `owner_pays` the resident was charged a grossed-up processing fee computed
+ * at the card rate, and `payment_method_types` includes `'card'`, which includes
+ * DEBIT. Visa and Mastercard rules prohibit surcharging debit outright — and
+ * they bind us through the Stripe agreement, where the remedy is losing card
+ * acceptance, not a fine.
+ *
+ * The two ways to keep the mode were: charge one uniform fee across every
+ * method (compliant, but an ACH payer's fee on a $2,000 assessment goes from
+ * about $5 to about $60, and it removes any reason to use the cheapest rail);
+ * or detect the card's funding type and waive the fee for debit (fair, but
+ * funding type is not reliably known until the payment method is attached, so
+ * it needs a confirm-time re-price and is the most fragile option).
+ *
+ * The owner chose to retire the mode instead. Associations absorb processing
+ * cost — which was already the DEFAULT for every community — so no fee is ever
+ * shown to a resident and the surcharge question stops existing rather than
+ * being managed.
+ *
+ * ── Why the stored value is read and then ignored ──
+ *
+ * `communitySettings.paymentFeePolicy` is left in place untouched. Deleting it
+ * would need a migration over a JSONB blob to reverse a product decision that
+ * could reasonably be revisited, and the stored value is still worth reading:
+ * it is how the settings UI explains to a PM that their old choice is no longer
+ * honoured. Behaviour is uniform; history is intact.
+ */
+export async function getCommunityFeePolicy(_communityId: number): Promise<PaymentFeePolicy> {
+  return 'association_absorbs';
+}
+
+/** The stored (possibly no-longer-honoured) preference. For settings copy only. */
+export async function getStoredFeePolicyPreference(
+  communityId: number,
+): Promise<PaymentFeePolicy> {
   const scoped = createScopedClient(communityId);
   const rows = await scoped.selectFrom(communities, {}, eq(communities.id, communityId));
   const community = rows[0] as Record<string, unknown> | undefined;
@@ -868,9 +919,15 @@ async function getPayableById(
 export async function requireActorOwnsPi(
   paymentIntentId: string,
   actorUserId: string,
+  communityId: number,
 ): Promise<void> {
   const stripe = getStripeClient();
-  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  // Direct charges live on the connected account, so a bare retrieve against
+  // the platform account raises `No such payment_intent` (F-15).
+  const stripeAccount = await requireConnectedAccountId(communityId);
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId, undefined, {
+    stripeAccount,
+  });
   const piUserId = parseMetadataString(intent.metadata ?? {}, 'userId');
   if (piUserId && piUserId !== actorUserId) {
     throw new ForbiddenError('You can only update your own payment intent');
@@ -889,7 +946,10 @@ export async function updatePaymentIntentFee(
   actorUserId: string,
 ): Promise<UpdatePaymentIntentFeeResult> {
   const stripe = getStripeClient();
-  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const stripeAccount = await requireConnectedAccountId(communityId);
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId, undefined, {
+    stripeAccount,
+  });
 
   // Security: verify the PI belongs to this community
   const piCommunityId = parseMetadataInt(intent.metadata ?? {}, 'communityId');
@@ -913,15 +973,21 @@ export async function updatePaymentIntentFee(
     const convenienceFeeCents = calculateConvenienceFee(baseAmountCents, paymentMethod);
     const totalChargeCents = baseAmountCents + convenienceFeeCents;
 
-    await stripe.paymentIntents.update(paymentIntentId, {
-      amount: totalChargeCents,
-      application_fee_amount: convenienceFeeCents,
-      metadata: {
-        ...intent.metadata,
-        convenienceFeeCents: String(convenienceFeeCents),
-        paymentMethod,
+    await stripe.paymentIntents.update(
+      paymentIntentId,
+      {
+        amount: totalChargeCents,
+        // Unchanged from the destination-charge design: our cut is still the
+        // application fee. Only the account the charge lives on has moved.
+        application_fee_amount: convenienceFeeCents,
+        metadata: {
+          ...intent.metadata,
+          convenienceFeeCents: String(convenienceFeeCents),
+          paymentMethod,
+        },
       },
-    });
+      { stripeAccount },
+    );
 
     return { convenienceFeeCents, totalChargeCents };
   }
@@ -929,15 +995,19 @@ export async function updatePaymentIntentFee(
   // association_absorbs: owner pays base amount, association transfer is reduced
   const stripeFeeEstimate = calculateStripeFeeEstimate(baseAmountCents, paymentMethod);
 
-  await stripe.paymentIntents.update(paymentIntentId, {
-    amount: baseAmountCents,
-    application_fee_amount: stripeFeeEstimate,
-    metadata: {
-      ...intent.metadata,
-      convenienceFeeCents: '0',
-      paymentMethod,
+  await stripe.paymentIntents.update(
+    paymentIntentId,
+    {
+      amount: baseAmountCents,
+      application_fee_amount: stripeFeeEstimate,
+      metadata: {
+        ...intent.metadata,
+        convenienceFeeCents: '0',
+        paymentMethod,
+      },
     },
-  });
+    { stripeAccount },
+  );
 
   return { convenienceFeeCents: 0, totalChargeCents: baseAmountCents };
 }
@@ -950,6 +1020,15 @@ export interface CreatePaymentIntentResult {
   totalChargeCents: number;
   currency: string;
   feePolicy: PaymentFeePolicy;
+  /**
+   * The association's connected account.
+   *
+   * The browser MUST initialise Stripe.js with `{ stripeAccount }` — a
+   * direct-charge client secret does not resolve against the platform account,
+   * so without this the payment element fails to mount and the resident sees a
+   * blank dialog rather than an error (F-15).
+   */
+  stripeAccountId: string;
 }
 
 async function createPaymentIntentForPayable(
@@ -1003,15 +1082,39 @@ async function createPaymentIntentForPayable(
   };
   const stripeMetadata: Stripe.MetadataParam = { ...stripeMetadataBase };
 
-  const intent = await stripe.paymentIntents.create({
-    amount: amountCents,
-    currency: 'usd',
-    payment_method_types: ['card', 'us_bank_account'],
-    metadata: stripeMetadata,
-    transfer_data: {
-      destination: connectAccount.stripeAccountId,
+  // ── DIRECT charge, not a destination charge (F-15) ──────────────────────
+  //
+  // The `{ stripeAccount }` request option creates the PaymentIntent ON the
+  // association's own connected account. Three things change, all of them the
+  // point:
+  //
+  //  1. Assessment funds never transit PropertyPro's Stripe balance. Our
+  //     customers are fiduciaries with association-funds segregation duties;
+  //     money briefly sitting in a vendor's account is the kind of detail that
+  //     surfaces in an association's annual audit.
+  //  2. The association becomes the merchant of record, so a chargeback on a
+  //     $4,000 special assessment debits THEIR balance, not ours. On a
+  //     destination charge the platform carries that liability and recovers
+  //     from the association only if it can.
+  //  3. Money-transmission questions stop arising, because we stop holding and
+  //     forwarding other people's money.
+  //
+  // Our cut is unchanged — `application_fee_amount` replaces `transfer_data`
+  // and is set on the update path where the fee is actually known.
+  //
+  // ⚠️ EVERY later call touching this PaymentIntent must pass the same
+  // `{ stripeAccount }`, and the BROWSER must initialise Stripe.js with it too
+  // — a direct-charge client secret is not resolvable from the platform
+  // account. That is why `stripeAccountId` is returned to the caller.
+  const intent = await stripe.paymentIntents.create(
+    {
+      amount: amountCents,
+      currency: 'usd',
+      payment_method_types: ['card', 'us_bank_account'],
+      metadata: stripeMetadata,
     },
-  });
+    { stripeAccount: connectAccount.stripeAccountId },
+  );
 
   if (!intent.client_secret) {
     throw new Error('Stripe did not return a client_secret for PaymentIntent');
@@ -1052,6 +1155,7 @@ async function createPaymentIntentForPayable(
     totalChargeCents: amountCents,
     currency: intent.currency,
     feePolicy,
+    stripeAccountId: connectAccount.stripeAccountId,
   };
 }
 
@@ -1850,10 +1954,32 @@ async function sendPaymentConfirmationEmail(
   });
 }
 
+/**
+ * Request options for re-reading a webhook's own objects from Stripe.
+ *
+ * ⚠️ Load-bearing under direct charges (F-15). A Connect event carries
+ * `event.account`, and the objects it describes live on THAT account — a bare
+ * `retrieve` against the platform account raises `No such payment_intent`. The
+ * failure mode is the bad kind: Stripe reports the payment as succeeded, the
+ * resident sees a receipt, and the ledger never records it, because the webhook
+ * threw on a lookup rather than on the payment.
+ *
+ * Returns `undefined` for a platform-account event so the same call sites keep
+ * working for anything not routed through a connected account.
+ */
+function connectRequestOptions(event: Stripe.Event): { stripeAccount: string } | undefined {
+  return event.account ? { stripeAccount: event.account } : undefined;
+}
+
 async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> {
   const stripe = getStripeClient();
+  const requestOptions = connectRequestOptions(event);
   const stripePaymentIntent = event.data.object as Stripe.PaymentIntent;
-  const freshIntent = await stripe.paymentIntents.retrieve(stripePaymentIntent.id);
+  const freshIntent = await stripe.paymentIntents.retrieve(
+    stripePaymentIntent.id,
+    undefined,
+    requestOptions,
+  );
   const metadata = freshIntent.metadata ?? {};
   const communityId = parseMetadataInt(metadata, 'communityId');
   const payableType = parsePayableType(metadata);
@@ -2025,10 +2151,15 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
 
 async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
   const stripe = getStripeClient();
+  const requestOptions = connectRequestOptions(event);
   const charge = event.data.object as Stripe.Charge;
-  const freshCharge = await stripe.charges.retrieve(charge.id, { expand: ['payment_intent'] });
+  const freshCharge = await stripe.charges.retrieve(
+    charge.id,
+    { expand: ['payment_intent'] },
+    requestOptions,
+  );
   const paymentIntent = typeof freshCharge.payment_intent === 'string'
-    ? await stripe.paymentIntents.retrieve(freshCharge.payment_intent)
+    ? await stripe.paymentIntents.retrieve(freshCharge.payment_intent, undefined, requestOptions)
     : freshCharge.payment_intent;
 
   const metadata = paymentIntent?.metadata ?? {};
@@ -2228,8 +2359,9 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
 
 async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
   const stripe = getStripeClient();
+  const requestOptions = connectRequestOptions(event);
   const dispute = event.data.object as Stripe.Dispute;
-  const freshDispute = await stripe.disputes.retrieve(dispute.id);
+  const freshDispute = await stripe.disputes.retrieve(dispute.id, undefined, requestOptions);
   const chargeId = typeof freshDispute.charge === 'string' ? freshDispute.charge : null;
   if (!chargeId) {
     logFinanceWebhookEvent('warn', 'Skipping charge.dispute.created because dispute charge is missing', {
@@ -2244,9 +2376,13 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  const freshCharge = await stripe.charges.retrieve(chargeId, { expand: ['payment_intent'] });
+  const freshCharge = await stripe.charges.retrieve(
+    chargeId,
+    { expand: ['payment_intent'] },
+    requestOptions,
+  );
   const paymentIntent = typeof freshCharge.payment_intent === 'string'
-    ? await stripe.paymentIntents.retrieve(freshCharge.payment_intent)
+    ? await stripe.paymentIntents.retrieve(freshCharge.payment_intent, undefined, requestOptions)
     : freshCharge.payment_intent;
 
   const metadata = paymentIntent?.metadata ?? {};

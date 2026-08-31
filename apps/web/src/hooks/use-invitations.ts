@@ -6,6 +6,13 @@ export interface AcceptInvitationInput {
   token: string;
   communityId: number;
   password: string;
+  /**
+   * Clickwrap acceptance. REQUIRED — this hook previously accepted only
+   * `{token, communityId, password}` and silently dropped the checkbox value the
+   * form had already collected, so invited residents accepted nothing.
+   * See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+   */
+  termsAccepted: true;
 }
 
 /**
@@ -19,11 +26,11 @@ export function useAcceptInvitation() {
     // user-facing copy, and the success payload's `email` is consumed by
     // the caller. requestJson exposes neither `error.code` nor lets the
     // caller read the body, so raw fetch + bespoke parsing is retained.
-    mutationFn: async ({ token, communityId, password }) => {
+    mutationFn: async ({ token, communityId, password, termsAccepted }) => {
       const res = await fetch('/api/v1/invitations', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token, communityId, password }),
+        body: JSON.stringify({ token, communityId, password, termsAccepted }),
       });
 
       if (!res.ok) {

@@ -42,7 +42,21 @@ export {
   createPresignedDownloadUrl,
   deleteStorageObject,
   downloadStorageObject,
+  uploadStorageObject,
 } from './supabase/storage';
+// Re-exported so app code can TYPE a table reference without importing
+// `drizzle-orm/pg-core` directly — which `guard:db-access` (DB001) forbids in
+// runtime code, and rightly so: a direct drizzle import is one autocomplete away
+// from a direct drizzle CLIENT.
+export type { PgTable } from 'drizzle-orm/pg-core';
+export { openStorageObjectStream } from './supabase/storage-stream';
+export type { StorageObjectStream } from './supabase/storage-stream';
+export {
+  COMMUNITY_EXPORTS_BUCKET,
+  COMMUNITY_EXPORT_RETENTION_DAYS,
+  COMMUNITY_EXPORT_SIGNED_URL_TTL_SECONDS,
+  DOCUMENTS_BUCKET,
+} from './constants/storage-buckets';
 
 // Audit logger
 export { logAuditEvent } from './utils/audit-logger';

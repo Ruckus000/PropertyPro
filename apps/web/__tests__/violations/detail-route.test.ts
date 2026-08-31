@@ -52,6 +52,8 @@ vi.mock('@/lib/finance/request', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   requireViolationsEnabled: requireViolationsEnabledMock,
   requireViolationAdminWrite: requireViolationAdminWriteMock,
   isResidentRole: isResidentRoleMock,

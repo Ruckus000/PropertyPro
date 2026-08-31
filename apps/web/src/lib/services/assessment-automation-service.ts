@@ -115,6 +115,12 @@ export interface LateFeeSummary {
   feesApplied: number;
   totalFeeCents: number;
   errors: number;
+  /**
+   * Communities skipped because online payments are disabled for them.
+   * Reported rather than silently dropped — a cron that quietly stops doing
+   * its job reads as "nothing was overdue".
+   */
+  communitiesSkippedPaymentsDisabled: number;
 }
 
 /**
@@ -133,7 +139,7 @@ export async function processLateFees(
   const today = format(now, 'yyyy-MM-dd');
 
   const activeCommunities = await db
-    .select({ id: communities.id })
+    .select({ id: communities.id, communitySettings: communities.communitySettings })
     .from(communities)
     .where(isNull(communities.deletedAt));
 
@@ -142,10 +148,29 @@ export async function processLateFees(
     feesApplied: 0,
     totalFeeCents: 0,
     errors: 0,
+    communitiesSkippedPaymentsDisabled: 0,
   };
 
   for (const community of activeCommunities) {
     try {
+      // Do not accrue late fees while online payments are disabled.
+      //
+      // Late fees are contractual rather than statutory, but charging a penalty
+      // for non-payment while the platform gives the resident no way to pay is
+      // indefensible if an owner disputes it — and these are real ledger entries
+      // on real accounts, not a display concern. Gated on the same flag as the
+      // charge path so the two can never diverge.
+      // See docs/audits/2026-08-09-legal-risk-audit.md §2a.
+      const settings = community.communitySettings;
+      const paymentsEnabled =
+        typeof settings === 'object'
+        && settings !== null
+        && (settings as Record<string, unknown>).assessmentPaymentsEnabled === true;
+      if (!paymentsEnabled) {
+        summary.communitiesSkippedPaymentsDisabled++;
+        continue;
+      }
+
       const scoped = createScopedClient(community.id);
 
       // Get overdue items that don't have a late fee yet

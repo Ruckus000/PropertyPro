@@ -108,6 +108,11 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   'apps/web/src/app/api/v1/internal/account-lifecycle/route.ts',
   'apps/web/src/app/api/v1/internal/assessment-overdue/route.ts',
   'apps/web/src/app/api/v1/internal/calendar-event-reminders/route.ts',
+  // Internal cron routes are a documented runRoute constraint: the runner has no
+  // integration for token-authenticated (cron-secret) auth, and this one also
+  // exports both GET and POST from one handler. Same posture as every sibling
+  // in this block.
+  'apps/web/src/app/api/v1/internal/community-export-worker/route.ts',
   'apps/web/src/app/api/v1/internal/compliance-alerts/route.ts',
   'apps/web/src/app/api/v1/internal/coupon-sync-retry/route.ts',
   'apps/web/src/app/api/v1/internal/expire-demos/route.ts',
@@ -123,6 +128,13 @@ const KNOWN_UNCONTRACTED_ROUTES = new Set<string>([
   // (HTML page + one-click POST) — same non-tenant-scoped shape as snowbird.
   'apps/web/src/app/api/v1/internal/insurance-alerts/route.ts',
   'apps/web/src/app/api/v1/insurance-alerts/unsubscribe/route.ts',
+  // Community bulk-email unsubscribe (announcements / notifications / digests /
+  // calendar reminders). Identical shape to the two above: no session, a signed
+  // token instead of tenant scope, an HTML confirmation page for the human GET
+  // and a bare-text 200 for the RFC 8058 one-click POST. runRoute can express
+  // none of those — it resolves tenancy from headers and emits a JSON envelope.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-11.
+  'apps/web/src/app/api/v1/notifications/unsubscribe/route.ts',
   'apps/web/src/app/api/v1/internal/payment-reminders/route.ts',
   'apps/web/src/app/api/v1/internal/provision/route.ts',
   'apps/web/src/app/api/v1/internal/provisioning-watchdog/route.ts',

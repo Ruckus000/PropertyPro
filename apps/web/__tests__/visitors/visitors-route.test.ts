@@ -88,6 +88,7 @@ vi.mock('@/lib/api/zod/error-formatter', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parsePositiveInt: (raw: string, field: string) => {
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0) throw new Error(`Invalid ${field}`);

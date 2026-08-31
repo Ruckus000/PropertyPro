@@ -247,6 +247,23 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
         </div>
       </div>
 
+      {/*
+        Rule reference — shown ABOVE the notes, because on a denial this is the
+        part the statute actually requires (§720.3035, as amended by HB 1203).
+        An owner reading a denial should not have to hunt for the citation in
+        prose.
+      */}
+      {submission.ruleReference && (
+        <div>
+          <h4 className="text-sm font-medium text-muted-foreground">
+            {submission.status === 'denied' ? 'Rule or covenant relied on' : 'Rule reference'}
+          </h4>
+          <p className="mt-1 text-sm whitespace-pre-wrap">
+            {submission.ruleReference}
+          </p>
+        </div>
+      )}
+
       {/* Review Notes */}
       {submission.reviewNotes && (
         <div>

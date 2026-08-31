@@ -15,11 +15,22 @@ import {
 interface Props {
   communityId: number;
   communityName: string;
+  /**
+   * Per-community `smsDispatchEnabled` legal gate. REQUIRED so a new call site
+   * has to state its intent rather than silently inheriting a default.
+   *
+   * When false the SMS channel is removed from the composer entirely and the
+   * broadcast goes out by EMAIL. It does not block sending — an emergency
+   * broadcast must still reach residents. The service degrades the same way
+   * server-side, so a crafted request cannot send SMS either.
+   * See docs/audits/2026-08-09-legal-risk-audit.md F-10.
+   */
+  smsEnabled: boolean;
 }
 
 type Step = 'template' | 'compose' | 'recipients' | 'confirm' | 'sending' | 'sent';
 
-export function BroadcastComposer({ communityId, communityName }: Props) {
+export function BroadcastComposer({ communityId, communityName, smsEnabled }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<Step>('template');
   const [title, setTitle] = useState('');
@@ -28,7 +39,9 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
   const [severity, setSeverity] = useState<'emergency' | 'urgent' | 'info'>('emergency');
   const [templateKey, setTemplateKey] = useState<string | undefined>();
   const [targetAudience, setTargetAudience] = useState<'all' | 'owners_only'>('all');
-  const [channels, setChannels] = useState<Array<'sms' | 'email'>>(['sms', 'email']);
+  const [channels, setChannels] = useState<Array<'sms' | 'email'>>(
+    smsEnabled ? ['sms', 'email'] : ['email'],
+  );
   const [confirmed, setConfirmed] = useState(false);
   const [broadcastId, setBroadcastId] = useState<number | null>(null);
   const [recipientInfo, setRecipientInfo] = useState<{
@@ -220,18 +233,20 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
             />
           </div>
 
-          <div>
-            <label htmlFor="smsBody" className="block text-sm font-medium text-content-secondary">SMS body</label>
-            <textarea
-              id="smsBody"
-              value={smsBody}
-              onChange={(e) => setSmsBody(e.target.value)}
-              rows={3}
-              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
-              placeholder="Short SMS message (160 chars recommended)..."
-            />
-            <SmsPreview body={smsBody} />
-          </div>
+          {smsEnabled && (
+            <div>
+              <label htmlFor="smsBody" className="block text-sm font-medium text-content-secondary">SMS body</label>
+              <textarea
+                id="smsBody"
+                value={smsBody}
+                onChange={(e) => setSmsBody(e.target.value)}
+                rows={3}
+                className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
+                placeholder="Short SMS message (160 chars recommended)..."
+              />
+              <SmsPreview body={smsBody} />
+            </div>
+          )}
 
           <div className="flex justify-between">
             <button
@@ -273,18 +288,25 @@ export function BroadcastComposer({ communityId, communityName }: Props) {
 
           <div className="space-y-2">
             <span className="block text-sm font-medium text-content-secondary">Channels</span>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={channels.includes('sms')}
-                onChange={(e) => {
-                  setChannels(e.target.checked
-                    ? [...channels, 'sms']
-                    : channels.filter((c) => c !== 'sms'));
-                }}
-              />
-              <span className="text-sm">SMS</span>
-            </label>
+            {smsEnabled ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={channels.includes('sms')}
+                  onChange={(e) => {
+                    setChannels(e.target.checked
+                      ? [...channels, 'sms']
+                      : channels.filter((c) => c !== 'sms'));
+                  }}
+                />
+                <span className="text-sm">SMS</span>
+              </label>
+            ) : (
+              <p className="text-xs text-content-tertiary">
+                Text messaging is not enabled for this community. This alert will be
+                delivered by email to every resident with an email address on file.
+              </p>
+            )}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"

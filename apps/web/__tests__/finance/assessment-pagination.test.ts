@@ -69,6 +69,7 @@ vi.mock('@/lib/services/oauth-state', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   centsToDollars: (cents: number) => cents / 100,
   parseDateOnly: (value: string) => value,
 }));

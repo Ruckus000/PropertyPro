@@ -18,6 +18,7 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { ValidationError } from '@/lib/api/errors/ValidationError';
+import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 import {
   createBroadcast,
   paginateEmergencyBroadcasts,
@@ -80,6 +81,12 @@ export const POST = withErrorHandler(
       templateKey: body.templateKey,
       targetAudience: body.targetAudience,
       channels: body.channels,
+      // SMS legal gate. Degrades the broadcast to email-only rather than
+      // refusing it — an emergency alert must still go out. Deliberately NOT a
+      // guard at the top of this handler: a 403 here would kill the email leg
+      // too, defeating the life-safety bypass noted above.
+      // See @/lib/sms/common and audit F-10.
+      smsAllowed: isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled,
       initiatedBy: userId,
     });
   }),

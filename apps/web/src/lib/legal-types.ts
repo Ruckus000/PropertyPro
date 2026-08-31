@@ -4,7 +4,7 @@
  * components can import the types without pulling in server-only runtime deps.
  */
 
-export type LegalDocKey = 'terms' | 'privacy';
+export type LegalDocKey = 'terms' | 'privacy' | 'accessibility';
 
 /** Pre-rendered legal-document HTML keyed by doc. */
 export type LegalDocs = Record<LegalDocKey, string>;

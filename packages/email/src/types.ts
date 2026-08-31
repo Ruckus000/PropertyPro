@@ -7,6 +7,29 @@ export interface CommunityBranding {
   accentColor?: string;
   /** Custom footer text appended after the standard footer. */
   customEmailFooter?: string;
+  /**
+   * The sender's physical postal address as display lines.
+   *
+   * CAN-SPAM requires one on commercial email. The sender here is the
+   * ASSOCIATION, not PropertyPro, so this is the community's own mailing
+   * address — build it with `formatCommunityPostalAddress`, which returns null
+   * when the address is incomplete rather than shipping a partial one.
+   *
+   * Optional because transactional email does not need it; `EmailLayout`
+   * renders it only when present.
+   */
+  postalAddressLines?: string[];
+  /**
+   * No-login opt-out URL, rendered as a visible footer link.
+   *
+   * Must be reachable WITHOUT a session — a link to a login-walled settings
+   * page satisfies neither Gmail's one-click List-Unsubscribe nor CAN-SPAM's
+   * expectation that opting out does not require an account. See
+   * `buildCommunityEmailUnsubscribeUrl`.
+   */
+  unsubscribeUrl?: string;
+  /** Link text, e.g. "Unsubscribe from announcements". Defaults to "Unsubscribe". */
+  unsubscribeLabel?: string;
 }
 
 /** Base props shared by all email templates. */

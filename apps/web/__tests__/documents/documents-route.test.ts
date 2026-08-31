@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { ValidationError } from '../../src/lib/api/errors/ValidationError';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -24,6 +25,7 @@ const {
   requirePermissionMock,
   requireActiveSubscriptionForMutationMock,
   createUploadedDocumentMock,
+  enforceRedactionAttestationMock,
   paginateAccessibleDocumentsMock,
   getDocumentForDeletionAuditMock,
   softDeleteDocumentMock,
@@ -41,6 +43,7 @@ const {
   requirePermissionMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn(),
   createUploadedDocumentMock: vi.fn(),
+  enforceRedactionAttestationMock: vi.fn(),
   paginateAccessibleDocumentsMock: vi.fn(),
   getDocumentForDeletionAuditMock: vi.fn(),
   softDeleteDocumentMock: vi.fn(),
@@ -77,6 +80,10 @@ vi.mock('@/lib/db/access-control', () => ({
 
 vi.mock('@/lib/middleware/subscription-guard', () => ({
   requireActiveSubscriptionForMutation: requireActiveSubscriptionForMutationMock,
+}));
+
+vi.mock('@/lib/documents/redaction-attestation', () => ({
+  enforceRedactionAttestation: enforceRedactionAttestationMock,
 }));
 
 vi.mock('@/lib/documents/create-uploaded-document', () => ({
@@ -280,6 +287,35 @@ describe('POST /api/v1/documents', () => {
     requirePermissionMock.mockReturnValue(undefined);
     requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
     createUploadedDocumentMock.mockResolvedValue({ document: DOCUMENT_ROW, warnings: [] });
+    enforceRedactionAttestationMock.mockResolvedValue(undefined);
+  });
+
+  // ── §718.111(12)(c) redaction attestation (F-02) ──────────────────────────
+
+  it('refuses the upload when the redaction gate rejects', async () => {
+    // The gate must run BEFORE the row is created — an unredacted record that
+    // reaches the portal and is then deleted was still published.
+    enforceRedactionAttestationMock.mockRejectedValueOnce(
+      new ValidationError('Confirm you have redacted it before uploading.'),
+    );
+
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+
+    expect(res.status).toBe(400);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('passes the attestation flag and category through to the gate', async () => {
+    await POST(jsonPost({ ...VALID_CREATE_BODY, redactionAttested: true }));
+
+    expect(enforceRedactionAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        communityId: 42,
+        categoryId: 3,
+        userId: 'user-admin',
+        attested: true,
+      }),
+    );
   });
 
   it('creates a document and returns the row (no warnings)', async () => {

@@ -44,6 +44,7 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   requireFinanceEnabled: requireFinanceEnabledMock,
   requireFinanceReadPermission: requireFinanceReadPermissionMock,
 }));

@@ -34,6 +34,48 @@ export function requireViolationAdminWrite(membership: CommunityMembership): voi
   requireBoardDesignation(membership);
 }
 
+// ── Legal gates ─────────────────────────────────────────────────────────────
+//
+// These are SYNCHRONOUS on purpose. The flags ride on `membership`, which
+// `requireCommunityMembership` already hydrates from the communities row it
+// fetches anyway — so unlike `requirePlanFeature` above, these cost no query
+// AND cannot fail open on a null plan.
+//
+// Both check the underlying feature FIRST (so a community type that never had
+// the feature gets the accurate error) and the legal gate SECOND, mirroring
+// `requireElectionsEnabled` in @/lib/elections/common.
+//
+// See docs/audits/2026-08-09-legal-risk-audit.md F-04, F-05.
+
+/**
+ * Gate on imposing a violation fine.
+ *
+ * Disabled because the fine route enforces no statutory cap ($100 per violation /
+ * $1,000 aggregate under §718.303(3) / §720.305(2) absent authorizing documents)
+ * and records no fining-committee approval, which those statutes require. Blocks
+ * WRITES only — existing fine records stay readable and payable, because they are
+ * association financial records.
+ */
+export function requireViolationFinesEnabled(membership: CommunityMembership): void {
+  if (!membership.violationFinesEnabled) {
+    throw new ForbiddenError('Fines are not available for this community');
+  }
+}
+
+/**
+ * Gate on generating a violation / hearing notice PDF.
+ *
+ * Disabled because the generated notice states legal conclusions (it computes and
+ * asserts whether the 14-day notice period was satisfied), enumerates the owner's
+ * rights, and names the *Board* as imposing the fine where the statute requires a
+ * fining committee.
+ */
+export function requireNoticePdfEnabled(membership: CommunityMembership): void {
+  if (!membership.noticePdfGenerationEnabled) {
+    throw new ForbiddenError('Generated notices are not available for this community');
+  }
+}
+
 export function requireArcReviewPermission(membership: CommunityMembership): void {
   if (!membership.isAdmin) {
     throw new ForbiddenError('Only ARC reviewers can perform this action');

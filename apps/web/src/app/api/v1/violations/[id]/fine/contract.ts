@@ -27,6 +27,12 @@
  *   - `dueDate`: ISO date string `YYYY-MM-DD` (optional)
  *   - `graceDays`: int in [1, 120] (optional)
  *   - `notes`: string, max 1000 chars, nullable + optional
+ *   - `approvedByCommittee`: literal `true` (REQUIRED — §718.303(3))
+ *   - `committeeMembers`: 1–20 `{ name, userId? }` snapshots (REQUIRED)
+ *
+ * The two committee fields are a deliberate BREAKING change to the request
+ * contract, and the amount is now capped in the service against
+ * `resolveFineCaps`. See docs/audits/2026-08-09-legal-risk-audit.md F-04.
  *
  * Service arg shape is POSITIONAL with a `{ amountCents, dueDate, graceDays,
  * notes }` options object as the 4th positional arg. The `notes ?? null`
@@ -70,6 +76,28 @@ export const violationsFineContract = defineRoute({
         .optional(),
       graceDays: z.number().int().min(1).max(120).optional(),
       notes: z.string().max(1000).nullable().optional(),
+      /**
+       * §718.303(3) / §720.305(2): a fine requires the approval of a committee
+       * of members who are not officers, directors, or their relatives.
+       *
+       * `z.literal(true)`, not `z.boolean()` — a `false` must be a 400, never a
+       * fine recorded as un-approved. Same reasoning as `termsAccepted` on the
+       * invitation contract.
+       */
+      approvedByCommittee: z.literal(true),
+      /**
+       * Snapshot of who approved. At least one member, because a "committee" of
+       * nobody is the same defect in a different shape.
+       */
+      committeeMembers: z
+        .array(
+          z.object({
+            name: z.string().min(1).max(200),
+            userId: z.string().uuid().optional(),
+          }),
+        )
+        .min(1)
+        .max(20),
     }),
   },
   response: z.unknown(),

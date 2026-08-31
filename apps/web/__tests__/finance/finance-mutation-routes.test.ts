@@ -120,6 +120,9 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'condo_718',
+      // Online payments ship gated OFF; these tests exercise the charge path, so
+      // they opt in. The gate itself is covered by its own block below.
+      assessmentPaymentsEnabled: true,
     });
     requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
 
@@ -315,6 +318,9 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityType: 'condo_718',
+      // Online payments ship gated OFF; these tests exercise the charge path, so
+      // they opt in. The gate itself is covered by its own block below.
+      assessmentPaymentsEnabled: true,
     });
 
     const response = await createIntentPost(
@@ -346,6 +352,9 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityType: 'condo_718',
+      // Online payments ship gated OFF; these tests exercise the charge path, so
+      // they opt in. The gate itself is covered by its own block below.
+      assessmentPaymentsEnabled: true,
     });
     listActorUnitIdsForFinanceMock.mockResolvedValueOnce([91, 92]);
 
@@ -379,6 +388,7 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'apartment',
+      assessmentPaymentsEnabled: true,
     });
 
     const response = await createIntentPost(
@@ -400,6 +410,7 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
       communityType: 'apartment',
+      assessmentPaymentsEnabled: true,
     });
     listActorUnitIdsForFinanceMock.mockResolvedValueOnce([93]);
 
@@ -429,6 +440,7 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant',
       communityType: 'apartment',
+      assessmentPaymentsEnabled: true,
     });
     listActorUnitIdsForFinanceMock.mockResolvedValueOnce([93, 94]);
 
@@ -488,6 +500,9 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
       communityType: 'condo_718',
+      // Online payments ship gated OFF; these tests exercise the charge path, so
+      // they opt in. The gate itself is covered by its own block below.
+      assessmentPaymentsEnabled: true,
     });
 
     const response = await connectStatusGet(
@@ -504,6 +519,9 @@ describe('WS66 finance mutation routes', () => {
       communityId,
       role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
       communityType: 'condo_718',
+      // Online payments ship gated OFF; these tests exercise the charge path, so
+      // they opt in. The gate itself is covered by its own block below.
+      assessmentPaymentsEnabled: true,
     });
 
     const response = await connectStatusGet(
@@ -574,4 +592,74 @@ describe('WS66 finance mutation routes', () => {
     expect(response.status).toBe(400);
     expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
   });
+
+  // ── Online payments gate ───────────────────────────────────────────────────
+  //
+  // The gate is checked BEFORE requireActiveSubscriptionForMutation, which
+  // deliberately lets a resident self-pay through even when the community's own
+  // PropertyPro subscription is soft-locked. That bypass must not become a hole
+  // in the legal gate: the exposure is the destination-charge fund flow, which
+  // is identical no matter who is paying.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-15.
+  it('blocks payment intent creation when the payments gate is off', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
+      communityType: 'condo_718',
+      assessmentPaymentsEnabled: false,
+    });
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        lineItemId: 88,
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks a RESIDENT self-pay too, despite the subscription-guard bypass', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
+      communityType: 'condo_718',
+      assessmentPaymentsEnabled: false,
+    });
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        lineItemId: 88,
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(createPaymentIntentForLineItemMock).not.toHaveBeenCalled();
+    // The gate fires before the subscription guard is even consulted.
+    expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a missing gate flag as disabled', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      userId: 'user-finance-1',
+      communityId,
+      role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Property Manager',
+      communityType: 'condo_718',
+      // assessmentPaymentsEnabled deliberately absent
+    });
+
+    const response = await createIntentPost(
+      jsonRequest('http://localhost:3000/api/v1/payments/create-intent', {
+        communityId,
+        lineItemId: 88,
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
 });

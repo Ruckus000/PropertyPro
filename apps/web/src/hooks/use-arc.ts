@@ -26,6 +26,8 @@ export interface ArcSubmission {
   attachmentDocumentIds: number[];
   status: ArcSubmissionStatus;
   reviewNotes: string | null;
+  /** Rule/covenant cited on denial (§720.3035). Null on approvals. */
+  ruleReference: string | null;
   decidedByUserId: string | null;
   decidedAt: string | null;
   createdAt: string;

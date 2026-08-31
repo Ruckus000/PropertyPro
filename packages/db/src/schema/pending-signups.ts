@@ -41,6 +41,17 @@ export const pendingSignups = pgTable(
     planKey: text('plan_key').notNull(),
     candidateSlug: text('candidate_slug').notNull(),
     termsAcceptedAt: timestamp('terms_accepted_at', { withTimezone: true }).notNull(),
+    /**
+     * Which version of the Terms this signup accepted. Carried through to
+     * `users.terms_version` at provisioning time.
+     *
+     * This column has to exist HERE, not just on `users`: a pending signup can sit
+     * unverified for days, so stamping the version at provisioning time would
+     * record whatever version is current *then* against an acceptance that
+     * happened earlier — silently backdating a legal record. Nullable because
+     * signups predating this column exist.
+     */
+    termsVersion: text('terms_version'),
     verificationEmailSentAt: timestamp('verification_email_sent_at', { withTimezone: true }),
     verificationEmailId: text('verification_email_id'),
     status: text('status').notNull().default('pending_verification'),

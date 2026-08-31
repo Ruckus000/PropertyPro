@@ -35,6 +35,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
+import { enforceRedactionAttestation } from '@/lib/documents/redaction-attestation';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import {
@@ -102,6 +103,16 @@ const runCreateDocument = runRoute(documentsCreateContract, async ({ body, req }
   const membership = await requireCommunityMembership(effectiveCommunityId, userId);
   requirePermission(membership, 'documents', 'write');
   await requireActiveSubscriptionForMutation(effectiveCommunityId);
+
+  // Before the row exists, not after: an unredacted record that reaches the
+  // portal and is then deleted was still published (F-02).
+  await enforceRedactionAttestation({
+    communityId: effectiveCommunityId,
+    categoryId: body.categoryId,
+    userId,
+    title: body.title,
+    attested: body.redactionAttested,
+  });
 
   const result = await createUploadedDocument({
     userId,

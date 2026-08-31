@@ -17,6 +17,16 @@ export interface NotificationPreferences {
   calendarReminderCommunityAssessments: boolean;
   inAppEnabled: boolean;
   emailInsuranceAlerts: boolean;
+  /**
+   * TCPA SMS consent state. The GET route has always returned these four; the
+   * interface simply did not declare them, so the only consumer that needed
+   * them (the SMS consent card) could not see them. Optional because the
+   * interface is also used for PATCH payloads, which send a subset.
+   */
+  smsEnabled?: boolean;
+  smsEmergencyOnly?: boolean;
+  smsConsentGivenAt?: string | null;
+  smsConsentRevokedAt?: string | null;
 }
 
 export const notificationPreferencesKey = (communityId: number) =>

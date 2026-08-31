@@ -18,6 +18,7 @@ import { MediaFrame } from '@/components/help/media-frame';
 import { HelpMediaLightbox, type LightboxMedia } from '@/components/help/help-media-lightbox';
 import { ArticleFeedback } from '@/components/help/article-feedback';
 import { ArticleViewTracker } from '@/components/help/article-view-tracker';
+import { HelpArticleDisclaimer } from '@/components/help/help-article-disclaimer';
 import type { HelpArticleMetadata } from '@/lib/services/help-article-service';
 
 function formatUpdatedAt(value: string | undefined): string | null {
@@ -195,7 +196,18 @@ export function HelpArticleBody({
         />
       )}
 
-      <div ref={contentRef} dangerouslySetInnerHTML={{ __html: html }} />
+      {/*
+        Same injected notice as the /help route pages. The modal is a second
+        rendering surface for the same articles, so leaving it out here would
+        mean the disclaimer depended on WHICH doorway the reader used.
+      */}
+      <HelpArticleDisclaimer statutes={metadata.statutes ?? []} />
+
+      <div
+        ref={contentRef}
+        data-help-article-content
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
 
       <ArticleFeedback
         communityId={communityId}

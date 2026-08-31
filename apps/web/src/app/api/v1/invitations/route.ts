@@ -10,6 +10,7 @@
 import { runRoute } from '@propertypro/api-contract';
 import { createElement } from 'react';
 import { logAuditEvent } from '@propertypro/db';
+import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { InvitationEmail, sendEmail } from '@propertypro/email';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, NotFoundError, ValidationError } from '@/lib/api/errors';
@@ -26,6 +27,7 @@ import {
   getUserForInvitation,
   getUserRoleForInvitation,
   markInvitationConsumed,
+  recordTermsAcceptance,
 } from '@/lib/services/invitations-service';
 import {
   acceptInvitationContract,
@@ -186,7 +188,16 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('Failed to create user');
     }
 
-    await markInvitationConsumed(communityId, token, new Date());
+    const acceptedAt = new Date();
+    await markInvitationConsumed(communityId, token, acceptedAt);
+
+    // Persist the clickwrap. Ordered AFTER the auth user is created and the
+    // invitation consumed, so a failure here cannot leave a terms record for an
+    // account that does not exist. The reverse failure — account created, terms
+    // write fails — is recoverable (the column is nullable and re-acceptance can
+    // be prompted); an orphaned acceptance record is not.
+    // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+    await recordTermsAcceptance(communityId, userId, acceptedAt, CURRENT_TERMS_VERSION);
 
     // Same rule as the POST branch: identify the invitation by its invitee, not
     // by the token. (The token is consumed by this point, but it is still a
@@ -197,7 +208,11 @@ export const PATCH = withErrorHandler(
       resourceType: 'invitation',
       resourceId: userId,
       communityId,
-      newValues: { consumedAt: new Date().toISOString() },
+      newValues: {
+        consumedAt: acceptedAt.toISOString(),
+        termsAcceptedAt: acceptedAt.toISOString(),
+        termsVersion: CURRENT_TERMS_VERSION,
+      },
     });
 
     return { success: true as const, email: user.email };

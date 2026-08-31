@@ -45,6 +45,20 @@ interface PaymentPortalProps {
   unitId?: number;
   actorUnits?: Array<{ id: number; label: string }>;
   requiresExplicitUnitSelection?: boolean;
+  /**
+   * Per-community `assessmentPaymentsEnabled` legal gate. When false the balance
+   * and history stay fully visible and only the CHARGE affordance disappears — a
+   * resident must still be able to see what they owe and how it was computed.
+   * The server guard in api/v1/payments/create-intent is authoritative.
+   *
+   * REQUIRED, deliberately. An optional prop defaulting to `false` would be
+   * fail-closed but silent — a future caller that forgets it would lose the Pay
+   * button with no compile error, which is how a defaulted-to-disabled prop once
+   * killed Publish for every PM in production. Making it required forces every
+   * call site to state its intent.
+   * See docs/audits/2026-08-09-legal-risk-audit.md F-15.
+   */
+  paymentsEnabled: boolean;
 }
 
 /* ─────── Helpers ─────── */
@@ -100,6 +114,7 @@ export function PaymentPortal({
   unitId,
   actorUnits = [],
   requiresExplicitUnitSelection = false,
+  paymentsEnabled,
 }: PaymentPortalProps) {
   void userRole;
   const router = useRouter();
@@ -110,7 +125,7 @@ export function PaymentPortal({
   const hasMultipleUnits = actorUnits.length > 1;
   const canLoadData = mode === 'community' || !requiresExplicitUnitSelection;
   const showUnitColumn = mode === 'community';
-  const canPay = mode === 'unit';
+  const canPay = mode === 'unit' && paymentsEnabled;
 
   const { data, isPending, isError, refetch } = usePaymentStatement(communityId, mode, unitId, {
     enabled: canLoadData,

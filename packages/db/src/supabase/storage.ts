@@ -101,6 +101,34 @@ export async function deleteStorageObject(bucket: string, path: string) {
 }
 
 /**
+ * Uploads bytes to Supabase Storage using the service-role client.
+ *
+ * Distinct from `createPresignedUploadUrl`, which exists so a BROWSER can
+ * upload without credentials. This is for server-side writers that already hold
+ * the bytes — going out to a signed URL and back would add a round trip and a
+ * token-handling step for no benefit.
+ *
+ * `upsert` defaults to true because the callers are retryable background jobs:
+ * a retried write must overwrite its own orphaned object rather than collide.
+ */
+export async function uploadStorageObject(
+  bucket: string,
+  path: string,
+  body: Uint8Array,
+  options?: { contentType?: string; upsert?: boolean },
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.storage.from(bucket).upload(path, body, {
+    contentType: options?.contentType ?? 'application/octet-stream',
+    upsert: options?.upsert ?? true,
+  });
+
+  if (error) {
+    throw new Error(`Failed to upload storage object ${bucket}/${path}: ${error.message}`);
+  }
+}
+
+/**
  * Downloads a Supabase Storage object as bytes.
  *
  * Used by content validators that need to inspect uploaded file headers

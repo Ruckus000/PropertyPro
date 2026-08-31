@@ -44,6 +44,7 @@ vi.mock('@/lib/db/access-control', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parsePositiveInt: (value: string, label: string) => {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed <= 0) {

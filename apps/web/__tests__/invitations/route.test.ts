@@ -16,6 +16,7 @@ const {
   findInvitationByTokenMock,
   createSupabaseAuthUserFromInvitationMock,
   markInvitationConsumedMock,
+  recordTermsAcceptanceMock,
 } = vi.hoisted(() => ({
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'test_1' }),
@@ -30,6 +31,7 @@ const {
   findInvitationByTokenMock: vi.fn(),
   createSupabaseAuthUserFromInvitationMock: vi.fn(),
   markInvitationConsumedMock: vi.fn().mockResolvedValue(undefined),
+  recordTermsAcceptanceMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -65,8 +67,10 @@ vi.mock('@/lib/services/invitations-service', () => ({
   findInvitationByToken: findInvitationByTokenMock,
   createSupabaseAuthUserFromInvitation: createSupabaseAuthUserFromInvitationMock,
   markInvitationConsumed: markInvitationConsumedMock,
+  recordTermsAcceptance: recordTermsAcceptanceMock,
 }));
 
+import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
 
 // requirePermission (from @/lib/db/access-control) is NOT mocked — it runs for
@@ -227,7 +231,7 @@ describe('p1-20 invitation auth flow', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId: 55, token, password: 'Strongpass123!' }),
+      body: JSON.stringify({ communityId: 55, token, password: 'Strongpass123!', termsAccepted: true }),
     });
 
     const res = await PATCH(req);
@@ -235,6 +239,23 @@ describe('p1-20 invitation auth flow', () => {
     const json = (await res.json()) as { data: { email: string } };
     expect(json.data.email).toBe('resident@example.com');
     expect(markInvitationConsumedMock).toHaveBeenCalledWith(55, token, expect.any(Date));
+
+    // The clickwrap must be PERSISTED, not merely validated. Before this, the
+    // form collected consent, the hook dropped it, and nothing was ever written
+    // — invited residents were bound by nothing while ToS §2 claimed otherwise.
+    // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+    expect(recordTermsAcceptanceMock).toHaveBeenCalledWith(
+      55,
+      'user-1',
+      expect.any(Date),
+      CURRENT_TERMS_VERSION,
+    );
+
+    // Same timestamp for both, so the audit trail cannot show a user accepting
+    // terms at a different moment than they consumed the invitation.
+    const [, , consumedAt] = markInvitationConsumedMock.mock.calls[0]!;
+    const [, , acceptedAt] = recordTermsAcceptanceMock.mock.calls[0]!;
+    expect((acceptedAt as Date).getTime()).toBe((consumedAt as Date).getTime());
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'update', communityId: 55 }),
     );
@@ -253,7 +274,7 @@ describe('p1-20 invitation auth flow', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId: 5, token, password: 'Pass123456!' }),
+      body: JSON.stringify({ communityId: 5, token, password: 'Pass123456!', termsAccepted: true }),
     });
 
     const res = await PATCH(req);
@@ -275,7 +296,7 @@ describe('p1-20 invitation auth flow', () => {
     const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ communityId: 9, token, password: 'Pass123456!' }),
+      body: JSON.stringify({ communityId: 9, token, password: 'Pass123456!', termsAccepted: true }),
     });
 
     const res = await PATCH(req);
@@ -283,4 +304,53 @@ describe('p1-20 invitation auth flow', () => {
     const json = (await res.json()) as { error: { code: string } };
     expect(json.error.code).toBe('TOKEN_EXPIRED');
   });
+
+  it('PATCH rejects an accept with no terms acceptance', async () => {
+    // `z.literal(true)` on the contract, not `z.boolean()` — an account must
+    // never come into existence having accepted nothing.
+    const token = 'a'.repeat(64);
+    findInvitationByTokenMock.mockResolvedValue({
+      userId: 'user-1',
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ communityId: 55, token, password: 'Strongpass123!' }),
+    });
+
+    const res = await PATCH(req);
+
+    expect(res.status).toBe(400);
+    expect(createSupabaseAuthUserFromInvitationMock).not.toHaveBeenCalled();
+    expect(recordTermsAcceptanceMock).not.toHaveBeenCalled();
+  });
+
+  it('PATCH rejects termsAccepted: false', async () => {
+    const token = 'a'.repeat(64);
+    findInvitationByTokenMock.mockResolvedValue({
+      userId: 'user-1',
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/invitations', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        communityId: 55,
+        token,
+        password: 'Strongpass123!',
+        termsAccepted: false,
+      }),
+    });
+
+    const res = await PATCH(req);
+
+    expect(res.status).toBe(400);
+    expect(createSupabaseAuthUserFromInvitationMock).not.toHaveBeenCalled();
+  });
+
 });

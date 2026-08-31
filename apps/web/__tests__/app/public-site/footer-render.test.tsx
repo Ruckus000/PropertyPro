@@ -82,7 +82,12 @@ describe('PublicSiteFooter — note', () => {
 
   it.each([null, undefined, '', '   '])('renders nothing for %s', (value) => {
     const { container } = render(<PublicSiteFooter communityName={COMMUNITY} note={value} />);
-    expect(container.querySelectorAll('p')).toHaveLength(0);
+    // The accessibility link is now an unconditional paragraph (F-12), so this
+    // asserts the absence of the NOTE rather than of every <p> — the old
+    // blanket count would pass for the wrong reason if the note ever moved out
+    // of a <p>, and fails for the wrong reason now.
+    const paragraphs = [...container.querySelectorAll('p')].map((el) => el.textContent);
+    expect(paragraphs).toEqual(['Accessibility']);
   });
 
   // The footer note is PM-authored, unreviewed, and lands on an anonymous page.
@@ -147,6 +152,36 @@ describe('PublicSiteFooter — everything at once', () => {
       />,
     );
     const paragraphs = [...container.querySelectorAll('p')].map((p) => p.textContent);
-    expect(paragraphs).toEqual(['Managed by Acme Property Group.', STATUTORY_FOOTER_LINE]);
+    expect(paragraphs).toEqual([
+      'Managed by Acme Property Group.',
+      STATUTORY_FOOTER_LINE,
+      'Accessibility',
+    ]);
+  });
+});
+
+describe('PublicSiteFooter — accessibility statement (F-12)', () => {
+  // Unlike the statutory line, this is NOT opt-in. A public association site is
+  // the surface an ADA demand letter targets, and a documented accommodation
+  // channel is the single most protective thing on it — so the sites most
+  // likely to need it must not be able to switch it off.
+  it('always links to the accessibility statement, with no props at all', () => {
+    render(<PublicSiteFooter communityName={COMMUNITY} />);
+
+    const link = screen.getByRole('link', { name: 'Accessibility' });
+    expect(link).toHaveAttribute('href', 'https://getpropertypro.com/legal/accessibility');
+  });
+
+  it('opens in a new tab with a safe rel', () => {
+    render(<PublicSiteFooter communityName={COMMUNITY} />);
+
+    const link = screen.getByRole('link', { name: 'Accessibility' });
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+  });
+
+  it('is present even when a PM opted OUT of the statutory line', () => {
+    render(<PublicSiteFooter communityName={COMMUNITY} showStatutoryLine={false} />);
+    expect(screen.getByRole('link', { name: 'Accessibility' })).toBeInTheDocument();
   });
 });

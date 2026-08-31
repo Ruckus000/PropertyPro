@@ -74,6 +74,7 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
         communityId={communityId}
         userId={userId}
         isAdmin={membership.isAdmin}
+        finesEnabled={membership.violationFinesEnabled}
       />
     </div>
     </FeatureGate>

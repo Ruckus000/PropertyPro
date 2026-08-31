@@ -37,9 +37,51 @@ export const communities = pgTable('communities', {
       unitsWriteLevel?: 'all_members' | 'admin_only';
       leasesWriteLevel?: 'all_members' | 'admin_only';
       documentCategoriesWriteLevel?: 'all_members' | 'admin_only';
-      electionsAttorneyReviewed?: boolean;
       paymentFeePolicy?: 'owner_pays' | 'association_absorbs';
       allowResidentVisitorRevoke?: boolean;
+      // ── Legal gates ────────────────────────────────────────────────────────
+      //
+      // Per-community kill switches for features that carry statutory or
+      // regulatory exposure. These are NOT plan entitlements and must never be
+      // moved into `CommunityFeatures`: that path resolves through
+      // `requirePlanFeature`, which FAILS OPEN when a community has no plan
+      // (apps/web/src/lib/middleware/plan-guard.ts) — precisely the failure mode
+      // these gates exist to prevent.
+      //
+      // Every key is a POSITIVE `…Enabled` boolean read with a strict `=== true`
+      // comparison. A `…Disabled` name would make an absent key mean "enabled",
+      // so a community row that predates the key would silently ship the feature
+      // ON. Absent / null / false / the STRING "true" all mean disabled.
+      //
+      // Toggled by platform admins via apps/admin (audit-logged per key).
+      // See docs/audits/2026-08-09-legal-risk-audit.md §2a.
+      electionsAttorneyReviewed?: boolean;
+      /** §718.303(3)/§720.305(2): no fine cap or fining-committee record yet (F-04). */
+      violationFinesEnabled?: boolean;
+      /** Stripe uses destination charges, so funds transit our balance (F-15). */
+      assessmentPaymentsEnabled?: boolean;
+      /** No inbound STOP handler, so TCPA consent revocation is unrecorded (F-10). */
+      smsDispatchEnabled?: boolean;
+      /** Generated notices state legal conclusions and name the wrong body (F-05). */
+      noticePdfGenerationEnabled?: boolean;
+
+      // ── Fine caps (F-04) ───────────────────────────────────────────────────
+      //
+      // NOT `…Enabled` booleans — these are numeric OVERRIDES, and their
+      // absence means "use the statutory default", not "unlimited". The
+      // defaults live in `packages/shared/src/compliance/fine-caps.ts` and are
+      // what applies when these are unset, so a community row that predates
+      // these keys is capped, not uncapped.
+      //
+      // An override exists because §718.303(3) and §720.305(2) set a floor that
+      // an association's own governing documents may lower but, in some
+      // readings, may also raise for particular categories. Setting one is a
+      // deliberate, audit-logged platform-admin act — not something a board
+      // can do to itself.
+      /** Per-violation ceiling in cents. Absent = the statutory $100 default. */
+      violationFineCapCents?: number;
+      /** Aggregate-per-violation ceiling in cents. Absent = the $1,000 default. */
+      violationFineAggregateCapCents?: number;
     }>()
     .notNull()
     .default({}),

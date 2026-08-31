@@ -51,7 +51,19 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 type ActionType = 'notice' | 'hearing' | 'fine' | 'resolve' | 'dismiss' | null;
 
-function getAvailableActions(status: string): { label: string; action: ActionType; variant: string }[] {
+/**
+ * `finesEnabled` reflects the per-community `violationFinesEnabled` legal gate.
+ * When false the "Impose Fine" action is removed from the list rather than
+ * rendered-and-disabled: a disabled button invites a support ticket asking how to
+ * enable it, and the server 403s the call regardless. The server guard in
+ * api/v1/violations/[id]/fine is authoritative — this is presentation only.
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-04.
+ */
+function getAvailableActions(
+  status: string,
+  finesEnabled: boolean,
+): { label: string; action: ActionType; variant: string }[] {
+  const actions = ((): { label: string; action: ActionType; variant: string }[] => {
   switch (status) {
     case 'reported':
       return [{ label: 'Send Notice', action: 'notice', variant: 'primary' }];
@@ -71,6 +83,10 @@ function getAvailableActions(status: string): { label: string; action: ActionTyp
     default:
       return [];
   }
+  })();
+
+  // Fines are gated per-community; drop the action entirely when disabled.
+  return actions.filter((a) => a.action !== 'fine' || finesEnabled);
 }
 
 const VARIANT_STYLES: Record<string, string> = {
@@ -85,6 +101,8 @@ interface ViolationDetailViewProps {
   communityId: number;
   userId: string;
   isAdmin: boolean;
+  /** Per-community `violationFinesEnabled` legal gate. Server guard is authoritative. */
+  finesEnabled: boolean;
   fines?: ViolationFineItem[];
 }
 
@@ -93,13 +111,14 @@ export function ViolationDetailView({
   communityId,
   userId,
   isAdmin,
+  finesEnabled,
   fines,
 }: ViolationDetailViewProps) {
   const [activeAction, setActiveAction] = useState<ActionType>(null);
 
   const statusStyle = STATUS_STYLES[violation.status] ?? 'bg-surface-muted text-content-secondary';
   const severityStyle = SEVERITY_STYLES[violation.severity] ?? 'bg-surface-muted text-content-secondary';
-  const actions = isAdmin ? getAvailableActions(violation.status) : [];
+  const actions = isAdmin ? getAvailableActions(violation.status, finesEnabled) : [];
 
   // Map ViolationRecord to ViolationItem shape for the transition component
   const violationItem: ViolationItem = {

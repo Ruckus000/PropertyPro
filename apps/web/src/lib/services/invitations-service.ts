@@ -170,6 +170,39 @@ export async function markInvitationConsumed(
 }
 
 /**
+ * Record that a user accepted the Terms of Service, and WHICH version.
+ *
+ * Written to `users` rather than `invitations` deliberately: terms are a global
+ * agreement, not a per-community one, and the `users` row outlives the
+ * invitation (which is tenant-scoped and soft-deletable — so the evidence would
+ * vanish with the community). This is also the same destination the signup path
+ * writes to via provisioning, so both entry points converge on one record.
+ *
+ * `users` carries no `community_id`, so the scoped client requires an explicit
+ * `where` — that is the established pattern here (see `getUserForInvitation`),
+ * not a bypass.
+ *
+ * AUTHZ: token-authenticated — caller MUST have validated the invitation token
+ * via `findInvitationByToken` + consumed/expiry checks BEFORE calling, and the
+ * `userId` MUST come from the invitation row rather than from request input.
+ *
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+ */
+export async function recordTermsAcceptance(
+  communityId: number,
+  userId: string,
+  acceptedAt: Date,
+  termsVersion: string,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.update(
+    users,
+    { termsAcceptedAt: acceptedAt, termsVersion },
+    eq(users.id, userId),
+  );
+}
+
+/**
  * Create the Supabase auth user that backs an accepted invitation.
  * Returns a discriminated union so the caller can produce structured
  * error responses without re-throwing.

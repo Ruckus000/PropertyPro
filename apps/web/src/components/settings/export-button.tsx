@@ -60,7 +60,7 @@ export function ExportButton({ communityId }: ExportButtonProps) {
         aria-busy={loading}
         className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:opacity-50"
       >
-        {loading ? 'Exporting…' : 'Download Community Data'}
+        {loading ? 'Exporting…' : 'Download CSV export'}
       </button>
       {error && (
         <p role="alert" className="mt-2 text-sm text-status-danger">

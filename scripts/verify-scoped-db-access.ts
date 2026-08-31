@@ -297,6 +297,19 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // session; the signed token confines the write to the exact (communityId,
   // userId) it encodes (the notification_preferences.email_insurance_alerts flag).
   resolve(repoRoot, 'apps/web/src/lib/services/insurance-alert-unsubscribe-service.ts'),
+  // Community bulk-email no-login unsubscribe write — same posture as the
+  // insurance one above: token-authenticated, no session, and the signed token
+  // confines the write to the exact (communityId, userId, topic) it encodes.
+  resolve(repoRoot, 'apps/web/src/lib/services/community-email-unsubscribe-service.ts'),
+  // Inbound SMS keyword handler (STOP/START). Signature-authenticated by
+  // Twilio, no session, and cross-community BY DESIGN: a resident texting STOP
+  // is opting out of texts from us, not from one association, so the revocation
+  // applies to every notification_preferences row they own.
+  resolve(repoRoot, 'apps/web/src/lib/services/sms/sms-consent-service.ts'),
+  // Settings page — reads the signed-in user's own `users` row for their phone
+  // number. That table has no community_id to scope by; same as
+  // settings/account/page.tsx above.
+  resolve(repoRoot, 'apps/web/src/app/(authenticated)/settings/page.tsx'),
   // PR #2: Site asset quota lookup — communities is the root tenant table (no communityId column);
   // plan resolution requires unscoped read. Routes calling these helpers MUST have already
   // verified caller's management-tier property_manager/root_manager membership in the target community.
@@ -318,6 +331,25 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   resolve(repoRoot, 'apps/web/src/lib/documents/create-authored-document.ts'),
   resolve(repoRoot, 'apps/web/src/lib/services/esign-pdf-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/site-assets/cleanup.ts'),
+  // Same posture as site-assets/cleanup.ts directly above, and called from the
+  // same place: purgeCommunityData in the account-lifecycle cron. By the time it
+  // runs, the community's members no longer exist, so any scoped path would be
+  // blocked by RLS — which would leave a purged community's full export archive
+  // (every table plus every document, including resident PII) stranded in
+  // storage. Storage cleanup after hard-delete is inherently a service-role
+  // operation. See docs/audits/2026-08-09-legal-risk-audit.md F-07.
+  resolve(repoRoot, 'apps/web/src/lib/services/export/purge-export-archives.ts'),
+  // The export worker's claim scan is inherently cross-tenant: a cron with no
+  // session, scanning for claimable jobs in ANY community. There is no
+  // communityId to scope by until a job is chosen. Confined to the two
+  // community_export_job* tables — all tenant DATA is read through
+  // createScopedClient in export-worker.ts.
+  resolve(repoRoot, 'apps/web/src/lib/services/export/export-job-service.ts'),
+  // Export-ready notification. Runs from the same cron — no session, no
+  // membership — and reads exactly two rows to address one email: the job's own
+  // requester, and its community's name. The community is fixed by the job row,
+  // so there is nothing for a scoped client to add.
+  resolve(repoRoot, 'apps/web/src/lib/services/export/export-notification.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/site/images/finalize/route.ts'),
   // Website editor v3 Phase 8 — favicon finalize. Same admin-client use as its
   // sibling above: download the raw upload, write the processed variants, and

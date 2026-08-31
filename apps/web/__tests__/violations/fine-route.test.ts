@@ -22,6 +22,7 @@ const {
   requireCommunityMembershipMock,
   resolveEffectiveCommunityIdMock,
   requireViolationsEnabledMock,
+  requireViolationFinesEnabledMock,
   requireViolationAdminWriteMock,
   requirePermissionMock,
   assertNotDemoGraceMock,
@@ -31,6 +32,7 @@ const {
   requireCommunityMembershipMock: vi.fn(),
   resolveEffectiveCommunityIdMock: vi.fn(),
   requireViolationsEnabledMock: vi.fn(),
+  requireViolationFinesEnabledMock: vi.fn(),
   requireViolationAdminWriteMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   assertNotDemoGraceMock: vi.fn(),
@@ -50,6 +52,8 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: requireViolationFinesEnabledMock,
+  requireNoticePdfEnabled: vi.fn(),
   requireViolationsEnabled: requireViolationsEnabledMock,
   requireViolationAdminWrite: requireViolationAdminWriteMock,
 }));
@@ -80,6 +84,23 @@ const ADMIN_MEMBERSHIP = {
   isUnitOwner: false,
   displayTitle: 'Board President',
   communityType: 'condo_718' as const,
+  // Resolved onto the membership at hydration so the route can pass them to the
+  // service without a second query.
+  fineCaps: { perFineCents: 100_00, aggregateCents: 1_000_00 },
+};
+
+/**
+ * §718.303(3) / §720.305(2): a fine now requires an affirmative fining-committee
+ * approval and a snapshot of who approved. Both are `z.literal(true)` / a
+ * non-empty array on the contract, so EVERY valid body carries them — that is
+ * the point, and it is why this is spread into each request rather than
+ * defaulted somewhere.
+ *
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-04.
+ */
+const COMMITTEE = {
+  approvedByCommittee: true as const,
+  committeeMembers: [{ name: 'Dana Reyes' }],
 };
 
 const FINE_RESULT = {
@@ -117,6 +138,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
     requireViolationsEnabledMock.mockResolvedValue(undefined);
+    requireViolationFinesEnabledMock.mockReturnValue(undefined);
     requirePermissionMock.mockReturnValue(undefined);
     requireViolationAdminWriteMock.mockReturnValue(undefined);
     imposeViolationFineForCommunityMock.mockResolvedValue(FINE_RESULT);
@@ -132,6 +154,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
           dueDate: '2026-02-01',
           graceDays: 10,
           notes: 'Late fee for repeated infractions',
+          ...COMMITTEE,
         },
         { 'x-request-id': 'req-abc' },
       ),
@@ -164,6 +187,9 @@ describe('POST /api/v1/violations/[id]/fine', () => {
         dueDate: '2026-02-01',
         graceDays: 10,
         notes: 'Late fee for repeated infractions',
+        approvedByCommittee: true,
+        committeeMembers: [{ name: 'Dana Reyes' }],
+        caps: ADMIN_MEMBERSHIP.fineCaps,
       },
       'req-abc',
     );
@@ -171,7 +197,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
 
   it('imposes a fine with only required fields (notes coerced to null)', async () => {
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -185,16 +211,68 @@ describe('POST /api/v1/violations/[id]/fine', () => {
         dueDate: undefined,
         graceDays: undefined,
         notes: null,
+        approvedByCommittee: true,
+        committeeMembers: [{ name: 'Dana Reyes' }],
+        caps: ADMIN_MEMBERSHIP.fineCaps,
       },
       null,
     );
+  });
+
+  // ── §718.303(3) fining-committee record (F-04) ──────────────────────────
+  //
+  // A fine imposed with no committee approval is the statutory defect itself,
+  // not a missing UI field. Enforced at the contract layer so a client that
+  // omits it is refused rather than recording an un-approved fine.
+
+  it('rejects a fine with NO committee approval', async () => {
+    const res = await POST(
+      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      routeCtx('99'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(imposeViolationFineForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects approvedByCommittee: false', async () => {
+    // `z.literal(true)`, not `z.boolean()` — a `false` must be a 400, never a
+    // fine persisted as explicitly un-approved.
+    const res = await POST(
+      jsonPost(99, {
+        communityId: 42,
+        amountCents: 2500,
+        approvedByCommittee: false,
+        committeeMembers: [{ name: 'Dana Reyes' }],
+      }),
+      routeCtx('99'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(imposeViolationFineForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an EMPTY committee', async () => {
+    // A "committee" of nobody is the same defect wearing a different shape.
+    const res = await POST(
+      jsonPost(99, {
+        communityId: 42,
+        amountCents: 2500,
+        approvedByCommittee: true,
+        committeeMembers: [],
+      }),
+      routeCtx('99'),
+    );
+
+    expect(res.status).toBe(400);
+    expect(imposeViolationFineForCommunityMock).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -204,7 +282,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
 
   it('returns 400 VALIDATION_ERROR when params.id is non-numeric', async () => {
     const res = await POST(
-      jsonPost('abc', { communityId: 42, amountCents: 2500 }),
+      jsonPost('abc', { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('abc'),
     );
 
@@ -217,7 +295,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
 
   it('returns 400 VALIDATION_ERROR when params.id is zero', async () => {
     const res = await POST(
-      jsonPost('0', { communityId: 42, amountCents: 2500 }),
+      jsonPost('0', { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('0'),
     );
 
@@ -250,7 +328,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
 
   it('returns 400 VALIDATION_ERROR when amountCents is zero (fails .positive())', async () => {
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 0 }),
+      jsonPost(99, { communityId: 42, amountCents: 0, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -313,7 +391,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo expired'));
 
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -329,7 +407,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     );
 
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -344,7 +422,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     );
 
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -359,7 +437,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     });
 
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -374,7 +452,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     });
 
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -384,7 +462,7 @@ describe('POST /api/v1/violations/[id]/fine', () => {
 
   it('forwards a null x-request-id when the header is absent', async () => {
     const res = await POST(
-      jsonPost(99, { communityId: 42, amountCents: 2500 }),
+      jsonPost(99, { communityId: 42, amountCents: 2500, ...COMMITTEE }),
       routeCtx('99'),
     );
 
@@ -392,4 +470,41 @@ describe('POST /api/v1/violations/[id]/fine', () => {
     const call = imposeViolationFineForCommunityMock.mock.calls[0];
     expect(call[4]).toBeNull();
   });
+
+  // ── Fines legal gate ───────────────────────────────────────────────────────
+  //
+  // Fines ship disabled: this route enforces no statutory cap ($100 per
+  // violation / $1,000 aggregate under §718.303(3) / §720.305(2)) and records no
+  // fining-committee approval, both of which those statutes require.
+  // See docs/audits/2026-08-09-legal-risk-audit.md F-04.
+  describe('fines legal gate', () => {
+    it('403s when the fines gate is closed, without touching the service', async () => {
+      requireViolationFinesEnabledMock.mockImplementationOnce(() => {
+        throw new ForbiddenError('Fines are not available for this community');
+      });
+
+      const res = await POST(
+        jsonPost(7, { communityId: 42, amountCents: 5000, ...COMMITTEE }),
+        routeCtx('7'),
+      );
+
+      expect(res.status).toBe(403);
+      expect(imposeViolationFineForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('checks the gate AFTER the feature flag but BEFORE any permission check', async () => {
+      // Ordering matters for the error a caller sees: a community type that never
+      // had violations should say so, rather than reporting a fines gate it could
+      // not satisfy anyway.
+      await POST(jsonPost(7, { communityId: 42, amountCents: 5000, ...COMMITTEE }), routeCtx('7'));
+
+      const featureOrder = requireViolationsEnabledMock.mock.invocationCallOrder[0]!;
+      const gateOrder = requireViolationFinesEnabledMock.mock.invocationCallOrder[0]!;
+      const permOrder = requirePermissionMock.mock.invocationCallOrder[0]!;
+
+      expect(featureOrder).toBeLessThan(gateOrder);
+      expect(gateOrder).toBeLessThan(permOrder);
+    });
+  });
+
 });

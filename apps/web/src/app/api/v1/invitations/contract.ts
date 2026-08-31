@@ -20,6 +20,21 @@ const createInvitationBodySchema = z.object({
 const acceptInvitationBodySchema = z.object({
   communityId: z.number().int().positive(),
   token: z.string().min(1),
+  /**
+   * Clickwrap acceptance of the Terms of Service and Privacy Policy.
+   *
+   * `z.literal(true)`, NOT `z.boolean()`. A `false` must be a 400, not an
+   * account that quietly exists having accepted nothing — this is the ONLY
+   * point at which an invited resident agrees to anything, and ToS §2 purports
+   * to bind "all users ... including unit owners or residents".
+   *
+   * The form has collected this value since the clickwrap landed, but the hook
+   * dropped it on the floor and it was never sent or persisted. Making it a
+   * required literal here means the request cannot silently regress to that
+   * state again.
+   * See docs/audits/2026-08-09-legal-risk-audit.md F-18.
+   */
+  termsAccepted: z.literal(true),
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')

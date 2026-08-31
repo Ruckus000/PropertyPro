@@ -41,6 +41,7 @@ vi.mock('@/lib/finance/common', () => {
 });
 
 vi.mock('@/lib/services/finance-service', () => ({
+  requirePaymentsEnabled: vi.fn(),
   listDelinquentUnits: listDelinquentUnitsMock,
 }));
 

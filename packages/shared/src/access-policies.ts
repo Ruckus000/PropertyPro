@@ -14,6 +14,11 @@ import {
 import type { KnownDocumentCategoryKey, DocumentCategoryKey } from './document-categories';
 
 export { KNOWN_DOCUMENT_CATEGORY_KEYS, DOCUMENT_CATEGORY_KEYS };
+export {
+  REDACTION_SENSITIVE_CATEGORY_KEYS,
+  isRedactionSensitiveCategory,
+} from './document-categories';
+export type { RedactionSensitiveCategoryKey } from './document-categories';
 export type { KnownDocumentCategoryKey, DocumentCategoryKey };
 
 type CategoryAccess = 'all' | readonly KnownDocumentCategoryKey[];

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective Date:** February 14, 2026
+**Version:** 2026-08-09.1 · **Effective Date:** August 9, 2026 · *Supersedes version 2026-02-14.1*
 
 ---
 
@@ -85,15 +85,25 @@ We retain your personal information for as long as your account is active and as
 
 ### 5.2 Account Deletion
 
-You may request deletion of your personal data at any time by contacting us at privacy@getpropertypro.com. Upon receiving a verified deletion request:
+You may request deletion of your personal data at any time through your account settings or by contacting us at privacy@getpropertypro.com. A deletion request moves through three stages:
 
-- We will delete or de-identify your personal information within thirty (30) calendar days.
-- Certain data may be retained if required by law, including compliance audit logs that Florida law requires associations to maintain.
-- Uploaded community documents are the property of the community association. Deletion requests for community documents must come from an authorized association representative.
+1. **Cooling-off period — thirty (30) calendar days.** The request can be cancelled during this window. Nothing is removed.
+2. **Deactivation.** Your account is deactivated and is no longer accessible through the platform. Your data is retained but is not reachable by you or by other users.
+3. **Purge — approximately six (6) months after deactivation.** We scrub personal information from your user record, replacing identifying fields with de-identified placeholders.
 
-### 5.3 Cancelled Accounts
+Certain data is retained beyond this process:
 
-When a subscription is cancelled, account data is retained for thirty (30) calendar days to allow for reactivation. After this period, data is permanently deleted from our active systems and backups.
+- **Compliance audit logs**, which Florida law requires associations to maintain.
+- **Content you contributed to a community**, such as documents you uploaded, maintenance requests, or forum posts. This is the association's record, not yours alone, and deleting it could impair the association's statutory record-keeping. Deletion requests for community records must come from an authorized association representative.
+- **Backup copies**, as described in Section 5.4.
+
+### 5.3 Cancelled Subscriptions
+
+**Cancelling a subscription does not delete anything.** Community associations have statutory record-retention obligations, and we have deliberately designed the platform so that a lapsed subscription does not destroy an association's records. Data is retained, and an association may export its records at any time — including after the subscription has lapsed. Deletion happens only when it is explicitly requested, through the process in Section 5.2.
+
+### 5.4 Backups
+
+We maintain encrypted database backups for disaster recovery and point-in-time restoration. Personal information may persist in these backups after it has been removed from our active systems, and is deleted as those backups age out under our hosting provider's retention schedule. We do not selectively purge individual records from historical backups.
 
 ---
 
@@ -104,8 +114,8 @@ We implement industry-standard security measures to protect your personal inform
 - Encryption of data in transit using TLS 1.2 or higher.
 - Encryption of data at rest in our database.
 - Role-based access controls ensuring users only access data within their own community.
-- Multi-tenant data isolation at the database level, preventing cross-community data access.
-- Regular security audits and vulnerability assessments.
+- Multi-tenant data isolation enforced at the database level through row-level security, preventing cross-community data access.
+- Automated security checks in our development pipeline, including dependency vulnerability scanning and tenant-isolation verification.
 
 While we strive to protect your information, no method of electronic transmission or storage is completely secure. We cannot guarantee absolute security.
 
@@ -131,12 +141,12 @@ You may manage your email notification preferences through the notification sett
 
 ### 7.5 SMS Opt-Out
 
-If you have opted in to SMS notifications, you may revoke your consent at any time by:
+If you have opted in to SMS notifications, you may revoke your consent at any time:
 
-- **Replying STOP** to any SMS message received from PropertyPro.
-- **Disabling SMS** in your notification settings within the platform.
+- **Disabling SMS in your notification settings** within the platform revokes your consent in our records and stops all further messages. This is the method we recommend.
+- **Replying STOP** to any SMS message stops delivery at the carrier level through our messaging provider. Because this happens at the carrier rather than in our application, we recommend also disabling SMS in your settings so that your revocation is reflected in your account.
 
-Upon opting out, we will stop sending you SMS messages promptly. Your phone number and consent records (including the date of consent and date of revocation) will be retained for TCPA compliance recordkeeping purposes but will not be used for further messaging unless you opt in again.
+Your phone number and consent records — including the date consent was given and the date it was revoked — are retained for TCPA compliance recordkeeping and are not used for further messaging unless you opt in again.
 
 ---
 
@@ -173,4 +183,6 @@ For data deletion or access requests, please include your full name, email addre
 
 ---
 
-*Last updated: February 14, 2026*
+*Version 2026-08-09.1 — last updated August 9, 2026.*
+
+*Version history is maintained in this document's revision record. When this policy is revised, the version identifier above changes and the prior version is noted as superseded.*

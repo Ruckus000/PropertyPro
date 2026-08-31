@@ -5,6 +5,7 @@ import { communities, pendingSignups } from '@propertypro/db';
 import { and, eq, gt, isNull, notInArray, or } from '@propertypro/db/filters';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { sendEmail } from '@propertypro/email';
+import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { createElement } from 'react';
 import { SignupVerificationEmail } from '@propertypro/email';
 import { SignupEmailDeliveryError, ValidationError } from '@/lib/api/errors';
@@ -346,6 +347,11 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
         planKey: input.planKey,
         candidateSlug: input.candidateSlug,
         termsAcceptedAt: timestamp,
+        // Stamp the version the user actually saw. Recorded here rather than at
+        // provisioning because a signup can sit unverified for days — stamping
+        // it later would record whatever version is current THEN against an
+        // acceptance that happened earlier, silently backdating a legal record.
+        termsVersion: CURRENT_TERMS_VERSION,
         status: 'pending_verification',
         payload,
         updatedAt: timestamp,
@@ -370,6 +376,11 @@ async function upsertPendingSignup(input: SignupPersistenceInput): Promise<Persi
           planKey: input.planKey,
           candidateSlug: input.candidateSlug,
           termsAcceptedAt: timestamp,
+        // Stamp the version the user actually saw. Recorded here rather than at
+        // provisioning because a signup can sit unverified for days — stamping
+        // it later would record whatever version is current THEN against an
+        // acceptance that happened earlier, silently backdating a legal record.
+        termsVersion: CURRENT_TERMS_VERSION,
           status: 'pending_verification',
           payload,
           updatedAt: timestamp,

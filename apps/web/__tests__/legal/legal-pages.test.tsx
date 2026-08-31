@@ -153,15 +153,40 @@ describe('Terms of Service content', () => {
   it('includes subscription terms and cancellation', () => {
     expect(termsContent).toContain('Subscription Terms');
     expect(termsContent).toContain('Cancellation');
-    expect(termsContent).toContain('Data Retention After Cancellation');
+    expect(termsContent).toContain('Data Retention and Deletion');
+  });
+
+  // These assertions exist because the retention language previously promised
+  // something the code does not do — deletion "from our systems and backups"
+  // within 30 days — which is a misdescription of our actual data practices, not
+  // a wording nit. See docs/audits/2026-08-09-legal-risk-audit.md F-17.
+  it('does not promise a 30-day purge from backups', () => {
+    expect(termsContent).not.toContain('permanently and irreversibly deleted');
+    expect(termsContent).not.toMatch(/thirty \(30\) calendar days[\s\S]{0,200}backups/);
+  });
+
+  it('states that cancelling does not destroy association records', () => {
+    expect(termsContent).toContain(
+      "We do not automatically destroy your association's records",
+    );
+    expect(termsContent).toContain('including after your subscription has lapsed');
+  });
+
+  it('discloses that data persists in backups', () => {
+    expect(termsContent).toContain('Backups');
+    expect(termsContent).toContain('may persist in these backups');
   });
 
   it('includes acceptable use policy', () => {
     expect(termsContent).toContain('Acceptable Use Policy');
   });
 
-  it('includes the effective date', () => {
-    expect(termsContent).toContain('February 14, 2026');
+  it('includes the effective date and a version identifier', () => {
+    expect(termsContent).toContain('August 9, 2026');
+    // Versioning exists so we can prove WHICH terms a user accepted once §11's
+    // "continued use is acceptance" clause is ever exercised. F-18.
+    expect(termsContent).toContain('**Version:** 2026-08-10.1');
+    expect(termsContent).toContain('Supersedes version 2026-02-14.1');
   });
 
   it('is no longer marked as draft', () => {
@@ -226,8 +251,24 @@ describe('Privacy Policy content', () => {
     expect(privacyContent).toContain('privacy@getpropertypro.com');
   });
 
-  it('includes the effective date', () => {
-    expect(privacyContent).toContain('February 14, 2026');
+  it('includes the effective date and a version identifier', () => {
+    expect(privacyContent).toContain('August 9, 2026');
+    expect(privacyContent).toContain('**Version:** 2026-08-09.1');
+  });
+
+  // As with the Terms: the previous copy described a 30-day purge from backups
+  // that does not happen. F-17.
+  it('describes the real deletion lifecycle rather than a 30-day purge', () => {
+    expect(privacyContent).not.toContain('permanently deleted from our active systems and backups');
+    expect(privacyContent).toContain('Cancelling a subscription does not delete anything');
+    expect(privacyContent).toContain('may persist in these backups');
+  });
+
+  // The policy previously promised that replying STOP revokes consent. No
+  // inbound-message webhook exists, so that promise was false. F-10.
+  it('does not claim that replying STOP revokes consent in our records', () => {
+    expect(privacyContent).toContain('stops delivery at the carrier level');
+    expect(privacyContent).not.toMatch(/Replying STOP\*\* to any SMS message received from PropertyPro\./);
   });
 
   it('is no longer marked as draft', () => {
@@ -250,5 +291,54 @@ describe('Legal page cross-links', () => {
 
   it('Terms links to Privacy Policy', () => {
     expect(termsHtml).toContain('href="/legal/privacy"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Accessibility Statement
+// ---------------------------------------------------------------------------
+//
+// Published because Florida is a high-volume jurisdiction for website
+// accessibility claims and the association sites we generate are public
+// accommodations. A documented remediation channel with a response commitment
+// is the part that actually changes the posture in a demand-letter
+// negotiation — so these tests guard the CONTACT ROUTE and the ADMISSIONS,
+// not the boilerplate. See docs/audits/2026-08-09-legal-risk-audit.md F-12.
+
+describe('Accessibility Statement content', () => {
+  const accessibilityPath = path.join(contentDir, 'accessibility.md');
+  const accessibilityContent = fs.readFileSync(accessibilityPath, 'utf-8');
+  const accessibilityHtml = renderMarkdown(accessibilityContent);
+
+  it('exists and renders', () => {
+    expect(accessibilityContent.length).toBeGreaterThan(0);
+    expect(accessibilityHtml).toContain('Accessibility Statement</h1>');
+  });
+
+  it('names the conformance target', () => {
+    expect(accessibilityContent).toContain('WCAG) 2.1');
+    expect(accessibilityContent).toContain('Level AA');
+  });
+
+  it('provides a working contact route for reporting a barrier', () => {
+    expect(accessibilityHtml).toContain('href="mailto:support@getpropertypro.com"');
+  });
+
+  it('commits to a response window and an interim alternative', () => {
+    expect(accessibilityContent).toContain('5 business days');
+    expect(accessibilityContent).toContain('at no cost to you');
+  });
+
+  // The value of this page is candour. A statement that only claims conformance
+  // is worse than none — it is a representation we cannot support. If someone
+  // later trims the "Where we know we fall short" section, this fails.
+  it('discloses the known gaps rather than only claiming conformance', () => {
+    expect(accessibilityContent).toContain('Where we know we fall short');
+    expect(accessibilityContent).toContain('We have not completed a full third-party audit');
+    expect(accessibilityContent).toContain('advisory, not enforced');
+  });
+
+  it('carries a version identifier like the other legal documents', () => {
+    expect(accessibilityContent).toContain('**Version:** 2026-08-09.1');
   });
 });

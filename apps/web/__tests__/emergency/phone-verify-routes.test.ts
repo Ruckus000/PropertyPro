@@ -56,12 +56,19 @@ function setTwilioEnv() {
   process.env.TWILIO_ACCOUNT_SID = 'AC_test';
   process.env.TWILIO_AUTH_TOKEN = 'auth_test';
   process.env.TWILIO_VERIFY_SERVICE_SID = 'VA_test';
+  // These routes call Twilio Verify DIRECTLY rather than through sms-service, so
+  // they are covered by the global SMS_DISPATCH_ENABLED floor and nothing else —
+  // they are userId-scoped and have no communityId, so the per-community flag
+  // cannot reach them. Tests of the happy path must opt in.
+  // See apps/web/src/lib/sms/dispatch-flag.ts and audit F-10.
+  process.env.SMS_DISPATCH_ENABLED = 'true';
 }
 
 function clearTwilioEnv() {
   delete process.env.TWILIO_ACCOUNT_SID;
   delete process.env.TWILIO_AUTH_TOKEN;
   delete process.env.TWILIO_VERIFY_SERVICE_SID;
+  delete process.env.SMS_DISPATCH_ENABLED;
 }
 
 function createJsonRequest(url: string, body: Record<string, unknown>): NextRequest {
@@ -252,4 +259,49 @@ describe('phone verification routes', () => {
     const afterSuccess = await POST(createJsonRequest('http://localhost:3000/api/v1/phone/verify/confirm', requestBody));
     expect(afterSuccess.status).toBe(400);
   });
+
+  // ── SMS kill switch ────────────────────────────────────────────────────────
+  //
+  // These routes call Twilio Verify directly rather than through sms-service, and
+  // are userId-scoped with no communityId — so the global SMS_DISPATCH_ENABLED
+  // floor is the ONLY gate that can reach them. If this ever regresses, OTP texts
+  // resume from a deployment that believes SMS is off.
+  // See apps/web/src/lib/sms/dispatch-flag.ts and audit F-10.
+  describe('SMS_DISPATCH_ENABLED kill switch', () => {
+    it('returns 503 from the OTP send route when SMS dispatch is disabled', async () => {
+      setTwilioEnv();
+      delete process.env.SMS_DISPATCH_ENABLED;
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { POST } = await import('@/app/api/v1/phone/verify/send/route');
+      const res = await POST(
+        createJsonRequest('http://localhost:3000/api/v1/phone/verify/send', {
+          phone: '+13055551234',
+        }),
+      );
+
+      expect(res.status).toBe(503);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('returns 503 from the OTP confirm route when SMS dispatch is disabled', async () => {
+      setTwilioEnv();
+      delete process.env.SMS_DISPATCH_ENABLED;
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { POST } = await import('@/app/api/v1/phone/verify/confirm/route');
+      const res = await POST(
+        createJsonRequest('http://localhost:3000/api/v1/phone/verify/confirm', {
+          phone: '+13055551234',
+          code: '123456',
+        }),
+      );
+
+      expect(res.status).toBe(503);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
 });

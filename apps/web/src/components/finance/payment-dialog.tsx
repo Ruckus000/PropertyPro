@@ -27,13 +27,33 @@ interface PaymentDialogProps {
 
 /* ─────── Helpers ─────── */
 
-// Lazy-initialize Stripe only in the browser to avoid SSR crashes.
-let _stripePromise: ReturnType<typeof loadStripe> | null = null;
-function getStripePromise() {
-  if (!_stripePromise && typeof window !== 'undefined') {
-    _stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '');
+/**
+ * Lazy-initialize Stripe only in the browser to avoid SSR crashes.
+ *
+ * ⚠️ Keyed by CONNECTED ACCOUNT (F-15). Payments are direct charges now, so the
+ * PaymentIntent lives on the association's own Stripe account and its client
+ * secret does not resolve against the platform account — Stripe.js must be
+ * loaded with `{ stripeAccount }` or the payment element silently fails to
+ * mount, which the resident experiences as an empty dialog rather than an
+ * error.
+ *
+ * A per-account cache rather than one singleton, because a PM who pays for two
+ * associations in one session would otherwise get the first association's
+ * Stripe instance for the second one's intent.
+ */
+const _stripePromises = new Map<string, ReturnType<typeof loadStripe>>();
+function getStripePromise(stripeAccount: string | undefined) {
+  if (typeof window === 'undefined') return null;
+  const key = stripeAccount ?? '__platform__';
+  let promise = _stripePromises.get(key);
+  if (!promise) {
+    promise = loadStripe(
+      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
+      stripeAccount ? { stripeAccount } : undefined,
+    );
+    _stripePromises.set(key, promise);
   }
-  return _stripePromise;
+  return promise;
 }
 
 function formatCents(cents: number): string {
@@ -154,7 +174,7 @@ export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSucces
 
           {intentMutation.data && (
             <Elements
-              stripe={getStripePromise()}
+              stripe={getStripePromise(intentMutation.data.stripeAccountId)}
               options={{
                 clientSecret: intentMutation.data.clientSecret,
                 appearance: {

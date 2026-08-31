@@ -98,6 +98,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
         unitId={unitId}
         actorUnits={actorUnits}
         requiresExplicitUnitSelection={requiresExplicitUnitSelection}
+        paymentsEnabled={membership.assessmentPaymentsEnabled}
       />
     </FeatureGate>
   );

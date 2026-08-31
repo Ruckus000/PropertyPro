@@ -56,11 +56,32 @@ export function generateCSV(
   headers: ReadonlyArray<{ key: string; label: string }>,
   rows: ReadonlyArray<Record<string, unknown>>,
 ): string {
-  const headerLine = headers.map((h) => escapeCSVField(h.label)).join(',');
+  const dataLines = rows.map((row) => generateCSVRowLine(headers, row));
+  return [generateCSVHeaderLine(headers), ...dataLines].join('\r\n') + '\r\n';
+}
 
-  const dataLines = rows.map((row) =>
-    headers.map((h) => escapeCSVField(row[h.key])).join(','),
-  );
+/**
+ * Single header line, WITHOUT a trailing newline.
+ *
+ * Split out of `generateCSV` so the async export worker can stream a table
+ * batch-by-batch into an archive instead of materialising the whole CSV as one
+ * string. `generateCSV` is now a composition of these two, so its behaviour is
+ * unchanged by construction — the existing tests cover both.
+ */
+export function generateCSVHeaderLine(
+  headers: ReadonlyArray<{ key: string; label: string }>,
+): string {
+  return headers.map((h) => escapeCSVField(h.label)).join(',');
+}
 
-  return [headerLine, ...dataLines].join('\r\n') + '\r\n';
+/**
+ * Single data line, WITHOUT a trailing newline. Same RFC 4180 quoting and
+ * formula-injection guard as the batch helper — it is literally the same code
+ * path.
+ */
+export function generateCSVRowLine(
+  headers: ReadonlyArray<{ key: string; label: string }>,
+  row: Record<string, unknown>,
+): string {
+  return headers.map((h) => escapeCSVField(row[h.key])).join(',');
 }

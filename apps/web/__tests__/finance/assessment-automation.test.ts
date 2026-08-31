@@ -49,8 +49,21 @@ vi.mock('@/lib/services/finance-service', () => ({
 describe('assessment-automation-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: return one community
-    mockUnscopedDb.where.mockResolvedValue([{ id: 1, name: 'Test Community' }]);
+    // Default: return one community with online payments ENABLED.
+    //
+    // `processLateFees` skips any community whose `assessmentPaymentsEnabled`
+    // gate is off — charging a penalty for non-payment while the platform offers
+    // no way to pay is the thing that gate exists to prevent. Most tests here
+    // exercise fee CALCULATION, so they opt in; the gate itself is covered by
+    // its own block below.
+    // See docs/audits/2026-08-09-legal-risk-audit.md §2a.
+    mockUnscopedDb.where.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Test Community',
+        communitySettings: { assessmentPaymentsEnabled: true },
+      },
+    ]);
   });
 
   describe('processOverdueTransitions', () => {
@@ -248,4 +261,46 @@ describe('assessment-automation-service', () => {
       expect(summary.totalSkipped).toBe(1);
     });
   });
+
+  // ── Late fees follow the payments gate ─────────────────────────────────────
+  describe('processLateFees payments gate', () => {
+    async function runWithSettings(communitySettings: unknown) {
+      mockUnscopedDb.where.mockResolvedValue([
+        { id: 1, name: 'Test Community', communitySettings },
+      ]);
+      const { processLateFees } = await import(
+        '../../src/lib/services/assessment-automation-service'
+      );
+      return processLateFees(new Date('2026-03-01T00:00:00Z'));
+    }
+
+    it('applies no late fees when online payments are disabled', async () => {
+      const summary = await runWithSettings({});
+
+      expect(summary.feesApplied).toBe(0);
+      expect(summary.totalFeeCents).toBe(0);
+      // Reported, not silent — a cron that quietly stops working reads as
+      // "nothing was overdue".
+      expect(summary.communitiesSkippedPaymentsDisabled).toBe(1);
+      // Short-circuits before touching the community's data at all.
+      expect(mockSelectFrom).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['absent', {}],
+      ['explicitly false', { assessmentPaymentsEnabled: false }],
+      ['the string "true"', { assessmentPaymentsEnabled: 'true' }],
+      ['null settings', null],
+    ])('skips the community when the gate is %s', async (_label, settings) => {
+      const summary = await runWithSettings(settings);
+      expect(summary.communitiesSkippedPaymentsDisabled).toBe(1);
+      expect(summary.feesApplied).toBe(0);
+    });
+
+    it('still counts skipped communities as scanned', async () => {
+      const summary = await runWithSettings({});
+      expect(summary.communitiesScanned).toBe(1);
+    });
+  });
+
 });

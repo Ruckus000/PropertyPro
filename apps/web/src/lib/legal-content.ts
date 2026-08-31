@@ -20,5 +20,9 @@ export function getLegalDoc(key: LegalDocKey): string {
 }
 
 export function getLegalDocs(): LegalDocs {
-  return { terms: readDoc('terms'), privacy: readDoc('privacy') };
+  return {
+    terms: readDoc('terms'),
+    privacy: readDoc('privacy'),
+    accessibility: readDoc('accessibility'),
+  };
 }

@@ -42,6 +42,11 @@ export type AuditAction =
   | 'access_request.approved' | 'access_request.denied'
   // Community join request audit actions (self-service community linking)
   | 'join_request.approved' | 'join_request.denied'
+  // Community data export — a downloaded volume is a copy of the ENTIRE
+  // association including resident PII, so it gets its own action rather than
+  // being folded into 'document_accessed'. "Who downloaded the whole
+  // association, and when" must be answerable on its own.
+  | 'community_export_downloaded'
   // Support access audit actions
   | 'support_session_started' | 'support_session_ended'
   | 'support_consent_granted' | 'support_consent_revoked'

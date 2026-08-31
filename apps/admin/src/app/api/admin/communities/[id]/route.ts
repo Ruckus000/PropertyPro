@@ -34,8 +34,30 @@ const patchSchema = z.object({
     leasesWriteLevel: writeLevel.optional(),
     documentCategoriesWriteLevel: writeLevel.optional(),
     electionsAttorneyReviewed: z.boolean().optional(),
+    violationFinesEnabled: z.boolean().optional(),
+    assessmentPaymentsEnabled: z.boolean().optional(),
+    smsDispatchEnabled: z.boolean().optional(),
+    noticePdfGenerationEnabled: z.boolean().optional(),
   }).optional(),
 }).strict();
+
+/**
+ * Per-community legal gates — every one of these controls a feature that carries
+ * statutory or regulatory exposure, so each flip is audited individually with its
+ * own `community_settings_changed` event.
+ *
+ * Keep in sync with the `communitySettings` `$type<>` union in
+ * packages/db/src/schema/communities.ts and the hydration in
+ * apps/web/src/lib/api/community-membership.ts.
+ * See docs/audits/2026-08-09-legal-risk-audit.md §2a.
+ */
+const LEGAL_GATE_KEYS = [
+  'electionsAttorneyReviewed',
+  'violationFinesEnabled',
+  'assessmentPaymentsEnabled',
+  'smsDispatchEnabled',
+  'noticePdfGenerationEnabled',
+] as const;
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -134,12 +156,30 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
 
   assertNoDbError(error, 'Failed to update community');
 
-  // Audit the legal-readiness gate with a dedicated settings_changed event.
+  // Audit every legal-readiness gate with its own settings_changed event.
+  //
+  // One event PER CHANGED KEY, not one per request: each of these authorizes a
+  // distinct legally-exposed capability, and "who turned fines back on, and when"
+  // has to be answerable on its own. The per-key event shape (including the
+  // `settingName` / `oldValue` / `newValue` metadata) is preserved exactly as it
+  // was when only `electionsAttorneyReviewed` existed, so existing consumers of
+  // that event keep working.
   if (community_settings !== undefined) {
-    const oldSettings = (existing as Record<string, unknown>).community_settings ?? {};
-    const oldAttorneyReviewed = (oldSettings as Record<string, unknown>).electionsAttorneyReviewed === true;
-    const nextAttorneyReviewed = community_settings.electionsAttorneyReviewed === true;
-    if (oldAttorneyReviewed !== nextAttorneyReviewed) {
+    const oldSettings = ((existing as Record<string, unknown>).community_settings ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const nextSettings = community_settings as Record<string, unknown>;
+
+    for (const key of LEGAL_GATE_KEYS) {
+      // A key absent from the PATCH body is UNCHANGED, not "set to false" — the
+      // update merges. Skip it rather than logging a phantom flip to false.
+      if (nextSettings[key] === undefined) continue;
+
+      const oldValue = oldSettings[key] === true;
+      const newValue = nextSettings[key] === true;
+      if (oldValue === newValue) continue;
+
       // Was a DYNAMIC import of logAuditEvent from '@propertypro/db' — the
       // only such import in apps/admin — done that way purely to defer
       // drizzle.ts's module-load throw on a missing DATABASE_URL to request
@@ -151,13 +191,9 @@ export const PATCH = withAdminErrorHandler(async (request: NextRequest, context:
         resourceType: 'community_settings',
         resourceId: communityId,
         communityId,
-        oldValues: { electionsAttorneyReviewed: oldAttorneyReviewed },
-        newValues: { electionsAttorneyReviewed: nextAttorneyReviewed },
-        metadata: {
-          settingName: 'electionsAttorneyReviewed',
-          oldValue: oldAttorneyReviewed,
-          newValue: nextAttorneyReviewed,
-        },
+        oldValues: { [key]: oldValue },
+        newValues: { [key]: newValue },
+        metadata: { settingName: key, oldValue, newValue },
       });
     }
   }

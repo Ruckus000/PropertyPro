@@ -7,6 +7,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import {
   requireFinanceAdminWrite,
   requireFinanceEnabled,
+  requirePaymentsEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
 import { parseCommunityIdFromBody } from '@/lib/finance/request';
@@ -21,6 +22,12 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     await requireFinanceEnabled(membership);
+    // Legal gate — online payments ship disabled. Placed HERE, before the
+    // subscription guard, so it is independent of that guard's deliberate
+    // resident-self-service bypass below: a resident self-paying must be blocked
+    // too, since the exposure is the destination-charge fund flow, not who is
+    // paying. See docs/audits/2026-08-09-legal-risk-audit.md F-15.
+    requirePaymentsEnabled(membership);
     // A3: a resident paying their own dues/rent must not be blocked when the
     // community's own PropertyPro subscription is soft-locked — dues collect via
     // the community's Stripe Connect account, not the platform subscription.

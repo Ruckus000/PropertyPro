@@ -59,6 +59,7 @@ export const POST = withErrorHandler(
       {
         decision: body.decision,
         reviewNotes: body.reviewNotes ?? null,
+        ruleReference: body.ruleReference ?? null,
       },
       req.headers.get('x-request-id'),
     );

@@ -49,6 +49,8 @@ vi.mock('@/lib/api/tenant-context', () => ({
 }));
 
 vi.mock('@/lib/violations/common', () => ({
+  requireViolationFinesEnabled: vi.fn(),
+  requireNoticePdfEnabled: vi.fn(),
   requireViolationsEnabled: requireViolationsEnabledMock,
   requireViolationAdminWrite: requireViolationAdminWriteMock,
 }));

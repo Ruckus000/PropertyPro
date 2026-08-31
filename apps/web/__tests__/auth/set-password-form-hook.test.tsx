@@ -33,6 +33,9 @@ async function submitValid() {
   fireEvent.change(screen.getByLabelText('Confirm password'), {
     target: { value: VALID },
   });
+  // Invited residents must accept the Terms here — this is their only clickwrap;
+  // they never pass through the signup form's. F-18.
+  fireEvent.click(screen.getByTestId('invite-terms-checkbox'));
   await act(async () => {
     fireEvent.submit(screen.getByTestId('set-password-form'));
   });
@@ -55,10 +58,15 @@ describe('SetPasswordForm — hook submit flow', () => {
 
     await submitValid();
 
+    // `termsAccepted` must be in the payload. The original defect was precisely
+    // that the form collected the checkbox and the hook dropped it, so invited
+    // residents accepted nothing — this assertion is the regression guard.
+    // See docs/audits/2026-08-09-legal-risk-audit.md F-18.
     expect(mutateAsyncMock).toHaveBeenCalledWith({
       token: 'tok',
       communityId: 9,
       password: VALID,
+      termsAccepted: true,
     });
     await waitFor(() =>
       expect(screen.getByTestId('invite-success')).toBeInTheDocument(),

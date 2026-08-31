@@ -59,6 +59,7 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 }));
 
 vi.mock('@/lib/finance/common', () => ({
+  requirePaymentsEnabled: vi.fn(),
   parsePositiveInt: parsePositiveIntMock,
 }));
 

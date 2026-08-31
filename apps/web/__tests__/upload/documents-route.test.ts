@@ -93,6 +93,16 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 
 
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn().mockResolvedValue(undefined) }));
+
+// The §718.111(12)(c) redaction gate reads the category's NAME from the DB to
+// decide whether an attestation is required (F-02). This file's `@propertypro/db`
+// factory has no `createScopedClient`, so the real lookup 500s every POST here.
+// Stubbed to "no attestation needed" — the gate's own behaviour is covered in
+// `__tests__/documents/redaction-attestation.test.ts`, and the POST contract is
+// covered in `__tests__/documents/documents-route.test.ts`.
+vi.mock('@/lib/documents/redaction-attestation', () => ({
+  enforceRedactionAttestation: vi.fn().mockResolvedValue(undefined),
+}));
 import { GET, POST, DELETE } from '../../src/app/api/v1/documents/route';
 
 const MANAGER_MEMBERSHIP = {
