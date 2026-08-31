@@ -120,12 +120,43 @@ function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+/**
+ * Authenticated pages that are cross-tenant by nature: they read no
+ * x-community-id, and resolving one for them is actively harmful.
+ *
+ * Two consumers must agree on this set — `shouldResolveTenant` (don't STAMP a
+ * tenant) and the missing-tenant redirect below (don't BOUNCE for the absence
+ * of one). Adding a path to only one of them is not a partial fix, it is a
+ * loop: `/account/join-community` shipped in the bounce list alone, so on a
+ * community subdomain a tenant was still stamped, the authenticated layout saw
+ * `community === null` with a tenant header and redirected to
+ * /select-community — whose empty state links straight back here. Hence one
+ * shared set rather than two literals that drift.
+ *
+ * Why each is here:
+ *   - /select-community — lists every community the user belongs to. A stamped
+ *     tenant makes the authenticated layout detect a wrong-community condition
+ *     and redirect back here, forever.
+ *   - /account/join-community — a cross-community search, and the ONLY escape
+ *     route for a user with zero live communities (every membership
+ *     soft-deleted). It must render on any host, including a subdomain the user
+ *     does not belong to.
+ *
+ * Cost, accepted deliberately: a user who DOES have a community and reaches one
+ * of these pages from their subdomain gets the null-community shell (sidebar
+ * links fall back to /select-community, no branding) instead of their normal
+ * chrome. Nothing in the app links to /account/join-community — no nav-config
+ * entry, no profile-menu item — and the callers that exist have no community by
+ * definition, so the trade buys a working escape hatch for a shell that would
+ * have been empty anyway.
+ */
+const TENANT_OPTIONAL_PATHS: ReadonlySet<string> = new Set([
+  '/select-community',
+  '/account/join-community',
+]);
+
 function shouldResolveTenant(pathname: string): boolean {
-  // /select-community is a cross-tenant page that lists all communities the
-  // user belongs to. It never reads x-community-id. Injecting tenant context
-  // here would cause an infinite redirect loop when the authenticated layout
-  // detects a wrong-community condition and redirects back here.
-  if (pathname === '/select-community') return false;
+  if (TENANT_OPTIONAL_PATHS.has(pathname)) return false;
   return isProtectedPath(pathname);
 }
 
@@ -950,12 +981,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // auto-redirects single-community users back to their dashboard.
     //
     // Carve-outs:
-    //   - /select-community itself (loop prevention)
-    //   - /account/join-community — a cross-community search that never reads
-    //     x-community-id, and the ONLY escape route for a user with zero live
-    //     communities (every membership soft-deleted). Without this carve-out
-    //     the /select-community empty state's own call to action bounces
-    //     straight back to the page it is trying to escape.
+    //   - TENANT_OPTIONAL_PATHS — the cross-tenant pages, which by definition
+    //     have no tenant to be missing. Shared with shouldResolveTenant so the
+    //     two layers cannot disagree; see that declaration for why each is
+    //     listed and what a one-sided entry costs.
     //   - /pm/* — the PM portfolio is a cross-community view that doesn't
     //     need a single tenant in scope
     //   - API routes — clients shouldn't follow redirects; existing handlers
@@ -964,8 +993,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       user &&
       !isApiPath(pathname) &&
       !forwardedHeaders.has(COMMUNITY_ID_HEADER) &&
-      pathname !== '/select-community' &&
-      pathname !== '/account/join-community' &&
+      !TENANT_OPTIONAL_PATHS.has(pathname) &&
       !pathname.startsWith('/pm/')
     ) {
       const selectUrl = request.nextUrl.clone();

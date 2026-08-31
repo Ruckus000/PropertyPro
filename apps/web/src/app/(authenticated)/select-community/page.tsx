@@ -80,9 +80,17 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
            to dead-end: the old copy said "contact your manager" and offered
            nothing to click, which reads as a broken login. The join path is the
            one self-service route out, so it has to be an action, not advice.
-           Middleware carves /account/join-community out of the missing-tenant
-           bounce specifically so this button cannot land back on this page. */
-        <div className="rounded-md border border-dashed border-edge-strong bg-surface-hover">
+           /account/join-community is in middleware's TENANT_OPTIONAL_PATHS so
+           this button cannot land back on this page — on ANY host. Listing it
+           in the missing-tenant bounce alone was not enough: a subdomain still
+           stamped a tenant, and the authenticated layout bounced it right back.
+
+           The dark: variants are deliberate, not leftovers. The token layer is
+           single-theme light, so without them this box renders as a light
+           island on a dark page. They are frozen in
+           scripts/design-token-baseline.json — see CLAUDE.md's design-token
+           section before removing them. */
+        <div className="rounded-md border border-dashed border-edge-strong bg-surface-hover dark:border-gray-600 dark:bg-gray-800">
           <EmptyState
             icon="building"
             title="Let's get you connected"
