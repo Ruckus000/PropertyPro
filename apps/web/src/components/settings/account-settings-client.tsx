@@ -99,6 +99,16 @@ export function AccountSettingsClient({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Same treatment for the password banner. Two small effects rather than a
+  // shared `useAutoDismiss` hook: there is no such hook to reuse, and these are
+  // the only two call sites — in one file. An abstraction for two adjacent uses
+  // would be more code, not less.
+  useEffect(() => {
+    if (!passwordSuccess) return;
+    const timer = setTimeout(() => setPasswordSuccess(false), 5000);
+    return () => clearTimeout(timer);
+  }, [passwordSuccess]);
+
   // ── Profile handlers ───────────────────────────
 
   const profileDirty = fullName !== initialFullName || phone !== initialPhone;
@@ -188,8 +198,6 @@ export function AccountSettingsClient({
       setNewPassword('');
       setConfirmPassword('');
       setShowRequirements(false);
-
-      setTimeout(() => setPasswordSuccess(false), 5000);
     } catch {
       setPasswordError('An unexpected error occurred. Please try again.');
     } finally {
