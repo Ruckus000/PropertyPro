@@ -97,6 +97,91 @@ describe('profile step', () => {
     );
   });
 
+  it('does not re-upload the logo when a failed onNext is retried', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { uploadUrl: 'https://upload.example.com', path: 'logos/community.png' } }),
+      })
+      .mockResolvedValueOnce({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const onNext = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('transient server error'))
+      .mockResolvedValueOnce(undefined);
+
+    await act(async () => {
+      root.render(
+        renderWithClient(
+          <ProfileStep
+            communityId={42}
+            onNext={onNext}
+            initialData={{
+              name: 'Metro Apartments',
+              addressLine1: '123 Main St',
+              city: 'Miami',
+              state: 'FL',
+              zipCode: '33101',
+              timezone: 'America/New_York',
+            }}
+          />,
+        ),
+      );
+      await flushEffects();
+    });
+
+    const logoInput = container.querySelector('#logo') as HTMLInputElement;
+
+    await act(async () => {
+      const logoFile = new File(['logo'], 'logo.png', { type: 'image/png' });
+      Object.defineProperty(logoInput, 'files', {
+        configurable: true,
+        value: [logoFile],
+      });
+      logoInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // The dropzone shows the pending file's name plus a "Click to replace"
+    // affordance while `logoFile` is set. (This assertion read
+    // `'Selected file: logo.png'` when the test was written in May; that copy
+    // no longer exists — the label was restyled. The state being asserted is
+    // unchanged.)
+    expect(container.textContent).toContain('logo.png');
+    expect(container.textContent).toContain('Click to replace');
+
+    const form = container.querySelector('form');
+
+    // First submit: upload succeeds (2 fetch calls), onNext rejects.
+    await act(async () => {
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushEffects();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('transient server error');
+    // UI flips to the resolved-path display, and the dropzone reverts to its
+    // empty state because `logoFile` was cleared. That reversion IS the fix:
+    // while `logoFile` is still set the dropzone keeps offering "Click to
+    // replace", and the retry below would upload the same file a second time.
+    expect(container.textContent).toContain('Current logo path: logos/community.png');
+    expect(container.textContent).not.toContain('Click to replace');
+    expect(container.textContent).toContain('Click to upload');
+
+    // Retry: no logoFile remains, so the upload must NOT run again.
+    await act(async () => {
+      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await flushEffects();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onNext).toHaveBeenCalledTimes(2);
+    expect(onNext).toHaveBeenLastCalledWith(
+      expect.objectContaining({ logoPath: 'logos/community.png' }),
+    );
+  });
+
   it('rejects oversized logo file', async () => {
     const onNext = vi.fn();
 

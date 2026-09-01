@@ -96,6 +96,7 @@ export function ProfileStep({ communityId, onNext, initialData }: ProfileStepPro
       if (logoFile) {
         resolvedLogoPath = await uploadLogo.mutateAsync({ communityId, file: logoFile });
         setLogoPath(resolvedLogoPath);
+        setLogoFile(null);
       }
 
       await onNext({
