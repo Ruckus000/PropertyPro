@@ -100,7 +100,7 @@ async function saveBranding(input: SaveBrandingInput): Promise<void> {
       accentColor,
       fontHeading,
       fontBody,
-      customEmailFooter: customEmailFooter || undefined,
+      customEmailFooter,
       ...(logoStoragePath !== undefined && { logoStoragePath }),
       ...(siteLogoStoragePath !== undefined && { siteLogoStoragePath }),
     }),

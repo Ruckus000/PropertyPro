@@ -160,6 +160,23 @@ describe('pm branding route', () => {
       );
     });
 
+    it('passes an empty customEmailFooter through to clear the stored value', async () => {
+      const req = new NextRequest('http://localhost/api/v1/pm/branding', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId: 1, customEmailFooter: '' }),
+      });
+      const res = await PATCH(req);
+
+      expect(res.status).toBe(200);
+      // '' must reach the persistence layer (not be dropped as undefined) so a
+      // user clearing the footer actually wipes it. updateBrandingForCommunity
+      // spreads the patch over existing branding, so '' overwrites the old text.
+      expect(updateBrandingForCommunityMock).toHaveBeenCalledWith(1, {
+        customEmailFooter: '',
+      });
+    });
+
     it('returns 400 for invalid hex color', async () => {
       const req = new NextRequest('http://localhost/api/v1/pm/branding', {
         method: 'PATCH',
