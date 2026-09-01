@@ -10559,7 +10559,7 @@
       "checkConstraints": {
         "site_blocks_block_type_check": {
           "name": "site_blocks_block_type_check",
-          "value": "\"site_blocks\".\"block_type\" IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','tombstone')"
+          "value": "\"site_blocks\".\"block_type\" IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','payments','tombstone')"
         }
       },
       "isRLSEnabled": false

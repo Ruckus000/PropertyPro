@@ -8,8 +8,14 @@
  * Migration 0026 added the 'tombstone' sentinel (staged deletion — a draft
  * row marking "remove the published block at this order on publish"; see
  * TOMBSTONE_BLOCK_TYPE in @propertypro/shared).
+ * Migration 0044 added 'payments' (website editor v3, Phase 9).
  * Migration 0046 (Phase 11a) added the nullable `page_id` and the per-page
  * ordering index — see `page_id` and the index comments below.
+ *
+ * The `check()` below must list EVERY type production's constraint carries. It
+ * is not decorative: drizzle-kit diffs this literal against the TIP snapshot,
+ * so a type missing from either is a type the next generated migration silently
+ * DROPS from the live constraint.
  */
 import { sql } from 'drizzle-orm';
 import {
@@ -96,7 +102,7 @@ export const siteBlocks = pgTable(
     }).onDelete('cascade'),
     check(
       'site_blocks_block_type_check',
-      sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','tombstone')`,
+      sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','payments','tombstone')`,
     ),
   ],
 );
