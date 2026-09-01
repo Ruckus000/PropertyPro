@@ -79,6 +79,16 @@ describe('readiness route', () => {
     process.env.CRON_SECRET = 'test-cron-secret-long-enough';
     process.env.OTP_HMAC_SECRET = 'test-otp-secret-long-enough';
     process.env.TOKEN_ENCRYPTION_KEY = 'a'.repeat(64);
+    process.env.OAUTH_STATE_SECRET = 'test-oauth-state-secret-long-enough';
+    process.env.SUPPORT_SESSION_JWT_SECRET = 'test-support-jwt-secret-min-32-chars-abc';
+    process.env.COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET = 'test-community-unsub-secret';
+    process.env.SNOWBIRD_UNSUBSCRIBE_SECRET = 'test-snowbird-unsub-secret';
+    process.env.INSURANCE_ALERTS_UNSUBSCRIBE_SECRET = 'test-insurance-unsub-secret';
+    // Email must resolve to 'live' for the healthy baseline. EMAIL_DRY_RUN is
+    // deleted rather than set falsy: it outranks the API key, and leaving it
+    // set from another test would degrade every case in this file.
+    process.env.RESEND_API_KEY = 'test-resend-key';
+    delete process.env.EMAIL_DRY_RUN;
     limitMock.mockResolvedValue([{ id: 1 }]);
     listUsersMock.mockResolvedValue({ data: { users: [] }, error: null });
   });
@@ -213,6 +223,110 @@ describe('readiness route', () => {
     };
 
     expect(body.checks.token_encryption_key.status).toBe('pass');
+    expect(body.status).toBe('healthy');
+  });
+
+  // Each of these was reachable in production with nothing reporting it. The
+  // failure is never a crash — it is a 500 on one flow, or an email that goes
+  // out carrying a link that cannot work. Readiness is the only place that
+  // turns "unset" into a signal.
+  it.each([
+    ['OAUTH_STATE_SECRET', 'oauth_state_secret'],
+    ['SUPPORT_SESSION_JWT_SECRET', 'support_session_jwt_secret'],
+    ['COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET', 'community_email_unsubscribe_secret'],
+    ['SNOWBIRD_UNSUBSCRIBE_SECRET', 'snowbird_unsubscribe_secret'],
+    ['INSURANCE_ALERTS_UNSUBSCRIBE_SECRET', 'insurance_alerts_unsubscribe_secret'],
+  ])('reports degraded when %s is missing', async (envName, checkKey) => {
+    delete process.env[envName];
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: Record<string, { status: string; error?: string }>;
+    };
+
+    // 200 not 503 — the app is serving traffic; a specific capability is dead.
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('degraded');
+    expect(body.checks[checkKey]?.status).toBe('fail');
+    expect(body.checks[checkKey]?.error).toContain(`${envName} is not set`);
+  });
+
+  it('never reports a secret VALUE, only its length', async () => {
+    // compliance_audit_log and this probe share a property: whatever they
+    // record is readable by someone who is not the operator. A readiness body
+    // is pasted into tickets and monitor alerts, so it must stay safe to paste.
+    process.env.OAUTH_STATE_SECRET = 'super-secret-value';
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const raw = JSON.stringify(await res.json());
+
+    expect(raw).not.toContain('super-secret-value');
+  });
+
+  // The silent-email class. `sendEmail` returns successfully in both of these
+  // states while transmitting nothing, so every call site reports success and
+  // no verification email, invitation or statutory notice ever arrives.
+  it('reports degraded when RESEND_API_KEY is unset — mail is silently discarded', async () => {
+    delete process.env.RESEND_API_KEY;
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { email_delivery: { status: string; error?: string } };
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('degraded');
+    expect(body.checks.email_delivery.status).toBe('fail');
+    expect(body.checks.email_delivery.error).toContain('silently discarded');
+  });
+
+  it('reports degraded when EMAIL_DRY_RUN is set, even with a valid API key', async () => {
+    // dry-run deliberately outranks a configured key. A deployed app in
+    // dry-run looks completely healthy from the outside while delivering
+    // nothing, so the probe has to read the resolved MODE, not the key.
+    process.env.EMAIL_DRY_RUN = '1';
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { email_delivery: { status: string; error?: string } };
+    };
+
+    expect(body.status).toBe('degraded');
+    expect(body.checks.email_delivery.status).toBe('fail');
+    expect(body.checks.email_delivery.error).toContain('EMAIL_DRY_RUN');
+  });
+
+  it('treats EMAIL_DRY_RUN=false as not set', async () => {
+    // Anti-vacuity for the case above: the check must follow the package's own
+    // truthiness rules ('0'/'false'/'no' are falsy) rather than testing for
+    // mere presence, or turning the flag off would not turn it off.
+    process.env.EMAIL_DRY_RUN = 'false';
+    executeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
+
+    const res = await GET(request());
+    const body = (await res.json()) as {
+      status: string;
+      checks: { email_delivery: { status: string } };
+    };
+
+    expect(body.checks.email_delivery.status).toBe('pass');
     expect(body.status).toBe('healthy');
   });
 });

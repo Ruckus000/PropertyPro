@@ -1,4 +1,20 @@
-# Fix Tracker
+# Fix Tracker — ARCHIVED
+
+> **Archived 2026-09-01. Historical record; do not work from this file.**
+>
+> Its 143 unchecked boxes are **not open work** — the checkboxes were simply never
+> ticked as the phases shipped. Spot-checked at archive time and confirmed landed:
+> Phase 2 (the E-Signatures "Coming Soon" banner is gone), Phase 5a (`/violations`
+> is flattened, no tab strip), Phase 5c (`/arc-requests` is a standalone page).
+>
+> **The setup snippet below is stale and dangerous.** It instructs
+> `pnpm --filter @propertypro/db db:migrate` immediately after populating
+> `.env.local` — and root `.env.local`'s `DATABASE_URL` points at **production**.
+> Running it there would apply `0062_secret_ballot`, an irreversible contract
+> migration that is deliberately held back pending attorney sign-off. `db:migrate`
+> is for disposable local databases only: use `pnpm db:test-local:setup`.
+> See `docs/DEPLOYMENT.md`.
+
 
 Cursor-actionable implementation document. Each phase = one PR. Phases are independent unless explicitly stated.
 

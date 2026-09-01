@@ -416,6 +416,29 @@ To apply:
 > `pnpm db:test-local:setup` / `pnpm db:test-local:reset`, which create and
 > migrate a throwaway localhost Postgres mirroring CI.
 
+### ON HOLD — do not apply: `0062_secret_ballot`
+
+`0062_secret_ballot` is merged to `main` and present in the Drizzle journal, but
+is **deliberately unapplied in production** and must stay that way until
+e-voting clears attorney review.
+
+It is a **contract** migration and it is **irreversible**: it drops
+`submission_id`, `unit_id`, `voter_hash`, `is_proxy_vote` and `proxy_id` from
+`election_ballots`. Re-adding the columns does not undo it — the linkage data is
+gone. That destruction is the point (§718.128 secret ballot), but applied early
+it destroys audit linkage for any election already recorded in exchange for a
+secrecy property nothing is relying on yet.
+
+Two consequences worth stating plainly:
+
+- **`main`'s highest migration number is not the next free one.** Production has
+  applied through `0061`; `0062` sits merged-but-unapplied. Re-derive the next
+  number from the production ledger and open branches, never from `main` alone.
+- **A single `db:migrate` against a production `DATABASE_URL` applies it.** There
+  is no tooling interlock — `scripts/local-test-db.sh` runs that same command
+  legitimately, so it cannot be blocked outright. The protection is this
+  document and the warning above.
+
 **Important:** when you do migrate a local database, use the direct connection
 (port 5432), not the pooled connection (port 6543). Drizzle reads `DIRECT_URL`
 for migrations automatically.

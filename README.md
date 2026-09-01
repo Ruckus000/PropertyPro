@@ -28,12 +28,25 @@ cp .env.example .env.local
 # 3. Install dependencies
 pnpm install
 
-# 4. Run database migrations
-pnpm --filter @propertypro/db db:migrate
+# 4. Create and migrate a DISPOSABLE local database
+#    Do NOT run `db:migrate` against the DATABASE_URL you just put in
+#    .env.local — that value points at PRODUCTION. See the warning below.
+pnpm db:test-local:setup
 
 # 5. Seed demo data
 pnpm seed:demo
 ```
+
+> **Never run `pnpm --filter @propertypro/db db:migrate` from a shell carrying
+> the root `.env.local`.** That file's `DATABASE_URL` is **production**.
+> Migrations reach production one way only — manually, via Supabase MCP
+> `apply_migration`, in the order documented in
+> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+>
+> One migration on `main` makes this concrete: `0062_secret_ballot` is an
+> irreversible contract migration, deliberately unapplied pending attorney
+> sign-off on e-voting. `db:migrate` would apply it and destroy the ballot
+> linkage permanently.
 
 ### Running the apps
 
