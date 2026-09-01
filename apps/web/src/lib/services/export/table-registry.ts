@@ -76,20 +76,43 @@ function col(key: string, label: string, column: unknown): ExportColumn {
   return { key, label, column };
 }
 
-/** Columns every tenant row carries. Soft-deleted rows ARE exported (see below). */
+/**
+ * The audit columns a tenant row carries — only the ones it ACTUALLY has.
+ *
+ * deleted_at is EXPORTED, not filtered on, wherever it exists.
+ *
+ * A soft-deleted meeting minute is still an association record under
+ * §718.111(12)(b) — "we deleted it in the UI" is not the same as "it was never
+ * a record". Excluding these rows would make the export something other than
+ * the association's record set, which is the one thing it must be. The column
+ * is present so the reader can tell the difference.
+ *
+ * ── Why the filter ──
+ *
+ * This used to reference all three unconditionally. `user_roles` and
+ * `meeting_documents` have no `deleted_at`, so `col()` received `undefined`,
+ * the projection carried an undefined value, and the read threw
+ * "Cannot convert undefined or null to object". `runExportJob` catches
+ * per-table on purpose — one unreadable table must not cost an association its
+ * other twenty — so the job completed as `ready` with the failure buried in
+ * manifest.warnings and BOTH TABLES SILENTLY ABSENT from every archive ever
+ * produced. `user_roles` is "who held which role, and any board designation":
+ * the record a §718.111(12) dispute turns on.
+ *
+ * Omitting a column the table does not have is the correct output, not a
+ * workaround — a table with no soft-delete has no "Deleted At" to report.
+ * `table-registry-columns.test.ts` now fails on any unresolved reference.
+ */
 function auditColumns(table: Record<string, unknown>): ExportColumn[] {
-  return [
-    col('createdAt', 'Created At', table.createdAt),
-    col('updatedAt', 'Updated At', table.updatedAt),
-    // deleted_at is EXPORTED, not filtered on.
-    //
-    // A soft-deleted meeting minute is still an association record under
-    // §718.111(12)(b) — "we deleted it in the UI" is not the same as "it was
-    // never a record". Excluding these rows would make the export something
-    // other than the association's record set, which is the one thing it must
-    // be. The column is present so the reader can tell the difference.
-    col('deletedAt', 'Deleted At', table.deletedAt),
-  ];
+  const candidates = [
+    ['createdAt', 'Created At'],
+    ['updatedAt', 'Updated At'],
+    ['deletedAt', 'Deleted At'],
+  ] as const;
+
+  return candidates
+    .filter(([key]) => table[key] !== undefined)
+    .map(([key, label]) => col(key, label, table[key]));
 }
 
 export const EXPORT_TABLES: ExportTableSpec[] = [
