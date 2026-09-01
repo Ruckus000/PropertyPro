@@ -26,6 +26,10 @@ import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { blockSchemaRegistry } from '@propertypro/shared';
+import {
+  assertPathsScopedToCommunity,
+  collectBlockAssetPaths,
+} from '@/lib/site-assets/scoped-paths';
 import { removeSiteBlock, upsertPublishedBlock } from '@/lib/services/site-blocks-service';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { blocksDeleteContract, blocksListContract, blocksUpsertContract } from './contract';
@@ -109,6 +113,17 @@ export const PATCH = withErrorHandler(
     if (!parse.success) {
       throw new ValidationError('Invalid block content', { fields: formatZodErrors(parse.error) });
     }
+
+    // Defense-in-depth, shared with /api/v1/pm/site/hero: bind each stored
+    // asset path's leading segment to the editing community. `imagePathSchema`
+    // validates only the shape `{digits}/{kind}/…`, so any digits pass — an
+    // `image` block's `imagePath`, or any of a gallery's up-to-24
+    // `images[].imagePath`, could otherwise persist a foreign community id.
+    // Runs on `parse.data`, after the per-type schema has vouched for shape.
+    assertPathsScopedToCommunity(
+      communityId,
+      collectBlockAssetPaths(body.blockType, parse.data),
+    );
 
     // PR #8e — PM edits write to the draft row at this slot. The public
     // site continues to serve the last-published row until the PM clicks
