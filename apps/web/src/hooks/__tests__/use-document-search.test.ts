@@ -146,6 +146,66 @@ describe('useDocumentSearch', () => {
     expect(result.current.items).toHaveLength(1);
   });
 
+  it('"Load more" after editing the input still paginates the original query', async () => {
+    // Fresh search for "cats" → page 1, cursor 5.
+    fetchMock.mockResolvedValueOnce(okResponse([makeRecord(1)], 5));
+    const { result } = renderHook(() => useDocumentSearch(3));
+
+    act(() => {
+      result.current.runSearch('cats', null);
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      '/api/v1/documents/search?communityId=3&q=cats',
+    );
+
+    // User edits the input to "dogs" but clicks "Load more" (cursored)
+    // instead of "Search". Pagination must reuse "cats", not "dogs".
+    fetchMock.mockResolvedValueOnce(okResponse([makeRecord(2)], null));
+    act(() => {
+      result.current.runSearch('dogs', 5);
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      '/api/v1/documents/search?communityId=3&q=cats&cursor=5',
+    );
+    expect(result.current.items.map((i) => i.id)).toEqual([1, 2]);
+  });
+
+  it('a fresh (cursor-less) search after an edit uses the new query and rebinds pagination', async () => {
+    fetchMock.mockResolvedValueOnce(okResponse([makeRecord(1)], 5));
+    const { result } = renderHook(() => useDocumentSearch(4));
+
+    act(() => {
+      result.current.runSearch('cats', null);
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    // Fresh search for "dogs" (cursor-less) → replaces results and
+    // becomes the new active query.
+    fetchMock.mockResolvedValueOnce(okResponse([makeRecord(2)], 9));
+    act(() => {
+      result.current.runSearch('dogs', null);
+    });
+    await waitFor(() =>
+      expect(result.current.items.map((i) => i.id)).toEqual([2]),
+    );
+    expect(fetchMock.mock.calls[1]![0]).toBe(
+      '/api/v1/documents/search?communityId=4&q=dogs',
+    );
+
+    // Subsequent "Load more" now paginates "dogs".
+    fetchMock.mockResolvedValueOnce(okResponse([makeRecord(3)], null));
+    act(() => {
+      result.current.runSearch('dogs', 9);
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+    expect(fetchMock.mock.calls[2]![0]).toBe(
+      '/api/v1/documents/search?communityId=4&q=dogs&cursor=9',
+    );
+  });
+
   it('resets items/nextCursor/error when communityId changes', async () => {
     fetchMock.mockResolvedValueOnce(
       okResponse([makeRecord(1), makeRecord(2)], 7),

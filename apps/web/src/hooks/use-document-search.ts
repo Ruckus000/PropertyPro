@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 
 export interface DocumentSearchRecord {
   id: number;
@@ -36,6 +36,12 @@ export function useDocumentSearch(communityId: number): UseDocumentSearchResult 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // The query that produced the current result set. Pagination ("Load
+  // more") must reuse this, not the live input — otherwise editing the
+  // input and clicking "Load more" fetches page 2 of the new query with
+  // page 1's cursor and appends it, mixing result sets.
+  const activeQuery = useRef('');
+
   // Reset transient state when the community changes — matches the
   // hook-authoring checklist (clear keyed-id state) so a tenant switch
   // doesn't show the previous community's results/error.
@@ -43,15 +49,23 @@ export function useDocumentSearch(communityId: number): UseDocumentSearchResult 
     setItems([]);
     setNextCursor(null);
     setError(null);
+    activeQuery.current = '';
   }, [communityId]);
 
   const runSearch = useCallback((query: string, cursor?: number | null) => {
     startTransition(async () => {
       try {
         setError(null);
+        // A cursor-less call is a fresh search: it becomes the new
+        // active query. A cursored call ("Load more") must keep
+        // paginating the query that produced the current results.
+        const effectiveQuery = cursor ? activeQuery.current : query;
+        if (!cursor) {
+          activeQuery.current = query;
+        }
         const params = new URLSearchParams({
           communityId: String(communityId),
-          q: query,
+          q: effectiveQuery,
         });
         if (cursor) {
           params.set('cursor', String(cursor));
@@ -70,10 +84,6 @@ export function useDocumentSearch(communityId: number): UseDocumentSearchResult 
         setError(err instanceof Error ? err.message : 'Search failed');
       }
     });
-    // NOTE: pagination intentionally uses the live `query` arg (preserved
-    // verbatim from the original component). The "Load more"-after-edit
-    // query/cursor mismatch is a pre-existing bug filed as a separate
-    // follow-up — out of scope for this behavior-preserving drain.
   }, [communityId]);
 
   return { items, nextCursor, error, isPending, runSearch };
