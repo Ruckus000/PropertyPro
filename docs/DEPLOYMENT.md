@@ -380,20 +380,45 @@ For urgent production fixes:
 
 ### 7.3 Database Migration Deploy
 
-Production migrations run **automatically** as a gated step in `deploy.yml`
-(see §7.1) — a failed migration aborts the deploy before the new code ships.
-The commands below are for local verification, staging, or one-off recovery
-paths:
+Production migrations are applied **manually**, one at a time, by a human. They
+are **not** run by `deploy.yml`, by CI, or by merging a PR — see the warning in
+§7.1 for why the old gated step was removed. `.claude/rules/migration-safety.md`
+is the authoritative procedure; this section is the short form.
 
-```bash
-# Via scripts/with-env-local.sh (local verification)
-scripts/with-env-local.sh pnpm --filter @propertypro/db db:migrate
+**Order the apply against the deploy before you touch anything** — this is what
+replaced the CI gate as drift protection, and getting it backwards is how you
+take production down:
 
-# Or set DATABASE_URL/DIRECT_URL directly
-DATABASE_URL=<pooled_url> DIRECT_URL=<direct_url> pnpm --filter @propertypro/db db:migrate
-```
+| Migration kind | Example | When to apply |
+| --- | --- | --- |
+| **Expand** | add a column, add a table, widen a `CHECK` | **BEFORE** merging the code that uses it |
+| **Contract** | drop a column, drop an enum value | **AFTER** the code that stopped reading it is live |
+| **Repair** | RLS policy / trigger / grant fix | Order-independent |
 
-**Important:** Always run migrations against the direct connection (port 5432), not the pooled connection (port 6543). The `DIRECT_URL` env var is used by Drizzle for migrations automatically.
+To apply:
+
+1. Apply the migration's statements **in order** via the Supabase MCP
+   `apply_migration` tool.
+2. Verify the result against `information_schema` / `pg_catalog` — do not trust
+   the tool's return value alone.
+3. Record the `drizzle.__drizzle_migrations` ledger row (`hash` = sha256 of the
+   migration file bytes, `created_at` = the journal `when`) so any later
+   `drizzle-kit` run stays consistent.
+
+> **Do not run `pnpm --filter @propertypro/db db:migrate` to reach production.**
+> Root `.env.local`'s `DATABASE_URL` points at **production**, so
+> `scripts/with-env-local.sh` targets prod, not a local database. Beyond that,
+> `drizzle-kit migrate` collides with the manually-maintained ledger and applies
+> contract migrations migrate-first, which drops columns the live old code is
+> still reading.
+>
+> `db:migrate` is for **disposable local databases only** — use
+> `pnpm db:test-local:setup` / `pnpm db:test-local:reset`, which create and
+> migrate a throwaway localhost Postgres mirroring CI.
+
+**Important:** when you do migrate a local database, use the direct connection
+(port 5432), not the pooled connection (port 6543). Drizzle reads `DIRECT_URL`
+for migrations automatically.
 
 After any migration-backed release, verify runtime schema compatibility before
 declaring the deploy healthy:
