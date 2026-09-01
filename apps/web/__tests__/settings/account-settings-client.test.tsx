@@ -11,6 +11,7 @@ import {
   screen,
   fireEvent,
   waitFor,
+  act,
 } from '@testing-library/react';
 
 // ── Hook mocks ──────────────────────────────────────────────
@@ -138,6 +139,43 @@ describe('AccountSettingsClient — profile section', () => {
     );
   });
 
+  it('clears the success-banner auto-dismiss timer when unmounted before 5s', async () => {
+    vi.useFakeTimers();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      updateProfileMutate.mockImplementation((_input, opts) => opts.onSuccess());
+      const { unmount } = renderComponent();
+
+      const nameInput = screen.getByLabelText('Full Name') as HTMLInputElement;
+      fireEvent.change(nameInput, { target: { value: 'New Name' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+      expect(screen.getByText('Profile updated successfully.')).toBeDefined();
+
+      // Unmount within the 5s window — the effect cleanup must cancel the timer.
+      unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+
+      // Firing the (now-cancelled) timer must not update an unmounted component.
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      const actWarnings = consoleError.mock.calls.filter(([msg]) =>
+        typeof msg === 'string'
+          ? msg.includes('not wrapped in act') ||
+            msg.includes('unmounted component')
+          : false,
+      );
+      expect(actWarnings).toEqual([]);
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      consoleError.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('surfaces the hook error message verbatim on failure', async () => {
     updateProfileMutate.mockImplementation((_input, opts) =>
       opts.onError(new Error('Server says no')),
@@ -179,6 +217,44 @@ describe('AccountSettingsClient — password section (Supabase, stays in compone
       password: 'OldPass1!',
     });
     expect(updateUser).toHaveBeenCalledWith({ password: 'NewPass1!' });
+  });
+
+  it('clears the password-banner auto-dismiss timer when unmounted before 5s', async () => {
+    // The sibling of the profile-banner test above. The password banner had the
+    // same bare setTimeout and was left behind by the original fix, so without
+    // this the file still contained the pattern the change claims to remove.
+    signInWithPassword.mockResolvedValue({ error: null });
+    updateUser.mockResolvedValue({ error: null });
+    const { unmount } = renderComponent();
+
+    fireEvent.change(screen.getByLabelText('Current Password'), {
+      target: { value: 'OldPass1!' },
+    });
+    fireEvent.change(screen.getByLabelText('New Password'), {
+      target: { value: 'NewPass1!' },
+    });
+    fireEvent.change(screen.getByLabelText('Confirm New Password'), {
+      target: { value: 'NewPass1!' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Update Password' }));
+
+    // The banner has to actually appear, or the effect never armed a timer and
+    // the assertion below would pass for the wrong reason.
+    await waitFor(() =>
+      expect(screen.getByText('Password updated successfully.')).toBeDefined(),
+    );
+
+    // Fake timers are installed only now: the Supabase flow above is async, and
+    // swapping the clock before it settles would stall waitFor.
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      unmount();
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('shows the incorrect-password error when sign-in fails', async () => {
