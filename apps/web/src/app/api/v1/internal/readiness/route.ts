@@ -1,12 +1,14 @@
 /**
  * GET /api/v1/internal/readiness
  *
- * Deployment readiness check. Validates stripe_prices completeness,
- * database connectivity, and Supabase auth availability.
+ * Deployment readiness check. Validates stripe_prices completeness, database
+ * connectivity, runtime schema compatibility, Supabase auth availability, the
+ * load-bearing secrets, and that email is actually being delivered.
  *
  * Auth: Bearer token via READINESS_CHECK_SECRET.
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { resolveDeliveryMode } from '@propertypro/email';
 import { requireCronSecret } from '@/lib/api/cron-auth';
 import {
   checkDatabaseConnectivity,
@@ -63,12 +65,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //   - CRON_SECRET: Vercel Cron only sends `Authorization: Bearer $CRON_SECRET`
   //     when the var exists. Unset, it sends no header, every scheduled job
   //     401s, and the platform still reports the cron as registered and firing.
-  //     Every scheduled job (15 as of apps/web/vercel.json) was dead for months
+  //     Every scheduled job (16 as of apps/web/vercel.json) was dead for months
   //     with a green dashboard.
   //   - OTP_HMAC_SECRET: access-request OTPs are 6 digits, so the HMAC secret is
   //     the only barrier to precomputing the whole space.
   //   - TOKEN_ENCRYPTION_KEY: calendar sync and accounting connectors throw
   //     without it, so those features 500 rather than degrade.
+  //   - OAUTH_STATE_SECRET: `signOAuthState` throws without it, so connecting a
+  //     Google Calendar or an accounting platform 500s instead of degrading.
+  //   - SUPPORT_SESSION_JWT_SECRET: the admin app signs the support-access JWT
+  //     and web verifies it. Absent on either side, Start Session 500s and the
+  //     popup never opens — the exact failure that made `support-access` look
+  //     like a broken E2E spec for months.
+  //   - The three *_UNSUBSCRIBE_SECRETs: their signers return `null` rather than
+  //     throwing (deliberately — a bulk sender must not be taken down by an
+  //     unset var), so the emails still go out, silently carrying a
+  //     login-walled settings URL instead of a working one-click link. That
+  //     defeats RFC 8058 and the CAN-SPAM no-account-required expectation, and
+  //     nothing anywhere reports it.
   //
   // This is the check that would have caught the cron outage on day one. It
   // deliberately makes "a secret is missing" a monitorable signal instead of
@@ -85,6 +99,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     { name: 'CRON_SECRET', minLength: 16 },
     { name: 'OTP_HMAC_SECRET', minLength: 16 },
     { name: 'TOKEN_ENCRYPTION_KEY', exactHexChars: 64 },
+    { name: 'OAUTH_STATE_SECRET', minLength: 16 },
+    { name: 'SUPPORT_SESSION_JWT_SECRET', minLength: 32 },
+    { name: 'COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET', minLength: 16 },
+    { name: 'SNOWBIRD_UNSUBSCRIBE_SECRET', minLength: 16 },
+    { name: 'INSURANCE_ALERTS_UNSUBSCRIBE_SECRET', minLength: 16 },
   ] as const;
 
   for (const rule of secretRules) {
@@ -116,6 +135,33 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         : { status: 'pass' };
   }
 
+  // 7. Email delivery mode.
+  //
+  // `sendEmail` does NOT throw when RESEND_API_KEY is unset — it collects the
+  // message in an in-memory test inbox and returns successfully. In production
+  // that means every verification email, invitation and statutory notice is
+  // silently discarded while every call site reports success. EMAIL_DRY_RUN
+  // does the same thing deliberately, and is correct for an ops script run but
+  // never for a deployed app.
+  //
+  // Delegated to `resolveDeliveryMode` rather than re-reading the two env vars:
+  // it owns the precedence (dry-run outranks a configured key) and the
+  // truthiness rules ('0'/'false'/'no' are falsy), and a second copy here would
+  // drift from the behaviour it is supposed to be reporting on.
+  {
+    const mode = resolveDeliveryMode();
+    checks.email_delivery =
+      mode === 'live'
+        ? { status: 'pass' }
+        : {
+            status: 'fail',
+            error:
+              mode === 'dry-run'
+                ? 'EMAIL_DRY_RUN is set — no mail is being delivered'
+                : 'RESEND_API_KEY is not set — mail is silently discarded',
+          };
+  }
+
   // Determine overall status
   const dbOk = checks.database?.status === 'pass';
   const authOk = checks.supabase_auth?.status === 'pass';
@@ -125,10 +171,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // Grouped with the other secret checks rather than the connectivity ones: a
   // missing secret is a real fault, but the process is still serving traffic,
   // so it must not read as 'healthy' while stopping short of 'unhealthy'.
+  //
+  // Derived from `secretRules` rather than naming each check, so adding a rule
+  // above cannot silently leave it out of the roll-up — a check that is
+  // computed and reported but never affects `status` is worse than no check,
+  // because the probe reports green while carrying a known fault.
   const secretsOk =
-    checks.cron_secret?.status === 'pass' &&
-    checks.otp_hmac_secret?.status === 'pass' &&
-    checks.token_encryption_key?.status === 'pass';
+    secretRules.every((rule) => checks[rule.name.toLowerCase()]?.status === 'pass') &&
+    checks.email_delivery?.status === 'pass';
 
   let status: 'healthy' | 'degraded' | 'unhealthy';
   if (dbOk && authOk && schemaOk && pricesOk && reauthOk && secretsOk) {

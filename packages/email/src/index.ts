@@ -135,3 +135,11 @@ export * as emailStyles from "./components/shared-styles";
 // Send helper
 export { sendEmail, sendBulkEmail, testInbox, clearTestInbox } from "./send";
 export type { TestMessage } from "./send";
+
+// Delivery mode. Exported so the deployment-readiness probe can report on it:
+// an unset RESEND_API_KEY makes every send a silent no-op, which is exactly the
+// class of failure readiness exists to surface. Callers must use this rather
+// than reading the env vars themselves — it encodes the EMAIL_DRY_RUN > key
+// precedence and the truthiness rules ('0'/'false'/'no' are falsy).
+export { resolveDeliveryMode } from "./send";
+export type { DeliveryMode } from "./send";

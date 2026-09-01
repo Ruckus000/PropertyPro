@@ -29,11 +29,12 @@ import {
   calculateStripeFeeEstimate,
 } from '@propertypro/shared';
 import type Stripe from 'stripe';
+import { captureMessage } from '@sentry/nextjs';
 import { AssessmentPaymentReceivedEmail, sendEmail } from '@propertypro/email';
 import { generateCSV } from '@/lib/services/csv-export';
 import { getStripeClient } from '@/lib/services/stripe-service';
 import { markMatchingViolationFinePaid } from '@/lib/services/violations-service';
-import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
+import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
 import { listActorUnitIds } from '@/lib/units/actor-units';
@@ -1663,7 +1664,33 @@ export async function startConnectOnboarding(
 ): Promise<{ onboardingUrl: string }> {
   const clientId = process.env.STRIPE_CONNECT_CLIENT_ID;
   if (!clientId) {
-    throw new Error('STRIPE_CONNECT_CLIENT_ID is not configured');
+    // Two distinct jobs here, and neither one covers the other.
+    //
+    // 1. The THROW is typed so the admin sees "payments aren't set up" instead
+    //    of a bare error page. A plain `Error` reaches the client as a generic
+    //    500 INTERNAL_ERROR, which reads as "the app is broken" rather than
+    //    "this environment is missing a key".
+    //
+    // 2. The CAPTURE is explicit because `withErrorHandler` returns early for
+    //    every `AppError` — BEFORE it reaches `Sentry.captureException`, which
+    //    only runs for unknown errors. So typing this error would otherwise
+    //    have made a real misconfiguration *less* visible than the untyped
+    //    `Error` it replaced: better UX, zero operator signal. Capturing at
+    //    the throw site keeps both.
+    //
+    // Not routed through the readiness probe on purpose: resident payments are
+    // gated off per community (`assessmentPaymentsEnabled`), so a readiness
+    // entry would hold production at 'degraded' indefinitely for a feature
+    // nobody has switched on — which is how a probe gets ignored.
+    captureMessage('stripe_connect_client_id_missing', {
+      level: 'error',
+      extra: { communityId, requestId: requestId ?? null },
+    });
+    throw new AppError(
+      'Resident payments are not configured for this environment.',
+      503,
+      'PAYMENTS_NOT_CONFIGURED',
+    );
   }
 
   const baseUrl = getStripeBaseUrl();
