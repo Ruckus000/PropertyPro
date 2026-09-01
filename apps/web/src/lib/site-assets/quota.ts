@@ -81,8 +81,16 @@ export async function assertWithinQuota(communityId: number, addBytes: number): 
  * level. `jsonb_set` + `(branding->>'assetsBytesUsed')::bigint` reads and
  * writes the JSONB field in one expression; `COALESCE(..., 0)` handles the
  * never-set case; `GREATEST(0, ...)` enforces the non-negative floor.
+ *
+ * Exported for `scripts/reconcile-site-assets-usage.ts`, which corrects
+ * accumulated drift in this counter. It applies a delta rather than an
+ * absolute set for exactly the reason above: a concurrent finalize's increment
+ * survives a delta, but is lost by a set computed from a stale read.
  */
-async function applyAssetsUsageDelta(communityId: number, deltaBytes: number): Promise<void> {
+export async function applyAssetsUsageDelta(
+  communityId: number,
+  deltaBytes: number,
+): Promise<void> {
   const db = createUnscopedClient();
   await db.execute(sql`
     UPDATE communities
