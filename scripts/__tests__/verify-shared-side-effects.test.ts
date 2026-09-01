@@ -235,6 +235,34 @@ describe('end to end', () => {
     expect(output).toContain('offender.ts');
   });
 
+  it('reports the file count on success, so a reader can see it examined something', () => {
+    const { status, output } = runGuard();
+    expect(status).toBe(0);
+    // The denominator is the point: "clean" and "looked at nothing" are
+    // indistinguishable without it.
+    const match = /Files scanned: (\d+)\./.exec(output);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBeGreaterThan(0);
+  });
+
+  it('exits 2 rather than 0 when the scan root does not exist', () => {
+    const { status, output } = runGuard(['--root', join(tmpdir(), 'no-such-dir-9f3a2c')]);
+    expect(status).toBe(2);
+    expect(output).toContain('Cannot check');
+  });
+
+  it('exits 2 rather than 0 when the tree contains no checkable files', () => {
+    // The vacuity case this guard would otherwise report as a pass: a real
+    // directory holding nothing isCheckedFile() recognises. Before the tri-state
+    // exit, this printed the success line.
+    sandbox = mkdtempSync(join(tmpdir(), 'shared-side-effects-empty-'));
+    writeFileSync(join(sandbox, 'README.md'), '# not a checked file\n');
+    writeFileSync(join(sandbox, 'types.d.ts'), 'export {};\n');
+    const { status, output } = runGuard(['--root', sandbox]);
+    expect(status).toBe(2);
+    expect(output).toContain('examined 0 files');
+  });
+
   it('defaults to packages/shared/src when --root is absent', () => {
     // The sandbox above proves the mechanism; this proves it is aimed at the
     // package the "sideEffects": false claim actually covers.

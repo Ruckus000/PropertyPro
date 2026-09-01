@@ -379,7 +379,37 @@ export function resolveScanRoot(argv: readonly string[]): string {
 }
 
 function main(): void {
-  const violations = scanSharedPackage(resolveScanRoot(process.argv.slice(2)));
+  const root = resolveScanRoot(process.argv.slice(2));
+  const label = relative(REPO_ROOT, root) || root;
+
+  // Tri-state, per .claude/rules/verification.md: exit 2 means "I could not
+  // check", which must never be reported as clean.
+  //
+  // Both refusals below are load-bearing. This guard's whole value is that it
+  // fails when someone adds a side effect — so the ways it can silently stop
+  // looking matter as much as the detection itself. A renamed package
+  // directory, or an extension `isCheckedFile` does not recognise (`.mts`),
+  // would otherwise walk an empty tree, find no violations, and print the
+  // success line. "sideEffects": false would then be guarded by nothing.
+  try {
+    if (!statSync(root).isDirectory()) throw new Error('not a directory');
+  } catch {
+    console.error(`\n❌ Cannot check: ${label} is missing or is not a directory.`);
+    process.exit(2);
+  }
+
+  const files = [...walk(root)];
+  if (files.length === 0) {
+    console.error(
+      `\n❌ Cannot check: examined 0 files under ${label}. isCheckedFile() matches ` +
+        '.ts/.tsx (excluding *.test.* and *.d.ts), so either the tree is empty or the ' +
+        'package moved to an extension this guard does not know about. Either way the ' +
+        'guard is broken, not the package pure.',
+    );
+    process.exit(2);
+  }
+
+  const violations = scanSharedPackage(root);
 
   if (violations.length > 0) {
     console.error(
@@ -399,7 +429,11 @@ function main(): void {
     process.exit(1);
   }
 
-  console.log('✅ @propertypro/shared is import-time pure ("sideEffects": false holds).');
+  // Print the denominator so a reader can see the scan had a population.
+  console.log(
+    `✅ @propertypro/shared is import-time pure ("sideEffects": false holds). ` +
+      `Files scanned: ${files.length}.`,
+  );
 }
 
 // Only run when invoked as a script. Without this, importing the module to unit
