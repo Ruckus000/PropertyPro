@@ -46,14 +46,12 @@ export function useUpdateMobileSettings() {
     // their EXACT fallback literals 'Failed to update profile' /
     // 'Failed to update notification preferences' when the error body has no
     // message. requestJson's non-OK fallback is the generic 'Request failed',
-    // which would change that user-facing copy — and the no-message path is
-    // real here: `/api/v1/profile` does not exist (pre-existing bug; the real
-    // route is /api/v1/account/profile), so the profile PATCH 404s with no
-    // `{ error: { message } }` body. (await-throw already short-circuits the
-    // second PATCH, so that is not the reason for the exception.)
+    // which would change that user-facing copy. (await-throw already
+    // short-circuits the second PATCH, so that is not the reason for the
+    // exception.)
     mutationFn: async ({ profile, notificationPreferences }) => {
       // Update profile
-      const profileRes = await fetch('/api/v1/profile', {
+      const profileRes = await fetch('/api/v1/account/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
