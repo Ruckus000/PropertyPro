@@ -143,7 +143,13 @@ describe('profile step', () => {
       logoInput.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('Selected file: logo.png');
+    // The dropzone shows the pending file's name plus a "Click to replace"
+    // affordance while `logoFile` is set. (This assertion read
+    // `'Selected file: logo.png'` when the test was written in May; that copy
+    // no longer exists — the label was restyled. The state being asserted is
+    // unchanged.)
+    expect(container.textContent).toContain('logo.png');
+    expect(container.textContent).toContain('Click to replace');
 
     const form = container.querySelector('form');
 
@@ -155,9 +161,13 @@ describe('profile step', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain('transient server error');
-    // UI flips to the resolved-path display; "Selected file" label is gone.
+    // UI flips to the resolved-path display, and the dropzone reverts to its
+    // empty state because `logoFile` was cleared. That reversion IS the fix:
+    // while `logoFile` is still set the dropzone keeps offering "Click to
+    // replace", and the retry below would upload the same file a second time.
     expect(container.textContent).toContain('Current logo path: logos/community.png');
-    expect(container.textContent).not.toContain('Selected file: logo.png');
+    expect(container.textContent).not.toContain('Click to replace');
+    expect(container.textContent).toContain('Click to upload');
 
     // Retry: no logoFile remains, so the upload must NOT run again.
     await act(async () => {
