@@ -164,11 +164,13 @@ export function GalleryImagesField({
 
   // The WHOLE-SITE block list — same query key as the rest of the editor, so
   // no extra request — not the editor context's page-narrowed `blocks`.
-  // "Photos already on your site" means the site.
+  // "Photos already in your sections" means every section on every page —
+  // draft and hidden ones included, which is why the copy says "sections"
+  // and not "site": a draft is not on the site yet.
   const { data: siteBlocks } = useContentBlocks(communityId);
   const photos = useMemo(() => placedPhotos(siteBlocks ?? []), [siteBlocks]);
 
-  // Photos on the site that are not in this gallery yet.
+  // Photos in the community's sections that are not in this gallery yet.
   //
   // A photo already here — committed, or picked and waiting to be described —
   // is not offered again. The committed list is keyed by PATH so that focus
@@ -644,10 +646,10 @@ export function GalleryImagesField({
         ) : (
           <div ref={pickerRef}>
             {photos.length > 0 && candidates.length === 0 ? (
-              // Not the picker's own empty copy: there ARE photos on the site,
+              // Not the picker's own empty copy: there ARE photos in the sections,
               // and "upload one and it will be available here" would be untrue.
               <p className="text-sm text-content-secondary">
-                Every photo on your site is already in this gallery.
+                Every photo in your sections is already in this gallery.
               </p>
             ) : (
               // `selectedPath` stays null: a pick moves the photo into the

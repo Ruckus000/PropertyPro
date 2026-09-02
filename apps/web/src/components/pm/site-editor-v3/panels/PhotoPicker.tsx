@@ -37,13 +37,13 @@ export function PhotoPicker({ photos, selectedPath, disabled = false, onSelect }
   if (photos.length === 0) {
     return (
       <p className="text-sm text-content-secondary">
-        No photos on your site yet. Upload one and it will be available here.
+        No photos in your sections yet. Upload one and it will be available here.
       </p>
     );
   }
 
   return (
-    <ul aria-label="Photos already on your site" className="grid grid-cols-2 gap-3">
+    <ul aria-label="Photos already in your sections" className="grid grid-cols-2 gap-3">
       {photos.map((photo, index) => {
         const selected = photo.path === selectedPath;
         const sections = photo.useCount === 1 ? 'section' : 'sections';

@@ -410,9 +410,9 @@ describe('GalleryForm', () => {
       await chooseFromYourPhotos(user);
 
       expect(screen.getByText(/already in this gallery/i)).toBeInTheDocument();
-      // NOT the picker's own empty copy — there ARE photos on the site, and
+      // NOT the picker's own empty copy — there ARE photos in the sections, and
       // "upload one and it will be available here" would be untrue.
-      expect(screen.queryByText(/No photos on your site yet/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No photos in your sections yet/i)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Use /i })).not.toBeInTheDocument();
     });
 

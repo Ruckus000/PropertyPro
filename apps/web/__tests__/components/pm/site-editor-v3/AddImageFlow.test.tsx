@@ -371,7 +371,7 @@ describe('AddImageFlow', () => {
   it('says so when the site has no photos to choose from', async () => {
     renderFlow();
     await chooseFromYourPhotos();
-    expect(screen.getByText(/No photos on your site yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No photos in your sections yet/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Use /i })).not.toBeInTheDocument();
   });
 });

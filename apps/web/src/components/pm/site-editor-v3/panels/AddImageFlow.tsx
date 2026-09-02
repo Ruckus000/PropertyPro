@@ -81,8 +81,10 @@ export interface AddImageFlowProps {
  *
  * The candidate list is the WHOLE-SITE block list from `useContentBlocks` —
  * same query key as the rest of the editor, so no extra request — not the
- * editor context's page-narrowed `blocks`. "Photos already on your site" means
- * the site.
+ * editor context's page-narrowed `blocks`. "Photos already in your sections"
+ * means every section on every page — draft and hidden ones included, which
+ * is why the copy says "sections" and not "site": a draft is not on the site
+ * yet, and `guard:page-state-copy` refuses copy that claims otherwise.
  *
  * The write uses whichever source is ACTIVE at submit. Switching sources does
  * not clear the other one's state, so a PM can flip over to check what is on
