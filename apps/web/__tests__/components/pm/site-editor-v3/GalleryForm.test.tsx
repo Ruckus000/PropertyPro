@@ -241,6 +241,21 @@ describe('GalleryForm', () => {
       expect(uploadMock).not.toHaveBeenCalled();
     });
 
+    it('shows each committed image by its 800w variant, never the base path', () => {
+      // finalize deletes the raw upload once the variants exist, so the base
+      // path is a 404; a thumbnail that drops the suffix renders as nothing.
+      renderForm(ONE_IMAGE);
+
+      const thumb = screen
+        .getByLabelText('Alt text')
+        .closest('[data-image-row]')!
+        .querySelector('img');
+      expect(thumb).toHaveAttribute(
+        'src',
+        expect.stringContaining('7/content/pool.jpg.800w.webp'),
+      );
+    });
+
     it('stops accepting files at the schema maximum', () => {
       const images = Array.from({ length: 24 }, (_, i) => ({
         imagePath: `7/content/p${i}.jpg`,
@@ -312,6 +327,15 @@ describe('GalleryForm', () => {
       // The hero's photo is offered alongside the image section's.
       expect(screen.getByRole('button', { name: /Use strip\.jpg/i })).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /Use deck\.jpg/i }));
+      // A chosen photo already has its variants, so its staging row shows it —
+      // the `.800w.webp` variant, never the base path, which finalize deleted.
+      // `alt=""` makes the image presentational, so scope by row rather than
+      // by role.
+      const stagedThumb = screen
+        .getByLabelText(/Alt text for deck.jpg/)
+        .closest('[data-staged-row]')!
+        .querySelector('img');
+      expect(stagedThumb).toHaveAttribute('src', expect.stringContaining(`${DECK}.800w.webp`));
       // Described in the SAME staging row a picked file gets.
       await user.type(screen.getByLabelText(/Alt text for deck.jpg/), 'The deck, from the pool');
       await user.click(screen.getByRole('button', { name: /Add 1 image to gallery/ }));
