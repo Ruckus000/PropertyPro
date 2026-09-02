@@ -51,10 +51,17 @@ export const STATUS_CONFIG = {
 export type StatusKey = keyof typeof STATUS_CONFIG;
 
 export function getStatusConfig(status: StatusKey | string): StatusConfigEntry {
-  return (
-    (STATUS_CONFIG as Record<string, StatusConfigEntry>)[status] ??
-    STATUS_CONFIG.neutral
-  );
+  // `hasOwnProperty`, not `??`: STATUS_CONFIG is an object literal, so it
+  // inherits from Object.prototype. A status of "constructor" / "toString" /
+  // "valueOf" resolves to a TRUTHY inherited value, the `??` never fires, and
+  // the caller gets an entry whose variant/label/icon are all undefined.
+  // `STATUS_ICONS[undefined]` is then undefined and React throws "Element type
+  // is invalid", blanking the subtree — reachable from any DB column or API
+  // payload passed straight to <StatusBadge status={...} />.
+  const own = Object.prototype.hasOwnProperty.call(STATUS_CONFIG, status)
+    ? (STATUS_CONFIG as Record<string, StatusConfigEntry | undefined>)[status]
+    : undefined;
+  return own ?? STATUS_CONFIG.neutral;
 }
 
 /**
@@ -131,6 +138,22 @@ const STATUS_CLASSES = {
   },
 } as const satisfies Record<StatusVariant, Record<string, string>>;
 
-export function getStatusClasses(variant: StatusVariant) {
-  return STATUS_CLASSES[variant] ?? STATUS_CLASSES.neutral;
+/**
+ * The result is a `Readonly` view of a SHARED module-level entry, not a fresh
+ * object per call. Without the readonly return type a single caller's write —
+ * a codemod, a test helper, a stray `classes.text += ' foo'` — corrupts the
+ * class strings for every StatusBadge and StatusDot for the life of the
+ * process. Do not widen it.
+ *
+ * `hasOwnProperty` is not redundant with the `StatusVariant` type. Types do not
+ * survive to runtime, and a caller doing
+ * `getStatusClasses(getStatusConfig(someString).variant)` can pass `undefined`
+ * or a prototype key.
+ */
+export function getStatusClasses(
+  variant: StatusVariant,
+): Readonly<(typeof STATUS_CLASSES)[StatusVariant]> {
+  return Object.prototype.hasOwnProperty.call(STATUS_CLASSES, variant)
+    ? STATUS_CLASSES[variant]
+    : STATUS_CLASSES.neutral;
 }
