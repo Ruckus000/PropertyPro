@@ -118,17 +118,29 @@ export function StatusBadge({
 
 export function StatusDot({
   variant,
+  label,
   className,
   ...props
 }: {
   variant: StatusVariant;
+  /**
+   * REQUIRED. A dot is colour and nothing else, and DESIGN.md forbids conveying
+   * status by colour alone ("NEVER color alone. Always icon + text + color").
+   * This was `aria-hidden`, which removed the only status signal from the
+   * accessibility tree entirely — so a screen-reader user got nothing at all,
+   * and a colour-blind user could not tell `status-owner` (violet-700) from
+   * `status-board` (pink-700). Pair the dot with visible text wherever the
+   * layout allows; this at least names it for assistive tech.
+   */
+  label: string;
   className?: string;
 } & React.HTMLAttributes<HTMLSpanElement>) {
   const classes = getStatusClasses(variant);
   return (
     <span
       className={cn("inline-block h-2 w-2 rounded-full", classes.dot, className)}
-      aria-hidden="true"
+      role="img"
+      aria-label={label}
       {...props}
     />
   );
