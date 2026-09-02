@@ -49,9 +49,14 @@ const COMMUNITY = {
   city: 'Miami',
 };
 
+const QUOTA_500_MB = 500 * 1024 * 1024;
+
 const EMPTY_RECORD = {
   settings: { seoTitle: null, seoDescription: null, searchIndexing: true, favicon: null },
   footer: { associationName: null, note: null, showStatutoryLine: false },
+  // The real record always carries storage; the default fixture matches it so
+  // every test below runs with the meter present, as in production.
+  storage: { assetsBytesUsed: 0, quotaBytes: QUOTA_500_MB },
 };
 
 function renderPanel(record: unknown = EMPTY_RECORD) {
@@ -274,6 +279,52 @@ describe('resync', () => {
     rerender(<SitePanel communityId={42} community={COMMUNITY} tagline={null} />);
 
     expect(screen.getByLabelText('Page title')).toHaveValue('Half-typed');
+  });
+});
+
+describe('photo storage', () => {
+  it('draws the bar against the quota and says how much of it is used', () => {
+    renderPanel({
+      ...EMPTY_RECORD,
+      storage: { assetsBytesUsed: 250 * 1024 * 1024, quotaBytes: QUOTA_500_MB },
+    });
+
+    const bar = screen.getByRole('progressbar', { name: 'Photo storage used' });
+    expect(bar).toHaveAttribute('aria-valuenow', '50');
+    expect(bar).toHaveAttribute('aria-valuemax', '100');
+    expect(bar).toHaveAttribute('aria-valuetext', '250.0 MB of 500.0 MB used');
+    expect(screen.getByText('250.0 MB of 500.0 MB used')).toBeInTheDocument();
+    expect(screen.queryByText(/over your plan/)).not.toBeInTheDocument();
+  });
+
+  // Null is "no plan limit". A bar would be drawn against a number that does
+  // not exist, so there is none — usage only.
+  it('shows usage alone, with NO progressbar, when the plan sets no quota', () => {
+    renderPanel({
+      ...EMPTY_RECORD,
+      storage: { assetsBytesUsed: 1024, quotaBytes: null },
+    });
+
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getByText('1.0 KB used')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Photo storage' })).toBeInTheDocument();
+  });
+
+  // Reachable after a plan downgrade. The bar cannot exceed its own track and
+  // `aria-valuenow` cannot exceed `aria-valuemax`, but the TEXT reports the
+  // true bytes — and says the limit is exceeded, so the colour is not the
+  // only signal.
+  it('clamps the bar at 100 over quota but reports the true bytes', () => {
+    renderPanel({
+      ...EMPTY_RECORD,
+      storage: { assetsBytesUsed: 600 * 1024 * 1024, quotaBytes: QUOTA_500_MB },
+    });
+
+    const bar = screen.getByRole('progressbar', { name: 'Photo storage used' });
+    expect(bar).toHaveAttribute('aria-valuenow', '100');
+    expect(bar.firstElementChild).toHaveStyle({ width: '100%' });
+    expect(screen.getByText(/600\.0 MB of 500\.0 MB used/)).toBeInTheDocument();
+    expect(screen.getByText(/over your plan/)).toBeInTheDocument();
   });
 });
 

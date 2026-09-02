@@ -19,14 +19,29 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { createUnscopedClientMock, logAuditEventMock, communitiesTable } = vi.hoisted(() => ({
+const {
+  createUnscopedClientMock,
+  logAuditEventMock,
+  communitiesTable,
+  getUsageMock,
+  getQuotaMock,
+} = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   communitiesTable: { id: 'communities.id', branding: 'communities.branding' },
+  getUsageMock: vi.fn(),
+  getQuotaMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
+}));
+// The storage helpers are a boundary with their own suite. Left real, they
+// would ALSO run their reads through the stub below and eat entries from the
+// before/after queue, which is not what any test here is about.
+vi.mock('@/lib/site-assets/quota', () => ({
+  getCommunitySiteAssetsUsage: getUsageMock,
+  getSiteAssetsQuotaBytes: getQuotaMock,
 }));
 vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
@@ -98,9 +113,59 @@ function stubDb(rows: Record<string, unknown>[]) {
   return db;
 }
 
+const STORAGE = { assetsBytesUsed: 1024, quotaBytes: 524288000 };
+
 beforeEach(() => {
   vi.clearAllMocks();
   logAuditEventMock.mockResolvedValue(undefined);
+  getUsageMock.mockResolvedValue(STORAGE.assetsBytesUsed);
+  getQuotaMock.mockResolvedValue(STORAGE.quotaBytes);
+});
+
+describe('storage — read-only usage against the plan quota', () => {
+  it('getSiteSettings carries usage and quota from the storage helpers', async () => {
+    stubDb([{ branding: {} }]);
+    const result = await getSiteSettings(COMMUNITY_ID);
+    expect(result.storage).toEqual(STORAGE);
+    expect(getUsageMock).toHaveBeenCalledWith(COMMUNITY_ID);
+    expect(getQuotaMock).toHaveBeenCalledWith(COMMUNITY_ID);
+  });
+
+  it('passes a null quota through — no plan limit is a real state, not 0', async () => {
+    stubDb([{ branding: {} }]);
+    getQuotaMock.mockResolvedValue(null);
+    const result = await getSiteSettings(COMMUNITY_ID);
+    expect(result.storage).toEqual({ assetsBytesUsed: 1024, quotaBytes: null });
+  });
+
+  // The route returns this straight to the client, which caches it AS the
+  // record. Drop it here and the meter blanks after every save — and the
+  // route test cannot see that, because it mocks this module.
+  it('updateSiteSettings returns the storage numbers too', async () => {
+    stubDb([{ branding: {} }]);
+    const result = await updateSiteSettings({
+      communityId: COMMUNITY_ID,
+      actorUserId: ACTOR,
+      seoTitle: 'Title',
+    });
+    expect(result.storage).toEqual(STORAGE);
+  });
+
+  // The before-snapshot the audit log needs has no use for the plan lookup.
+  it('reads the plan once per update, not for the audit snapshot', async () => {
+    stubDb([{ branding: {} }]);
+    await updateSiteSettings({ communityId: COMMUNITY_ID, actorUserId: ACTOR, seoTitle: 'T' });
+    expect(getQuotaMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('the favicon writers never read the quota — they return no record', async () => {
+    const favicon = { icon32Path: '42/favicon/a.png', appleTouch180Path: '42/favicon/b.png' };
+    stubDb([{ branding: {} }]);
+    await setSiteFavicon({ communityId: COMMUNITY_ID, actorUserId: ACTOR, favicon });
+    await clearSiteFavicon({ communityId: COMMUNITY_ID, actorUserId: ACTOR });
+    expect(getQuotaMock).not.toHaveBeenCalled();
+    expect(getUsageMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('getSiteSettings', () => {

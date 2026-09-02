@@ -38,7 +38,15 @@ export async function getCommunitySiteAssetsUsage(communityId: number): Promise<
   return typeof branding?.assetsBytesUsed === 'number' ? branding.assetsBytesUsed : 0;
 }
 
-async function getSiteAssetsQuotaBytes(communityId: number): Promise<number | null> {
+/**
+ * The plan's site-asset quota in bytes, or `null` when there is no limit
+ * (unprovisioned or unrecognised plan — fail-open, per the rules above).
+ *
+ * Exported for `site-settings-service`, which reports usage against quota on
+ * the settings record so the editor can show a meter. That is a READ; the
+ * counter itself stays writable only through the upload finalize routes.
+ */
+export async function getSiteAssetsQuotaBytes(communityId: number): Promise<number | null> {
   const db = createUnscopedClient();
   const rows = await db
     .select({ subscriptionPlan: communities.subscriptionPlan })

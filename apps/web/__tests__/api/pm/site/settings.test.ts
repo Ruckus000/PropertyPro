@@ -67,6 +67,7 @@ const RECORD = {
     favicon: null,
   },
   footer: { associationName: null, note: null, showStatutoryLine: false },
+  storage: { assetsBytesUsed: 1024, quotaBytes: 524288000 },
 };
 
 function patchRequest(body: unknown): NextRequest {
@@ -151,6 +152,51 @@ describe('PATCH — authorized', () => {
   it('accepts a PATCH carrying only communityId as a no-op', async () => {
     const res = await PATCH(patchRequest({ communityId: COMMUNITY_ID }));
     expect(res.status).toBe(200);
+  });
+
+  // The client writes the PATCH response into its cache AS the record, so the
+  // storage numbers have to ride on it — a GET-only field would blank the
+  // meter after every save.
+  it('returns the full record, storage included', async () => {
+    const res = await PATCH(patchRequest({ communityId: COMMUNITY_ID, seoTitle: 'x' }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.storage).toEqual(RECORD.storage);
+  });
+});
+
+describe('response contract canary — storage is required', () => {
+  // `storage` is required on the shared response schema precisely so that a
+  // route (or service) which forgets it fails LOUDLY: an opaque 500 and a
+  // logged contract violation, never a silently blank meter. This pins that
+  // the runner's response validation really is the canary, on both verbs.
+  const withoutStorage = { settings: RECORD.settings, footer: RECORD.footer };
+
+  it('GET 500s when the service result lacks storage', async () => {
+    getSiteSettingsMock.mockResolvedValue(withoutStorage);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await GET(getRequest());
+      expect(res.status).toBe(500);
+      expect((await res.json()).error.code).toBe('INTERNAL_ERROR');
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Contract response-validation failure:',
+        expect.anything(),
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('PATCH 500s when the service result lacks storage', async () => {
+    updateSiteSettingsMock.mockResolvedValue(withoutStorage);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await PATCH(patchRequest({ communityId: COMMUNITY_ID, seoTitle: 'x' }));
+      expect(res.status).toBe(500);
+      expect((await res.json()).error.code).toBe('INTERNAL_ERROR');
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

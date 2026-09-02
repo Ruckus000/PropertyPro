@@ -42,6 +42,7 @@ import { communities, logAuditEvent } from '@propertypro/db';
 // AUTHZ: Phase 8 site settings — communities is the root tenant table (no community_id column); the branding jsonb is readable/writable only by primary key. Route-layer ensurePmAccess verifies management-tier membership in the target community plus the hasSiteEditor plan feature.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { ValidationError } from '@/lib/api/errors';
+import { getCommunitySiteAssetsUsage, getSiteAssetsQuotaBytes } from '@/lib/site-assets/quota';
 import {
   FOOTER_ASSOCIATION_NAME_MAX_LENGTH,
   FOOTER_NOTE_MAX_LENGTH,
@@ -53,12 +54,23 @@ import {
   type SiteFaviconPaths,
   type SiteFooterSettings,
   type SiteSettings,
+  type SiteStorage,
 } from '@/lib/site-editor/site-settings';
 
 export interface SiteSettingsRecord {
   settings: SiteSettings;
   footer: SiteFooterSettings;
+  /**
+   * Read-only. Present on every record this module returns — GET and PATCH
+   * alike — because the client caches the PATCH response as the record. See
+   * the contract's `siteStorageSchema` for why it is required rather than
+   * optional.
+   */
+  storage: SiteStorage;
 }
+
+/** The two halves that live in `branding` and that a patch can change. */
+type SiteSettingsFields = Pick<SiteSettingsRecord, 'settings' | 'footer'>;
 
 /**
  * A patch field. `undefined` (absent) means unchanged; `null` clears.
@@ -90,12 +102,44 @@ async function readBranding(communityId: number): Promise<unknown> {
   return rows[0]?.branding ?? null;
 }
 
-export async function getSiteSettings(communityId: number): Promise<SiteSettingsRecord> {
+/**
+ * Settings + footer only, from one branding read. Used for the before/after
+ * snapshots the audit log needs, which have no use for the storage numbers and
+ * should not pay for the plan lookup that produces them.
+ */
+async function readSiteSettingsFields(communityId: number): Promise<SiteSettingsFields> {
   const branding = await readBranding(communityId);
   return {
     settings: resolveSiteSettings(branding),
     footer: resolveFooterSettings(branding),
   };
+}
+
+/**
+ * Photo storage usage against the plan quota.
+ *
+ * Exported for the editor page, which seeds the Site panel's query from its
+ * server render: `initialData` counts as fresh for the provider's `staleTime`,
+ * so the first paint has to show the same numbers the route would, from the
+ * same helpers.
+ *
+ * The two reads are independent — the branding counter and the plan — so they
+ * run in parallel.
+ */
+export async function getSiteStorage(communityId: number): Promise<SiteStorage> {
+  const [assetsBytesUsed, quotaBytes] = await Promise.all([
+    getCommunitySiteAssetsUsage(communityId),
+    getSiteAssetsQuotaBytes(communityId),
+  ]);
+  return { assetsBytesUsed, quotaBytes };
+}
+
+export async function getSiteSettings(communityId: number): Promise<SiteSettingsRecord> {
+  const [fields, storage] = await Promise.all([
+    readSiteSettingsFields(communityId),
+    getSiteStorage(communityId),
+  ]);
+  return { ...fields, storage };
 }
 
 type BrandingKey = 'siteSettings' | 'siteFooter';
@@ -183,7 +227,7 @@ export async function updateSiteSettings(
   params: UpdateSiteSettingsParams,
 ): Promise<SiteSettingsRecord> {
   const { communityId, actorUserId } = params;
-  const before = await getSiteSettings(communityId);
+  const before = await readSiteSettingsFields(communityId);
 
   const settingsPatch: Record<string, unknown> = {};
   const seoTitle = patchText(params.seoTitle, SEO_TITLE_MAX_LENGTH, 'seoTitle', 'A site title');
@@ -217,6 +261,8 @@ export async function updateSiteSettings(
 
   await mergeBranding(communityId, { siteSettings: settingsPatch, siteFooter: footerPatch });
 
+  // The full record, storage included: this is what the route returns and what
+  // the client writes into its cache in place of the GET result.
   const after = await getSiteSettings(communityId);
 
   // Two audit actions rather than one, because these are two different
@@ -262,7 +308,7 @@ export async function setSiteFavicon(params: {
   actorUserId: string;
   favicon: SiteFaviconPaths;
 }): Promise<{ previous: SiteFaviconPaths | null }> {
-  const before = await getSiteSettings(params.communityId);
+  const before = await readSiteSettingsFields(params.communityId);
   await mergeBranding(params.communityId, { siteSettings: { favicon: params.favicon } });
 
   await logAuditEvent({
@@ -283,7 +329,7 @@ export async function clearSiteFavicon(params: {
   communityId: number;
   actorUserId: string;
 }): Promise<{ previous: SiteFaviconPaths | null }> {
-  const before = await getSiteSettings(params.communityId);
+  const before = await readSiteSettingsFields(params.communityId);
   if (before.settings.favicon === null) return { previous: null };
 
   await mergeBranding(params.communityId, { siteSettings: { favicon: null } });

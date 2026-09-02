@@ -33,7 +33,9 @@ import {
   SEO_DESCRIPTION_MAX_LENGTH,
   SEO_TITLE_MAX_LENGTH,
   STATUTORY_FOOTER_LINE,
+  type SiteStorage,
 } from '@/lib/site-editor/site-settings';
+import { formatBytes } from '@/lib/utils/format-bytes';
 import {
   useSiteSettings,
   useUpdateSiteSettings,
@@ -71,6 +73,63 @@ function CharacterCount({ value, max }: { value: string; max: number }) {
     >
       {over ? `${Math.abs(remaining)} over` : `${remaining} left`}
     </span>
+  );
+}
+
+/**
+ * Photo storage against the plan quota. Read-only: the counter is charged by
+ * the upload routes, and the settings PATCH body cannot reach it.
+ *
+ * A null quota means the plan sets no limit, so only the usage is shown —
+ * drawing a bar would mean inventing a denominator. Over quota (reachable
+ * after a plan downgrade) the bar is full and the text says so; the colour
+ * change alone is not the signal.
+ */
+function StorageMeter({ storage }: { storage: SiteStorage }) {
+  const { assetsBytesUsed, quotaBytes } = storage;
+  const used = formatBytes(assetsBytesUsed);
+
+  if (quotaBytes === null) {
+    return (
+      <section aria-labelledby="site-storage-heading" className="space-y-2">
+        <h3 id="site-storage-heading" className="text-sm font-semibold text-content">
+          Photo storage
+        </h3>
+        <p className="text-sm text-content-tertiary">{used} used</p>
+      </section>
+    );
+  }
+
+  const percent = Math.min(100, Math.round((assetsBytesUsed / quotaBytes) * 100));
+  const overQuota = assetsBytesUsed > quotaBytes;
+  const summary = `${used} of ${formatBytes(quotaBytes)} used`;
+
+  return (
+    <section aria-labelledby="site-storage-heading" className="space-y-2">
+      <h3 id="site-storage-heading" className="text-sm font-semibold text-content">
+        Photo storage
+      </h3>
+      <div
+        role="progressbar"
+        aria-label="Photo storage used"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuetext={summary}
+        className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+      >
+        <div
+          className={
+            overQuota ? 'h-full rounded-full bg-status-danger' : 'h-full rounded-full bg-interactive'
+          }
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="text-sm text-content-tertiary">
+        {summary}
+        {overQuota ? ' — over your plan’s limit' : null}
+      </p>
+    </section>
   );
 }
 
@@ -275,6 +334,14 @@ export function SitePanel({
           </p>
         </div>
       </section>
+
+      {/*
+        Next to the icon upload — the one control on this panel that consumes
+        it — and above the footer, so the Save block below stays attached to
+        the fields it saves. Guarded because `useSiteSettings` can resolve
+        undefined before the first fetch.
+      */}
+      {record?.storage ? <StorageMeter storage={record.storage} /> : null}
 
       <section aria-labelledby="site-footer-heading" className="space-y-4">
         <h3 id="site-footer-heading" className="text-sm font-semibold text-content">
