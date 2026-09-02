@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TextForm } from '@/components/pm/site-editor-v3/inspector/forms/TextForm';
+import { settleAutosave } from './autosave-harness';
 
 const upsertMock = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
@@ -23,8 +24,6 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useUpsertContentBlock: () => ({ mutateAsync: upsertMock, isPending: false }),
 }));
 
-const DEBOUNCE_MS = 800;
-
 function renderForm(content: unknown) {
   return render(
     <TextForm communityId={42} blockType="text" blockOrder={3} content={content} />,
@@ -32,12 +31,6 @@ function renderForm(content: unknown) {
 }
 
 /** Advance past the autosave debounce and let the write settle. */
-async function settleAutosave() {
-  await act(async () => {
-    vi.advanceTimersByTime(DEBOUNCE_MS + 50);
-    await Promise.resolve();
-  });
-}
 
 beforeEach(() => {
   upsertMock.mockReset();

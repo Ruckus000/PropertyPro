@@ -7,8 +7,7 @@
  * gate exists at all.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor } from '@testing-library/react';
 import { galleryBlockSchema } from '@propertypro/shared';
 import { GalleryForm } from '@/components/pm/site-editor-v3/inspector/forms/GalleryForm';
 
@@ -25,19 +24,7 @@ vi.mock('@/hooks/use-image-upload', () => ({
   useImageUpload: () => ({ mutateAsync: uploadMock, isPending: false }),
 }));
 
-const DEBOUNCE_MS = 800;
-
-async function settleAutosave() {
-  await act(async () => {
-    vi.advanceTimersByTime(DEBOUNCE_MS + 50);
-    await Promise.resolve();
-  });
-}
-
-function setupTimers() {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-}
+import { setupTimers, settleAutosave } from './autosave-harness';
 
 function renderForm(content: unknown) {
   return render(
