@@ -33,9 +33,23 @@ export class QuotaExceededError extends AppError {
   }
 }
 
+/**
+ * The stored counter, or 0 when unset or malformed. Pure — the read side of
+ * `applyAssetsUsageDelta`, whose `COALESCE(..., 0)` this mirrors.
+ *
+ * Exported so a caller that already holds the branding blob (the settings
+ * service, the editor page) resolves usage from it rather than re-reading the
+ * row: usage then has no failure mode of its own, separate from the read that
+ * produced everything else on the panel.
+ */
+export function resolveAssetsBytesUsed(rawBranding: unknown): number {
+  if (typeof rawBranding !== 'object' || rawBranding === null) return 0;
+  const value = (rawBranding as { assetsBytesUsed?: unknown }).assetsBytesUsed;
+  return typeof value === 'number' ? value : 0;
+}
+
 export async function getCommunitySiteAssetsUsage(communityId: number): Promise<number> {
-  const branding = await getBrandingForCommunity(communityId);
-  return typeof branding?.assetsBytesUsed === 'number' ? branding.assetsBytesUsed : 0;
+  return resolveAssetsBytesUsed(await getBrandingForCommunity(communityId));
 }
 
 /**

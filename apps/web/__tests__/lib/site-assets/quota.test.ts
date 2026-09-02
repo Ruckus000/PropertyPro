@@ -58,6 +58,7 @@ vi.mock('@propertypro/shared', () => ({
 import {
   getCommunitySiteAssetsUsage,
   getSiteAssetsQuotaBytes,
+  resolveAssetsBytesUsed,
   assertWithinQuota,
   incrementAssetsUsage,
   decrementAssetsUsage,
@@ -80,6 +81,23 @@ describe('getCommunitySiteAssetsUsage', () => {
   it('returns 0 when assetsBytesUsed is unset', async () => {
     getBrandingMock.mockResolvedValueOnce({ primaryColor: '#fff' });
     expect(await getCommunitySiteAssetsUsage(42)).toBe(0);
+  });
+});
+
+// The pure read side of the counter, for callers that already hold the
+// branding blob. Mirrors `COALESCE(..., 0)` in the atomic UPDATE.
+describe('resolveAssetsBytesUsed', () => {
+  it('returns the stored counter', () => {
+    expect(resolveAssetsBytesUsed({ assetsBytesUsed: 12345 })).toBe(12345);
+  });
+
+  it.each([
+    ['null branding', null],
+    ['an empty object', {}],
+    ['a non-object blob', 'not an object'],
+    ['a non-numeric counter', { assetsBytesUsed: '12345' }],
+  ])('returns 0 for %s', (_label, raw) => {
+    expect(resolveAssetsBytesUsed(raw)).toBe(0);
   });
 });
 

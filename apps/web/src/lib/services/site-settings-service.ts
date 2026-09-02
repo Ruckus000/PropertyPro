@@ -30,6 +30,7 @@
  * values live inside a jsonb blob rather than in columns of their own. This
  * module is therefore the authoritative layer.
  */
+import { captureMessage } from '@sentry/nextjs';
 import { eq, sql } from '@propertypro/db/filters';
 import { communities, logAuditEvent } from '@propertypro/db';
 // Phase 8 site settings — communities is the ROOT tenant table: it has no
@@ -42,7 +43,7 @@ import { communities, logAuditEvent } from '@propertypro/db';
 // AUTHZ: Phase 8 site settings — communities is the root tenant table (no community_id column); the branding jsonb is readable/writable only by primary key. Route-layer ensurePmAccess verifies management-tier membership in the target community plus the hasSiteEditor plan feature.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { ValidationError } from '@/lib/api/errors';
-import { getCommunitySiteAssetsUsage, getSiteAssetsQuotaBytes } from '@/lib/site-assets/quota';
+import { getSiteAssetsQuotaBytes, resolveAssetsBytesUsed } from '@/lib/site-assets/quota';
 import {
   FOOTER_ASSOCIATION_NAME_MAX_LENGTH,
   FOOTER_NOTE_MAX_LENGTH,
@@ -102,44 +103,72 @@ async function readBranding(communityId: number): Promise<unknown> {
   return rows[0]?.branding ?? null;
 }
 
-/**
- * Settings + footer only, from one branding read. Used for the before/after
- * snapshots the audit log needs, which have no use for the storage numbers and
- * should not pay for the plan lookup that produces them.
- */
-async function readSiteSettingsFields(communityId: number): Promise<SiteSettingsFields> {
-  const branding = await readBranding(communityId);
+/** Settings + footer, resolved from one branding blob. Total, like the resolvers. */
+function resolveFields(rawBranding: unknown): SiteSettingsFields {
   return {
-    settings: resolveSiteSettings(branding),
-    footer: resolveFooterSettings(branding),
+    settings: resolveSiteSettings(rawBranding),
+    footer: resolveFooterSettings(rawBranding),
   };
 }
 
 /**
- * Photo storage usage against the plan quota.
- *
- * Exported for the editor page, which seeds the Site panel's query from its
- * server render: `initialData` counts as fresh for the provider's `staleTime`,
- * so the first paint has to show the same numbers the route would, from the
- * same helpers.
- *
- * The two reads are independent — the branding counter and the plan — so they
- * run in parallel.
+ * Settings + footer only, from one branding read. Used for the before
+ * snapshot the audit log needs, which has no use for the storage numbers and
+ * should not pay for the plan lookup that produces them.
  */
-export async function getSiteStorage(communityId: number): Promise<SiteStorage> {
-  const [assetsBytesUsed, quotaBytes] = await Promise.all([
-    getCommunitySiteAssetsUsage(communityId),
-    getSiteAssetsQuotaBytes(communityId),
-  ]);
-  return { assetsBytesUsed, quotaBytes };
+async function readSiteSettingsFields(communityId: number): Promise<SiteSettingsFields> {
+  return resolveFields(await readBranding(communityId));
 }
 
+/**
+ * The plan's storage quota for the meter, or null when it cannot be read.
+ *
+ * This is the ONE read on the settings path that touches something other than
+ * the branding row — the plan string — and it is purely informational: it
+ * draws a bar. A transient failure here must not 500 the settings read, turn
+ * a committed save into a false "save failed", or (through the editor page's
+ * seed) take down the whole editor for a manager who came to move a block. So
+ * it degrades to null, which the schema, the type and the meter already treat
+ * as "no limit — show usage only". Same shape as `loadInitialPages` on the
+ * editor page: degraded, but never silently — Sentry gets a warning.
+ *
+ * Contrast `assertWithinQuota` on the UPLOAD path, which fails closed. That
+ * one enforces the limit; this one only reports it.
+ *
+ * Exported for the editor page, so the seed and the route degrade at the same
+ * single point.
+ */
+export async function loadSiteQuotaBytes(communityId: number): Promise<number | null> {
+  try {
+    return await getSiteAssetsQuotaBytes(communityId);
+  } catch (error) {
+    captureMessage('site_settings_storage_quota_failure', {
+      level: 'warning',
+      extra: {
+        communityId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return null;
+  }
+}
+
+/**
+ * The full record, storage included.
+ *
+ * Usage is resolved from the SAME branding read as the settings — never a
+ * second read of the row — so it has no failure mode of its own: if that read
+ * fails, nothing on the panel can render anyway, and propagating is right. The
+ * quota is the only extra read, and it degrades (above). The two run in
+ * parallel.
+ */
 export async function getSiteSettings(communityId: number): Promise<SiteSettingsRecord> {
-  const [fields, storage] = await Promise.all([
-    readSiteSettingsFields(communityId),
-    getSiteStorage(communityId),
+  const [branding, quotaBytes] = await Promise.all([
+    readBranding(communityId),
+    loadSiteQuotaBytes(communityId),
   ]);
-  return { ...fields, storage };
+  const storage: SiteStorage = { assetsBytesUsed: resolveAssetsBytesUsed(branding), quotaBytes };
+  return { ...resolveFields(branding), storage };
 }
 
 type BrandingKey = 'siteSettings' | 'siteFooter';
@@ -164,11 +193,11 @@ type BrandingKey = 'siteSettings' | 'siteFooter';
  */
 async function mergeBranding(
   communityId: number,
-  patches: Partial<Record<BrandingKey, Record<string, unknown>>>,
+  patches: Partial<Record<BrandingKey, object>>,
 ): Promise<void> {
-  const entries = (
-    Object.entries(patches) as [BrandingKey, Record<string, unknown>][]
-  ).filter(([, patch]) => Object.keys(patch).length > 0);
+  const entries = (Object.entries(patches) as [BrandingKey, object][]).filter(
+    ([, patch]) => Object.keys(patch).length > 0,
+  );
   if (entries.length === 0) return;
 
   let expr = sql`COALESCE(branding, '{}'::jsonb)`;
@@ -229,7 +258,9 @@ export async function updateSiteSettings(
   const { communityId, actorUserId } = params;
   const before = await readSiteSettingsFields(communityId);
 
-  const settingsPatch: Record<string, unknown> = {};
+  // Typed as partial records rather than loose maps so the audit's `newValues`
+  // below can be built from them and still BE a SiteSettings / SiteFooterSettings.
+  const settingsPatch: Partial<SiteSettings> = {};
   const seoTitle = patchText(params.seoTitle, SEO_TITLE_MAX_LENGTH, 'seoTitle', 'A site title');
   if (seoTitle !== undefined) settingsPatch.seoTitle = seoTitle;
 
@@ -243,7 +274,7 @@ export async function updateSiteSettings(
 
   if (params.searchIndexing !== undefined) settingsPatch.searchIndexing = params.searchIndexing;
 
-  const footerPatch: Record<string, unknown> = {};
+  const footerPatch: Partial<SiteFooterSettings> = {};
   const associationName = patchText(
     params.associationName,
     FOOTER_ASSOCIATION_NAME_MAX_LENGTH,
@@ -261,14 +292,20 @@ export async function updateSiteSettings(
 
   await mergeBranding(communityId, { siteSettings: settingsPatch, siteFooter: footerPatch });
 
-  // The full record, storage included: this is what the route returns and what
-  // the client writes into its cache in place of the GET result.
-  const after = await getSiteSettings(communityId);
-
+  // The write is committed — `mergeBranding` is a standalone statement, not a
+  // transaction. Audit it NOW, from the snapshot and the patch already in hand,
+  // never from a read that could fail after the write has landed: that would
+  // leave a committed, public-facing change with no trail (and hand the
+  // manager a false "save failed" on top). The merged values ARE `before`
+  // overlaid with the normalised patch — the merge is a jsonb `||` on exactly
+  // these keys, and the resolver hands normalised text back unchanged — so
+  // this is byte-identical to reading them back, minus the read.
+  //
   // Two audit actions rather than one, because these are two different
   // decisions with different reviewers: SEO is a marketing choice, the footer's
   // statutory line is one the association's counsel may need to see.
   if (Object.keys(settingsPatch).length > 0) {
+    const afterSettings: SiteSettings = { ...before.settings, ...settingsPatch };
     await logAuditEvent({
       userId: actorUserId,
       communityId,
@@ -276,11 +313,12 @@ export async function updateSiteSettings(
       resourceType: 'community',
       resourceId: String(communityId),
       oldValues: { siteSettings: before.settings },
-      newValues: { siteSettings: after.settings },
+      newValues: { siteSettings: afterSettings },
     });
   }
 
   if (Object.keys(footerPatch).length > 0) {
+    const afterFooter: SiteFooterSettings = { ...before.footer, ...footerPatch };
     await logAuditEvent({
       userId: actorUserId,
       communityId,
@@ -288,11 +326,14 @@ export async function updateSiteSettings(
       resourceType: 'community',
       resourceId: String(communityId),
       oldValues: { siteFooter: before.footer },
-      newValues: { siteFooter: after.footer },
+      newValues: { siteFooter: afterFooter },
     });
   }
 
-  return after;
+  // The response is a fresh read — the record as stored, storage included,
+  // which the client caches in place of the GET result. A failure here 500s
+  // the response; it cannot un-audit the write above.
+  return getSiteSettings(communityId);
 }
 
 /**

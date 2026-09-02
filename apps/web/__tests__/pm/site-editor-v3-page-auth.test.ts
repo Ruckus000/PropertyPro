@@ -21,6 +21,8 @@ const requireAuthMock = vi.hoisted(() => vi.fn());
 const requireMembershipMock = vi.hoisted(() => vi.fn());
 const featuresMock = vi.hoisted(() => vi.fn());
 const shellContextMock = vi.hoisted(() => vi.fn());
+const quotaLookupMock = vi.hoisted(() => vi.fn());
+const captureMessageMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('@/lib/request/page-auth-context', () => ({
@@ -64,8 +66,39 @@ vi.mock('@/lib/utils/community-url', () => ({
 vi.mock('@/lib/site-editor/load-canvas-context', () => ({
   loadCanvasContext: vi.fn().mockResolvedValue(null),
 }));
+// The storage meter's plan lookup. Mocked PARTIALLY, on purpose: the pure
+// usage resolver stays real, and so does the service's degrading wrapper that
+// the page reaches the lookup through — the point of the storage tests below
+// is that a failure at this seam is survived by the page, which only holds if
+// the wrapper between them is the real one.
+vi.mock('@/lib/site-assets/quota', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/site-assets/quota')>()),
+  getSiteAssetsQuotaBytes: quotaLookupMock,
+}));
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock }));
 
 import WebsiteEditorV3Page from '@/app/(site-editor)/pm/website-editor/page';
+import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
+import { getBrandingForCommunity } from '@/lib/api/branding';
+
+/**
+ * Depth-first search of the element tree the page returns for the EditorRoot
+ * element's props. EditorRoot is mocked to render nothing, so its props are
+ * only observable on the element itself.
+ */
+function findEditorRootProps(node: unknown): Record<string, unknown> | null {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findEditorRootProps(child);
+      if (found) return found;
+    }
+    return null;
+  }
+  const element = node as { type?: unknown; props?: Record<string, unknown> };
+  if (element.type === EditorRoot) return element.props ?? null;
+  return findEditorRootProps(element.props?.['children']);
+}
 
 const ACTIVE_MEMBERSHIP = {
   userId: 'user-1',
@@ -107,6 +140,46 @@ beforeEach(() => {
   requireMembershipMock.mockResolvedValue({ ...ACTIVE_MEMBERSHIP });
   featuresMock.mockResolvedValue({ hasSiteEditor: true });
   shellContextMock.mockResolvedValue({ user: { id: 'user-1', fullName: 'Jordan Rivera', email: null } });
+  quotaLookupMock.mockResolvedValue(null);
+});
+
+describe('v3 editor page — storage meter seed', () => {
+  const QUOTA_500_MB = 500 * 1024 * 1024;
+
+  function renderPage() {
+    return WebsiteEditorV3Page({
+      searchParams: Promise.resolve({ communityId: '7' } as Record<string, string>),
+    });
+  }
+
+  it('seeds the meter from the cached branding read and the plan quota', async () => {
+    vi.mocked(getBrandingForCommunity).mockResolvedValueOnce({ assetsBytesUsed: 2048 });
+    quotaLookupMock.mockResolvedValueOnce(QUOTA_500_MB);
+
+    const props = findEditorRootProps(await renderPage());
+
+    expect(props?.['initialSiteSettings']).toMatchObject({
+      storage: { assetsBytesUsed: 2048, quotaBytes: QUOTA_500_MB },
+    });
+  });
+
+  // A manager who came to move a block must not meet an error boundary because
+  // the plan lookup behind a storage bar hiccuped. There is no route-group
+  // error.tsx here — the root one would swallow the whole editor. Same trade
+  // `loadInitialPages` makes, and like it, not silent: Sentry gets a warning.
+  it('survives a quota lookup failure — the meter degrades, the editor does not', async () => {
+    quotaLookupMock.mockRejectedValueOnce(new Error('plan lookup down'));
+
+    const props = findEditorRootProps(await renderPage());
+
+    expect(props?.['initialSiteSettings']).toMatchObject({
+      storage: { assetsBytesUsed: 0, quotaBytes: null },
+    });
+    expect(captureMessageMock).toHaveBeenCalledWith(
+      'site_settings_storage_quota_failure',
+      expect.objectContaining({ level: 'warning' }),
+    );
+  });
 });
 
 describe('v3 editor page — community scope', () => {
