@@ -192,6 +192,22 @@ const config: Config = {
           'brand-border': 'var(--status-brand-border)',
           'brand-subtle': 'var(--status-brand-subtle)',
 
+          // `owner` (violet) and `board` (pink) are StatusVariant members in
+          // packages/ui and their tokens are defined in tokens.css, but this
+          // config never declared them — so getStatusClasses('owner') returned
+          // classes that emitted NO CSS and StatusDot rendered invisibly.
+          // apps/admin/tailwind.config.ts already carries them for the same
+          // reason. Guarded by `pnpm guard:web-semantic-css`.
+          owner: 'var(--status-owner)',
+          'owner-bg': 'var(--status-owner-bg)',
+          'owner-border': 'var(--status-owner-border)',
+          'owner-subtle': 'var(--status-owner-subtle)',
+
+          board: 'var(--status-board)',
+          'board-bg': 'var(--status-board-bg)',
+          'board-border': 'var(--status-board-border)',
+          'board-subtle': 'var(--status-board-subtle)',
+
           premium: 'var(--status-premium)',
           'premium-bg': 'var(--status-premium-bg)',
           'premium-border': 'var(--status-premium-border)',

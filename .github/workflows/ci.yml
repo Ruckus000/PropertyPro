@@ -194,6 +194,17 @@ jobs:
       - name: Run admin unit tests
         run: pnpm --filter '@propertypro/admin' test
 
+      # `scripts/` is NOT a workspace package, so no `pnpm --filter` can reach
+      # it and the `working-directory: apps/web` step above never sees it. Its
+      # tests were therefore matched by scripts/vitest.config.ts (via the root
+      # vitest.workspace.ts) but executed nowhere in CI -- 137 of them, only
+      # ever run by a human typing root `pnpm test`. `--project scripts` from
+      # the repo root is the invocation that works: `--config
+      # scripts/vitest.config.ts` would root vitest at the CWD instead of the
+      # config's directory, match zero files, and exit 0.
+      - name: Run scripts unit tests
+        run: pnpm exec vitest run --project scripts
+
       - name: Report coverage summary
         if: always()
         run: |

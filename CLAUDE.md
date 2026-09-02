@@ -228,6 +228,19 @@ pnpm guard:class-resolution     # Every colour utility class in apps/web/src mus
 > `guard:design-tokens`. Tri-state exit: 0 clean / 1 violations / 2 could-not-check.
 > Note a class emitting CSS still does not prove the control is *visible* — see
 > `apps/web/__tests__/accessibility/switch-contrast.test.ts`.
+>
+> It scans **`apps/web/src` + `packages/ui/src`** — both roots the web config
+> lists in `content`, so a packages/ui class that resolves to nothing renders as
+> no style in web exactly like one written in apps/web (apps/admin's guard scans
+> only `apps/admin/src`, so nothing else covers it). Extraction uses the
+> **TypeScript parser**, not a regex over the raw text: a quote-delimited regex
+> cannot tell a string from a REGEX LITERAL or from JSX TEXT, so `const re =
+> /"/g` and `<p>Don't stop</p>` each swallow whatever follows on their line. It
+> also flags class names **assembled at runtime** (`` `bg-status-${v}` ``,
+> `cls.replace("text-", "bg-")`), which Tailwind's source-text scanner can never
+> see — that is a separate failure from an undefined class, and `StatusDot` had
+> both at once. The parser's own failure detector is self-tested before the scan
+> is trusted, because `parseDiagnostics` is a TS internal.
 
 > **Page padding (`guard:page-padding`):** the authenticated page gutter (horizontal
 > `px`, vertical `py`, and centred max-width) is single-sourced in **one** place —

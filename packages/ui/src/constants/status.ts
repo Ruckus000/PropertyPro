@@ -59,13 +59,78 @@ export function getStatusConfig(status: StatusKey | string): StatusConfigEntry {
 
 /**
  * Maps a StatusVariant to Tailwind semantic token classes.
- * Returns { text, bg, border, subtle } class strings.
+ * Returns { text, bg, border, subtle, dot } class strings.
+ *
+ * WRITTEN OUT IN FULL, DELIBERATELY. These were built by interpolation
+ * (`text-status-${variant}`), which Tailwind's scanner cannot see: it reads
+ * source TEXT, so an assembled class name is never a candidate and never
+ * emits CSS. The variants happened to render only because other files spell
+ * `text-status-danger` and friends out statically; `owner` and `board`, which
+ * nothing else spells out, silently rendered as no colour at all.
+ *
+ * Any new StatusVariant must be added here as literal strings AND declared in
+ * the consuming app's Tailwind config. `pnpm guard:web-semantic-css` fails on
+ * both mistakes.
  */
+const STATUS_CLASSES = {
+  success: {
+    text: "text-status-success",
+    bg: "bg-status-success-bg",
+    border: "border-status-success-border",
+    subtle: "bg-status-success-subtle",
+    dot: "bg-status-success",
+  },
+  brand: {
+    text: "text-status-brand",
+    bg: "bg-status-brand-bg",
+    border: "border-status-brand-border",
+    subtle: "bg-status-brand-subtle",
+    dot: "bg-status-brand",
+  },
+  warning: {
+    text: "text-status-warning",
+    bg: "bg-status-warning-bg",
+    border: "border-status-warning-border",
+    subtle: "bg-status-warning-subtle",
+    dot: "bg-status-warning",
+  },
+  danger: {
+    text: "text-status-danger",
+    bg: "bg-status-danger-bg",
+    border: "border-status-danger-border",
+    subtle: "bg-status-danger-subtle",
+    dot: "bg-status-danger",
+  },
+  info: {
+    text: "text-status-info",
+    bg: "bg-status-info-bg",
+    border: "border-status-info-border",
+    subtle: "bg-status-info-subtle",
+    dot: "bg-status-info",
+  },
+  neutral: {
+    text: "text-status-neutral",
+    bg: "bg-status-neutral-bg",
+    border: "border-status-neutral-border",
+    subtle: "bg-status-neutral-subtle",
+    dot: "bg-status-neutral",
+  },
+  owner: {
+    text: "text-status-owner",
+    bg: "bg-status-owner-bg",
+    border: "border-status-owner-border",
+    subtle: "bg-status-owner-subtle",
+    dot: "bg-status-owner",
+  },
+  board: {
+    text: "text-status-board",
+    bg: "bg-status-board-bg",
+    border: "border-status-board-border",
+    subtle: "bg-status-board-subtle",
+    dot: "bg-status-board",
+  },
+} as const satisfies Record<StatusVariant, Record<string, string>>;
+
 export function getStatusClasses(variant: StatusVariant) {
-  return {
-    text: `text-status-${variant}`,
-    bg: `bg-status-${variant}-bg`,
-    border: `border-status-${variant}-border`,
-    subtle: `bg-status-${variant}-subtle`,
-  } as const;
+  return STATUS_CLASSES[variant] ?? STATUS_CLASSES.neutral;
 }
