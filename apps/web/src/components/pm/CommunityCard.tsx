@@ -39,7 +39,7 @@ export function CommunityCard({ community }: CommunityCardProps) {
   return (
     <Link
       href={`/pm/dashboard/${community.communityId}`}
-      className="block rounded-md border border-edge bg-surface-card p-5 shadow-e0 transition-shadow duration-quick hover:shadow-e1 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className="block rounded-md border border-edge bg-surface-card p-5 shadow-e0 transition-shadow duration-quick hover:shadow-e1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       aria-label={`Open dashboard for ${community.communityName}`}
     >
       <div className="flex items-start justify-between gap-2">

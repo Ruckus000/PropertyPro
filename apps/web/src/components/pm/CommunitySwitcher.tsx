@@ -86,7 +86,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
         aria-expanded={isOpen}
         aria-controls={listboxId}
         onClick={handleButtonClick}
-        className="flex items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-sm font-medium text-content shadow-e0 hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="flex items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3 py-2 text-sm font-medium text-content shadow-e0 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <span className="truncate max-w-[200px]">
           {currentCommunity ? currentCommunity.communityName : 'Switch Community'}
@@ -148,7 +148,7 @@ export function CommunitySwitcher({ communities, currentCommunityId }: Community
                       role="option"
                       aria-selected={community.communityId === currentCommunityId}
                       onClick={() => handleSelect(community)}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-surface-hover focus:bg-surface-hover focus:outline-none ${
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-surface-hover focus:bg-surface-hover focus-visible:outline-none ${
                         community.communityId === currentCommunityId
                           ? 'bg-surface-hover font-medium text-content-link'
                           : 'text-content'

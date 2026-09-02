@@ -177,7 +177,7 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
         <a
           href={`/pm/onboarding/website?communityId=${community.communityId}`}
           aria-label={`Customize the public site for ${community.communityName} (${label})`}
-          className="inline-flex rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
+          className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         >
           <StatusBadge status={statusKey} label={label} size="sm" subtle />
         </a>

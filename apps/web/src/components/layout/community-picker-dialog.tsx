@@ -122,7 +122,7 @@ export function CommunityPickerDialog({
                   <li key={community.id}>
                     <a
                       href={destinationFor(community.id)}
-                      className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-3 text-left transition-colors hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       aria-label={`Open ${itemLabel ?? 'this page'} for ${community.name}`}
                     >
                       <span className="min-w-0 flex-1 truncate text-sm font-medium text-content">

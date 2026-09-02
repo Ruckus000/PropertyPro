@@ -58,7 +58,7 @@ export function ExportButton({ communityId }: ExportButtonProps) {
         onClick={handleExport}
         disabled={loading}
         aria-busy={loading}
-        className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus:outline-none focus:ring-2 focus:ring-focus focus:ring-offset-2 disabled:opacity-50"
+        className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:opacity-50"
       >
         {loading ? 'Exporting…' : 'Download CSV export'}
       </button>

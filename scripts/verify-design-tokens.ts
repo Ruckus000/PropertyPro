@@ -38,7 +38,17 @@
 import { readdirSync, readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const ROOTS = ['apps/web/src', 'apps/admin/src'];
+// `only` restricts a root to a subset of the rules. The design system DEFINES
+// the tokens, so it legitimately holds hex literals and raw ramps
+// (`styles/tokens.css` alone has 116 raw-hex, `tokens/shadows.ts` 10 rgba) —
+// baselining those would record the token source as if it were in violation.
+// It is still the highest-value place to forbid a keyboard-blind focus ring,
+// since its components ship to both apps.
+const ROOTS: Array<{ dir: string; only?: readonly string[] }> = [
+  { dir: 'apps/web/src' },
+  { dir: 'apps/admin/src' },
+  { dir: 'packages/ui/src', only: ['bare-focus-ring'] },
+];
 const BASELINE_PATH = 'scripts/design-token-baseline.json';
 
 const PALETTE_NAMES =
@@ -80,7 +90,28 @@ const RULES: Record<string, RegExp> = {
   // alpha genuinely compiles there, and using them at all is already caught by
   // the raw-palette rule. apps/admin's ramps (coral/blue/gray) are all hex too.
   'slash-opacity-semantic':
-    /\b(?:bg|text|border|ring|from|via|to|divide|outline|placeholder|fill|stroke|ring-offset|decoration|accent|caret)-(?:content|surface|edge|interactive|status|primary|secondary|accent|nav)[a-z-]*\/\d+/g,
+    /\b(?:bg|text|border|ring|from|via|to|divide|outline|placeholder|fill|stroke|ring-offset|decoration|accent|caret)-(?:content|surface|edge|interactive|status|primary|secondary|accent|nav)[a-z-]*\/\d+|\b(?:ring-offset|ring)-(?:focus|error)[a-z-]*\/\d+/g,
+  // A bare `focus:` ring paints on MOUSE and PROGRAMMATIC focus, not just
+  // keyboard focus — `:focus` matches whenever the element holds focus, however
+  // it got there. It shipped that way on the Dialog/Sheet close buttons and the
+  // Select trigger: Radix autofocuses the first focusable element when a dialog
+  // opens, so a purely mouse-driven open painted a coral ring. Use the
+  // `focus-visible:` variant, which the browser gates on keyboard intent.
+  //
+  // `shadow` is listed alongside `ring` because a box-shadow is the other way to
+  // draw a ring. The trailing `(?:-|(?![\w-]))` matters: Tailwind's BARE `ring`
+  // and `shadow` utilities carry no hyphen (`focus:ring` is a real 3px ring), so
+  // requiring one let the most natural shorthand reintroduction through. The
+  // lookbehind requires a real variant boundary so `group-focus:` (a distinct,
+  // legitimate variant) is not swept up, and `focus-visible:` never matches since
+  // it contains no `focus:` substring.
+  //
+  // `focus:outline-*` is counted by scanContent only when a bare focus ring sits
+  // on the SAME line — a lone `focus:outline-none` is the idiomatic way to quiet
+  // a focus CONTAINER that deliberately shows no ring (Radix `Dialog.Content`),
+  // and the global `:focus:not(:focus-visible){outline:none}` in tokens.css
+  // already covers the mouse case there.
+  'bare-focus-ring': /(?<![\w-])focus:(?:ring|shadow)(?:-|(?![\w-]))/g,
 };
 
 type Counts = Record<string, number>;
@@ -94,14 +125,24 @@ type Counts = Record<string, number>;
 // code and must count.
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|\{\/\*)/;
 
-function scanContent(src: string): Counts {
+// Counted only on lines that already carry a bare focus ring — see 'bare-focus-ring'.
+const BARE_FOCUS_OUTLINE = /(?<![\w-])focus:outline(?:-|(?![\w-]))/g;
+
+function scanContent(src: string, only?: readonly string[]): Counts {
   const counts: Counts = {};
   for (const line of src.split('\n')) {
     if (line.includes('design-tokens:exempt')) continue;
     for (const [rule, re] of Object.entries(RULES)) {
+      if (only && !only.includes(rule)) continue;
       if (rule === 'raw-hex' && COMMENT_LINE.test(line)) continue;
       const n = (line.match(re) ?? []).length;
       if (n > 0) counts[rule] = (counts[rule] ?? 0) + n;
+      // Outline suppression only counts as part of the keyboard-blind pattern
+      // when it accompanies a bare focus ring on the same line (see the rule's
+      // docblock); on its own it is a legitimate focus-container idiom.
+      if (rule === 'bare-focus-ring' && n > 0) {
+        counts[rule] += (line.match(BARE_FOCUS_OUTLINE) ?? []).length;
+      }
     }
   }
   return counts;
@@ -158,6 +199,40 @@ function selftest(): void {
     // Hex ramps: alpha genuinely compiles, so this rule must stay quiet
     // (using them at all is raw-palette's job, not this one's).
     ['slash-opacity-semantic', 'className="bg-blue-500/20 text-gray-700/50"', 0],
+    // `ringColor` has its own bare-var groups (focus, error) that live outside
+    // the `colors` families above. `ring-focus/20` shipped on four auth submit
+    // buttons and emitted ZERO css, so the ring fell back to Tailwind's default
+    // color instead of the coral token.
+    ['slash-opacity-semantic', 'className="focus-visible:ring-focus/20 ring-error/50"', 2],
+    ['slash-opacity-semantic', 'className="focus-visible:ring-focus ring-error"', 0],
+    // `focus`/`error` exist ONLY under ringColor, so they must be scoped to the
+    // ring prefixes — `text-error/50` is not a class Tailwind ever generates.
+    ['slash-opacity-semantic', 'className="text-error/50 bg-focus/20"', 0],
+    ['slash-opacity-semantic', 'className="ring-offset-focus/20"', 1],
+    // A bare `focus:` ring is keyboard-blind; `focus-visible:` is the correct
+    // variant. Variant-prefixed forms (md:, dark:, hover:) must still be caught —
+    // anchoring on whitespace alone is what let `md:focus:ring-2` through.
+    ['bare-focus-ring', 'className="focus:outline-none focus:ring-2 focus:ring-focus"', 3],
+    ['bare-focus-ring', 'className="md:focus:ring-2 dark:focus:ring-2"', 2],
+    ['bare-focus-ring', 'className="hover:focus:outline-none focus:shadow-lg"', 2],
+    // The correct form, and non-ring `focus:` utilities (Radix menu items key
+    // off `focus:bg-*`), must stay quiet.
+    ['bare-focus-ring', 'className="focus-visible:outline-none focus-visible:ring-2"', 0],
+    ['bare-focus-ring', 'className="focus:bg-surface-hover focus:text-content"', 0],
+    // `group-focus:` is a distinct variant, not a bare focus ring.
+    ['bare-focus-ring', 'className="group-focus:ring-2"', 0],
+    // Tailwind's BARE utilities carry no hyphen. `focus:ring` is a real 3px
+    // `:focus`-gated ring and `focus:shadow` a real `:focus` box-shadow, so
+    // requiring `ring-`/`shadow-` let the commonest shorthand through.
+    ['bare-focus-ring', 'className="focus:ring"', 1],
+    ['bare-focus-ring', 'className="focus:shadow"', 1],
+    ['bare-focus-ring', 'className="md:focus:ring"', 1],
+    ['bare-focus-ring', 'className="focus:ring focus:outline-none"', 2],
+    // …but a bare word that merely STARTS with ring/shadow is not a ring.
+    ['bare-focus-ring', 'className="focus:ringer"', 0],
+    // A lone `focus:outline-none` is the focus-CONTAINER idiom (Radix
+    // Dialog.Content) and must not be flagged without a ring on the line.
+    ['bare-focus-ring', 'className="outline-none focus:outline-none"', 0],
   ];
   for (const [rule, input, expected] of cases) {
     const got = scanContent(input)[rule] ?? 0;
@@ -176,8 +251,8 @@ if (process.argv.includes('--selftest')) {
 // ── Scan ──
 const current = new Map<string, Counts>();
 for (const root of ROOTS) {
-  for (const file of walk(root)) {
-    const counts = scanContent(readFileSync(file, 'utf8'));
+  for (const file of walk(root.dir)) {
+    const counts = scanContent(readFileSync(file, 'utf8'), root.only);
     if (Object.keys(counts).length > 0) current.set(file, counts);
   }
 }
