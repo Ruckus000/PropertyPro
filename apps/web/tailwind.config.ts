@@ -187,6 +187,23 @@ const config: Config = {
           'neutral-border': 'var(--status-neutral-border)',
           'neutral-subtle': 'var(--status-neutral-subtle)',
 
+          // `owner` and `board` are StatusVariants (packages/ui tokens/colors.ts)
+          // and their tokens exist in tokens.css, but this family used to omit
+          // them — so `text-status-owner` / `bg-status-owner` were not utilities
+          // at any spelling and emitted no CSS, silently rendering StatusDot's
+          // owner/board dots invisible. An undeclared family is not an error;
+          // it just produces nothing. apps/admin hit the identical bug on its
+          // root-manager chip and declared them there first.
+          owner: 'var(--status-owner)',
+          'owner-bg': 'var(--status-owner-bg)',
+          'owner-border': 'var(--status-owner-border)',
+          'owner-subtle': 'var(--status-owner-subtle)',
+
+          board: 'var(--status-board)',
+          'board-bg': 'var(--status-board-bg)',
+          'board-border': 'var(--status-board-border)',
+          'board-subtle': 'var(--status-board-subtle)',
+
           brand: 'var(--status-brand)',
           'brand-bg': 'var(--status-brand-bg)',
           'brand-border': 'var(--status-brand-border)',

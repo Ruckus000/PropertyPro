@@ -3,6 +3,13 @@
  *
  * Consumes getStatusConfig() for consistent status display.
  * NEVER uses color alone — always icon + text + color per DESIGN.md.
+ *
+ * The dot colour comes from `classes.dot` and must NEVER be derived at runtime
+ * (this file used to build it with `classes.text.replace("text-", "bg-")`).
+ * Tailwind's scanner reads raw file text and cannot see a class assembled in
+ * JS, so the utility is never generated and the dot renders with no background
+ * — invisible, with nothing thrown or logged. See
+ * packages/ui/src/constants/status.ts.
  */
 
 import * as React from "react";
@@ -79,12 +86,7 @@ export function StatusBadge({
         aria-label={displayLabel}
         {...props}
       >
-        <span
-          className={cn(
-            "inline-block h-2 w-2 rounded-full",
-            classes.text.replace("text-", "bg-")
-          )}
-        />
+        <span className={cn("inline-block h-2 w-2 rounded-full", classes.dot)} />
       </span>
     );
   }
@@ -115,21 +117,28 @@ export function StatusBadge({
 
 export function StatusDot({
   variant,
+  label,
   className,
   ...props
 }: {
   variant: StatusVariant;
+  /**
+   * REQUIRED. A dot is colour and nothing else, and DESIGN.md forbids conveying
+   * status by colour alone ("NEVER color alone. Always icon + text + color").
+   * This used to be `aria-hidden`, which removed the only status signal from
+   * the accessibility tree entirely. Pair the dot with visible text wherever
+   * you can; where the layout genuinely cannot carry a label, this at least
+   * names it for assistive tech.
+   */
+  label: string;
   className?: string;
 } & React.HTMLAttributes<HTMLSpanElement>) {
   const classes = getStatusClasses(variant);
   return (
     <span
-      className={cn(
-        "inline-block h-2 w-2 rounded-full",
-        classes.text.replace("text-", "bg-"),
-        className
-      )}
-      aria-hidden="true"
+      className={cn("inline-block h-2 w-2 rounded-full", classes.dot, className)}
+      role="img"
+      aria-label={label}
       {...props}
     />
   );
