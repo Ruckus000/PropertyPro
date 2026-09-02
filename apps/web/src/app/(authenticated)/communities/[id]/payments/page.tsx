@@ -42,7 +42,6 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   }
 
   const resolved = await searchParams;
-  const initialTab = typeof resolved['tab'] === 'string' ? resolved['tab'] : undefined;
   const rawUnitId = typeof resolved['unitId'] === 'string' ? resolved['unitId'] : undefined;
   const parsedUnitId = rawUnitId ? Number(rawUnitId) : undefined;
   const queryUnitId = parsedUnitId !== undefined && Number.isFinite(parsedUnitId) && parsedUnitId > 0
@@ -57,7 +56,6 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
           communityId={communityId}
           userId={userId}
           userRole={membership.role}
-          initialTab={initialTab}
         />
       </FeatureGate>
     );
