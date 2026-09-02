@@ -18,6 +18,8 @@ import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 
 const toggleHidden = vi.fn();
 const duplicate = vi.fn();
+/** Mutable so one test can put the provider into its refused-duplicate state. */
+const state = vi.hoisted(() => ({ duplicateError: null as string | null }));
 
 const sections = [
   { id: 1, blockType: 'text', blockOrder: 0, content: { body: 'Welcome' } },
@@ -35,6 +37,7 @@ vi.mock('@/components/pm/site-editor-v3/editor-context', () => ({
     isMoving: false,
     toggleHidden,
     duplicate,
+    duplicateError: state.duplicateError,
   }),
 }));
 
@@ -42,6 +45,7 @@ describe('SectionList hide affordance', () => {
   beforeEach(() => {
     toggleHidden.mockClear();
     duplicate.mockClear();
+    state.duplicateError = null;
   });
 
   it('labels a hidden section as hidden', () => {
@@ -66,5 +70,19 @@ describe('SectionList hide affordance', () => {
     const [first] = screen.getAllByRole('button', { name: /^duplicate .* section$/i });
     await userEvent.click(first);
     expect(duplicate).toHaveBeenCalledWith(1);
+  });
+
+  it('shows a refused duplicate rather than leaving the click unexplained', () => {
+    // A full page and a rejected write both leave the list looking exactly as
+    // it did before the click. Without this the Duplicate button is the silent
+    // no-op this panel already had once.
+    state.duplicateError = 'This page is full — it already has the maximum of 98 sections.';
+    render(<SectionList />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/page is full/i);
+  });
+
+  it('renders no alert when nothing has been refused', () => {
+    render(<SectionList />);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

@@ -90,6 +90,7 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
     isMoving,
     toggleHidden,
     duplicate,
+    duplicateError,
   } = useSiteEditor();
   const [drag, setDrag] = useState<DragState | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -179,6 +180,20 @@ export function SectionList({ className, onAddSection }: SectionListProps) {
 
   return (
     <div className={className}>
+      {/*
+        Duplicate's only visible failure channel. Both refusals it carries — a
+        page with no free slot, and a rejected write — leave this list looking
+        untouched, so without a rendered message the button reads as broken.
+        Placed above the list rather than on the row: the copy would have gone
+        to the bottom of the page, not next to its source, and the message is
+        about the page's capacity, not that one row. Mirrors how `AddPanel`
+        reports the same two conditions.
+      */}
+      {duplicateError ? (
+        <p role="alert" className="mb-2 text-sm text-status-danger">
+          {duplicateError}
+        </p>
+      ) : null}
       <p id={KEYBOARD_HINT_ID} className="sr-only">
         Press Arrow Up or Arrow Down to move this section one position. Press Home to move
         it to the top, or End to move it to the bottom.

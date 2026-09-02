@@ -18,6 +18,9 @@ import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
 const reorderMutate = vi.hoisted(() => vi.fn());
 const upsertMutate = vi.hoisted(() => vi.fn());
+// `duplicate` awaits the write before it can move the copy, so it needs the
+// PROMISE-returning member; `toggleHidden` is fire-and-forget and uses `mutate`.
+const upsertMutateAsync = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock('@/hooks/use-content-blocks', () => ({
   // FloatControls reads the published side to decide whether a removal is
   // staged or immediate; a factory missing it yields `undefined` at call time.
@@ -25,7 +28,11 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: reorderMutate, isPending: false }),
   // `toggleHidden` writes through the ordinary upsert; a factory missing this
   // throws at module load and reddens every test in this file.
-  useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
+  useUpsertContentBlock: () => ({
+    mutate: upsertMutate,
+    mutateAsync: upsertMutateAsync,
+    isPending: false,
+  }),
 }));
 
 /** Phase 11b — every SiteBlockSummary carries the page it belongs to. */
@@ -67,6 +74,7 @@ function renderProvider(blocks: SiteBlockSummary[] = BLOCKS, onSelect?: (id: num
 
 beforeEach(() => {
   vi.clearAllMocks();
+  upsertMutateAsync.mockResolvedValue(undefined);
 });
 
 describe('SiteEditorProvider', () => {
@@ -211,5 +219,193 @@ describe('SiteEditorProvider — toggleHidden', () => {
     renderProvider();
     act(() => api.toggleHidden(999, true));
     expect(upsertMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe('SiteEditorProvider — duplicate', () => {
+  const PAGE = [
+    block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+    block({ id: 2, blockType: 'text', blockOrder: 2, content: { body: 'Welcome' } }),
+    block({
+      id: 3,
+      blockType: 'image',
+      blockOrder: 3,
+      content: { imagePath: '7/content/pool.jpg', altText: 'Pool', hidden: true },
+    }),
+    block({ id: 4, blockType: 'text', blockOrder: 4, content: { body: 'Rules' } }),
+  ];
+
+  /** The refetch landing: the same page, now carrying the written copy. */
+  function withCopy(extra: SiteBlockSummary) {
+    return [...PAGE, extra];
+  }
+
+  it('appends the copy to the next free slot on the page', async () => {
+    renderProvider(PAGE);
+
+    await act(async () => {
+      api.duplicate(3);
+    });
+
+    // Slot 5 (max + 1), the same allocator the Add panel uses. No `pageId`:
+    // the source is on the selected page by construction, which is the write
+    // hook's default. `hidden` is dropped — the copy starts visible.
+    expect(upsertMutateAsync).toHaveBeenCalledWith({
+      blockType: 'image',
+      blockOrder: 5,
+      content: { imagePath: '7/content/pool.jpg', altText: 'Pool' },
+    });
+  });
+
+  it('waits for the refetch before moving the copy below its source', async () => {
+    const { rerender } = renderProvider(PAGE);
+
+    await act(async () => {
+      api.duplicate(3);
+    });
+    // The copy is not in the list yet, so there is nothing to move. This is the
+    // whole point of the deferral: the new row's id does not exist until the
+    // invalidation refetch delivers it, and the upsert resolves to void.
+    expect(reorderMutate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rerender(
+        <SiteEditorProvider
+          communityId={7}
+          blocks={withCopy(block({ id: 50, blockType: 'image', blockOrder: 5 }))}
+        >
+          <Probe />
+        </SiteEditorProvider>,
+      );
+    });
+
+    // toOrder 4, the source's next NEIGHBOUR — not `sourceOrder + 1`. A reorder
+    // is an array move onto an occupied slot.
+    expect(reorderMutate).toHaveBeenCalledWith({ blockId: 50, toOrder: 4 });
+  });
+
+  it('moves the copy exactly once, not on every later refetch', async () => {
+    const { rerender } = renderProvider(PAGE);
+    await act(async () => {
+      api.duplicate(3);
+    });
+
+    const arrived = withCopy(block({ id: 50, blockType: 'image', blockOrder: 5 }));
+    for (const _pass of [1, 2]) {
+      await act(async () => {
+        rerender(
+          <SiteEditorProvider communityId={7} blocks={arrived}>
+            <Probe />
+          </SiteEditorProvider>,
+        );
+      });
+    }
+
+    expect(reorderMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mistake another section for the copy', async () => {
+    const { rerender } = renderProvider(PAGE);
+    await act(async () => {
+      api.duplicate(3);
+    });
+
+    // A `text` row at the awaited slot is somebody else's write, not our image
+    // copy. Moving it would reorder a section the PM never touched.
+    await act(async () => {
+      rerender(
+        <SiteEditorProvider
+          communityId={7}
+          blocks={withCopy(block({ id: 60, blockType: 'text', blockOrder: 5 }))}
+        >
+          <Probe />
+        </SiteEditorProvider>,
+      );
+    });
+
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+
+  it('leaves the copy where it landed when the source is the last section', async () => {
+    const { rerender } = renderProvider(PAGE);
+
+    await act(async () => {
+      api.duplicate(4);
+    });
+    await act(async () => {
+      rerender(
+        <SiteEditorProvider
+          communityId={7}
+          blocks={withCopy(block({ id: 51, blockType: 'text', blockOrder: 5 }))}
+        >
+          <Probe />
+        </SiteEditorProvider>,
+      );
+    });
+
+    // Appending IS "directly below" here, so a reorder would be a wasted
+    // request the server answers as a no-op.
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+
+  it('refuses the hero, which has its own endpoint', async () => {
+    renderProvider(PAGE);
+    await act(async () => {
+      api.duplicate(1);
+    });
+    expect(upsertMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('ignores an unknown block id', async () => {
+    renderProvider(PAGE);
+    await act(async () => {
+      api.duplicate(999);
+    });
+    expect(upsertMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('reports a full page instead of writing', async () => {
+    // Slots 2..99 all taken: `nextContentSlot` returns null and there is
+    // nowhere for a copy to go.
+    const full = [
+      block({ id: 1, blockType: 'hero', blockOrder: 1 }),
+      ...Array.from({ length: 98 }, (_unused, i) =>
+        block({ id: 100 + i, blockType: 'text', blockOrder: 2 + i }),
+      ),
+    ];
+    renderProvider(full);
+
+    await act(async () => {
+      api.duplicate(100);
+    });
+
+    expect(upsertMutateAsync).not.toHaveBeenCalled();
+    expect(api.duplicateError).toMatch(/full/i);
+  });
+
+  it('reports a failed write rather than swallowing it', async () => {
+    upsertMutateAsync.mockRejectedValueOnce(new Error('Section limit reached'));
+    renderProvider(PAGE);
+
+    await act(async () => {
+      api.duplicate(3);
+    });
+
+    expect(api.duplicateError).toBe('Section limit reached');
+    expect(reorderMutate).not.toHaveBeenCalled();
+  });
+
+  it('clears a previous failure when a duplicate succeeds', async () => {
+    upsertMutateAsync.mockRejectedValueOnce(new Error('Section limit reached'));
+    renderProvider(PAGE);
+    await act(async () => {
+      api.duplicate(3);
+    });
+    expect(api.duplicateError).not.toBeNull();
+
+    await act(async () => {
+      api.duplicate(2);
+    });
+    expect(api.duplicateError).toBeNull();
   });
 });

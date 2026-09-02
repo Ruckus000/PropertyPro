@@ -13,13 +13,17 @@ import {
   useReorderBlocks,
   useUpsertContentBlock,
   type SiteBlockSummary,
-  type UpsertContentBlockInput,
 } from '@/hooks/use-content-blocks';
-import { BLOCK_TYPES } from '@propertypro/shared';
+import {
+  planDuplicate,
+  reorderTargetForCopy,
+} from '@/lib/site-editor/plan-duplicate';
+import { upsertableBlockType } from '@/lib/site-editor/upsertable-block-type';
 import {
   useCanvasSelection,
   type CanvasSelection,
 } from './canvas/use-canvas-selection';
+import { nextContentSlot } from './panels/add-catalog';
 import { sectionLabel } from './section-label';
 
 export type MoveDirection = 'up' | 'down';
@@ -76,28 +80,47 @@ export interface SiteEditorContextValue {
    * rather than needing a column and a second write path.
    */
   toggleHidden: (blockId: number, hidden: boolean) => void;
-  /** Copy a section into the slot below it. */
+  /**
+   * Copy a section into the slot below it.
+   *
+   * Fire-and-forget from the caller's side: the copy is written immediately,
+   * and the move that puts it below its source happens when the refetch
+   * delivers the new row (see the implementation).
+   */
   duplicate: (blockId: number) => void;
+  /**
+   * Why the last duplicate did not happen, or null.
+   *
+   * The provider needs a VISIBLE channel, not just its live region: the two
+   * refusals here (a page with no free slot, and a rejected write) both leave
+   * the section list looking exactly as it did before the click, and an
+   * `aria-live` announcement is gone by the time a sighted PM looks for the
+   * copy. `SectionList` renders this as a `role="alert"`, mirroring how
+   * `AddPanel` surfaces its own full-site and write failures.
+   */
+  duplicateError: string | null;
 }
 
 const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
 
-type UpsertBlockType = UpsertContentBlockInput['blockType'];
-
 /**
- * Narrow a row's `blockType` (typed `string`, because the server may send a
- * type this build has no label for) to something the upsert contract accepts.
+ * A copy that has been WRITTEN but not yet moved below its source.
  *
- * Returns null for anything the PM must not rewrite through this path: the
- * `hero`, which has its own endpoint, and the `tombstone` sentinel, which is
- * not in `BLOCK_TYPES` at all and would 400.
+ * Anchored on `(blockOrder, blockType)` rather than an id, for the same reason
+ * `selectSlot` is: `useUpsertContentBlock` resolves to `void`, so the new row's
+ * id does not exist on this side of the write. Unlike `selectSlot`, a wrong
+ * match here would MOVE a section rather than merely select one, so the block
+ * type is part of the anchor and not decoration.
  */
-function upsertableBlockType(blockType: string): UpsertBlockType | null {
-  if (blockType === 'hero') return null;
-  return (BLOCK_TYPES as readonly string[]).includes(blockType)
-    ? (blockType as UpsertBlockType)
-    : null;
+interface PendingCopy {
+  slot: number;
+  blockType: string;
+  toOrder: number;
 }
+
+const PAGE_FULL_MESSAGE =
+  'This page is full — it already has the maximum of 98 sections. Remove one before duplicating another.';
+const DUPLICATE_FAILED_MESSAGE = 'We could not duplicate that section.';
 
 export interface SiteEditorProviderProps {
   communityId: number;
@@ -180,6 +203,8 @@ export function SiteEditorProvider({
   // default (D-WRITE).
   const upsert = useUpsertContentBlock(communityId);
   const [announcement, setAnnouncement] = useState('');
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [pendingCopy, setPendingCopy] = useState<PendingCopy | null>(null);
 
   const select = useCallback(
     (blockId: number) => {
@@ -301,14 +326,106 @@ export function SiteEditorProvider({
   );
 
   /*
-   * TODO(site-editor utilities, task 4): duplication proper.
+   * Duplicate a section: APPEND the copy, then move it below its source when
+   * the refetch delivers it.
    *
-   * The control is wired here rather than in the next change so the section
-   * list ships as one coherent row of actions, but the copy-into-the-next-slot
-   * planning (which slot is free, what shifts) lands with `planDuplicate`. Until
-   * then this is inert BY DESIGN and must not reach a release branch as-is.
+   * ## Why not "free the slot below and insert there"
+   *
+   * Because no such operation exists. Three separate facts make the obvious
+   * design impossible, and each alone would be enough:
+   *
+   *  - `upsertPublishedBlock` REPLACES the draft at the order it is given — it
+   *    soft-deletes whatever sits there. Writing the copy at `sourceOrder + 1`
+   *    while a section still occupies it destroys that section.
+   *  - `moveTo` early-returns when nothing occupies the target order, so
+   *    "shift the last section down to `order + 1`" is a silent no-op.
+   *  - a reorder is an ARRAY MOVE that re-stamps the existing slot sequence, so
+   *    "free slot 2" is not a state this API can even express.
+   *
+   * So the copy goes to the free slot at the end — the same `nextContentSlot`
+   * allocation the Add panel makes — and is then dropped onto its source's
+   * neighbour. `reorderTargetForCopy` computes that target.
+   *
+   * ## Why the move is deferred to an effect rather than awaited here
+   *
+   * The move needs the copy's id, and `useUpsertContentBlock` resolves to
+   * `void`. The id only exists once the invalidation refetch lands, and the
+   * continuation after `await` still holds the `blocks` array from BEFORE it —
+   * the same trap documented on `AddPanel`'s slot-based selection. Handing the
+   * intent to an effect keyed on `blocks` turns that race into a wait: the
+   * effect re-runs as the list fills and fires the move whenever the copy
+   * appears, in whatever order the refetch and the render happen to land. If it
+   * never appears, nothing moves and the copy stays appended — which is a
+   * legible outcome, not a corrupt one.
+   *
+   * No `pageId` override, matching `toggleHidden` above: `blocks` is already
+   * narrowed to the selected page, so a section that can be duplicated is on
+   * the selected page by construction — exactly the write hook's default
+   * (D-WRITE). That also keeps the slot maths and the write on ONE page.
    */
-  const duplicate = useCallback((_blockId: number) => {}, []);
+  const duplicate = useCallback(
+    (blockId: number) => {
+      // Resolved from `blocks`, not `movableSections`: the hero and tombstone
+      // refusals inside `planDuplicate` are the guard that actually runs, and
+      // `movableSections` has already dropped both.
+      const source = blocks.find((b) => b.id === blockId);
+      if (!source) return;
+      const plan = planDuplicate(blocks, blockId);
+      if (plan === null) return;
+
+      // Tombstones INCLUDED (they are staged deletions still holding a slot),
+      // hero included — the same input the Add panel gives the allocator.
+      const slot = nextContentSlot(blocks);
+      if (slot === null) {
+        setDuplicateError(PAGE_FULL_MESSAGE);
+        return;
+      }
+      setDuplicateError(null);
+
+      const toOrder = reorderTargetForCopy(movableSections, source.blockOrder, slot);
+
+      void upsert
+        .mutateAsync({ blockType: plan.blockType, blockOrder: slot, content: plan.content })
+        .then(() => {
+          // Armed only AFTER the write succeeded, so the effect below can never
+          // be waiting for a row the server was never asked to create.
+          if (toOrder !== null) {
+            setPendingCopy({ slot, blockType: plan.blockType, toOrder });
+          }
+        })
+        .catch((cause: unknown) => {
+          setDuplicateError(
+            cause instanceof Error ? cause.message : DUPLICATE_FAILED_MESSAGE,
+          );
+        });
+    },
+    [blocks, movableSections, upsert],
+  );
+
+  /*
+   * The copy has arrived — move it below its source.
+   *
+   * Through `moveTo`, not `reorder.mutate`, so this is the same single reorder
+   * path the grip and the drop target use: one live-region announcement, and
+   * one place where a move can be refused. Its guard is a real one here rather
+   * than a formality — a co-manager who stages the neighbour for deletion
+   * between the write and the refetch takes it out of `movableSections`, and
+   * `moveTo` then declines instead of sending a request the server answers with
+   * "That position is no longer a content section". The copy stays appended,
+   * which is the same outcome as never arming the move at all.
+   *
+   * Cleared BEFORE the move fires, so a later refetch of the same list (the
+   * reorder's own `onSettled` invalidation, for one) cannot re-fire it.
+   */
+  useEffect(() => {
+    if (pendingCopy === null) return;
+    const copy = blocks.find(
+      (b) => b.blockOrder === pendingCopy.slot && b.blockType === pendingCopy.blockType,
+    );
+    if (!copy) return;
+    setPendingCopy(null);
+    moveTo(copy.id, pendingCopy.toOrder);
+  }, [blocks, moveTo, pendingCopy]);
 
   const value = useMemo<SiteEditorContextValue>(
     () => ({
@@ -325,6 +442,7 @@ export function SiteEditorProvider({
       isMoving: reorder.isPending,
       toggleHidden,
       duplicate,
+      duplicateError,
     }),
     [
       blocks,
@@ -340,6 +458,7 @@ export function SiteEditorProvider({
       reorder.isPending,
       toggleHidden,
       duplicate,
+      duplicateError,
     ],
   );
 
