@@ -16,6 +16,7 @@ import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { getLayout } from '@/components/public-site/layouts/registry';
 import { hasRenderer } from '@/components/public-site/blocks/registry';
 import { reportDegradedBlocks } from '@/lib/telemetry/site-block-render';
+import { visibleBlocks } from '@/lib/site/visible-blocks';
 import {
   getPublicCommunityScopedReader,
   type PublicNavPage,
@@ -294,10 +295,12 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
     // all (0046's backfill skipped it because it has no site content), in which
     // case the unfiltered read is the correct pre-11b behaviour — and it can only
     // happen on the home path, since a named slug had to resolve to a page row.
-    const blocks = await reader.listSiteBlocks({
-      includeDrafts: isPreview,
-      ...(pageId === null ? {} : { pageId }),
-    });
+    const blocks = visibleBlocks(
+      await reader.listSiteBlocks({
+        includeDrafts: isPreview,
+        ...(pageId === null ? {} : { pageId }),
+      }),
+    );
     // Every block renderer degrades a failed safeParse to `return null`, and
     // all three layouts skip an unknown block type silently — so a section can
     // disappear from a statutory-transparency page behind an HTTP 200 with
