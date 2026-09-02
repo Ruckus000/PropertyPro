@@ -33,6 +33,7 @@ vi.mock('@/hooks/use-hero-photos', () => ({
 }));
 
 import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
+import { settleAutosave } from './autosave-harness';
 
 /** A hero as stored before `photos` existed. */
 const LEGACY = {
@@ -59,11 +60,6 @@ afterEach(() => {
 });
 
 /** Past the 800ms autosave debounce. */
-async function settleAutosave() {
-  await act(async () => {
-    vi.advanceTimersByTime(1000);
-  });
-}
 
 describe('HeroForm — reconciliation', () => {
   it('opens a legacy hero with its image already resolved into the photo list', () => {

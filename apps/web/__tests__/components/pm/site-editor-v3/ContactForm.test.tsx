@@ -8,8 +8,7 @@
  * round-trip would look like a foreign change.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { contactBlockSchema } from '@propertypro/shared';
 import { ContactForm } from '@/components/pm/site-editor-v3/inspector/forms/ContactForm';
 
@@ -21,19 +20,7 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useUpsertContentBlock: () => ({ mutateAsync: upsertMock, isPending: false }),
 }));
 
-const DEBOUNCE_MS = 800;
-
-async function settleAutosave() {
-  await act(async () => {
-    vi.advanceTimersByTime(DEBOUNCE_MS + 50);
-    await Promise.resolve();
-  });
-}
-
-function setupTimers() {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-  return userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-}
+import { setupTimers, settleAutosave } from './autosave-harness';
 
 function renderForm(content: unknown = { showBoard: true, showManagement: true }) {
   return render(
